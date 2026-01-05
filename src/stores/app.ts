@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ProviderName, Theme, Provider, LLMServerStatus } from '../types';
 
+// Track notification timeouts to allow proper cleanup when notifications are removed
+const notificationTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
 interface AppState {
   // Theme
   theme: Theme;
@@ -87,21 +90,29 @@ export const useAppStore = create<AppState>()(
             { ...notification, id, timestamp: Date.now() },
           ],
         }));
-        // Auto-remove after 5 seconds
-        // Note: In a Zustand store, this timeout is acceptable as it's not tied to component lifecycle.
-        // The store persists across component mounts/unmounts, so cleanup isn't strictly necessary.
-        // However, for production apps with many notifications, consider tracking timeouts in a Map
-        // and providing a cleanup method if the store is ever destroyed.
-        setTimeout(() => {
+        // Auto-remove after 5 seconds with proper timeout tracking
+        const timeoutId = setTimeout(() => {
           get().removeNotification(id);
         }, 5000);
+        notificationTimeouts.set(id, timeoutId);
       },
       removeNotification: (id) => {
+        // Clear the timeout if it exists to prevent memory leaks
+        const timeoutId = notificationTimeouts.get(id);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          notificationTimeouts.delete(id);
+        }
         set((state) => ({
           notifications: state.notifications.filter((n) => n.id !== id),
         }));
       },
-      clearNotifications: () => set({ notifications: [] }),
+      clearNotifications: () => {
+        // Clear all pending timeouts before clearing notifications
+        notificationTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+        notificationTimeouts.clear();
+        set({ notifications: [] });
+      },
     }),
     {
       name: 'stitch-app-storage',
