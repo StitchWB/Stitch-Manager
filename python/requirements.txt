@@ -12,3 +12,4 @@ patchright
 opencv-python-headless
 psutil
 bcrypt
+cryptography
