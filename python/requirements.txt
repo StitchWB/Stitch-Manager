@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlalchemy
+aiosqlite
+pydantic
+pydantic-settings
+DrissionPage
+httpx
+aiohttp
+python-dotenv
+patchright
+opencv-python-headless
+psutil
+bcrypt
