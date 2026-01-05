@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Users,
   Key,
@@ -36,7 +36,7 @@ interface SummaryCardProps {
   status?: 'success' | 'warning' | 'error' | 'neutral';
 }
 
-function SummaryCard({ title, value, subtitle, icon, trend, status = 'neutral' }: SummaryCardProps) {
+const SummaryCard = React.memo(function SummaryCard({ title, value, subtitle, icon, trend, status = 'neutral' }: SummaryCardProps) {
   const statusColors = {
     success: 'text-emerald-400',
     warning: 'text-amber-400',
@@ -61,7 +61,7 @@ function SummaryCard({ title, value, subtitle, icon, trend, status = 'neutral' }
       </div>
     </div>
   );
-}
+});
 
 // ============================================
 // Activity Item Component
@@ -74,7 +74,7 @@ interface ActivityItemProps {
   timestamp: string;
 }
 
-function ActivityItem({ status, title, description, timestamp }: ActivityItemProps) {
+const ActivityItem = React.memo(function ActivityItem({ status, title, description, timestamp }: ActivityItemProps) {
   const statusConfig = {
     success: { icon: <CheckCircle size={16} />, color: 'text-emerald-400', border: 'border-emerald-500' },
     pending: { icon: <Loader2 size={16} className="animate-spin" />, color: 'text-amber-400', border: 'border-amber-500' },
@@ -95,7 +95,7 @@ function ActivityItem({ status, title, description, timestamp }: ActivityItemPro
       <span className="text-xs text-slate-500 font-mono">{timestamp}</span>
     </div>
   );
-}
+});
 
 // ============================================
 // Quick Action Button Component
@@ -109,7 +109,7 @@ interface QuickActionProps {
   loading?: boolean;
 }
 
-function QuickAction({ icon, label, onClick, variant = 'secondary', disabled, loading }: QuickActionProps) {
+const QuickAction = React.memo(function QuickAction({ icon, label, onClick, variant = 'secondary', disabled, loading }: QuickActionProps) {
   const baseClasses = 'flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all';
   const variantClasses = {
     primary: 'bg-primary text-white hover:bg-primary/90 disabled:bg-primary/50',
@@ -126,7 +126,7 @@ function QuickAction({ icon, label, onClick, variant = 'secondary', disabled, lo
       {label}
     </button>
   );
-}
+});
 
 // ============================================
 // Provider Breakdown Chart Component (CSS-based)
@@ -210,7 +210,7 @@ interface ProviderCardProps {
   onSelect: () => void;
 }
 
-function ProviderCard({ provider, accountCount, isSelected, onSelect }: ProviderCardProps) {
+const ProviderCard = React.memo(function ProviderCard({ provider, accountCount, isSelected, onSelect }: ProviderCardProps) {
   const statusColors = {
     active: 'text-slate-400',
     down: 'text-red-400 bg-red-400/10',
@@ -265,7 +265,7 @@ function ProviderCard({ provider, accountCount, isSelected, onSelect }: Provider
       </p>
     </div>
   );
-}
+});
 
 // ============================================
 // Main Dashboard Component
