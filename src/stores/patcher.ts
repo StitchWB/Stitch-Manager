@@ -1,0 +1,477 @@
+import { create } from 'zustand';
+import { devtools, persist } from 'zustand/middleware';
+import type {
+  DetectedIDE,
+  PatchStatus,
+  PatchStatusType,
+  BackupInfo,
+  PatchResult,
+  IDEType,
+} from '../types';
+import {
+  detectIDEs,
+  getPatchStatus,
+  patchIDE,
+  unpatchIDE,
+  listBackups,
+  restoreBackup,
+  deleteBackup,
+  verifyIDE,
+  TauriError,
+} from '../lib/tauri';
+
+// ============================================
+// Types
+// ============================================
+
+interface PatcherState {
+  // State
+  detectedIDEs: DetectedIDE[];
+  patchStatus: Record<string, PatchStatus>;
+  backups: Record<string, BackupInfo[]>;
+  loading: boolean;
+  scanning: boolean;
+  error: string | null;
+  
+  // Selected IDE
+  selectedIDEId: string | null;
+  
+  // Operation status
+  operationInProgress: Record<string, 'patching' | 'unpatching' | 'restoring' | null>;
+  
+  // Actions
+  detectIDEs: () => Promise<DetectedIDE[]>;
+  refreshIDEs: () => Promise<void>;
+  getPatchStatus: (ideId: string) => Promise<PatchStatus>;
+  getAllPatchStatuses: () => Promise<void>;
+  applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
+  removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
+  
+  // Backup management
+  listBackups: (ideId?: string) => Promise<BackupInfo[]>;
+  restoreBackup: (backupId: string) => Promise<PatchResult>;
+  deleteBackup: (backupId: string) => Promise<void>;
+  
+  // IDE verification
+  verifyIDE: (ideId: string) => Promise<boolean>;
+  
+  // Selection
+  selectIDE: (ideId: string | null) => void;
+  
+  // Computed helpers
+  getIDEById: (ideId: string) => DetectedIDE | undefined;
+  getIDEsByType: (type: IDEType) => DetectedIDE[];
+  getPatchedIDEs: () => DetectedIDE[];
+  getUnpatchedIDEs: () => DetectedIDE[];
+  getBackupsForIDE: (ideId: string) => BackupInfo[];
+  canPatchIDE: (ideId: string) => boolean;
+  
+  // Error handling
+  clearError: () => void;
+  setError: (error: string | null) => void;
+}
+
+// ============================================
+// Store
+// ============================================
+
+export const usePatcherStore = create<PatcherState>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        // Initial state
+        detectedIDEs: [],
+        patchStatus: {},
+        backups: {},
+        loading: false,
+        scanning: false,
+        error: null,
+        selectedIDEId: null,
+        operationInProgress: {},
+
+        // ============================================
+        // IDE Detection
+        // ============================================
+
+        detectIDEs: async () => {
+          set({ scanning: true, error: null });
+          try {
+            const ides = await detectIDEs();
+            set({ detectedIDEs: ides, scanning: false });
+            
+            // Fetch patch status for all detected IDEs
+            await get().getAllPatchStatuses();
+            
+            return ides;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message, scanning: false });
+            throw error;
+          }
+        },
+
+        refreshIDEs: async () => {
+          await get().detectIDEs();
+          // Also refresh backups
+          await get().listBackups();
+        },
+
+        // ============================================
+        // Patch Status
+        // ============================================
+
+        getPatchStatus: async (ideId: string) => {
+          try {
+            const status = await getPatchStatus({ ideId });
+            set((state) => ({
+              patchStatus: { ...state.patchStatus, [ideId]: status },
+            }));
+            return status;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            // Set error status for this IDE
+            const errorStatus: PatchStatus = {
+              ideId,
+              status: 'error',
+              error: message,
+            };
+            set((state) => ({
+              patchStatus: { ...state.patchStatus, [ideId]: errorStatus },
+            }));
+            throw error;
+          }
+        },
+
+        getAllPatchStatuses: async () => {
+          const { detectedIDEs } = get();
+          const results = await Promise.allSettled(
+            detectedIDEs.map((ide: DetectedIDE) => getPatchStatus({ ideId: ide.id }))
+          );
+
+          const newStatuses: Record<string, PatchStatus> = {};
+          results.forEach((result, index) => {
+            const ideId = detectedIDEs[index].id;
+            if (result.status === 'fulfilled') {
+              newStatuses[ideId] = result.value;
+            } else {
+              newStatuses[ideId] = {
+                ideId,
+                status: 'error',
+                error: result.reason?.message || 'Failed to get status',
+              };
+            }
+          });
+
+          set((state) => ({
+            patchStatus: { ...state.patchStatus, ...newStatuses },
+          }));
+        },
+
+        // ============================================
+        // Patching Operations
+        // ============================================
+
+        applyPatch: async (ideId: string, createBackup = true) => {
+          set((state) => ({
+            operationInProgress: { ...state.operationInProgress, [ideId]: 'patching' },
+            error: null,
+          }));
+
+          try {
+            const result = await patchIDE({ ideId, createBackup });
+            
+            if (result.success) {
+              // Update IDE status
+              set((state) => ({
+                detectedIDEs: state.detectedIDEs.map((ide: DetectedIDE) =>
+                  ide.id === ideId ? { ...ide, isPatched: true } : ide
+                ),
+                patchStatus: {
+                  ...state.patchStatus,
+                  [ideId]: {
+                    ideId,
+                    status: 'patched' as PatchStatusType,
+                    patchedAt: new Date().toISOString(),
+                  },
+                },
+              }));
+
+              // Refresh backups if a backup was created
+              if (result.backupId) {
+                await get().listBackups(ideId);
+              }
+            }
+
+            set((state) => ({
+              operationInProgress: { ...state.operationInProgress, [ideId]: null },
+            }));
+
+            return result;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set((state) => ({
+              error: message,
+              operationInProgress: { ...state.operationInProgress, [ideId]: null },
+            }));
+            throw error;
+          }
+        },
+
+        removePatch: async (ideId: string, restoreBackupFlag = true) => {
+          set((state) => ({
+            operationInProgress: { ...state.operationInProgress, [ideId]: 'unpatching' },
+            error: null,
+          }));
+
+          try {
+            const result = await unpatchIDE({ ideId, restoreBackup: restoreBackupFlag });
+            
+            if (result.success) {
+              // Update IDE status
+              set((state) => ({
+                detectedIDEs: state.detectedIDEs.map((ide: DetectedIDE) =>
+                  ide.id === ideId ? { ...ide, isPatched: false, patchVersion: undefined } : ide
+                ),
+                patchStatus: {
+                  ...state.patchStatus,
+                  [ideId]: {
+                    ideId,
+                    status: 'unpatched' as PatchStatusType,
+                  },
+                },
+              }));
+            }
+
+            set((state) => ({
+              operationInProgress: { ...state.operationInProgress, [ideId]: null },
+            }));
+
+            return result;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set((state) => ({
+              error: message,
+              operationInProgress: { ...state.operationInProgress, [ideId]: null },
+            }));
+            throw error;
+          }
+        },
+
+        // ============================================
+        // Backup Management
+        // ============================================
+
+        listBackups: async (ideId?: string) => {
+          set({ loading: true });
+          try {
+            const backupList = await listBackups({ ideId });
+            
+            // Group backups by IDE
+            const groupedBackups: Record<string, BackupInfo[]> = {};
+            for (const backup of backupList) {
+              if (!groupedBackups[backup.ideId]) {
+                groupedBackups[backup.ideId] = [];
+              }
+              groupedBackups[backup.ideId].push(backup);
+            }
+
+            set((state) => ({
+              backups: ideId
+                ? { ...state.backups, [ideId]: backupList }
+                : groupedBackups,
+              loading: false,
+            }));
+
+            return backupList;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message, loading: false });
+            throw error;
+          }
+        },
+
+        restoreBackup: async (backupId: string) => {
+          // Find the IDE and backup info for this backup
+          const { backups, detectedIDEs } = get();
+          let ideId: string | null = null;
+          let backup: BackupInfo | null = null;
+          
+          for (const [id, backupList] of Object.entries(backups)) {
+            const foundBackup = backupList.find((b: BackupInfo) => b.id === backupId);
+            if (foundBackup) {
+              ideId = id;
+              backup = foundBackup;
+              break;
+            }
+          }
+
+          if (!backup) {
+            throw new Error(`Backup not found: ${backupId}`);
+          }
+
+          // Get the IDE type from the detected IDE
+          const ide = detectedIDEs.find((i: DetectedIDE) => i.id === ideId);
+          const ideType = ide?.type || 'kiro';
+
+          if (ideId) {
+            set((state) => ({
+              operationInProgress: { ...state.operationInProgress, [ideId!]: 'restoring' },
+              error: null,
+            }));
+          }
+
+          try {
+            const result = await restoreBackup({ ideType, backupPath: backup.path });
+            
+            if (result.success && ideId) {
+              // Update IDE status
+              set((state) => ({
+                detectedIDEs: state.detectedIDEs.map((ide: DetectedIDE) =>
+                  ide.id === ideId ? { ...ide, isPatched: false, patchVersion: undefined } : ide
+                ),
+                patchStatus: {
+                  ...state.patchStatus,
+                  [ideId]: {
+                    ideId,
+                    status: 'unpatched' as PatchStatusType,
+                  },
+                },
+              }));
+            }
+
+            if (ideId) {
+              set((state) => ({
+                operationInProgress: { ...state.operationInProgress, [ideId!]: null },
+              }));
+            }
+
+            return result;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set((state) => ({
+              error: message,
+              operationInProgress: ideId
+                ? { ...state.operationInProgress, [ideId]: null }
+                : state.operationInProgress,
+            }));
+            throw error;
+          }
+        },
+
+        deleteBackup: async (backupId: string) => {
+          try {
+            await deleteBackup({ backupId });
+            
+            // Remove backup from state
+            set((state) => {
+              const newBackups = { ...state.backups };
+              for (const ideId of Object.keys(newBackups)) {
+                newBackups[ideId] = newBackups[ideId].filter((b: BackupInfo) => b.id !== backupId);
+              }
+              return { backups: newBackups };
+            });
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message });
+            throw error;
+          }
+        },
+
+        // ============================================
+        // IDE Verification
+        // ============================================
+
+        verifyIDE: async (ideId: string) => {
+          try {
+            return await verifyIDE({ ideId });
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message });
+            throw error;
+          }
+        },
+
+        // ============================================
+        // Selection
+        // ============================================
+
+        selectIDE: (ideId: string | null) => {
+          set({ selectedIDEId: ideId });
+        },
+
+        // ============================================
+        // Computed Helpers
+        // ============================================
+
+        getIDEById: (ideId: string) => {
+          return get().detectedIDEs.find((ide: DetectedIDE) => ide.id === ideId);
+        },
+
+        getIDEsByType: (type: IDEType) => {
+          return get().detectedIDEs.filter((ide: DetectedIDE) => ide.type === type);
+        },
+
+        getPatchedIDEs: () => {
+          return get().detectedIDEs.filter((ide: DetectedIDE) => ide.isPatched);
+        },
+
+        getUnpatchedIDEs: () => {
+          return get().detectedIDEs.filter((ide: DetectedIDE) => !ide.isPatched);
+        },
+
+        getBackupsForIDE: (ideId: string) => {
+          return get().backups[ideId] || [];
+        },
+
+        canPatchIDE: (ideId: string) => {
+          const ide = get().getIDEById(ideId);
+          if (!ide) return false;
+          
+          const status = get().patchStatus[ideId];
+          const operation = get().operationInProgress[ideId];
+          
+          return (
+            ide.canPatch &&
+            !ide.isPatched &&
+            status?.status !== 'error' &&
+            !operation
+          );
+        },
+
+        // ============================================
+        // Error Handling
+        // ============================================
+
+        clearError: () => {
+          set({ error: null });
+        },
+
+        setError: (error: string | null) => {
+          set({ error });
+        },
+      }),
+      {
+        name: 'patcher-store',
+        partialize: (state) => ({
+          // Only persist detected IDEs (not status which should be refreshed)
+          detectedIDEs: state.detectedIDEs,
+          selectedIDEId: state.selectedIDEId,
+        }),
+      }
+    ),
+    { name: 'patcher-store' }
+  )
+);
+
+// ============================================
+// Selectors
+// ============================================
+
+export const selectDetectedIDEs = (state: PatcherState) => state.detectedIDEs;
+export const selectPatchStatus = (state: PatcherState) => state.patchStatus;
+export const selectBackups = (state: PatcherState) => state.backups;
+export const selectLoading = (state: PatcherState) => state.loading;
+export const selectScanning = (state: PatcherState) => state.scanning;
+export const selectError = (state: PatcherState) => state.error;
+export const selectSelectedIDEId = (state: PatcherState) => state.selectedIDEId;
+export const selectOperationInProgress = (state: PatcherState) => state.operationInProgress;
