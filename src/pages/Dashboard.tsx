@@ -15,6 +15,7 @@ import {
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
+import { API_BASE_URL } from '../config';
 import {
   getServerStatus,
   getRegistrationJobs,
@@ -319,7 +320,7 @@ export default function Dashboard() {
   const loadDashboardStats = useCallback(async () => {
     try {
       setIsLoadingStats(true);
-      const response = await fetch('http://localhost:8000/dashboard/stats');
+      const response = await fetch(`${API_BASE_URL}/dashboard/stats`);
       if (response.ok) {
         const stats = await response.json();
         setDashboardStats(stats);
