@@ -25,6 +25,18 @@ import type { ProviderName, RegistrationJob, LLMServerStatus } from '../types';
 import { PROVIDER_HEX_COLORS } from '../constants';
 
 // ============================================
+// Dashboard Stats Type
+// ============================================
+interface DashboardStats {
+  total_accounts: number;
+  active_tokens: number;
+  quota_usage: number;
+  quota_used: number;
+  quota_limit: number;
+  accounts_by_provider: Record<string, number>;
+}
+
+// ============================================
 // Summary Card Component
 // ============================================
 interface SummaryCardProps {
@@ -279,6 +291,10 @@ export default function Dashboard() {
   const [isStartingRegistration, setIsStartingRegistration] = useState(false);
   const [isRefreshingTokens, setIsRefreshingTokens] = useState(false);
   const [isStartingServer, setIsStartingServer] = useState(false);
+  
+  // Dashboard stats state
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   // Memoize load functions to prevent infinite loops
   const loadServerStatus = useCallback(async () => {
@@ -299,15 +315,55 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Fetch dashboard stats from backend
+  const loadDashboardStats = useCallback(async () => {
+    try {
+      setIsLoadingStats(true);
+      const response = await fetch('http://localhost:8000/dashboard/stats');
+      if (response.ok) {
+        const stats = await response.json();
+        setDashboardStats(stats);
+      } else {
+        console.error('Failed to fetch dashboard stats:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Failed to load dashboard stats:', error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }, []);
+
   // Fetch data on mount
   useEffect(() => {
     fetchAccounts();
     loadServerStatus();
     loadRegistrationJobs();
-  }, [fetchAccounts, loadServerStatus, loadRegistrationJobs]);
+    loadDashboardStats();
+  }, [fetchAccounts, loadServerStatus, loadRegistrationJobs, loadDashboardStats]);
 
-  // Computed values
+  // Computed values - use backend stats when available, fallback to local calculation
   const summaryData = useMemo(() => {
+    // If we have backend stats, use them
+    if (dashboardStats) {
+      const accountsByProvider = providers.map((p) => ({
+        provider: p.id,
+        count: dashboardStats.accounts_by_provider[p.id.toUpperCase()] || 0,
+        color: p.color,
+      }));
+      
+      return {
+        totalAccounts: dashboardStats.total_accounts,
+        accountsByProvider,
+        activeTokens: dashboardStats.active_tokens,
+        quotaUsage: {
+          used: dashboardStats.quota_used,
+          limit: dashboardStats.quota_limit,
+        },
+        quotaPercent: Math.round(dashboardStats.quota_usage),
+      };
+    }
+    
+    // Fallback to local calculation from accounts store
     const totalAccounts = accounts.length;
     const accountsByProvider = providers.map((p) => ({
       provider: p.id,
@@ -329,7 +385,7 @@ export default function Dashboard() {
       : 0;
 
     return { totalAccounts, accountsByProvider, activeTokens, quotaUsage, quotaPercent };
-  }, [accounts, providers]);
+  }, [accounts, providers, dashboardStats]);
 
   // Recent activity from registration jobs
   const recentActivity = useMemo(() => {
@@ -430,6 +486,7 @@ export default function Dashboard() {
     setIsRefreshingTokens(true);
     try {
       await fetchAccounts();
+      await loadDashboardStats(); // Refresh stats after fetching accounts
     } catch (error) {
       console.error('Failed to refresh tokens:', error);
     } finally {
@@ -476,11 +533,14 @@ export default function Dashboard() {
           <section>
             <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">
               Overview
+              {isLoadingStats && (
+                <Loader2 size={14} className="inline-block ml-2 animate-spin text-slate-400" />
+              )}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard
                 title="Total Accounts"
-                value={summaryData.totalAccounts}
+                value={isLoadingStats ? '...' : summaryData.totalAccounts}
                 subtitle={`Across ${providers.filter((p) => 
                   summaryData.accountsByProvider.find((a) => a.provider === p.id && a.count > 0)
                 ).length} providers`}
@@ -489,14 +549,14 @@ export default function Dashboard() {
               />
               <SummaryCard
                 title="Active Tokens"
-                value={summaryData.activeTokens}
+                value={isLoadingStats ? '...' : summaryData.activeTokens}
                 subtitle={`${summaryData.totalAccounts - summaryData.activeTokens} inactive`}
                 icon={<Key size={20} />}
                 status={summaryData.activeTokens > 0 ? 'success' : 'warning'}
               />
               <SummaryCard
                 title="Quota Usage"
-                value={`${summaryData.quotaPercent}%`}
+                value={isLoadingStats ? '...' : `${summaryData.quotaPercent}%`}
                 subtitle={`${summaryData.quotaUsage.used.toLocaleString()} / ${summaryData.quotaUsage.limit.toLocaleString()}`}
                 icon={<PieChart size={20} />}
                 status={summaryData.quotaPercent > 80 ? 'warning' : summaryData.quotaPercent > 95 ? 'error' : 'neutral'}
