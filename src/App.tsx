@@ -6,6 +6,8 @@ import Accounts from './pages/Accounts';
 import AutoReg from './pages/AutoReg';
 import Patcher from './pages/Patcher';
 import Server from './pages/Server';
+import Settings from './pages/Settings';
+import Logs from './pages/Logs';
 import { useAppStore } from './stores/app';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 
@@ -78,6 +80,8 @@ function App() {
           <Route path="/autoreg" element={<AutoReg />} />
           <Route path="/patcher" element={<Patcher />} />
           <Route path="/server" element={<Server />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/logs" element={<Logs />} />
         </Routes>
       </Layout>
       <NotificationToast />
