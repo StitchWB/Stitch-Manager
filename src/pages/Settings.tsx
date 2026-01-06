@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Settings as SettingsIcon, Moon, Sun, Monitor, Database, Mail, Globe, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../stores/app';
-import { API_BASE_URL } from '../config';
+import { getSettings, updateSettings } from '../lib/tauri';
 
 // Settings response type from backend
 interface SettingsData {
@@ -35,28 +35,22 @@ export default function Settings() {
   const loadSettings = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/settings`);
+      const data = await getSettings() as unknown as SettingsData;
       
-      if (response.ok) {
-        const data: SettingsData = await response.json();
-        
-        // Update form state with loaded settings
-        setImapServer(data.imap_server || '');
-        setImapPort(String(data.imap_port || 993));
-        setImapEmail(data.imap_email || '');
-        // Don't overwrite password field if it's masked
-        if (data.imap_password && data.imap_password !== '********') {
-          setImapPassword(data.imap_password);
-        }
-        setProxyEnabled(data.proxy_enabled || false);
-        setProxyUrl(data.proxy_url || '');
-        
-        // Update theme in store if different
-        if (data.theme && ['light', 'dark', 'system'].includes(data.theme)) {
-          setTheme(data.theme as 'light' | 'dark' | 'system');
-        }
-      } else {
-        console.error('Failed to load settings:', response.statusText);
+      // Update form state with loaded settings
+      setImapServer(data.imap_server || '');
+      setImapPort(String(data.imap_port || 993));
+      setImapEmail(data.imap_email || '');
+      // Don't overwrite password field if it's masked
+      if (data.imap_password && data.imap_password !== '********') {
+        setImapPassword(data.imap_password);
+      }
+      setProxyEnabled(data.proxy_enabled || false);
+      setProxyUrl(data.proxy_url || '');
+      
+      // Update theme in store if different
+      if (data.theme && ['light', 'dark', 'system'].includes(data.theme)) {
+        setTheme(data.theme as 'light' | 'dark' | 'system');
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -77,36 +71,20 @@ export default function Settings() {
       setSaveStatus('idle');
       setErrorMessage('');
       
-      const settingsToSave: Partial<SettingsData> = {
+      const settingsToSave = {
         theme,
         imap_server: imapServer,
         imap_port: parseInt(imapPort, 10) || 993,
         imap_email: imapEmail,
         proxy_enabled: proxyEnabled,
         proxy_url: proxyUrl,
+        imap_password: imapPassword !== '********' ? imapPassword : '',
       };
       
-      // Only include password if it was changed (not the masked value)
-      if (imapPassword && imapPassword !== '********') {
-        settingsToSave.imap_password = imapPassword;
-      }
-      
-      const response = await fetch(`${API_BASE_URL}/settings`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settingsToSave),
-      });
-      
-      if (response.ok) {
-        setSaveStatus('success');
-        // Clear success status after 3 seconds
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to save settings');
-      }
+      await updateSettings(settingsToSave);
+      setSaveStatus('success');
+      // Clear success status after 3 seconds
+      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error) {
       console.error('Failed to save settings:', error);
       setSaveStatus('error');

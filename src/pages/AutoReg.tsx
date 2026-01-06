@@ -1,5 +1,6 @@
-import { useEffect, useCallback, useRef } from 'react';
-import { Download, CheckCircle, XCircle, Copy, RefreshCw } from 'lucide-react';
+import { useEffect, useCallback } from 'react';
+import { Download, CheckCircle, XCircle, Copy } from 'lucide-react';
+import { listen } from '@tauri-apps/api/event';
 import Header from '../components/layout/Header';
 import RegistrationConfig from '../components/RegistrationConfig';
 import LogConsole from '../components/LogConsole';
@@ -7,27 +8,30 @@ import { useRegistrationStore } from '../stores/registration';
 import { useAppStore } from '../stores/app';
 import type { RegistrationLog } from '../types';
 
-// WebSocket URL - connects to Python backend
-// Uses environment variable if available, otherwise builds from current hostname
-const getWebSocketUrl = (): string => {
-  // Check for environment variable first (Vite uses import.meta.env)
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL;
-  }
-  // Fall back to building URL from current hostname
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.hostname || 'localhost';
-  const port = import.meta.env.VITE_API_PORT || '8000';
-  return `${protocol}//${host}:${port}/registration/ws`;
-};
+// Event payload types from Rust backend
+interface RegistrationLogEvent {
+  level: string;
+  message: string;
+}
 
-const WS_URL = getWebSocketUrl();
+interface AccountAddedEvent {
+  id: number;
+  email: string;
+  provider: string;
+}
+
+interface RegistrationCompleteEvent {
+  success: boolean;
+}
+
+interface RegistrationErrorEvent {
+  error: string;
+}
 
 export default function AutoReg() {
   const { addNotification } = useAppStore();
   const {
     results,
-    isRunning,
     successCount,
     failedCount,
     addLog,
@@ -36,283 +40,201 @@ export default function AutoReg() {
     setWsConnected,
   } = useRegistrationStore();
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Setup Tauri event listeners
+  useEffect(() => {
+    // Mark as connected (using Tauri IPC instead of WebSocket)
+    setWsConnected(true);
+    addLog({ level: 'info', message: 'Connected to Tauri backend' });
 
-  // WebSocket connection handler
-  const connectWebSocket = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-
-    try {
-      const ws = new WebSocket(WS_URL);
-
-      ws.onopen = () => {
-        setWsConnected(true);
-        addLog({ level: 'info', message: 'Connected to registration server' });
-      };
-
-      ws.onmessage = (event) => {
+    // Listen for registration logs
+    const unlistenLog = listen<RegistrationLogEvent>('REGISTRATION_LOG', (event) => {
+      const { level, message } = event.payload;
+      addLog({
+        level: level as RegistrationLog['level'],
+        message,
+      });
+      
+      // Parse progress from message if present
+      if (message.startsWith('PROGRESS:')) {
         try {
-          const data = JSON.parse(event.data);
-          
-          switch (data.type) {
-            case 'log':
-              addLog({
-                level: data.level as RegistrationLog['level'],
-                message: data.message,
-                jobId: data.jobId,
-              });
-              break;
-              
-            case 'progress':
-              setProgress({
-                current: data.current,
-                total: data.total,
-                percentage: Math.round((data.current / data.total) * 100),
-                currentStep: data.step,
-              });
-              break;
-              
-            case 'result':
-              addResult({
-                email: data.email,
-                status: data.success ? 'success' : 'failed',
-                token: data.token,
-                error: data.error,
-              });
-              
-              if (data.success) {
-                addLog({ level: 'success', message: `Account created: ${data.email}` });
-              } else {
-                addLog({ level: 'error', message: `Failed: ${data.email} - ${data.error}` });
-              }
-              break;
-              
-            case 'complete':
-              addLog({ level: 'info', message: 'Registration batch completed' });
-              addNotification({
-                type: 'success',
-                title: 'Registration Complete',
-                message: `Created ${data.successCount} accounts`,
-              });
-              break;
-              
-            case 'error':
-              addLog({ level: 'error', message: data.message });
-              break;
+          const progressData = JSON.parse(message.substring(9));
+          if (progressData.step && progressData.totalSteps) {
+            setProgress({
+              current: progressData.step,
+              total: progressData.totalSteps,
+              percentage: Math.round((progressData.step / progressData.totalSteps) * 100),
+              currentStep: progressData.detail || `Step ${progressData.step}`,
+            });
           }
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
+        } catch {
+          // Not a progress message, ignore
         }
-      };
+      }
+    });
 
-      ws.onclose = () => {
-        setWsConnected(false);
-        addLog({ level: 'warn', message: 'Disconnected from registration server' });
-        
-        // Attempt to reconnect after 5 seconds
-        if (isRunning) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            addLog({ level: 'info', message: 'Attempting to reconnect...' });
-            connectWebSocket();
-          }, 5000);
-        }
-      };
+    // Listen for account added events
+    const unlistenAccount = listen<AccountAddedEvent>('ACCOUNT_ADDED', (event) => {
+      const { email } = event.payload;
+      addResult({
+        email,
+        status: 'success',
+        token: 'saved',
+      });
+      addLog({ level: 'success', message: `Account created and saved: ${email}` });
+    });
 
-      ws.onerror = () => {
-        addLog({ level: 'error', message: 'WebSocket connection error' });
-      };
+    // Listen for registration complete
+    const unlistenComplete = listen<RegistrationCompleteEvent>('REGISTRATION_COMPLETE', (event) => {
+      if (event.payload.success) {
+        addLog({ level: 'info', message: 'Registration completed successfully' });
+        addNotification({
+          type: 'success',
+          title: 'Registration Complete',
+          message: 'Account registration finished',
+        });
+      }
+    });
 
-      wsRef.current = ws;
-    } catch (err) {
-      console.error('Failed to connect WebSocket:', err);
-    }
-  }, [addLog, addResult, setProgress, setWsConnected, addNotification, isRunning]);
+    // Listen for registration errors
+    const unlistenError = listen<RegistrationErrorEvent>('REGISTRATION_ERROR', (event) => {
+      const { error } = event.payload;
+      addLog({ level: 'error', message: `Registration failed: ${error}` });
+      addNotification({
+        type: 'error',
+        title: 'Registration Failed',
+        message: error,
+      });
+    });
 
-  // Connect WebSocket when registration starts
-  useEffect(() => {
-    if (isRunning) {
-      connectWebSocket();
-    }
-
+    // Cleanup listeners on unmount
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      unlistenLog.then(fn => fn());
+      unlistenAccount.then(fn => fn());
+      unlistenComplete.then(fn => fn());
+      unlistenError.then(fn => fn());
+      setWsConnected(false);
     };
-  }, [isRunning, connectWebSocket]);
+  }, [addLog, addResult, setProgress, setWsConnected, addNotification]);
 
-  // Cleanup WebSocket on unmount
-  useEffect(() => {
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Export results to CSV
-  const exportResults = () => {
-    if (results.length === 0) return;
-
-    const headers = ['Email', 'Status', 'Token', 'Error', 'Created At'];
-    const rows = results.map((r) => [
-      r.email,
-      r.status,
-      r.token || '',
-      r.error || '',
-      r.createdAt,
-    ]);
-
-    const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `registration-results-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Copy token to clipboard
-  const copyToken = async (token: string) => {
-    await navigator.clipboard.writeText(token);
+  // Copy results to clipboard
+  const handleCopyResults = useCallback(() => {
+    const text = results
+      .map((r) => `${r.email}: ${r.status}${r.token ? ` (${r.token})` : ''}${r.error ? ` - ${r.error}` : ''}`)
+      .join('\n');
+    navigator.clipboard.writeText(text);
     addNotification({
       type: 'success',
       title: 'Copied',
-      message: 'Token copied to clipboard',
+      message: 'Results copied to clipboard',
     });
-  };
+  }, [results, addNotification]);
 
-  // Truncate token for display
-  const truncateToken = (token: string, length = 20) => {
-    if (token.length <= length) return token;
-    return `${token.slice(0, length)}...`;
-  };
+  // Export results as JSON
+  const handleExportResults = useCallback(() => {
+    const data = JSON.stringify(results, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `registration-results-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [results]);
 
   return (
-    <>
-      <Header title="Auto-Registration Factory" subtitle="Automated account creation pipeline" />
+    <div className="flex flex-col h-full">
+      <Header
+        title="Auto Registration"
+        subtitle="Automated account registration with browser automation"
+      />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel: Configuration (40%) */}
-        <div className="w-[40%] min-w-[400px] max-w-[500px]">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 overflow-auto">
+        {/* Left Column - Configuration */}
+        <div className="space-y-6">
           <RegistrationConfig />
         </div>
 
-        {/* Right Panel: Terminal & Results (60%) */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Live Log Console (60% of right panel) */}
-          <div className="h-[60%] min-h-[300px]">
-            <LogConsole />
-          </div>
-
-          {/* Results Table (40% of right panel) */}
-          <div className="flex-1 bg-background-dark border-t border-border-dark flex flex-col overflow-hidden">
-            {/* Results Header */}
-            <div className="h-12 flex items-center justify-between px-4 border-b border-border-dark bg-surface-dark/50">
-              <div className="flex items-center gap-4">
-                <h3 className="text-sm font-medium text-white">Results</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-green-400 bg-green-400/10 px-2 py-0.5 rounded flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" />
-                    {successCount} Success
-                  </span>
-                  <span className="text-xs text-red-400 bg-red-400/10 px-2 py-0.5 rounded flex items-center gap-1">
-                    <XCircle className="w-3 h-3" />
-                    {failedCount} Failed
-                  </span>
-                </div>
+        {/* Right Column - Results & Logs */}
+        <div className="space-y-6">
+          {/* Results Summary */}
+          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Results</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyResults}
+                  disabled={results.length === 0}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Copy results"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleExportResults}
+                  disabled={results.length === 0}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export results"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={exportResults}
-                disabled={results.length === 0}
-                className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded hover:bg-white/10"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Export CSV
-              </button>
             </div>
 
-            {/* Results Table */}
-            <div className="flex-1 overflow-auto">
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-white">{results.length}</div>
+                <div className="text-xs text-slate-400">Total</div>
+              </div>
+              <div className="bg-emerald-500/10 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-400">{successCount}</div>
+                <div className="text-xs text-slate-400">Success</div>
+              </div>
+              <div className="bg-red-500/10 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-red-400">{failedCount}</div>
+                <div className="text-xs text-slate-400">Failed</div>
+              </div>
+            </div>
+
+            {/* Results List */}
+            <div className="max-h-48 overflow-y-auto space-y-2">
               {results.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-slate-600">
-                  <div className="text-center">
-                    <RefreshCw className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No results yet</p>
-                    <p className="text-xs mt-1">Results will appear here as accounts are created</p>
-                  </div>
+                <div className="text-center text-slate-500 py-4">
+                  No results yet. Start registration to see results here.
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-surface-dark/50 sticky top-0">
-                    <tr className="text-left text-xs text-slate-400 uppercase tracking-wider">
-                      <th className="px-4 py-2 font-medium">Email</th>
-                      <th className="px-4 py-2 font-medium">Status</th>
-                      <th className="px-4 py-2 font-medium">Token</th>
-                      <th className="px-4 py-2 font-medium">Error</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-dark">
-                    {results.map((result) => (
-                      <tr
-                        key={result.id}
-                        className={`hover:bg-white/5 transition-colors ${
-                          result.status === 'failed' ? 'bg-red-500/5' : ''
-                        }`}
-                      >
-                        <td className="px-4 py-2.5 text-white font-mono text-xs">
-                          {result.email}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {result.status === 'success' ? (
-                            <span className="inline-flex items-center gap-1 text-green-400 text-xs">
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              Success
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-red-400 text-xs">
-                              <XCircle className="w-3.5 h-3.5" />
-                              Failed
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {result.token ? (
-                            <div className="flex items-center gap-2">
-                              <code className="text-xs text-slate-400 font-mono bg-surface-dark px-2 py-0.5 rounded">
-                                {truncateToken(result.token)}
-                              </code>
-                              <button
-                                onClick={() => copyToken(result.token!)}
-                                className="text-slate-500 hover:text-white transition-colors"
-                                title="Copy token"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-slate-600 text-xs">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-red-400 text-xs max-w-[200px] truncate">
-                          {result.error || '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                results.map((result, index) => (
+                  <div
+                    key={index}
+                    className={`flex items-center justify-between p-2 rounded-lg ${
+                      result.status === 'success'
+                        ? 'bg-emerald-500/10 border border-emerald-500/20'
+                        : 'bg-red-500/10 border border-red-500/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {result.status === 'success' ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-400" />
+                      )}
+                      <span className="text-sm text-white">{result.email}</span>
+                    </div>
+                    {result.error && (
+                      <span className="text-xs text-red-400 truncate max-w-[150px]">
+                        {result.error}
+                      </span>
+                    )}
+                  </div>
+                ))
               )}
             </div>
           </div>
+
+          {/* Log Console */}
+          <LogConsole />
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -15,12 +15,12 @@ import {
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
-import { API_BASE_URL } from '../config';
 import {
   getServerStatus,
   getRegistrationJobs,
   startRegistration,
   startLLMServer,
+  getDashboardStats,
 } from '../lib/tauri';
 import type { ProviderName, RegistrationJob, LLMServerStatus } from '../types';
 import { PROVIDER_HEX_COLORS } from '../constants';
@@ -320,13 +320,8 @@ export default function Dashboard() {
   const loadDashboardStats = useCallback(async () => {
     try {
       setIsLoadingStats(true);
-      const response = await fetch(`${API_BASE_URL}/dashboard/stats`);
-      if (response.ok) {
-        const stats = await response.json();
-        setDashboardStats(stats);
-      } else {
-        console.error('Failed to fetch dashboard stats:', response.statusText);
-      }
+      const stats = await getDashboardStats();
+      setDashboardStats(stats);
     } catch (error) {
       console.error('Failed to load dashboard stats:', error);
     } finally {
