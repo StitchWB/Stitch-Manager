@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Settings as SettingsIcon, Moon, Sun, Monitor, Database, Mail, Globe, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../stores/app';
-
-// API base URL
-const API_BASE = 'http://localhost:8000';
+import { API_BASE_URL } from '../config';
 
 // Settings response type from backend
 interface SettingsData {
@@ -37,7 +35,7 @@ export default function Settings() {
   const loadSettings = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE}/settings`);
+      const response = await fetch(`${API_BASE_URL}/settings`);
       
       if (response.ok) {
         const data: SettingsData = await response.json();
@@ -93,7 +91,7 @@ export default function Settings() {
         settingsToSave.imap_password = imapPassword;
       }
       
-      const response = await fetch(`${API_BASE}/settings`, {
+      const response = await fetch(`${API_BASE_URL}/settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
