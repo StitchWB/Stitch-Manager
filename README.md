@@ -1,101 +1,79 @@
 # Stitch Manager
 
-Universal AI Account Manager - десктопное приложение для управления аккаунтами AI IDE (Kiro, Windsurf, Trae).
+Менеджер аккаунтов для AI IDE (Kiro, Windsurf, Trae). Позволяет управлять несколькими аккаунтами, переключаться между ними и автоматически инжектить токены в IDE.
 
 ## Возможности
 
-- 🔐 **Управление аккаунтами AI IDE** - централизованное хранение и управление учетными записями
-- 🤖 **Авторегистрация аккаунтов** - автоматическое создание аккаунтов с использованием браузерной автоматизации
-- 🔧 **IDE Patcher** - модификация IDE для расширенной функциональности
-- 🆔 **Machine ID Manager** - управление идентификаторами машины и телеметрией
-- 📊 **Dashboard** - статистика использования и мониторинг квот
+- 🔐 **Управление аккаунтами** — добавление, удаление, обновление токенов
+- 🔄 **Быстрое переключение** — активация аккаунта одним кликом с автоматической записью токена в IDE
+- 🌍 **Мультиязычность** — English / Русский
+- 🎨 **Современный UI** — glassmorphism, анимации, тёмная тема
+- 🤖 **Авто-регистрация** — автоматическая регистрация аккаунтов через браузер (DrissionPage)
+- 🔧 **IDE Патчер** — патчинг расширений IDE
+- 🖥️ **LLM API Сервер** — OpenAI-совместимый прокси
 
 ## Технологии
 
-- **Frontend:** React 18, TypeScript, TailwindCSS, Zustand
-- **Desktop:** Tauri 2.x (Rust)
-- **Database:** SQLite (sqlx)
-- **Browser Automation:** DrissionPage (Python CLI)
-
-## Архитектура
-
-Приложение использует нативный Rust backend через Tauri:
-- **AccountService** - CRUD операции с аккаунтами
-- **PatcherService** - патчинг IDE расширений
-- **MachineIdService** - управление телеметрией и системными ID
-
-Python используется только для авторегистрации (CLI утилита).
+- **Frontend**: React 18, TypeScript, TailwindCSS, Zustand
+- **Backend**: Tauri 2.x (Rust), SQLite
+- **Automation**: Python, DrissionPage
 
 ## Установка
 
-### Требования
-
-- Node.js 18+
-- Rust 1.70+
-- Python 3.10+ (только для авторегистрации)
-
-### Запуск
-
 ```bash
-# Установка зависимостей frontend
+# Клонирование
+git clone <repo-url>
+cd stitch-manager
+
+# Установка зависимостей
 npm install
 
-# Установка зависимостей Python (для авторегистрации)
+# Установка Python зависимостей (для авто-регистрации)
 pip install -r python/requirements.txt
-
-# Запуск в dev режиме
-npm run tauri dev
 ```
 
-### Сборка
+## Запуск
 
 ```bash
-npm run tauri build
+# Разработка (Vite + Tauri вместе)
+npm run dev
+
+# Только фронтенд (для отладки в браузере)
+npm run dev:web
+
+# Сборка
+npm run build
 ```
 
 ## Структура проекта
 
 ```
-├── src/                     # React frontend
-│   ├── components/          # UI компоненты
-│   ├── pages/               # Страницы приложения
-│   ├── stores/              # Zustand stores
-│   └── types/               # TypeScript типы
-│
-├── src-tauri/               # Tauri/Rust backend
+├── src/                    # React frontend
+│   ├── components/         # UI компоненты
+│   ├── pages/              # Страницы приложения
+│   ├── stores/             # Zustand stores
+│   ├── lib/                # Утилиты, i18n, Tauri API
+│   └── types/              # TypeScript типы
+├── src-tauri/              # Rust backend
 │   ├── src/
-│   │   ├── database/        # SQLite с sqlx
-│   │   ├── services/        # Бизнес-логика
-│   │   │   ├── account_service.rs
-│   │   │   ├── patcher_service.rs
-│   │   │   └── machine_id_service.rs
-│   │   ├── registration/    # OAuth, IMAP сервисы
-│   │   ├── commands.rs      # Tauri commands
-│   │   └── lib.rs           # Entry point
-│   └── Cargo.toml
-│
-└── python/                  # Python CLI (только авторегистрация)
-    └── autoreg/
-        ├── core/            # Конфигурация, пути
-        ├── registration/    # Стратегии регистрации
-        ├── services/        # TokenService
-        ├── spoofers/        # Антидетект для браузера
-        └── cli_registration.py  # Entry point
+│   │   ├── commands.rs     # Tauri команды
+│   │   ├── services/       # Бизнес-логика
+│   │   └── database.rs     # SQLite
+│   └── tauri.conf.json     # Конфигурация Tauri
+└── python/                 # Python скрипты
+    └── autoreg/            # Авто-регистрация
 ```
 
-## Поддерживаемые IDE
+## Как работает активация аккаунта
 
-| IDE | Патчинг | Авторегистрация |
-|-----|---------|-----------------|
-| Kiro | ✅ | ✅ |
-| Windsurf | ✅ | ✅ |
-| Trae | ✅ | ✅ |
+1. Пользователь нажимает "Start" на аккаунте
+2. Backend читает токен из SQLite
+3. Токен записывается в `~/.aws/sso/cache/kiro-auth-token.json`
+4. Kiro IDE читает этот файл при запуске/обновлении
 
-## Конфигурация
+## Скриншоты
 
-```bash
-cp .env.example .env
-```
+*Coming soon*
 
 ## Лицензия
 
