@@ -7,13 +7,10 @@ import type {
   RegistrationStatus 
 } from '../types';
 
-// Email strategy types
+// Email strategy types (kept for future use)
 export type EmailStrategy = 'single' | 'plus-alias' | 'catch-all' | 'pool';
 
-// Registration mode types
-export type RegistrationMode = 'webview' | 'automated' | 'auto';
-
-// IMAP configuration
+// IMAP configuration (kept for future email verification)
 export interface IMAPConfig {
   server: string;
   port: number;
@@ -30,15 +27,13 @@ export interface ProxyConfig {
   password?: string;
 }
 
-// Registration configuration
+// Registration configuration (simplified - no mode selection)
 export interface RegistrationConfig {
   provider: ProviderName;
-  registrationMode: RegistrationMode;
   emailStrategy: EmailStrategy;
   imap: IMAPConfig;
   proxy: ProxyConfig;
   count: number;
-  headless: boolean;
   timeout: number;
   retryAttempts: number;
 }
@@ -51,6 +46,16 @@ export interface RegistrationResult {
   token?: string;
   error?: string;
   createdAt: string;
+}
+
+// Registration history entry
+export interface RegistrationHistoryEntry {
+  id: string;
+  provider: ProviderName;
+  email: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: string;
+  completedAt?: string;
 }
 
 // Save status for UI feedback
@@ -75,6 +80,9 @@ interface RegistrationState {
   successCount: number;
   failedCount: number;
   
+  // History
+  history: RegistrationHistoryEntry[];
+  
   // WebSocket
   wsConnected: boolean;
   
@@ -85,12 +93,10 @@ interface RegistrationState {
   
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
-  setRegistrationMode: (mode: RegistrationMode) => void;
   setEmailStrategy: (strategy: EmailStrategy) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
   setProxyConfig: (proxy: Partial<ProxyConfig>) => void;
   setCount: (count: number) => void;
-  setHeadless: (headless: boolean) => void;
   
   // Actions - Settings persistence
   loadSettings: () => Promise<void>;
@@ -112,13 +118,17 @@ interface RegistrationState {
   addResult: (result: Omit<RegistrationResult, 'id' | 'createdAt'>) => void;
   clearResults: () => void;
   
+  // Actions - History
+  addHistoryEntry: (entry: Omit<RegistrationHistoryEntry, 'id' | 'createdAt'>) => void;
+  updateHistoryEntry: (id: string, updates: Partial<RegistrationHistoryEntry>) => void;
+  clearHistory: () => void;
+  
   // Actions - WebSocket
   setWsConnected: (connected: boolean) => void;
 }
 
 const DEFAULT_CONFIG: RegistrationConfig = {
   provider: 'kiro',
-  registrationMode: 'webview',
   emailStrategy: 'catch-all',
   imap: {
     server: '',
@@ -134,7 +144,6 @@ const DEFAULT_CONFIG: RegistrationConfig = {
     password: '',
   },
   count: 1,
-  headless: true,
   timeout: 60000,
   retryAttempts: 3,
 };
@@ -172,6 +181,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     results: [],
     successCount: 0,
     failedCount: 0,
+    history: [],
     wsConnected: false,
     settingsLoaded: false,
     saveStatus: 'idle',
@@ -180,11 +190,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     // Config actions - all trigger auto-save
     setProvider: (provider: ProviderName) => {
       set((state) => ({ config: { ...state.config, provider } }));
-      triggerSave();
-    },
-
-    setRegistrationMode: (registrationMode: RegistrationMode) => {
-      set((state) => ({ config: { ...state.config, registrationMode } }));
       triggerSave();
     },
 
@@ -220,11 +225,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       triggerSave();
     },
 
-    setHeadless: (headless: boolean) => {
-      set((state) => ({ config: { ...state.config, headless } }));
-      triggerSave();
-    },
-
     // Settings persistence
     loadSettings: async () => {
       try {
@@ -234,7 +234,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             config: {
               ...state.config,
               provider: (settings.provider as ProviderName) || 'kiro',
-              registrationMode: (settings.registration_mode as RegistrationMode) || 'webview',
               emailStrategy: (settings.email_strategy as EmailStrategy) || 'catch-all',
               imap: {
                 ...state.config.imap,
@@ -251,7 +250,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
                 password: settings.proxy_password || '',
               },
               count: settings.count || 1,
-              headless: settings.headless ?? true,
             },
             settingsLoaded: true,
             imapPasswordSet: !!settings.imap_password,
@@ -266,10 +264,8 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     saveSettings: async () => {
       const { config } = get();
       try {
-        // Only send password if it's not empty (don't overwrite with empty)
         const updateData: Record<string, unknown> = {
           provider: config.provider,
-          registration_mode: config.registrationMode,
           email_strategy: config.emailStrategy,
           imap_server: config.imap.server,
           imap_port: config.imap.port,
@@ -278,7 +274,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           proxy_url: config.proxy.url,
           proxy_username: config.proxy.username,
           count: config.count,
-          headless: config.headless,
         };
         
         // Only include passwords if they have actual values
@@ -291,7 +286,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         
         await updateSettings(updateData);
         set({ saveStatus: 'saved' });
-        // Reset to idle after 2 seconds
         setTimeout(() => set({ saveStatus: 'idle' }), 2000);
       } catch (error) {
         console.error('Failed to save settings:', error);
@@ -310,8 +304,8 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         successCount: 0,
         failedCount: 0,
       });
-      addLog({ level: 'info', message: `Starting registration for ${config.count} account(s)...` });
-      addLog({ level: 'info', message: `Provider: ${config.provider}, Strategy: ${config.emailStrategy}` });
+      addLog({ level: 'info', message: `Starting registration for ${config.provider}...` });
+      addLog({ level: 'info', message: 'Opening browser for authentication' });
       
       try {
         await startRegistration({
@@ -320,10 +314,9 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             provider: config.provider,
             count: config.count,
             useProxy: config.proxy.enabled,
-            headless: config.headless,
           },
         });
-        addLog({ level: 'success', message: 'Registration request sent to backend' });
+        addLog({ level: 'success', message: 'Registration started' });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         addLog({ level: 'error', message: `Failed to start registration: ${message}` });
@@ -386,6 +379,26 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     }),
 
     clearResults: () => set({ results: [], successCount: 0, failedCount: 0 }),
+
+    // History actions
+    addHistoryEntry: (entry: Omit<RegistrationHistoryEntry, 'id' | 'createdAt'>) => set((state) => ({
+      history: [
+        {
+          ...entry,
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        },
+        ...state.history,
+      ].slice(0, 50), // Keep only last 50 entries
+    })),
+
+    updateHistoryEntry: (id: string, updates: Partial<RegistrationHistoryEntry>) => set((state) => ({
+      history: state.history.map((entry) =>
+        entry.id === id ? { ...entry, ...updates } : entry
+      ),
+    })),
+
+    clearHistory: () => set({ history: [] }),
 
     // WebSocket actions
     setWsConnected: (connected: boolean) => set({ wsConnected: connected }),
