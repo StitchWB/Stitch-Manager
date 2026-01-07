@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import type { Account, ProviderName, QuotaInfo } from '../types';
 import {
   listAccounts,
@@ -8,6 +8,8 @@ import {
   refreshAccountQuota,
   getAccountQuota,
   validateAccount,
+  setActiveAccount as setActiveAccountTauri,
+  getActiveAccounts as getActiveAccountsTauri,
   // TODO: Implement Rust commands
   // importAccounts,
   // exportAccounts,
@@ -27,6 +29,9 @@ interface AccountsState {
   selectedIds: Set<number>;
   searchQuery: string;
   
+  // Active accounts per provider (provider -> accountId)
+  activeAccountIds: Record<string, number | null>;
+  
   // Quota cache
   quotaCache: Map<number, { quota: QuotaInfo; fetchedAt: number }>;
   
@@ -39,6 +44,11 @@ interface AccountsState {
   refreshAllAccounts: () => Promise<void>;
   getQuota: (accountId: number, forceRefresh?: boolean) => Promise<QuotaInfo>;
   validateAccount: (accountId: number) => Promise<boolean>;
+  
+  // Active account management
+  setActiveAccount: (provider: string, accountId: number | null) => Promise<void>;
+  getActiveAccount: (provider: string) => Account | undefined;
+  loadActiveAccounts: () => Promise<void>;
   
   // Import/Export
   importFromFile: (filePath: string) => Promise<Account[]>;
@@ -81,31 +91,35 @@ interface AccountStats {
 
 export const useAccountsStore = create<AccountsState>()(
   devtools(
-    (set, get) => ({
-      // Initial state
-      accounts: [],
-      loading: false,
-      error: null,
-      selectedProvider: null,
-      selectedIds: new Set(),
-      searchQuery: '',
-      quotaCache: new Map(),
+    persist(
+      (set, get) => ({
+        // Initial state
+        accounts: [],
+        loading: false,
+        error: null,
+        selectedProvider: null,
+        selectedIds: new Set(),
+        searchQuery: '',
+        quotaCache: new Map(),
+        activeAccountIds: {},
 
-      // ============================================
-      // Core Actions
-      // ============================================
+        // ============================================
+        // Core Actions
+        // ============================================
 
-      fetchAccounts: async (provider) => {
-        set({ loading: true, error: null });
-        try {
-          const accounts = await listAccounts({ provider });
-          set({ accounts, loading: false });
-        } catch (error) {
-          const message = error instanceof TauriError ? error.message : String(error);
-          set({ error: message, loading: false });
-          throw error;
-        }
-      },
+        fetchAccounts: async (provider) => {
+          set({ loading: true, error: null });
+          try {
+            const accounts = await listAccounts({ provider });
+            set({ accounts, loading: false });
+            // Load active accounts after fetching
+            await get().loadActiveAccounts();
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message, loading: false });
+            throw error;
+          }
+        },
 
       addAccount: async (provider, email, password) => {
         set({ loading: true, error: null });
@@ -260,6 +274,55 @@ export const useAccountsStore = create<AccountsState>()(
           const message = error instanceof TauriError ? error.message : String(error);
           set({ error: message });
           throw error;
+        }
+      },
+
+      // ============================================
+      // Active Account Management
+      // ============================================
+
+      setActiveAccount: async (provider, accountId) => {
+        try {
+          // Call backend to persist and apply the active account
+          const result = await setActiveAccountTauri({ provider, accountId });
+          
+          // Update local state
+          set((state) => ({
+            activeAccountIds: {
+              ...state.activeAccountIds,
+              [provider]: accountId,
+            },
+          }));
+          
+          // Log result for debugging
+          if (result.success) {
+            console.log(`[AccountsStore] Token written to: ${result.token_path}`);
+            if (result.client_path) {
+              console.log(`[AccountsStore] Client credentials written to: ${result.client_path}`);
+            }
+          }
+        } catch (error) {
+          const message = error instanceof TauriError ? error.message : String(error);
+          set({ error: message });
+          throw error;
+        }
+      },
+
+      getActiveAccount: (provider) => {
+        const { accounts, activeAccountIds } = get();
+        const activeId = activeAccountIds[provider];
+        if (activeId === null || activeId === undefined) return undefined;
+        return accounts.find((a) => a.id === activeId);
+      },
+
+      loadActiveAccounts: async () => {
+        try {
+          const activeAccounts = await getActiveAccountsTauri();
+          // activeAccounts is Record<string, number | null>
+          set({ activeAccountIds: activeAccounts });
+        } catch (error) {
+          // Silently fail - active accounts are optional
+          console.warn('Failed to load active accounts:', error);
         }
       },
 
@@ -423,7 +486,14 @@ export const useAccountsStore = create<AccountsState>()(
         set({ error });
       },
     }),
-    { name: 'accounts-store' }
+    { 
+      name: 'accounts-store',
+      partialize: (state) => ({ 
+        activeAccountIds: state.activeAccountIds 
+      }),
+    }
+  ),
+  { name: 'accounts-store' }
   )
 );
 
@@ -437,3 +507,4 @@ export const selectError = (state: AccountsState) => state.error;
 export const selectSelectedProvider = (state: AccountsState) => state.selectedProvider;
 export const selectSelectedIds = (state: AccountsState) => state.selectedIds;
 export const selectSearchQuery = (state: AccountsState) => state.searchQuery;
+export const selectActiveAccountIds = (state: AccountsState) => state.activeAccountIds;

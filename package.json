@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5174",
-    "build": "tsc && vite build",
+    "dev": "npm exec tauri -- dev",
+    "dev:web": "vite --port 5174",
+    "build": "npm exec tauri -- build",
+    "build:web": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "setup:py": "pip install -r python/autoreg/requirements.txt"
@@ -13,6 +15,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-dialog": "^2.4.2",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -20,7 +23,7 @@
     "zustand": "^5.0.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0",
+    "@tauri-apps/cli": "^2.9.6",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",

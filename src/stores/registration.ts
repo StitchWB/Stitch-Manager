@@ -10,6 +10,9 @@ import type {
 // Email strategy types
 export type EmailStrategy = 'single' | 'plus-alias' | 'catch-all' | 'pool';
 
+// Registration mode types
+export type RegistrationMode = 'webview' | 'automated' | 'auto';
+
 // IMAP configuration
 export interface IMAPConfig {
   server: string;
@@ -30,6 +33,7 @@ export interface ProxyConfig {
 // Registration configuration
 export interface RegistrationConfig {
   provider: ProviderName;
+  registrationMode: RegistrationMode;
   emailStrategy: EmailStrategy;
   imap: IMAPConfig;
   proxy: ProxyConfig;
@@ -81,6 +85,7 @@ interface RegistrationState {
   
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
+  setRegistrationMode: (mode: RegistrationMode) => void;
   setEmailStrategy: (strategy: EmailStrategy) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
   setProxyConfig: (proxy: Partial<ProxyConfig>) => void;
@@ -113,6 +118,7 @@ interface RegistrationState {
 
 const DEFAULT_CONFIG: RegistrationConfig = {
   provider: 'kiro',
+  registrationMode: 'webview',
   emailStrategy: 'catch-all',
   imap: {
     server: '',
@@ -177,6 +183,11 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       triggerSave();
     },
 
+    setRegistrationMode: (registrationMode: RegistrationMode) => {
+      set((state) => ({ config: { ...state.config, registrationMode } }));
+      triggerSave();
+    },
+
     setEmailStrategy: (emailStrategy: EmailStrategy) => {
       set((state) => ({ config: { ...state.config, emailStrategy } }));
       triggerSave();
@@ -223,6 +234,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             config: {
               ...state.config,
               provider: (settings.provider as ProviderName) || 'kiro',
+              registrationMode: (settings.registration_mode as RegistrationMode) || 'webview',
               emailStrategy: (settings.email_strategy as EmailStrategy) || 'catch-all',
               imap: {
                 ...state.config.imap,
@@ -257,6 +269,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         // Only send password if it's not empty (don't overwrite with empty)
         const updateData: Record<string, unknown> = {
           provider: config.provider,
+          registration_mode: config.registrationMode,
           email_strategy: config.emailStrategy,
           imap_server: config.imap.server,
           imap_port: config.imap.port,

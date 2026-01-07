@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { FileText, Filter, Search, Download, Trash2, RefreshCw } from 'lucide-react';
+import { FileText, Search, Download, Trash2, RefreshCw } from 'lucide-react';
+import Header from '../components/layout/Header';
+import { useAppStore } from '../stores/app';
+import { t } from '../lib/i18n';
 
 interface LogEntry {
   id: string;
@@ -15,10 +18,21 @@ const MOCK_LOGS: LogEntry[] = [
   { id: '3', timestamp: new Date().toISOString(), level: 'warn', message: 'IMAP not configured', source: 'registration' },
 ];
 
+const levelConfig = {
+  info: 'badge-info',
+  warn: 'badge-warning',
+  error: 'badge-error',
+  debug: 'badge-neutral',
+};
+
 export default function Logs() {
+  const { language } = useAppStore();
   const [logs, setLogs] = useState<LogEntry[]>(MOCK_LOGS);
   const [filter, setFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+
+  // Force re-render when language changes
+  const _ = language;
 
   const filteredLogs = logs.filter((log) => {
     const matchesFilter = filter === 'all' || log.level === filter;
@@ -26,16 +40,7 @@ export default function Logs() {
     return matchesFilter && matchesSearch;
   });
 
-  const levelColors = {
-    info: 'text-blue-400 bg-blue-500/10',
-    warn: 'text-amber-400 bg-amber-500/10',
-    error: 'text-red-400 bg-red-500/10',
-    debug: 'text-slate-400 bg-slate-500/10',
-  };
-
-  const handleClear = () => {
-    setLogs([]);
-  };
+  const handleClear = () => setLogs([]);
 
   const handleExport = () => {
     const content = logs.map((log) => `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.message}`).join('\n');
@@ -49,122 +54,114 @@ export default function Logs() {
   };
 
   const handleRefresh = () => {
-    // TODO: Fetch logs from backend
     console.log('Refreshing logs...');
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <FileText className="w-7 h-7 text-primary" />
-            Application Logs
-          </h1>
-          <p className="text-slate-400 mt-1">View and manage application logs</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefresh}
-            className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </button>
-          <button
-            onClick={handleClear}
-            className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            Clear
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      <Header
+        title={t('logs.title')}
+        subtitle={t('logs.subtitle')}
+        icon={<FileText size={18} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <button onClick={handleRefresh} className="btn-secondary py-1.5 text-xs">
+              <RefreshCw className="w-3.5 h-3.5" />
+              {t('logs.refresh')}
+            </button>
+            <button onClick={handleExport} className="btn-secondary py-1.5 text-xs">
+              <Download className="w-3.5 h-3.5" />
+              {t('logs.export')}
+            </button>
+            <button onClick={handleClear} className="btn-danger py-1.5 text-xs">
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('logs.clear')}
+            </button>
+          </div>
+        }
+      />
 
-      {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white"
-          >
-            <option value="all">All Levels</option>
-            <option value="info">Info</option>
-            <option value="warn">Warning</option>
-            <option value="error">Error</option>
-            <option value="debug">Debug</option>
-          </select>
+      <div className="flex-1 overflow-y-auto p-6">
+        {/* Filters */}
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="input-ds text-sm py-1.5 w-32"
+            >
+              <option value="all">{t('logs.allLevels')}</option>
+              <option value="info">{t('logs.info')}</option>
+              <option value="warn">{t('logs.warning')}</option>
+              <option value="error">{t('logs.error')}</option>
+              <option value="debug">{t('logs.debug')}</option>
+            </select>
+          </div>
+          <div className="flex-1 relative max-w-md">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('logs.searchPlaceholder')}
+              className="input-ds text-sm py-1.5 pl-9"
+            />
+          </div>
         </div>
-        <div className="flex-1 relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search logs..."
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-lg pl-10 pr-4 py-2 text-white placeholder-slate-500"
-          />
-        </div>
-      </div>
 
-      {/* Logs Table */}
-      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700/50">
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Time</th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Level</th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Source</th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">Message</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/50">
-              {filteredLogs.length === 0 ? (
+        {/* Logs Table */}
+        <div className="card flex-1 overflow-hidden flex flex-col">
+          <div className="overflow-auto flex-1">
+            <table className="table-ds">
+              <thead>
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                    No logs to display
-                  </td>
+                  <th className="w-24">{t('logs.time')}</th>
+                  <th className="w-20">{t('logs.level')}</th>
+                  <th className="w-28">{t('logs.source')}</th>
+                  <th>{t('logs.message')}</th>
                 </tr>
-              ) : (
-                filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-700/30">
-                    <td className="px-4 py-3 text-sm text-slate-400 font-mono whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium uppercase ${levelColors[log.level]}`}>
-                        {log.level}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-400">
-                      {log.source || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-white">
-                      {log.message}
+              </thead>
+              <tbody>
+                {filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-12 text-center text-slate-600">
+                      {t('logs.noLogs')}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                ) : (
+                  filteredLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td className="font-mono text-xs text-slate-500 tabular-nums">
+                        {new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false })}
+                      </td>
+                      <td>
+                        <span className={levelConfig[log.level]}>
+                          {log.level}
+                        </span>
+                      </td>
+                      <td className="text-xs text-slate-500">
+                        {log.source || '—'}
+                      </td>
+                      <td className="text-sm text-slate-200">
+                        {log.message}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      {/* Stats */}
-      <div className="flex items-center justify-between text-sm text-slate-400">
-        <span>Showing {filteredLogs.length} of {logs.length} entries</span>
-        <span>Last updated: {new Date().toLocaleTimeString()}</span>
+          {/* Footer */}
+          <div className="border-t border-white/5 px-4 py-3 flex items-center justify-between bg-ds-surface/50">
+            <span className="text-2xs text-slate-500">
+              {t('logs.showing')} <span className="text-slate-300 tabular-nums">{filteredLogs.length}</span> {t('logs.of')} <span className="text-slate-300 tabular-nums">{logs.length}</span> {t('logs.entries')}
+            </span>
+            <span className="text-2xs text-slate-600">
+              {t('logs.lastUpdated')} {new Date().toLocaleTimeString('en-US', { hour12: false })}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

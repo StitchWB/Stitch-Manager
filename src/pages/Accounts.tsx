@@ -1,23 +1,24 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, RefreshCw, Download } from 'lucide-react';
+import { Plus, Search, RefreshCw, Download, Users } from 'lucide-react';
 import Header from '../components/layout/Header';
 import AccountsTable from '../components/AccountsTable';
 import AddAccountModal from '../components/AddAccountModal';
+import QuickAccountSwitch from '../components/QuickAccountSwitch';
 import { useAccountsStore } from '../stores/accounts';
+import { useAppStore } from '../stores/app';
 import { copyToClipboard } from '../lib/tauri';
+import { t } from '../lib/i18n';
 import type { ProviderName } from '../types';
 
-// Provider filter tabs
-const providerTabs: { id: ProviderName | null; label: string }[] = [
-  { id: null, label: 'All' },
-  { id: 'kiro', label: 'Kiro' },
-  { id: 'windsurf', label: 'Windsurf' },
-  { id: 'cursor', label: 'Cursor' },
-  { id: 'trae', label: 'Trae' },
-  { id: 'qoder', label: 'Qoder' },
+const providerTabs: { id: ProviderName | null; labelKey: string; label: string }[] = [
+  { id: null, labelKey: 'accounts.filterAll', label: 'All' },
+  { id: 'kiro', labelKey: '', label: 'Kiro' },
+  { id: 'windsurf', labelKey: '', label: 'Windsurf' },
+  { id: 'trae', labelKey: '', label: 'Trae' },
 ];
 
 export default function Accounts() {
+  const { language } = useAppStore();
   const {
     loading: isLoading,
     searchQuery,
@@ -35,6 +36,8 @@ export default function Accounts() {
     deleteAccounts: removeSelectedAccounts,
     refreshAccount,
     refreshAllAccounts,
+    activeAccountIds,
+    setActiveAccount,
   } = useAccountsStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,23 +46,22 @@ export default function Accounts() {
 
   const accounts = getFilteredAccounts();
 
-  // Fetch accounts on mount
+  // Force re-render when language changes
+  const _ = language;
+
   useEffect(() => {
     fetchAccounts();
   }, [fetchAccounts]);
 
-  // Handle adding a new account
   const handleAddAccount = async (data: {
     provider: ProviderName;
     email: string;
     password: string;
     token?: string;
   }) => {
-    // Pass email and password to the backend for account creation
     await createAccount(data.provider, data.email, data.password);
   };
 
-  // Handle refreshing a single account's token
   const handleRefreshToken = async (accountId: number) => {
     try {
       await refreshAccount(accountId);
@@ -68,7 +70,6 @@ export default function Accounts() {
     }
   };
 
-  // Handle refreshing all accounts
   const handleRefreshAll = async () => {
     setIsRefreshingAll(true);
     try {
@@ -78,14 +79,12 @@ export default function Accounts() {
     }
   };
 
-  // Handle copying token to clipboard
   const handleCopyToken = useCallback(async (token: string) => {
     try {
       await copyToClipboard({ text: token });
       setCopiedToast(true);
       setTimeout(() => setCopiedToast(false), 2000);
-    } catch (error) {
-      // Fallback to browser clipboard API
+    } catch {
       try {
         await navigator.clipboard.writeText(token);
         setCopiedToast(true);
@@ -96,7 +95,6 @@ export default function Accounts() {
     }
   }, []);
 
-  // Handle deleting an account
   const handleDelete = async (accountId: number) => {
     try {
       await removeAccount(accountId);
@@ -105,7 +103,36 @@ export default function Accounts() {
     }
   };
 
-  // Handle exporting accounts to CSV
+  const handleActivate = async (provider: string, accountId: number | null) => {
+    try {
+      await setActiveAccount(provider, accountId);
+      // Show success notification
+      const { addNotification } = useAppStore.getState();
+      if (accountId) {
+        const account = accounts.find(a => a.id === accountId);
+        addNotification({
+          type: 'success',
+          title: t('notifications.accountActivated'),
+          message: account ? `${account.email} → ${provider}` : provider,
+        });
+      } else {
+        addNotification({
+          type: 'info',
+          title: t('notifications.accountDeactivated'),
+          message: provider,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to activate account:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('notifications.activationFailed'),
+        message: String(error),
+      });
+    }
+  };
+
   const handleExportCSV = () => {
     const headers = ['Provider', 'Email', 'Status', 'Quota Used', 'Quota Limit', 'Token'];
     const rows = accounts.map((account) => [
@@ -134,170 +161,130 @@ export default function Accounts() {
   };
 
   return (
-    <>
-      <Header title="Accounts Database" />
+    <div className="flex flex-col h-full overflow-hidden">
+      <Header title={t('accounts.title')} icon={<Users size={18} />} />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Filter & Search Toolbar */}
-        <div className="p-6 pb-2">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Filter Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-              {providerTabs.map((tab) => (
-                <button
-                  key={tab.id ?? 'all'}
-                  onClick={() => setFilterProvider(tab.id)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                    filterProvider === tab.id
-                      ? 'bg-surface-dark border border-primary text-primary shadow-sm'
-                      : 'border border-border-dark text-slate-400 hover:text-white hover:border-white/20 hover:bg-surface-dark'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+      <div className="flex-1 flex flex-col overflow-hidden p-4">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between gap-4 mb-4">
+          {/* Filter Tabs - Text links style */}
+          <div className="flex items-center gap-1">
+            {providerTabs.map((tab) => (
+              <button
+                key={tab.id ?? 'all'}
+                onClick={() => setFilterProvider(tab.id)}
+                className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                  filterProvider === tab.id
+                    ? 'text-white font-medium bg-white/10 border border-white/5 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {tab.labelKey ? t(tab.labelKey) : tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search & Actions */}
+          <div className="flex items-center gap-2">
+            <QuickAccountSwitch />
+            
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-56 h-9 bg-transparent border border-white/10 rounded-lg pl-9 pr-3 text-sm text-white placeholder-slate-600 focus:border-white/20 focus:outline-none"
+                placeholder={t('accounts.searchPlaceholder')}
+              />
             </div>
 
-            {/* Search & Actions */}
-            <div className="flex items-center gap-3">
-              {/* Search Input */}
-              <div className="relative group w-full md:w-80">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="w-5 h-5 text-slate-400 group-focus-within:text-primary transition-colors" />
-                </div>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 bg-surface-dark border border-border-dark rounded-lg leading-5 text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm transition-all shadow-sm"
-                  placeholder="Search by email..."
-                />
-              </div>
+            <button
+              onClick={handleRefreshAll}
+              disabled={isRefreshingAll}
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 text-slate-500 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50"
+              title={t('accounts.refreshAll')}
+            >
+              <RefreshCw size={15} className={isRefreshingAll ? 'animate-spin' : ''} />
+            </button>
 
-              {/* Refresh All Button */}
-              <button
-                onClick={handleRefreshAll}
-                disabled={isRefreshingAll}
-                className="p-2 rounded-lg border border-border-dark text-slate-400 hover:text-white hover:bg-surface-dark transition-colors disabled:opacity-50"
-                title="Refresh All"
-              >
-                <RefreshCw size={18} className={isRefreshingAll ? 'animate-spin' : ''} />
-              </button>
+            <button
+              onClick={handleExportCSV}
+              disabled={accounts.length === 0}
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 text-slate-500 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50"
+              title={t('accounts.exportCsv')}
+            >
+              <Download size={15} />
+            </button>
 
-              {/* Export Button */}
-              <button
-                onClick={handleExportCSV}
-                disabled={accounts.length === 0}
-                className="p-2 rounded-lg border border-border-dark text-slate-400 hover:text-white hover:bg-surface-dark transition-colors disabled:opacity-50"
-                title="Export CSV"
-              >
-                <Download size={18} />
-              </button>
-
-              {/* Add Account Button */}
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="bg-primary hover:bg-blue-600 text-white text-sm font-medium py-2 px-4 rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
-              >
-                <Plus size={18} />
-                <span>Add Account</span>
-              </button>
-            </div>
+            <button 
+              onClick={() => setIsModalOpen(true)} 
+              className="h-9 px-4 bg-white text-black text-xs font-semibold rounded-lg flex items-center gap-1.5 hover:bg-white/90 transition-colors"
+            >
+              <Plus size={14} />
+              {t('common.add')}
+            </button>
           </div>
         </div>
 
-        {/* Data Grid */}
-        <div className="flex-1 px-6 pb-6 overflow-hidden flex flex-col">
+        {/* Table */}
+        <div className="flex-1 overflow-hidden">
           <AccountsTable
             accounts={accounts}
             isLoading={isLoading}
             selectedIds={selectedIds}
+            activeAccountIds={activeAccountIds}
             onToggleSelection={toggleSelection}
             onSelectAll={selectAll}
             onClearSelection={clearSelection}
             onRefreshToken={handleRefreshToken}
             onCopyToken={handleCopyToken}
             onDelete={handleDelete}
+            onActivate={handleActivate}
           />
         </div>
 
-        {/* Bulk Actions Floating Bar */}
+        {/* Bulk Actions */}
         {selectedIds.size > 0 && (
-          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-surface-dark border border-border-dark shadow-lg rounded-full px-6 py-3 flex items-center gap-6 z-20 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="flex items-center gap-2 pr-4 border-r border-border-dark">
-              <span className="bg-primary text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {selectedIds.size}
-              </span>
-              <span className="text-sm font-medium text-white">Selected</span>
-            </div>
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
-            >
-              <Download size={18} />
-              Export CSV
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 border border-white/10 rounded-full px-4 py-2 flex items-center gap-4 shadow-2xl z-20 animate-slide-up">
+            <span className="text-xs text-white">
+              <span className="font-semibold">{selectedIds.size}</span> {t('common.selected')}
+            </span>
+            <div className="w-px h-4 bg-white/10" />
+            <button onClick={handleExportCSV} className="text-xs text-slate-400 hover:text-white">
+              {t('common.export')}
             </button>
             <button
               onClick={async () => {
-                if (confirm(`Delete ${selectedIds.size} selected accounts?`)) {
+                if (confirm(t('accounts.deleteConfirm', { count: selectedIds.size }))) {
                   await removeSelectedAccounts([...selectedIds]);
                 }
               }}
-              className="flex items-center gap-2 text-sm text-red-400 hover:text-red-300 transition-colors"
+              className="text-xs text-red-400 hover:text-red-300"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 6h18" />
-                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-              </svg>
-              Delete
+              {t('common.delete')}
             </button>
-            <button
-              onClick={clearSelection}
-              className="ml-2 text-slate-400 hover:text-white"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
+            <button onClick={clearSelection} className="text-slate-500 hover:text-white">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
         )}
 
-        {/* Copied Toast */}
+        {/* Toast */}
         {copiedToast && (
-          <div className="fixed bottom-8 right-8 bg-green-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
-            Token copied to clipboard!
+          <div className="fixed bottom-6 right-6 bg-white text-black text-xs font-medium px-4 py-2 rounded-lg shadow-lg animate-slide-up z-50">
+            {t('common.copied')}
           </div>
         )}
       </div>
 
-      {/* Add Account Modal */}
       <AddAccountModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleAddAccount}
       />
-    </>
+    </div>
   );
 }

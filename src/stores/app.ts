@@ -1,14 +1,44 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ProviderName, Theme, Provider, LLMServerStatus } from '../types';
+import { setLocale, getLocale } from '../lib/i18n';
 
 // Track notification timeouts to allow proper cleanup when notifications are removed
 const notificationTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
+export type Language = 'en' | 'ru' | 'zh';
+
+// Initialize locale from localStorage or system preference
+const initializeLocale = (): Language => {
+  // Try to get from localStorage first (persisted state)
+  try {
+    const stored = localStorage.getItem('stitch-app-storage');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed.state?.language) {
+        setLocale(parsed.state.language);
+        return parsed.state.language;
+      }
+    }
+  } catch {}
+  
+  // Fall back to system preference
+  const systemLang = navigator.language.split('-')[0];
+  const supportedLang = ['en', 'ru'].includes(systemLang) ? systemLang as Language : 'en';
+  setLocale(supportedLang);
+  return supportedLang;
+};
+
+const initialLanguage = initializeLocale();
 
 interface AppState {
   // Theme
   theme: Theme;
   setTheme: (theme: Theme) => void;
+
+  // Language
+  language: Language;
+  setLanguage: (language: Language) => void;
 
   // Selected Provider
   selectedProvider: ProviderName | null;
@@ -45,8 +75,6 @@ const DEFAULT_PROVIDERS: Provider[] = [
   { id: 'kiro', name: 'Kiro', version: 'v2.1', activeCount: 12, status: 'active', color: 'from-purple-500 to-indigo-600' },
   { id: 'windsurf', name: 'Windsurf', version: 'v1.4', activeCount: 4, status: 'active', color: 'from-cyan-400 to-blue-500' },
   { id: 'trae', name: 'Trae', version: 'v1.0', activeCount: 8, status: 'active', color: 'from-emerald-400 to-teal-600' },
-  { id: 'qoder', name: 'Qoder', version: 'v0.8', activeCount: 0, status: 'down', color: 'from-slate-600 to-slate-700' },
-  { id: 'cursor', name: 'Cursor', version: 'v0.9', activeCount: 22, status: 'active', color: 'from-slate-100 to-slate-300' },
 ];
 
 export const useAppStore = create<AppState>()(
@@ -62,6 +90,13 @@ export const useAppStore = create<AppState>()(
         } else {
           document.documentElement.classList.remove('dark');
         }
+      },
+
+      // Language
+      language: initialLanguage,
+      setLanguage: (language) => {
+        setLocale(language);
+        set({ language });
       },
 
       // Selected Provider
@@ -118,6 +153,7 @@ export const useAppStore = create<AppState>()(
       name: 'stitch-app-storage',
       partialize: (state) => ({
         theme: state.theme,
+        language: state.language,
         selectedProvider: state.selectedProvider,
         sidebarCollapsed: state.sidebarCollapsed,
       }),
