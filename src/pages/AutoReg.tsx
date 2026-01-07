@@ -1,14 +1,14 @@
 import { useEffect, useCallback } from 'react';
-import { Download, CheckCircle, XCircle, Copy } from 'lucide-react';
+import { Download, CheckCircle, XCircle, Copy, RefreshCw } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import Header from '../components/layout/Header';
 import RegistrationConfig from '../components/RegistrationConfig';
 import LogConsole from '../components/LogConsole';
 import { useRegistrationStore } from '../stores/registration';
 import { useAppStore } from '../stores/app';
+import { t } from '../lib/i18n';
 import type { RegistrationLog } from '../types';
 
-// Event payload types from Rust backend
 interface RegistrationLogEvent {
   level: string;
   message: string;
@@ -29,7 +29,7 @@ interface RegistrationErrorEvent {
 }
 
 export default function AutoReg() {
-  const { addNotification } = useAppStore();
+  const { addNotification, language } = useAppStore();
   const {
     results,
     successCount,
@@ -40,21 +40,17 @@ export default function AutoReg() {
     setWsConnected,
   } = useRegistrationStore();
 
-  // Setup Tauri event listeners
+  // Force re-render when language changes
+  const _ = language;
+
   useEffect(() => {
-    // Mark as connected (using Tauri IPC instead of WebSocket)
     setWsConnected(true);
     addLog({ level: 'info', message: 'Connected to Tauri backend' });
 
-    // Listen for registration logs
     const unlistenLog = listen<RegistrationLogEvent>('REGISTRATION_LOG', (event) => {
       const { level, message } = event.payload;
-      addLog({
-        level: level as RegistrationLog['level'],
-        message,
-      });
+      addLog({ level: level as RegistrationLog['level'], message });
       
-      // Parse progress from message if present
       if (message.startsWith('PROGRESS:')) {
         try {
           const progressData = JSON.parse(message.substring(9));
@@ -66,47 +62,29 @@ export default function AutoReg() {
               currentStep: progressData.detail || `Step ${progressData.step}`,
             });
           }
-        } catch {
-          // Not a progress message, ignore
-        }
+        } catch { /* ignore */ }
       }
     });
 
-    // Listen for account added events
     const unlistenAccount = listen<AccountAddedEvent>('ACCOUNT_ADDED', (event) => {
       const { email } = event.payload;
-      addResult({
-        email,
-        status: 'success',
-        token: 'saved',
-      });
+      addResult({ email, status: 'success', token: 'saved' });
       addLog({ level: 'success', message: `Account created and saved: ${email}` });
     });
 
-    // Listen for registration complete
     const unlistenComplete = listen<RegistrationCompleteEvent>('REGISTRATION_COMPLETE', (event) => {
       if (event.payload.success) {
         addLog({ level: 'info', message: 'Registration completed successfully' });
-        addNotification({
-          type: 'success',
-          title: 'Registration Complete',
-          message: 'Account registration finished',
-        });
+        addNotification({ type: 'success', title: t('notifications.registrationComplete'), message: t('notifications.accountRegistrationFinished') });
       }
     });
 
-    // Listen for registration errors
     const unlistenError = listen<RegistrationErrorEvent>('REGISTRATION_ERROR', (event) => {
       const { error } = event.payload;
       addLog({ level: 'error', message: `Registration failed: ${error}` });
-      addNotification({
-        type: 'error',
-        title: 'Registration Failed',
-        message: error,
-      });
+      addNotification({ type: 'error', title: t('notifications.registrationFailed'), message: error });
     });
 
-    // Cleanup listeners on unmount
     return () => {
       unlistenLog.then(fn => fn());
       unlistenAccount.then(fn => fn());
@@ -116,20 +94,14 @@ export default function AutoReg() {
     };
   }, [addLog, addResult, setProgress, setWsConnected, addNotification]);
 
-  // Copy results to clipboard
   const handleCopyResults = useCallback(() => {
     const text = results
       .map((r) => `${r.email}: ${r.status}${r.token ? ` (${r.token})` : ''}${r.error ? ` - ${r.error}` : ''}`)
       .join('\n');
     navigator.clipboard.writeText(text);
-    addNotification({
-      type: 'success',
-      title: 'Copied',
-      message: 'Results copied to clipboard',
-    });
+    addNotification({ type: 'success', title: t('notifications.copied'), message: t('notifications.resultsCopiedToClipboard') });
   }, [results, addNotification]);
 
-  // Export results as JSON
   const handleExportResults = useCallback(() => {
     const data = JSON.stringify(results, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
@@ -142,97 +114,94 @@ export default function AutoReg() {
   }, [results]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <Header
-        title="Auto Registration"
-        subtitle="Automated account registration with browser automation"
+        title={t('autoReg.title')}
+        subtitle={t('autoReg.subtitle')}
+        icon={<RefreshCw size={18} />}
       />
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 overflow-auto">
-        {/* Left Column - Configuration */}
-        <div className="space-y-6">
+      <div className="flex-1 flex gap-4 p-4 min-h-0 overflow-hidden">
+        {/* Left - Config (40%) */}
+        <div className="w-[40%] overflow-y-auto no-scrollbar">
           <RegistrationConfig />
         </div>
 
-        {/* Right Column - Results & Logs */}
-        <div className="space-y-6">
-          {/* Results Summary */}
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Results</h3>
+        {/* Right - Terminal (60%) */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Log Console - Full remaining height */}
+          <LogConsole className="flex-1" />
+
+          {/* Compact Results Summary */}
+          <div className="card p-3 mt-3 shrink-0">
+            <div className="flex items-center justify-between gap-3">
+              {/* Inline Stats */}
               <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-white/5 rounded px-2 py-1">
+                  <span className="text-xs text-slate-500">{t('autoReg.results.total')}</span>
+                  <span className="text-sm font-bold text-white tabular-nums">{results.length}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-emerald-500/10 rounded px-2 py-1">
+                  <CheckCircle className="w-3 h-3 text-emerald-400" />
+                  <span className="text-sm font-bold text-emerald-400 tabular-nums">{successCount}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-red-500/10 rounded px-2 py-1">
+                  <XCircle className="w-3 h-3 text-red-400" />
+                  <span className="text-sm font-bold text-red-400 tabular-nums">{failedCount}</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1">
                 <button
                   onClick={handleCopyResults}
                   disabled={results.length === 0}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Copy results"
+                  className="btn-icon disabled:opacity-50"
+                  title={t('autoReg.copyResults')}
                 >
-                  <Copy className="w-4 h-4" />
+                  <Copy className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={handleExportResults}
                   disabled={results.length === 0}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Export results"
+                  className="btn-icon disabled:opacity-50"
+                  title={t('autoReg.exportResults')}
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-white">{results.length}</div>
-                <div className="text-xs text-slate-400">Total</div>
-              </div>
-              <div className="bg-emerald-500/10 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-emerald-400">{successCount}</div>
-                <div className="text-xs text-slate-400">Success</div>
-              </div>
-              <div className="bg-red-500/10 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-red-400">{failedCount}</div>
-                <div className="text-xs text-slate-400">Failed</div>
-              </div>
-            </div>
-
-            {/* Results List */}
-            <div className="max-h-48 overflow-y-auto space-y-2">
-              {results.length === 0 ? (
-                <div className="text-center text-slate-500 py-4">
-                  No results yet. Start registration to see results here.
-                </div>
-              ) : (
-                results.map((result, index) => (
+            {/* Compact Results List - Only show if there are results */}
+            {results.length > 0 && (
+              <div className="mt-2 max-h-24 overflow-y-auto space-y-1 no-scrollbar">
+                {results.map((result, index) => (
                   <div
                     key={index}
-                    className={`flex items-center justify-between p-2 rounded-lg ${
+                    className={`flex items-center justify-between px-2 py-1 rounded text-xs ${
                       result.status === 'success'
-                        ? 'bg-emerald-500/10 border border-emerald-500/20'
-                        : 'bg-red-500/10 border border-red-500/20'
+                        ? 'bg-emerald-500/10'
+                        : 'bg-red-500/10'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {result.status === 'success' ? (
-                        <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        <CheckCircle className="w-3 h-3 text-emerald-400" />
                       ) : (
-                        <XCircle className="w-4 h-4 text-red-400" />
+                        <XCircle className="w-3 h-3 text-red-400" />
                       )}
-                      <span className="text-sm text-white">{result.email}</span>
+                      <span className="text-white font-mono text-2xs">{result.email}</span>
                     </div>
                     {result.error && (
-                      <span className="text-xs text-red-400 truncate max-w-[150px]">
+                      <span className="text-2xs text-red-400 truncate max-w-[100px]">
                         {result.error}
                       </span>
                     )}
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          {/* Log Console */}
-          <LogConsole />
         </div>
       </div>
     </div>

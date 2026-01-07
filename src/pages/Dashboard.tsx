@@ -11,6 +11,8 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  LayoutDashboard,
+  TrendingUp,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
@@ -22,6 +24,7 @@ import {
   startLLMServer,
   getDashboardStats,
 } from '../lib/tauri';
+import { t } from '../lib/i18n';
 import type { ProviderName, RegistrationJob, LLMServerStatus } from '../types';
 import { PROVIDER_HEX_COLORS } from '../constants';
 
@@ -38,39 +41,53 @@ interface DashboardStats {
 }
 
 // ============================================
-// Summary Card Component
+// Sparkline Component (Mini SVG Chart)
 // ============================================
-interface SummaryCardProps {
+const Sparkline = ({ data = [3, 7, 4, 9, 5, 8, 6] }: { data?: number[] }) => {
+  const max = Math.max(...data);
+  const points = data.map((v, i) => `${i * 14},${20 - (v / max) * 18}`).join(' ');
+  return (
+    <svg className="w-20 h-5 opacity-50" viewBox="0 0 84 20">
+      <polyline fill="none" stroke="currentColor" strokeWidth="1.5" points={points} />
+    </svg>
+  );
+};
+
+// ============================================
+// Stat Card Component (Bento Style)
+// ============================================
+interface StatCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
   icon: React.ReactNode;
   trend?: { value: string; positive: boolean };
-  status?: 'success' | 'warning' | 'error' | 'neutral';
+  className?: string;
 }
 
-const SummaryCard = React.memo(function SummaryCard({ title, value, subtitle, icon, trend, status = 'neutral' }: SummaryCardProps) {
-  const statusColors = {
-    success: 'text-emerald-400',
-    warning: 'text-amber-400',
-    error: 'text-red-400',
-    neutral: 'text-slate-400',
-  };
-
+const StatCard = React.memo(function StatCard({ title, value, subtitle, icon, trend, className = '' }: StatCardProps) {
+  // Fix NaN display: if value is 0, NaN, or falsy (except string "0"), show "—" in gray
+  const displayValue = value === 0 || value === '0' || !value || (typeof value === 'number' && isNaN(value)) ? '—' : value;
+  const isPlaceholder = displayValue === '—';
+  
   return (
-    <div className="bg-surface-dark border border-border-dark rounded-lg p-4 flex flex-col gap-2">
+    <div className={`card p-3 flex flex-col gap-2 border border-white/5 ${className}`}>
       <div className="flex items-center justify-between">
-        <span className="text-slate-400">{icon}</span>
-        {trend && (
-          <span className={`text-xs font-medium ${trend.positive ? 'text-emerald-400' : 'text-red-400'}`}>
-            {trend.positive ? '↑' : '↓'} {trend.value}
-          </span>
+        <span className="text-slate-500">{icon}</span>
+        {trend && !isPlaceholder && (
+          <div className="flex items-center gap-2">
+            <Sparkline />
+            <span className={`text-2xs font-medium flex items-center gap-1 ${trend.positive ? 'text-emerald-400' : 'text-red-400'}`}>
+              <TrendingUp size={12} className={!trend.positive ? 'rotate-180' : ''} />
+              {trend.value}
+            </span>
+          </div>
         )}
       </div>
       <div>
-        <p className={`text-2xl font-bold ${statusColors[status]} text-white`}>{value}</p>
-        <p className="text-sm text-slate-400">{title}</p>
-        {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
+        <p className={`text-2xl font-bold tracking-tight tabular-nums ${isPlaceholder ? 'text-slate-600' : 'text-white'}`}>{displayValue}</p>
+        <p className="text-2xs uppercase text-slate-500 mt-0.5">{title}</p>
+        {subtitle && <p className="text-2xs text-slate-600 mt-1">{subtitle}</p>}
       </div>
     </div>
   );
@@ -80,7 +97,6 @@ const SummaryCard = React.memo(function SummaryCard({ title, value, subtitle, ic
 // Activity Item Component
 // ============================================
 interface ActivityItemProps {
-  type: 'registration' | 'token_refresh' | 'error';
   status: 'success' | 'pending' | 'failed';
   title: string;
   description: string;
@@ -88,124 +104,25 @@ interface ActivityItemProps {
 }
 
 const ActivityItem = React.memo(function ActivityItem({ status, title, description, timestamp }: ActivityItemProps) {
-  const statusConfig = {
-    success: { icon: <CheckCircle size={16} />, color: 'text-emerald-400', border: 'border-emerald-500' },
-    pending: { icon: <Loader2 size={16} className="animate-spin" />, color: 'text-amber-400', border: 'border-amber-500' },
-    failed: { icon: <XCircle size={16} />, color: 'text-red-400', border: 'border-red-500' },
-  };
-
-  const config = statusConfig[status];
+  const config = {
+    success: { icon: <CheckCircle size={14} />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    pending: { icon: <Loader2 size={14} className="animate-spin" />, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+    failed: { icon: <XCircle size={14} />, color: 'text-red-400', bg: 'bg-red-500/10' },
+  }[status];
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded hover:bg-white/5 transition-colors border-l-2 ${config.border} bg-white/[0.02]`}>
-      <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center">
-        <span className={config.color}>{config.icon}</span>
+    <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/[0.02] transition-colors group">
+      <div className={`w-7 h-7 rounded-lg ${config.bg} flex items-center justify-center ${config.color}`}>
+        {config.icon}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-200 truncate">{title}</p>
-        <p className="text-xs text-slate-500">{description}</p>
+        <p className="text-2xs text-slate-500 truncate">{description}</p>
       </div>
-      <span className="text-xs text-slate-500 font-mono">{timestamp}</span>
+      <span className="text-2xs text-slate-600 font-mono tabular-nums">{timestamp}</span>
     </div>
   );
 });
-
-// ============================================
-// Quick Action Button Component
-// ============================================
-interface QuickActionProps {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  variant?: 'primary' | 'secondary';
-  disabled?: boolean;
-  loading?: boolean;
-}
-
-const QuickAction = React.memo(function QuickAction({ icon, label, onClick, variant = 'secondary', disabled, loading }: QuickActionProps) {
-  const baseClasses = 'flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all';
-  const variantClasses = {
-    primary: 'bg-primary text-white hover:bg-primary/90 disabled:bg-primary/50',
-    secondary: 'bg-white/5 text-slate-300 hover:bg-white/10 border border-border-dark disabled:opacity-50',
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled || loading}
-      className={`${baseClasses} ${variantClasses[variant]}`}
-    >
-      {loading ? <Loader2 size={18} className="animate-spin" /> : icon}
-      {label}
-    </button>
-  );
-});
-
-// ============================================
-// Provider Breakdown Chart Component (CSS-based)
-// ============================================
-interface ProviderChartProps {
-  data: { provider: ProviderName; count: number; color: string }[];
-}
-
-function ProviderBreakdownChart({ data }: ProviderChartProps) {
-  const total = data.reduce((sum, item) => sum + item.count, 0);
-  if (total === 0) {
-    return (
-      <div className="flex items-center justify-center h-full text-slate-500">
-        <p>No accounts to display</p>
-      </div>
-    );
-  }
-
-  // Calculate percentages and create conic gradient
-  let cumulativePercent = 0;
-  const gradientStops = data
-    .filter((item) => item.count > 0)
-    .map((item) => {
-      const percent = (item.count / total) * 100;
-      const start = cumulativePercent;
-      cumulativePercent += percent;
-      const color = PROVIDER_HEX_COLORS[item.provider] || '#64748b';
-      return `${color} ${start}% ${cumulativePercent}%`;
-    })
-    .join(', ');
-
-  return (
-    <div className="flex flex-col lg:flex-row items-center gap-6 h-full">
-      {/* Pie Chart */}
-      <div className="relative">
-        <div
-          className="w-32 h-32 rounded-full"
-          style={{ background: `conic-gradient(${gradientStops})` }}
-        />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-20 h-20 bg-surface-dark rounded-full flex flex-col items-center justify-center">
-            <span className="text-xl font-bold text-white">{total}</span>
-            <span className="text-[10px] text-slate-400">Total</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-col gap-2 flex-1">
-        {data.filter((item) => item.count > 0).map((item) => (
-          <div key={item.provider} className="flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-sm"
-              style={{ backgroundColor: PROVIDER_HEX_COLORS[item.provider] || '#64748b' }}
-            />
-            <span className="text-sm text-slate-300 capitalize flex-1">{item.provider}</span>
-            <span className="text-sm font-medium text-white">{item.count}</span>
-            <span className="text-xs text-slate-500">
-              ({((item.count / total) * 100).toFixed(0)}%)
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ============================================
 // Provider Card Component
@@ -224,67 +141,100 @@ interface ProviderCardProps {
 }
 
 const ProviderCard = React.memo(function ProviderCard({ provider, accountCount, isSelected, onSelect }: ProviderCardProps) {
-  const statusColors = {
-    active: 'text-slate-400',
-    down: 'text-red-400 bg-red-400/10',
-    maintenance: 'text-amber-400 bg-amber-400/10',
-  };
-
   return (
     <div
       onClick={onSelect}
-      className={`group relative bg-surface-dark p-4 rounded-lg border transition-all cursor-pointer ${
-        isSelected
-          ? 'border-2 border-primary shadow-[0_0_15px_-3px_rgba(56,136,255,0.3)]'
-          : 'border-border-dark hover:bg-white/5'
-      } ${provider.status === 'down' ? 'opacity-75 hover:opacity-100' : ''}`}
+      className={`card-interactive p-3 border border-white/5 ${
+        isSelected ? 'border-primary/50 gradient-border' : ''
+      }`}
     >
-      {/* Selected checkmark */}
       {isSelected && (
-        <div className="absolute -top-2 -right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center border-2 border-surface-dark">
-          <CheckCircle className="w-3 h-3 text-white" />
+        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary rounded-full flex items-center justify-center ring-2 ring-ds-bg">
+          <CheckCircle className="w-2.5 h-2.5 text-white" />
         </div>
       )}
-
       <div className="flex items-start justify-between mb-2">
-        <div
-          className={`w-8 h-8 rounded bg-gradient-to-br ${provider.color} flex items-center justify-center text-white font-bold text-xs`}
-        >
+        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${provider.color} flex items-center justify-center text-white font-bold text-sm`}>
           {provider.name[0]}
         </div>
-        <span
-          className={`text-xs font-mono px-1.5 rounded ${
-            provider.status === 'active'
-              ? isSelected
-                ? 'text-primary bg-primary/10'
-                : 'text-slate-400'
-              : statusColors[provider.status]
-          }`}
-        >
-          {provider.status === 'active'
-            ? isSelected
-              ? 'Active'
-              : provider.version
-            : provider.status === 'down'
-            ? 'Down'
-            : 'Maint.'}
+        <span className={`text-2xs font-mono px-1.5 py-0.5 rounded ${
+          isSelected ? 'text-primary bg-primary/10' : 'text-slate-500'
+        }`}>
+          {isSelected ? t('status.active') : provider.version}
         </span>
       </div>
-      <p className={`font-medium ${provider.status === 'down' ? 'text-slate-200' : 'text-white'}`}>
-        {provider.name}
-      </p>
-      <p className={`text-sm ${provider.status === 'down' ? 'text-slate-500' : 'text-slate-400'}`}>
-        {accountCount} Account{accountCount !== 1 ? 's' : ''}
+      <p className="font-medium text-white text-sm">{provider.name}</p>
+      <p className="text-2xs text-slate-500 mt-0.5 tabular-nums">
+        {accountCount} {t('accounts.account')}{accountCount !== 1 ? 's' : ''}
       </p>
     </div>
   );
 });
 
 // ============================================
+// Provider Breakdown Mini Chart
+// ============================================
+interface ProviderChartProps {
+  data: { provider: ProviderName; count: number }[];
+}
+
+function ProviderBreakdownChart({ data }: ProviderChartProps) {
+  const total = data.reduce((sum, item) => sum + item.count, 0);
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-slate-600 text-sm">
+        {t('dashboard.noAccountsToDisplay')}
+      </div>
+    );
+  }
+
+  let cumulativePercent = 0;
+  const gradientStops = data
+    .filter((item) => item.count > 0)
+    .map((item) => {
+      const percent = (item.count / total) * 100;
+      const start = cumulativePercent;
+      cumulativePercent += percent;
+      const color = PROVIDER_HEX_COLORS[item.provider] || '#64748b';
+      return `${color} ${start}% ${cumulativePercent}%`;
+    })
+    .join(', ');
+
+  return (
+    <div className="flex items-center gap-6 h-full">
+      <div className="relative shrink-0">
+        <div
+          className="w-24 h-24 rounded-full"
+          style={{ background: `conic-gradient(${gradientStops})` }}
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-16 h-16 bg-ds-surface rounded-full flex flex-col items-center justify-center border border-white/10">
+            <span className="text-lg font-bold text-white tabular-nums">{total}</span>
+            <span className="text-2xs text-slate-500">{t('common.total')}</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5 flex-1">
+        {data.filter((item) => item.count > 0).map((item) => (
+          <div key={item.provider} className="flex items-center gap-2">
+            <div
+              className="w-2 h-2 rounded-sm shrink-0"
+              style={{ backgroundColor: PROVIDER_HEX_COLORS[item.provider] || '#64748b' }}
+            />
+            <span className="text-xs text-slate-400 capitalize flex-1">{item.provider}</span>
+            <span className="text-xs font-medium text-white tabular-nums">{item.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // Main Dashboard Component
 // ============================================
 export default function Dashboard() {
-  const { providers, selectedProvider, setSelectedProvider, addNotification } = useAppStore();
+  const { providers, selectedProvider, setSelectedProvider, addNotification, language } = useAppStore();
   const { accounts, fetchAccounts } = useAccountsStore();
   
   const [serverStatus, setServerStatus] = useState<LLMServerStatus | null>(null);
@@ -292,12 +242,12 @@ export default function Dashboard() {
   const [isStartingRegistration, setIsStartingRegistration] = useState(false);
   const [isRefreshingTokens, setIsRefreshingTokens] = useState(false);
   const [isStartingServer, setIsStartingServer] = useState(false);
-  
-  // Dashboard stats state
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
-  // Memoize load functions to prevent infinite loops
+  // Force re-render when language changes
+  const _ = language;
+
   const loadServerStatus = useCallback(async () => {
     try {
       const status = await getServerStatus();
@@ -316,7 +266,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Fetch dashboard stats from backend
   const loadDashboardStats = useCallback(async () => {
     try {
       setIsLoadingStats(true);
@@ -329,7 +278,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Fetch data on mount
   useEffect(() => {
     fetchAccounts();
     loadServerStatus();
@@ -337,9 +285,7 @@ export default function Dashboard() {
     loadDashboardStats();
   }, [fetchAccounts, loadServerStatus, loadRegistrationJobs, loadDashboardStats]);
 
-  // Computed values - use backend stats when available, fallback to local calculation
   const summaryData = useMemo(() => {
-    // If we have backend stats, use them
     if (dashboardStats) {
       const accountsByProvider = providers.map((p) => ({
         provider: p.id,
@@ -351,64 +297,41 @@ export default function Dashboard() {
         totalAccounts: dashboardStats.total_accounts,
         accountsByProvider,
         activeTokens: dashboardStats.active_tokens,
-        quotaUsage: {
-          used: dashboardStats.quota_used,
-          limit: dashboardStats.quota_limit,
-        },
+        quotaUsage: { used: dashboardStats.quota_used, limit: dashboardStats.quota_limit },
         quotaPercent: Math.round(dashboardStats.quota_usage),
       };
     }
     
-    // Fallback to local calculation from accounts store
     const totalAccounts = accounts.length;
     const accountsByProvider = providers.map((p) => ({
       provider: p.id,
       count: accounts.filter((a) => a.provider === p.id).length,
       color: p.color,
     }));
-    
     const activeTokens = accounts.filter((a) => a.status === 'active').length;
-    
     const quotaUsage = accounts.reduce(
-      (acc, a) => ({
-        used: acc.used + (a.quota?.used || 0),
-        limit: acc.limit + (a.quota?.limit || 0),
-      }),
+      (acc, a) => ({ used: acc.used + (a.quota?.used || 0), limit: acc.limit + (a.quota?.limit || 0) }),
       { used: 0, limit: 0 }
     );
-    const quotaPercent = quotaUsage.limit > 0 
-      ? Math.round((quotaUsage.used / quotaUsage.limit) * 100) 
-      : 0;
+    const quotaPercent = quotaUsage.limit > 0 ? Math.round((quotaUsage.used / quotaUsage.limit) * 100) : 0;
 
     return { totalAccounts, accountsByProvider, activeTokens, quotaUsage, quotaPercent };
   }, [accounts, providers, dashboardStats]);
 
-  // Recent activity from registration jobs
   const recentActivity = useMemo(() => {
     const activities: ActivityItemProps[] = [];
-
-    // Add registration jobs
     const sortedJobs = [...registrationJobs]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5);
 
     sortedJobs.forEach((job) => {
       const statusMap: Record<string, 'success' | 'pending' | 'failed'> = {
-        completed: 'success',
-        processing: 'pending',
-        pending: 'pending',
-        initializing: 'pending',
-        creating_email: 'pending',
-        registering: 'pending',
-        verifying: 'pending',
-        completing: 'pending',
-        failed: 'failed',
-        cancelled: 'failed',
-        idle: 'pending',
+        completed: 'success', processing: 'pending', pending: 'pending',
+        initializing: 'pending', creating_email: 'pending', registering: 'pending',
+        verifying: 'pending', completing: 'pending', failed: 'failed',
+        cancelled: 'failed', idle: 'pending',
       };
-
       activities.push({
-        type: 'registration',
         status: statusMap[job.status] || 'pending',
         title: job.email || `Registration ${job.id.slice(0, 8)}`,
         description: job.error || `${job.provider} - ${job.status}`,
@@ -416,63 +339,40 @@ export default function Dashboard() {
       });
     });
 
-    // Add placeholder if no jobs
     if (activities.length === 0) {
-      activities.push(
-        {
-          type: 'token_refresh',
-          status: 'success',
-          title: 'System Ready',
-          description: 'No recent registration activity',
-          timestamp: 'Now',
-        }
-      );
+      activities.push({
+        status: 'success',
+        title: t('dashboard.systemReady'),
+        description: t('dashboard.noRecentActivity'),
+        timestamp: t('time.now'),
+      });
     }
-
     return activities;
   }, [registrationJobs]);
 
-  // Format timestamp helper
   function formatTimestamp(dateStr: string): string {
     const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    if (diffMins < 1) return t('time.justNow');
+    if (diffMins < 60) return t('time.minutesAgo', { count: diffMins });
+    if (diffMins < 1440) return t('time.hoursAgo', { count: Math.floor(diffMins / 60) });
     return date.toLocaleDateString();
   }
 
-  // Quick action handlers
   const handleStartRegistration = async () => {
     if (!selectedProvider) {
-      addNotification({
-        type: 'warning',
-        title: 'No Provider Selected',
-        message: 'Please select a provider first',
-      });
+      addNotification({ type: 'warning', title: t('dashboard.noProviderSelected'), message: t('dashboard.selectProviderFirst') });
       return;
     }
     setIsStartingRegistration(true);
     try {
-      await startRegistration({
-        provider: selectedProvider,
-      });
-      addNotification({
-        type: 'success',
-        title: 'Registration Started',
-        message: `Started registration for ${selectedProvider}`,
-      });
+      await startRegistration({ provider: selectedProvider });
+      addNotification({ type: 'success', title: t('dashboard.registrationStarted'), message: `Started registration for ${selectedProvider}` });
       await loadRegistrationJobs();
     } catch (error) {
-      console.error('Failed to start registration:', error);
-      addNotification({
-        type: 'error',
-        title: 'Registration Failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
+      addNotification({ type: 'error', title: t('dashboard.registrationFailed'), message: error instanceof Error ? error.message : 'Unknown error' });
     } finally {
       setIsStartingRegistration(false);
     }
@@ -482,9 +382,7 @@ export default function Dashboard() {
     setIsRefreshingTokens(true);
     try {
       await fetchAccounts();
-      await loadDashboardStats(); // Refresh stats after fetching accounts
-    } catch (error) {
-      console.error('Failed to refresh tokens:', error);
+      await loadDashboardStats();
     } finally {
       setIsRefreshingTokens(false);
     }
@@ -495,178 +393,124 @@ export default function Dashboard() {
       window.open(`http://${serverStatus.host}:${serverStatus.port}`, '_blank');
       return;
     }
-    
     setIsStartingServer(true);
     try {
       const status = await startLLMServer();
       setServerStatus(status);
-    } catch (error) {
-      console.error('Failed to start LLM server:', error);
     } finally {
       setIsStartingServer(false);
     }
   };
 
-  // Date/time for header
-  const currentDate = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  });
-  const currentTime = new Date().toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const currentDate = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' });
+  const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <>
-      <Header title="Dashboard Overview" subtitle={`${currentDate} • ${currentTime}`} />
+    <div className="flex flex-col h-full overflow-hidden">
+      <Header 
+        title={t('dashboard.title')} 
+        subtitle={`${currentDate} • ${currentTime}`}
+        icon={<LayoutDashboard size={18} />}
+      />
 
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-[1400px] mx-auto flex flex-col gap-6">
+        <div className="max-w-[1400px] mx-auto flex flex-col gap-3">
           
-          {/* 1. Summary Cards Row */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">
-              Overview
-              {isLoadingStats && (
-                <Loader2 size={14} className="inline-block ml-2 animate-spin text-slate-400" />
-              )}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <SummaryCard
-                title="Total Accounts"
-                value={isLoadingStats ? '...' : summaryData.totalAccounts}
-                subtitle={`Across ${providers.filter((p) => 
-                  summaryData.accountsByProvider.find((a) => a.provider === p.id && a.count > 0)
-                ).length} providers`}
-                icon={<Users size={20} />}
-                trend={summaryData.totalAccounts > 0 ? { value: '+5%', positive: true } : undefined}
-              />
-              <SummaryCard
-                title="Active Tokens"
-                value={isLoadingStats ? '...' : summaryData.activeTokens}
-                subtitle={`${summaryData.totalAccounts - summaryData.activeTokens} inactive`}
-                icon={<Key size={20} />}
-                status={summaryData.activeTokens > 0 ? 'success' : 'warning'}
-              />
-              <SummaryCard
-                title="Quota Usage"
-                value={isLoadingStats ? '...' : `${summaryData.quotaPercent}%`}
-                subtitle={`${summaryData.quotaUsage.used.toLocaleString()} / ${summaryData.quotaUsage.limit.toLocaleString()}`}
-                icon={<PieChart size={20} />}
-                status={summaryData.quotaPercent > 80 ? 'warning' : summaryData.quotaPercent > 95 ? 'error' : 'neutral'}
-              />
-              <SummaryCard
-                title="LLM Server"
-                value={serverStatus?.isRunning ? 'Running' : 'Stopped'}
-                subtitle={serverStatus?.isRunning ? `Port ${serverStatus.port}` : 'Click to start'}
-                icon={<Server size={20} />}
-                status={serverStatus?.isRunning ? 'success' : 'neutral'}
-              />
-            </div>
+          {/* Bento Grid - Stats */}
+          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard
+              title={t('dashboard.totalAccounts')}
+              value={isLoadingStats ? '—' : summaryData.totalAccounts}
+              subtitle={`${t('dashboard.across')} ${providers.filter((p) => summaryData.accountsByProvider.find((a) => a.provider === p.id && a.count > 0)).length} ${t('dashboard.providers')}`}
+              icon={<Users size={18} />}
+              trend={summaryData.totalAccounts > 0 ? { value: '+5%', positive: true } : undefined}
+            />
+            <StatCard
+              title={t('dashboard.activeTokens')}
+              value={isLoadingStats ? '—' : summaryData.activeTokens}
+              subtitle={`${summaryData.totalAccounts - summaryData.activeTokens} ${t('dashboard.inactive')}`}
+              icon={<Key size={18} />}
+            />
+            <StatCard
+              title={t('dashboard.quotaUsage')}
+              value={isLoadingStats ? '—' : `${summaryData.quotaPercent}%`}
+              subtitle={`${summaryData.quotaUsage.used.toLocaleString()} / ${summaryData.quotaUsage.limit.toLocaleString()}`}
+              icon={<PieChart size={18} />}
+            />
+            <StatCard
+              title={t('dashboard.llmServer')}
+              value={serverStatus?.isRunning ? t('status.running') : t('status.stopped')}
+              subtitle={serverStatus?.isRunning ? `${t('dashboard.port')} ${serverStatus.port}` : t('dashboard.clickToStart')}
+              icon={<Server size={18} />}
+            />
           </section>
 
-          {/* 2. Quick Actions Row */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">
-              Quick Actions
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              <QuickAction
-                icon={<Play size={18} />}
-                label="Start Registration"
-                onClick={handleStartRegistration}
-                variant="primary"
-                loading={isStartingRegistration}
-                disabled={!selectedProvider}
-              />
-              <QuickAction
-                icon={<RefreshCw size={18} />}
-                label="Refresh All Tokens"
-                onClick={handleRefreshAllTokens}
-                loading={isRefreshingTokens}
-              />
-              <QuickAction
-                icon={<ExternalLink size={18} />}
-                label={serverStatus?.isRunning ? 'Open LLM Server' : 'Start LLM Server'}
-                onClick={handleOpenLLMServer}
-                loading={isStartingServer}
-              />
-            </div>
+          {/* Quick Actions */}
+          <section className="flex flex-wrap gap-3">
+            <button onClick={handleStartRegistration} disabled={!selectedProvider || isStartingRegistration} className="btn-secondary py-1.5 text-xs">
+              {isStartingRegistration ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              {t('dashboard.startRegistration')}
+            </button>
+            <button onClick={handleRefreshAllTokens} disabled={isRefreshingTokens} className="btn-secondary py-1.5 text-xs">
+              <RefreshCw size={14} className={isRefreshingTokens ? 'animate-spin' : ''} />
+              {t('dashboard.refreshAllTokens')}
+            </button>
+            <button onClick={handleOpenLLMServer} disabled={isStartingServer} className="btn-secondary py-1.5 text-xs">
+              {isStartingServer ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+              {serverStatus?.isRunning ? t('dashboard.openLlmServer') : t('dashboard.startLlmServer')}
+            </button>
             {!selectedProvider && (
-              <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
+              <span className="flex items-center gap-1.5 text-2xs text-amber-400 ml-2">
                 <AlertCircle size={12} />
-                Select a provider below to enable registration
-              </p>
+                {t('dashboard.selectProviderBelow')}
+              </span>
             )}
           </section>
 
-          {/* 3. Main Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Recent Activity (Span 2) */}
-            <div className="col-span-1 lg:col-span-2 bg-surface-dark border border-border-dark rounded-lg p-5 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {/* Recent Activity */}
+            <div className="lg:col-span-2 card p-3 flex flex-col border border-white/5">
+              <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="text-base font-medium text-white">Recent Activity</h3>
-                  <p className="text-xs text-slate-400">Last registration attempts and token refreshes</p>
+                  <h3 className="text-sm font-semibold text-white">{t('dashboard.recentActivity')}</h3>
+                  <p className="text-2xs text-slate-500">{t('dashboard.lastRegistrationAttempts')}</p>
                 </div>
-                <button 
-                  onClick={loadRegistrationJobs}
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                >
-                  <RefreshCw size={12} />
-                  Refresh
+                <button onClick={loadRegistrationJobs} className="btn-ghost text-xs py-1 px-2">
+                  <RefreshCw size={12} /> {t('common.refresh')}
                 </button>
               </div>
-              
-              <div className="flex flex-col gap-2 flex-1">
-                {recentActivity.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center text-slate-500">
-                    <p>No recent activity</p>
-                  </div>
-                ) : (
-                  recentActivity.map((activity, index) => (
-                    <ActivityItem key={index} {...activity} />
-                  ))
-                )}
+              <div className="flex flex-col gap-1 flex-1">
+                {recentActivity.map((activity, index) => (
+                  <ActivityItem key={index} {...activity} />
+                ))}
               </div>
-              
-              <button className="mt-4 w-full py-2 text-xs text-slate-400 hover:text-white border border-dashed border-slate-700 hover:border-slate-500 rounded transition-all">
-                View Full Activity Log
+              <button className="mt-3 w-full py-2 text-2xs text-slate-500 hover:text-white border border-dashed border-white/10 hover:border-white/20 rounded-lg transition-all">
+                {t('dashboard.viewFullActivityLog')}
               </button>
             </div>
 
-            {/* Provider Breakdown Chart (Span 1) */}
-            <div className="col-span-1 bg-surface-dark border border-border-dark rounded-lg p-5 flex flex-col min-h-[280px]">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-medium text-white">Accounts by Provider</h3>
-              </div>
+            {/* Provider Breakdown */}
+            <div className="card p-3 flex flex-col min-h-[220px] border border-white/5">
+              <h3 className="text-sm font-semibold text-white mb-3">{t('dashboard.accountsByProvider')}</h3>
               <div className="flex-1">
                 <ProviderBreakdownChart data={summaryData.accountsByProvider} />
               </div>
             </div>
           </div>
 
-          {/* 4. Provider Selection Row */}
+          {/* Provider Selection */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
-                Provider Selection
-              </h2>
-              <button className="text-xs text-primary hover:underline">
-                Manage Providers
-              </button>
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('dashboard.providerSelection')}</h2>
+              <button className="text-2xs text-primary hover:underline">{t('dashboard.manageProviders')}</button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {providers.map((provider) => (
                 <ProviderCard
                   key={provider.id}
                   provider={provider}
-                  accountCount={
-                    summaryData.accountsByProvider.find((a) => a.provider === provider.id)?.count || 0
-                  }
+                  accountCount={summaryData.accountsByProvider.find((a) => a.provider === provider.id)?.count || 0}
                   isSelected={selectedProvider === provider.id}
                   onSelect={() => setSelectedProvider(provider.id)}
                 />
@@ -674,10 +518,9 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* Footer Spacer */}
-          <div className="h-10" />
+          <div className="h-6" />
         </div>
       </div>
-    </>
+    </div>
   );
 }

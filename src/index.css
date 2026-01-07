@@ -2,77 +2,372 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom scrollbar styles for dark theme */
+/* ============================================
+   Deep Space Theme - Global Styles
+   ============================================ */
+
+@layer base {
+  :root {
+    --color-primary: 99 102 241;
+    --color-accent: 6 182 212;
+  }
+
+  html {
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  body {
+    @apply bg-ds-bg text-slate-100 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Tabular numbers for data */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ============================================
+   Custom Scrollbar - Sleek & Minimal
+   ============================================ */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f1723;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 #0f1723;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
 
-/* Selection styling */
+/* ============================================
+   Selection & Focus Styles
+   ============================================ */
 ::selection {
-  background-color: #3888ff;
+  background-color: rgba(99, 102, 241, 0.4);
   color: white;
 }
 
-/* Custom checkbox styling */
-.custom-checkbox:checked {
-  background-color: #3888ff;
-  border-color: #3888ff;
+:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.5);
+  outline-offset: 2px;
 }
 
-/* Table row hover effects */
-.hover-row:hover td {
-  background-color: rgba(56, 136, 255, 0.05);
-}
-
-.action-btn {
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.hover-row:hover .action-btn {
-  opacity: 1;
-}
-
-/* Smooth transitions */
-.transition-sidebar {
-  transition: width 0.3s ease-in-out;
-}
-
-/* Animation utilities */
-@keyframes pulse-slow {
-  0%, 100% {
-    opacity: 1;
+/* ============================================
+   Glassmorphism Utilities
+   ============================================ */
+@layer components {
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10;
   }
-  50% {
-    opacity: 0.5;
+
+  .glass-subtle {
+    @apply bg-white/[0.02] backdrop-blur-md border border-white/5;
+  }
+
+  .glass-header {
+    @apply bg-ds-bg/80 backdrop-blur-xl border-b border-white/10;
   }
 }
 
-.animate-pulse-slow {
-  animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* ============================================
+   Card & Surface Styles
+   ============================================ */
+@layer components {
+  .card {
+    @apply bg-ds-surface border border-white/5 rounded-lg;
+  }
+
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-white/10 hover:bg-white/[0.02];
+  }
+
+  .card-interactive {
+    @apply card-hover cursor-pointer;
+  }
 }
 
-/* Hide scrollbar but keep functionality */
+/* ============================================
+   Input Styles - Deep Space Theme
+   ============================================ */
+@layer components {
+  .input-ds {
+    @apply w-full h-8 bg-transparent border-b border-slate-700 rounded-none px-2 py-1.5;
+    @apply text-sm text-white placeholder-slate-500 font-mono;
+    @apply transition-all duration-200 ease-out;
+    @apply focus:border-primary focus:outline-none;
+  }
+
+  /* Alternative bordered style */
+  .input-ds-bordered {
+    @apply w-full h-8 bg-transparent border border-white/10 rounded-md px-2 py-1.5;
+    @apply text-sm text-white placeholder-slate-500;
+    @apply transition-all duration-200 ease-out;
+    @apply focus:border-primary focus:ring-1 focus:ring-primary/20 focus:outline-none;
+  }
+
+  .input-mono {
+    @apply input-ds font-mono;
+  }
+
+  .input-label {
+    @apply block text-2xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5;
+  }
+
+  /* Select styling */
+  select.input-ds {
+    @apply bg-ds-surface border border-white/10 rounded-md cursor-pointer;
+    @apply appearance-none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  select.input-ds option {
+    @apply bg-ds-surface text-white py-2;
+  }
+
+  /* Checkbox styling */
+  .checkbox-ds {
+    @apply appearance-none w-4 h-4 rounded border border-slate-700 bg-slate-900;
+    @apply checked:bg-primary checked:border-primary;
+    @apply transition-all cursor-pointer;
+    @apply hover:border-slate-600;
+    @apply focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 focus:outline-none;
+  }
+
+  .checkbox-ds:checked {
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  input[type="checkbox"] {
+    @apply appearance-none w-4 h-4 rounded border border-white/20 bg-white/5;
+    @apply checked:bg-primary checked:border-primary;
+    @apply transition-colors cursor-pointer;
+    @apply focus:ring-2 focus:ring-primary/30 focus:ring-offset-0;
+  }
+
+  input[type="checkbox"]:checked {
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
+
+/* ============================================
+   Button Styles
+   ============================================ */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md;
+    @apply text-sm font-medium transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-ds-bg;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-primary/90 active:scale-95 transition-all duration-75;
+  }
+
+  .btn-secondary {
+    @apply btn bg-white/5 text-slate-300 border border-white/5;
+    @apply hover:bg-white/10 hover:text-white hover:border-white/10;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-400 hover:text-white hover:bg-white/5;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-500/10 text-red-400 border border-red-500/20;
+    @apply hover:bg-red-500/20 hover:text-red-300;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-md text-slate-400 hover:text-white hover:bg-white/5 transition-colors;
+  }
+}
+
+/* ============================================
+   Badge / Pill Styles - Compact
+   ============================================ */
+@layer components {
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full;
+    @apply text-[10px] font-semibold uppercase tracking-wide;
+  }
+
+  .badge-success {
+    @apply badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/20;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-500/15 text-amber-400 border border-amber-500/20;
+  }
+
+  .badge-error {
+    @apply badge bg-red-500/15 text-red-400 border border-red-500/20;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-500/15 text-blue-400 border border-blue-500/20;
+  }
+
+  .badge-neutral {
+    @apply badge bg-slate-500/15 text-slate-400 border border-slate-500/20;
+  }
+}
+
+/* ============================================
+   Table Styles - High Density
+   ============================================ */
+@layer components {
+  .table-ds {
+    @apply w-full text-left border-collapse;
+  }
+
+  .table-ds thead {
+    @apply sticky top-0 z-10;
+  }
+
+  .table-ds th {
+    @apply py-3 px-4 text-2xs font-semibold text-slate-500 uppercase tracking-wider;
+    @apply bg-ds-surface/95 backdrop-blur-sm border-b border-white/10;
+  }
+
+  .table-ds tbody tr {
+    @apply border-b border-white/5 transition-colors;
+  }
+
+  .table-ds tbody tr:hover {
+    @apply bg-white/[0.02];
+  }
+
+  .table-ds td {
+    @apply py-3 px-4 text-sm;
+  }
+}
+
+/* ============================================
+   Terminal Styles
+   ============================================ */
+.terminal {
+  @apply bg-[#050505] font-mono text-sm;
+}
+
+.terminal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+/* ============================================
+   Progress Bar Styles
+   ============================================ */
+@layer components {
+  .progress-bar {
+    @apply w-full h-1 bg-white/10 rounded-full overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full bg-primary rounded-full transition-all duration-300;
+  }
+
+  .progress-bar-slim {
+    @apply w-full h-0.5 bg-white/5 rounded-full overflow-hidden;
+  }
+
+  .progress-bar-slim-fill {
+    @apply h-full bg-primary rounded-full transition-all duration-300;
+  }
+}
+
+/* ============================================
+   Sidebar Navigation Glow Effect
+   ============================================ */
+.nav-item-active {
+  @apply relative;
+}
+
+.nav-item-active::before {
+  content: '';
+  @apply absolute inset-0 rounded-lg;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(6, 182, 212, 0.1));
+  box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.4);
+}
+
+/* ============================================
+   Pulsing Status Dot
+   ============================================ */
+.status-dot {
+  @apply relative flex h-2 w-2;
+}
+
+.status-dot-online::before {
+  @apply absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping;
+  content: '';
+}
+
+.status-dot-online::after {
+  @apply relative inline-flex rounded-full h-2 w-2 bg-emerald-500;
+  content: '';
+}
+
+.status-dot-offline::after {
+  @apply relative inline-flex rounded-full h-2 w-2 bg-slate-500;
+  content: '';
+}
+
+/* ============================================
+   Gradient Border Effect
+   ============================================ */
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(6, 182, 212, 0.3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* ============================================
+   Hide Scrollbar Utility
+   ============================================ */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -82,26 +377,176 @@
   scrollbar-width: none;
 }
 
-/* Terminal scrollbar styles */
-.terminal-scroll::-webkit-scrollbar {
-  width: 8px;
+/* ============================================
+   Transition Utilities
+   ============================================ */
+.transition-sidebar {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.terminal-scroll::-webkit-scrollbar-track {
-  background: #000000;
+/* ============================================
+   Action Button Reveal on Hover
+   ============================================ */
+.action-btn {
+  @apply opacity-0 transition-opacity duration-200;
 }
 
-.terminal-scroll::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 4px;
+tr:hover .action-btn,
+.group:hover .action-btn {
+  @apply opacity-100;
 }
 
-.terminal-scroll::-webkit-scrollbar-thumb:hover {
-  background: #444;
+/* ============================================
+   Fieldset Styling
+   ============================================ */
+.fieldset {
+  @apply relative border border-white/5 rounded-lg p-4 pt-6;
 }
 
-/* Font smoothing */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+.fieldset-legend {
+  @apply absolute -top-2.5 left-3 px-2 text-2xs font-semibold text-slate-500 uppercase tracking-wider bg-ds-surface;
+}
+
+/* ============================================
+   Motion Design - Animations
+   ============================================ */
+@layer utilities {
+  /* Staggered Entry Animation */
+  .animate-fade-in-up {
+    animation: fadeInUp 0.3s ease-out forwards;
+  }
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  /* Stagger delays */
+  .stagger-1 { animation-delay: 50ms; }
+  .stagger-2 { animation-delay: 100ms; }
+  .stagger-3 { animation-delay: 150ms; }
+  .stagger-4 { animation-delay: 200ms; }
+  .stagger-5 { animation-delay: 250ms; }
+  
+  /* Cross-fade for tab content */
+  .animate-fade {
+    animation: fade 0.15s ease-out forwards;
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out forwards;
+  }
+  
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+/* ============================================
+   Button Glow Effects
+   ============================================ */
+.btn-glow-primary {
+  @apply shadow-[0_0_15px_rgba(99,102,241,0.3)];
+}
+
+.btn-glow-success {
+  @apply shadow-[0_0_15px_rgba(16,185,129,0.3)];
+}
+
+/* ============================================
+   Enhanced Glassmorphism
+   ============================================ */
+.glass-sidebar {
+  @apply bg-slate-950/80 backdrop-blur-xl border-r border-white/10;
+}
+
+.glass-card {
+  @apply bg-white/[0.02] backdrop-blur-sm border border-white/5 border-t-white/10;
+}
+
+/* ============================================
+   Spaceship Cockpit Effects
+   ============================================ */
+.cockpit-panel {
+  @apply bg-slate-950/90 backdrop-blur-xl border border-white/10;
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+    0 0 30px -10px rgba(99, 102, 241, 0.15);
+}
+
+.cockpit-glow {
+  box-shadow: 0 0 30px -5px rgba(99, 102, 241, 0.3);
+}
+
+/* Active button glow */
+.btn-active-glow {
+  @apply shadow-[0_0_20px_rgba(99,102,241,0.4)];
+}
+
+/* Subtle hover lift */
+.hover-lift {
+  @apply transition-all duration-200;
+}
+
+.hover-lift:hover {
+  @apply -translate-y-0.5;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+}
+
+/* Smooth scale on click */
+.click-scale {
+  @apply active:scale-[0.98] transition-transform duration-75;
+}
+
+/* Terminal cursor blink */
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.terminal-cursor {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* Pulse ring for status indicators */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.pulse-ring::before {
+  content: '';
+  @apply absolute inset-0 rounded-full;
+  animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Smooth content transitions */
+.content-transition {
+  @apply transition-all duration-200 ease-out;
+}
+
+.content-enter {
+  @apply opacity-0 translate-y-2;
+}
+
+.content-enter-active {
+  @apply opacity-100 translate-y-0;
 }

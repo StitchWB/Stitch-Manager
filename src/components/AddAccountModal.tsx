@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { ProviderName } from '../types';
+import { useAppStore } from '../stores/app';
+import { t } from '../lib/i18n';
 
 interface AddAccountModalProps {
   isOpen: boolean;
@@ -16,19 +18,21 @@ interface AddAccountModalProps {
 const providers: { id: ProviderName; name: string }[] = [
   { id: 'kiro', name: 'Kiro' },
   { id: 'windsurf', name: 'Windsurf' },
-  { id: 'cursor', name: 'Cursor' },
   { id: 'trae', name: 'Trae' },
-  { id: 'qoder', name: 'Qoder' },
   { id: 'copilot', name: 'Copilot' },
 ];
 
 export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccountModalProps) {
+  const { language } = useAppStore();
   const [provider, setProvider] = useState<ProviderName>('kiro');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Force re-render when language changes
+  const _ = language;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +80,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
       <div className="relative bg-surface-dark border border-border-dark rounded-xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-dark">
-          <h3 className="text-lg font-semibold text-white">Add Account</h3>
+          <h3 className="text-lg font-semibold text-white">{t('accounts.addAccount')}</h3>
           <button
             onClick={handleClose}
             disabled={isSubmitting}
@@ -97,7 +101,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
           {/* Provider Select */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              Provider
+              {t('accounts.provider')}
             </label>
             <select
               value={provider}
@@ -116,7 +120,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
           {/* Email Input */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              Email
+              {t('accounts.email')}
             </label>
             <input
               type="email"
@@ -132,7 +136,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
           {/* Password Input */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              Password
+              {t('accounts.password')}
             </label>
             <input
               type="password"
@@ -148,7 +152,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
           {/* Token Input (Optional) */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              Token <span className="text-slate-500">(optional, for manual add)</span>
+              {t('accounts.token')} <span className="text-slate-500">({t('accounts.tokenOptional')})</span>
             </label>
             <input
               type="text"
@@ -159,7 +163,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
               className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-slate-500 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
             />
             <p className="mt-1 text-xs text-slate-500">
-              If provided, the token will be used directly instead of logging in.
+              {t('accounts.tokenOptionalHint')}
             </p>
           </div>
 
@@ -171,7 +175,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
               disabled={isSubmitting}
               className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -196,10 +200,10 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  Adding...
+                  {t('accounts.addingAccount')}
                 </>
               ) : (
-                'Add Account'
+                t('accounts.addAccount')
               )}
             </button>
           </div>

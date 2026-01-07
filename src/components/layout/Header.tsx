@@ -1,42 +1,171 @@
-import { Bell } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Bell, Globe, X, Info, CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
+import { t } from '../../lib/i18n';
+
+const languages = [
+  { code: 'en', label: 'English' },
+  { code: 'ru', label: 'Русский' },
+] as const;
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
+  icon?: React.ReactNode;
+  actions?: React.ReactNode;
 }
 
-export default function Header({ title, subtitle }: HeaderProps) {
-  const { serverStatus } = useAppStore();
+export default function Header({ title, subtitle, icon, actions }: HeaderProps) {
+  const { serverStatus, language, setLanguage, notifications, removeNotification, clearNotifications } = useAppStore();
+  const [langOpen, setLangOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const langRef = useRef<HTMLDivElement>(null);
 
-  const getStatusInfo = () => {
-    if (serverStatus?.isRunning) {
-      return { label: 'System Online', color: 'bg-green-500' };
+  const isOnline = serverStatus?.isRunning;
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setNotifOpen(false);
+      }
+      if (langRef.current && !langRef.current.contains(event.target as Node)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success': return <CheckCircle className="w-4 h-4 text-emerald-400" />;
+      case 'warning': return <AlertTriangle className="w-4 h-4 text-amber-400" />;
+      case 'error': return <AlertCircle className="w-4 h-4 text-red-400" />;
+      default: return <Info className="w-4 h-4 text-blue-400" />;
     }
-    return { label: 'Server Offline', color: 'bg-slate-500' };
   };
 
-  const status = getStatusInfo();
+  const formatTime = (timestamp: number) => {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return t('time.justNow');
+    if (minutes < 60) return t('time.minutesAgo', { count: minutes });
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t('time.hoursAgo', { count: hours });
+    return t('time.daysAgo', { count: Math.floor(hours / 24) });
+  };
 
   return (
-    <header className="h-16 border-b border-border-dark bg-background-dark flex items-center justify-between px-6 shrink-0">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-white">{title}</h1>
-        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+    <header className="h-14 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 border-t border-t-white/[0.03] flex items-center justify-between px-6 shrink-0 sticky top-0 z-20">
+      <div className="flex items-center gap-3">
+        {icon && <span className="text-primary">{icon}</span>}
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-semibold text-white">{title}</h1>
+          {subtitle && (
+            <>
+              <span className="text-slate-600">•</span>
+              <p className="text-xs text-slate-500">{subtitle}</p>
+            </>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-4">
+      
+      <div className="flex items-center gap-3">
+        {actions}
+        
         {/* Status Indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-white/5 border border-white/10">
-          <div className={`w-2 h-2 rounded-full ${status.color} animate-pulse`} />
-          <span className="text-xs font-medium text-slate-300">{status.label}</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+          <span className={`status-dot ${isOnline ? 'status-dot-online' : 'status-dot-offline'}`} />
+          <span className="text-2xs font-medium text-slate-400">
+            {isOnline ? t('header.systemOnline') : t('header.serverOffline')}
+          </span>
+        </div>
+
+        {/* Language Switcher */}
+        <div className="relative" ref={langRef}>
+          <button onClick={() => { setLangOpen(!langOpen); setNotifOpen(false); }} className="btn-icon">
+            <Globe size={18} />
+          </button>
+          {langOpen && (
+            <div className="absolute right-0 top-full mt-1 w-32 bg-ds-panel border border-white/10 rounded-lg shadow-xl z-50 py-1">
+              {languages.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={() => { setLanguage(lang.code); setLangOpen(false); }}
+                  className={`w-full px-3 py-1.5 text-xs text-left hover:bg-white/5 ${language === lang.code ? 'text-primary' : 'text-slate-300'}`}
+                >
+                  {lang.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Notifications */}
-        <button className="text-slate-400 hover:text-white transition-colors relative">
-          <Bell size={20} />
-          {/* Notification badge */}
-          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
-        </button>
+        <div className="relative" ref={notifRef}>
+          <button 
+            onClick={() => { setNotifOpen(!notifOpen); setLangOpen(false); }} 
+            className="btn-icon relative"
+          >
+            <Bell size={18} />
+            {notifications.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-ds-bg animate-pulse" />
+            )}
+          </button>
+          
+          {notifOpen && (
+            <div className="absolute right-0 top-full mt-1 w-80 bg-ds-panel border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <span className="text-xs font-medium text-white">{t('header.notifications')}</span>
+                {notifications.length > 0 && (
+                  <button 
+                    onClick={clearNotifications}
+                    className="text-2xs text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {t('header.clearAll')}
+                  </button>
+                )}
+              </div>
+              
+              {/* Notifications List */}
+              <div className="max-h-64 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center">
+                    <Bell className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500">{t('header.noNotifications')}</p>
+                  </div>
+                ) : (
+                  notifications.map((notif) => (
+                    <div 
+                      key={notif.id} 
+                      className="px-3 py-2.5 border-b border-white/5 hover:bg-white/[0.02] transition-colors group"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        {getNotificationIcon(notif.type)}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-white truncate">{notif.title}</p>
+                          {notif.message && (
+                            <p className="text-2xs text-slate-400 mt-0.5 line-clamp-2">{notif.message}</p>
+                          )}
+                          <p className="text-2xs text-slate-600 mt-1">{formatTime(notif.timestamp)}</p>
+                        </div>
+                        <button 
+                          onClick={() => removeNotification(notif.id)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-white transition-all"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
