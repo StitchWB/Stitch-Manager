@@ -32,7 +32,7 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
   const [error, setError] = useState<string | null>(null);
 
   // Force re-render when language changes
-  const _ = language;
+  void language; // Force re-render on language change
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

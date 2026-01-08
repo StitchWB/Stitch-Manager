@@ -18,13 +18,17 @@ import {
   EyeOff,
   Palette,
   Download,
-  Upload
+  Upload,
+  Zap,
+  RefreshCw,
+  Coins
 } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { getSettings, updateSettings } from '../lib/tauri';
 import { open } from '@tauri-apps/plugin-dialog';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
+import PoolSettingsPanel from '../components/settings/PoolSettingsPanel';
 
 interface SettingsData {
   theme: string;
@@ -37,7 +41,7 @@ interface SettingsData {
   custom_ide_paths?: Record<string, string>;
 }
 
-type SettingsCategory = 'general' | 'imap' | 'proxy' | 'ide-paths' | 'database';
+type SettingsCategory = 'general' | 'patcher' | 'token-pool' | 'imap' | 'proxy' | 'ide-paths' | 'database';
 
 interface CategoryConfig {
   id: SettingsCategory;
@@ -47,6 +51,8 @@ interface CategoryConfig {
 
 const categories: CategoryConfig[] = [
   { id: 'general', labelKey: 'settings.categories.general', icon: <Palette className="w-4 h-4" /> },
+  { id: 'patcher', labelKey: 'settings.categories.patcher', icon: <Zap className="w-4 h-4" /> },
+  { id: 'token-pool', labelKey: 'settings.categories.tokenPool', icon: <Coins className="w-4 h-4" /> },
   { id: 'imap', labelKey: 'settings.categories.imap', icon: <Mail className="w-4 h-4" /> },
   { id: 'proxy', labelKey: 'settings.categories.proxy', icon: <Globe className="w-4 h-4" /> },
   { id: 'ide-paths', labelKey: 'settings.categories.idePaths', icon: <Code className="w-4 h-4" /> },
@@ -69,13 +75,18 @@ export default function Settings() {
   const [proxyUrl, setProxyUrl] = useState('');
   const [customIdePaths, setCustomIdePaths] = useState<Record<string, string>>({});
   
+  // Patcher settings
+  const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
+  const [logRequestsEnabled, setLogRequestsEnabled] = useState(true);
+  const [spoofMachineIdEnabled, setSpoofMachineIdEnabled] = useState(true);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
   // Force re-render when language changes
-  const _ = language;
+  void language; // Force re-render on language change
 
   // Mount animation
   useEffect(() => {
@@ -236,6 +247,106 @@ export default function Settings() {
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+
+  const renderPatcherSettings = () => (
+    <div className="space-y-6">
+      <div style={getAnimationStyle(0)}>
+        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-amber-400" />
+          {t('settings.patcher.title')}
+        </h3>
+        <p className="text-slate-500 text-xs mb-4">{t('settings.patcher.description')}</p>
+      </div>
+
+      {/* Auto-Rotate Toggle */}
+      <div 
+        className="glass-card rounded-lg p-4 border border-white/10"
+        style={getAnimationStyle(1)}
+      >
+        <label className="flex items-start gap-4 cursor-pointer">
+          <div className="pt-0.5">
+            <input
+              type="checkbox"
+              checked={autoRotateEnabled}
+              onChange={(e) => setAutoRotateEnabled(e.target.checked)}
+              className="w-5 h-5 rounded border-white/20 bg-white/5 text-amber-500 focus:ring-amber-500/50 focus:ring-offset-0 transition-colors"
+            />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <RefreshCw className="w-4 h-4 text-amber-400" />
+              <span className="text-white font-medium text-sm">{t('settings.patcher.autoRotate')}</span>
+            </div>
+            <p className="text-slate-500 text-xs leading-relaxed">
+              {t('settings.patcher.autoRotateDescription')}
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* Log Requests Toggle */}
+      <div 
+        className="glass-card rounded-lg p-4 border border-white/10"
+        style={getAnimationStyle(2)}
+      >
+        <label className="flex items-start gap-4 cursor-pointer">
+          <div className="pt-0.5">
+            <input
+              type="checkbox"
+              checked={logRequestsEnabled}
+              onChange={(e) => setLogRequestsEnabled(e.target.checked)}
+              className="w-5 h-5 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50 focus:ring-offset-0 transition-colors"
+            />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <Code className="w-4 h-4 text-primary" />
+              <span className="text-white font-medium text-sm">{t('settings.patcher.logRequests')}</span>
+            </div>
+            <p className="text-slate-500 text-xs leading-relaxed">
+              {t('settings.patcher.logRequestsDescription')}
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* Spoof Machine ID Toggle */}
+      <div 
+        className="glass-card rounded-lg p-4 border border-white/10"
+        style={getAnimationStyle(3)}
+      >
+        <label className="flex items-start gap-4 cursor-pointer">
+          <div className="pt-0.5">
+            <input
+              type="checkbox"
+              checked={spoofMachineIdEnabled}
+              onChange={(e) => setSpoofMachineIdEnabled(e.target.checked)}
+              className="w-5 h-5 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500/50 focus:ring-offset-0 transition-colors"
+            />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <Monitor className="w-4 h-4 text-emerald-400" />
+              <span className="text-white font-medium text-sm">{t('settings.patcher.spoofMachineId')}</span>
+            </div>
+            <p className="text-slate-500 text-xs leading-relaxed">
+              {t('settings.patcher.spoofMachineIdDescription')}
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {/* Info Box */}
+      <div 
+        className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4"
+        style={getAnimationStyle(4)}
+      >
+        <p className="text-amber-200/80 text-xs leading-relaxed">
+          <strong className="text-amber-300">⚡ {t('settings.patcher.note')}:</strong> {t('settings.patcher.noteDescription')}
+        </p>
       </div>
     </div>
   );
@@ -449,6 +560,10 @@ export default function Settings() {
     switch (activeCategory) {
       case 'general':
         return renderGeneralSettings();
+      case 'patcher':
+        return renderPatcherSettings();
+      case 'token-pool':
+        return <PoolSettingsPanel getAnimationStyle={getAnimationStyle} />;
       case 'imap':
         return renderImapSettings();
       case 'proxy':

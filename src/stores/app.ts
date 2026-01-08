@@ -1,10 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { toast } from 'sonner';
 import type { ProviderName, Theme, Provider, LLMServerStatus } from '../types';
-import { setLocale, getLocale } from '../lib/i18n';
-
-// Track notification timeouts to allow proper cleanup when notifications are removed
-const notificationTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+import { setLocale } from '../lib/i18n';
 
 export type Language = 'en' | 'ru' | 'zh';
 
@@ -79,7 +77,7 @@ const DEFAULT_PROVIDERS: Provider[] = [
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Theme
       theme: 'dark',
       setTheme: (theme) => {
@@ -115,38 +113,26 @@ export const useAppStore = create<AppState>()(
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
-      // Notifications
+      // Notifications - using Sonner toasts
       notifications: [],
       addNotification: (notification) => {
-        const id = crypto.randomUUID();
-        set((state) => ({
-          notifications: [
-            ...state.notifications,
-            { ...notification, id, timestamp: Date.now() },
-          ],
-        }));
-        // Auto-remove after 5 seconds with proper timeout tracking
-        const timeoutId = setTimeout(() => {
-          get().removeNotification(id);
-        }, 5000);
-        notificationTimeouts.set(id, timeoutId);
-      },
-      removeNotification: (id) => {
-        // Clear the timeout if it exists to prevent memory leaks
-        const timeoutId = notificationTimeouts.get(id);
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          notificationTimeouts.delete(id);
+        const { type, title, message } = notification;
+        
+        if (type === 'success') {
+          toast.success(title, { description: message });
+        } else if (type === 'error') {
+          toast.error(title, { description: message });
+        } else if (type === 'warning') {
+          toast.warning(title, { description: message });
+        } else {
+          toast.info(title, { description: message });
         }
-        set((state) => ({
-          notifications: state.notifications.filter((n) => n.id !== id),
-        }));
+      },
+      removeNotification: (_id) => {
+        // Sonner handles its own toast removal
       },
       clearNotifications: () => {
-        // Clear all pending timeouts before clearing notifications
-        notificationTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
-        notificationTimeouts.clear();
-        set({ notifications: [] });
+        toast.dismiss();
       },
     }),
     {

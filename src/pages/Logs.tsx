@@ -1,38 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Search, Download, Trash2, RefreshCw } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
+import { useLogsStore } from '../stores/logs';
 import { t } from '../lib/i18n';
-
-interface LogEntry {
-  id: string;
-  timestamp: string;
-  level: 'info' | 'warn' | 'error' | 'debug';
-  message: string;
-  source?: string;
-}
-
-const MOCK_LOGS: LogEntry[] = [
-  { id: '1', timestamp: new Date().toISOString(), level: 'info', message: 'Application started', source: 'system' },
-  { id: '2', timestamp: new Date().toISOString(), level: 'info', message: 'Python backend connected', source: 'backend' },
-  { id: '3', timestamp: new Date().toISOString(), level: 'warn', message: 'IMAP not configured', source: 'registration' },
-];
 
 const levelConfig = {
   info: 'badge-info',
   warn: 'badge-warning',
   error: 'badge-error',
   debug: 'badge-neutral',
+  success: 'badge-success',
 };
 
 export default function Logs() {
   const { language } = useAppStore();
-  const [logs, setLogs] = useState<LogEntry[]>(MOCK_LOGS);
+  const { logs, clearLogs } = useLogsStore();
   const [filter, setFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   // Force re-render when language changes
-  const _ = language;
+  void language;
+
+  // Update timestamp when logs change
+  useEffect(() => {
+    setLastUpdated(new Date());
+  }, [logs.length]);
 
   const filteredLogs = logs.filter((log) => {
     const matchesFilter = filter === 'all' || log.level === filter;
@@ -40,10 +34,10 @@ export default function Logs() {
     return matchesFilter && matchesSearch;
   });
 
-  const handleClear = () => setLogs([]);
+  const handleClear = () => clearLogs();
 
   const handleExport = () => {
-    const content = logs.map((log) => `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.message}`).join('\n');
+    const content = logs.map((log) => `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.source ? `[${log.source}] ` : ''}${log.message}`).join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -54,7 +48,7 @@ export default function Logs() {
   };
 
   const handleRefresh = () => {
-    console.log('Refreshing logs...');
+    setLastUpdated(new Date());
   };
 
   return (
@@ -92,6 +86,7 @@ export default function Logs() {
             >
               <option value="all">{t('logs.allLevels')}</option>
               <option value="info">{t('logs.info')}</option>
+              <option value="success">Success</option>
               <option value="warn">{t('logs.warning')}</option>
               <option value="error">{t('logs.error')}</option>
               <option value="debug">{t('logs.debug')}</option>
@@ -135,7 +130,7 @@ export default function Logs() {
                         {new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false })}
                       </td>
                       <td>
-                        <span className={levelConfig[log.level]}>
+                        <span className={levelConfig[log.level] || 'badge-neutral'}>
                           {log.level}
                         </span>
                       </td>
@@ -153,12 +148,12 @@ export default function Logs() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-white/5 px-4 py-3 flex items-center justify-between bg-ds-surface/50">
+          <div className="border-t border-white/5 px-4 py-3 flex items-center justify-between" style={{ background: 'rgba(30, 41, 59, 0.6)' }}>
             <span className="text-2xs text-slate-500">
               {t('logs.showing')} <span className="text-slate-300 tabular-nums">{filteredLogs.length}</span> {t('logs.of')} <span className="text-slate-300 tabular-nums">{logs.length}</span> {t('logs.entries')}
             </span>
             <span className="text-2xs text-slate-600">
-              {t('logs.lastUpdated')} {new Date().toLocaleTimeString('en-US', { hour12: false })}
+              {t('logs.lastUpdated')} {lastUpdated.toLocaleTimeString('en-US', { hour12: false })}
             </span>
           </div>
         </div>

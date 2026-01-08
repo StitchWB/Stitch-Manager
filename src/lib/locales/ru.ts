@@ -111,6 +111,7 @@ export const ru: Translations = {
     status: 'Статус',
     usage: 'Квота',
     expires: 'Истекает',
+    registrationDate: 'Дата регистрации',
     refresh: 'Обновить',
     copyToken: 'Копировать токен',
     delete: 'Удалить',
@@ -126,12 +127,16 @@ export const ru: Translations = {
     config: 'Настройки',
     liveTerminal: 'Терминал',
     provider: 'Провайдер',
+    selectProvider: 'Выберите провайдер',
     emailStrategy: 'Стратегия Email',
     mode: 'Режим',
     imap: 'IMAP',
+    imapSettings: 'Настройки IMAP',
     proxy: 'Прокси',
+    proxySettings: 'Настройки прокси',
     headless: 'Без окна',
     accounts: 'Аккаунты',
+    count: 'Количество',
     saving: 'Сохранение',
     saved: 'Сохранено',
     error: 'Ошибка',
@@ -142,6 +147,12 @@ export const ru: Translations = {
     filter: 'Фильтр:',
     entries: 'записей',
     progress: 'Прогресс',
+    startRegistration: 'Начать регистрацию',
+    stopRegistration: 'Остановить',
+    registrationHistory: 'История регистраций',
+    noHistory: 'Нет истории регистраций',
+    comingSoon: 'Скоро',
+    step: 'Шаг',
     registrationModes: {
       webview: 'WebView',
       automated: 'Автоматический',
@@ -152,6 +163,12 @@ export const ru: Translations = {
       plusAlias: 'Plus-алиас',
       catchAll: 'Catch-All',
       pool: 'Пул Email',
+    },
+    strategies: {
+      single: 'Один email',
+      plusAlias: 'Plus alias (+random)',
+      catchAll: 'Catch-all домен',
+      pool: 'Пул email',
     },
     results: {
       total: 'Всего',
@@ -218,6 +235,7 @@ export const ru: Translations = {
     tabs: {
       liveLogs: 'Логи',
       apiUsage: 'API',
+      tokenPool: 'Пул токенов',
     },
     logs: {
       waitingForLogs: 'Ожидание логов...',
@@ -261,12 +279,17 @@ export const ru: Translations = {
     patching: 'Патчинг',
     unpatching: 'Удаление патча',
     restoring: 'Восстановление',
+    settings: 'Настройки патча',
+    strategy: 'Стратегия',
+    logRequests: 'Логировать запросы',
   },
   settings: {
     title: 'Настройки',
     subtitle: 'Настройки приложения',
     categories: {
       general: 'Общие',
+      patcher: 'Патчер',
+      tokenPool: 'Пул токенов',
       imap: 'IMAP',
       proxy: 'Прокси',
       idePaths: 'Пути IDE',
@@ -366,6 +389,131 @@ export const ru: Translations = {
     invalidEmail: 'Введите корректный email адрес',
     invalidUrl: 'Введите корректный URL',
     invalidPort: 'Введите корректный номер порта',
+  },
+  tokenPool: {
+    // Tab and titles
+    title: 'Пул токенов',
+    subtitle: 'Управление пулом токенов для API',
+    
+    // Stats
+    totalTokens: 'ВСЕГО ТОКЕНОВ',
+    available: 'ДОСТУПНО',
+    banned: 'ЗАБЛОКИРОВАНО',
+    quotaLeft: 'ОСТАТОК КВОТЫ',
+    
+    // Current token section
+    currentToken: 'Текущий токен',
+    noActiveToken: 'Нет активного токена',
+    forceSwitch: 'Переключить',
+    
+    // Token list
+    allTokens: 'Все токены',
+    noTokensInPool: 'Нет токенов в пуле',
+    active: 'Активен',
+    refreshToken: 'Обновить токен',
+    refreshAll: 'Обновить все',
+    reloadPool: 'Перезагрузить пул',
+    
+    // Token status
+    statusAvailable: 'Доступен',
+    statusBanned: 'Заблокирован',
+    statusExpired: 'Истёк',
+    statusLowQuota: 'Мало квоты',
+    statusWarning: 'Предупреждение',
+    
+    // Events
+    recentEvents: 'Последние события',
+    noRecentEvents: 'Нет событий',
+    clearEvents: 'Очистить',
+    
+    // Event types
+    eventSwitched: 'Переключение',
+    eventQuotaLow: 'Низкая квота',
+    eventTokenError: 'Ошибка токена',
+    eventTokenBanned: 'Токен заблокирован',
+    eventRefreshed: 'Обновлён',
+    eventTokenUsed: 'Использован',
+    
+    // Token details
+    quota: 'Квота',
+    reset: 'Сброс',
+    requests: 'Запросов',
+    errors: 'Ошибок',
+    region: 'Регион',
+    unknown: 'Неизвестно',
+    expired: 'Истёк',
+    lowQuota: 'Мало квоты',
+    warning: 'Внимание',
+    
+    // Tooltips
+    forceSwitchTooltip: 'Принудительно переключиться на следующий доступный токен',
+    refreshTokenTooltip: 'Обновить этот токен',
+    refreshAllTooltip: 'Обновить все токены',
+    reloadPoolTooltip: 'Перезагрузить пул токенов из базы данных',
+    clearEventsTooltip: 'Очистить все события',
+  },
+  settingsTokenPool: {
+    // Switch Strategy
+    switchStrategy: 'Стратегия переключения',
+    switchStrategyDescription: 'Выберите когда переключаться на следующий токен по остатку квоты',
+    
+    // Thresholds
+    strategyThresholds: 'Пороги стратегий',
+    strategyThresholdsDescription: 'Настройте пороговые значения для каждой стратегии',
+    
+    // Behavior
+    behavior: 'Поведение',
+    behaviorDescription: 'Настройка автоматического переключения и обработки ошибок',
+    
+    // Auto-refresh
+    autoRefresh: 'Авто-обновление',
+    autoRefreshDescription: 'Автоматически обновлять токены перед истечением срока',
+    
+    // Strategies
+    strategies: {
+      aggressive: 'Агрессивная',
+      aggressiveDescription: 'Переключаться рано, никогда не достигать лимитов',
+      balanced: 'Сбалансированная',
+      balancedDescription: 'Хороший баланс между использованием и безопасностью',
+      conservative: 'Консервативная',
+      conservativeDescription: 'Максимальный запас безопасности',
+      custom: 'Пользовательская',
+      customDescription: 'Установить свой порог',
+    },
+    
+    // Custom threshold
+    customThreshold: 'Пользовательский порог:',
+    tokensRemaining: 'токенов осталось',
+    tokens: 'токенов',
+    
+    // Behavior settings
+    switchOnError: 'Переключать при ошибке',
+    switchOnErrorDescription: 'Автоматически переключаться на следующий токен при ошибке текущего',
+    switchOnRateLimit: 'Переключать при лимите (429)',
+    switchOnRateLimitDescription: 'Немедленно переключаться при достижении лимита запросов',
+    maxErrorsBeforeBan: 'Макс. ошибок до блокировки:',
+    maxErrorsBeforeBanDescription: 'Токен будет временно заблокирован после этого количества ошибок подряд',
+    cooldownPeriod: 'Период охлаждения:',
+    cooldownPeriodDescription: 'Время отдыха токена после переключения с него',
+    minutes: 'минут',
+    
+    // Auto-refresh settings
+    enableAutoRefresh: 'Включить авто-обновление',
+    enableAutoRefreshDescription: 'Автоматически обновлять токены для поддержания доступности',
+    refreshBeforeExpiry: 'Обновлять до истечения:',
+    refreshBeforeExpiryDescription: 'Начинать обновление за указанное время до истечения токена',
+    
+    // Info box
+    currentStrategy: 'Текущая стратегия:',
+    activeTokens: 'Активных токенов:',
+    totalQuotaRemaining: 'Общий остаток квоты:',
+    requestsUnit: 'запросов',
+    
+    // Unsaved changes
+    unsavedChanges: 'Несохранённые изменения',
+    changesWillBeSaved: 'Изменения будут сохранены при выходе из поля',
+    saveNow: 'Сохранить сейчас',
+    default: 'ПО УМОЛЧ.',
   },
 };
 

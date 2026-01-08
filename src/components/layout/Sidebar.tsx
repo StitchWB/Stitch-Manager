@@ -41,14 +41,14 @@ function NavItem({ to, icon, label, collapsed, index = 0 }: NavItemProps) {
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2 transition-all duration-200 ${
           isActive
-            ? 'bg-white/5 border-l-2 border-primary font-medium text-white'
+            ? 'bg-indigo-500/10 border-l-2 border-indigo-400 font-medium text-white'
             : 'border-l-2 border-transparent text-slate-400 hover:text-white hover:bg-white/[0.03]'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          <span className={`transition-colors duration-200 ${isActive ? 'text-primary' : ''}`}>
+          <span className={`transition-colors duration-200 ${isActive ? 'text-indigo-400' : ''}`}>
             {icon}
           </span>
           {!collapsed && (
@@ -70,22 +70,23 @@ export default function Sidebar() {
   }, []);
 
   // Force re-render when language changes
-  const _ = language;
+  void language; // Force re-render on language change
 
   return (
     <aside
       className={`${
         sidebarCollapsed ? 'w-[60px]' : 'w-60'
-      } glass-sidebar flex flex-col shrink-0 transition-sidebar`}
+      } flex flex-col shrink-0 transition-sidebar backdrop-blur-xl border-r border-white/5`}
       style={{
         opacity: mounted ? 1 : 0,
         transition: 'opacity 300ms ease-out, width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+        background: 'rgba(15, 23, 42, 0.5)',
       }}
     >
       {/* Logo */}
-      <div className="h-14 flex items-center px-4 border-b border-white/10">
+      <div className="h-14 flex items-center px-4 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <div className="bg-primary rounded-lg w-8 h-8 flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+          <div className="rounded-lg w-8 h-8 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 20px rgba(99, 102, 241, 0.4)' }}>
             <Terminal className="w-4 h-4 text-white" />
           </div>
           {!sidebarCollapsed && (
@@ -108,7 +109,7 @@ export default function Sidebar() {
         <NavItem to="/server" icon={<Server size={18} />} label={t('sidebar.apiServer')} collapsed={sidebarCollapsed} index={4} />
 
         {/* System Section */}
-        <div className="pt-4 mt-4 border-t border-white/10">
+        <div className="pt-4 mt-4 border-t border-white/5">
           {!sidebarCollapsed && (
             <p className="px-3 text-2xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
               {t('sidebar.system')}
@@ -120,9 +121,9 @@ export default function Sidebar() {
       </nav>
 
       {/* User Profile - Compact */}
-      <div className="h-12 px-3 border-t border-white/10 flex items-center">
+      <div className="h-12 px-3 border-t border-white/5 flex items-center">
         <button className="flex items-center gap-2 w-full hover:bg-white/[0.03] px-2 py-1.5 rounded transition-all duration-200 group active:scale-[0.98]">
-          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-2xs font-bold text-white shadow-[0_0_10px_rgba(99,102,241,0.3)]">
+          <div className="w-6 h-6 rounded-full flex items-center justify-center text-2xs font-bold text-white" style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 12px rgba(99, 102, 241, 0.4)' }}>
             AD
           </div>
           {!sidebarCollapsed && (

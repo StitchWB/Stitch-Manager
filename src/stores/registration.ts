@@ -7,9 +7,6 @@ import type {
   RegistrationStatus 
 } from '../types';
 
-// Email strategy types (kept for future use)
-export type EmailStrategy = 'single' | 'plus-alias' | 'catch-all' | 'pool';
-
 // IMAP configuration (kept for future email verification)
 export interface IMAPConfig {
   server: string;
@@ -27,12 +24,34 @@ export interface ProxyConfig {
   password?: string;
 }
 
-// Registration configuration (simplified - no mode selection)
+// Auto-registration credentials
+export interface AutoRegCredentials {
+  email: string;
+  password: string;
+}
+
+// Email pattern types
+export type EmailPattern = 'random' | 'name_random' | 'provider_timestamp' | 'custom_prefix' | 'name_counter';
+
+// Name pattern types  
+export type NamePattern = 'random' | 'from_email' | 'custom';
+
+// Pattern configuration
+export interface PatternConfig {
+  emailPattern: EmailPattern;
+  emailCustomPrefix: string;
+  namePattern: NamePattern;
+  nameCustomFirst: string;
+  nameCustomLast: string;
+}
+
+// Registration configuration (simplified)
 export interface RegistrationConfig {
   provider: ProviderName;
-  emailStrategy: EmailStrategy;
+  credentials: AutoRegCredentials;
   imap: IMAPConfig;
   proxy: ProxyConfig;
+  patterns: PatternConfig;
   count: number;
   timeout: number;
   retryAttempts: number;
@@ -93,9 +112,10 @@ interface RegistrationState {
   
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
-  setEmailStrategy: (strategy: EmailStrategy) => void;
+  setCredentials: (credentials: Partial<AutoRegCredentials>) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
   setProxyConfig: (proxy: Partial<ProxyConfig>) => void;
+  setPatternConfig: (patterns: Partial<PatternConfig>) => void;
   setCount: (count: number) => void;
   
   // Actions - Settings persistence
@@ -129,7 +149,10 @@ interface RegistrationState {
 
 const DEFAULT_CONFIG: RegistrationConfig = {
   provider: 'kiro',
-  emailStrategy: 'catch-all',
+  credentials: {
+    email: '',
+    password: '',
+  },
   imap: {
     server: '',
     port: 993,
@@ -142,6 +165,13 @@ const DEFAULT_CONFIG: RegistrationConfig = {
     url: '',
     username: '',
     password: '',
+  },
+  patterns: {
+    emailPattern: 'provider_timestamp',
+    emailCustomPrefix: '',
+    namePattern: 'random',
+    nameCustomFirst: '',
+    nameCustomLast: '',
   },
   count: 1,
   timeout: 60000,
@@ -193,9 +223,14 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       triggerSave();
     },
 
-    setEmailStrategy: (emailStrategy: EmailStrategy) => {
-      set((state) => ({ config: { ...state.config, emailStrategy } }));
-      triggerSave();
+    setCredentials: (credentials: Partial<AutoRegCredentials>) => {
+      set((state) => ({
+        config: { 
+          ...state.config, 
+          credentials: { ...state.config.credentials, ...credentials } 
+        }
+      }));
+      // Don't auto-save credentials for security
     },
 
     setIMAPConfig: (imap: Partial<IMAPConfig>) => {
@@ -218,6 +253,16 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       triggerSave();
     },
 
+    setPatternConfig: (patterns: Partial<PatternConfig>) => {
+      set((state) => ({
+        config: { 
+          ...state.config, 
+          patterns: { ...state.config.patterns, ...patterns } 
+        }
+      }));
+      triggerSave();
+    },
+
     setCount: (count: number) => {
       set((state) => ({
         config: { ...state.config, count: Math.max(1, Math.min(100, count)) }
@@ -230,29 +275,43 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       try {
         const settings = await getSettings();
         set((state) => {
+          // Check if passwords are masked (meaning they exist in DB)
+          const imapPasswordMasked = settings.imap_password === '********';
+          const proxyPasswordMasked = settings.proxy_password === '********';
+          
           return {
             config: {
               ...state.config,
               provider: (settings.provider as ProviderName) || 'kiro',
-              emailStrategy: (settings.email_strategy as EmailStrategy) || 'catch-all',
               imap: {
                 ...state.config.imap,
                 server: settings.imap_server || '',
                 port: settings.imap_port || 993,
                 email: settings.imap_email || '',
-                password: settings.imap_password || '',
+                // Don't overwrite password with masked value - keep existing or empty
+                password: imapPasswordMasked ? state.config.imap.password : (settings.imap_password || ''),
               },
               proxy: {
                 ...state.config.proxy,
                 enabled: settings.proxy_enabled || false,
                 url: settings.proxy_url || '',
                 username: settings.proxy_username || '',
-                password: settings.proxy_password || '',
+                // Don't overwrite password with masked value - keep existing or empty
+                password: proxyPasswordMasked ? state.config.proxy.password : (settings.proxy_password || ''),
+              },
+              patterns: {
+                ...state.config.patterns,
+                emailPattern: (settings.email_pattern as EmailPattern) || 'provider_timestamp',
+                emailCustomPrefix: settings.email_custom_prefix || '',
+                namePattern: (settings.name_pattern as NamePattern) || 'random',
+                nameCustomFirst: settings.name_custom_first || '',
+                nameCustomLast: settings.name_custom_last || '',
               },
               count: settings.count || 1,
             },
             settingsLoaded: true,
-            imapPasswordSet: !!settings.imap_password,
+            // Track that password exists in DB even if we don't have the actual value
+            imapPasswordSet: imapPasswordMasked || !!settings.imap_password,
           };
         });
       } catch (error) {
@@ -266,13 +325,17 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       try {
         const updateData: Record<string, unknown> = {
           provider: config.provider,
-          email_strategy: config.emailStrategy,
           imap_server: config.imap.server,
           imap_port: config.imap.port,
           imap_email: config.imap.email,
           proxy_enabled: config.proxy.enabled,
           proxy_url: config.proxy.url,
           proxy_username: config.proxy.username,
+          email_pattern: config.patterns.emailPattern,
+          email_custom_prefix: config.patterns.emailCustomPrefix,
+          name_pattern: config.patterns.namePattern,
+          name_custom_first: config.patterns.nameCustomFirst,
+          name_custom_last: config.patterns.nameCustomLast,
           count: config.count,
         };
         
@@ -297,6 +360,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     // Control actions
     start: async () => {
       const { config, addLog } = get();
+      
       set({ 
         isRunning: true, 
         status: 'initializing',
@@ -305,16 +369,11 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         failedCount: 0,
       });
       addLog({ level: 'info', message: `Starting registration for ${config.provider}...` });
-      addLog({ level: 'info', message: 'Opening browser for authentication' });
+      addLog({ level: 'info', message: 'Opening browser for AWS Builder ID authentication' });
       
       try {
         await startRegistration({
           provider: config.provider,
-          config: {
-            provider: config.provider,
-            count: config.count,
-            useProxy: config.proxy.enabled,
-          },
         });
         addLog({ level: 'success', message: 'Registration started' });
       } catch (error) {
