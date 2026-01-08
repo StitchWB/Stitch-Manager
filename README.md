@@ -5,248 +5,223 @@
 <h1 align="center">Stitch Manager</h1>
 
 <p align="center">
-  <strong>Universal Account Manager for AI-Powered IDEs</strong>
+  <strong>🇺🇸 Universal Account Manager for AI-Powered IDEs</strong><br>
+  <strong>🇷🇺 Универсальный менеджер аккаунтов для AI IDE</strong>
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#usage">Usage</a> •
-  <a href="#supported-ides">Supported IDEs</a> •
-  <a href="#tech-stack">Tech Stack</a>
+  <a href="#-english">English</a> •
+  <a href="#-русский">Русский</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Tauri-2.x-blue?logo=tauri" alt="Tauri 2.x">
-  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" alt="React 18">
-  <img src="https://img.shields.io/badge/Rust-Backend-orange?logo=rust" alt="Rust">
-  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript" alt="TypeScript">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
+  <img src="https://img.shields.io/github/v/release/WhiteBite/Stitch-Account-Manager?style=flat-square&color=6366f1" alt="Release">
+  <img src="https://img.shields.io/badge/Tauri-2.x-blue?style=flat-square&logo=tauri" alt="Tauri 2.x">
+  <img src="https://img.shields.io/badge/Rust-Backend-orange?style=flat-square&logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react" alt="React 18">
+  <img src="https://img.shields.io/github/license/WhiteBite/Stitch-Account-Manager?style=flat-square&color=green" alt="License">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux">
 </p>
 
 ---
 
+# 🇺🇸 English
+
 ## 🎯 What is Stitch Manager?
 
-**Stitch Manager** is a powerful desktop application for managing multiple accounts across AI-powered IDEs like **Kiro**, **Windsurf**, and **Trae**. Switch between accounts instantly, auto-register new ones, and patch IDE extensions — all from a beautiful, modern interface.
+**Stitch Manager** is a powerful cross-platform desktop app for managing multiple accounts across AI-powered IDEs like **Kiro**, **Windsurf**, and **Trae**.
 
-Perfect for developers who:
-- Work with multiple AI coding assistants
-- Need to manage team accounts
-- Want automated account registration
-- Require quick account switching without IDE restarts
+### Why use it?
+
+- 🔄 **Switch accounts instantly** — No IDE restart required
+- 🤖 **Auto-registration** — Create accounts automatically with browser automation
+- 🔧 **IDE Patcher** — Enable multi-account support in IDE extensions
+- 📊 **Quota tracking** — Monitor usage across all accounts
+- 🎨 **Beautiful UI** — Modern Deep Space theme with glassmorphism
 
 ---
 
 ## ✨ Features
 
+| Feature | Kiro | Windsurf | Trae |
+|---------|:----:|:--------:|:----:|
+| Account Management | ✅ | ✅ | 🚧 |
+| Auto-Registration | ✅ | ✅ | 🚧 |
+| Token Injection | ✅ | ✅ | 🚧 |
+| Extension Patcher | ✅ | ✅ | 🚧 |
+
 ### 🔐 Account Management
-- Add, edit, and delete accounts for multiple IDE providers
-- Secure token storage with SQLite encryption
-- Real-time quota tracking and status monitoring
-- One-click account activation with automatic token injection
+- Secure local storage with SQLite
+- One-click account activation
+- Real-time quota monitoring
+- Import/export accounts
 
 ### 🤖 Auto-Registration
-- Automated account creation using browser automation (DrissionPage)
-- Support for Kiro (AWS Cognito) and Windsurf (Firebase Auth)
+- Browser automation via DrissionPage
 - IMAP integration for email verification
-- Proxy support for registration
+- Proxy support
+- Customizable email patterns
 
 ### 🔧 IDE Patcher
-- Patch IDE extensions to enable multi-account support
-- Automatic backup before patching
-- One-click restore from backup
-- Support for Kiro, Windsurf, and VS Code extensions
-
-### 🖥️ LLM API Server
-- OpenAI-compatible API proxy
-- Route requests through your managed accounts
-- Load balancing across multiple tokens
-- Real-time request monitoring
-
-### 🎨 Modern UI/UX
-- Deep Space dark theme with glassmorphism effects
-- Smooth animations and transitions
-- Command palette (Ctrl+K) for quick actions
-- Multi-language support (English, Русский)
+- Patch extensions for multi-account support
+- Automatic backup & restore
+- Safe patching with validation
 
 ---
 
-## 🖥️ Supported IDEs
+## 📥 Installation
 
-| IDE | Account Management | Auto-Registration | Patcher |
-|-----|-------------------|-------------------|---------|
-| **Kiro** | ✅ Full Support | ✅ AWS Cognito | ✅ Ready |
-| **Windsurf** | ✅ Full Support | ✅ Firebase Auth | ✅ Ready |
-| **Trae** | 🚧 Coming Soon | 🚧 Planned | 🚧 Planned |
+### Download
 
----
+Get the latest release for your platform:
 
-## 🚀 Installation
+| Platform | Download |
+|----------|----------|
+| Windows | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
+| macOS | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal) |
+| Linux | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
 
-### Prerequisites
-
-- **Node.js** 18+ 
-- **Rust** (for Tauri backend)
-- **Python** 3.11+ (for auto-registration)
-
-### Quick Start
+### Build from Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/stitch-manager.git
-cd stitch-manager
+# Clone
+git clone https://github.com/WhiteBite/Stitch-Account-Manager.git
+cd Stitch-Account-Manager
 
-# Install Node.js dependencies
+# Install dependencies
 npm install
 
-# Install Python dependencies (optional, for auto-registration)
-pip install -r python/requirements.txt
-
-# Run in development mode
+# Development
 npm run dev
-```
 
-### Build for Production
-
-```bash
-# Build the application
+# Build
 npm run build
-
-# The installer will be in src-tauri/target/release/bundle/
 ```
 
----
-
-## 📖 Usage
-
-### Adding an Account
-
-1. Navigate to **Accounts** page
-2. Click **Add Account**
-3. Select provider (Kiro/Windsurf)
-4. Enter email and password
-5. Click **Save**
-
-### Activating an Account
-
-1. Find the account in the list
-2. Click the **Start** button
-3. The token is automatically injected into the IDE
-4. Restart your IDE to use the new account
-
-### Auto-Registration
-
-1. Go to **Auto-Reg** page
-2. Select target provider (Kiro/Windsurf)
-3. Configure IMAP settings for email verification
-4. Set email pattern and count
-5. Click **START**
+**Requirements:**
+- Node.js 18+
+- Rust (for Tauri)
+- Python 3.11+ (for auto-registration)
 
 ---
 
 ## 🛠️ Tech Stack
 
-### Frontend
-- **React 18** — UI library
-- **TypeScript** — Type safety
-- **TailwindCSS** — Utility-first styling
-- **Zustand** — State management
-- **React Router** — Navigation
-- **Sonner** — Toast notifications
-- **cmdk** — Command palette
-
-### Backend
-- **Tauri 2.x** — Desktop framework
-- **Rust** — Backend logic
-- **SQLite** — Local database
-- **SQLx** — Async database driver
-
-### Automation
-- **Python 3.11+** — Scripting
-- **DrissionPage** — Browser automation
-- **IMAPClient** — Email verification
-
----
-
-## 📁 Project Structure
-
 ```
-stitch-manager/
-├── src/                      # React frontend
-│   ├── components/           # Reusable UI components
-│   │   ├── layout/           # Layout components (Sidebar, Header)
-│   │   └── ui/               # UI primitives (Terminal, ModuleCard)
-│   ├── pages/                # Application pages
-│   ├── stores/               # Zustand state stores
-│   ├── lib/                  # Utilities, i18n, Tauri API
-│   ├── constants/            # App constants and theme
-│   └── types/                # TypeScript definitions
-├── src-tauri/                # Rust backend
-│   ├── src/
-│   │   ├── commands.rs       # Tauri IPC commands
-│   │   ├── services/         # Business logic services
-│   │   └── database/         # SQLite migrations & queries
-│   └── tauri.conf.json       # Tauri configuration
-├── python/                   # Python automation
-│   └── autoreg/              # Auto-registration module
-└── docs/                     # Documentation
+Frontend:  React 18 • TypeScript • TailwindCSS • Zustand
+Backend:   Tauri 2.x • Rust • SQLite • SQLx
+Automation: Python • DrissionPage • IMAPClient
 ```
-
----
-
-## ⚙️ Configuration
-
-Create a `.env` file based on `.env.example`:
-
-```env
-# IMAP Configuration (for auto-registration)
-IMAP_SERVER=imap.example.com
-IMAP_PORT=993
-IMAP_EMAIL=user@example.com
-IMAP_PASSWORD=your-password
-
-# Email domain for catch-all
-EMAIL_DOMAIN=example.com
-```
-
----
-
-## 🔒 Security
-
-- Tokens are stored locally in SQLite with optional encryption
-- Passwords are never logged or transmitted
-- All network requests use HTTPS
-- No telemetry or data collection
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE)
 
 ---
 
-## 🙏 Acknowledgments
+# 🇷🇺 Русский
 
-- [Tauri](https://tauri.app/) — For the amazing desktop framework
-- [DrissionPage](https://github.com/g1879/DrissionPage) — For browser automation
-- [Lucide Icons](https://lucide.dev/) — For beautiful icons
+## 🎯 Что такое Stitch Manager?
+
+**Stitch Manager** — мощное кроссплатформенное приложение для управления аккаунтами в AI IDE: **Kiro**, **Windsurf** и **Trae**.
+
+### Зачем это нужно?
+
+- 🔄 **Мгновенное переключение** — Без перезапуска IDE
+- 🤖 **Авто-регистрация** — Создание аккаунтов через браузерную автоматизацию
+- 🔧 **Патчер IDE** — Включение мульти-аккаунтов в расширениях
+- 📊 **Отслеживание квот** — Мониторинг использования всех аккаунтов
+- 🎨 **Красивый UI** — Современная тема Deep Space с glassmorphism
+
+---
+
+## ✨ Возможности
+
+| Функция | Kiro | Windsurf | Trae |
+|---------|:----:|:--------:|:----:|
+| Управление аккаунтами | ✅ | ✅ | 🚧 |
+| Авто-регистрация | ✅ | ✅ | 🚧 |
+| Инъекция токенов | ✅ | ✅ | 🚧 |
+| Патчер расширений | ✅ | ✅ | 🚧 |
+
+### 🔐 Управление аккаунтами
+- Безопасное локальное хранение в SQLite
+- Активация аккаунта в один клик
+- Мониторинг квот в реальном времени
+- Импорт/экспорт аккаунтов
+
+### 🤖 Авто-регистрация
+- Браузерная автоматизация через DrissionPage
+- IMAP интеграция для верификации email
+- Поддержка прокси
+- Настраиваемые паттерны email
+
+### 🔧 Патчер IDE
+- Патч расширений для мульти-аккаунтов
+- Автоматический бэкап и восстановление
+- Безопасный патчинг с валидацией
+
+---
+
+## 📥 Установка
+
+### Скачать
+
+Последний релиз для вашей платформы:
+
+| Платформа | Скачать |
+|-----------|---------|
+| Windows | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
+| macOS | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal) |
+| Linux | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
+
+### Сборка из исходников
+
+```bash
+# Клонировать
+git clone https://github.com/WhiteBite/Stitch-Account-Manager.git
+cd Stitch-Account-Manager
+
+# Установить зависимости
+npm install
+
+# Разработка
+npm run dev
+
+# Сборка
+npm run build
+```
+
+**Требования:**
+- Node.js 18+
+- Rust (для Tauri)
+- Python 3.11+ (для авто-регистрации)
+
+---
+
+## 🛠️ Технологии
+
+```
+Frontend:  React 18 • TypeScript • TailwindCSS • Zustand
+Backend:   Tauri 2.x • Rust • SQLite • SQLx
+Автоматизация: Python • DrissionPage • IMAPClient
+```
+
+---
+
+## 📄 Лицензия
+
+MIT License — см. [LICENSE](LICENSE)
 
 ---
 
 <p align="center">
-  Made with ❤️ by <a href="https://github.com/WhiteBite">WhiteBite</a>
+  <strong>Made with ❤️ by <a href="https://github.com/WhiteBite">WhiteBite</a></strong>
 </p>
