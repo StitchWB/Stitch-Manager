@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app-icon.png" alt="Stitch Manager Logo" width="128" height="128">
+  <img src="stitch-ide-logo.png" alt="Stitch Manager Logo" width="200">
 </p>
 
 <h1 align="center">Stitch Manager</h1>
