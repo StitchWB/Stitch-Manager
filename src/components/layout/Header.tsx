@@ -89,7 +89,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
             <Globe size={18} />
           </button>
           {langOpen && (
-            <div className="absolute right-0 top-full mt-1 w-32 bg-ds-panel border border-white/10 rounded-lg shadow-xl z-50 py-1">
+            <div className="absolute right-0 top-full mt-1 w-32 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 py-1">
               {languages.map(lang => (
                 <button
                   key={lang.code}
@@ -111,14 +111,14 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           >
             <Bell size={18} />
             {notifications.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-ds-bg animate-pulse" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-400 rounded-full ring-2 ring-[#050508] animate-pulse" />
             )}
           </button>
           
           {notifOpen && (
-            <div className="absolute right-0 top-full mt-1 w-80 bg-ds-panel border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 w-80 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 overflow-hidden">
               {/* Header */}
-              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
                 <span className="text-xs font-medium text-white">{t('header.notifications')}</span>
                 {notifications.length > 0 && (
                   <button 

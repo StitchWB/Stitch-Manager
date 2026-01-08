@@ -10,16 +10,25 @@
     "build:web": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "setup:py": "pip install -r python/autoreg/requirements.txt"
+    "setup:py": "pip install -r python/autoreg/requirements.txt",
+    "validate:css": "node scripts/validate-tailwind.cjs"
   },
   "dependencies": {
+    "@babel/parser": "^7.28.5",
+    "@headlessui/react": "^2.2.9",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "^2.4.2",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "esprima": "^4.0.1",
+    "framer-motion": "^12.24.10",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.4.0",
     "zustand": "^5.0.1"
   },
   "devDependencies": {
@@ -29,6 +38,7 @@
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
+    "prettier": "^3.7.4",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"

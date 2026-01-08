@@ -13,6 +13,7 @@ import {
   Loader2,
   LayoutDashboard,
   TrendingUp,
+  Trash2,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
@@ -20,6 +21,7 @@ import { useAccountsStore } from '../stores/accounts';
 import {
   getServerStatus,
   getRegistrationJobs,
+  clearRegistrationJobs,
   startRegistration,
   startLLMServer,
   getDashboardStats,
@@ -149,7 +151,7 @@ const ProviderCard = React.memo(function ProviderCard({ provider, accountCount, 
       }`}
     >
       {isSelected && (
-        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary rounded-full flex items-center justify-center ring-2 ring-ds-bg">
+        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary rounded-full flex items-center justify-center ring-2 ring-vsc-bg">
           <CheckCircle className="w-2.5 h-2.5 text-white" />
         </div>
       )}
@@ -208,7 +210,7 @@ function ProviderBreakdownChart({ data }: ProviderChartProps) {
           style={{ background: `conic-gradient(${gradientStops})` }}
         />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-16 h-16 bg-ds-surface rounded-full flex flex-col items-center justify-center border border-white/10">
+          <div className="w-16 h-16 bg-vsc-sidebar rounded-full flex flex-col items-center justify-center border border-vsc-border">
             <span className="text-lg font-bold text-white tabular-nums">{total}</span>
             <span className="text-2xs text-slate-500">{t('common.total')}</span>
           </div>
@@ -246,7 +248,7 @@ export default function Dashboard() {
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   // Force re-render when language changes
-  const _ = language;
+  void language; // Force re-render on language change
 
   const loadServerStatus = useCallback(async () => {
     try {
@@ -265,6 +267,17 @@ export default function Dashboard() {
       console.error('Failed to load registration jobs:', error);
     }
   }, []);
+
+  const handleClearJobs = useCallback(async () => {
+    try {
+      await clearRegistrationJobs();
+      setRegistrationJobs([]);
+      addNotification({ type: 'success', title: t('common.cleared'), message: t('dashboard.activityCleared') });
+    } catch (error) {
+      console.error('Failed to clear jobs:', error);
+      addNotification({ type: 'error', title: t('common.error'), message: 'Failed to clear activity log' });
+    }
+  }, [addNotification]);
 
   const loadDashboardStats = useCallback(async () => {
     try {
@@ -324,6 +337,31 @@ export default function Dashboard() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5);
 
+    // Helper to clean and truncate error messages
+    const cleanErrorMessage = (error: string | undefined, provider: string, status: string): string => {
+      if (!error) return `${provider} - ${status}`;
+      
+      // Remove technical details, Chinese characters, and truncate
+      let cleaned = error
+        .replace(/[\u4e00-\u9fff]/g, '') // Remove Chinese characters
+        .replace(/\{[^}]*\}/g, '') // Remove JSON-like objects
+        .replace(/\[[^\]]*\]/g, '') // Remove arrays
+        .replace(/['"][^'"]*['"]/g, '') // Remove quoted strings
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+      
+      // Extract meaningful part or use generic message
+      if (cleaned.includes('Browser worker failed')) {
+        cleaned = 'Browser automation failed';
+      } else if (cleaned.includes('timeout')) {
+        cleaned = 'Operation timed out';
+      } else if (cleaned.length > 50) {
+        cleaned = cleaned.substring(0, 47) + '...';
+      }
+      
+      return cleaned || `${provider} - ${status}`;
+    };
+
     sortedJobs.forEach((job) => {
       const statusMap: Record<string, 'success' | 'pending' | 'failed'> = {
         completed: 'success', processing: 'pending', pending: 'pending',
@@ -331,10 +369,13 @@ export default function Dashboard() {
         verifying: 'pending', completing: 'pending', failed: 'failed',
         cancelled: 'failed', idle: 'pending',
       };
+      const jobIdStr = String(job.id);
       activities.push({
         status: statusMap[job.status] || 'pending',
-        title: job.email || `Registration ${job.id.slice(0, 8)}`,
-        description: job.error || `${job.provider} - ${job.status}`,
+        title: job.email || `Registration ${jobIdStr.slice(0, 8)}`,
+        description: job.status === 'failed' 
+          ? cleanErrorMessage(job.error, job.provider, job.status)
+          : `${job.provider} - ${job.status}`,
         timestamp: formatTimestamp(job.createdAt),
       });
     });
@@ -476,9 +517,14 @@ export default function Dashboard() {
                   <h3 className="text-sm font-semibold text-white">{t('dashboard.recentActivity')}</h3>
                   <p className="text-2xs text-slate-500">{t('dashboard.lastRegistrationAttempts')}</p>
                 </div>
-                <button onClick={loadRegistrationJobs} className="btn-ghost text-xs py-1 px-2">
-                  <RefreshCw size={12} /> {t('common.refresh')}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleClearJobs} className="btn-ghost text-xs py-1 px-2 text-red-400 hover:text-red-300" title="Clear activity log">
+                    <Trash2 size={12} />
+                  </button>
+                  <button onClick={loadRegistrationJobs} className="btn-ghost text-xs py-1 px-2">
+                    <RefreshCw size={12} /> {t('common.refresh')}
+                  </button>
+                </div>
               </div>
               <div className="flex flex-col gap-1 flex-1">
                 {recentActivity.map((activity, index) => (

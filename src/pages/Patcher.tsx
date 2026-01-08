@@ -15,6 +15,7 @@ import {
   Wind,
   Terminal,
   Code,
+  Settings,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
@@ -48,26 +49,40 @@ const truncateMiddle = (path: string, maxLength: number = 35): string => {
 export default function Patcher() {
   const { language } = useAppStore();
   const {
-    detectedIDEs, backups, scanning, loading, error, operationInProgress,
-    detectIDEs, applyPatch, removePatch, listBackups, restoreBackup, deleteBackup, clearError,
+    detectedIDEs,
+    backups,
+    scanning,
+    loading,
+    error,
+    operationInProgress,
+    patchStrategy,
+    logRequests,
+    setPatchStrategy,
+    setLogRequests,
+    detectIDEs: scanForIDEs, // Renamed to avoid conflict
+    applyPatch,
+    removePatch,
+    listBackups,
+    restoreBackup,
+    deleteBackup,
+    clearError,
   } = usePatcherStore();
 
   // Force re-render when language changes
-  const _ = language;
+  void language; // Force re-render on language change
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [createBackupOnPatch, setCreateBackupOnPatch] = useState(true);
-  const [restoreBackupOnUnpatch, setRestoreBackupOnUnpatch] = useState(true);
   const [selectedIDEFilter, setSelectedIDEFilter] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    detectIDEs();
+    scanForIDEs();
     listBackups();
-  }, [detectIDEs, listBackups]);
+  }, [scanForIDEs, listBackups]);
 
-  const handleScan = async () => { clearError(); await detectIDEs(); await listBackups(); };
-  const handlePatch = async (ideId: string) => { clearError(); try { await applyPatch(ideId, createBackupOnPatch); } catch {} };
-  const handleUnpatch = async (ideId: string) => { clearError(); try { await removePatch(ideId, restoreBackupOnUnpatch); } catch {} };
+  const handleScan = async () => { clearError(); await scanForIDEs(); await listBackups(); };
+  const handlePatch = async (ideId: string) => { clearError(); try { await applyPatch(ideId, true); } catch {} };
+  const handleUnpatch = async (ideId: string) => { clearError(); try { await removePatch(ideId, true); } catch {} };
   const handleRestoreBackup = async (backupId: string) => { clearError(); try { await restoreBackup(backupId); await listBackups(); } catch {} };
   const handleDeleteBackup = async (backupId: string) => { clearError(); try { await deleteBackup(backupId); setConfirmDelete(null); } catch {} };
 
@@ -102,6 +117,7 @@ export default function Patcher() {
             </div>
           )}
 
+
           {/* Scan Control */}
           <section className="card p-5">
             <div className="flex items-center justify-between">
@@ -109,16 +125,39 @@ export default function Patcher() {
                 <h2 className="text-sm font-semibold text-white">{t('patcher.detectedIdes')}</h2>
                 <p className="text-2xs text-slate-500 mt-0.5">{t('patcher.scanDescription')}</p>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-4 text-xs">
-                  <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
-                    <input type="checkbox" checked={createBackupOnPatch} onChange={(e) => setCreateBackupOnPatch(e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0" />
-                    {t('patcher.backupOnPatch')}
-                  </label>
-                  <label className="flex items-center gap-2 text-slate-400 cursor-pointer">
-                    <input type="checkbox" checked={restoreBackupOnUnpatch} onChange={(e) => setRestoreBackupOnUnpatch(e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-0" />
-                    {t('patcher.restoreOnUnpatch')}
-                  </label>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button onClick={() => setShowSettings(!showSettings)} className="btn-icon text-slate-500 hover:text-white hover:bg-white/10">
+                    <Settings size={16} />
+                  </button>
+                  {showSettings && (
+                    <div className="absolute top-full right-0 mt-2 w-64 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-10 p-4">
+                      <h4 className="text-xs font-semibold text-white mb-3">{t('patcher.settings')}</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label htmlFor="patchStrategy" className="text-2xs text-slate-400 block mb-1">{t('patcher.strategy')}</label>
+                          <select
+                            id="patchStrategy"
+                            value={patchStrategy}
+                            onChange={(e) => setPatchStrategy(e.target.value as 'injection' | 'legacy')}
+                            className="input-ds w-full text-xs"
+                          >
+                            <option value="injection">Injection (Recommended)</option>
+                            <option value="legacy">Legacy (Regex)</option>
+                          </select>
+                        </div>
+                        <label className="flex items-center gap-2 text-slate-300 cursor-pointer text-xs">
+                          <input 
+                            type="checkbox" 
+                            checked={logRequests} 
+                            onChange={(e) => setLogRequests(e.target.checked)} 
+                            className="w-3.5 h-3.5 rounded border-white/20 bg-white/10 text-primary focus:ring-0 focus:ring-offset-0"
+                          />
+                          {t('patcher.logRequests')}
+                        </label>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button onClick={handleScan} disabled={scanning || isAnyOperationInProgress} className="btn-primary py-1.5 text-xs">
                   {scanning ? <><RefreshCw size={14} className="animate-spin" />{t('patcher.scanning')}</> : <><Search size={14} />{t('patcher.scanForIdes')}</>}

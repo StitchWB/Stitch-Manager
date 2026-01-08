@@ -38,6 +38,10 @@ interface PatcherState {
   
   // Operation status
   operationInProgress: Record<string, 'patching' | 'unpatching' | 'restoring' | null>;
+
+  // Patch settings
+  patchStrategy: 'injection' | 'legacy';
+  logRequests: boolean;
   
   // Actions
   detectIDEs: () => Promise<DetectedIDE[]>;
@@ -46,6 +50,8 @@ interface PatcherState {
   getAllPatchStatuses: () => Promise<void>;
   applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
+  setPatchStrategy: (strategy: 'injection' | 'legacy') => void;
+  setLogRequests: (log: boolean) => void;
   
   // Backup management
   listBackups: (ideId?: string) => Promise<BackupInfo[]>;
@@ -88,6 +94,8 @@ export const usePatcherStore = create<PatcherState>()(
         error: null,
         selectedIDEId: null,
         operationInProgress: {},
+        patchStrategy: 'injection', // Default to new method
+        logRequests: false,
 
         // ============================================
         // IDE Detection
@@ -171,14 +179,18 @@ export const usePatcherStore = create<PatcherState>()(
         // Patching Operations
         // ============================================
 
-        applyPatch: async (ideId: string, createBackup = true) => {
+        setPatchStrategy: (strategy) => set({ patchStrategy: strategy }),
+        setLogRequests: (log) => set({ logRequests: log }),
+
+        applyPatch: async (ideId: string, createBackup = true) => { 
           set((state) => ({
             operationInProgress: { ...state.operationInProgress, [ideId]: 'patching' },
             error: null,
           }));
 
           try {
-            const result = await patchIDE({ ideId, createBackup });
+            const { patchStrategy } = get();
+            const result = await patchIDE({ ideId, createBackup, strategy: patchStrategy });
             
             if (result.success) {
               // Update IDE status

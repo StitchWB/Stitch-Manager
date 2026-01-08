@@ -1,5 +1,14 @@
-# Requirements for autoreg CLI only
-# Main app uses Rust backend, Python is only for browser automation
+# Requirements for autoreg - browser automation for AWS Builder ID registration
 # Install: pip install -r python/requirements.txt
 
--r autoreg/requirements.txt
+# Browser automation (DrissionPage - works via CDP, no WebDriver needed)
+DrissionPage>=4.0.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# SOCKS proxy support (optional)
+pysocks>=1.7.1

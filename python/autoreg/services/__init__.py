@@ -1,10 +1,27 @@
 """
-Services for autoreg CLI
-
-Only token saving is handled here.
-All other logic (refresh, validate, accounts CRUD) is in Rust backend.
+Services module - бизнес-логика
 """
 
-from .token_service import TokenService
+# Lazy imports to avoid circular dependencies
+def get_token_service():
+    from .token_service import TokenService
+    return TokenService
 
-__all__ = ['TokenService']
+def get_quota_service():
+    from .quota_service import QuotaService
+    return QuotaService
+
+def get_machine_id_service():
+    from .machine_id_service import MachineIdService
+    return MachineIdService
+
+def get_kiro_service():
+    from .kiro_service import KiroService
+    return KiroService
+
+__all__ = [
+    'get_token_service',
+    'get_quota_service', 
+    'get_machine_id_service',
+    'get_kiro_service'
+]

@@ -47,7 +47,7 @@ export default function Accounts() {
   const accounts = getFilteredAccounts();
 
   // Force re-render when language changes
-  const _ = language;
+  void language; // Force re-render on language change
 
   useEffect(() => {
     fetchAccounts();
@@ -175,7 +175,7 @@ export default function Accounts() {
                 onClick={() => setFilterProvider(tab.id)}
                 className={`px-3 py-1 rounded-full text-sm transition-colors ${
                   filterProvider === tab.id
-                    ? 'text-white font-medium bg-white/10 border border-white/5 shadow-sm'
+                    ? 'text-indigo-300 font-medium bg-indigo-500/15 border border-indigo-500/20 shadow-sm'
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
@@ -194,7 +194,10 @@ export default function Accounts() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-56 h-9 bg-transparent border border-white/10 rounded-lg pl-9 pr-3 text-sm text-white placeholder-slate-600 focus:border-white/20 focus:outline-none"
+                className="w-56 h-9 bg-transparent rounded-lg pl-9 pr-3 text-sm text-white placeholder-slate-600 focus:outline-none"
+                style={{ border: '1px solid rgba(255, 255, 255, 0.08)', }}
+                onFocus={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.12)'}
+                onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
                 placeholder={t('accounts.searchPlaceholder')}
               />
             </div>
@@ -202,7 +205,7 @@ export default function Accounts() {
             <button
               onClick={handleRefreshAll}
               disabled={isRefreshingAll}
-              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 text-slate-500 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50"
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/[0.08] text-slate-500 hover:text-white hover:border-white/[0.12] transition-colors disabled:opacity-50"
               title={t('accounts.refreshAll')}
             >
               <RefreshCw size={15} className={isRefreshingAll ? 'animate-spin' : ''} />
@@ -211,7 +214,7 @@ export default function Accounts() {
             <button
               onClick={handleExportCSV}
               disabled={accounts.length === 0}
-              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 text-slate-500 hover:text-white hover:border-white/20 transition-colors disabled:opacity-50"
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/[0.08] text-slate-500 hover:text-white hover:border-white/[0.12] transition-colors disabled:opacity-50"
               title={t('accounts.exportCsv')}
             >
               <Download size={15} />
@@ -219,7 +222,8 @@ export default function Accounts() {
 
             <button 
               onClick={() => setIsModalOpen(true)} 
-              className="h-9 px-4 bg-white text-black text-xs font-semibold rounded-lg flex items-center gap-1.5 hover:bg-white/90 transition-colors"
+              className="h-9 px-4 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 15px rgba(99, 102, 241, 0.3)' }}
             >
               <Plus size={14} />
               {t('common.add')}
@@ -240,37 +244,11 @@ export default function Accounts() {
             onRefreshToken={handleRefreshToken}
             onCopyToken={handleCopyToken}
             onDelete={handleDelete}
+            onDeleteSelected={removeSelectedAccounts}
             onActivate={handleActivate}
+            onExportCSV={handleExportCSV}
           />
         </div>
-
-        {/* Bulk Actions */}
-        {selectedIds.size > 0 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 border border-white/10 rounded-full px-4 py-2 flex items-center gap-4 shadow-2xl z-20 animate-slide-up">
-            <span className="text-xs text-white">
-              <span className="font-semibold">{selectedIds.size}</span> {t('common.selected')}
-            </span>
-            <div className="w-px h-4 bg-white/10" />
-            <button onClick={handleExportCSV} className="text-xs text-slate-400 hover:text-white">
-              {t('common.export')}
-            </button>
-            <button
-              onClick={async () => {
-                if (confirm(t('accounts.deleteConfirm', { count: selectedIds.size }))) {
-                  await removeSelectedAccounts([...selectedIds]);
-                }
-              }}
-              className="text-xs text-red-400 hover:text-red-300"
-            >
-              {t('common.delete')}
-            </button>
-            <button onClick={clearSelection} className="text-slate-500 hover:text-white">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-        )}
 
         {/* Toast */}
         {copiedToast && (

@@ -114,6 +114,7 @@ export interface Translations {
     status: string;
     usage: string;
     expires: string;
+    registrationDate: string;
     refresh: string;
     copyToken: string;
     delete: string;
@@ -129,12 +130,16 @@ export interface Translations {
     config: string;
     liveTerminal: string;
     provider: string;
+    selectProvider: string;
     emailStrategy: string;
     mode: string;
     imap: string;
+    imapSettings: string;
     proxy: string;
+    proxySettings: string;
     headless: string;
     accounts: string;
+    count: string;
     saving: string;
     saved: string;
     error: string;
@@ -145,12 +150,24 @@ export interface Translations {
     filter: string;
     entries: string;
     progress: string;
+    startRegistration: string;
+    stopRegistration: string;
+    registrationHistory: string;
+    noHistory: string;
+    comingSoon: string;
+    step: string;
     registrationModes: {
       webview: string;
       automated: string;
       auto: string;
     };
     emailStrategies: {
+      single: string;
+      plusAlias: string;
+      catchAll: string;
+      pool: string;
+    };
+    strategies: {
       single: string;
       plusAlias: string;
       catchAll: string;
@@ -221,6 +238,7 @@ export interface Translations {
     tabs: {
       liveLogs: string;
       apiUsage: string;
+      tokenPool: string;
     };
     logs: {
       waitingForLogs: string;
@@ -264,12 +282,17 @@ export interface Translations {
     patching: string;
     unpatching: string;
     restoring: string;
+    settings: string;
+    strategy: string;
+    logRequests: string;
   };
   settings: {
     title: string;
     subtitle: string;
     categories: {
       general: string;
+      patcher: string;
+      tokenPool: string;
       imap: string;
       proxy: string;
       idePaths: string;
@@ -370,382 +393,121 @@ export interface Translations {
     invalidUrl: string;
     invalidPort: string;
   };
+  tokenPool: {
+    // Tab and titles
+    title: string;
+    subtitle: string;
+    
+    // Stats
+    totalTokens: string;
+    available: string;
+    banned: string;
+    quotaLeft: string;
+    
+    // Current token section
+    currentToken: string;
+    noActiveToken: string;
+    forceSwitch: string;
+    
+    // Token list
+    allTokens: string;
+    noTokensInPool: string;
+    active: string;
+    refreshToken: string;
+    refreshAll: string;
+    reloadPool: string;
+    
+    // Token status
+    statusAvailable: string;
+    statusBanned: string;
+    statusExpired: string;
+    statusLowQuota: string;
+    statusWarning: string;
+    
+    // Events
+    recentEvents: string;
+    noRecentEvents: string;
+    clearEvents: string;
+    
+    // Event types
+    eventSwitched: string;
+    eventQuotaLow: string;
+    eventTokenError: string;
+    eventTokenBanned: string;
+    eventRefreshed: string;
+    eventTokenUsed: string;
+    
+    // Token details
+    quota: string;
+    reset: string;
+    requests: string;
+    errors: string;
+    region: string;
+    unknown: string;
+    expired: string;
+    lowQuota: string;
+    warning: string;
+    
+    // Tooltips
+    forceSwitchTooltip: string;
+    refreshTokenTooltip: string;
+    refreshAllTooltip: string;
+    reloadPoolTooltip: string;
+    clearEventsTooltip: string;
+  };
+  settingsTokenPool: {
+    changesWillBeSaved: string;
+    switchStrategy: string;
+    switchStrategyDescription: string;
+    strategyThresholds: string;
+    strategyThresholdsDescription: string;
+    behavior: string;
+    behaviorDescription: string;
+    autoRefresh: string;
+    autoRefreshDescription: string;
+    strategies: {
+      aggressive: string;
+      aggressiveDescription: string;
+      balanced: string;
+      balancedDescription: string;
+      conservative: string;
+      conservativeDescription: string;
+      custom: string;
+      customDescription: string;
+    };
+    customThreshold: string;
+    tokensRemaining: string;
+    tokens: string;
+    switchOnError: string;
+    switchOnErrorDescription: string;
+    switchOnRateLimit: string;
+    switchOnRateLimitDescription: string;
+    maxErrorsBeforeBan: string;
+    maxErrorsBeforeBanDescription: string;
+    cooldownPeriod: string;
+    cooldownPeriodDescription: string;
+    minutes: string;
+    enableAutoRefresh: string;
+    enableAutoRefreshDescription: string;
+    refreshBeforeExpiry: string;
+    refreshBeforeExpiryDescription: string;
+    currentStrategy: string;
+    activeTokens: string;
+    totalQuotaRemaining: string;
+    requestsUnit: string;
+    unsavedChanges: string;
+    saveNow: string;
+    default: string;
+  };
 }
 
-// ============================================
-// English Translations
-// ============================================
-
-const en: Translations = {
-  common: {
-    save: 'Save',
-    cancel: 'Cancel',
-    delete: 'Delete',
-    add: 'Add',
-    edit: 'Edit',
-    refresh: 'Refresh',
-    export: 'Export',
-    import: 'Import',
-    copy: 'Copy',
-    clear: 'Clear',
-    confirm: 'Confirm',
-    close: 'Close',
-    search: 'Search',
-    loading: 'Loading...',
-    error: 'Error',
-    success: 'Success',
-    warning: 'Warning',
-    info: 'Info',
-    yes: 'Yes',
-    no: 'No',
-    ok: 'OK',
-    back: 'Back',
-    next: 'Next',
-    previous: 'Previous',
-    start: 'Start',
-    stop: 'Stop',
-    restart: 'Restart',
-    browse: 'Browse',
-    select: 'Select',
-    all: 'All',
-    none: 'None',
-    selected: 'selected',
-    total: 'Total',
-    actions: 'Actions',
-    status: 'Status',
-    settings: 'Settings',
-    dismiss: 'Dismiss',
-    copied: 'Copied!',
-  },
-  status: {
-    active: 'Active',
-    banned: 'Banned',
-    limitHit: 'Limit',
-    expired: 'Expired',
-    unknown: 'Unknown',
-    online: 'Online',
-    offline: 'Offline',
-    running: 'Running',
-    stopped: 'Stopped',
-    pending: 'Pending',
-    processing: 'Processing',
-    completed: 'Completed',
-    failed: 'Failed',
-    idle: 'Idle',
-    patched: 'Patched',
-    notPatched: 'Not Patched',
-    valid: 'Valid',
-    invalid: 'Invalid',
-    notFound: 'Not Found',
-  },
-  header: {
-    systemOnline: 'System Online',
-    serverOffline: 'Server Offline',
-    notifications: 'Notifications',
-    noNotifications: 'No notifications',
-    clearAll: 'Clear all',
-  },
-  sidebar: {
-    dashboard: 'Dashboard',
-    accounts: 'Accounts',
-    autoReg: 'Auto-Reg',
-    idePatch: 'IDE Patch',
-    apiServer: 'API Server',
-    system: 'System',
-    settings: 'Settings',
-    logs: 'Logs',
-    adminUser: 'Admin User',
-  },
-  accounts: {
-    title: 'Accounts',
-    addAccount: 'Add Account',
-    searchPlaceholder: 'Search...',
-    refreshAll: 'Refresh All',
-    exportCsv: 'Export',
-    noAccounts: 'No accounts',
-    noAccountsSubtitle: 'Add one to get started',
-    account: 'Account',
-    usage: 'Usage',
-    expires: 'Expires',
-    provider: 'Provider',
-    email: 'Email',
-    password: 'Password',
-    token: 'Token',
-    tokenOptional: 'optional, for manual add',
-    tokenOptionalHint: 'If provided, the token will be used directly instead of logging in.',
-    copyToken: 'Copy Token',
-    deleteConfirm: 'Delete {count} accounts?',
-    addingAccount: 'Adding...',
-    filterAll: 'All',
-  },
-  accountsTable: {
-    account: 'Account',
-    status: 'Status',
-    usage: 'Usage',
-    expires: 'Expires',
-    refresh: 'Refresh',
-    copyToken: 'Copy Token',
-    delete: 'Delete',
-    confirm: 'Confirm',
-    accounts: 'accounts',
-    activate: 'Activate',
-    deactivate: 'Deactivate',
-    active: 'Active',
-  },
-  autoReg: {
-    title: 'Auto Registration',
-    subtitle: 'Automated account registration with browser automation',
-    config: 'Config',
-    liveTerminal: 'Live Terminal',
-    provider: 'Provider',
-    emailStrategy: 'Email Strategy',
-    mode: 'Mode',
-    imap: 'IMAP',
-    proxy: 'Proxy',
-    headless: 'Headless',
-    accounts: 'Accounts',
-    saving: 'Saving',
-    saved: 'Saved',
-    error: 'Error',
-    copyResults: 'Copy results',
-    exportResults: 'Export results',
-    noLogs: 'No logs yet',
-    noLogsSubtitle: 'Start a registration to see logs here',
-    filter: 'Filter:',
-    entries: 'entries',
-    progress: 'Progress',
-    registrationModes: {
-      webview: 'WebView',
-      automated: 'Automated',
-      auto: 'Auto',
-    },
-    emailStrategies: {
-      single: 'Single Email',
-      plusAlias: 'Plus Alias',
-      catchAll: 'Catch-All',
-      pool: 'Email Pool',
-    },
-    results: {
-      total: 'Total',
-      success: 'Success',
-      failed: 'Failed',
-    },
-  },
-  dashboard: {
-    title: 'Dashboard Overview',
-    totalAccounts: 'Total Accounts',
-    activeTokens: 'Active Tokens',
-    quotaUsage: 'Quota Usage',
-    llmServer: 'LLM Server',
-    inactive: 'inactive',
-    clickToStart: 'Click to start',
-    startRegistration: 'Start Registration',
-    refreshAllTokens: 'Refresh All Tokens',
-    openLlmServer: 'Open LLM Server',
-    startLlmServer: 'Start LLM Server',
-    selectProviderBelow: 'Select a provider below',
-    recentActivity: 'Recent Activity',
-    lastRegistrationAttempts: 'Last registration attempts',
-    viewFullActivityLog: 'View Full Activity Log',
-    accountsByProvider: 'Accounts by Provider',
-    noAccountsToDisplay: 'No accounts to display',
-    providerSelection: 'Provider Selection',
-    manageProviders: 'Manage Providers',
-    systemReady: 'System Ready',
-    noRecentActivity: 'No recent registration activity',
-    noProviderSelected: 'No Provider Selected',
-    selectProviderFirst: 'Please select a provider first',
-    registrationStarted: 'Registration Started',
-    registrationFailed: 'Registration Failed',
-    across: 'Across',
-    providers: 'providers',
-    port: 'Port',
-  },
-  server: {
-    title: 'LLM API Server',
-    subtitle: 'OpenAI-compatible API endpoint',
-    serverControl: 'Server Control',
-    manageLocalServer: 'Manage the local LLM API server',
-    endpoint: 'Endpoint',
-    copyUrl: 'Copy URL',
-    openInBrowser: 'Open in Browser',
-    configuration: 'Configuration',
-    stopServerToEdit: 'Stop server to edit',
-    port: 'Port',
-    host: 'Host',
-    maxConnections: 'Max Connections',
-    timeout: 'Timeout (ms)',
-    loadBalancing: 'Load Balancing',
-    loadBalancingOptions: {
-      roundRobin: 'Round Robin',
-      leastConnections: 'Least Connections',
-      random: 'Random',
-    },
-    stats: {
-      uptime: 'Uptime',
-      requests: 'Requests',
-      connections: 'Connections',
-      latency: 'Latency',
-    },
-    tabs: {
-      liveLogs: 'Live Logs',
-      apiUsage: 'API Usage',
-    },
-    logs: {
-      waitingForLogs: 'Waiting for logs...',
-      startServerToSeeLogs: 'Start the server to see logs',
-    },
-    api: {
-      chatCompletions: 'Chat Completions',
-      streamingResponse: 'Streaming Response',
-      pythonExample: 'Python Example',
-    },
-    live: 'Live',
-    poll: 'Poll',
-  },
-  patcher: {
-    title: 'IDE Patcher Module',
-    subtitle: 'Manage IDE patches and extensions',
-    detectedIdes: 'Detected IDEs',
-    scanDescription: 'Scan your system to detect installed IDEs and manage patches',
-    backupOnPatch: 'Backup on patch',
-    restoreOnUnpatch: 'Restore on unpatch',
-    scanForIdes: 'Scan for IDEs',
-    scanning: 'Scanning...',
-    scanningForIdes: 'Scanning for installed IDEs...',
-    noIdesDetected: 'No IDEs detected. Click "Scan for IDEs" to search your system.',
-    applyPatch: 'Apply Patch',
-    removePatch: 'Remove Patch',
-    backups: 'Backups',
-    backup: 'backup',
-    allIdes: 'All IDEs',
-    loadingBackups: 'Loading backups...',
-    noBackups: 'No backups available',
-    noBackupsForIde: 'No backups for selected IDE',
-    backupsCreatedWhenPatching: 'Backups are created when patching IDEs',
-    restore: 'Restore',
-    patchInformation: 'Patch Information',
-    currentVersion: 'Current Version',
-    patchedIdes: 'Patched IDEs',
-    totalBackups: 'Total Backups',
-    ideNotDetected: 'IDE not detected. Configure path in Settings.',
-    configurePathInSettings: 'Configure path in Settings',
-    patching: 'Patching',
-    unpatching: 'Unpatching',
-    restoring: 'Restoring',
-  },
-  settings: {
-    title: 'Settings',
-    subtitle: 'Configure application preferences',
-    categories: {
-      general: 'General',
-      imap: 'IMAP',
-      proxy: 'Proxy',
-      idePaths: 'IDE Paths',
-      database: 'Database',
-    },
-    general: {
-      appearance: 'Appearance',
-      appearanceDescription: 'Choose your preferred theme for the application.',
-      light: 'Light',
-      dark: 'Dark',
-      system: 'System',
-      language: 'Language',
-      languageDescription: 'Choose your preferred language for the interface.',
-    },
-    imap: {
-      title: 'IMAP Configuration',
-      description: 'Configure your email server for account verification.',
-      server: 'IMAP Server',
-      port: 'Port',
-      emailAddress: 'Email Address',
-      password: 'Password',
-    },
-    proxy: {
-      title: 'Proxy Settings',
-      description: 'Configure proxy for network requests.',
-      enableProxy: 'Enable Proxy',
-      proxyUrl: 'Proxy URL',
-      proxyUrlHint: 'Supports HTTP, HTTPS, and SOCKS5 proxies.',
-    },
-    idePaths: {
-      title: 'IDE Extension Paths',
-      description: 'Manually specify paths to IDE extension folders if auto-detection doesn\'t work.',
-      pathExample: 'Example: S:\\Kiro\\resources\\app\\extensions\\kiro.kiro-agent',
-    },
-    database: {
-      title: 'Database',
-      description: 'Database information and management.',
-      location: 'Location',
-      type: 'Type',
-      sqliteDescription: 'SQLite database for storing accounts and settings.',
-      exportData: 'Export Data',
-      importData: 'Import Data',
-    },
-    loadingSettings: 'Loading settings...',
-    saveSettings: 'Save Settings',
-    settingsSaved: 'Settings saved successfully',
-    failedToSave: 'Failed to save',
-  },
-  logs: {
-    title: 'Application Logs',
-    subtitle: 'View and manage application logs',
-    refresh: 'Refresh',
-    export: 'Export',
-    clear: 'Clear',
-    allLevels: 'All Levels',
-    info: 'Info',
-    warning: 'Warning',
-    error: 'Error',
-    debug: 'Debug',
-    searchPlaceholder: 'Search logs...',
-    time: 'Time',
-    level: 'Level',
-    source: 'Source',
-    message: 'Message',
-    noLogs: 'No logs to display',
-    showing: 'Showing',
-    of: 'of',
-    entries: 'entries',
-    lastUpdated: 'Last updated:',
-  },
-  notifications: {
-    registrationComplete: 'Registration Complete',
-    accountRegistrationFinished: 'Account registration finished',
-    registrationFailed: 'Registration Failed',
-    copied: 'Copied',
-    resultsCopiedToClipboard: 'Results copied to clipboard',
-    accountActivated: 'Account Activated',
-    accountDeactivated: 'Account Deactivated',
-    activationFailed: 'Activation Failed',
-    tokenWritten: 'Token written to Kiro',
-  },
-  time: {
-    justNow: 'Just now',
-    minutesAgo: '{count}m ago',
-    hoursAgo: '{count}h ago',
-    daysAgo: '{count}d ago',
-    monthsAgo: '{count}mo ago',
-    inMinutes: 'in {count}m',
-    inHours: 'in {count}h',
-    inDays: 'in {count}d',
-    inMonths: 'in {count}mo',
-    soon: 'soon',
-    now: 'Now',
-  },
-  validation: {
-    required: 'This field is required',
-    invalidEmail: 'Please enter a valid email address',
-    invalidUrl: 'Please enter a valid URL',
-    invalidPort: 'Please enter a valid port number',
-  },
-};
 
 // ============================================
 // Translations Registry
 // ============================================
 
 import { ru } from './locales/ru';
+import { en } from './locales/en';
 
 export const translations: Record<string, Translations> = {
   en,
@@ -855,5 +617,4 @@ export function tt(key: TranslationKey, params?: Record<string, string | number>
 // Exports
 // ============================================
 
-export { en };
 export default { translations, t, tt, getLocale, setLocale };

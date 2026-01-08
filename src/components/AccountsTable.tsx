@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Copy,
   Trash2,
@@ -9,21 +9,25 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
-  Star,
-  Zap,
   Play,
+  Square,
 } from 'lucide-react';
 import type { Account, AccountStatus } from '../types';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
+import { cn } from '../lib/utils';
+import { ProviderLogo } from './ui/ProviderLogo';
+import { UsageBar } from './ui/UsageBar';
+import { AccountDrawer } from './ui/AccountDrawer';
+import { FloatingActionBar } from './ui/FloatingActionBar';
 
-// Minimal status config - just dot color
+// Status dot styles
 const statusDot: Record<AccountStatus, string> = {
-  active: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]',
-  banned: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]',
-  limit_hit: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]',
+  active: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]',
+  banned: 'bg-red-400',
+  limit_hit: 'bg-amber-400',
   expired: 'bg-slate-500',
-  unknown: 'bg-slate-600',
+  unknown: 'bg-slate-500',
 };
 
 const getStatusLabel = (status: AccountStatus): string => {
@@ -37,29 +41,7 @@ const getStatusLabel = (status: AccountStatus): string => {
   return statusMap[status];
 };
 
-// Provider badge styles
-const providerBadge: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  kiro: { 
-    bg: 'bg-indigo-500/10', 
-    text: 'text-indigo-400', 
-    border: 'border-indigo-500/20',
-    label: 'Kiro'
-  },
-  windsurf: { 
-    bg: 'bg-cyan-500/10', 
-    text: 'text-cyan-400', 
-    border: 'border-cyan-500/20',
-    label: 'Windsurf'
-  },
-  trae: { 
-    bg: 'bg-emerald-500/10', 
-    text: 'text-emerald-400', 
-    border: 'border-emerald-500/20',
-    label: 'Trae'
-  },
-};
-
-type SortField = 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires';
+type SortField = 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
 
 interface AccountsTableProps {
@@ -73,27 +55,25 @@ interface AccountsTableProps {
   onRefreshToken: (accountId: number) => Promise<void>;
   onCopyToken: (token: string) => void;
   onDelete: (accountId: number) => void;
+  onDeleteSelected?: (ids: number[]) => void;
   onActivate: (provider: string, accountId: number | null) => Promise<void>;
+  onExportCSV?: () => void;
 }
 
 function formatRelativeTime(dateString?: string): string {
   if (!dateString) return '—';
   const date = new Date(dateString);
   const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
   
-  if (diffMs < 0) {
-    const absDays = Math.abs(diffDays);
-    if (absDays > 30) return t('time.monthsAgo', { count: Math.floor(absDays / 30) });
-    if (absDays > 0) return t('time.daysAgo', { count: absDays });
-    return t('time.hoursAgo', { count: Math.abs(diffHours) });
-  }
-  if (diffDays > 30) return t('time.inMonths', { count: Math.floor(diffDays / 30) });
-  if (diffDays > 0) return t('time.inDays', { count: diffDays });
-  if (diffHours > 0) return t('time.inHours', { count: diffHours });
-  return t('time.soon');
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 30) return `${diffDays}d ago`;
+  return `${Math.floor(diffDays / 30)}mo ago`;
 }
 
 export default function AccountsTable({
@@ -107,29 +87,21 @@ export default function AccountsTable({
   onRefreshToken,
   onCopyToken,
   onDelete,
+  onDeleteSelected,
   onActivate,
+  onExportCSV,
 }: AccountsTableProps) {
   const { language } = useAppStore();
   const [sortField, setSortField] = useState<SortField>('email');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const [activatingIds, setActivatingIds] = useState<Set<number>>(new Set());
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [drawerAccount, setDrawerAccount] = useState<Account | null>(null);
   const itemsPerPage = 50;
-  
-  const deleteConfirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Force re-render when language changes
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _lang = language;
-  
-  useEffect(() => {
-    return () => {
-      if (deleteConfirmTimeoutRef.current) clearTimeout(deleteConfirmTimeoutRef.current);
-    };
-  }, []);
+  void language;
 
   useEffect(() => {
     const handleClick = () => setOpenMenuId(null);
@@ -155,6 +127,11 @@ export default function AccountsTable({
           const aDate = a.quota.resetAt ? new Date(a.quota.resetAt).getTime() : 0;
           const bDate = b.quota.resetAt ? new Date(b.quota.resetAt).getTime() : 0;
           comparison = aDate - bDate;
+          break;
+        case 'createdAt':
+          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          comparison = aCreated - bCreated;
           break;
       }
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -189,25 +166,10 @@ export default function AccountsTable({
     }
   };
 
-  const handleDelete = (accountId: number) => {
-    if (deleteConfirmId === accountId) {
-      onDelete(accountId);
-      setDeleteConfirmId(null);
-      if (deleteConfirmTimeoutRef.current) {
-        clearTimeout(deleteConfirmTimeoutRef.current);
-      }
-    } else {
-      setDeleteConfirmId(accountId);
-      if (deleteConfirmTimeoutRef.current) clearTimeout(deleteConfirmTimeoutRef.current);
-      deleteConfirmTimeoutRef.current = setTimeout(() => setDeleteConfirmId(null), 3000);
-    }
-  };
-
   const handleActivate = async (account: Account) => {
     const isCurrentlyActive = activeAccountIds[account.provider] === account.id;
     setActivatingIds((prev) => new Set([...prev, account.id]));
     try {
-      // If already active, deactivate (set to null), otherwise activate
       await onActivate(account.provider, isCurrentlyActive ? null : account.id);
     } finally {
       setActivatingIds((prev) => {
@@ -218,302 +180,283 @@ export default function AccountsTable({
     }
   };
 
-  const handleRowDoubleClick = (account: Account) => {
-    // Double-click to activate/deactivate
-    if (account.status === 'active') {
-      handleActivate(account);
-    }
+  const handleRowClick = (account: Account, e: React.MouseEvent) => {
+    // Don't open drawer if clicking on checkbox or action buttons
+    const target = e.target as HTMLElement;
+    if (target.closest('input[type="checkbox"]') || target.closest('button')) return;
+    setDrawerAccount(account);
   };
 
-  const isAccountActive = (account: Account) => {
-    return activeAccountIds[account.provider] === account.id;
-  };
+  const isAccountActive = (account: Account) => activeAccountIds[account.provider] === account.id;
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null;
     return sortDirection === 'asc' 
-      ? <ChevronUp size={12} className="text-white/60" />
-      : <ChevronDown size={12} className="text-white/60" />;
+      ? <ChevronUp size={10} className="text-slate-500" />
+      : <ChevronDown size={10} className="text-slate-500" />;
   };
 
   const allSelected = accounts.length > 0 && selectedIds.size === accounts.length;
   const someSelected = selectedIds.size > 0 && selectedIds.size < accounts.length;
 
   return (
-    <div className="flex flex-col h-full border border-white/10 rounded-lg overflow-hidden bg-slate-950">
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full">
-          {/* Header */}
-          <thead className="sticky top-0 z-10">
-            <tr className="h-10 bg-white/[0.02] border-b border-white/5">
-              <th className="w-12 px-4">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => { if (el) el.indeterminate = someSelected; }}
-                  onChange={(e) => (e.target.checked ? onSelectAll() : onClearSelection())}
-                  className="checkbox-ds"
-                />
-              </th>
-              <th className="px-3 text-left">
-                <button onClick={() => handleSort('email')} className="flex items-center gap-1 text-[11px] uppercase tracking-widest text-slate-500 font-bold hover:text-slate-300">
-                  {t('accountsTable.account')} <SortIcon field="email" />
-                </button>
-              </th>
-              <th className="w-24 px-3 text-left">
-                <button onClick={() => handleSort('status')} className="flex items-center gap-1 text-[11px] uppercase tracking-widest text-slate-500 font-bold hover:text-slate-300">
-                  {t('accountsTable.status')} <SortIcon field="status" />
-                </button>
-              </th>
-              <th className="w-28 px-3 text-left">
-                <button onClick={() => handleSort('quota')} className="flex items-center gap-1 text-[11px] uppercase tracking-widest text-slate-500 font-bold hover:text-slate-300">
-                  {t('accountsTable.usage')} <SortIcon field="quota" />
-                </button>
-              </th>
-              <th className="w-24 px-3 text-left">
-                <button onClick={() => handleSort('tokenExpires')} className="flex items-center gap-1 text-[11px] uppercase tracking-widest text-slate-500 font-bold hover:text-slate-300">
-                  {t('accountsTable.expires')} <SortIcon field="tokenExpires" />
-                </button>
-              </th>
-              <th className="w-20 px-3"></th>
-            </tr>
-          </thead>
-
-          {/* Body */}
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={7} className="h-64">
-                  <div className="flex items-center justify-center gap-2 text-slate-500">
-                    <RefreshCw size={16} className="animate-spin" />
-                    <span className="text-sm">{t('common.loading')}</span>
-                  </div>
-                </td>
+    <>
+      <div 
+        className="flex flex-col h-full rounded-lg overflow-hidden"
+        style={{ border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}
+      >
+        {/* Table */}
+        <div className="flex-1 overflow-auto">
+          <table className="w-full">
+            <thead className="sticky top-0 z-10">
+              <tr className="h-9 border-b border-white/5" style={{ background: 'rgba(30, 41, 59, 0.5)' }}>
+                <th className="w-10 px-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                    onChange={(e) => (e.target.checked ? onSelectAll() : onClearSelection())}
+                    className="w-3.5 h-3.5 accent-indigo-500 rounded-sm"
+                  />
+                </th>
+                <th className="w-10 px-2"></th>
+                <th className="px-3 text-left">
+                  <button onClick={() => handleSort('email')} className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold hover:text-slate-200">
+                    Account <SortIcon field="email" />
+                  </button>
+                </th>
+                <th className="w-20 px-3 text-left">
+                  <button onClick={() => handleSort('status')} className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold hover:text-slate-200">
+                    Status <SortIcon field="status" />
+                  </button>
+                </th>
+                <th className="w-24 px-3 text-left">
+                  <button onClick={() => handleSort('quota')} className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold hover:text-slate-200">
+                    Usage <SortIcon field="quota" />
+                  </button>
+                </th>
+                <th className="w-20 px-3 text-left">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                    Last
+                  </span>
+                </th>
+                <th className="w-16 px-3"></th>
               </tr>
-            ) : paginatedAccounts.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="h-64">
-                  <div className="flex flex-col items-center justify-center text-slate-600">
-                    <Users className="w-12 h-12 mb-3 opacity-20" />
-                    <p className="text-sm text-slate-400">{t('accounts.noAccounts')}</p>
-                    <p className="text-xs text-slate-600 mt-1">{t('accounts.noAccountsSubtitle')}</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedAccounts.map((account) => {
-                const provider = providerBadge[account.provider] || providerBadge.kiro;
-                const rawPercent = account.quota.limit > 0 ? (account.quota.used / account.quota.limit) * 100 : 0;
-                const usagePercent = Math.round(rawPercent);
-                const isRefreshing = refreshingIds.has(account.id);
-                const isActivating = activatingIds.has(account.id);
-                const isDeleteConfirm = deleteConfirmId === account.id;
-                const isActive = isAccountActive(account);
+            </thead>
 
-                return (
-                  <tr 
-                    key={account.id} 
-                    className={`h-14 border-b border-white/5 hover:bg-white/[0.02] transition-colors duration-150 group cursor-pointer ${
-                      isActive ? 'bg-primary/5 border-l-2 border-l-primary' : ''
-                    }`}
-                    onDoubleClick={() => handleRowDoubleClick(account)}
-                  >
-                    {/* Checkbox */}
-                    <td className="px-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(account.id)}
-                        onChange={() => onToggleSelection(account.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="checkbox-ds"
-                      />
-                    </td>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="h-48">
+                    <div className="flex items-center justify-center gap-2 text-slate-500">
+                      <RefreshCw size={14} className="animate-spin" />
+                      <span className="text-xs">Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedAccounts.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="h-48">
+                    <div className="flex flex-col items-center justify-center text-slate-500">
+                      <Users className="w-10 h-10 mb-2 opacity-30" />
+                      <p className="text-xs">No accounts</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedAccounts.map((account) => {
+                  const isRefreshing = refreshingIds.has(account.id);
+                  const isActivating = activatingIds.has(account.id);
+                  const isActive = isAccountActive(account);
+                  const isSelected = selectedIds.has(account.id);
 
-                    {/* Provider Badge + Email & Token */}
-                    <td className="px-3 min-w-0">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Provider Badge */}
-                        <div className={`shrink-0 px-2 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wide border ${provider.bg} ${provider.text} ${provider.border} ${isActive ? 'ring-1 ring-primary' : ''}`}>
-                          {provider.label}
+                  return (
+                    <tr 
+                      key={account.id} 
+                      onClick={(e) => handleRowClick(account, e)}
+                      className={cn(
+                        'h-12 border-b border-white/[0.03] transition-colors duration-100 group cursor-pointer',
+                        isSelected && 'bg-indigo-500/10',
+                        isActive && 'bg-emerald-500/5 border-l-2 border-l-emerald-400',
+                        !isSelected && !isActive && 'hover:bg-white/[0.03]'
+                      )}
+                    >
+                      {/* Checkbox */}
+                      <td className="px-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => onToggleSelection(account.id)}
+                          className="w-3.5 h-3.5 accent-indigo-500 rounded-sm"
+                        />
+                      </td>
+
+                      {/* Provider Logo */}
+                      <td className="px-2">
+                        <ProviderLogo provider={account.provider} size={18} colored={isActive} />
+                      </td>
+
+                      {/* Email & Token ID */}
+                      <td className="px-3 min-w-0">
+                        <div className="flex flex-col min-w-0">
+                          <span className={cn(
+                            'text-xs font-medium truncate',
+                            account.status === 'banned' ? 'text-slate-500 line-through' : 'text-slate-200'
+                          )}>
+                            {account.email}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500 truncate">
+                            {account.token ? `tk_...${account.token.slice(-8)}` : '—'}
+                          </span>
                         </div>
-                        
-                        {/* Email & Token */}
-                        <div className="flex flex-col justify-center min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[13px] font-medium leading-tight truncate ${
-                              account.status === 'banned' ? 'text-slate-500 line-through' : 'text-slate-200'
-                            }`}>
-                              {account.email}
-                            </span>
-                            {isActive && (
-                              <div className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-primary/20 text-primary rounded">
-                                <Star size={8} className="fill-current" />
-                                {t('accountsTable.active')}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-3">
+                        <div className="flex items-center gap-1.5">
+                          <div className={cn('w-1.5 h-1.5 rounded-full', statusDot[account.status])} />
+                          <span className="text-[10px] text-slate-500">{getStatusLabel(account.status)}</span>
+                        </div>
+                      </td>
+
+                      {/* Usage Bar */}
+                      <td className="px-3">
+                        <UsageBar used={account.quota.used} limit={account.quota.limit} />
+                      </td>
+
+                      {/* Last Active */}
+                      <td className="px-3">
+                        <span className="text-[10px] text-slate-500 tabular-nums">
+                          {formatRelativeTime(account.createdAt)}
+                        </span>
+                      </td>
+
+                      {/* Actions - Hover visible */}
+                      <td className="px-3">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {/* Play/Stop */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleActivate(account); }}
+                            disabled={isActivating || account.status !== 'active'}
+                            className={cn(
+                              'p-1.5 rounded-sm transition-colors',
+                              isActive 
+                                ? 'text-amber-400 hover:bg-amber-400/10' 
+                                : 'text-emerald-400 hover:bg-emerald-400/10',
+                              'disabled:opacity-30 disabled:cursor-not-allowed'
+                            )}
+                          >
+                            {isActivating ? (
+                              <RefreshCw size={12} className="animate-spin" />
+                            ) : isActive ? (
+                              <Square size={12} />
+                            ) : (
+                              <Play size={12} className="fill-current" />
+                            )}
+                          </button>
+
+                          {/* More Menu */}
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === account.id ? null : account.id);
+                              }}
+                              className="p-1.5 rounded-sm text-slate-500 hover:text-slate-200 hover:bg-white/[0.03] transition-colors"
+                            >
+                              <MoreHorizontal size={12} />
+                            </button>
+                            
+                            {openMenuId === account.id && (
+                              <div 
+                                className="absolute right-0 top-full mt-1 w-32 rounded-sm shadow-xl z-50 py-1"
+                                style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.05)' }}
+                              >
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleRefresh(account.id); setOpenMenuId(null); }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200"
+                                >
+                                  <RefreshCw size={10} className={isRefreshing ? 'animate-spin' : ''} />
+                                  Refresh
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onCopyToken(account.token); setOpenMenuId(null); }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200"
+                                >
+                                  <Copy size={10} />
+                                  Copy Token
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onDelete(account.id); setOpenMenuId(null); }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-400/10"
+                                >
+                                  <Trash2 size={10} />
+                                  Delete
+                                </button>
                               </div>
                             )}
                           </div>
-                          <span className="text-[11px] font-mono text-slate-500 mt-0.5 leading-tight truncate">
-                            {account.token ? account.token.slice(0, 32) + '...' : '—'}
-                          </span>
                         </div>
-                      </div>
-                    </td>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-                    {/* Status */}
-                    <td className="px-3">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full ${statusDot[account.status]}`} />
-                        <span className="text-xs font-medium text-slate-300">
-                          {getStatusLabel(account.status)}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Usage */}
-                    <td className="px-3">
-                      {account.quota.limit > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${usagePercent > 90 ? 'bg-amber-500' : 'bg-white/30'}`}
-                              style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                            />
-                          </div>
-                          <span className={`text-[11px] font-mono tabular-nums ${usagePercent > 90 ? 'text-amber-400' : 'text-slate-400'}`}>
-                            {usagePercent}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-slate-600">—</span>
-                      )}
-                    </td>
-
-                    {/* Expires */}
-                    <td className="px-3">
-                      <span className="text-[11px] text-slate-500 tabular-nums">
-                        {formatRelativeTime(account.quota.resetAt)}
-                      </span>
-                    </td>
-
-                    {/* Actions: Start Button + Delete */}
-                    <td className="px-3">
-                      <div className="flex items-center gap-1.5">
-                        {/* Start/Stop Button - Always visible */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleActivate(account);
-                          }}
-                          disabled={isActivating || account.status !== 'active'}
-                          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${
-                            isActive 
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20' 
-                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-                          }`}
-                        >
-                          {isActivating ? (
-                            <RefreshCw size={10} className="animate-spin" />
-                          ) : isActive ? (
-                            <Zap size={10} className="fill-current" />
-                          ) : (
-                            <Play size={10} className="fill-current" />
-                          )}
-                          {isActive ? 'Stop' : 'Start'}
-                        </button>
-
-                        {/* Delete Button - Always visible, requires confirmation */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(account.id);
-                          }}
-                          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wide transition-all active:scale-95 ${
-                            isDeleteConfirm 
-                              ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse' 
-                              : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20'
-                          }`}
-                        >
-                          <Trash2 size={10} />
-                          {isDeleteConfirm ? '?' : ''}
-                        </button>
-
-                        {/* More Menu */}
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenMenuId(openMenuId === account.id ? null : account.id);
-                            }}
-                            className="p-1.5 rounded text-slate-600 hover:text-white hover:bg-white/5 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <MoreHorizontal size={16} />
-                          </button>
-                          
-                          {openMenuId === account.id && (
-                            <div className="absolute right-0 top-full mt-1 w-36 bg-slate-900 border border-white/10 rounded-lg shadow-2xl z-50 py-1">
-                              <button
-                                onClick={() => { handleRefresh(account.id); setOpenMenuId(null); }}
-                                disabled={isRefreshing}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
-                              >
-                                <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-                                {t('accountsTable.refresh')}
-                              </button>
-                              <button
-                                onClick={() => { onCopyToken(account.token); setOpenMenuId(null); }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
-                              >
-                                <Copy size={12} />
-                                {t('accountsTable.copyToken')}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Footer */}
-      <div className="h-10 px-4 flex items-center justify-between border-t border-white/5 bg-white/[0.01]">
-        <span className="text-[11px] text-slate-500">
-          {sortedAccounts.length} {t('accountsTable.accounts')}
-        </span>
-        
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 text-slate-500 hover:text-white disabled:opacity-30"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="text-[11px] text-slate-500 px-2 tabular-nums">
-              {currentPage}/{totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1 text-slate-500 hover:text-white disabled:opacity-30"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        )}
-
-        {selectedIds.size > 0 && (
-          <span className="text-[11px] text-slate-400">
-            <span className="text-white font-medium">{selectedIds.size}</span> {t('common.selected')}
+        {/* Footer */}
+        <div className="h-8 px-3 flex items-center justify-between border-t border-white/5" style={{ background: 'rgba(30, 41, 59, 0.5)' }}>
+          <span className="text-[10px] text-slate-500">
+            {sortedAccounts.length} accounts
           </span>
-        )}
+          
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 text-slate-500 hover:text-slate-200 disabled:opacity-30"
+              >
+                <ChevronLeft size={12} />
+              </button>
+              <span className="text-[10px] text-slate-500 px-1 tabular-nums">
+                {currentPage}/{totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 text-slate-500 hover:text-slate-200 disabled:opacity-30"
+              >
+                <ChevronRight size={12} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Floating Action Bar */}
+      <FloatingActionBar
+        selectedCount={selectedIds.size}
+        onExport={onExportCSV || (() => {})}
+        onDelete={() => onDeleteSelected?.([...selectedIds])}
+        onRefreshAll={() => {
+          selectedIds.forEach(id => handleRefresh(id));
+        }}
+        onClear={onClearSelection}
+      />
+
+      {/* Account Drawer */}
+      <AccountDrawer
+        account={drawerAccount}
+        isOpen={!!drawerAccount}
+        onClose={() => setDrawerAccount(null)}
+        onCopyToken={onCopyToken}
+        onRefresh={handleRefresh}
+        onDelete={onDelete}
+        isActive={drawerAccount ? isAccountActive(drawerAccount) : false}
+      />
+    </>
   );
 }
