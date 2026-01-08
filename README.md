@@ -248,5 +248,5 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 ---
 
 <p align="center">
-  Made with ❤️ by the Stitch Team
+  Made with ❤️ by <a href="https://github.com/WhiteBite">WhiteBite</a>
 </p>
