@@ -10,7 +10,7 @@ import {
   validateAccount,
   setActiveAccount as setActiveAccountTauri,
   getActiveAccounts as getActiveAccountsTauri,
-  // TODO: Implement Rust commands
+  // Note: These functions are defined in tauri.ts but not yet implemented in Rust backend
   // importAccounts,
   // exportAccounts,
   TauriError,
@@ -330,7 +330,8 @@ export const useAccountsStore = create<AccountsState>()(
       // Import/Export
       // ============================================
 
-      // TODO: Implement Rust command - importAccounts
+      // Note: importAccounts not yet implemented in Rust backend
+      // Would require file format specification and validation logic
       importFromFile: async (_filePath) => {
         // set({ loading: true, error: null });
         // try {
@@ -348,7 +349,8 @@ export const useAccountsStore = create<AccountsState>()(
         throw new Error('importFromFile: Rust command not implemented');
       },
 
-      // TODO: Implement Rust command - exportAccounts
+      // Note: exportAccounts not yet implemented in Rust backend
+      // Would require export format implementation (JSON/CSV)
       exportToFile: async (_filePath, _format = 'json') => {
         // const { selectedProvider } = get();
         // try {
@@ -418,7 +420,7 @@ export const useAccountsStore = create<AccountsState>()(
             const query = searchQuery.toLowerCase();
             return (
               account.email.toLowerCase().includes(query) ||
-              account.token.toLowerCase().includes(query) ||
+              (account.token?.toLowerCase().includes(query) ?? false) ||
               String(account.id).includes(query) ||
               account.provider.toLowerCase().includes(query)
             );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { 
   Settings as SettingsIcon, 
   Moon, 
@@ -85,6 +85,10 @@ export default function Settings() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Refs for timer cleanup to prevent memory leaks
+  const categoryChangeOuterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const categoryChangeInnerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Force re-render when language changes
   void language; // Force re-render on language change
 
@@ -125,12 +129,42 @@ export default function Settings() {
 
   const handleCategoryChange = (category: SettingsCategory) => {
     if (category === activeCategory) return;
+    
+    // Clear any existing timers to prevent memory leaks
+    if (categoryChangeOuterTimerRef.current) {
+      clearTimeout(categoryChangeOuterTimerRef.current);
+      categoryChangeOuterTimerRef.current = null;
+    }
+    if (categoryChangeInnerTimerRef.current) {
+      clearTimeout(categoryChangeInnerTimerRef.current);
+      categoryChangeInnerTimerRef.current = null;
+    }
+    
     setIsTransitioning(true);
-    setTimeout(() => {
+    categoryChangeOuterTimerRef.current = setTimeout(() => {
       setActiveCategory(category);
-      setTimeout(() => setIsTransitioning(false), 50);
+      categoryChangeInnerTimerRef.current = setTimeout(() => setIsTransitioning(false), 50);
     }, 150);
   };
+
+  // Cleanup category change timers on unmount
+  useEffect(() => {
+    return () => {
+      if (categoryChangeOuterTimerRef.current) {
+        clearTimeout(categoryChangeOuterTimerRef.current);
+      }
+      if (categoryChangeInnerTimerRef.current) {
+        clearTimeout(categoryChangeInnerTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-hide saveStatus with cleanup
+  useEffect(() => {
+    if (saveStatus !== 'success') return;
+    const timer = setTimeout(() => setSaveStatus('idle'), 3000);
+    return () => clearTimeout(timer);
+  }, [saveStatus]);
 
   const handleSave = async () => {
     try {
@@ -151,7 +185,6 @@ export default function Settings() {
       
       await updateSettings(settingsToSave);
       setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error) {
       console.error('Failed to save settings:', error);
       setSaveStatus('error');

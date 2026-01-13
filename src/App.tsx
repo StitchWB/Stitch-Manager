@@ -6,7 +6,6 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import AutoReg from './pages/AutoReg';
-import AutoRegNext from './pages/AutoRegNext';
 import Patcher from './pages/Patcher';
 import Server from './pages/Server';
 import Settings from './pages/Settings';
@@ -59,8 +58,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/accounts" element={<Accounts />} />
-          <Route path="/autoreg" element={<AutoRegNext />} />
-          <Route path="/autoreg-legacy" element={<AutoReg />} />
+          <Route path="/autoreg" element={<AutoReg />} />
           <Route path="/patcher" element={<Patcher />} />
           <Route path="/server" element={<Server />} />
           <Route path="/settings" element={<Settings />} />

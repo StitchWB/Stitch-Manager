@@ -17,6 +17,12 @@ import {
   restoreBackup,
   deleteBackup,
   verifyIDE,
+  patchTraeStorage,
+  patchTraeFull,
+  isTraePatched,
+  isTraeExtensionPatched,
+  isTraeWorkbenchPatched,
+  restoreTraeStorage,
   TauriError,
 } from '../lib/tauri';
 
@@ -43,6 +49,12 @@ interface PatcherState {
   patchStrategy: 'injection' | 'legacy';
   logRequests: boolean;
   
+  // Trae storage patch state
+  traePatched: boolean | null;
+  traeExtensionPatched: boolean | null;
+  traeWorkbenchPatched: boolean | null;
+  traePatchLoading: boolean;
+  
   // Actions
   detectIDEs: () => Promise<DetectedIDE[]>;
   refreshIDEs: () => Promise<void>;
@@ -52,6 +64,12 @@ interface PatcherState {
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
   setPatchStrategy: (strategy: 'injection' | 'legacy') => void;
   setLogRequests: (log: boolean) => void;
+  
+  // Trae storage patch actions
+  checkTraePatched: () => Promise<boolean>;
+  patchTraeStorage: () => Promise<PatchResult>;
+  patchTraeFull: () => Promise<PatchResult>;
+  restoreTraeStorage: (backupPath: string) => Promise<PatchResult>;
   
   // Backup management
   listBackups: (ideId?: string) => Promise<BackupInfo[]>;
@@ -96,6 +114,10 @@ export const usePatcherStore = create<PatcherState>()(
         operationInProgress: {},
         patchStrategy: 'injection', // Default to new method
         logRequests: false,
+        traePatched: null,
+        traeExtensionPatched: null,
+        traeWorkbenchPatched: null,
+        traePatchLoading: false,
 
         // ============================================
         // IDE Detection
@@ -182,6 +204,82 @@ export const usePatcherStore = create<PatcherState>()(
         setPatchStrategy: (strategy) => set({ patchStrategy: strategy }),
         setLogRequests: (log) => set({ logRequests: log }),
 
+        // ============================================
+        // Trae Storage Patch
+        // ============================================
+
+        checkTraePatched: async () => {
+          try {
+            const [storagePatched, extensionPatched, workbenchPatched] = await Promise.all([
+              isTraePatched().catch(() => null),
+              isTraeExtensionPatched().catch(() => null),
+              isTraeWorkbenchPatched().catch(() => null),
+            ]);
+            set({ 
+              traePatched: storagePatched,
+              traeExtensionPatched: extensionPatched,
+              traeWorkbenchPatched: workbenchPatched,
+            });
+            return storagePatched ?? false;
+          } catch (error) {
+            // Trae not installed or storage not found
+            set({ traePatched: null, traeExtensionPatched: null, traeWorkbenchPatched: null });
+            return false;
+          }
+        },
+
+        patchTraeStorage: async () => {
+          set({ traePatchLoading: true, error: null });
+          try {
+            const result = await patchTraeStorage();
+            if (result.success) {
+              set({ traePatched: true });
+            }
+            set({ traePatchLoading: false });
+            return result;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message, traePatchLoading: false });
+            throw error;
+          }
+        },
+
+        patchTraeFull: async () => {
+          set({ traePatchLoading: true, error: null });
+          try {
+            const result = await patchTraeFull();
+            if (result.success) {
+              set({ 
+                traePatched: true,
+                traeExtensionPatched: true,
+                traeWorkbenchPatched: true,
+              });
+            }
+            set({ traePatchLoading: false });
+            return result;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message, traePatchLoading: false });
+            throw error;
+          }
+        },
+
+        restoreTraeStorage: async (backupPath: string) => {
+          set({ traePatchLoading: true, error: null });
+          try {
+            const result = await restoreTraeStorage({ backupPath });
+            if (result.success) {
+              set({ traePatched: false });
+            }
+            set({ traePatchLoading: false });
+            return result;
+          } catch (error) {
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message, traePatchLoading: false });
+            throw error;
+          }
+        },
+
         applyPatch: async (ideId: string, createBackup = true) => { 
           set((state) => ({
             operationInProgress: { ...state.operationInProgress, [ideId]: 'patching' },
@@ -212,6 +310,9 @@ export const usePatcherStore = create<PatcherState>()(
               if (result.backupId) {
                 await get().listBackups(ideId);
               }
+            } else {
+              // Set error state if patch was not successful
+              set({ error: result.message || 'Patch failed for an unknown reason.' });
             }
 
             set((state) => ({
