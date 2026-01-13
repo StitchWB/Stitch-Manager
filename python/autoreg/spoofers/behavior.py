@@ -224,10 +224,10 @@ class BehaviorSpoofModule:
             
             # Клик
             page.run_js('arguments[0].click()', element)
-        except:
+        except Exception:
             try:
                 element.click()
-            except:
+            except Exception:
                 pass
         
         self.human_delay(0.1, 0.3)
@@ -402,7 +402,7 @@ class BehaviorSpoofModule:
                             clientX: {x}, clientY: {y}, bubbles: true
                         }}));
                     ''')
-                except:
+                except Exception:
                     pass
                 time.sleep(random.uniform(0.1, 0.3))
             
@@ -412,7 +412,7 @@ class BehaviorSpoofModule:
                 direction = random.choice([1, -1])
                 try:
                     page.run_js(f'window.scrollBy(0, {scroll_amount * direction});')
-                except:
+                except Exception:
                     pass
                 time.sleep(random.uniform(0.2, 0.5))
             
@@ -438,7 +438,7 @@ class BehaviorSpoofModule:
                         clientX: {x}, clientY: {y}, bubbles: true
                     }}));
                 ''')
-            except:
+            except Exception:
                 pass
             time.sleep(random.uniform(0.1, 0.25))
         
@@ -469,7 +469,7 @@ class BehaviorSpoofModule:
                 page.run_js(f'window.scrollBy(0, {random.randint(100, 300)});')
                 time.sleep(random.uniform(0.5, 1.5))
                 page.run_js(f'window.scrollBy(0, {random.randint(-300, -100)});')
-            except:
+            except Exception:
                 pass
             time.sleep(random.uniform(0.3, 0.6))
         
@@ -483,7 +483,7 @@ class BehaviorSpoofModule:
                         clientX: {corner[0]}, clientY: {corner[1]}, bubbles: true
                     }}));
                 ''')
-            except:
+            except Exception:
                 pass
             time.sleep(random.uniform(1.0, 3.0))
     
@@ -517,7 +517,7 @@ class BehaviorSpoofModule:
             ''', element)
             
             time.sleep(duration)
-        except:
+        except Exception:
             pass
     
     def natural_scroll_to_element(self, page, element):
@@ -565,7 +565,7 @@ class BehaviorSpoofModule:
             try:
                 page.run_js('arguments[0].scrollIntoView({behavior: "smooth", block: "center"});', element)
                 time.sleep(0.3)
-            except:
+            except Exception:
                 pass
     
     def random_micro_movements(self, page, count: int = None):
@@ -602,7 +602,7 @@ class BehaviorSpoofModule:
                 
                 base_x += dx
                 base_y += dy
-        except:
+        except Exception:
             pass
 
     # ========================================================================
@@ -808,7 +808,7 @@ class BehaviorSpoofModule:
             
             client_x = int(rect['x'])
             client_y = int(rect['y'])
-        except:
+        except Exception:
             client_x = 400
             client_y = 300
         
