@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { startRegistration, stopRegistration, getSettings, updateSettings } from '../lib/tauri';
+import { getSettings, updateSettings } from '../lib/tauri';
 import type { 
   ProviderName, 
   RegistrationLog, 
@@ -112,20 +112,13 @@ interface RegistrationState {
   
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
-  setCredentials: (credentials: Partial<AutoRegCredentials>) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
   setProxyConfig: (proxy: Partial<ProxyConfig>) => void;
-  setPatternConfig: (patterns: Partial<PatternConfig>) => void;
   setCount: (count: number) => void;
   
   // Actions - Settings persistence
   loadSettings: () => Promise<void>;
   saveSettings: () => Promise<void>;
-  
-  // Actions - Control
-  start: () => Promise<void>;
-  stop: () => Promise<void>;
-  reset: () => void;
   
   // Actions - Logs
   addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => void;
@@ -136,12 +129,9 @@ interface RegistrationState {
   
   // Actions - Results
   addResult: (result: Omit<RegistrationResult, 'id' | 'createdAt'>) => void;
-  clearResults: () => void;
   
   // Actions - History
   addHistoryEntry: (entry: Omit<RegistrationHistoryEntry, 'id' | 'createdAt'>) => void;
-  updateHistoryEntry: (id: string, updates: Partial<RegistrationHistoryEntry>) => void;
-  clearHistory: () => void;
   
   // Actions - WebSocket
   setWsConnected: (connected: boolean) => void;
@@ -223,16 +213,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       triggerSave();
     },
 
-    setCredentials: (credentials: Partial<AutoRegCredentials>) => {
-      set((state) => ({
-        config: { 
-          ...state.config, 
-          credentials: { ...state.config.credentials, ...credentials } 
-        }
-      }));
-      // Don't auto-save credentials for security
-    },
-
     setIMAPConfig: (imap: Partial<IMAPConfig>) => {
       set((state) => ({
         config: { 
@@ -248,16 +228,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         config: { 
           ...state.config, 
           proxy: { ...state.config.proxy, ...proxy } 
-        }
-      }));
-      triggerSave();
-    },
-
-    setPatternConfig: (patterns: Partial<PatternConfig>) => {
-      set((state) => ({
-        config: { 
-          ...state.config, 
-          patterns: { ...state.config.patterns, ...patterns } 
         }
       }));
       triggerSave();
@@ -322,6 +292,21 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
 
     saveSettings: async () => {
       const { config } = get();
+
+      // Basic validation
+      if (config.imap.email && !config.imap.email.includes('@')) {
+        console.warn('Invalid email format, skipping save');
+        set({ saveStatus: 'error' });
+        setTimeout(() => set({ saveStatus: 'idle' }), 3000);
+        return;
+      }
+      if (isNaN(config.imap.port) || config.imap.port < 1 || config.imap.port > 65535) {
+        console.warn('Invalid IMAP port, skipping save');
+        set({ saveStatus: 'error' });
+        setTimeout(() => set({ saveStatus: 'idle' }), 3000);
+        return;
+      }
+
       try {
         const updateData: Record<string, unknown> = {
           provider: config.provider,
@@ -357,53 +342,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       }
     },
 
-    // Control actions
-    start: async () => {
-      const { config, addLog } = get();
-      
-      set({ 
-        isRunning: true, 
-        status: 'initializing',
-        progress: { current: 0, total: config.count, percentage: 0 },
-        successCount: 0,
-        failedCount: 0,
-      });
-      addLog({ level: 'info', message: `Starting registration for ${config.provider}...` });
-      addLog({ level: 'info', message: 'Opening browser for AWS Builder ID authentication' });
-      
-      try {
-        await startRegistration({
-          provider: config.provider,
-        });
-        addLog({ level: 'success', message: 'Registration started' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        addLog({ level: 'error', message: `Failed to start registration: ${message}` });
-        set({ isRunning: false, status: 'failed' });
-      }
-    },
-
-    stop: async () => {
-      const { addLog } = get();
-      try {
-        await stopRegistration();
-        addLog({ level: 'warn', message: 'Registration stopped by user' });
-      } catch (error) {
-        addLog({ level: 'error', message: 'Failed to stop registration' });
-      }
-      set({ isRunning: false, status: 'cancelled' });
-    },
-
-    reset: () => set({
-      isRunning: false,
-      status: 'idle',
-      progress: DEFAULT_PROGRESS,
-      logs: [],
-      results: [],
-      successCount: 0,
-      failedCount: 0,
-    }),
-
     // Log actions
     addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => set((state) => ({
       logs: [
@@ -437,8 +375,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       };
     }),
 
-    clearResults: () => set({ results: [], successCount: 0, failedCount: 0 }),
-
     // History actions
     addHistoryEntry: (entry: Omit<RegistrationHistoryEntry, 'id' | 'createdAt'>) => set((state) => ({
       history: [
@@ -450,14 +386,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         ...state.history,
       ].slice(0, 50), // Keep only last 50 entries
     })),
-
-    updateHistoryEntry: (id: string, updates: Partial<RegistrationHistoryEntry>) => set((state) => ({
-      history: state.history.map((entry) =>
-        entry.id === id ? { ...entry, ...updates } : entry
-      ),
-    })),
-
-    clearHistory: () => set({ history: [] }),
 
     // WebSocket actions
     setWsConnected: (connected: boolean) => set({ wsConnected: connected }),

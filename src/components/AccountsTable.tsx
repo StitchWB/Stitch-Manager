@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Play,
   Square,
+  Activity,
 } from 'lucide-react';
 import type { Account, AccountStatus } from '../types';
 import { useAppStore } from '../stores/app';
@@ -58,6 +59,7 @@ interface AccountsTableProps {
   onDeleteSelected?: (ids: number[]) => void;
   onActivate: (provider: string, accountId: number | null) => Promise<void>;
   onExportCSV?: () => void;
+  onCheckStatus?: (accountId: number) => Promise<void>;
 }
 
 function formatRelativeTime(dateString?: string): string {
@@ -90,12 +92,14 @@ export default function AccountsTable({
   onDeleteSelected,
   onActivate,
   onExportCSV,
+  onCheckStatus,
 }: AccountsTableProps) {
   const { language } = useAppStore();
   const [sortField, setSortField] = useState<SortField>('email');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const [activatingIds, setActivatingIds] = useState<Set<number>>(new Set());
+  const [checkingStatusIds, setCheckingStatusIds] = useState<Set<number>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerAccount, setDrawerAccount] = useState<Account | null>(null);
@@ -175,6 +179,20 @@ export default function AccountsTable({
       setActivatingIds((prev) => {
         const next = new Set(prev);
         next.delete(account.id);
+        return next;
+      });
+    }
+  };
+
+  const handleCheckStatus = async (accountId: number) => {
+    if (!onCheckStatus) return;
+    setCheckingStatusIds((prev) => new Set([...prev, accountId]));
+    try {
+      await onCheckStatus(accountId);
+    } finally {
+      setCheckingStatusIds((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
         return next;
       });
     }
@@ -267,6 +285,7 @@ export default function AccountsTable({
                 paginatedAccounts.map((account) => {
                   const isRefreshing = refreshingIds.has(account.id);
                   const isActivating = activatingIds.has(account.id);
+                  const isCheckingStatus = checkingStatusIds.has(account.id);
                   const isActive = isAccountActive(account);
                   const isSelected = selectedIds.has(account.id);
 
@@ -327,7 +346,7 @@ export default function AccountsTable({
                       {/* Last Active */}
                       <td className="px-3">
                         <span className="text-[10px] text-slate-500 tabular-nums">
-                          {formatRelativeTime(account.createdAt)}
+                          {formatRelativeTime(account.lastUsedAt || account.createdAt)}
                         </span>
                       </td>
 
@@ -369,9 +388,17 @@ export default function AccountsTable({
                             
                             {openMenuId === account.id && (
                               <div 
-                                className="absolute right-0 top-full mt-1 w-32 rounded-sm shadow-xl z-50 py-1"
+                                className="absolute right-0 top-full mt-1 w-36 rounded-sm shadow-xl z-50 py-1"
                                 style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.05)' }}
                               >
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleCheckStatus(account.id); setOpenMenuId(null); }}
+                                  disabled={isCheckingStatus}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200 disabled:opacity-50"
+                                >
+                                  <Activity size={10} className={isCheckingStatus ? 'animate-pulse' : ''} />
+                                  Check Status
+                                </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleRefresh(account.id); setOpenMenuId(null); }}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200"
@@ -380,8 +407,9 @@ export default function AccountsTable({
                                   Refresh
                                 </button>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); onCopyToken(account.token); setOpenMenuId(null); }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200"
+                                  onClick={(e) => { e.stopPropagation(); onCopyToken(account.token ?? ''); setOpenMenuId(null); }}
+                                  disabled={!account.token}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200 disabled:opacity-50"
                                 >
                                   <Copy size={10} />
                                   Copy Token

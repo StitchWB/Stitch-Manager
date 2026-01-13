@@ -8,8 +8,13 @@ interface UsageBarProps {
 }
 
 export function UsageBar({ used, limit, showLabel = true, className }: UsageBarProps) {
+  // limit <= 0 means unlimited (API returns 0 or -1 for unlimited plans)
   if (limit <= 0) {
-    return <span className="text-[10px] text-zinc-600">—</span>;
+    return (
+      <span className="text-[10px] text-emerald-500 font-medium">
+        {used > 0 ? `${used} / ∞` : '∞ Unlimited'}
+      </span>
+    );
   }
 
   const percent = Math.min((used / limit) * 100, 100);

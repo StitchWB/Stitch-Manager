@@ -6,7 +6,7 @@ import AddAccountModal from '../components/AddAccountModal';
 import QuickAccountSwitch from '../components/QuickAccountSwitch';
 import { useAccountsStore } from '../stores/accounts';
 import { useAppStore } from '../stores/app';
-import { copyToClipboard } from '../lib/tauri';
+import { copyToClipboard, checkAccountStatus } from '../lib/tauri';
 import { t } from '../lib/i18n';
 import type { ProviderName } from '../types';
 
@@ -59,7 +59,23 @@ export default function Accounts() {
     password: string;
     token?: string;
   }) => {
-    await createAccount(data.provider, data.email, data.password);
+    try {
+      await createAccount(data.provider, data.email, data.password);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'success',
+        title: t('notifications.accountAdded'),
+        message: `${data.email} (${data.provider})`,
+      });
+    } catch (error) {
+      console.error('Failed to add account:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('notifications.addFailed'),
+        message: String(error),
+      });
+    }
   };
 
   const handleRefreshToken = async (accountId: number) => {
@@ -83,17 +99,22 @@ export default function Accounts() {
     try {
       await copyToClipboard({ text: token });
       setCopiedToast(true);
-      setTimeout(() => setCopiedToast(false), 2000);
     } catch {
       try {
         await navigator.clipboard.writeText(token);
         setCopiedToast(true);
-        setTimeout(() => setCopiedToast(false), 2000);
       } catch (e) {
         console.error('Failed to copy token:', e);
       }
     }
   }, []);
+
+  // Auto-hide copied toast with cleanup
+  useEffect(() => {
+    if (!copiedToast) return;
+    const timer = setTimeout(() => setCopiedToast(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copiedToast]);
 
   const handleDelete = async (accountId: number) => {
     try {
@@ -133,6 +154,60 @@ export default function Accounts() {
     }
   };
 
+  const handleCheckStatus = async (accountId: number) => {
+    try {
+      const { addNotification } = useAppStore.getState();
+      const account = accounts.find(a => a.id === accountId);
+      
+      if (!account) {
+        addNotification({
+          type: 'error',
+          title: 'Account not found',
+          message: `Account ID ${accountId} not found`,
+        });
+        return;
+      }
+
+      addNotification({
+        type: 'info',
+        title: 'Checking status...',
+        message: `Checking ${account.provider} account: ${account.email}`,
+      });
+
+      const statusInfo = await checkAccountStatus({ accountId });
+      
+      if (!statusInfo || typeof statusInfo !== 'object') {
+        throw new Error("Invalid response from server");
+      }
+      
+      // Show detailed status notification
+      const quotaText = statusInfo.quotaLimit < 0 
+        ? 'Unlimited' 
+        : `${statusInfo.quotaUsed}/${statusInfo.quotaLimit} (${Math.round(statusInfo.quotaPercent)}%)`;
+      
+      const flowText = statusInfo.flowCreditsLimit !== undefined
+        ? `\nFlow: ${statusInfo.flowCreditsUsed}/${statusInfo.flowCreditsLimit < 0 ? '∞' : statusInfo.flowCreditsLimit}`
+        : '';
+
+      addNotification({
+        type: statusInfo.isActive ? 'success' : 'warning',
+        title: `${statusInfo.provider.toUpperCase()} Status`,
+        message: `${statusInfo.email}\nPlan: ${statusInfo.plan}\nQuota: ${quotaText}${flowText}`,
+      });
+
+      // Refresh account data
+      await refreshAccount(accountId);
+    } catch (error) {
+      console.error('Failed to check account status:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: 'Status Check Failed',
+        message: String(error),
+      });
+    }
+  };
+
   const handleExportCSV = () => {
     const headers = ['Provider', 'Email', 'Status', 'Quota Used', 'Quota Limit', 'Token'];
     const rows = accounts.map((account) => [
@@ -141,7 +216,7 @@ export default function Accounts() {
       account.status,
       account.quota.used.toString(),
       account.quota.limit.toString(),
-      account.token,
+      account.token ?? '',
     ]);
 
     const csvContent = [
@@ -247,6 +322,7 @@ export default function Accounts() {
             onDeleteSelected={removeSelectedAccounts}
             onActivate={handleActivate}
             onExportCSV={handleExportCSV}
+            onCheckStatus={handleCheckStatus}
           />
         </div>
 

@@ -16,6 +16,8 @@ import {
   Terminal,
   Code,
   Settings,
+  Crown,
+  Sparkles,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
@@ -57,6 +59,10 @@ export default function Patcher() {
     operationInProgress,
     patchStrategy,
     logRequests,
+    traePatched,
+    traeExtensionPatched,
+    traeWorkbenchPatched,
+    traePatchLoading,
     setPatchStrategy,
     setLogRequests,
     detectIDEs: scanForIDEs, // Renamed to avoid conflict
@@ -66,6 +72,8 @@ export default function Patcher() {
     restoreBackup,
     deleteBackup,
     clearError,
+    checkTraePatched,
+    patchTraeFull,
   } = usePatcherStore();
 
   // Force re-render when language changes
@@ -78,13 +86,31 @@ export default function Patcher() {
   useEffect(() => {
     scanForIDEs();
     listBackups();
-  }, [scanForIDEs, listBackups]);
+    checkTraePatched();
+  }, [scanForIDEs, listBackups, checkTraePatched]);
 
-  const handleScan = async () => { clearError(); await scanForIDEs(); await listBackups(); };
-  const handlePatch = async (ideId: string) => { clearError(); try { await applyPatch(ideId, true); } catch {} };
-  const handleUnpatch = async (ideId: string) => { clearError(); try { await removePatch(ideId, true); } catch {} };
+  const handleScan = async () => { clearError(); await scanForIDEs(); await listBackups(); await checkTraePatched(); };
+  const handlePatch = async (ideId: string) => { 
+    clearError(); 
+    try { 
+      await applyPatch(ideId, true); 
+    } catch (err) {
+      // Error is already set in the store by the applyPatch function
+      console.error('Patch failed:', err);
+    }
+  };
+  const handleUnpatch = async (ideId: string) => { 
+    clearError(); 
+    try {
+      await removePatch(ideId, true); 
+    } catch (err) {
+      // Error is already set in the store by the removePatch function
+      console.error('Unpatch failed:', err);
+    }
+  };
   const handleRestoreBackup = async (backupId: string) => { clearError(); try { await restoreBackup(backupId); await listBackups(); } catch {} };
   const handleDeleteBackup = async (backupId: string) => { clearError(); try { await deleteBackup(backupId); setConfirmDelete(null); } catch {} };
+  const handlePatchTraeFull = async () => { clearError(); try { await patchTraeFull(); } catch {} };
 
   const allBackups: BackupInfo[] = Object.values(backups).flat() as BackupInfo[];
   const filteredBackups = selectedIDEFilter ? allBackups.filter((b: BackupInfo) => b.ideId === selectedIDEFilter) : allBackups;
@@ -234,6 +260,96 @@ export default function Patcher() {
             </div>
           </section>
 
+          {/* Trae Pro Patch Section */}
+          <section className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white shadow-lg">
+                  <Terminal size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-white">Trae Pro Patch</h3>
+                    <span className="flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                      <Crown size={10} />
+                      Full
+                    </span>
+                  </div>
+                  <p className="text-2xs text-slate-500 mt-0.5">Patch storage, extension, and workbench for Pro features</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {traePatchLoading ? (
+                  <div className="badge-info flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Patching...</span>
+                  </div>
+                ) : traePatched === null ? (
+                  <div className="badge-warning flex items-center gap-1.5">
+                    <AlertCircle className="w-3 h-3" />
+                    Not Installed
+                  </div>
+                ) : null}
+                <button
+                  onClick={handlePatchTraeFull}
+                  disabled={traePatchLoading || traePatched === null}
+                  className="btn-primary py-1.5 text-xs"
+                >
+                  {traePatchLoading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Patching...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      Full Patch
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            {/* Patch Status Grid */}
+            {traePatched !== null && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className={`p-3 rounded-lg border ${traePatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-2xs text-slate-400">Storage</span>
+                    {traePatched ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                    )}
+                  </div>
+                  <p className="text-xs text-white font-medium">{traePatched ? 'Pro' : 'Free'}</p>
+                </div>
+                <div className={`p-3 rounded-lg border ${traeExtensionPatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-2xs text-slate-400">Extension</span>
+                    {traeExtensionPatched ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                    )}
+                  </div>
+                  <p className="text-xs text-white font-medium">{traeExtensionPatched ? 'Patched' : 'Original'}</p>
+                </div>
+                <div className={`p-3 rounded-lg border ${traeWorkbenchPatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-2xs text-slate-400">Workbench</span>
+                    {traeWorkbenchPatched ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                    )}
+                  </div>
+                  <p className="text-xs text-white font-medium">{traeWorkbenchPatched ? 'Patched' : 'Original'}</p>
+                </div>
+              </div>
+            )}
+          </section>
+
           {/* Backups Section */}
           <section className="card p-5">
             <div className="flex items-center justify-between mb-4">
@@ -280,19 +396,15 @@ export default function Patcher() {
 
                   return (
                     <div key={backup.id} className="flex items-center gap-3 p-2 bg-white/[0.02] rounded-lg border border-white/5">
-                      <div className={`w-7 h-7 rounded-md ${ide ? `bg-gradient-to-br ${getIDEGradient(ide.type)}` : 'bg-slate-700'} flex items-center justify-center text-white shrink-0`}>
-                        {ide ? getIDEIcon(ide.type) : <Archive size={12} />}
-                      </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-white font-medium text-xs">{backup.ideName}</span>
-                          <span className="text-2xs text-slate-600 font-mono">v{backup.ideVersion}</span>
-                          {!backup.isValid && <span className="badge-error">{t('status.invalid')}</span>}
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-medium text-white truncate">{backup.ideName}</span>
+                          <span className="text-2xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded">{backup.ideVersion}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-2xs text-slate-600">
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
                           <span>{formatDate(backup.createdAt)}</span>
                           <span>•</span>
-                          <span className="tabular-nums">{formatSize(backup.size)}</span>
+                          <span>{formatSize(backup.size)}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 ml-auto shrink-0">
