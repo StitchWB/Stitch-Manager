@@ -40,7 +40,9 @@ class AutomationSpoofModule(BaseSpoofModule):
         // Puppeteer/Playwright
         '__puppeteer_evaluation_script__', '__playwright', '__nightmare',
         // Selenium
-        'webdriver', '__webdriver_script_func', '__webdriver_script_function'
+        'webdriver', '__webdriver_script_func', '__webdriver_script_function',
+        // Others
+        '_selenium', 'calledSelenium', '_Selenium_IDE_Recorder'
     ];
     
     const documentProps = [
@@ -53,76 +55,90 @@ class AutomationSpoofModule(BaseSpoofModule):
         '__$webdriverAsyncExecutor'
     ];
     
+    const navigatorProps = [
+        'webdriver', '__webdriver_evaluate', '__selenium_evaluate',
+        '__webdriver_unwrapped', '__selenium_unwrapped'
+    ];
+    
     // Удаляем из window
     windowProps.forEach(prop => {
         try {
-            if (prop in window) delete window[prop];
+            if (prop in window) {
+                Object.defineProperty(window, prop, { get: () => undefined, configurable: true });
+            }
         } catch(e) {}
     });
     
     // Удаляем из document
     documentProps.forEach(prop => {
         try {
-            if (prop in document) delete document[prop];
+            if (prop in document) {
+                Object.defineProperty(document, prop, { get: () => undefined, configurable: true });
+            }
         } catch(e) {}
     });
+
+    // Скрываем признаки headless в navigator.plugins и mimeTypes
+    // (уже частично сделано в navigator.py, но здесь добавим общие проверки)
+    if (navigator.plugins.length === 0) {
+        // Если плагинов нет - это подозрительно (headless)
+        // Но navigator.py должен был их добавить.
+    }
     
     // ============================================
     // CHROME RUNTIME (headless detection)
     // ============================================
-    if (!window.chrome) window.chrome = {};
-    
-    if (!window.chrome.runtime) {
-        window.chrome.runtime = {
-            connect: () => {},
-            sendMessage: () => {},
-            onMessage: { addListener: () => {}, removeListener: () => {} },
-            onConnect: { addListener: () => {}, removeListener: () => {} },
-            id: undefined
-        };
-    }
-    
-    // chrome.csi
-    if (!window.chrome.csi) {
-        window.chrome.csi = () => ({
-            startE: Date.now(),
-            onloadT: Date.now(),
-            pageT: Date.now() + Math.random() * 1000,
-            tran: 15
-        });
-    }
-    
-    // chrome.loadTimes
-    if (!window.chrome.loadTimes) {
-        const now = Date.now() / 1000;
-        window.chrome.loadTimes = () => ({
-            commitLoadTime: now,
-            connectionInfo: 'h2',
-            finishDocumentLoadTime: now,
-            finishLoadTime: now,
-            firstPaintAfterLoadTime: 0,
-            firstPaintTime: now,
-            navigationType: 'Other',
-            npnNegotiatedProtocol: 'h2',
-            requestTime: now,
-            startLoadTime: now,
-            wasAlternateProtocolAvailable: false,
-            wasFetchedViaSpdy: true,
-            wasNpnNegotiated: true
+    if (!window.chrome) {
+        Object.defineProperty(window, 'chrome', {
+            get: () => ({
+                runtime: {
+                    connect: () => {},
+                    sendMessage: () => {},
+                    onMessage: { addListener: () => {}, removeListener: () => {} },
+                    onConnect: { addListener: () => {}, removeListener: () => {} }
+                },
+                csi: () => ({
+                    startE: Date.now(),
+                    onloadT: Date.now(),
+                    pageT: Date.now() + Math.random() * 1000,
+                    tran: 15
+                }),
+                loadTimes: () => ({
+                    commitLoadTime: Date.now() / 1000,
+                    connectionInfo: 'h2',
+                    finishDocumentLoadTime: Date.now() / 1000 + 0.5,
+                    finishLoadTime: Date.now() / 1000 + 1.0,
+                    firstPaintAfterFinishedLoadTime: 0,
+                    firstPaintTime: Date.now() / 1000 + 0.1,
+                    navigationType: 'Other',
+                    npnNegotiatedProtocol: 'h2',
+                    requestTime: Date.now() / 1000 - 0.1,
+                    startLoadTime: Date.now() / 1000 - 0.2,
+                    wasAlternateProtocolAvailable: false,
+                    wasFetchedViaSpdy: true,
+                    wasNpn: true
+                })
+            }),
+            configurable: true
         });
     }
     
     // ============================================
-    // PERMISSIONS API
+    // Permissions Query
     // ============================================
     if (navigator.permissions && navigator.permissions.query) {
-        const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-        navigator.permissions.query = (params) => {
-            if (params.name === 'notifications') {
-                return Promise.resolve({ state: 'prompt', onchange: null });
-            }
-            return originalQuery(params);
-        };
+        const originalQuery = navigator.permissions.query;
+        navigator.permissions.query = (parameters) => (
+            parameters.name === 'notifications' ?
+                Promise.resolve({ state: Notification.permission }) :
+                originalQuery(parameters)
+        );
     }
+
+    // ============================================
+    // Avoid "Cloudflare" useragent check mentioned in report
+    // ============================================
+    // (UserAgent is handled by DrissionPage/CDP, but we can double check)
+    
 })();
 '''

@@ -79,7 +79,7 @@ class DebugRecorder:
         if page:
             try:
                 action['url'] = page.url
-            except:
+            except Exception:
                 pass
         
         # Делаем скриншот

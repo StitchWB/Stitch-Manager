@@ -33,6 +33,7 @@ from .screen import ScreenSpoofModule
 from .webgl import WebGLSpoofModule
 from .canvas import CanvasSpoofModule
 from .timezone import TimezoneSpoofModule
+from .intl import IntlSpoofModule
 from .audio import AudioSpoofModule
 from .battery import BatterySpoofModule
 from .network import NetworkSpoofModule
@@ -46,6 +47,8 @@ from .performance import PerformanceSpoofModule
 from .math import MathSpoofModule
 from .history import HistorySpoofModule
 from .capabilities import CapabilitiesSpoofModule
+from .storage import StorageSpoofModule
+from .media import MediaDevicesSpoofModule
 
 # CDP Spoofer (main entry point)
 from .cdp_spoofer import (
@@ -58,7 +61,7 @@ from .cdp_spoofer import (
 from .behavior import BehaviorSpoofModule
 
 
-# Все JS-модули (19 модулей)
+# Все JS-модули (22 модуля)
 ALL_JS_MODULES = [
     AutomationSpoofModule,
     CDPHideSpoofModule,
@@ -67,6 +70,7 @@ ALL_JS_MODULES = [
     WebGLSpoofModule,
     CanvasSpoofModule,
     TimezoneSpoofModule,
+    IntlSpoofModule,
     AudioSpoofModule,
     BatterySpoofModule,
     NetworkSpoofModule,
@@ -79,6 +83,8 @@ ALL_JS_MODULES = [
     MathSpoofModule,
     HistorySpoofModule,
     CapabilitiesSpoofModule,
+    StorageSpoofModule,
+    MediaDevicesSpoofModule,
 ]
 
 
