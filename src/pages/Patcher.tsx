@@ -88,6 +88,35 @@ export default function Patcher() {
     checkTraePatched();
   }, [scanForIDEs, listBackups, checkTraePatched]);
 
+  // Handle Escape key to close settings dropdown
+  useEffect(() => {
+    if (!showSettings) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSettings(false);
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showSettings]);
+
+  // Close settings dropdown when clicking outside
+  useEffect(() => {
+    if (!showSettings) return;
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-settings-dropdown]')) {
+        setShowSettings(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSettings]);
+
   const handleScan = async () => { clearError(); await scanForIDEs(); await listBackups(); await checkTraePatched(); };
   const handlePatch = async (ideId: string) => { 
     clearError(); 
@@ -96,6 +125,12 @@ export default function Patcher() {
     } catch (err) {
       // Error is already set in the store by the applyPatch function
       console.error('Patch failed:', err);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('patcher.patchFailed'),
+        message: String(err),
+      });
     }
   };
   const handleUnpatch = async (ideId: string) => { 
@@ -105,11 +140,43 @@ export default function Patcher() {
     } catch (err) {
       // Error is already set in the store by the removePatch function
       console.error('Unpatch failed:', err);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('patcher.unpatchFailed'),
+        message: String(err),
+      });
     }
   };
-  const handleRestoreBackup = async (backupId: string) => { clearError(); try { await restoreBackup(backupId); await listBackups(); } catch {} };
-  const handleDeleteBackup = async (backupId: string) => { clearError(); try { await deleteBackup(backupId); await listBackups(); } catch {} };
-  const handlePatchTraeFull = async () => { clearError(); try { await patchTraeFull(); } catch {} };
+  const handleRestoreBackup = async (backupId: string) => { 
+    clearError(); 
+    try { 
+      await restoreBackup(backupId); 
+      await listBackups(); 
+    } catch (error) {
+      const { addNotification } = useAppStore.getState();
+      addNotification({ type: 'error', title: t('patcher.restoreFailed'), message: String(error) });
+    } 
+  };
+  const handleDeleteBackup = async (backupId: string) => { 
+    clearError(); 
+    try { 
+      await deleteBackup(backupId); 
+      await listBackups(); 
+    } catch (error) {
+      const { addNotification } = useAppStore.getState();
+      addNotification({ type: 'error', title: t('patcher.deleteFailed'), message: String(error) });
+    } 
+  };
+  const handlePatchTraeFull = async () => { 
+    clearError(); 
+    try { 
+      await patchTraeFull(); 
+    } catch (error) {
+      const { addNotification } = useAppStore.getState();
+      addNotification({ type: 'error', title: t('patcher.patchTraeFailed'), message: String(error) });
+    } 
+  };
 
   const allBackups: BackupInfo[] = Object.values(backups).flat() as BackupInfo[];
   const filteredBackups = selectedIDEFilter ? allBackups.filter((b: BackupInfo) => b.ideId === selectedIDEFilter) : allBackups;
@@ -151,12 +218,22 @@ export default function Patcher() {
                 <p className="text-2xs text-slate-500 mt-0.5">{t('patcher.scanDescription')}</p>
               </div>
               <div className="flex items-center gap-2">
-                <div className="relative">
-                  <button onClick={() => setShowSettings(!showSettings)} className="btn-icon text-slate-500 hover:text-white hover:bg-white/10">
-                    <Settings size={16} />
+                <div className="relative" data-settings-dropdown>
+                  <button 
+                    onClick={() => setShowSettings(!showSettings)} 
+                    className="btn-icon text-slate-500 hover:text-white hover:bg-white/10"
+                    aria-label={t('patcher.settings')}
+                    aria-expanded={showSettings}
+                    aria-haspopup="true"
+                  >
+                    <Settings size={16} aria-hidden="true" />
                   </button>
                   {showSettings && (
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-10 p-4">
+                    <div 
+                      className="absolute top-full right-0 mt-2 w-64 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-10 p-4"
+                      role="menu"
+                      aria-label={t('patcher.settingsMenu')}
+                    >
                       <h4 className="text-xs font-semibold text-white mb-3">{t('patcher.settings')}</h4>
                       <div className="space-y-3">
                         <div>
@@ -422,7 +499,7 @@ export default function Patcher() {
                           {isRestoring ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
                         </button>
                         <button 
-                          onClick={() => handleDeleteBackup(backup.path)} 
+                          onClick={() => handleDeleteBackup(backup.id)} 
                           className="btn-icon text-vsc-text-muted hover:text-vsc-red hover:bg-vsc-red/10" 
                           title={t('common.delete')}
                         >
@@ -439,11 +516,7 @@ export default function Patcher() {
           {/* Patch Info */}
           <section className="card p-4">
             <h3 className="text-sm font-semibold text-white mb-3">{t('patcher.patchInformation')}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <div className="bg-white/[0.02] rounded-lg p-3 border border-white/5">
-                <p className="text-2xs text-slate-500 uppercase tracking-wider mb-1">{t('patcher.currentVersion')}</p>
-                <p className="text-base font-bold text-white tabular-nums">v2.1.4</p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className="bg-white/[0.02] rounded-lg p-3 border border-white/5">
                 <p className="text-2xs text-slate-500 uppercase tracking-wider mb-1">{t('patcher.patchedIdes')}</p>
                 <p className="text-base font-bold text-white tabular-nums">

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Mail, Eye, EyeOff, Info, RefreshCw } from 'lucide-react';
+import { Mail, Eye, EyeOff, Info, RefreshCw, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { DEFAULT_IMAP_PORT, EMAIL_SHORTCODES, RANDOM_NAMES } from '../../constants/registration';
 
@@ -20,13 +20,17 @@ export interface IdentityConfig {
   gmailAppPassword: string;
 }
 
+export type TestConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
+
 interface IdentitySystemCardProps {
   config: IdentityConfig;
   onChange: (config: Partial<IdentityConfig>) => void;
-  onTest: () => void;
+  onTest: () => Promise<boolean> | void;
   disabled?: boolean;
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   passwordSet?: boolean;
+  testStatus?: TestConnectionStatus;
+  testError?: string;
 }
 
 export function IdentitySystemCard({
@@ -36,10 +40,53 @@ export function IdentitySystemCard({
   disabled,
   saveStatus = 'idle',
   passwordSet = false,
+  testStatus: externalTestStatus,
+  testError: externalTestError,
 }: IdentitySystemCardProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showAppPassword, setShowAppPassword] = useState(false);
   const [preview, setPreview] = useState('');
+  const [internalTestStatus, setInternalTestStatus] = useState<TestConnectionStatus>('idle');
+  const [internalTestError, setInternalTestError] = useState<string>('');
+  
+  // Use external status if provided, otherwise use internal
+  const testStatus = externalTestStatus ?? internalTestStatus;
+  const testError = externalTestError ?? internalTestError;
+
+  // Handle test connection with internal state management
+  const handleTest = async () => {
+    if (externalTestStatus !== undefined) {
+      // External state management - just call onTest
+      onTest();
+      return;
+    }
+    
+    // Internal state management
+    setInternalTestStatus('testing');
+    setInternalTestError('');
+    try {
+      const result = await onTest();
+      if (result === false) {
+        setInternalTestStatus('error');
+        setInternalTestError('Connection failed');
+      } else {
+        setInternalTestStatus('success');
+      }
+      // Auto-reset after 3 seconds
+      setTimeout(() => {
+        setInternalTestStatus('idle');
+        setInternalTestError('');
+      }, 3000);
+    } catch (err) {
+      setInternalTestStatus('error');
+      setInternalTestError(err instanceof Error ? err.message : 'Connection failed');
+      // Auto-reset after 5 seconds
+      setTimeout(() => {
+        setInternalTestStatus('idle');
+        setInternalTestError('');
+      }, 5000);
+    }
+  };
 
   const isGmail = config.strategy === 'gmail';
   
@@ -344,9 +391,9 @@ export function IdentitySystemCard({
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={config.password || (passwordSet ? '••••••••' : '')}
-                    onChange={(e) => onChange({ password: e.target.value.replace(/•/g, '') })}
+                    placeholder={passwordSet ? '(saved)' : '••••••••'}
+                    value={config.password || ''}
+                    onChange={(e) => onChange({ password: e.target.value })}
                     disabled={disabled}
                     className={cn(
                       'input-ds pr-10',
@@ -368,7 +415,7 @@ export function IdentitySystemCard({
 
         {/* Footer Actions */}
         <div className="flex items-center justify-between pt-3 border-t border-white/5">
-          <div className="h-4 flex items-center">
+          <div className="h-4 flex items-center gap-2">
             {saveStatus === 'saving' && (
               <span className="text-2xs text-slate-500">Saving...</span>
             )}
@@ -378,13 +425,47 @@ export function IdentitySystemCard({
             {saveStatus === 'error' && (
               <span className="text-2xs text-red-500">Save failed</span>
             )}
+            {/* Test connection feedback */}
+            {testStatus === 'success' && (
+              <span className="text-2xs text-emerald-500 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                Connected
+              </span>
+            )}
+            {testStatus === 'error' && (
+              <span className="text-2xs text-red-500 flex items-center gap-1" title={testError}>
+                <XCircle className="w-3 h-3" />
+                {testError || 'Failed'}
+              </span>
+            )}
           </div>
           <button
-            onClick={onTest}
-            disabled={!isReady || disabled}
-            className="btn-secondary text-xs py-1.5 px-3"
+            onClick={handleTest}
+            disabled={!isReady || disabled || testStatus === 'testing'}
+            className={cn(
+              "btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5",
+              testStatus === 'success' && "border-emerald-500/30 text-emerald-400",
+              testStatus === 'error' && "border-red-500/30 text-red-400"
+            )}
           >
-            Test Connection
+            {testStatus === 'testing' ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Testing...
+              </>
+            ) : testStatus === 'success' ? (
+              <>
+                <CheckCircle className="w-3 h-3" />
+                Success
+              </>
+            ) : testStatus === 'error' ? (
+              <>
+                <XCircle className="w-3 h-3" />
+                Retry
+              </>
+            ) : (
+              'Test Connection'
+            )}
           </button>
         </div>
       </div>

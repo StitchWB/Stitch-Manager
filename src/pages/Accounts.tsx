@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, RefreshCw, Download, Users } from 'lucide-react';
+import { Plus, Search, RefreshCw, Download, Users, AlertCircle } from 'lucide-react';
 import Header from '../components/layout/Header';
 import AccountsTable from '../components/AccountsTable';
 import AddAccountModal from '../components/AddAccountModal';
@@ -10,17 +10,18 @@ import { copyToClipboard, checkAccountStatus } from '../lib/tauri';
 import { t } from '../lib/i18n';
 import type { ProviderName } from '../types';
 
-const providerTabs: { id: ProviderName | null; labelKey: string; label: string }[] = [
+// Provider tabs are derived from the app store's providers list
+const getProviderTabs = (providers: { id: ProviderName; name: string }[]): { id: ProviderName | null; labelKey: string; label: string }[] => [
   { id: null, labelKey: 'accounts.filterAll', label: 'All' },
-  { id: 'kiro', labelKey: '', label: 'Kiro' },
-  { id: 'windsurf', labelKey: '', label: 'Windsurf' },
-  { id: 'trae', labelKey: '', label: 'Trae' },
+  ...providers.map(p => ({ id: p.id, labelKey: '', label: p.name })),
 ];
 
 export default function Accounts() {
-  const { language } = useAppStore();
+  const { language, providers } = useAppStore();
+  const providerTabs = getProviderTabs(providers);
   const {
     loading: isLoading,
+    error: storeError,
     searchQuery,
     setSearchQuery,
     selectedProvider: filterProvider,
@@ -83,6 +84,12 @@ export default function Accounts() {
       await refreshAccount(accountId);
     } catch (error) {
       console.error('Failed to refresh token:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('notifications.refreshFailed'),
+        message: String(error),
+      });
     }
   };
 
@@ -121,6 +128,12 @@ export default function Accounts() {
       await removeAccount(accountId);
     } catch (error) {
       console.error('Failed to delete account:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('notifications.deleteFailed'),
+        message: String(error),
+      });
     }
   };
 
@@ -240,6 +253,20 @@ export default function Accounts() {
       <Header title={t('accounts.title')} icon={<Users size={18} />} />
 
       <div className="flex-1 flex flex-col overflow-hidden p-4">
+        {/* Error Alert */}
+        {storeError && (
+          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-3">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="text-xs text-red-400 flex-1">{storeError}</span>
+            <button 
+              onClick={() => useAccountsStore.setState({ error: null })}
+              className="text-red-400 hover:text-red-300 text-xs shrink-0"
+            >
+              {t('common.dismiss')}
+            </button>
+          </div>
+        )}
+
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-4 mb-4">
           {/* Filter Tabs - Text links style */}
@@ -308,22 +335,40 @@ export default function Accounts() {
 
         {/* Table */}
         <div className="flex-1 overflow-hidden">
-          <AccountsTable
-            accounts={accounts}
-            isLoading={isLoading}
-            selectedIds={selectedIds}
-            activeAccountIds={activeAccountIds}
-            onToggleSelection={toggleSelection}
-            onSelectAll={selectAll}
-            onClearSelection={clearSelection}
-            onRefreshToken={handleRefreshToken}
-            onCopyToken={handleCopyToken}
-            onDelete={handleDelete}
-            onDeleteSelected={removeSelectedAccounts}
-            onActivate={handleActivate}
-            onExportCSV={handleExportCSV}
-            onCheckStatus={handleCheckStatus}
-          />
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+              <RefreshCw size={32} className="animate-spin text-indigo-400" />
+              <p className="text-sm">{t('common.loading') || 'Loading...'}</p>
+            </div>
+          ) : accounts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+              <Users size={48} className="opacity-30" />
+              <p className="text-sm">{t('accounts.noAccountsFound') || 'No accounts found'}</p>
+              <button 
+                onClick={() => setIsModalOpen(true)} 
+                className="mt-2 px-4 py-2 text-xs font-medium rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
+              >
+                {t('accounts.addFirstAccount') || 'Add your first account'}
+              </button>
+            </div>
+          ) : (
+            <AccountsTable
+              accounts={accounts}
+              isLoading={isLoading}
+              selectedIds={selectedIds}
+              activeAccountIds={activeAccountIds}
+              onToggleSelection={toggleSelection}
+              onSelectAll={selectAll}
+              onClearSelection={clearSelection}
+              onRefreshToken={handleRefreshToken}
+              onCopyToken={handleCopyToken}
+              onDelete={handleDelete}
+              onDeleteSelected={removeSelectedAccounts}
+              onActivate={handleActivate}
+              onExportCSV={handleExportCSV}
+              onCheckStatus={handleCheckStatus}
+            />
+          )}
         </div>
 
         {/* Toast */}
