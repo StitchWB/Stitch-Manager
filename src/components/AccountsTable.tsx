@@ -56,10 +56,10 @@ interface AccountsTableProps {
   onRefreshToken: (accountId: number) => Promise<void>;
   onCopyToken: (token: string) => void;
   onDelete: (accountId: number) => void;
-  onDeleteSelected?: (ids: number[]) => void;
+  onDeleteSelected: (ids: number[]) => void;
   onActivate: (provider: string, accountId: number | null) => Promise<void>;
-  onExportCSV?: () => void;
-  onCheckStatus?: (accountId: number) => Promise<void>;
+  onExportCSV: () => void;
+  onCheckStatus: (accountId: number) => Promise<void>;
 }
 
 function formatRelativeTime(dateString?: string): string {
@@ -185,7 +185,6 @@ export default function AccountsTable({
   };
 
   const handleCheckStatus = async (accountId: number) => {
-    if (!onCheckStatus) return;
     setCheckingStatusIds((prev) => new Set([...prev, accountId]));
     try {
       await onCheckStatus(accountId);
@@ -467,8 +466,8 @@ export default function AccountsTable({
       {/* Floating Action Bar */}
       <FloatingActionBar
         selectedCount={selectedIds.size}
-        onExport={onExportCSV || (() => {})}
-        onDelete={() => onDeleteSelected?.([...selectedIds])}
+        onExport={onExportCSV}
+        onDelete={() => onDeleteSelected([...selectedIds])}
         onRefreshAll={() => {
           selectedIds.forEach(id => handleRefresh(id));
         }}

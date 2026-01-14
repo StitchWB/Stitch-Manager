@@ -5,14 +5,33 @@ interface UsageBarProps {
   limit: number;
   showLabel?: boolean;
   className?: string;
+  isError?: boolean;
 }
 
-export function UsageBar({ used, limit, showLabel = true, className }: UsageBarProps) {
-  // limit <= 0 means unlimited (API returns 0 or -1 for unlimited plans)
-  if (limit <= 0) {
+export function UsageBar({ used, limit, showLabel = true, className, isError = false }: UsageBarProps) {
+  // If error state (banned/expired), show error message
+  if (isError && limit === 0) {
+    return (
+      <span className="text-[10px] text-red-400 font-medium">
+        Error / Banned
+      </span>
+    );
+  }
+  
+  // limit < 0 means unlimited (API returns -1 for unlimited plans)
+  if (limit < 0) {
     return (
       <span className="text-[10px] text-emerald-500 font-medium">
         {used > 0 ? `${used} / ∞` : '∞ Unlimited'}
+      </span>
+    );
+  }
+  
+  // limit === 0 with used === 0 might be uninitialized or error
+  if (limit === 0 && used === 0) {
+    return (
+      <span className="text-[10px] text-slate-600 font-medium">
+        —
       </span>
     );
   }
