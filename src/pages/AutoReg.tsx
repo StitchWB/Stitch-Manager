@@ -130,7 +130,6 @@ export default function AutoRegNext() {
             // Replace {counter} first if present
             if (alias.includes('{counter}')) {
               const counter = await getNextCounter({ provider: config.provider, strategy: 'gmail' });
-              console.log(`[Counter] Provider: ${config.provider}, Strategy: gmail, Counter: ${counter}`);
               alias = alias.replace(/\{counter\}/gi, counter.toString());
             }
             
@@ -144,7 +143,6 @@ export default function AutoRegNext() {
             // Replace {counter} first if present
             if (pattern.includes('{counter}')) {
               const counter = await getNextCounter({ provider: config.provider, strategy: 'custom' });
-              console.log(`[Counter] Provider: ${config.provider}, Strategy: custom, Counter: ${counter}`);
               pattern = pattern.replace(/\{counter\}/gi, counter.toString());
             }
             
