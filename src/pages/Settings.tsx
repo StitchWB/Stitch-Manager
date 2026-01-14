@@ -17,8 +17,6 @@ import {
   Eye,
   EyeOff,
   Palette,
-  Download,
-  Upload,
   Zap,
   RefreshCw,
   Coins
@@ -39,6 +37,10 @@ interface SettingsData {
   proxy_enabled: boolean;
   proxy_url: string;
   custom_ide_paths?: Record<string, string>;
+  // Patcher settings
+  auto_rotate_enabled?: boolean;
+  log_requests_enabled?: boolean;
+  spoof_machine_id_enabled?: boolean;
 }
 
 type SettingsCategory = 'general' | 'patcher' | 'token-pool' | 'imap' | 'proxy' | 'ide-paths' | 'database';
@@ -113,11 +115,22 @@ export default function Settings() {
       setProxyUrl(data.proxy_url || '');
       setCustomIdePaths(data.custom_ide_paths || {});
       
+      // Load patcher settings
+      setAutoRotateEnabled(data.auto_rotate_enabled ?? true);
+      setLogRequestsEnabled(data.log_requests_enabled ?? true);
+      setSpoofMachineIdEnabled(data.spoof_machine_id_enabled ?? true);
+      
       if (data.theme && ['light', 'dark', 'system'].includes(data.theme)) {
         setTheme(data.theme as 'light' | 'dark' | 'system');
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('settings.loadFailed'),
+        message: String(error),
+      });
     } finally {
       setIsLoading(false);
     }
@@ -181,6 +194,10 @@ export default function Settings() {
         proxy_url: proxyUrl,
         imap_password: imapPassword !== '********' ? imapPassword : '',
         custom_ide_paths: customIdePaths,
+        // Patcher settings
+        auto_rotate_enabled: autoRotateEnabled,
+        log_requests_enabled: logRequestsEnabled,
+        spoof_machine_id_enabled: spoofMachineIdEnabled,
       };
       
       await updateSettings(settingsToSave);
@@ -520,6 +537,12 @@ export default function Settings() {
                   }
                 } catch (e) {
                   console.error('Failed to open folder dialog:', e);
+                  const { addNotification } = useAppStore.getState();
+                  addNotification({
+                    type: 'error',
+                    title: t('settings.folderDialogFailed'),
+                    message: String(e),
+                  });
                 }
               }}
               className="btn-icon active:scale-95 transition-transform duration-75 hover:bg-white/[0.08]"
@@ -575,16 +598,6 @@ export default function Settings() {
         <p className="text-slate-500 text-xs" style={getAnimationStyle(2)}>
           {t('settings.database.sqliteDescription')}
         </p>
-        <div className="flex gap-3 pt-2" style={getAnimationStyle(3)}>
-          <button className="btn-secondary text-xs py-2 px-4 flex items-center gap-2 active:scale-95 transition-all duration-75 hover:bg-white/[0.08]">
-            <Download className="w-3.5 h-3.5" />
-            {t('settings.database.exportData')}
-          </button>
-          <button className="btn-secondary text-xs py-2 px-4 flex items-center gap-2 active:scale-95 transition-all duration-75 hover:bg-white/[0.08]">
-            <Upload className="w-3.5 h-3.5" />
-            {t('settings.database.importData')}
-          </button>
-        </div>
       </div>
     </div>
   );
