@@ -578,15 +578,4 @@ export const usePatcherStore = create<PatcherState>()(
   )
 );
 
-// ============================================
-// Selectors
-// ============================================
 
-export const selectDetectedIDEs = (state: PatcherState) => state.detectedIDEs;
-export const selectPatchStatus = (state: PatcherState) => state.patchStatus;
-export const selectBackups = (state: PatcherState) => state.backups;
-export const selectLoading = (state: PatcherState) => state.loading;
-export const selectScanning = (state: PatcherState) => state.scanning;
-export const selectError = (state: PatcherState) => state.error;
-export const selectSelectedIDEId = (state: PatcherState) => state.selectedIDEId;
-export const selectOperationInProgress = (state: PatcherState) => state.operationInProgress;

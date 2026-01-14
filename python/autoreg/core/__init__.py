@@ -19,6 +19,22 @@ from .process_utils import (
     is_kiro_running,
     kill_kiro
 )
+from .validators import (
+    # Models
+    PasswordValidator,
+    ImapConfig as ImapConfigValidator,
+    RegistrationRequest,
+    EmailPoolEntry,
+    EmailStrategyConfig,
+    ProxyConfig,
+    VerificationCode,
+    # Helper functions
+    validate_email,
+    validate_password,
+    validate_imap_config,
+    validate_registration_request,
+    validate_verification_code,
+)
 
 __all__ = [
     'Config',
@@ -34,5 +50,18 @@ __all__ = [
     'wait_for_process_exit',
     'kill_process',
     'is_kiro_running',
-    'kill_kiro'
+    'kill_kiro',
+    # Validators
+    'PasswordValidator',
+    'ImapConfigValidator',
+    'RegistrationRequest',
+    'EmailPoolEntry',
+    'EmailStrategyConfig',
+    'ProxyConfig',
+    'VerificationCode',
+    'validate_email',
+    'validate_password',
+    'validate_imap_config',
+    'validate_registration_request',
+    'validate_verification_code',
 ]

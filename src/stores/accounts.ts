@@ -446,14 +446,4 @@ export const useAccountsStore = create<AccountsState>()(
   )
 );
 
-// ============================================
-// Selectors (for performance optimization)
-// ============================================
 
-export const selectAccounts = (state: AccountsState) => state.accounts;
-export const selectLoading = (state: AccountsState) => state.loading;
-export const selectError = (state: AccountsState) => state.error;
-export const selectSelectedProvider = (state: AccountsState) => state.selectedProvider;
-export const selectSelectedIds = (state: AccountsState) => state.selectedIds;
-export const selectSearchQuery = (state: AccountsState) => state.searchQuery;
-export const selectActiveAccountIds = (state: AccountsState) => state.activeAccountIds;
