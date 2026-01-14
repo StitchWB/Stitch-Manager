@@ -214,7 +214,7 @@ export const useAccountsStore = create<AccountsState>()(
       setActiveAccount: async (provider, accountId) => {
         try {
           // Call backend to persist and apply the active account
-          const result = await setActiveAccountTauri({ provider, accountId });
+          await setActiveAccountTauri({ provider, accountId });
           
           // Update local state
           set((state) => ({
@@ -223,14 +223,6 @@ export const useAccountsStore = create<AccountsState>()(
               [provider]: accountId,
             },
           }));
-          
-          // Log result for debugging
-          if (result.success) {
-            console.log(`[AccountsStore] Token written to: ${result.token_path}`);
-            if (result.client_path) {
-              console.log(`[AccountsStore] Client credentials written to: ${result.client_path}`);
-            }
-          }
         } catch (error) {
           const message = error instanceof TauriError ? error.message : String(error);
           set({ error: message });
