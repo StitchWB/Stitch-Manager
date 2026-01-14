@@ -49,9 +49,19 @@ class Paths:
         # =====================================================================
         # AWS SSO cache (~/.aws/sso/cache/)
         # =====================================================================
-        self.aws_dir = self.home / '.aws'
-        self.aws_sso_cache = self.aws_dir / 'sso' / 'cache'
-        self.kiro_token_file = self.aws_sso_cache / 'kiro-auth-token.json'
+        # Support for isolated Kiro instances via KIRO_USER_DATA_DIR env var
+        kiro_user_data = os.environ.get('KIRO_USER_DATA_DIR')
+        if kiro_user_data:
+            # Isolated mode: use token path relative to Kiro's user-data-dir
+            base_dir = Path(kiro_user_data)
+            self.aws_dir = base_dir / '.aws'
+            self.aws_sso_cache = self.aws_dir / 'sso' / 'cache'
+            self.kiro_token_file = self.aws_sso_cache / 'kiro-auth-token.json'
+        else:
+            # Standard mode: use home directory
+            self.aws_dir = self.home / '.aws'
+            self.aws_sso_cache = self.aws_dir / 'sso' / 'cache'
+            self.kiro_token_file = self.aws_sso_cache / 'kiro-auth-token.json'
         
         # =====================================================================
         # Kiro IDE paths

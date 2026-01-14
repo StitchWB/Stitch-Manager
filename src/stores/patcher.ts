@@ -37,6 +37,7 @@ interface PatcherState {
   backups: Record<string, BackupInfo[]>;
   loading: boolean;
   scanning: boolean;
+  backupsLoading: boolean;
   error: string | null;
   
   // Selected IDE
@@ -109,6 +110,7 @@ export const usePatcherStore = create<PatcherState>()(
         backups: {},
         loading: false,
         scanning: false,
+        backupsLoading: false,
         error: null,
         selectedIDEId: null,
         operationInProgress: {},
@@ -375,7 +377,7 @@ export const usePatcherStore = create<PatcherState>()(
         // ============================================
 
         listBackups: async (ideId?: string) => {
-          set({ loading: true });
+          set({ backupsLoading: true });
           try {
             const backupList = await listBackups({ ideId });
             
@@ -392,13 +394,13 @@ export const usePatcherStore = create<PatcherState>()(
               backups: ideId
                 ? { ...state.backups, [ideId]: backupList }
                 : groupedBackups,
-              loading: false,
+              backupsLoading: false,
             }));
 
             return backupList;
           } catch (error) {
             const message = error instanceof TauriError ? error.message : String(error);
-            set({ error: message, loading: false });
+            set({ error: message, backupsLoading: false });
             throw error;
           }
         },
@@ -475,11 +477,11 @@ export const usePatcherStore = create<PatcherState>()(
           try {
             await deleteBackup({ backupId });
             
-            // Remove backup from state
+            // Remove backup from state (backupId is the path)
             set((state) => {
               const newBackups = { ...state.backups };
               for (const ideId of Object.keys(newBackups)) {
-                newBackups[ideId] = newBackups[ideId].filter((b: BackupInfo) => b.id !== backupId);
+                newBackups[ideId] = newBackups[ideId].filter((b: BackupInfo) => b.path !== backupId);
               }
               return { backups: newBackups };
             });

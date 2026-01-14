@@ -7,13 +7,22 @@ import type {
   RegistrationStatus 
 } from '../types';
 
+// Mail strategy type
+export type MailStrategy = 'custom' | 'gmail';
+
 // IMAP configuration (kept for future email verification)
 export interface IMAPConfig {
+  strategy: MailStrategy;
+  // Custom domain fields
   server: string;
   port: number;
   email: string;
   password: string;
   useTLS: boolean;
+  // Gmail alias fields
+  gmailBase: string;
+  gmailAlias: string;
+  gmailAppPassword: string;
 }
 
 // Proxy configuration
@@ -144,11 +153,15 @@ const DEFAULT_CONFIG: RegistrationConfig = {
     password: '',
   },
   imap: {
+    strategy: 'custom',
     server: '',
     port: 993,
     email: '',
     password: '',
     useTLS: true,
+    gmailBase: '',
+    gmailAlias: '',
+    gmailAppPassword: '',
   },
   proxy: {
     enabled: false,
@@ -195,7 +208,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     // Initial state
     config: DEFAULT_CONFIG,
     isRunning: false,
-    status: 'idle',
+    status: 'pending',  // Changed from 'idle' to 'pending' to match new RegistrationStatus type
     progress: DEFAULT_PROGRESS,
     logs: [],
     results: [],
@@ -214,12 +227,24 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     },
 
     setIMAPConfig: (imap: Partial<IMAPConfig>) => {
-      set((state) => ({
-        config: { 
-          ...state.config, 
-          imap: { ...state.config.imap, ...imap } 
+      set((state) => {
+        const updates: Partial<RegistrationConfig> = {
+          imap: { ...state.config.imap, ...imap }
+        };
+        
+        // If emailPattern is being updated, also update patterns
+        if ('emailPattern' in imap) {
+          updates.patterns = {
+            ...state.config.patterns,
+            emailPattern: (imap as any).emailPattern
+          };
+          // Remove emailPattern from imap updates
+          const { emailPattern, ...imapWithoutPattern } = imap as any;
+          updates.imap = { ...state.config.imap, ...imapWithoutPattern };
         }
-      }));
+        
+        return { config: { ...state.config, ...updates } };
+      });
       triggerSave();
     },
 
@@ -247,6 +272,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         set((state) => {
           // Check if passwords are masked (meaning they exist in DB)
           const imapPasswordMasked = settings.imap_password === '********';
+          const gmailAppPasswordMasked = settings.gmail_app_password === '********';
           const proxyPasswordMasked = settings.proxy_password === '********';
           
           return {
@@ -255,11 +281,15 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
               provider: (settings.provider as ProviderName) || 'kiro',
               imap: {
                 ...state.config.imap,
+                strategy: (settings.mail_strategy as MailStrategy) || 'custom',
                 server: settings.imap_server || '',
                 port: settings.imap_port || 993,
                 email: settings.imap_email || '',
                 // Don't overwrite password with masked value - keep existing or empty
                 password: imapPasswordMasked ? state.config.imap.password : (settings.imap_password || ''),
+                gmailBase: settings.gmail_base || '',
+                gmailAlias: settings.gmail_alias || '',
+                gmailAppPassword: gmailAppPasswordMasked ? state.config.imap.gmailAppPassword : (settings.gmail_app_password || ''),
               },
               proxy: {
                 ...state.config.proxy,
@@ -310,9 +340,12 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       try {
         const updateData: Record<string, unknown> = {
           provider: config.provider,
+          mail_strategy: config.imap.strategy,
           imap_server: config.imap.server,
           imap_port: config.imap.port,
           imap_email: config.imap.email,
+          gmail_base: config.imap.gmailBase,
+          gmail_alias: config.imap.gmailAlias,
           proxy_enabled: config.proxy.enabled,
           proxy_url: config.proxy.url,
           proxy_username: config.proxy.username,
@@ -327,6 +360,9 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         // Only include passwords if they have actual values
         if (config.imap.password) {
           updateData.imap_password = config.imap.password;
+        }
+        if (config.imap.gmailAppPassword) {
+          updateData.gmail_app_password = config.imap.gmailAppPassword;
         }
         if (config.proxy.password) {
           updateData.proxy_password = config.proxy.password;

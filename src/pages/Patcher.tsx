@@ -54,7 +54,7 @@ export default function Patcher() {
     detectedIDEs,
     backups,
     scanning,
-    loading,
+    backupsLoading,
     error,
     operationInProgress,
     patchStrategy,
@@ -79,7 +79,6 @@ export default function Patcher() {
   // Force re-render when language changes
   void language; // Force re-render on language change
 
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIDEFilter, setSelectedIDEFilter] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -109,7 +108,7 @@ export default function Patcher() {
     }
   };
   const handleRestoreBackup = async (backupId: string) => { clearError(); try { await restoreBackup(backupId); await listBackups(); } catch {} };
-  const handleDeleteBackup = async (backupId: string) => { clearError(); try { await deleteBackup(backupId); setConfirmDelete(null); } catch {} };
+  const handleDeleteBackup = async (backupId: string) => { clearError(); try { await deleteBackup(backupId); await listBackups(); } catch {} };
   const handlePatchTraeFull = async () => { clearError(); try { await patchTraeFull(); } catch {} };
 
   const allBackups: BackupInfo[] = Object.values(backups).flat() as BackupInfo[];
@@ -371,13 +370,13 @@ export default function Patcher() {
                     {detectedIDEs.map((ide: DetectedIDE) => <option key={ide.id} value={ide.id}>{ide.name}</option>)}
                   </select>
                 )}
-                <button onClick={() => listBackups()} disabled={loading} className="btn-ghost text-xs py-1 px-2">
-                  <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> {t('common.refresh')}
+                <button onClick={() => listBackups()} disabled={backupsLoading} className="btn-ghost text-xs py-1 px-2">
+                  <RefreshCw size={12} className={backupsLoading ? 'animate-spin' : ''} /> {t('common.refresh')}
                 </button>
               </div>
             </div>
 
-            {loading && allBackups.length === 0 ? (
+            {backupsLoading && allBackups.length === 0 ? (
               <div className="text-center py-6 text-slate-500 flex flex-col items-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span className="text-xs">{t('patcher.loadingBackups')}</span>
@@ -389,38 +388,46 @@ export default function Patcher() {
                 <p className="text-2xs mt-1 text-slate-700">{t('patcher.backupsCreatedWhenPatching')}</p>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {filteredBackups.map((backup: BackupInfo) => {
                   const ide = detectedIDEs.find((i: DetectedIDE) => i.id === backup.ideId);
                   const isRestoring = operationInProgress[backup.ideId] === 'restoring';
 
                   return (
-                    <div key={backup.id} className="flex items-center gap-3 p-2 bg-white/[0.02] rounded-lg border border-white/5">
+                    <div key={backup.id} className="flex items-center gap-3 p-3 bg-vsc-sidebar rounded-lg border border-vsc-border hover:border-vsc-border-light transition-colors">
+                      <div className="w-8 h-8 rounded-md bg-vsc-panel flex items-center justify-center text-vsc-text-muted shrink-0">
+                        <Archive size={14} />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-medium text-white truncate">{backup.ideName}</span>
-                          <span className="text-2xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded">{backup.ideVersion}</span>
+                          <span className="text-sm font-medium text-vsc-text truncate">{backup.ideName}</span>
+                          <span className="text-2xs text-vsc-text-muted bg-vsc-panel px-1.5 py-0.5 rounded">{backup.ideVersion}</span>
+                          {!backup.isValid && (
+                            <span className="text-2xs text-vsc-red bg-vsc-red/10 px-1.5 py-0.5 rounded">{t('status.invalid')}</span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <div className="flex items-center gap-3 text-xs text-vsc-text-muted">
                           <span>{formatDate(backup.createdAt)}</span>
-                          <span>•</span>
+                          <span className="opacity-50">•</span>
                           <span>{formatSize(backup.size)}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 ml-auto shrink-0">
-                        <button onClick={() => handleRestoreBackup(backup.id)} disabled={isRestoring || !backup.isValid || !ide} className="btn-icon text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50" title={t('patcher.restore')}>
+                      <div className="flex items-center gap-2 ml-auto shrink-0">
+                        <button 
+                          onClick={() => handleRestoreBackup(backup.id)} 
+                          disabled={isRestoring || !backup.isValid || !ide} 
+                          className="btn-icon text-vsc-text-muted hover:text-vsc-green hover:bg-vsc-green/10 disabled:opacity-40 disabled:cursor-not-allowed" 
+                          title={t('patcher.restore')}
+                        >
                           {isRestoring ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
                         </button>
-                        {confirmDelete === backup.id ? (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleDeleteBackup(backup.id)} className="px-2 py-1 text-2xs bg-red-500 text-white rounded hover:bg-red-600">{t('common.confirm')}</button>
-                            <button onClick={() => setConfirmDelete(null)} className="px-2 py-1 text-2xs bg-slate-600 text-white rounded hover:bg-slate-500">{t('common.cancel')}</button>
-                          </div>
-                        ) : (
-                          <button onClick={() => setConfirmDelete(backup.id)} className="btn-icon text-slate-500 hover:text-red-400 hover:bg-red-500/10" title={t('common.delete')}>
-                            <Trash2 size={14} />
-                          </button>
-                        )}
+                        <button 
+                          onClick={() => handleDeleteBackup(backup.path)} 
+                          className="btn-icon text-vsc-text-muted hover:text-vsc-red hover:bg-vsc-red/10" 
+                          title={t('common.delete')}
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
                   );

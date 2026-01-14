@@ -1,12 +1,11 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import type { Account, ProviderName, QuotaInfo } from '../types';
+import type { Account, ProviderName } from '../types';
 import {
   listAccounts,
   addAccount,
   deleteAccount,
   refreshAccountQuota,
-  getAccountQuota,
   validateAccount,
   setActiveAccount as setActiveAccountTauri,
   getActiveAccounts as getActiveAccountsTauri,
@@ -32,9 +31,6 @@ interface AccountsState {
   // Active accounts per provider (provider -> accountId)
   activeAccountIds: Record<string, number | null>;
   
-  // Quota cache
-  quotaCache: Map<number, { quota: QuotaInfo; fetchedAt: number }>;
-  
   // Actions
   fetchAccounts: (provider?: ProviderName) => Promise<void>;
   addAccount: (provider: ProviderName, email: string, password: string) => Promise<Account>;
@@ -42,7 +38,6 @@ interface AccountsState {
   deleteAccounts: (accountIds: number[]) => Promise<void>;
   refreshAccount: (accountId: number) => Promise<Account>;
   refreshAllAccounts: () => Promise<void>;
-  getQuota: (accountId: number, forceRefresh?: boolean) => Promise<QuotaInfo>;
   validateAccount: (accountId: number) => Promise<boolean>;
   
   // Active account management
@@ -100,7 +95,6 @@ export const useAccountsStore = create<AccountsState>()(
         selectedProvider: null,
         selectedIds: new Set(),
         searchQuery: '',
-        quotaCache: new Map(),
         activeAccountIds: {},
 
         // ============================================
@@ -148,12 +142,6 @@ export const useAccountsStore = create<AccountsState>()(
 
         try {
           await deleteAccount({ accountId });
-          // Also remove from quota cache
-          set((state) => {
-            const newCache = new Map(state.quotaCache);
-            newCache.delete(accountId);
-            return { quotaCache: newCache };
-          });
         } catch (error) {
           // Rollback on error
           set({ accounts: previousAccounts });
@@ -175,13 +163,6 @@ export const useAccountsStore = create<AccountsState>()(
         try {
           // Delete accounts in parallel
           await Promise.all(accountIds.map((id) => deleteAccount({ accountId: id })));
-          
-          // Remove from quota cache
-          set((state) => {
-            const newCache = new Map(state.quotaCache);
-            accountIds.forEach((id) => newCache.delete(id));
-            return { quotaCache: newCache };
-          });
         } catch (error) {
           // Rollback on error
           set({ accounts: previousAccounts });
@@ -199,16 +180,6 @@ export const useAccountsStore = create<AccountsState>()(
               a.id === accountId ? updatedAccount : a
             ),
           }));
-          
-          // Update quota cache
-          set((state) => {
-            const newCache = new Map(state.quotaCache);
-            newCache.set(accountId, {
-              quota: updatedAccount.quota,
-              fetchedAt: Date.now(),
-            });
-            return { quotaCache: newCache };
-          });
           
           return updatedAccount;
         } catch (error) {
@@ -239,30 +210,6 @@ export const useAccountsStore = create<AccountsState>()(
         } catch (error) {
           const message = error instanceof TauriError ? error.message : String(error);
           set({ error: message, loading: false });
-          throw error;
-        }
-      },
-
-      getQuota: async (accountId, forceRefresh = false) => {
-        const { quotaCache } = get();
-        const cached = quotaCache.get(accountId);
-        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-        
-        if (!forceRefresh && cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-          return cached.quota;
-        }
-        
-        try {
-          const quota = await getAccountQuota({ accountId });
-          set((state) => {
-            const newCache = new Map(state.quotaCache);
-            newCache.set(accountId, { quota, fetchedAt: Date.now() });
-            return { quotaCache: newCache };
-          });
-          return quota;
-        } catch (error) {
-          const message = error instanceof TauriError ? error.message : String(error);
-          set({ error: message });
           throw error;
         }
       },
