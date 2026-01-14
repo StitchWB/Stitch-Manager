@@ -86,6 +86,7 @@ export interface Translations {
     settings: string;
     logs: string;
     adminUser: string;
+    localMode: string;
   };
   accounts: {
     title: string;
@@ -108,6 +109,9 @@ export interface Translations {
     deleteConfirm: string;
     addingAccount: string;
     filterAll: string;
+    tokenCopied: string;
+    emailCopied: string;
+    jsonCopied: string;
   };
   accountsTable: {
     account: string;
@@ -123,6 +127,10 @@ export interface Translations {
     activate: string;
     deactivate: string;
     active: string;
+    last: string;
+    checkStatus: string;
+    loading: string;
+    noAccounts: string;
   };
   autoReg: {
     title: string;
@@ -283,8 +291,26 @@ export interface Translations {
     unpatching: string;
     restoring: string;
     settings: string;
+    settingsMenu: string;
     strategy: string;
     logRequests: string;
+    patchFailed: string;
+    patchTraeFailed: string;
+    unpatchFailed: string;
+    restoreFailed: string;
+    deleteFailed: string;
+    traeProPatch: string;
+    traeProFull: string;
+    traeProDescription: string;
+    traeNotInstalled: string;
+    traeFullPatch: string;
+    traeStorage: string;
+    traeExtension: string;
+    traeWorkbench: string;
+    traePro: string;
+    traeFree: string;
+    traePatched: string;
+    traeOriginal: string;
   };
   settings: {
     title: string;
@@ -340,6 +366,20 @@ export interface Translations {
     saveSettings: string;
     settingsSaved: string;
     failedToSave: string;
+    loadFailed: string;
+    folderDialogFailed: string;
+    patcher: {
+      title: string;
+      description: string;
+      autoRotate: string;
+      autoRotateDescription: string;
+      logRequests: string;
+      logRequestsDescription: string;
+      spoofMachineId: string;
+      spoofMachineIdDescription: string;
+      note: string;
+      noteDescription: string;
+    };
   };
   logs: {
     title: string;
@@ -352,6 +392,7 @@ export interface Translations {
     warning: string;
     error: string;
     debug: string;
+    success: string;
     searchPlaceholder: string;
     time: string;
     level: string;
@@ -373,6 +414,10 @@ export interface Translations {
     accountDeactivated: string;
     activationFailed: string;
     tokenWritten: string;
+    accountAdded: string;
+    addFailed: string;
+    refreshFailed: string;
+    deleteFailed: string;
   };
   time: {
     justNow: string;
@@ -392,6 +437,16 @@ export interface Translations {
     invalidEmail: string;
     invalidUrl: string;
     invalidPort: string;
+  };
+  quickSwitch: {
+    title: string;
+    active: string;
+    noActiveAccounts: string;
+    deactivate: string;
+    noActiveAccount: string;
+    clickProviderTab: string;
+    activeAccountsPerProvider: string;
+    activationFailed: string;
   };
   tokenPool: {
     // Tab and titles

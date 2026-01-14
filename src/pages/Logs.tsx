@@ -86,7 +86,7 @@ export default function Logs() {
             >
               <option value="all">{t('logs.allLevels')}</option>
               <option value="info">{t('logs.info')}</option>
-              <option value="success">Success</option>
+              <option value="success">{t('logs.success')}</option>
               <option value="warn">{t('logs.warning')}</option>
               <option value="error">{t('logs.error')}</option>
               <option value="debug">{t('logs.debug')}</option>

@@ -345,25 +345,25 @@ export default function Patcher() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white">Trae Pro Patch</h3>
+                    <h3 className="text-sm font-semibold text-white">{t('patcher.traeProPatch')}</h3>
                     <span className="flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
                       <Crown size={10} />
-                      Full
+                      {t('patcher.traeProFull')}
                     </span>
                   </div>
-                  <p className="text-2xs text-slate-500 mt-0.5">Patch storage, extension, and workbench for Pro features</p>
+                  <p className="text-2xs text-slate-500 mt-0.5">{t('patcher.traeProDescription')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 {traePatchLoading ? (
                   <div className="badge-info flex items-center gap-1.5">
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Patching...</span>
+                    <span>{t('patcher.patching')}...</span>
                   </div>
                 ) : traePatched === null ? (
                   <div className="badge-warning flex items-center gap-1.5">
                     <AlertCircle className="w-3 h-3" />
-                    Not Installed
+                    {t('patcher.traeNotInstalled')}
                   </div>
                 ) : null}
                 <button
@@ -374,12 +374,12 @@ export default function Patcher() {
                   {traePatchLoading ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      Patching...
+                      {t('patcher.patching')}...
                     </>
                   ) : (
                     <>
                       <Sparkles size={14} />
-                      Full Patch
+                      {t('patcher.traeFullPatch')}
                     </>
                   )}
                 </button>
@@ -391,36 +391,36 @@ export default function Patcher() {
               <div className="grid grid-cols-3 gap-3">
                 <div className={`p-3 rounded-lg border ${traePatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-2xs text-slate-400">Storage</span>
+                    <span className="text-2xs text-slate-400">{t('patcher.traeStorage')}</span>
                     {traePatched ? (
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
                       <XCircle className="w-3.5 h-3.5 text-slate-500" />
                     )}
                   </div>
-                  <p className="text-xs text-white font-medium">{traePatched ? 'Pro' : 'Free'}</p>
+                  <p className="text-xs text-white font-medium">{traePatched ? t('patcher.traePro') : t('patcher.traeFree')}</p>
                 </div>
                 <div className={`p-3 rounded-lg border ${traeExtensionPatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-2xs text-slate-400">Extension</span>
+                    <span className="text-2xs text-slate-400">{t('patcher.traeExtension')}</span>
                     {traeExtensionPatched ? (
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
                       <XCircle className="w-3.5 h-3.5 text-slate-500" />
                     )}
                   </div>
-                  <p className="text-xs text-white font-medium">{traeExtensionPatched ? 'Patched' : 'Original'}</p>
+                  <p className="text-xs text-white font-medium">{traeExtensionPatched ? t('patcher.traePatched') : t('patcher.traeOriginal')}</p>
                 </div>
                 <div className={`p-3 rounded-lg border ${traeWorkbenchPatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-2xs text-slate-400">Workbench</span>
+                    <span className="text-2xs text-slate-400">{t('patcher.traeWorkbench')}</span>
                     {traeWorkbenchPatched ? (
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
                       <XCircle className="w-3.5 h-3.5 text-slate-500" />
                     )}
                   </div>
-                  <p className="text-xs text-white font-medium">{traeWorkbenchPatched ? 'Patched' : 'Original'}</p>
+                  <p className="text-xs text-white font-medium">{traeWorkbenchPatched ? t('patcher.traePatched') : t('patcher.traeOriginal')}</p>
                 </div>
               </div>
             )}

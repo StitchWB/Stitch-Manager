@@ -13,6 +13,7 @@ import {
   Square,
   Activity,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Account, AccountStatus } from '../types';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
@@ -71,11 +72,11 @@ function formatRelativeTime(dateString?: string): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
   
-  if (diffMins < 1) return 'now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 30) return `${diffDays}d ago`;
-  return `${Math.floor(diffDays / 30)}mo ago`;
+  if (diffMins < 1) return t('time.now');
+  if (diffMins < 60) return t('time.minutesAgo', { count: diffMins });
+  if (diffHours < 24) return t('time.hoursAgo', { count: diffHours });
+  if (diffDays < 30) return t('time.daysAgo', { count: diffDays });
+  return t('time.monthsAgo', { count: Math.floor(diffDays / 30) });
 }
 
 export default function AccountsTable({
@@ -221,10 +222,12 @@ export default function AccountsTable({
       <div 
         className="flex flex-col h-full rounded-lg overflow-hidden"
         style={{ border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}
+        role="region"
+        aria-label={t('accounts.tableRegion')}
       >
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          <table className="w-full">
+          <table className="w-full" role="table" aria-label={t('accounts.accountsTable')}>
             <thead className="sticky top-0 z-10">
               <tr className="h-9 border-b border-white/5" style={{ background: 'rgba(30, 41, 59, 0.5)' }}>
                 <th className="w-10 px-3">
@@ -234,27 +237,28 @@ export default function AccountsTable({
                     ref={(el) => { if (el) el.indeterminate = someSelected; }}
                     onChange={(e) => (e.target.checked ? onSelectAll() : onClearSelection())}
                     className="w-3.5 h-3.5 accent-indigo-500 rounded-sm"
+                    aria-label={allSelected ? t('accounts.deselectAll') : t('accounts.selectAll')}
                   />
                 </th>
                 <th className="w-10 px-2"></th>
                 <th className="px-3 text-left">
                   <button onClick={() => handleSort('email')} className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold hover:text-slate-200">
-                    Account <SortIcon field="email" />
+                    {t('accountsTable.account')} <SortIcon field="email" />
                   </button>
                 </th>
                 <th className="w-20 px-3 text-left">
                   <button onClick={() => handleSort('status')} className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold hover:text-slate-200">
-                    Status <SortIcon field="status" />
+                    {t('accountsTable.status')} <SortIcon field="status" />
                   </button>
                 </th>
                 <th className="w-24 px-3 text-left">
                   <button onClick={() => handleSort('quota')} className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold hover:text-slate-200">
-                    Usage <SortIcon field="quota" />
+                    {t('accountsTable.usage')} <SortIcon field="quota" />
                   </button>
                 </th>
                 <th className="w-20 px-3 text-left">
                   <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                    Last
+                    {t('accountsTable.last')}
                   </span>
                 </th>
                 <th className="w-16 px-3"></th>
@@ -267,7 +271,7 @@ export default function AccountsTable({
                   <td colSpan={7} className="h-48">
                     <div className="flex items-center justify-center gap-2 text-slate-500">
                       <RefreshCw size={14} className="animate-spin" />
-                      <span className="text-xs">Loading...</span>
+                      <span className="text-xs">{t('accountsTable.loading')}</span>
                     </div>
                   </td>
                 </tr>
@@ -276,7 +280,7 @@ export default function AccountsTable({
                   <td colSpan={7} className="h-48">
                     <div className="flex flex-col items-center justify-center text-slate-500">
                       <Users className="w-10 h-10 mb-2 opacity-30" />
-                      <p className="text-xs">No accounts</p>
+                      <p className="text-xs">{t('accountsTable.noAccounts')}</p>
                     </div>
                   </td>
                 </tr>
@@ -306,6 +310,7 @@ export default function AccountsTable({
                           checked={isSelected}
                           onChange={() => onToggleSelection(account.id)}
                           className="w-3.5 h-3.5 accent-indigo-500 rounded-sm"
+                          aria-label={`${isSelected ? t('accounts.deselect') : t('accounts.select')} ${account.email}`}
                         />
                       </td>
 
@@ -363,6 +368,7 @@ export default function AccountsTable({
                                 : 'text-emerald-400 hover:bg-emerald-400/10',
                               'disabled:opacity-30 disabled:cursor-not-allowed'
                             )}
+                            aria-label={isActive ? t('accounts.deactivate') : t('accounts.activate')}
                           >
                             {isActivating ? (
                               <RefreshCw size={12} className="animate-spin" />
@@ -381,44 +387,58 @@ export default function AccountsTable({
                                 setOpenMenuId(openMenuId === account.id ? null : account.id);
                               }}
                               className="p-1.5 rounded-sm text-slate-500 hover:text-slate-200 hover:bg-white/[0.03] transition-colors"
+                              aria-label={t('accounts.moreActions')}
+                              aria-expanded={openMenuId === account.id}
+                              aria-haspopup="menu"
                             >
-                              <MoreHorizontal size={12} />
+                              <MoreHorizontal size={12} aria-hidden="true" />
                             </button>
                             
                             {openMenuId === account.id && (
                               <div 
                                 className="absolute right-0 top-full mt-1 w-36 rounded-sm shadow-xl z-50 py-1"
                                 style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.05)' }}
+                                role="menu"
+                                aria-label={t('accounts.accountActions')}
                               >
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleCheckStatus(account.id); setOpenMenuId(null); }}
                                   disabled={isCheckingStatus}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200 disabled:opacity-50"
+                                  role="menuitem"
                                 >
-                                  <Activity size={10} className={isCheckingStatus ? 'animate-pulse' : ''} />
-                                  Check Status
+                                  <Activity size={10} className={isCheckingStatus ? 'animate-pulse' : ''} aria-hidden="true" />
+                                  {t('accountsTable.checkStatus')}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleRefresh(account.id); setOpenMenuId(null); }}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200"
+                                  role="menuitem"
                                 >
-                                  <RefreshCw size={10} className={isRefreshing ? 'animate-spin' : ''} />
-                                  Refresh
+                                  <RefreshCw size={10} className={isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
+                                  {t('accountsTable.refresh')}
                                 </button>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); onCopyToken(account.token ?? ''); setOpenMenuId(null); }}
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    onCopyToken(account.token ?? ''); 
+                                    toast.success(t('accounts.tokenCopied'));
+                                    setOpenMenuId(null); 
+                                  }}
                                   disabled={!account.token}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200 disabled:opacity-50"
+                                  role="menuitem"
                                 >
-                                  <Copy size={10} />
-                                  Copy Token
+                                  <Copy size={10} aria-hidden="true" />
+                                  {t('accountsTable.copyToken')}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); onDelete(account.id); setOpenMenuId(null); }}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-400/10"
+                                  role="menuitem"
                                 >
-                                  <Trash2 size={10} />
-                                  Delete
+                                  <Trash2 size={10} aria-hidden="true" />
+                                  {t('accountsTable.delete')}
                                 </button>
                               </div>
                             )}
@@ -435,30 +455,32 @@ export default function AccountsTable({
 
         {/* Footer */}
         <div className="h-8 px-3 flex items-center justify-between border-t border-white/5" style={{ background: 'rgba(30, 41, 59, 0.5)' }}>
-          <span className="text-[10px] text-slate-500">
-            {sortedAccounts.length} accounts
+          <span className="text-[10px] text-slate-500" aria-live="polite">
+            {sortedAccounts.length} {t('accountsTable.accounts')}
           </span>
           
           {totalPages > 1 && (
-            <div className="flex items-center gap-1">
+            <nav className="flex items-center gap-1" aria-label={t('accounts.pagination')}>
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
                 className="p-1 text-slate-500 hover:text-slate-200 disabled:opacity-30"
+                aria-label={t('accounts.previousPage')}
               >
-                <ChevronLeft size={12} />
+                <ChevronLeft size={12} aria-hidden="true" />
               </button>
-              <span className="text-[10px] text-slate-500 px-1 tabular-nums">
+              <span className="text-[10px] text-slate-500 px-1 tabular-nums" aria-current="page">
                 {currentPage}/{totalPages}
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
                 className="p-1 text-slate-500 hover:text-slate-200 disabled:opacity-30"
+                aria-label={t('accounts.nextPage')}
               >
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden="true" />
               </button>
-            </div>
+            </nav>
           )}
         </div>
       </div>
