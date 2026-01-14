@@ -45,15 +45,12 @@ interface AccountsState {
   getActiveAccount: (provider: string) => Account | undefined;
   loadActiveAccounts: () => Promise<void>;
   
-  // Import/Export
-  importFromFile: (filePath: string) => Promise<Account[]>;
-  exportToFile: (filePath: string, format?: 'json' | 'csv') => Promise<void>;
+
   
   // Selection
   toggleSelection: (accountId: number) => void;
   selectAll: () => void;
   clearSelection: () => void;
-  setSelectedIds: (ids: Set<number>) => void;
   
   // Filters
   setSelectedProvider: (provider: ProviderName | null) => void;
@@ -61,24 +58,10 @@ interface AccountsState {
   
   // Computed helpers
   getFilteredAccounts: () => Account[];
-  getAccountById: (id: number) => Account | undefined;
   getAccountsByProvider: (provider: ProviderName) => Account[];
-  getActiveAccounts: () => Account[];
-  getAccountStats: () => AccountStats;
   
-  // Error handling
-  clearError: () => void;
-  setError: (error: string | null) => void;
 }
 
-interface AccountStats {
-  total: number;
-  active: number;
-  banned: number;
-  limitHit: number;
-  expired: number;
-  byProvider: Record<ProviderName, number>;
-}
 
 // ============================================
 // Store
@@ -274,44 +257,7 @@ export const useAccountsStore = create<AccountsState>()(
       },
 
       // ============================================
-      // Import/Export
-      // ============================================
-
-      // Note: importAccounts not yet implemented in Rust backend
-      // Would require file format specification and validation logic
-      importFromFile: async (_filePath) => {
-        // set({ loading: true, error: null });
-        // try {
-        //   const importedAccounts = await importAccounts({ filePath });
-        //   set((state) => ({
-        //     accounts: [...state.accounts, ...importedAccounts],
-        //     loading: false,
-        //   }));
-        //   return importedAccounts;
-        // } catch (error) {
-        //   const message = error instanceof TauriError ? error.message : String(error);
-        //   set({ error: message, loading: false });
-        //   throw error;
-        // }
-        throw new Error('importFromFile: Rust command not implemented');
-      },
-
-      // Note: exportAccounts not yet implemented in Rust backend
-      // Would require export format implementation (JSON/CSV)
-      exportToFile: async (_filePath, _format = 'json') => {
-        // const { selectedProvider } = get();
-        // try {
-        //   await exportAccounts({ filePath, provider: selectedProvider ?? undefined, format });
-        // } catch (error) {
-        //   const message = error instanceof TauriError ? error.message : String(error);
-        //   set({ error: message });
-        //   throw error;
-        // }
-        throw new Error('exportToFile: Rust command not implemented');
-      },
-
-      // ============================================
-      // Selection
+      // Filters
       // ============================================
 
       toggleSelection: (accountId) => {
@@ -333,10 +279,6 @@ export const useAccountsStore = create<AccountsState>()(
 
       clearSelection: () => {
         set({ selectedIds: new Set() });
-      },
-
-      setSelectedIds: (ids) => {
-        set({ selectedIds: ids });
       },
 
       // ============================================
@@ -376,63 +318,8 @@ export const useAccountsStore = create<AccountsState>()(
         });
       },
 
-      getAccountById: (id) => {
-        return get().accounts.find((a) => a.id === id);
-      },
-
       getAccountsByProvider: (provider) => {
         return get().accounts.filter((a) => a.provider === provider);
-      },
-
-      getActiveAccounts: () => {
-        return get().accounts.filter((a) => a.status === 'active');
-      },
-
-      getAccountStats: () => {
-        const { accounts } = get();
-        const stats: AccountStats = {
-          total: accounts.length,
-          active: 0,
-          banned: 0,
-          limitHit: 0,
-          expired: 0,
-          byProvider: {} as Record<ProviderName, number>,
-        };
-
-        for (const account of accounts) {
-          // Count by status
-          switch (account.status) {
-            case 'active':
-              stats.active++;
-              break;
-            case 'banned':
-              stats.banned++;
-              break;
-            case 'limit_hit':
-              stats.limitHit++;
-              break;
-            case 'expired':
-              stats.expired++;
-              break;
-          }
-
-          // Count by provider
-          stats.byProvider[account.provider] = (stats.byProvider[account.provider] || 0) + 1;
-        }
-
-        return stats;
-      },
-
-      // ============================================
-      // Error Handling
-      // ============================================
-
-      clearError: () => {
-        set({ error: null });
-      },
-
-      setError: (error) => {
-        set({ error });
       },
     }),
     { 

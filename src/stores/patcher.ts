@@ -6,7 +6,6 @@ import type {
   PatchStatusType,
   BackupInfo,
   PatchResult,
-  IDEType,
 } from '../types';
 import {
   detectIDEs,
@@ -16,13 +15,10 @@ import {
   listBackups,
   restoreBackup,
   deleteBackup,
-  verifyIDE,
-  patchTraeStorage,
   patchTraeFull,
   isTraePatched,
   isTraeExtensionPatched,
   isTraeWorkbenchPatched,
-  restoreTraeStorage,
   TauriError,
 } from '../lib/tauri';
 
@@ -35,13 +31,9 @@ interface PatcherState {
   detectedIDEs: DetectedIDE[];
   patchStatus: Record<string, PatchStatus>;
   backups: Record<string, BackupInfo[]>;
-  loading: boolean;
   scanning: boolean;
   backupsLoading: boolean;
   error: string | null;
-  
-  // Selected IDE
-  selectedIDEId: string | null;
   
   // Operation status
   operationInProgress: Record<string, 'patching' | 'unpatching' | 'restoring' | null>;
@@ -58,8 +50,6 @@ interface PatcherState {
   
   // Actions
   detectIDEs: () => Promise<DetectedIDE[]>;
-  refreshIDEs: () => Promise<void>;
-  getPatchStatus: (ideId: string) => Promise<PatchStatus>;
   getAllPatchStatuses: () => Promise<void>;
   applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
@@ -68,32 +58,15 @@ interface PatcherState {
   
   // Trae storage patch actions
   checkTraePatched: () => Promise<boolean>;
-  patchTraeStorage: () => Promise<PatchResult>;
   patchTraeFull: () => Promise<PatchResult>;
-  restoreTraeStorage: (backupPath: string) => Promise<PatchResult>;
   
   // Backup management
   listBackups: (ideId?: string) => Promise<BackupInfo[]>;
   restoreBackup: (backupId: string) => Promise<PatchResult>;
   deleteBackup: (backupId: string) => Promise<void>;
   
-  // IDE verification
-  verifyIDE: (ideId: string) => Promise<boolean>;
-  
-  // Selection
-  selectIDE: (ideId: string | null) => void;
-  
-  // Computed helpers
-  getIDEById: (ideId: string) => DetectedIDE | undefined;
-  getIDEsByType: (type: IDEType) => DetectedIDE[];
-  getPatchedIDEs: () => DetectedIDE[];
-  getUnpatchedIDEs: () => DetectedIDE[];
-  getBackupsForIDE: (ideId: string) => BackupInfo[];
-  canPatchIDE: (ideId: string) => boolean;
-  
   // Error handling
   clearError: () => void;
-  setError: (error: string | null) => void;
 }
 
 // ============================================
@@ -108,11 +81,9 @@ export const usePatcherStore = create<PatcherState>()(
         detectedIDEs: [],
         patchStatus: {},
         backups: {},
-        loading: false,
         scanning: false,
         backupsLoading: false,
         error: null,
-        selectedIDEId: null,
         operationInProgress: {},
         patchStrategy: 'injection', // Default to new method
         logRequests: false,
@@ -140,12 +111,6 @@ export const usePatcherStore = create<PatcherState>()(
             set({ error: message, scanning: false });
             throw error;
           }
-        },
-
-        refreshIDEs: async () => {
-          await get().detectIDEs();
-          // Also refresh backups
-          await get().listBackups();
         },
 
         // ============================================
@@ -230,22 +195,6 @@ export const usePatcherStore = create<PatcherState>()(
           }
         },
 
-        patchTraeStorage: async () => {
-          set({ traePatchLoading: true, error: null });
-          try {
-            const result = await patchTraeStorage();
-            if (result.success) {
-              set({ traePatched: true });
-            }
-            set({ traePatchLoading: false });
-            return result;
-          } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
-            set({ error: message, traePatchLoading: false });
-            throw error;
-          }
-        },
-
         patchTraeFull: async () => {
           set({ traePatchLoading: true, error: null });
           try {
@@ -256,22 +205,6 @@ export const usePatcherStore = create<PatcherState>()(
                 traeExtensionPatched: true,
                 traeWorkbenchPatched: true,
               });
-            }
-            set({ traePatchLoading: false });
-            return result;
-          } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
-            set({ error: message, traePatchLoading: false });
-            throw error;
-          }
-        },
-
-        restoreTraeStorage: async (backupPath: string) => {
-          set({ traePatchLoading: true, error: null });
-          try {
-            const result = await restoreTraeStorage({ backupPath });
-            if (result.success) {
-              set({ traePatched: false });
             }
             set({ traePatchLoading: false });
             return result;
@@ -493,76 +426,11 @@ export const usePatcherStore = create<PatcherState>()(
         },
 
         // ============================================
-        // IDE Verification
-        // ============================================
-
-        verifyIDE: async (ideId: string) => {
-          try {
-            return await verifyIDE({ ideId });
-          } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
-            set({ error: message });
-            throw error;
-          }
-        },
-
-        // ============================================
-        // Selection
-        // ============================================
-
-        selectIDE: (ideId: string | null) => {
-          set({ selectedIDEId: ideId });
-        },
-
-        // ============================================
-        // Computed Helpers
-        // ============================================
-
-        getIDEById: (ideId: string) => {
-          return get().detectedIDEs.find((ide: DetectedIDE) => ide.id === ideId);
-        },
-
-        getIDEsByType: (type: IDEType) => {
-          return get().detectedIDEs.filter((ide: DetectedIDE) => ide.type === type);
-        },
-
-        getPatchedIDEs: () => {
-          return get().detectedIDEs.filter((ide: DetectedIDE) => ide.isPatched);
-        },
-
-        getUnpatchedIDEs: () => {
-          return get().detectedIDEs.filter((ide: DetectedIDE) => !ide.isPatched);
-        },
-
-        getBackupsForIDE: (ideId: string) => {
-          return get().backups[ideId] || [];
-        },
-
-        canPatchIDE: (ideId: string) => {
-          const ide = get().getIDEById(ideId);
-          if (!ide) return false;
-          
-          const status = get().patchStatus[ideId];
-          const operation = get().operationInProgress[ideId];
-          
-          return (
-            ide.canPatch &&
-            !ide.isPatched &&
-            status?.status !== 'error' &&
-            !operation
-          );
-        },
-
-        // ============================================
         // Error Handling
         // ============================================
 
         clearError: () => {
           set({ error: null });
-        },
-
-        setError: (error: string | null) => {
-          set({ error });
         },
       }),
       {
@@ -570,7 +438,6 @@ export const usePatcherStore = create<PatcherState>()(
         partialize: (state) => ({
           // Only persist detected IDEs (not status which should be refreshed)
           detectedIDEs: state.detectedIDEs,
-          selectedIDEId: state.selectedIDEId,
         }),
       }
     ),
