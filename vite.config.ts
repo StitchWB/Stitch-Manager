@@ -17,4 +17,15 @@ export default defineConfig({
       ignored: ['**/src-tauri/**'],
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-ui': ['lucide-react', 'framer-motion', 'sonner'],
+          'vendor-tauri': ['@tauri-apps/api', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-clipboard-manager'],
+        },
+      },
+    },
+  },
 });
