@@ -8,7 +8,6 @@ import {
   Eye,
   EyeOff,
   Keyboard,
-  Camera,
   Timer,
   Minus,
   Plus,
@@ -714,28 +713,25 @@ export default function AutoRegNext() {
                   />
                 </div>
 
-                {/* Toggle Switches Row */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* Toggle Switches - 2 rows */}
+                <div className="grid grid-cols-2 gap-2">
                   <ToggleSwitch
-                    label="Typing"
+                    label="Realistic Typing"
                     checked={config.advanced.realisticTyping}
                     onChange={(v) => setAdvancedSettings({ realisticTyping: v })}
                     disabled={isRunning}
-                    icon={<Keyboard className="w-3 h-3" />}
                   />
                   <ToggleSwitch
-                    label="Delays"
+                    label="Human Delays"
                     checked={config.advanced.humanDelays}
                     onChange={(v) => setAdvancedSettings({ humanDelays: v })}
                     disabled={isRunning}
-                    icon={<Timer className="w-3 h-3" />}
                   />
                   <ToggleSwitch
                     label="Screenshots"
                     checked={config.advanced.screenshotsOnError}
                     onChange={(v) => setAdvancedSettings({ screenshotsOnError: v })}
                     disabled={isRunning}
-                    icon={<Camera className="w-3 h-3" />}
                   />
                 </div>
               </div>
