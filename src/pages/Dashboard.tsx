@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Users,
   Key,
@@ -18,6 +19,7 @@ import {
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
+import { useLogsStore } from '../stores/logs';
 import {
   getServerStatus,
   getRegistrationJobs,
@@ -56,7 +58,7 @@ const Sparkline = ({ data = [3, 7, 4, 9, 5, 8, 6] }: { data?: number[] }) => {
 };
 
 // ============================================
-// Stat Card Component (Bento Style)
+// Stat Card Component (Deep Space Void Style)
 // ============================================
 interface StatCardProps {
   title: string;
@@ -73,9 +75,18 @@ const StatCard = React.memo(function StatCard({ title, value, subtitle, icon, tr
   const isPlaceholder = displayValue === '—';
   
   return (
-    <div className={`card p-3 flex flex-col gap-2 border border-white/5 ${className}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-slate-500">{icon}</span>
+    <div className={`relative p-5 flex flex-col gap-4 rounded-xl transition-all duration-300 hover:shadow-glow-purple ${className}`}
+      style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.04), transparent)' }}
+    >
+      {/* Large faint icon in top-right */}
+      <div className="absolute top-3 right-3 opacity-[0.08]">
+        {React.cloneElement(icon as React.ReactElement, { size: 64 })}
+      </div>
+      
+      <div className="flex items-center justify-between relative z-10">
+        <span className="w-8 h-8 text-purple-400 flex items-center justify-center rounded-lg bg-purple-500/10">
+          {React.cloneElement(icon as React.ReactElement, { size: 20 })}
+        </span>
         {trend && !isPlaceholder && (
           <div className="flex items-center gap-2">
             <Sparkline />
@@ -86,9 +97,9 @@ const StatCard = React.memo(function StatCard({ title, value, subtitle, icon, tr
           </div>
         )}
       </div>
-      <div>
-        <p className={`text-2xl font-bold tracking-tight tabular-nums ${isPlaceholder ? 'text-slate-600' : 'text-white'}`}>{displayValue}</p>
-        <p className="text-2xs uppercase text-slate-500 mt-0.5">{title}</p>
+      <div className="relative z-10">
+        <p className={`text-4xl font-bold tracking-tight tabular-nums ${isPlaceholder ? 'text-slate-600' : 'text-white'}`}>{displayValue}</p>
+        <p className="text-xs uppercase text-slate-500 tracking-wider mt-1.5">{title}</p>
         {subtitle && <p className="text-2xs text-slate-600 mt-1">{subtitle}</p>}
       </div>
     </div>
@@ -96,7 +107,7 @@ const StatCard = React.memo(function StatCard({ title, value, subtitle, icon, tr
 });
 
 // ============================================
-// Activity Item Component
+// Activity Item Component (Deep Space Void Style)
 // ============================================
 interface ActivityItemProps {
   status: 'success' | 'pending' | 'failed';
@@ -107,19 +118,37 @@ interface ActivityItemProps {
 
 const ActivityItem = React.memo(function ActivityItem({ status, title, description, timestamp }: ActivityItemProps) {
   const config = {
-    success: { icon: <CheckCircle size={14} />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    pending: { icon: <Loader2 size={14} className="animate-spin" />, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-    failed: { icon: <XCircle size={14} />, color: 'text-red-400', bg: 'bg-red-500/10' },
+    success: { 
+      icon: <CheckCircle size={16} />, 
+      color: 'text-emerald-400', 
+      bg: 'bg-emerald-500/10', 
+      rowBg: '',
+      borderColor: '' 
+    },
+    pending: { 
+      icon: <Loader2 size={16} className="animate-spin" />, 
+      color: 'text-amber-400', 
+      bg: 'bg-amber-500/10', 
+      rowBg: '',
+      borderColor: '' 
+    },
+    failed: { 
+      icon: <XCircle size={16} />, 
+      color: 'text-red-400', 
+      bg: 'bg-red-500/10', 
+      rowBg: 'bg-red-500/[0.05]',
+      borderColor: 'border-l-2 border-red-500' 
+    },
   }[status];
 
   return (
-    <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/[0.02] transition-colors group">
-      <div className={`w-7 h-7 rounded-lg ${config.bg} flex items-center justify-center ${config.color}`}>
+    <div className={`flex items-center gap-3 py-3 px-3 rounded-lg hover:bg-white/[0.02] transition-colors group ${config.rowBg} ${config.borderColor}`}>
+      <div className={`w-8 h-8 rounded-lg ${config.bg} flex items-center justify-center ${config.color}`}>
         {config.icon}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-200 truncate">{title}</p>
-        <p className="text-2xs text-slate-500 truncate">{description}</p>
+        <p className={`text-2xs truncate ${status === 'failed' ? 'text-red-400' : 'text-slate-500'}`}>{description}</p>
       </div>
       <span className="text-2xs text-slate-600 font-mono tabular-nums">{timestamp}</span>
     </div>
@@ -127,7 +156,7 @@ const ActivityItem = React.memo(function ActivityItem({ status, title, descripti
 });
 
 // ============================================
-// Provider Card Component
+// Provider Card Component (Deep Space Glass Style)
 // ============================================
 interface ProviderCardProps {
   provider: {
@@ -146,12 +175,12 @@ const ProviderCard = React.memo(function ProviderCard({ provider, accountCount, 
   return (
     <div
       onClick={onSelect}
-      className={`card-interactive p-3 border border-white/5 ${
-        isSelected ? 'border-primary/50 gradient-border' : ''
+      className={`relative p-3 rounded-xl cursor-pointer transition-all duration-300 bg-white/[0.03] border border-white/[0.08] hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] hover:border-white/[0.12] ${
+        isSelected ? 'border-purple-500/50 shadow-[0_0_15px_rgba(139,92,246,0.2)]' : ''
       }`}
     >
       {isSelected && (
-        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary rounded-full flex items-center justify-center ring-2 ring-vsc-bg">
+        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center ring-2 ring-vsc-bg">
           <CheckCircle className="w-2.5 h-2.5 text-white" />
         </div>
       )}
@@ -160,7 +189,7 @@ const ProviderCard = React.memo(function ProviderCard({ provider, accountCount, 
           {provider.name[0]}
         </div>
         <span className={`text-2xs font-mono px-1.5 py-0.5 rounded ${
-          isSelected ? 'text-primary bg-primary/10' : 'text-slate-500'
+          isSelected ? 'text-purple-400 bg-purple-500/10' : 'text-slate-500'
         }`}>
           {isSelected ? t('status.active') : provider.version}
         </span>
@@ -174,7 +203,7 @@ const ProviderCard = React.memo(function ProviderCard({ provider, accountCount, 
 });
 
 // ============================================
-// Provider Breakdown Mini Chart
+// Provider Breakdown Mini Chart (Deep Space Void Style)
 // ============================================
 interface ProviderChartProps {
   data: { provider: ProviderName; count: number }[];
@@ -182,10 +211,27 @@ interface ProviderChartProps {
 
 function ProviderBreakdownChart({ data }: ProviderChartProps) {
   const total = data.reduce((sum, item) => sum + item.count, 0);
+  
+  // Empty state with placeholder chart
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-600 text-sm">
-        {t('dashboard.noAccountsToDisplay')}
+      <div className="flex flex-col items-center justify-center h-full text-center py-6">
+        {/* Placeholder donut ring */}
+        <div className="relative mb-4">
+          <div 
+            className="w-20 h-20 rounded-full opacity-10"
+            style={{ 
+              background: 'conic-gradient(#64748b 0% 100%)',
+            }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-14 h-14 bg-vsc-bg rounded-full" />
+          </div>
+        </div>
+        <p className="text-sm text-slate-600">{t('dashboard.noDataToDisplay')}</p>
+        <button className="mt-3 px-4 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+          {t('accounts.addFirstAccount') || 'Add Account'}
+        </button>
       </div>
     );
   }
@@ -210,7 +256,7 @@ function ProviderBreakdownChart({ data }: ProviderChartProps) {
           style={{ background: `conic-gradient(${gradientStops})` }}
         />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-16 h-16 bg-vsc-sidebar rounded-full flex flex-col items-center justify-center border border-vsc-border">
+          <div className="w-16 h-16 bg-vsc-bg rounded-full flex flex-col items-center justify-center border border-white/[0.08]">
             <span className="text-lg font-bold text-white tabular-nums">{total}</span>
             <span className="text-2xs text-slate-500">{t('common.total')}</span>
           </div>
@@ -238,6 +284,8 @@ function ProviderBreakdownChart({ data }: ProviderChartProps) {
 export default function Dashboard() {
   const { providers, selectedProvider, setSelectedProvider, addNotification, language } = useAppStore();
   const { accounts, fetchAccounts } = useAccountsStore();
+  const { addLog } = useLogsStore();
+  const navigate = useNavigate();
   
   const [serverStatus, setServerStatus] = useState<LLMServerStatus | null>(null);
   const [registrationJobs, setRegistrationJobs] = useState<RegistrationJob[]>([]);
@@ -256,6 +304,7 @@ export default function Dashboard() {
       setServerStatus(status);
     } catch (error) {
       console.error('Failed to load server status:', error);
+      // Silent fail for background status check - no notification needed
     }
   }, []);
 
@@ -265,6 +314,7 @@ export default function Dashboard() {
       setRegistrationJobs(jobs);
     } catch (error) {
       console.error('Failed to load registration jobs:', error);
+      // Silent fail for background job loading - no notification needed
     }
   }, []);
 
@@ -275,7 +325,7 @@ export default function Dashboard() {
       addNotification({ type: 'success', title: t('common.cleared'), message: t('dashboard.activityCleared') });
     } catch (error) {
       console.error('Failed to clear jobs:', error);
-      addNotification({ type: 'error', title: t('common.error'), message: 'Failed to clear activity log' });
+      addNotification({ type: 'error', title: t('common.error'), message: t('dashboard.failedToClearActivity') });
     }
   }, [addNotification]);
 
@@ -286,6 +336,7 @@ export default function Dashboard() {
       setDashboardStats(stats);
     } catch (error) {
       console.error('Failed to load dashboard stats:', error);
+      // Silent fail for background stats loading - no notification needed
     } finally {
       setIsLoadingStats(false);
     }
@@ -411,9 +462,19 @@ export default function Dashboard() {
     try {
       await startRegistration({ provider: selectedProvider });
       addNotification({ type: 'success', title: t('dashboard.registrationStarted'), message: `Started registration for ${selectedProvider}` });
+      addLog({
+        level: 'info',
+        message: `Registration started for provider: ${selectedProvider}`,
+        source: 'registration',
+      });
       await loadRegistrationJobs();
     } catch (error) {
       addNotification({ type: 'error', title: t('dashboard.registrationFailed'), message: error instanceof Error ? error.message : 'Unknown error' });
+      addLog({
+        level: 'error',
+        message: `Registration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        source: 'registration',
+      });
     } finally {
       setIsStartingRegistration(false);
     }
@@ -421,9 +482,19 @@ export default function Dashboard() {
 
   const handleRefreshAllTokens = async () => {
     setIsRefreshingTokens(true);
+    addLog({
+      level: 'info',
+      message: 'Refreshing all tokens...',
+      source: 'accounts',
+    });
     try {
       await fetchAccounts();
       await loadDashboardStats();
+      addLog({
+        level: 'success',
+        message: 'Tokens refreshed successfully',
+        source: 'accounts',
+      });
     } finally {
       setIsRefreshingTokens(false);
     }
@@ -432,12 +503,33 @@ export default function Dashboard() {
   const handleOpenLLMServer = async () => {
     if (serverStatus?.isRunning) {
       window.open(`http://${serverStatus.host}:${serverStatus.port}`, '_blank');
+      addLog({
+        level: 'info',
+        message: `Opened LLM server at ${serverStatus.host}:${serverStatus.port}`,
+        source: 'server',
+      });
       return;
     }
     setIsStartingServer(true);
+    addLog({
+      level: 'info',
+      message: 'Starting LLM server...',
+      source: 'server',
+    });
     try {
       const status = await startLLMServer();
       setServerStatus(status);
+      addLog({
+        level: 'success',
+        message: `LLM server started on port ${status.port}`,
+        source: 'server',
+      });
+    } catch (error) {
+      addLog({
+        level: 'error',
+        message: `Failed to start LLM server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        source: 'server',
+      });
     } finally {
       setIsStartingServer(false);
     }
@@ -464,7 +556,6 @@ export default function Dashboard() {
               value={isLoadingStats ? '—' : summaryData.totalAccounts}
               subtitle={`${t('dashboard.across')} ${providers.filter((p) => summaryData.accountsByProvider.find((a) => a.provider === p.id && a.count > 0)).length} ${t('dashboard.providers')}`}
               icon={<Users size={18} />}
-              trend={summaryData.totalAccounts > 0 ? { value: '+5%', positive: true } : undefined}
             />
             <StatCard
               title={t('dashboard.activeTokens')}
@@ -488,21 +579,21 @@ export default function Dashboard() {
 
           {/* Quick Actions */}
           <section className="flex flex-wrap gap-3">
-            <button onClick={handleStartRegistration} disabled={!selectedProvider || isStartingRegistration} className="btn-secondary py-1.5 text-xs">
-              {isStartingRegistration ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            <button onClick={handleStartRegistration} disabled={!selectedProvider || isStartingRegistration} className="bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white py-2 px-4 text-sm rounded-lg flex items-center gap-2 transition-colors">
+              {isStartingRegistration ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
               {t('dashboard.startRegistration')}
             </button>
-            <button onClick={handleRefreshAllTokens} disabled={isRefreshingTokens} className="btn-secondary py-1.5 text-xs">
-              <RefreshCw size={14} className={isRefreshingTokens ? 'animate-spin' : ''} />
+            <button onClick={handleRefreshAllTokens} disabled={isRefreshingTokens} className="btn-secondary py-2 px-4 text-sm">
+              <RefreshCw size={16} className={isRefreshingTokens ? 'animate-spin' : ''} />
               {t('dashboard.refreshAllTokens')}
             </button>
-            <button onClick={handleOpenLLMServer} disabled={isStartingServer} className="btn-secondary py-1.5 text-xs">
-              {isStartingServer ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+            <button onClick={handleOpenLLMServer} disabled={isStartingServer} className="btn-secondary py-2 px-4 text-sm">
+              {isStartingServer ? <Loader2 size={16} className="animate-spin" /> : <ExternalLink size={16} />}
               {serverStatus?.isRunning ? t('dashboard.openLlmServer') : t('dashboard.startLlmServer')}
             </button>
             {!selectedProvider && (
-              <span className="flex items-center gap-1.5 text-2xs text-amber-400 ml-2">
-                <AlertCircle size={12} />
+              <span className="flex items-center gap-1.5 text-xs text-amber-400 ml-2">
+                <AlertCircle size={14} />
                 {t('dashboard.selectProviderBelow')}
               </span>
             )}
@@ -511,14 +602,14 @@ export default function Dashboard() {
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             {/* Recent Activity */}
-            <div className="lg:col-span-2 card p-3 flex flex-col border border-white/5">
+            <div className="lg:col-span-2 p-4 flex flex-col bg-white/[0.03] border border-white/[0.08] rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-sm font-semibold text-white">{t('dashboard.recentActivity')}</h3>
                   <p className="text-2xs text-slate-500">{t('dashboard.lastRegistrationAttempts')}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={handleClearJobs} className="btn-ghost text-xs py-1 px-2 text-red-400 hover:text-red-300" title="Clear activity log">
+                  <button onClick={handleClearJobs} className="btn-ghost text-xs py-1 px-2 text-red-400 hover:text-red-300" title={t('dashboard.clearActivityLog')}>
                     <Trash2 size={12} />
                   </button>
                   <button onClick={loadRegistrationJobs} className="btn-ghost text-xs py-1 px-2">
@@ -526,18 +617,21 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
-              <div className="flex flex-col gap-1 flex-1">
+              <div className="flex flex-col space-y-2 flex-1">
                 {recentActivity.map((activity, index) => (
                   <ActivityItem key={index} {...activity} />
                 ))}
               </div>
-              <button className="mt-3 w-full py-2 text-2xs text-slate-500 hover:text-white border border-dashed border-white/10 hover:border-white/20 rounded-lg transition-all">
+              <button 
+                onClick={() => navigate('/logs')}
+                className="mt-3 w-full py-2 text-2xs text-slate-500 hover:text-white border border-dashed border-white/10 hover:border-white/20 rounded-lg transition-all"
+              >
                 {t('dashboard.viewFullActivityLog')}
               </button>
             </div>
 
             {/* Provider Breakdown */}
-            <div className="card p-3 flex flex-col min-h-[220px] border border-white/5">
+            <div className="p-4 flex flex-col min-h-[220px] bg-white/[0.03] border border-white/[0.08] rounded-xl">
               <h3 className="text-sm font-semibold text-white mb-3">{t('dashboard.accountsByProvider')}</h3>
               <div className="flex-1">
                 <ProviderBreakdownChart data={summaryData.accountsByProvider} />
@@ -549,7 +643,12 @@ export default function Dashboard() {
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('dashboard.providerSelection')}</h2>
-              <button className="text-2xs text-primary hover:underline">{t('dashboard.manageProviders')}</button>
+              <button 
+                onClick={() => navigate('/settings')}
+                className="text-2xs text-primary hover:underline"
+              >
+                {t('dashboard.manageProviders')}
+              </button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {providers.map((provider) => (

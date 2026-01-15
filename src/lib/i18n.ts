@@ -47,6 +47,9 @@ export interface Translations {
     settings: string;
     dismiss: string;
     copied: string;
+    cleared: string;
+    scrollToBottom: string;
+    copyToClipboard: string;
   };
   status: {
     active: string;
@@ -67,6 +70,7 @@ export interface Translations {
     notPatched: string;
     valid: string;
     invalid: string;
+    notConfigured: string;
     notFound: string;
   };
   header: {
@@ -75,6 +79,9 @@ export interface Translations {
     notifications: string;
     noNotifications: string;
     clearAll: string;
+    changeLanguage: string;
+    notificationsList: string;
+    selectLanguage: string;
   };
   sidebar: {
     dashboard: string;
@@ -112,6 +119,44 @@ export interface Translations {
     tokenCopied: string;
     emailCopied: string;
     jsonCopied: string;
+    accountsSelected: string;
+    noAccountsFound: string;
+    addFirstAccount: string;
+    syncComplete: string;
+    syncPartial: string;
+    syncing: string;
+    select: string;
+    deselect: string;
+    selectAll: string;
+    deselectAll: string;
+    activate: string;
+    deactivate: string;
+    moreActions: string;
+    tableRegion: string;
+    accountsTable: string;
+    accountActions: string;
+    pagination: string;
+    previousPage: string;
+    nextPage: string;
+    // Account Drawer
+    accountDetails: string;
+    inUse: string;
+    usageQuota: string;
+    liveStatus: string;
+    checkNow: string;
+    checking: string;
+    plan: string;
+    quotaUsage: string;
+    flowCredits: string;
+    rawData: string;
+    copyJson: string;
+    created: string;
+    importToken: string;
+    importing: string;
+    pasteTokenHere: string;
+    noToken: string;
+    clickCheckNow: string;
+    clearSelection: string;
   };
   accountsTable: {
     account: string;
@@ -146,11 +191,85 @@ export interface Translations {
     proxy: string;
     proxySettings: string;
     headless: string;
+    headlessDescription: string;
     accounts: string;
     count: string;
+    
+    // Engine Tab Settings
+    speed: string;
+    slow: string;
+    fast: string;
+    delay: string;
+    timeouts: string;
+    verification: string;
+    oauth: string;
+    allowAccess: string;
+    pageLoad: string;
+    elementWait: string;
+    imapPoll: string;
+    behavior: string;
+    passwordLength: string;
+    realisticTyping: string;
+    humanDelays: string;
+    screenshots: string;
+    
+    // Identity Tab Settings
+    identitySystem: string;
+    emailGeneration: string;
+    ready: string;
+    customDomain: string;
+    gmailAlias: string;
+    masterGmail: string;
+    aliasPattern: string;
+    counter: string;
+    rnd: string;
+    time: string;
+    name: string;
+    clickToRefresh: string;
+    appPassword: string;
+    testConnection: string;
+    
+    // Network Tab Settings
+    network: string;
+    networkSettings: string;
+    proxyEnabled: string;
+    proxyUrl: string;
+    useProxy: string;
+    username: string;
+    directConnection: string;
+    proxyUrlRequired: string;
+    
+    // IMAP Credentials
+    imapCredentials: string;
+    host: string;
+    port: string;
+    emailPattern: string;
+    
+    // Placeholders
+    placeholders: {
+      gmailEmail: string;
+      gmailAlias: string;
+      prefix: string;
+      imapHost: string;
+      email: string;
+      proxyUrl: string;
+      optional: string;
+    };
+    
+    // Status messages
+    staticAliasWarning: string;
+    appPasswordHint: string;
+    
+    // Status & Progress
     saving: string;
     saved: string;
+    saveFailed: string;
     error: string;
+    testing: string;
+    connected: string;
+    connectionFailed: string;
+    success: string;
+    retry: string;
     copyResults: string;
     exportResults: string;
     noLogs: string;
@@ -164,6 +283,12 @@ export interface Translations {
     noHistory: string;
     comingSoon: string;
     step: string;
+    start: string;
+    stop: string;
+    readyToStart: string;
+    configureMailFirst: string;
+    consoleOutput: string;
+    liveRegistrationLogs: string;
     registrationModes: {
       webview: string;
       automated: string;
@@ -186,6 +311,20 @@ export interface Translations {
       success: string;
       failed: string;
     };
+    tooltips: {
+      verification: string;
+      oauth: string;
+      allowAccess: string;
+      pageLoad: string;
+      elementWait: string;
+      imapPoll: string;
+      speed: string;
+      delay: string;
+      passwordLength: string;
+      realisticTyping: string;
+      humanDelays: string;
+      screenshots: string;
+    };
   };
   dashboard: {
     title: string;
@@ -205,6 +344,7 @@ export interface Translations {
     viewFullActivityLog: string;
     accountsByProvider: string;
     noAccountsToDisplay: string;
+    noDataToDisplay: string;
     providerSelection: string;
     manageProviders: string;
     systemReady: string;
@@ -216,6 +356,9 @@ export interface Translations {
     across: string;
     providers: string;
     port: string;
+    activityCleared: string;
+    clearActivityLog: string;
+    failedToClearActivity: string;
   };
   server: {
     title: string;
@@ -259,6 +402,16 @@ export interface Translations {
     };
     live: string;
     poll: string;
+    // Coming Soon banner
+    comingSoon: string;
+    comingSoonDescription: string;
+    simulatedMode: string;
+    simulatedModeDescription: string;
+    notAvailable: string;
+    startFailed: string;
+    stopFailed: string;
+    restartFailed: string;
+    saveConfigFailed: string;
   };
   patcher: {
     title: string;
@@ -403,6 +556,13 @@ export interface Translations {
     of: string;
     entries: string;
     lastUpdated: string;
+    allSources: string;
+    resetFilters: string;
+    loadMore: string;
+    scrollHint: string;
+    clearConfirmTitle: string;
+    clearConfirmMessage: string;
+    clearLogs: string;
   };
   notifications: {
     registrationComplete: string;
@@ -510,6 +670,43 @@ export interface Translations {
     reloadPoolTooltip: string;
     clearEventsTooltip: string;
   };
+  liveStatus: {
+    idle: string;
+    processing: string;
+    connecting: string;
+    scanningInbox: string;
+    launchingBrowser: string;
+    navigating: string;
+    typingEmail: string;
+    typingPassword: string;
+    typingCode: string;
+    waitingCode: string;
+    verifying: string;
+    gettingToken: string;
+    success: string;
+    error: string;
+    clickToStart: string;
+    configureFirst: string;
+  };
+  successCard: {
+    accountCreated: string;
+    token: string;
+    copyEmail: string;
+    copyToken: string;
+  };
+  logFeed: {
+    activityLog: string;
+    waitingForActivity: string;
+    debug: string;
+    authTokenData: string;
+    copied: string;
+  };
+  terminal: {
+    liveFeed: string;
+    readyToLaunch: string;
+    logsWillAppear: string;
+    debugDetails: string;
+  };
   settingsTokenPool: {
     changesWillBeSaved: string;
     switchStrategy: string;
@@ -553,6 +750,50 @@ export interface Translations {
     unsavedChanges: string;
     saveNow: string;
     default: string;
+    saveFailed: string;
+  };
+  timeline: {
+    init: string;
+    mail: string;
+    browser: string;
+    auth: string;
+    verify: string;
+    token: string;
+    done: string;
+  };
+  commandPalette: {
+    placeholder: string;
+    noResults: string;
+    navigation: string;
+    actions: string;
+    refreshAllAccounts: string;
+  };
+  notFoundPage: {
+    title: string;
+    description: string;
+    goHome: string;
+  };
+  filters: {
+    any: string;
+    anyStatus: string;
+    active: string;
+    banned: string;
+    limitHit: string;
+    anyQuota: string;
+    hasQuota: string;
+    empty: string;
+    full: string;
+    status: string;
+    quota: string;
+    minRemaining: string;
+    reset: string;
+    done: string;
+    pcs: string;
+  };
+  usageBar: {
+    errorBanned: string;
+    unlimited: string;
+    used: string;
   };
 }
 

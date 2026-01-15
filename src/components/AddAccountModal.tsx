@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import type { ProviderName } from '../types';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
+import { PROVIDERS } from '../constants/providers';
 
 interface AddAccountModalProps {
   isOpen: boolean;
@@ -15,13 +16,6 @@ interface AddAccountModalProps {
   }) => Promise<void>;
 }
 
-const providers: { id: ProviderName; name: string }[] = [
-  { id: 'kiro', name: 'Kiro' },
-  { id: 'windsurf', name: 'Windsurf' },
-  { id: 'trae', name: 'Trae' },
-  { id: 'copilot', name: 'Copilot' },
-];
-
 export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccountModalProps) {
   const { language } = useAppStore();
   const [provider, setProvider] = useState<ProviderName>('kiro');
@@ -30,9 +24,32 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
   const [token, setToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
   // Force re-render when language changes
   void language; // Force re-render on language change
+
+  // Handle Escape key to close modal
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) {
+        handleClose();
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isSubmitting]);
+
+  // Autofocus email input when modal opens
+  useEffect(() => {
+    if (isOpen && emailInputRef.current) {
+      // Small delay to ensure modal is rendered
+      setTimeout(() => emailInputRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,16 +94,22 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
       />
 
       {/* Modal */}
-      <div className="relative bg-surface-dark border border-border-dark rounded-xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
+      <div 
+        className="relative bg-surface-dark border border-border-dark rounded-xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-account-modal-title"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-dark">
-          <h3 className="text-lg font-semibold text-white">{t('accounts.addAccount')}</h3>
+          <h3 id="add-account-modal-title" className="text-lg font-semibold text-white">{t('accounts.addAccount')}</h3>
           <button
             onClick={handleClose}
             disabled={isSubmitting}
             className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            aria-label={t('common.close')}
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 
@@ -100,16 +123,17 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
 
           {/* Provider Select */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label htmlFor="provider-select" className="block text-sm font-medium text-slate-300 mb-1.5">
               {t('accounts.provider')}
             </label>
             <select
+              id="provider-select"
               value={provider}
               onChange={(e) => setProvider(e.target.value as ProviderName)}
               disabled={isSubmitting}
               className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
             >
-              {providers.map((p) => (
+              {PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -119,26 +143,30 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
 
           {/* Email Input */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label htmlFor="email-input" className="block text-sm font-medium text-slate-300 mb-1.5">
               {t('accounts.email')}
             </label>
             <input
+              ref={emailInputRef}
+              id="email-input"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isSubmitting}
               required
-              placeholder="user@example.com"
+              placeholder={t('autoReg.placeholders.email')}
               className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
+              aria-required="true"
             />
           </div>
 
           {/* Password Input */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label htmlFor="password-input" className="block text-sm font-medium text-slate-300 mb-1.5">
               {t('accounts.password')}
             </label>
             <input
+              id="password-input"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -146,23 +174,26 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
               required
               placeholder="••••••••"
               className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
+              aria-required="true"
             />
           </div>
 
           {/* Token Input (Optional) */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label htmlFor="token-input" className="block text-sm font-medium text-slate-300 mb-1.5">
               {t('accounts.token')} <span className="text-slate-500">({t('accounts.tokenOptional')})</span>
             </label>
             <input
+              id="token-input"
               type="text"
               value={token}
               onChange={(e) => setToken(e.target.value)}
               disabled={isSubmitting}
-              placeholder="Paste token here..."
+              placeholder={t('accounts.pasteTokenHere')}
               className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-slate-500 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
+              aria-describedby="token-hint"
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p id="token-hint" className="mt-1 text-xs text-slate-500">
               {t('accounts.tokenOptionalHint')}
             </p>
           </div>

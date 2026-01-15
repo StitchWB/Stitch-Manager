@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { ChevronRight, Check, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { t } from '../../lib/i18n';
 
 export type ModuleStatus = 'ready' | 'warning' | 'error' | 'idle';
 
@@ -69,7 +70,7 @@ export function ModuleCard({
             </div>
           )}
           {!summary && !isExpanded && status === 'idle' && (
-            <div className="text-xs text-slate-600">Not configured</div>
+            <div className="text-xs text-slate-600">{t('status.notConfigured')}</div>
           )}
         </div>
 

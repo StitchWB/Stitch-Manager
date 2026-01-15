@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Mail, Eye, EyeOff, Info, RefreshCw, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { t } from '../../lib/i18n';
 import { DEFAULT_IMAP_PORT, EMAIL_SHORTCODES, RANDOM_NAMES } from '../../constants/registration';
 
 export type MailStrategy = 'custom' | 'gmail';
@@ -29,6 +30,7 @@ interface IdentitySystemCardProps {
   disabled?: boolean;
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   passwordSet?: boolean;
+  gmailAppPasswordSet?: boolean;
   testStatus?: TestConnectionStatus;
   testError?: string;
 }
@@ -40,6 +42,7 @@ export function IdentitySystemCard({
   disabled,
   saveStatus = 'idle',
   passwordSet = false,
+  gmailAppPasswordSet = false,
   testStatus: externalTestStatus,
   testError: externalTestError,
 }: IdentitySystemCardProps) {
@@ -92,7 +95,7 @@ export function IdentitySystemCard({
   
   // Determine if configuration is ready
   const isReady = isGmail
-    ? !!(config.gmailBase && config.gmailAppPassword)
+    ? !!(config.gmailBase && (config.gmailAppPassword || gmailAppPasswordSet))
     : !!(config.server && config.email && (config.password || passwordSet));
 
   // Get domain for preview
@@ -140,13 +143,13 @@ export function IdentitySystemCard({
             <Mail className={cn('w-4 h-4', isReady ? 'text-emerald-400' : 'text-slate-500')} />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-white">Identity System</h3>
-            <p className="text-2xs text-slate-500 mt-0.5">Email generation & authentication</p>
+            <h3 className="text-sm font-semibold text-white">{t('autoReg.identitySystem')}</h3>
+            <p className="text-2xs text-slate-500 mt-0.5">{t('autoReg.emailGeneration')}</p>
           </div>
           {isReady && (
             <div className="flex items-center gap-1.5 text-2xs text-emerald-400">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px] shadow-emerald-500/50" />
-              Ready
+              {t('autoReg.ready')}
             </div>
           )}
         </div>
@@ -166,7 +169,7 @@ export function IdentitySystemCard({
               disabled && 'opacity-50 cursor-not-allowed'
             )}
           >
-            Custom Domain
+            {t('autoReg.customDomain')}
           </button>
           <button
             onClick={() => onChange({ strategy: 'gmail' })}
@@ -179,7 +182,7 @@ export function IdentitySystemCard({
               disabled && 'opacity-50 cursor-not-allowed'
             )}
           >
-            Gmail Alias
+            {t('autoReg.gmailAlias')}
           </button>
         </div>
       </div>
@@ -190,7 +193,7 @@ export function IdentitySystemCard({
             {/* Gmail Mode */}
             {/* Master Identity */}
             <div>
-              <label className="input-label">Master Gmail</label>
+              <label className="input-label">{t('autoReg.masterGmail')}</label>
               <input
                 type="email"
                 placeholder="your.email@gmail.com"
@@ -204,7 +207,7 @@ export function IdentitySystemCard({
             {/* Alias Configuration */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="input-label mb-0">Alias Pattern</label>
+                <label className="input-label mb-0">{t('autoReg.aliasPattern')}</label>
                 <div className="flex items-center gap-1">
                   {EMAIL_SHORTCODES.map(({ id, code }) => (
                     <button
@@ -248,7 +251,7 @@ export function IdentitySystemCard({
               <div className="flex items-center justify-between mt-2">
                 <div className="flex-1 min-w-0">
                   <span className="text-xs text-emerald-400 font-mono truncate block">{preview}</span>
-                  <span className="text-[10px] text-slate-600">↻ Click refresh to see another example</span>
+                  <span className="text-[10px] text-slate-600">↻ {t('autoReg.clickToRefresh')}</span>
                 </div>
                 <button
                   onClick={generatePreview}
@@ -262,7 +265,7 @@ export function IdentitySystemCard({
             {/* Gmail App Password */}
             <div>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="input-label mb-0">App Password</label>
+                <label className="input-label mb-0">{t('autoReg.appPassword')}</label>
                 <div className="group relative">
                   <Info className="w-3 h-3 text-slate-600 cursor-help" />
                   <div className="absolute left-0 bottom-full mb-2 w-56 p-2 rounded-md bg-slate-900 border border-white/10 text-[10px] text-slate-300 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-10">
@@ -274,11 +277,14 @@ export function IdentitySystemCard({
               <div className="relative">
                 <input
                   type={showAppPassword ? 'text' : 'password'}
-                  placeholder="••••••••••••••••"
+                  placeholder={gmailAppPasswordSet ? `(${t('autoReg.saved')})` : '••••••••••••••••'}
                   value={config.gmailAppPassword}
                   onChange={(e) => onChange({ gmailAppPassword: e.target.value })}
                   disabled={disabled}
-                  className="input-ds pr-10"
+                  className={cn(
+                    'input-ds pr-10',
+                    gmailAppPasswordSet && !config.gmailAppPassword && 'ring-1 ring-emerald-500/30'
+                  )}
                 />
                 <button
                   type="button"
@@ -296,7 +302,7 @@ export function IdentitySystemCard({
             {/* Pattern Section */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="input-label mb-0">Email Pattern</label>
+                <label className="input-label mb-0">{t('autoReg.emailPattern')}</label>
                 <div className="flex items-center gap-1">
                   {EMAIL_SHORTCODES.map(({ id, code }) => (
                     <button
@@ -318,7 +324,7 @@ export function IdentitySystemCard({
                   value={config.emailPattern}
                   onChange={(e) => onChange({ emailPattern: e.target.value })}
                   disabled={disabled}
-                  placeholder="prefix"
+                  placeholder={t('autoReg.placeholders.prefix')}
                   className="flex-1 h-full bg-transparent border-none outline-none pl-3 text-xs font-mono text-white placeholder-slate-600 focus:ring-0"
                 />
                 <span className="pr-3 pl-1 text-xs font-mono text-slate-500 select-none border-l border-white/10">
@@ -341,16 +347,16 @@ export function IdentitySystemCard({
             {/* Credentials Section */}
             <div className="space-y-3 pt-2 border-t border-white/5">
               <div className="text-2xs uppercase text-slate-500 tracking-wider">
-                IMAP Credentials
+                {t('autoReg.imapCredentials')}
               </div>
               
               {/* IMAP Host & Port */}
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className="input-label">Host</label>
+                  <label className="input-label">{t('autoReg.host')}</label>
                   <input
                     type="text"
-                    placeholder="imap.example.com"
+                    placeholder={t('autoReg.placeholders.imapHost')}
                     value={config.server}
                     onChange={(e) => onChange({ server: e.target.value })}
                     disabled={disabled}
@@ -358,7 +364,7 @@ export function IdentitySystemCard({
                   />
                 </div>
                 <div className="w-20">
-                  <label className="input-label">Port</label>
+                  <label className="input-label">{t('autoReg.port')}</label>
                   <input
                     type="number"
                     placeholder="993"
@@ -374,10 +380,10 @@ export function IdentitySystemCard({
 
               {/* Email */}
               <div>
-                <label className="input-label">Email</label>
+                <label className="input-label">{t('accounts.email')}</label>
                 <input
                   type="email"
-                  placeholder="user@example.com"
+                  placeholder={t('autoReg.placeholders.email')}
                   value={config.email}
                   onChange={(e) => onChange({ email: e.target.value })}
                   disabled={disabled}
@@ -387,11 +393,11 @@ export function IdentitySystemCard({
 
               {/* Password */}
               <div>
-                <label className="input-label">Password</label>
+                <label className="input-label">{t('accounts.password')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder={passwordSet ? '(saved)' : '••••••••'}
+                    placeholder={passwordSet ? `(${t('autoReg.saved')})` : '••••••••'}
                     value={config.password || ''}
                     onChange={(e) => onChange({ password: e.target.value })}
                     disabled={disabled}
@@ -417,25 +423,25 @@ export function IdentitySystemCard({
         <div className="flex items-center justify-between pt-3 border-t border-white/5">
           <div className="h-4 flex items-center gap-2">
             {saveStatus === 'saving' && (
-              <span className="text-2xs text-slate-500">Saving...</span>
+              <span className="text-2xs text-slate-500">{t('autoReg.saving')}...</span>
             )}
             {saveStatus === 'saved' && (
-              <span className="text-2xs text-emerald-500">Saved</span>
+              <span className="text-2xs text-emerald-500">{t('autoReg.saved')}</span>
             )}
             {saveStatus === 'error' && (
-              <span className="text-2xs text-red-500">Save failed</span>
+              <span className="text-2xs text-red-500">{t('autoReg.saveFailed')}</span>
             )}
             {/* Test connection feedback */}
             {testStatus === 'success' && (
               <span className="text-2xs text-emerald-500 flex items-center gap-1">
                 <CheckCircle className="w-3 h-3" />
-                Connected
+                {t('autoReg.connected')}
               </span>
             )}
             {testStatus === 'error' && (
               <span className="text-2xs text-red-500 flex items-center gap-1" title={testError}>
                 <XCircle className="w-3 h-3" />
-                {testError || 'Failed'}
+                {testError || t('status.failed')}
               </span>
             )}
           </div>
@@ -451,20 +457,20 @@ export function IdentitySystemCard({
             {testStatus === 'testing' ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
-                Testing...
+                {t('autoReg.testing')}
               </>
             ) : testStatus === 'success' ? (
               <>
                 <CheckCircle className="w-3 h-3" />
-                Success
+                {t('autoReg.success')}
               </>
             ) : testStatus === 'error' ? (
               <>
                 <XCircle className="w-3 h-3" />
-                Retry
+                {t('autoReg.retry')}
               </>
             ) : (
-              'Test Connection'
+              t('autoReg.testConnection')
             )}
           </button>
         </div>
