@@ -2,15 +2,16 @@ import { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import {
   Play,
   Square,
-  ChevronDown,
-  ChevronUp,
+  User,
   Settings2,
-  Gauge,
+  Wifi,
   Eye,
   EyeOff,
   Keyboard,
   Camera,
   Timer,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 
@@ -33,6 +34,98 @@ import {
 
 // Timeout for each registration attempt (5 minutes)
 const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
+
+// Tab types for the command center
+type ConfigTab = 'identity' | 'engine' | 'network';
+
+// Compact number input component for timeouts
+function TimeoutInput({ 
+  label, 
+  value, 
+  onChange, 
+  min, 
+  max, 
+  step = 1,
+  unit = 's',
+  disabled 
+}: { 
+  label: string; 
+  value: number; 
+  onChange: (v: number) => void; 
+  min: number; 
+  max: number; 
+  step?: number;
+  unit?: string;
+  disabled?: boolean;
+}) {
+  const decrement = () => onChange(Math.max(min, value - step));
+  const increment = () => onChange(Math.min(max, value + step));
+
+  return (
+    <div className="rounded-lg p-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="text-[10px] text-slate-500 mb-1.5">{label}</div>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={decrement}
+          disabled={disabled || value <= min}
+          className="w-5 h-5 rounded flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <Minus className="w-3 h-3" />
+        </button>
+        <span className="flex-1 text-center text-xs font-mono text-indigo-400">{value}{unit}</span>
+        <button
+          onClick={increment}
+          disabled={disabled || value >= max}
+          className="w-5 h-5 rounded flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Compact toggle switch component
+function ToggleSwitch({ 
+  label, 
+  checked, 
+  onChange, 
+  disabled,
+  icon
+}: { 
+  label: string; 
+  checked: boolean; 
+  onChange: (v: boolean) => void; 
+  disabled?: boolean;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <label className={cn(
+      "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors",
+      checked ? "bg-indigo-500/10" : "bg-white/[0.02]",
+      disabled && "opacity-50 cursor-not-allowed"
+    )}>
+      {icon && <span className="text-slate-500">{icon}</span>}
+      <span className="text-[10px] text-slate-400 flex-1">{label}</span>
+      <div className={cn(
+        "w-7 h-4 rounded-full transition-colors relative",
+        checked ? "bg-indigo-500" : "bg-white/10"
+      )}>
+        <div className={cn(
+          "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform",
+          checked ? "translate-x-3.5" : "translate-x-0.5"
+        )} />
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        className="sr-only"
+      />
+    </label>
+  );
+}
 
 export default function AutoRegNext() {
   const { addNotification } = useAppStore();
@@ -58,7 +151,7 @@ export default function AutoRegNext() {
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
   const [activeThreads, setActiveThreads] = useState(0);
-  const [advancedExpanded, setAdvancedExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<ConfigTab>('identity');
   
   // Ref to track if registration should be cancelled
   const cancelledRef = useRef(false);
@@ -364,13 +457,20 @@ export default function AutoRegNext() {
     setActiveThreads(0);
   }, [addLog, addNotification]);
 
+  // Tab configuration
+  const tabs: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'identity', label: 'Identity', icon: <User className="w-3.5 h-3.5" /> },
+    { id: 'engine', label: 'Engine', icon: <Settings2 className="w-3.5 h-3.5" /> },
+    { id: 'network', label: 'Network', icon: <Wifi className="w-3.5 h-3.5" /> },
+  ];
+
   return (
     <div className="h-full flex" style={{ background: '#050508' }}>
-      {/* Left Panel */}
-      <div className="w-[360px] shrink-0 flex flex-col border-r border-white/5">
+      {/* Left Panel - Command Center */}
+      <div className="w-[360px] shrink-0 flex flex-col h-full border-r border-white/5">
         
-        {/* Provider Tabs - Dashboard Style */}
-        <div className="px-4 pt-4 pb-3">
+        {/* Zone A: Provider Selector (Fixed Top) */}
+        <div className="shrink-0 px-4 pt-4 pb-3">
           <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
             {PROVIDERS.map(provider => (
               <button
@@ -391,14 +491,36 @@ export default function AutoRegNext() {
           </div>
         </div>
 
-        {/* Configuration Stack */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-            
-            {/* Identity System Card - Unified */}
+        {/* Tab Bar */}
+        <div className="shrink-0 px-4 pb-3">
+          <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                disabled={isRunning}
+                className={cn(
+                  'flex-1 py-2 px-2 text-xs font-medium rounded-md transition-all duration-200 flex items-center justify-center gap-1.5',
+                  activeTab === tab.id
+                    ? 'text-white bg-indigo-500/20 shadow-[0_0_10px_rgba(99,102,241,0.3)]'
+                    : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                )}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Zone B: Tabbed Content (Dynamic, Scrollable) */}
+        <div className="flex-1 overflow-y-auto px-4 py-2">
+          
+          {/* Identity Tab */}
+          {activeTab === 'identity' && (
             <IdentitySystemCard
               config={identityConfig}
               onChange={(updates) => {
-                // Handle pattern updates
                 if ('emailPattern' in updates) {
                   setIMAPConfig({ ...updates });
                 } else {
@@ -411,75 +533,75 @@ export default function AutoRegNext() {
               passwordSet={imapPasswordSet}
               gmailAppPasswordSet={gmailAppPasswordSet}
             />
+          )}
 
-            {/* Network Card - Compact */}
-            <NetworkCard
-              config={networkConfig}
-              onChange={(updates) => setProxyConfig(updates)}
-              disabled={isRunning}
-            />
-
-            {/* Main Settings Card */}
-            <div className="card border border-white/5">
-              <div className="px-4 py-3 border-b border-white/5">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                    <Gauge className="w-4 h-4 text-indigo-400" />
+          {/* Engine Tab */}
+          {activeTab === 'engine' && (
+            <div className="space-y-4">
+              {/* Headless Mode - Full Width Toggle */}
+              <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                      {config.advanced.headless ? (
+                        <EyeOff className="w-4 h-4 text-indigo-400" />
+                      ) : (
+                        <Eye className="w-4 h-4 text-slate-500" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-200">Headless Mode</div>
+                      <div className="text-[10px] text-slate-500">Run browser without visible window</div>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-semibold text-white">Automation</h3>
-                    <p className="text-2xs text-slate-500 mt-0.5">Speed & behavior settings</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="px-4 py-4 space-y-4">
-                {/* Headless Mode Toggle */}
-                <label className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {config.advanced.headless ? (
-                      <EyeOff className="w-3.5 h-3.5 text-slate-500" />
-                    ) : (
-                      <Eye className="w-3.5 h-3.5 text-slate-500" />
-                    )}
-                    <span className="text-xs text-slate-300">Headless Mode</span>
+                  <div className={cn(
+                    "w-10 h-5 rounded-full transition-colors relative cursor-pointer",
+                    config.advanced.headless ? "bg-indigo-500" : "bg-white/10"
+                  )}>
+                    <div className={cn(
+                      "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm",
+                      config.advanced.headless ? "translate-x-5" : "translate-x-0.5"
+                    )} />
                   </div>
                   <input
                     type="checkbox"
                     checked={config.advanced.headless}
                     onChange={(e) => setAdvancedSettings({ headless: e.target.checked })}
                     disabled={isRunning}
-                    className="w-4 h-4 accent-indigo-500 rounded"
+                    className="sr-only"
                   />
                 </label>
+              </div>
 
-                {/* Speed Multiplier Slider */}
-                <div>
+              {/* Speed & Delay Row */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Speed Multiplier */}
+                <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-slate-300">Speed</label>
+                    <span className="text-xs text-slate-400">Speed</span>
                     <span className="text-xs font-mono text-indigo-400">{config.advanced.speedMultiplier.toFixed(1)}x</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xs text-slate-500">Slow</span>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2"
-                      step="0.1"
-                      value={config.advanced.speedMultiplier}
-                      onChange={(e) => setAdvancedSettings({ speedMultiplier: parseFloat(e.target.value) })}
-                      disabled={isRunning}
-                      className="flex-1 h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                      style={{ background: 'rgba(255,255,255,0.1)' }}
-                    />
-                    <span className="text-2xs text-slate-500">Fast</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={config.advanced.speedMultiplier}
+                    onChange={(e) => setAdvancedSettings({ speedMultiplier: parseFloat(e.target.value) })}
+                    disabled={isRunning}
+                    className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
+                    style={{ background: 'rgba(255,255,255,0.1)' }}
+                  />
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[9px] text-slate-600">Slow</span>
+                    <span className="text-[9px] text-slate-600">Fast</span>
                   </div>
                 </div>
 
-                {/* Delay Between Accounts Slider */}
-                <div>
+                {/* Delay Between Accounts */}
+                <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-slate-300">Delay Between Accounts</label>
+                    <span className="text-xs text-slate-400">Delay</span>
                     <span className="text-xs font-mono text-indigo-400">{config.advanced.delayBetweenAccounts}s</span>
                   </div>
                   <input
@@ -493,239 +615,145 @@ export default function AutoRegNext() {
                     className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
                     style={{ background: 'rgba(255,255,255,0.1)' }}
                   />
-                </div>
-              </div>
-            </div>
-
-            {/* Advanced Settings Card - Collapsible */}
-            <div className="card border border-white/5">
-              {/* Collapsible Header */}
-              <button
-                onClick={() => setAdvancedExpanded(!advancedExpanded)}
-                disabled={isRunning}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02]"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                  <Settings2 className="w-4 h-4 text-slate-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-slate-200">Advanced Settings</div>
-                  <div className="text-2xs text-slate-500">Timeouts, typing behavior & more</div>
-                </div>
-                {advancedExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-slate-600" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-slate-600" />
-                )}
-              </button>
-
-              {/* Expandable Content */}
-              <div
-                className={cn(
-                  'overflow-hidden transition-all duration-300',
-                  advancedExpanded ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
-                )}
-              >
-                <div className="px-4 pb-4 space-y-5 border-t border-white/5">
-                  
-                  {/* Timeouts Section */}
-                  <div className="pt-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Timer className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="text-2xs uppercase text-slate-500 tracking-wider font-semibold">Timeouts</span>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      {/* Verification Code Timeout */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs text-slate-400">Verification Code</label>
-                          <span className="text-xs font-mono text-slate-500">{config.advanced.verificationCodeTimeout}s</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="60"
-                          max="180"
-                          step="10"
-                          value={config.advanced.verificationCodeTimeout}
-                          onChange={(e) => setAdvancedSettings({ verificationCodeTimeout: parseInt(e.target.value) })}
-                          disabled={isRunning}
-                          className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
-                        />
-                      </div>
-
-                      {/* OAuth Callback Timeout */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs text-slate-400">OAuth Callback</label>
-                          <span className="text-xs font-mono text-slate-500">{config.advanced.oauthCallbackTimeout}s</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="30"
-                          max="180"
-                          step="10"
-                          value={config.advanced.oauthCallbackTimeout}
-                          onChange={(e) => setAdvancedSettings({ oauthCallbackTimeout: parseInt(e.target.value) })}
-                          disabled={isRunning}
-                          className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
-                        />
-                      </div>
-
-                      {/* Allow Access Wait */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs text-slate-400">Allow Access Wait</label>
-                          <span className="text-xs font-mono text-slate-500">{config.advanced.allowAccessWait}s</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="60"
-                          max="300"
-                          step="10"
-                          value={config.advanced.allowAccessWait}
-                          onChange={(e) => setAdvancedSettings({ allowAccessWait: parseInt(e.target.value) })}
-                          disabled={isRunning}
-                          className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
-                        />
-                      </div>
-
-                      {/* Page Load Timeout */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs text-slate-400">Page Load</label>
-                          <span className="text-xs font-mono text-slate-500">{config.advanced.pageLoadTimeout}s</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="2"
-                          max="15"
-                          step="1"
-                          value={config.advanced.pageLoadTimeout}
-                          onChange={(e) => setAdvancedSettings({ pageLoadTimeout: parseInt(e.target.value) })}
-                          disabled={isRunning}
-                          className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
-                        />
-                      </div>
-
-                      {/* Element Wait Timeout */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs text-slate-400">Element Wait</label>
-                          <span className="text-xs font-mono text-slate-500">{config.advanced.elementWaitTimeout}s</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          step="1"
-                          value={config.advanced.elementWaitTimeout}
-                          onChange={(e) => setAdvancedSettings({ elementWaitTimeout: parseInt(e.target.value) })}
-                          disabled={isRunning}
-                          className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
-                        />
-                      </div>
-
-                      {/* IMAP Poll Interval */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs text-slate-400">IMAP Poll Interval</label>
-                          <span className="text-xs font-mono text-slate-500">{config.advanced.imapPollInterval}s</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0.5"
-                          max="5"
-                          step="0.5"
-                          value={config.advanced.imapPollInterval}
-                          onChange={(e) => setAdvancedSettings({ imapPollInterval: parseFloat(e.target.value) })}
-                          disabled={isRunning}
-                          className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Browser Behavior Section */}
-                  <div className="pt-2 border-t border-white/5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Keyboard className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="text-2xs uppercase text-slate-500 tracking-wider font-semibold">Browser Behavior</span>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      {/* Password Length */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs text-slate-400">Password Length</label>
-                          <span className="text-xs font-mono text-slate-500">{config.advanced.passwordLength}</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="12"
-                          max="24"
-                          step="1"
-                          value={config.advanced.passwordLength}
-                          onChange={(e) => setAdvancedSettings({ passwordLength: parseInt(e.target.value) })}
-                          disabled={isRunning}
-                          className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                          style={{ background: 'rgba(255,255,255,0.1)' }}
-                        />
-                      </div>
-
-                      {/* Realistic Typing Toggle */}
-                      <label className="flex items-center justify-between py-1">
-                        <span className="text-xs text-slate-400">Realistic Typing</span>
-                        <input
-                          type="checkbox"
-                          checked={config.advanced.realisticTyping}
-                          onChange={(e) => setAdvancedSettings({ realisticTyping: e.target.checked })}
-                          disabled={isRunning}
-                          className="w-4 h-4 accent-indigo-500 rounded"
-                        />
-                      </label>
-
-                      {/* Human Delays Toggle */}
-                      <label className="flex items-center justify-between py-1">
-                        <span className="text-xs text-slate-400">Human Delays</span>
-                        <input
-                          type="checkbox"
-                          checked={config.advanced.humanDelays}
-                          onChange={(e) => setAdvancedSettings({ humanDelays: e.target.checked })}
-                          disabled={isRunning}
-                          className="w-4 h-4 accent-indigo-500 rounded"
-                        />
-                      </label>
-
-                      {/* Screenshots on Error Toggle */}
-                      <label className="flex items-center justify-between py-1">
-                        <div className="flex items-center gap-2">
-                          <Camera className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="text-xs text-slate-400">Screenshots on Error</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={config.advanced.screenshotsOnError}
-                          onChange={(e) => setAdvancedSettings({ screenshotsOnError: e.target.checked })}
-                          disabled={isRunning}
-                          className="w-4 h-4 accent-indigo-500 rounded"
-                        />
-                      </label>
-                    </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[9px] text-slate-600">1s</span>
+                    <span className="text-[9px] text-slate-600">10s</span>
                   </div>
                 </div>
               </div>
+
+              {/* Timeouts Section */}
+              <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Timer className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">Timeouts</span>
+                </div>
+                
+                {/* 2-Column Grid for Timeouts */}
+                <div className="grid grid-cols-2 gap-2">
+                  <TimeoutInput
+                    label="Verification"
+                    value={config.advanced.verificationCodeTimeout}
+                    onChange={(v) => setAdvancedSettings({ verificationCodeTimeout: v })}
+                    min={60}
+                    max={180}
+                    step={10}
+                    disabled={isRunning}
+                  />
+                  <TimeoutInput
+                    label="OAuth"
+                    value={config.advanced.oauthCallbackTimeout}
+                    onChange={(v) => setAdvancedSettings({ oauthCallbackTimeout: v })}
+                    min={30}
+                    max={180}
+                    step={10}
+                    disabled={isRunning}
+                  />
+                  <TimeoutInput
+                    label="Allow Access"
+                    value={config.advanced.allowAccessWait}
+                    onChange={(v) => setAdvancedSettings({ allowAccessWait: v })}
+                    min={60}
+                    max={300}
+                    step={10}
+                    disabled={isRunning}
+                  />
+                  <TimeoutInput
+                    label="Page Load"
+                    value={config.advanced.pageLoadTimeout}
+                    onChange={(v) => setAdvancedSettings({ pageLoadTimeout: v })}
+                    min={2}
+                    max={15}
+                    step={1}
+                    disabled={isRunning}
+                  />
+                  <TimeoutInput
+                    label="Element Wait"
+                    value={config.advanced.elementWaitTimeout}
+                    onChange={(v) => setAdvancedSettings({ elementWaitTimeout: v })}
+                    min={1}
+                    max={10}
+                    step={1}
+                    disabled={isRunning}
+                  />
+                  <TimeoutInput
+                    label="IMAP Poll"
+                    value={config.advanced.imapPollInterval}
+                    onChange={(v) => setAdvancedSettings({ imapPollInterval: v })}
+                    min={0.5}
+                    max={5}
+                    step={0.5}
+                    disabled={isRunning}
+                  />
+                </div>
+              </div>
+
+              {/* Browser Behavior Section */}
+              <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Keyboard className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">Behavior</span>
+                </div>
+                
+                {/* Password Length */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-slate-400">Password Length</span>
+                    <span className="text-xs font-mono text-indigo-400">{config.advanced.passwordLength}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="12"
+                    max="24"
+                    step="1"
+                    value={config.advanced.passwordLength}
+                    onChange={(e) => setAdvancedSettings({ passwordLength: parseInt(e.target.value) })}
+                    disabled={isRunning}
+                    className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
+                    style={{ background: 'rgba(255,255,255,0.1)' }}
+                  />
+                </div>
+
+                {/* Toggle Switches Row */}
+                <div className="grid grid-cols-3 gap-2">
+                  <ToggleSwitch
+                    label="Typing"
+                    checked={config.advanced.realisticTyping}
+                    onChange={(v) => setAdvancedSettings({ realisticTyping: v })}
+                    disabled={isRunning}
+                    icon={<Keyboard className="w-3 h-3" />}
+                  />
+                  <ToggleSwitch
+                    label="Delays"
+                    checked={config.advanced.humanDelays}
+                    onChange={(v) => setAdvancedSettings({ humanDelays: v })}
+                    disabled={isRunning}
+                    icon={<Timer className="w-3 h-3" />}
+                  />
+                  <ToggleSwitch
+                    label="Screenshots"
+                    checked={config.advanced.screenshotsOnError}
+                    onChange={(v) => setAdvancedSettings({ screenshotsOnError: v })}
+                    disabled={isRunning}
+                    icon={<Camera className="w-3 h-3" />}
+                  />
+                </div>
+              </div>
             </div>
+          )}
+
+          {/* Network Tab */}
+          {activeTab === 'network' && (
+            <NetworkCard
+              config={networkConfig}
+              onChange={(updates) => setProxyConfig(updates)}
+              disabled={isRunning}
+            />
+          )}
         </div>
 
-        {/* Launch Pad - Merged Count + Start Button (Deep Space Void) */}
-        <div className="p-4 border-t border-white/5">
+        {/* Zone C: Launch Pad (Fixed Bottom) */}
+        <div className="shrink-0 p-4 border-t border-white/5">
           <div className="flex rounded-lg overflow-hidden" style={{ boxShadow: '0 0 20px rgba(99, 102, 241, 0.15)' }}>
             {/* Count Input - attached to button */}
             <div className="relative">
