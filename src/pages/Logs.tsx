@@ -1,55 +1,145 @@
-import { useState, useEffect } from 'react';
-import { FileText, Search, Download, Trash2, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { FileText, Search, Download, Trash2, RefreshCw, ChevronDown, Loader2 } from 'lucide-react';
 import Header from '../components/layout/Header';
+import { EmptyState } from '../components/ui/EmptyState';
 import { useAppStore } from '../stores/app';
-import { useLogsStore } from '../stores/logs';
+import { useLogsStore, LogLevel } from '../stores/logs';
 import { t } from '../lib/i18n';
 
-const levelConfig = {
-  info: 'badge-info',
-  warn: 'badge-warning',
-  error: 'badge-error',
-  debug: 'badge-neutral',
-  success: 'badge-success',
+// ============================================
+// Constants
+// ============================================
+
+const LOG_SOURCES = [
+  'accounts',
+  'registration', 
+  'patcher',
+  'settings',
+  'server',
+  'system',
+] as const;
+
+const LEVEL_COLORS: Record<LogLevel, string> = {
+  debug: 'text-slate-400',
+  info: 'text-vsc-blue',
+  success: 'text-vsc-green',
+  warn: 'text-vsc-yellow',
+  error: 'text-vsc-red',
 };
+
+const LEVEL_BADGES: Record<LogLevel, string> = {
+  debug: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  info: 'bg-vsc-blue/20 text-vsc-blue border-vsc-blue/30',
+  success: 'bg-vsc-green/20 text-vsc-green border-vsc-green/30',
+  warn: 'bg-vsc-yellow/20 text-vsc-yellow border-vsc-yellow/30',
+  error: 'bg-vsc-red/20 text-vsc-red border-vsc-red/30',
+};
+
+// ============================================
+// Component
+// ============================================
 
 export default function Logs() {
   const { language } = useAppStore();
-  const { logs, clearLogs } = useLogsStore();
-  const [filter, setFilter] = useState<string>('all');
-  const [search, setSearch] = useState('');
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const {
+    logs,
+    total,
+    hasMore,
+    isLoading,
+    error,
+    fetchLogs,
+    loadMore,
+    clearLogs,
+    exportLogs,
+    setFilter,
+    resetFilter,
+    subscribeToLogs,
+    unsubscribeFromLogs,
+  } = useLogsStore();
+
+  // Local filter state
+  const [levelFilter, setLevelFilter] = useState<string>('');
+  const [sourceFilter, setSourceFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Force re-render when language changes
   void language;
 
-  // Update timestamp when logs change
+  // ============================================
+  // Effects
+  // ============================================
+
+  // On mount: fetch logs and subscribe to real-time updates
   useEffect(() => {
-    setLastUpdated(new Date());
-  }, [logs.length]);
+    fetchLogs();
+    subscribeToLogs();
+    
+    return () => {
+      unsubscribeFromLogs();
+    };
+  }, [fetchLogs, subscribeToLogs, unsubscribeFromLogs]);
 
-  const filteredLogs = logs.filter((log) => {
-    const matchesFilter = filter === 'all' || log.level === filter;
-    const matchesSearch = search === '' || log.message.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilter({ search: searchQuery || undefined });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, setFilter]);
 
-  const handleClear = () => clearLogs();
+  // ============================================
+  // Handlers
+  // ============================================
 
-  const handleExport = () => {
-    const content = logs.map((log) => `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.source ? `[${log.source}] ` : ''}${log.message}`).join('\n');
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `stitch-logs-${new Date().toISOString().split('T')[0]}.log`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleLevelChange = useCallback((level: string) => {
+    setLevelFilter(level);
+    setFilter({ levels: level ? [level as LogLevel] : [] });
+  }, [setFilter]);
 
-  const handleRefresh = () => {
-    setLastUpdated(new Date());
-  };
+  const handleSourceChange = useCallback((source: string) => {
+    setSourceFilter(source);
+    setFilter({ sources: source ? [source] : [] });
+  }, [setFilter]);
+
+  const handleRefresh = useCallback(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  const handleClear = useCallback(async () => {
+    try {
+      await clearLogs();
+      setShowClearConfirm(false);
+    } catch (err) {
+      console.error('Failed to clear logs:', err);
+    }
+  }, [clearLogs]);
+
+  const handleExport = useCallback(async () => {
+    try {
+      const content = await exportLogs('json');
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stitch-logs-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export logs:', err);
+    }
+  }, [exportLogs]);
+
+  const handleResetFilters = useCallback(() => {
+    setLevelFilter('');
+    setSourceFilter('');
+    setSearchQuery('');
+    resetFilter();
+  }, [resetFilter]);
+
+  // ============================================
+  // Render
+  // ============================================
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -59,15 +149,27 @@ export default function Logs() {
         icon={<FileText size={18} />}
         actions={
           <div className="flex items-center gap-2">
-            <button onClick={handleRefresh} className="btn-secondary py-1.5 text-xs">
-              <RefreshCw className="w-3.5 h-3.5" />
+            <button 
+              onClick={handleRefresh} 
+              className="btn-secondary py-1.5 text-xs"
+              disabled={isLoading}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               {t('logs.refresh')}
             </button>
-            <button onClick={handleExport} className="btn-secondary py-1.5 text-xs">
+            <button 
+              onClick={handleExport} 
+              className="btn-secondary py-1.5 text-xs"
+              disabled={logs.length === 0}
+            >
               <Download className="w-3.5 h-3.5" />
               {t('logs.export')}
             </button>
-            <button onClick={handleClear} className="btn-danger py-1.5 text-xs">
+            <button 
+              onClick={() => setShowClearConfirm(true)} 
+              className="btn-danger py-1.5 text-xs"
+              disabled={logs.length === 0}
+            >
               <Trash2 className="w-3.5 h-3.5" />
               {t('logs.clear')}
             </button>
@@ -78,86 +180,182 @@ export default function Logs() {
       <div className="flex-1 overflow-y-auto p-6">
         {/* Filters */}
         <div className="flex items-center gap-4 mb-4">
-          <div className="flex items-center gap-2">
+          {/* Level Filter */}
+          <div className="relative">
             <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="input-ds text-sm py-1.5 w-32"
+              value={levelFilter}
+              onChange={(e) => handleLevelChange(e.target.value)}
+              className="input-ds text-sm py-1.5 w-32 appearance-none pr-8"
             >
-              <option value="all">{t('logs.allLevels')}</option>
+              <option value="">{t('logs.allLevels')}</option>
+              <option value="debug">{t('logs.debug')}</option>
               <option value="info">{t('logs.info')}</option>
               <option value="success">{t('logs.success')}</option>
               <option value="warn">{t('logs.warning')}</option>
               <option value="error">{t('logs.error')}</option>
-              <option value="debug">{t('logs.debug')}</option>
             </select>
+            <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
+
+          {/* Source Filter */}
+          <div className="relative">
+            <select
+              value={sourceFilter}
+              onChange={(e) => handleSourceChange(e.target.value)}
+              className="input-ds text-sm py-1.5 w-36 appearance-none pr-8"
+            >
+              <option value="">{t('common.all')} Sources</option>
+              {LOG_SOURCES.map((source) => (
+                <option key={source} value={source}>
+                  {source}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
+          {/* Search Input */}
           <div className="flex-1 relative max-w-md">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('logs.searchPlaceholder')}
-              className="input-ds text-sm py-1.5 pl-9"
+              className="input-ds text-sm py-1.5 pl-9 w-full"
             />
           </div>
+
+          {/* Reset Filters */}
+          {(levelFilter || sourceFilter || searchQuery) && (
+            <button
+              onClick={handleResetFilters}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              Reset filters
+            </button>
+          )}
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 p-3 bg-vsc-red/10 border border-vsc-red/30 rounded text-sm text-vsc-red">
+            {error}
+          </div>
+        )}
 
         {/* Logs Table */}
         <div className="card flex-1 overflow-hidden flex flex-col">
           <div className="overflow-auto flex-1">
-            <table className="table-ds">
-              <thead>
-                <tr>
-                  <th className="w-24">{t('logs.time')}</th>
-                  <th className="w-20">{t('logs.level')}</th>
-                  <th className="w-28">{t('logs.source')}</th>
-                  <th>{t('logs.message')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLogs.length === 0 ? (
+            {logs.length === 0 && !isLoading ? (
+              <EmptyState
+                icon={FileText}
+                title={t('logs.noLogs')}
+                description="No logs to display"
+              />
+            ) : (
+              <table className="table-ds w-full">
+                <thead>
                   <tr>
-                    <td colSpan={4} className="py-12 text-center text-slate-600">
-                      {t('logs.noLogs')}
-                    </td>
+                    <th className="w-28">{t('logs.time')}</th>
+                    <th className="w-20">{t('logs.level')}</th>
+                    <th className="w-28">{t('logs.source')}</th>
+                    <th>{t('logs.message')}</th>
                   </tr>
-                ) : (
-                  filteredLogs.map((log) => (
-                    <tr key={log.id}>
+                </thead>
+                <tbody>
+                  {logs.map((log) => (
+                    <tr key={log.id} className="hover:bg-white/[0.02]">
                       <td className="font-mono text-xs text-slate-500 tabular-nums">
-                        {new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false })}
+                        {new Date(log.timestamp).toLocaleTimeString('en-US', { 
+                          hour12: false,
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
                       </td>
                       <td>
-                        <span className={levelConfig[log.level] || 'badge-neutral'}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${LEVEL_BADGES[log.level]}`}>
                           {log.level}
                         </span>
                       </td>
-                      <td className="text-xs text-slate-500">
-                        {log.source || '—'}
+                      <td>
+                        <span className="text-xs text-slate-400 bg-white/5 px-2 py-0.5 rounded">
+                          {log.source || '—'}
+                        </span>
                       </td>
-                      <td className="text-sm text-slate-200">
+                      <td className={`text-sm ${LEVEL_COLORS[log.level]}`}>
                         {log.message}
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* Loading Spinner */}
+            {isLoading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              </div>
+            )}
+
+            {/* Load More Button */}
+            {hasMore && !isLoading && (
+              <div className="flex justify-center py-4">
+                <button
+                  onClick={loadMore}
+                  className="btn-secondary text-sm"
+                >
+                  Load more
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
-          <div className="border-t border-white/5 px-4 py-3 flex items-center justify-between" style={{ background: 'rgba(30, 41, 59, 0.6)' }}>
+          <div className="border-t border-white/5 px-4 py-3 flex items-center justify-between bg-slate-900/50">
             <span className="text-2xs text-slate-500">
-              {t('logs.showing')} <span className="text-slate-300 tabular-nums">{filteredLogs.length}</span> {t('logs.of')} <span className="text-slate-300 tabular-nums">{logs.length}</span> {t('logs.entries')}
+              {t('logs.showing')}{' '}
+              <span className="text-slate-300 tabular-nums">{logs.length}</span>{' '}
+              {t('logs.of')}{' '}
+              <span className="text-slate-300 tabular-nums">{total}</span>{' '}
+              {t('logs.entries')}
             </span>
-            <span className="text-2xs text-slate-600">
-              {t('logs.lastUpdated')} {lastUpdated.toLocaleTimeString('en-US', { hour12: false })}
-            </span>
+            {hasMore && (
+              <span className="text-2xs text-slate-600">
+                Scroll or click "Load more" to see older logs
+              </span>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Clear Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-white/10 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-2">Clear all logs?</h3>
+            <p className="text-sm text-slate-400 mb-6">
+              This action cannot be undone. All logs will be permanently deleted.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="btn-secondary"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleClear}
+                className="btn-danger"
+              >
+                {t('common.clear')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

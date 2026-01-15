@@ -1,7 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Toaster } from 'sonner';
-import { listen } from '@tauri-apps/api/event';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
@@ -10,47 +9,53 @@ import Patcher from './pages/Patcher';
 import Server from './pages/Server';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
+import NotFound from './pages/NotFound';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
 
 function App() {
   const { theme } = useAppStore();
-  const { addLog } = useLogsStore();
+  const { subscribeToLogs, unsubscribeFromLogs, fetchLogs } = useLogsStore();
+  const hasInitialized = useRef(false);
 
   // Apply theme on mount and when it changes
   useEffect(() => {
-    if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    const applyTheme = () => {
+      if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    applyTheme();
+
+    // Listen for system theme changes when using 'system' theme
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = () => applyTheme();
+      
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [theme]);
 
-  // Global log listener - captures all REGISTRATION_LOG events
+  // Initialize logging system - subscribe to real-time events and fetch initial logs
   useEffect(() => {
-    const unlistenLog = listen<{ level: string; message: string; source?: string }>('REGISTRATION_LOG', (event) => {
-      addLog({
-        level: event.payload.level as 'info' | 'error' | 'success' | 'warn' | 'debug',
-        message: event.payload.message,
-        source: event.payload.source || 'registration',
-      });
-    });
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
 
-    // Also listen for general app logs
-    const unlistenAppLog = listen<{ level: string; message: string; source?: string }>('APP_LOG', (event) => {
-      addLog({
-        level: event.payload.level as 'info' | 'error' | 'success' | 'warn' | 'debug',
-        message: event.payload.message,
-        source: event.payload.source || 'app',
-      });
-    });
+    // Subscribe to real-time log events from backend
+    subscribeToLogs();
+    
+    // Fetch initial logs from database
+    fetchLogs();
 
     return () => {
-      unlistenLog.then(fn => fn());
-      unlistenAppLog.then(fn => fn());
+      unsubscribeFromLogs();
     };
-  }, [addLog]);
+  }, [subscribeToLogs, unsubscribeFromLogs, fetchLogs]);
 
   return (
     <>
@@ -63,6 +68,7 @@ function App() {
           <Route path="/server" element={<Server />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Layout>
       <Toaster 
