@@ -54,6 +54,26 @@ export interface PatternConfig {
   nameCustomLast: string;
 }
 
+// Advanced settings configuration
+export interface AdvancedSettings {
+  // Main settings (always visible)
+  headless: boolean;
+  speedMultiplier: number; // 0.5 to 2.0
+  delayBetweenAccounts: number; // 1-10 seconds
+  
+  // Advanced settings (collapsible)
+  verificationCodeTimeout: number; // 60-180s
+  oauthCallbackTimeout: number; // 30-180s
+  allowAccessWait: number; // 60-300s
+  pageLoadTimeout: number; // 2-15s
+  elementWaitTimeout: number; // 1-10s
+  imapPollInterval: number; // 0.5-5s
+  passwordLength: number; // 12-24
+  realisticTyping: boolean;
+  humanDelays: boolean;
+  screenshotsOnError: boolean;
+}
+
 // Registration configuration (simplified)
 export interface RegistrationConfig {
   provider: ProviderName;
@@ -61,6 +81,7 @@ export interface RegistrationConfig {
   imap: IMAPConfig;
   proxy: ProxyConfig;
   patterns: PatternConfig;
+  advanced: AdvancedSettings;
   count: number;
   timeout: number;
   retryAttempts: number;
@@ -118,11 +139,13 @@ interface RegistrationState {
   settingsLoaded: boolean;
   saveStatus: SaveStatus;
   imapPasswordSet: boolean;
+  gmailAppPasswordSet: boolean;
   
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
   setProxyConfig: (proxy: Partial<ProxyConfig>) => void;
+  setAdvancedSettings: (settings: Partial<AdvancedSettings>) => void;
   setCount: (count: number) => void;
   
   // Actions - Settings persistence
@@ -176,6 +199,23 @@ const DEFAULT_CONFIG: RegistrationConfig = {
     nameCustomFirst: '',
     nameCustomLast: '',
   },
+  advanced: {
+    // Main settings
+    headless: false,
+    speedMultiplier: 1.0,
+    delayBetweenAccounts: 2,
+    // Advanced settings
+    verificationCodeTimeout: 120,
+    oauthCallbackTimeout: 90,
+    allowAccessWait: 120,
+    pageLoadTimeout: 5,
+    elementWaitTimeout: 2,
+    imapPollInterval: 1,
+    passwordLength: 16,
+    realisticTyping: true,
+    humanDelays: true,
+    screenshotsOnError: true,
+  },
   count: 1,
   timeout: 60000,
   retryAttempts: 3,
@@ -219,6 +259,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     settingsLoaded: false,
     saveStatus: 'idle',
     imapPasswordSet: false,
+    gmailAppPasswordSet: false,
 
     // Config actions - all trigger auto-save
     setProvider: (provider: ProviderName) => {
@@ -253,6 +294,16 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         config: { 
           ...state.config, 
           proxy: { ...state.config.proxy, ...proxy } 
+        }
+      }));
+      triggerSave();
+    },
+
+    setAdvancedSettings: (settings: Partial<AdvancedSettings>) => {
+      set((state) => ({
+        config: {
+          ...state.config,
+          advanced: { ...state.config.advanced, ...settings }
         }
       }));
       triggerSave();
@@ -312,6 +363,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             settingsLoaded: true,
             // Track that password exists in DB even if we don't have the actual value
             imapPasswordSet: imapPasswordMasked || !!settings.imap_password,
+            gmailAppPasswordSet: gmailAppPasswordMasked || !!settings.gmail_app_password,
           };
         });
       } catch (error) {
