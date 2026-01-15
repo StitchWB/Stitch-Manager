@@ -211,7 +211,7 @@ export default function Patcher() {
 
 
           {/* Scan Control */}
-          <section className="card p-5">
+          <section className="glass-card p-5">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-white">{t('patcher.detectedIdes')}</h2>
@@ -230,7 +230,7 @@ export default function Patcher() {
                   </button>
                   {showSettings && (
                     <div 
-                      className="absolute top-full right-0 mt-2 w-64 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-10 p-4"
+                      className="absolute top-full right-0 mt-2 w-64 glass-card shadow-xl z-10 p-4"
                       role="menu"
                       aria-label={t('patcher.settingsMenu')}
                     >
@@ -242,7 +242,7 @@ export default function Patcher() {
                             id="patchStrategy"
                             value={patchStrategy}
                             onChange={(e) => setPatchStrategy(e.target.value as 'injection' | 'legacy')}
-                            className="input-ds w-full text-xs"
+                            className="input-deep w-full text-xs rounded-md px-2 py-1.5"
                           >
                             <option value="injection">Injection (Recommended)</option>
                             <option value="legacy">Legacy (Regex)</option>
@@ -269,8 +269,8 @@ export default function Patcher() {
           </section>
 
           {/* IDE List */}
-          <section className="card overflow-hidden">
-            <div className="divide-y divide-white/5">
+          <section className="glass-card overflow-hidden">
+            <div className="divide-y divide-white/[0.03]">
               {scanning && detectedIDEs.length === 0 ? (
                 <div className="p-8 text-center text-slate-500 flex flex-col items-center gap-2">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -286,7 +286,7 @@ export default function Patcher() {
                   const isOperating = !!operation;
 
                   return (
-                    <div key={ide.id} className={`flex items-center gap-4 p-3 hover:bg-white/[0.02] transition-colors ${isOperating ? 'opacity-75' : ''}`}>
+                    <div key={ide.id} className={`flex items-center gap-4 p-4 hover:bg-white/[0.02] transition-colors ${isOperating ? 'opacity-75' : ''}`}>
                       <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${getIDEGradient(ide.type)} flex items-center justify-center text-white shadow-lg shrink-0`}>
                         {getIDEIcon(ide.type)}
                       </div>
@@ -303,31 +303,35 @@ export default function Patcher() {
                         )}
                       </div>
                       <div className="flex items-center gap-3 ml-auto shrink-0">
+                        {/* Status Badge - Static non-clickable pill */}
                         {isOperating ? (
-                          <div className="badge-info flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 bg-indigo-500/20 text-indigo-400 rounded-full px-3 py-1 text-xs font-medium select-none">
                             <Loader2 className="w-3 h-3 animate-spin" />
                             <span className="capitalize">{operation === 'patching' ? t('patcher.patching') : operation === 'unpatching' ? t('patcher.unpatching') : t('patcher.restoring')}...</span>
-                          </div>
+                          </span>
                         ) : ide.isPatched ? (
-                          <div className="badge-success flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 bg-emerald-500/15 text-emerald-400 rounded-full px-3 py-1 text-xs font-medium select-none">
                             <CheckCircle className="w-3 h-3" />
                             {t('status.patched')} {ide.patchVersion && <span className="font-mono opacity-70">v{ide.patchVersion}</span>}
-                          </div>
+                          </span>
                         ) : (
-                          <div className="badge-neutral flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 bg-white/5 text-slate-500 rounded-full px-3 py-1 text-xs font-medium select-none">
                             <XCircle className="w-3 h-3" />
                             {t('status.notPatched')}
-                          </div>
+                          </span>
                         )}
-                        {ide.isPatched ? (
-                          <button onClick={() => handleUnpatch(ide.id)} disabled={isOperating || !ide.canPatch} className="btn-icon text-slate-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50" title={t('patcher.removePatch')}>
-                            <Trash2 size={16} />
-                          </button>
-                        ) : (
-                          <button onClick={() => handlePatch(ide.id)} disabled={isOperating || !ide.canPatch} className="btn-icon text-slate-500 hover:text-primary hover:bg-primary/10 disabled:opacity-50" title={t('patcher.applyPatch')}>
-                            <Download size={16} />
-                          </button>
-                        )}
+                        {/* Action Icons - Separate from status */}
+                        <div className="flex items-center gap-1">
+                          {ide.isPatched ? (
+                            <button onClick={() => handleUnpatch(ide.id)} disabled={isOperating || !ide.canPatch} className="btn-icon text-slate-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50" title={t('patcher.removePatch')}>
+                              <Trash2 size={16} />
+                            </button>
+                          ) : (
+                            <button onClick={() => handlePatch(ide.id)} disabled={isOperating || !ide.canPatch} className="btn-icon text-slate-500 hover:text-primary hover:bg-primary/10 disabled:opacity-50" title={t('patcher.applyPatch')}>
+                              <Download size={16} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -337,7 +341,7 @@ export default function Patcher() {
           </section>
 
           {/* Trae Pro Patch Section */}
-          <section className="card p-5">
+          <section className="glass-card p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white shadow-lg">
@@ -356,12 +360,12 @@ export default function Patcher() {
               </div>
               <div className="flex items-center gap-3">
                 {traePatchLoading ? (
-                  <div className="badge-info flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 bg-indigo-500/20 text-indigo-400 rounded-full px-3 py-1 text-xs font-medium">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     <span>{t('patcher.patching')}...</span>
                   </div>
                 ) : traePatched === null ? (
-                  <div className="badge-warning flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-400 rounded-full px-3 py-1 text-xs font-medium">
                     <AlertCircle className="w-3 h-3" />
                     {t('patcher.traeNotInstalled')}
                   </div>
@@ -386,54 +390,54 @@ export default function Patcher() {
               </div>
             </div>
             
-            {/* Patch Status Grid */}
+            {/* Patch Status Grid - Nested blocks with subtle background differences, NO inner borders */}
             {traePatched !== null && (
-              <div className="grid grid-cols-3 gap-3">
-                <div className={`p-3 rounded-lg border ${traePatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-2xs text-slate-400">{t('patcher.traeStorage')}</span>
+              <div className="grid grid-cols-3 gap-3 mt-4 bg-white/[0.01] rounded-lg p-3">
+                <div className={`p-3 rounded-md transition-colors ${traePatched ? 'bg-emerald-500/8' : 'bg-white/[0.02]'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-2xs text-slate-500 uppercase tracking-wider">{t('patcher.traeStorage')}</span>
                     {traePatched ? (
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
-                      <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                      <XCircle className="w-3.5 h-3.5 text-slate-600" />
                     )}
                   </div>
-                  <p className="text-xs text-white font-medium">{traePatched ? t('patcher.traePro') : t('patcher.traeFree')}</p>
+                  <p className={`text-sm font-medium ${traePatched ? 'text-white' : 'text-slate-400'}`}>{traePatched ? t('patcher.traePro') : t('patcher.traeFree')}</p>
                 </div>
-                <div className={`p-3 rounded-lg border ${traeExtensionPatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-2xs text-slate-400">{t('patcher.traeExtension')}</span>
+                <div className={`p-3 rounded-md transition-colors ${traeExtensionPatched ? 'bg-emerald-500/8' : 'bg-white/[0.02]'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-2xs text-slate-500 uppercase tracking-wider">{t('patcher.traeExtension')}</span>
                     {traeExtensionPatched ? (
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
-                      <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                      <XCircle className="w-3.5 h-3.5 text-slate-600" />
                     )}
                   </div>
-                  <p className="text-xs text-white font-medium">{traeExtensionPatched ? t('patcher.traePatched') : t('patcher.traeOriginal')}</p>
+                  <p className={`text-sm font-medium ${traeExtensionPatched ? 'text-white' : 'text-slate-400'}`}>{traeExtensionPatched ? t('patcher.traePatched') : t('patcher.traeOriginal')}</p>
                 </div>
-                <div className={`p-3 rounded-lg border ${traeWorkbenchPatched ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/5'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-2xs text-slate-400">{t('patcher.traeWorkbench')}</span>
+                <div className={`p-3 rounded-md transition-colors ${traeWorkbenchPatched ? 'bg-emerald-500/8' : 'bg-white/[0.02]'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-2xs text-slate-500 uppercase tracking-wider">{t('patcher.traeWorkbench')}</span>
                     {traeWorkbenchPatched ? (
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
-                      <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                      <XCircle className="w-3.5 h-3.5 text-slate-600" />
                     )}
                   </div>
-                  <p className="text-xs text-white font-medium">{traeWorkbenchPatched ? t('patcher.traePatched') : t('patcher.traeOriginal')}</p>
+                  <p className={`text-sm font-medium ${traeWorkbenchPatched ? 'text-white' : 'text-slate-400'}`}>{traeWorkbenchPatched ? t('patcher.traePatched') : t('patcher.traeOriginal')}</p>
                 </div>
               </div>
             )}
           </section>
 
-          {/* Backups Section */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-4">
+          {/* Backups Section - Compact */}
+          <section className="glass-card p-5">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Archive className="w-4 h-4 text-slate-500" />
                 <h3 className="text-sm font-semibold text-white">{t('patcher.backups')}</h3>
                 <span className="text-2xs text-slate-600 bg-white/5 px-1.5 py-0.5 rounded tabular-nums">
-                  {filteredBackups.length} {t('patcher.backup')}{filteredBackups.length !== 1 ? 's' : ''}
+                  {filteredBackups.length}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -441,7 +445,7 @@ export default function Patcher() {
                   <select
                     value={selectedIDEFilter || ''}
                     onChange={(e) => setSelectedIDEFilter(e.target.value || null)}
-                    className="input-ds text-xs py-1 px-2 w-32"
+                    className="input-deep text-xs py-1 px-2 w-32 rounded-md"
                   >
                     <option value="">{t('patcher.allIdes')}</option>
                     {detectedIDEs.map((ide: DetectedIDE) => <option key={ide.id} value={ide.id}>{ide.name}</option>)}
@@ -454,56 +458,45 @@ export default function Patcher() {
             </div>
 
             {backupsLoading && allBackups.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 flex flex-col items-center gap-2">
+              <div className="text-center py-4 text-slate-500 flex flex-col items-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span className="text-xs">{t('patcher.loadingBackups')}</span>
               </div>
             ) : filteredBackups.length === 0 ? (
-              <div className="text-center py-6 text-slate-600">
-                <HardDrive className="w-6 h-6 mx-auto mb-2 opacity-50" />
+              <div className="text-center py-4 text-slate-600">
+                <HardDrive className="w-5 h-5 mx-auto mb-2 opacity-50" />
                 <p className="text-xs">{selectedIDEFilter ? t('patcher.noBackupsForIde') : t('patcher.noBackups')}</p>
-                <p className="text-2xs mt-1 text-slate-700">{t('patcher.backupsCreatedWhenPatching')}</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto scrollbar-thin">
                 {filteredBackups.map((backup: BackupInfo) => {
                   const ide = detectedIDEs.find((i: DetectedIDE) => i.id === backup.ideId);
                   const isRestoring = operationInProgress[backup.ideId] === 'restoring';
 
                   return (
-                    <div key={backup.id} className="flex items-center gap-3 p-3 bg-vsc-sidebar rounded-lg border border-vsc-border hover:border-vsc-border-light transition-colors">
-                      <div className="w-8 h-8 rounded-md bg-vsc-panel flex items-center justify-center text-vsc-text-muted shrink-0">
-                        <Archive size={14} />
+                    <div key={backup.id} className="flex items-center gap-2 p-2 bg-white/[0.02] rounded-lg hover:bg-white/[0.04] transition-colors">
+                      <div className="w-6 h-6 rounded bg-white/[0.05] flex items-center justify-center text-slate-500 shrink-0">
+                        <Archive size={12} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-medium text-vsc-text truncate">{backup.ideName}</span>
-                          <span className="text-2xs text-vsc-text-muted bg-vsc-panel px-1.5 py-0.5 rounded">{backup.ideVersion}</span>
-                          {!backup.isValid && (
-                            <span className="text-2xs text-vsc-red bg-vsc-red/10 px-1.5 py-0.5 rounded">{t('status.invalid')}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-vsc-text-muted">
-                          <span>{formatDate(backup.createdAt)}</span>
-                          <span className="opacity-50">•</span>
-                          <span>{formatSize(backup.size)}</span>
-                        </div>
+                        <span className="text-xs font-medium text-white truncate block">{backup.ideName}</span>
+                        <span className="text-[10px] text-slate-600">{formatDate(backup.createdAt)} • {formatSize(backup.size)}</span>
                       </div>
-                      <div className="flex items-center gap-2 ml-auto shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button 
                           onClick={() => handleRestoreBackup(backup.id)} 
                           disabled={isRestoring || !backup.isValid || !ide} 
-                          className="btn-icon text-vsc-text-muted hover:text-vsc-green hover:bg-vsc-green/10 disabled:opacity-40 disabled:cursor-not-allowed" 
+                          className="p-1 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded disabled:opacity-40" 
                           title={t('patcher.restore')}
                         >
-                          {isRestoring ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                          {isRestoring ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
                         </button>
                         <button 
                           onClick={() => handleDeleteBackup(backup.id)} 
-                          className="btn-icon text-vsc-text-muted hover:text-vsc-red hover:bg-vsc-red/10" 
+                          className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded" 
                           title={t('common.delete')}
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     </div>
@@ -514,18 +507,18 @@ export default function Patcher() {
           </section>
 
           {/* Patch Info */}
-          <section className="card p-4">
+          <section className="glass-card p-4">
             <h3 className="text-sm font-semibold text-white mb-3">{t('patcher.patchInformation')}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div className="bg-white/[0.02] rounded-lg p-3 border border-white/5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-white/[0.02] rounded-lg p-4">
                 <p className="text-2xs text-slate-500 uppercase tracking-wider mb-1">{t('patcher.patchedIdes')}</p>
-                <p className="text-base font-bold text-white tabular-nums">
+                <p className="text-xl font-bold text-white tabular-nums">
                   {detectedIDEs.filter((ide: DetectedIDE) => ide.isPatched).length} / {detectedIDEs.length}
                 </p>
               </div>
-              <div className="bg-white/[0.02] rounded-lg p-3 border border-white/5">
+              <div className="bg-white/[0.02] rounded-lg p-4">
                 <p className="text-2xs text-slate-500 uppercase tracking-wider mb-1">{t('patcher.totalBackups')}</p>
-                <p className="text-base font-bold text-white tabular-nums">{allBackups.length}</p>
+                <p className="text-xl font-bold text-white tabular-nums">{allBackups.length}</p>
               </div>
             </div>
           </section>

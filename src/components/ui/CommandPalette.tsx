@@ -5,10 +5,13 @@ import {
   LayoutDashboard, Users, RefreshCw, Code, Server, 
   Settings, FileText, Search 
 } from 'lucide-react';
+import { useAccountsStore } from '../../stores/accounts';
+import { t } from '../../lib/i18n';
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { refreshAllAccounts } = useAccountsStore();
 
   // Toggle on Cmd+K / Ctrl+K
   useEffect(() => {
@@ -47,7 +50,7 @@ export function CommandPalette() {
           <div className="flex items-center px-4 border-b border-white/5">
             <Search className="w-4 h-4 text-slate-500 mr-3" />
             <Command.Input 
-              placeholder="Type a command or search..."
+              placeholder={t('commandPalette.placeholder')}
               className="w-full h-12 bg-transparent text-sm text-slate-200 placeholder-slate-500 focus:outline-none"
             />
             <kbd className="px-2 py-1 text-[10px] text-slate-500 bg-white/5 rounded">ESC</kbd>
@@ -56,36 +59,36 @@ export function CommandPalette() {
           {/* Results */}
           <Command.List className="max-h-80 overflow-y-auto p-2">
             <Command.Empty className="py-6 text-center text-sm text-slate-500">
-              No results found.
+              {t('commandPalette.noResults')}
             </Command.Empty>
 
-            <Command.Group heading="Navigation" className="mb-2">
+            <Command.Group heading={t('commandPalette.navigation')} className="mb-2">
               <CommandItem icon={<LayoutDashboard />} onSelect={() => runCommand(() => navigate('/'))}>
-                Dashboard
+                {t('sidebar.dashboard')}
               </CommandItem>
               <CommandItem icon={<Users />} onSelect={() => runCommand(() => navigate('/accounts'))}>
-                Accounts
+                {t('sidebar.accounts')}
               </CommandItem>
               <CommandItem icon={<RefreshCw />} onSelect={() => runCommand(() => navigate('/autoreg'))}>
-                Auto Registration
+                {t('sidebar.autoReg')}
               </CommandItem>
               <CommandItem icon={<Code />} onSelect={() => runCommand(() => navigate('/patcher'))}>
-                IDE Patcher
+                {t('sidebar.idePatch')}
               </CommandItem>
               <CommandItem icon={<Server />} onSelect={() => runCommand(() => navigate('/server'))}>
-                API Server
+                {t('sidebar.apiServer')}
               </CommandItem>
               <CommandItem icon={<Settings />} onSelect={() => runCommand(() => navigate('/settings'))}>
-                Settings
+                {t('sidebar.settings')}
               </CommandItem>
               <CommandItem icon={<FileText />} onSelect={() => runCommand(() => navigate('/logs'))}>
-                Logs
+                {t('sidebar.logs')}
               </CommandItem>
             </Command.Group>
 
-            <Command.Group heading="Actions" className="mb-2">
-              <CommandItem icon={<RefreshCw />} onSelect={() => runCommand(() => {/* refresh all */})}>
-                Refresh All Accounts
+            <Command.Group heading={t('commandPalette.actions')} className="mb-2">
+              <CommandItem icon={<RefreshCw />} onSelect={() => runCommand(() => refreshAllAccounts())}>
+                {t('commandPalette.refreshAllAccounts')}
               </CommandItem>
             </Command.Group>
           </Command.List>

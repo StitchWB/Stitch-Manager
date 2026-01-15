@@ -73,13 +73,22 @@ function App() {
       </Layout>
       <Toaster 
         position="bottom-right"
+        expand={false}
+        richColors
+        closeButton
+        gap={8}
+        visibleToasts={4}
         toastOptions={{
           style: {
-            background: '#0f172a',
+            background: 'rgba(15, 23, 42, 0.95)',
+            backdropFilter: 'blur(12px)',
             border: '1px solid rgba(255,255,255,0.1)',
             color: '#e2e8f0',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
           },
           className: 'sonner-toast',
+          duration: 4000,
         }}
         theme="dark"
       />

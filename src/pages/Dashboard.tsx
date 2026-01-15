@@ -353,7 +353,7 @@ export default function Dashboard() {
     if (dashboardStats) {
       const accountsByProvider = providers.map((p) => ({
         provider: p.id,
-        count: dashboardStats.accounts_by_provider[p.id.toUpperCase()] || 0,
+        count: dashboardStats.accounts_by_provider[p.id] || 0,
         color: p.color,
       }));
       
