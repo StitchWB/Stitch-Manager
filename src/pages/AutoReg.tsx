@@ -37,6 +37,19 @@ const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
 // Tab types for the command center
 type ConfigTab = 'identity' | 'engine' | 'network';
 
+// Simple Tooltip component
+function Tooltip({ children, text }: { children: React.ReactNode; text: string }) {
+  return (
+    <div className="relative group">
+      {children}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-[10px] text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 border border-white/10">
+        {text}
+        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+      </div>
+    </div>
+  );
+}
+
 // Compact number input component for timeouts
 function TimeoutInput({ 
   label, 
@@ -46,7 +59,8 @@ function TimeoutInput({
   max, 
   step = 1,
   unit = 's',
-  disabled 
+  disabled,
+  tooltip
 }: { 
   label: string; 
   value: number; 
@@ -56,11 +70,12 @@ function TimeoutInput({
   step?: number;
   unit?: string;
   disabled?: boolean;
+  tooltip?: string;
 }) {
   const decrement = () => onChange(Math.max(min, value - step));
   const increment = () => onChange(Math.min(max, value + step));
 
-  return (
+  const content = (
     <div className="rounded-lg p-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
       <div className="text-[10px] text-slate-500 mb-1.5">{label}</div>
       <div className="flex items-center gap-1">
@@ -82,6 +97,8 @@ function TimeoutInput({
       </div>
     </div>
   );
+
+  return tooltip ? <Tooltip text={tooltip}>{content}</Tooltip> : content;
 }
 
 // Compact toggle switch component
@@ -90,21 +107,20 @@ function ToggleSwitch({
   checked, 
   onChange, 
   disabled,
-  icon
+  tooltip
 }: { 
   label: string; 
   checked: boolean; 
   onChange: (v: boolean) => void; 
   disabled?: boolean;
-  icon?: React.ReactNode;
+  tooltip?: string;
 }) {
-  return (
+  const content = (
     <label className={cn(
       "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors",
       checked ? "bg-indigo-500/10" : "bg-white/[0.02]",
       disabled && "opacity-50 cursor-not-allowed"
     )}>
-      {icon && <span className="text-slate-500">{icon}</span>}
       <span className="text-[10px] text-slate-400 flex-1">{label}</span>
       <div className={cn(
         "w-7 h-4 rounded-full transition-colors relative",
@@ -124,6 +140,8 @@ function ToggleSwitch({
       />
     </label>
   );
+
+  return tooltip ? <Tooltip text={tooltip}>{content}</Tooltip> : content;
 }
 
 export default function AutoRegNext() {
@@ -575,50 +593,54 @@ export default function AutoRegNext() {
               {/* Speed & Delay Row */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Speed Multiplier */}
-                <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-slate-400">Speed</span>
-                    <span className="text-xs font-mono text-indigo-400">{config.advanced.speedMultiplier.toFixed(1)}x</span>
+                <Tooltip text="Multiplier for all delays (0.5x = faster, 2x = slower)">
+                  <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-slate-400">Speed</span>
+                      <span className="text-xs font-mono text-indigo-400">{config.advanced.speedMultiplier.toFixed(1)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={config.advanced.speedMultiplier}
+                      onChange={(e) => setAdvancedSettings({ speedMultiplier: parseFloat(e.target.value) })}
+                      disabled={isRunning}
+                      className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
+                      style={{ background: 'rgba(255,255,255,0.1)' }}
+                    />
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[9px] text-slate-600">Slow</span>
+                      <span className="text-[9px] text-slate-600">Fast</span>
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="2"
-                    step="0.1"
-                    value={config.advanced.speedMultiplier}
-                    onChange={(e) => setAdvancedSettings({ speedMultiplier: parseFloat(e.target.value) })}
-                    disabled={isRunning}
-                    className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                    style={{ background: 'rgba(255,255,255,0.1)' }}
-                  />
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[9px] text-slate-600">Slow</span>
-                    <span className="text-[9px] text-slate-600">Fast</span>
-                  </div>
-                </div>
+                </Tooltip>
 
                 {/* Delay Between Accounts */}
-                <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-slate-400">Delay</span>
-                    <span className="text-xs font-mono text-indigo-400">{config.advanced.delayBetweenAccounts}s</span>
+                <Tooltip text="Pause between registrations to avoid rate limiting">
+                  <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-slate-400">Delay</span>
+                      <span className="text-xs font-mono text-indigo-400">{config.advanced.delayBetweenAccounts}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      step="1"
+                      value={config.advanced.delayBetweenAccounts}
+                      onChange={(e) => setAdvancedSettings({ delayBetweenAccounts: parseInt(e.target.value) })}
+                      disabled={isRunning}
+                      className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
+                      style={{ background: 'rgba(255,255,255,0.1)' }}
+                    />
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[9px] text-slate-600">1s</span>
+                      <span className="text-[9px] text-slate-600">10s</span>
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    step="1"
-                    value={config.advanced.delayBetweenAccounts}
-                    onChange={(e) => setAdvancedSettings({ delayBetweenAccounts: parseInt(e.target.value) })}
-                    disabled={isRunning}
-                    className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                    style={{ background: 'rgba(255,255,255,0.1)' }}
-                  />
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[9px] text-slate-600">1s</span>
-                    <span className="text-[9px] text-slate-600">10s</span>
-                  </div>
-                </div>
+                </Tooltip>
               </div>
 
               {/* Timeouts Section */}
@@ -638,6 +660,7 @@ export default function AutoRegNext() {
                     max={180}
                     step={10}
                     disabled={isRunning}
+                    tooltip="Time to wait for email verification code"
                   />
                   <TimeoutInput
                     label="OAuth"
@@ -647,6 +670,7 @@ export default function AutoRegNext() {
                     max={180}
                     step={10}
                     disabled={isRunning}
+                    tooltip="Time to wait for OAuth redirect from AWS"
                   />
                   <TimeoutInput
                     label="Allow Access"
@@ -656,6 +680,7 @@ export default function AutoRegNext() {
                     max={300}
                     step={10}
                     disabled={isRunning}
+                    tooltip="Time to wait for 'Allow access' button click"
                   />
                   <TimeoutInput
                     label="Page Load"
@@ -665,6 +690,7 @@ export default function AutoRegNext() {
                     max={15}
                     step={1}
                     disabled={isRunning}
+                    tooltip="Max time to wait for page to load"
                   />
                   <TimeoutInput
                     label="Element Wait"
@@ -674,6 +700,7 @@ export default function AutoRegNext() {
                     max={10}
                     step={1}
                     disabled={isRunning}
+                    tooltip="Time to wait for UI elements to appear"
                   />
                   <TimeoutInput
                     label="IMAP Poll"
@@ -683,6 +710,7 @@ export default function AutoRegNext() {
                     max={5}
                     step={0.5}
                     disabled={isRunning}
+                    tooltip="How often to check inbox for verification code"
                   />
                 </div>
               </div>
@@ -695,23 +723,25 @@ export default function AutoRegNext() {
                 </div>
                 
                 {/* Password Length */}
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-slate-400">Password Length</span>
-                    <span className="text-xs font-mono text-indigo-400">{config.advanced.passwordLength}</span>
+                <Tooltip text="Length of generated account password">
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-slate-400">Password Length</span>
+                      <span className="text-xs font-mono text-indigo-400">{config.advanced.passwordLength}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="12"
+                      max="24"
+                      step="1"
+                      value={config.advanced.passwordLength}
+                      onChange={(e) => setAdvancedSettings({ passwordLength: parseInt(e.target.value) })}
+                      disabled={isRunning}
+                      className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
+                      style={{ background: 'rgba(255,255,255,0.1)' }}
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min="12"
-                    max="24"
-                    step="1"
-                    value={config.advanced.passwordLength}
-                    onChange={(e) => setAdvancedSettings({ passwordLength: parseInt(e.target.value) })}
-                    disabled={isRunning}
-                    className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                    style={{ background: 'rgba(255,255,255,0.1)' }}
-                  />
-                </div>
+                </Tooltip>
 
                 {/* Toggle Switches - 2 rows */}
                 <div className="grid grid-cols-2 gap-2">
@@ -720,18 +750,21 @@ export default function AutoRegNext() {
                     checked={config.advanced.realisticTyping}
                     onChange={(v) => setAdvancedSettings({ realisticTyping: v })}
                     disabled={isRunning}
+                    tooltip="Type like a human with random delays"
                   />
                   <ToggleSwitch
                     label="Human Delays"
                     checked={config.advanced.humanDelays}
                     onChange={(v) => setAdvancedSettings({ humanDelays: v })}
                     disabled={isRunning}
+                    tooltip="Add random pauses between actions"
                   />
                   <ToggleSwitch
                     label="Screenshots"
                     checked={config.advanced.screenshotsOnError}
                     onChange={(v) => setAdvancedSettings({ screenshotsOnError: v })}
                     disabled={isRunning}
+                    tooltip="Save screenshot when error occurs"
                   />
                 </div>
               </div>
