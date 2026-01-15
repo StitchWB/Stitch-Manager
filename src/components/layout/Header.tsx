@@ -58,14 +58,17 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
   };
 
   return (
-    <header className="h-14 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 border-t border-t-white/[0.03] flex items-center justify-between px-6 shrink-0 sticky top-0 z-20">
+    <header 
+      className="h-14 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 border-t border-t-white/[0.03] flex items-center justify-between px-6 shrink-0 sticky top-0 z-20"
+      role="banner"
+    >
       <div className="flex items-center gap-3">
-        {icon && <span className="text-primary">{icon}</span>}
+        {icon && <span className="text-primary" aria-hidden="true">{icon}</span>}
         <div className="flex items-center gap-3">
           <h1 className="text-base font-semibold text-white">{title}</h1>
           {subtitle && (
             <>
-              <span className="text-slate-600">•</span>
+              <span className="text-slate-600" aria-hidden="true">•</span>
               <p className="text-xs text-slate-500">{subtitle}</p>
             </>
           )}
@@ -76,8 +79,13 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
         {actions}
         
         {/* Status Indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-          <span className={`status-dot ${isOnline ? 'status-dot-online' : 'status-dot-offline'}`} />
+        <div 
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10"
+          role="status"
+          aria-live="polite"
+          aria-label={isOnline ? t('header.systemOnline') : t('header.serverOffline')}
+        >
+          <span className={`status-dot ${isOnline ? 'status-dot-online' : 'status-dot-offline'}`} aria-hidden="true" />
           <span className="text-2xs font-medium text-slate-400">
             {isOnline ? t('header.systemOnline') : t('header.serverOffline')}
           </span>
@@ -85,16 +93,28 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
         {/* Language Switcher */}
         <div className="relative" ref={langRef}>
-          <button onClick={() => { setLangOpen(!langOpen); setNotifOpen(false); }} className="btn-icon">
-            <Globe size={18} />
+          <button 
+            onClick={() => { setLangOpen(!langOpen); setNotifOpen(false); }} 
+            className="btn-icon"
+            aria-label={t('header.changeLanguage')}
+            aria-expanded={langOpen}
+            aria-haspopup="listbox"
+          >
+            <Globe size={18} aria-hidden="true" />
           </button>
           {langOpen && (
-            <div className="absolute right-0 top-full mt-1 w-32 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 py-1">
+            <div 
+              className="absolute right-0 top-full mt-1 w-32 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 py-1"
+              role="listbox"
+              aria-label={t('header.selectLanguage')}
+            >
               {languages.map(lang => (
                 <button
                   key={lang.code}
                   onClick={() => { setLanguage(lang.code); setLangOpen(false); }}
                   className={`w-full px-3 py-1.5 text-xs text-left hover:bg-white/5 ${language === lang.code ? 'text-primary' : 'text-slate-300'}`}
+                  role="option"
+                  aria-selected={language === lang.code}
                 >
                   {lang.label}
                 </button>
@@ -108,10 +128,13 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           <button 
             onClick={() => { setNotifOpen(!notifOpen); setLangOpen(false); }} 
             className="btn-icon relative"
+            aria-label={t('header.notifications') + (notifications.length > 0 ? ` (${notifications.length})` : '')}
+            aria-expanded={notifOpen}
+            aria-haspopup="true"
           >
-            <Bell size={18} />
+            <Bell size={18} aria-hidden="true" />
             {notifications.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-400 rounded-full ring-2 ring-[#050508] animate-pulse" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-400 rounded-full ring-2 ring-[#050508] animate-pulse" aria-hidden="true" />
             )}
           </button>
           
@@ -131,7 +154,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
               </div>
               
               {/* Notifications List */}
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto" role="list" aria-label={t('header.notificationsList')}>
                 {notifications.length === 0 ? (
                   <div className="px-3 py-6 text-center">
                     <Bell className="w-8 h-8 text-slate-600 mx-auto mb-2" />
@@ -142,6 +165,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
                     <div 
                       key={notif.id} 
                       className="px-3 py-2.5 border-b border-white/5 hover:bg-white/[0.02] transition-colors group"
+                      role="listitem"
                     >
                       <div className="flex items-start gap-2.5">
                         {getNotificationIcon(notif.type)}

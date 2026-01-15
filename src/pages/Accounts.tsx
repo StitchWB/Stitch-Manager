@@ -3,12 +3,13 @@ import { Plus, Search, RefreshCw, Download, Users, AlertCircle } from 'lucide-re
 import Header from '../components/layout/Header';
 import AccountsTable from '../components/AccountsTable';
 import AddAccountModal from '../components/AddAccountModal';
-import QuickAccountSwitch from '../components/QuickAccountSwitch';
+import { StatusFilterChip, QuotaFilterChip } from '../components/ui/FilterChip';
 import { useAccountsStore } from '../stores/accounts';
 import { useAppStore } from '../stores/app';
+import { useLogsStore } from '../stores/logs';
 import { copyToClipboard, checkAccountStatus } from '../lib/tauri';
 import { t } from '../lib/i18n';
-import type { ProviderName } from '../types';
+import type { ProviderName, AccountStatus } from '../types';
 
 // Provider tabs are derived from the app store's providers list
 const getProviderTabs = (providers: { id: ProviderName; name: string }[]): { id: ProviderName | null; labelKey: string; label: string }[] => [
@@ -18,6 +19,7 @@ const getProviderTabs = (providers: { id: ProviderName; name: string }[]): { id:
 
 export default function Accounts() {
   const { language, providers } = useAppStore();
+  const { addLog } = useLogsStore();
   const providerTabs = getProviderTabs(providers);
   const {
     loading: isLoading,
@@ -26,6 +28,10 @@ export default function Accounts() {
     setSearchQuery,
     selectedProvider: filterProvider,
     setSelectedProvider: setFilterProvider,
+    statusFilter,
+    setStatusFilter,
+    quotaFilter,
+    setQuotaFilter,
     getFilteredAccounts,
     selectedIds,
     toggleSelection,
@@ -68,6 +74,11 @@ export default function Accounts() {
         title: t('notifications.accountAdded'),
         message: `${data.email} (${data.provider})`,
       });
+      addLog({
+        level: 'success',
+        message: `Account added: ${data.email} (${data.provider})`,
+        source: 'accounts',
+      });
     } catch (error) {
       console.error('Failed to add account:', error);
       const { addNotification } = useAppStore.getState();
@@ -75,6 +86,11 @@ export default function Accounts() {
         type: 'error',
         title: t('notifications.addFailed'),
         message: String(error),
+      });
+      addLog({
+        level: 'error',
+        message: `Failed to add account: ${String(error)}`,
+        source: 'accounts',
       });
     }
   };
@@ -125,7 +141,13 @@ export default function Accounts() {
 
   const handleDelete = async (accountId: number) => {
     try {
+      const account = accounts.find(a => a.id === accountId);
       await removeAccount(accountId);
+      addLog({
+        level: 'info',
+        message: `Account deleted: ${account?.email || accountId}`,
+        source: 'accounts',
+      });
     } catch (error) {
       console.error('Failed to delete account:', error);
       const { addNotification } = useAppStore.getState();
@@ -133,6 +155,11 @@ export default function Accounts() {
         type: 'error',
         title: t('notifications.deleteFailed'),
         message: String(error),
+      });
+      addLog({
+        level: 'error',
+        message: `Failed to delete account: ${String(error)}`,
+        source: 'accounts',
       });
     }
   };
@@ -149,11 +176,21 @@ export default function Accounts() {
           title: t('notifications.accountActivated'),
           message: account ? `${account.email} → ${provider}` : provider,
         });
+        addLog({
+          level: 'success',
+          message: `Account activated: ${account?.email || accountId} for ${provider}`,
+          source: 'accounts',
+        });
       } else {
         addNotification({
           type: 'info',
           title: t('notifications.accountDeactivated'),
           message: provider,
+        });
+        addLog({
+          level: 'info',
+          message: `Account deactivated for ${provider}`,
+          source: 'accounts',
         });
       }
     } catch (error) {
@@ -163,6 +200,11 @@ export default function Accounts() {
         type: 'error',
         title: t('notifications.activationFailed'),
         message: String(error),
+      });
+      addLog({
+        level: 'error',
+        message: `Failed to activate account: ${String(error)}`,
+        source: 'accounts',
       });
     }
   };
@@ -269,45 +311,60 @@ export default function Accounts() {
 
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-4 mb-4">
-          {/* Filter Tabs - Text links style */}
-          <div className="flex items-center gap-1">
-            {providerTabs.map((tab) => (
-              <button
-                key={tab.id ?? 'all'}
-                onClick={() => setFilterProvider(tab.id)}
-                className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                  filterProvider === tab.id
-                    ? 'text-indigo-300 font-medium bg-indigo-500/15 border border-indigo-500/20 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                {tab.labelKey ? t(tab.labelKey) : tab.label}
-              </button>
-            ))}
+          {/* Left: Provider Tabs + Filter Chips */}
+          <div className="flex items-center gap-3">
+            {/* Provider Tabs - Pill/Segmented control style */}
+            <div className="flex items-center gap-1">
+              {providerTabs.map((tab) => (
+                <button
+                  key={tab.id ?? 'all'}
+                  onClick={() => setFilterProvider(tab.id)}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-all duration-200 ${
+                    filterProvider === tab.id
+                      ? 'bg-white/[0.08] text-white'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]'
+                  }`}
+                >
+                  {tab.labelKey ? t(tab.labelKey) : tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Separator */}
+            <div className="w-px h-5 bg-white/10" />
+
+            {/* Filter Chips */}
+            <StatusFilterChip 
+              value={statusFilter} 
+              onChange={(value) => setStatusFilter(value as AccountStatus | null)}
+            />
+            <QuotaFilterChip 
+              value={quotaFilter} 
+              onChange={setQuotaFilter}
+            />
           </div>
 
-          {/* Search & Actions */}
+          {/* Right: Search & Actions */}
           <div className="flex items-center gap-2">
-            <QuickAccountSwitch />
-            
+            {/* Search with shortcut hint */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-56 h-9 bg-transparent rounded-lg pl-9 pr-3 text-sm text-white placeholder-slate-600 focus:outline-none"
-                style={{ border: '1px solid rgba(255, 255, 255, 0.08)', }}
-                onFocus={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.12)'}
-                onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
+                className="w-64 h-9 bg-white/5 rounded-lg pl-9 pr-16 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-white/20 focus:outline-none transition-colors"
                 placeholder={t('accounts.searchPlaceholder')}
               />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/10 text-slate-500 text-[10px] font-mono px-1.5 py-0.5 rounded">
+                ⌘K
+              </span>
             </div>
 
             <button
               onClick={handleRefreshAll}
               disabled={isRefreshingAll}
-              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/[0.08] text-slate-500 hover:text-white hover:border-white/[0.12] transition-colors disabled:opacity-50"
+              className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
               title={t('accounts.refreshAll')}
             >
               <RefreshCw size={15} className={isRefreshingAll ? 'animate-spin' : ''} />
@@ -316,7 +373,7 @@ export default function Accounts() {
             <button
               onClick={handleExportCSV}
               disabled={accounts.length === 0}
-              className="h-9 w-9 flex items-center justify-center rounded-lg border border-white/[0.08] text-slate-500 hover:text-white hover:border-white/[0.12] transition-colors disabled:opacity-50"
+              className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
               title={t('accounts.exportCsv')}
             >
               <Download size={15} />
@@ -324,8 +381,7 @@ export default function Accounts() {
 
             <button 
               onClick={() => setIsModalOpen(true)} 
-              className="h-9 px-4 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 15px rgba(99, 102, 241, 0.3)' }}
+              className="h-9 px-4 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 transition-colors"
             >
               <Plus size={14} />
               {t('common.add')}

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import type { Account, ProviderName } from '../types';
+import type { Account, ProviderName, AccountStatus } from '../types';
 import {
   listAccounts,
   addAccount,
@@ -27,6 +27,8 @@ interface AccountsState {
   selectedProvider: ProviderName | null;
   selectedIds: Set<number>;
   searchQuery: string;
+  statusFilter: AccountStatus | null;
+  quotaFilter: 'any' | 'has_quota' | 'empty' | 'full';
   
   // Active accounts per provider (provider -> accountId)
   activeAccountIds: Record<string, number | null>;
@@ -55,6 +57,9 @@ interface AccountsState {
   // Filters
   setSelectedProvider: (provider: ProviderName | null) => void;
   setSearchQuery: (query: string) => void;
+  setStatusFilter: (status: AccountStatus | null) => void;
+  setQuotaFilter: (filter: 'any' | 'has_quota' | 'empty' | 'full') => void;
+  clearFilters: () => void;
   
   // Computed helpers
   getFilteredAccounts: () => Account[];
@@ -78,6 +83,8 @@ export const useAccountsStore = create<AccountsState>()(
         selectedProvider: null,
         selectedIds: new Set(),
         searchQuery: '',
+        statusFilter: null,
+        quotaFilter: 'any',
         activeAccountIds: {},
 
         // ============================================
@@ -285,13 +292,31 @@ export const useAccountsStore = create<AccountsState>()(
         set({ searchQuery: query });
       },
 
+      setStatusFilter: (status) => {
+        set({ statusFilter: status });
+      },
+
+      setQuotaFilter: (filter) => {
+        set({ quotaFilter: filter });
+      },
+
+      clearFilters: () => {
+        set({ 
+          selectedProvider: null, 
+          searchQuery: '', 
+          statusFilter: null, 
+          quotaFilter: 'any',
+          selectedIds: new Set() 
+        });
+      },
+
       // ============================================
       // Computed Helpers
       // ============================================
 
       getFilteredAccounts: () => {
-        const { accounts, selectedProvider, searchQuery } = get();
-        return accounts.filter((account) => {
+        const { accounts, selectedProvider, searchQuery, statusFilter, quotaFilter } = get();
+        let result = accounts.filter((account) => {
           // Filter by provider
           if (selectedProvider && account.provider !== selectedProvider) {
             return false;
@@ -308,6 +333,30 @@ export const useAccountsStore = create<AccountsState>()(
           }
           return true;
         });
+
+        // Status filter
+        if (statusFilter) {
+          result = result.filter(a => a.status === statusFilter);
+        }
+
+        // Quota filter (simplified logic)
+        if (quotaFilter !== 'any') {
+          result = result.filter(a => {
+            const remaining = a.quota.limit - a.quota.used;
+            const hasQuota = remaining > 0;
+            const isEmpty = a.quota.used === 0;
+            const isFull = a.quota.limit > 0 && a.quota.used >= a.quota.limit;
+            
+            switch (quotaFilter) {
+              case 'has_quota': return hasQuota;
+              case 'empty': return isEmpty;
+              case 'full': return isFull;
+              default: return true;
+            }
+          });
+        }
+
+        return result;
       },
 
       getAccountsByProvider: (provider) => {

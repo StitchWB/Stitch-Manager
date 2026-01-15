@@ -22,7 +22,8 @@ import {
   Coins
 } from 'lucide-react';
 import { useAppStore } from '../stores/app';
-import { getSettings, updateSettings } from '../lib/tauri';
+import { useLogsStore } from '../stores/logs';
+import { getSettings, updateSettings, getDatabasePath } from '../lib/tauri';
 import { open } from '@tauri-apps/plugin-dialog';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
@@ -63,6 +64,7 @@ const categories: CategoryConfig[] = [
 
 export default function Settings() {
   const { theme, setTheme, language, setLanguage } = useAppStore();
+  const { addLog } = useLogsStore();
   
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('general');
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -86,6 +88,7 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [dbPath, setDbPath] = useState<string>('');
 
   // Refs for timer cleanup to prevent memory leaks
   const categoryChangeOuterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -122,6 +125,15 @@ export default function Settings() {
       
       if (data.theme && ['light', 'dark', 'system'].includes(data.theme)) {
         setTheme(data.theme as 'light' | 'dark' | 'system');
+      }
+      
+      // Load database path
+      try {
+        const path = await getDatabasePath();
+        setDbPath(path);
+      } catch (e) {
+        console.error('Failed to get database path:', e);
+        setDbPath('./stitch.db'); // Fallback
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -202,10 +214,20 @@ export default function Settings() {
       
       await updateSettings(settingsToSave);
       setSaveStatus('success');
+      addLog({
+        level: 'success',
+        message: 'Settings saved successfully',
+        source: 'settings',
+      });
     } catch (error) {
       console.error('Failed to save settings:', error);
       setSaveStatus('error');
       setErrorMessage(error instanceof Error ? error.message : t('settings.failedToSave'));
+      addLog({
+        level: 'error',
+        message: `Failed to save settings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        source: 'settings',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -493,7 +515,7 @@ export default function Settings() {
               placeholder="http://proxy:8080"
               className="input-ds text-sm transition-all duration-200 focus:border-primary"
             />
-            <p className="text-slate-600 text-xs mt-2">
+            <p className="text-slate-500 text-xs mt-2">
               {t('settings.proxy.proxyUrlHint')}
             </p>
           </div>
@@ -566,7 +588,7 @@ export default function Settings() {
           </div>
         ))}
       </div>
-      <p className="text-slate-600 text-xs mt-4" style={getAnimationStyle(4)}>
+      <p className="text-slate-500 text-xs mt-4" style={getAnimationStyle(4)}>
         {t('settings.idePaths.pathExample')}
       </p>
     </div>
@@ -588,11 +610,11 @@ export default function Settings() {
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-slate-400 text-sm">{t('settings.database.location')}</span>
-            <span className="text-white font-mono text-sm">./stitch.db</span>
+            <span className="text-slate-200 font-mono text-xs break-all max-w-[300px] text-right">{dbPath || './stitch.db'}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-400 text-sm">{t('settings.database.type')}</span>
-            <span className="text-white text-sm">SQLite</span>
+            <span className="text-slate-200 text-sm">SQLite</span>
           </div>
         </div>
         <p className="text-slate-500 text-xs" style={getAnimationStyle(2)}>
@@ -632,10 +654,10 @@ export default function Settings() {
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - Glassmorphism */}
+        {/* Sidebar - Deep Space Void with improved spacing */}
         <div 
-          className="w-52 shrink-0 border-r border-white/10 flex flex-col glass-sidebar"
-          style={getAnimationStyle(0)}
+          className="w-52 shrink-0 border-r border-white/5 flex flex-col"
+          style={{ background: 'rgba(15, 23, 42, 0.3)' }}
         >
           <nav className="flex-1 py-4">
             {categories.map((category, index) => (
@@ -643,13 +665,17 @@ export default function Settings() {
                 key={category.id}
                 onClick={() => handleCategoryChange(category.id)}
                 style={getAnimationStyle(index + 1)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                className={`relative w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all duration-200 ${
                   activeCategory === category.id
-                    ? 'bg-white/5 border-l-2 border-primary text-white'
-                    : 'text-slate-400 hover:bg-white/[0.03] hover:text-white border-l-2 border-transparent'
+                    ? 'bg-white/5 text-white'
+                    : 'text-slate-500 hover:bg-white/[0.02] hover:text-slate-300'
                 }`}
               >
-                <span className={`transition-colors duration-200 ${activeCategory === category.id ? 'text-primary' : ''}`}>
+                {/* Active indicator bar */}
+                {activeCategory === category.id && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-purple-500 rounded-r" />
+                )}
+                <span className={`transition-colors duration-200 ${activeCategory === category.id ? 'text-purple-400' : ''}`}>
                   {category.icon}
                 </span>
                 {t(category.labelKey)}

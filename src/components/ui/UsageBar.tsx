@@ -1,4 +1,6 @@
 import { cn } from '../../lib/utils';
+import { useState } from 'react';
+import { t } from '../../lib/i18n';
 
 interface UsageBarProps {
   used: number;
@@ -9,11 +11,13 @@ interface UsageBarProps {
 }
 
 export function UsageBar({ used, limit, showLabel = true, className, isError = false }: UsageBarProps) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
   // If error state (banned/expired), show error message
   if (isError && limit === 0) {
     return (
       <span className="text-[10px] text-red-400 font-medium">
-        Error / Banned
+        {t('usageBar.errorBanned')}
       </span>
     );
   }
@@ -22,12 +26,12 @@ export function UsageBar({ used, limit, showLabel = true, className, isError = f
   if (limit < 0) {
     return (
       <span className="text-[10px] text-emerald-500 font-medium">
-        {used > 0 ? `${used} / ∞` : '∞ Unlimited'}
+        {used > 0 ? `${used} / ∞` : `∞ ${t('usageBar.unlimited')}`}
       </span>
     );
   }
   
-  // limit === 0 with used === 0 might be uninitialized or error
+  // Hide bar entirely when quota is null/0 (uninitialized or no quota)
   if (limit === 0 && used === 0) {
     return (
       <span className="text-[10px] text-slate-600 font-medium">
@@ -36,32 +40,73 @@ export function UsageBar({ used, limit, showLabel = true, className, isError = f
     );
   }
 
-  const percent = Math.min((used / limit) * 100, 100);
+  const remaining = Math.max(limit - used, 0);
+  const remainingPercent = (remaining / limit) * 100;
+  const usedPercent = Math.min((used / limit) * 100, 100);
   
-  // Color based on usage
-  const getBarColor = () => {
-    if (percent >= 90) return 'bg-gradient-to-r from-red-500 to-red-400';
-    if (percent >= 70) return 'bg-gradient-to-r from-amber-500 to-amber-400';
-    if (percent >= 50) return 'bg-gradient-to-r from-yellow-500 to-emerald-500';
-    return 'bg-gradient-to-r from-emerald-500 to-emerald-400';
+  // Color based on remaining percentage
+  const getBarStyles = () => {
+    if (remaining === 0) {
+      // Empty - gray, no glow
+      return {
+        colorClass: 'bg-slate-600',
+        glowClass: ''
+      };
+    }
+    if (remainingPercent < 20) {
+      // Low remaining - amber with glow
+      return {
+        colorClass: 'bg-amber-500',
+        glowClass: 'shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+      };
+    }
+    // High remaining (>50%) - emerald with glow
+    return {
+      colorClass: 'bg-emerald-500',
+      glowClass: 'shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+    };
   };
 
+  const { colorClass, glowClass } = getBarStyles();
+
   return (
-    <div className={cn('flex flex-col gap-0.5', className)}>
+    <div 
+      className={cn('relative flex items-center gap-2', className)}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      {/* Remaining number on the left */}
       {showLabel && (
-        <span className={cn(
-          'text-[10px] font-mono tabular-nums',
-          percent >= 90 ? 'text-red-400' : percent >= 70 ? 'text-amber-400' : 'text-zinc-500'
-        )}>
-          {used}/{limit}
+        <span className="font-mono font-bold text-white text-xs w-8 text-right">
+          {remaining}
         </span>
       )}
-      <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+      
+      {/* Progress bar on the right */}
+      <div 
+        className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden"
+        role="progressbar"
+        aria-valuenow={Math.round(remainingPercent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Remaining: ${remaining} of ${limit} (${Math.round(remainingPercent)}%)`}
+      >
         <div
-          className={cn('h-full rounded-full transition-all duration-300', getBarColor())}
-          style={{ width: `${percent}%` }}
+          className={cn('h-full rounded-full transition-all duration-300', colorClass, glowClass)}
+          style={{ width: `${100 - usedPercent}%` }}
         />
       </div>
+
+      {/* Tooltip on hover showing full info */}
+      {showTooltip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-[10px] text-zinc-300 whitespace-nowrap z-50 shadow-lg">
+          <span className="text-white font-medium">{used}</span>
+          <span className="text-zinc-500"> / </span>
+          <span className="text-zinc-400">{limit}</span>
+          <span className="text-zinc-600 ml-1">{t('usageBar.used')}</span>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-700" />
+        </div>
+      )}
     </div>
   );
 }

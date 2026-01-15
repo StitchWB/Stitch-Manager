@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Home, AlertTriangle } from 'lucide-react';
+import { t } from '../lib/i18n';
 
 export default function NotFound() {
   const navigate = useNavigate();
@@ -12,14 +13,14 @@ export default function NotFound() {
             <AlertTriangle className="w-8 h-8 text-amber-400" />
           </div>
         </div>
-        <h1 className="text-4xl font-bold text-white mb-2">404</h1>
-        <p className="text-slate-400 mb-6">Page Not Found</p>
+        <h1 className="text-4xl font-bold text-white mb-2">{t('notFoundPage.title')}</h1>
+        <p className="text-slate-400 mb-6">{t('notFoundPage.description')}</p>
         <button
           onClick={() => navigate('/')}
           className="btn-primary py-2 px-4 text-sm flex items-center gap-2 mx-auto"
         >
           <Home className="w-4 h-4" />
-          Go Home
+          {t('notFoundPage.goHome')}
         </button>
       </div>
     </div>

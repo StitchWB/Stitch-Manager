@@ -210,11 +210,16 @@
     color: #e2e8f0;
   }
 
-  /* Checkbox styling */
+  /* Custom Deep Space Checkbox Styling */
   input[type="checkbox"] {
-    @apply appearance-none w-4 h-4 rounded cursor-pointer transition-colors;
-    background: rgba(51, 65, 85, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    @apply appearance-none w-4 h-4 rounded cursor-pointer;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.2s ease;
+  }
+
+  input[type="checkbox"]:hover {
+    border-color: rgba(255, 255, 255, 0.4);
   }
 
   input[type="checkbox"]:checked {
@@ -223,10 +228,26 @@
     background-size: 100% 100%;
     background-position: center;
     background-repeat: no-repeat;
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
   }
 
   input[type="checkbox"]:focus {
+    outline: none;
     box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+  }
+
+  input[type="checkbox"]:checked:focus {
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.5), 0 0 0 2px rgba(99, 102, 241, 0.3);
+  }
+
+  /* Indeterminate state for select-all checkbox */
+  input[type="checkbox"]:indeterminate {
+    background-color: rgba(99, 102, 241, 0.5);
+    border-color: #6366f1;
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3crect x='3' y='7' width='10' height='2' rx='1'/%3e%3c/svg%3e");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
   }
 }
 
@@ -562,7 +583,7 @@ tr:hover .action-btn,
    Sonner Toast Customization
    ============================================ */
 [data-sonner-toaster] {
-  --normal-bg: #0f172a;
+  --normal-bg: rgba(15, 23, 42, 0.95);
   --normal-border: rgba(255, 255, 255, 0.1);
   --normal-text: #e2e8f0;
 }
@@ -570,6 +591,29 @@ tr:hover .action-btn,
 [data-sonner-toast] {
   @apply rounded-lg shadow-xl;
   font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Close button styling */
+[data-sonner-toast] [data-close-button] {
+  @apply bg-white/10 border-white/10 text-slate-400 hover:bg-white/20 hover:text-white transition-colors;
+  left: auto !important;
+  right: 4px !important;
+}
+
+/* Toast stacking animation */
+[data-sonner-toast][data-mounted="true"] {
+  animation: toast-slide-in 0.2s ease-out;
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 [data-sonner-toast][data-type="success"] {
@@ -676,4 +720,127 @@ input[type="range"]:disabled::-webkit-slider-thumb {
 
 input[type="range"]:disabled::-moz-range-thumb {
   cursor: not-allowed;
+}
+
+/* ============================================
+   Custom Quota Slider
+   ============================================ */
+input[type="range"].quota-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+}
+
+input[type="range"].quota-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #6366f1;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+}
+
+input[type="range"].quota-slider::-webkit-slider-thumb:hover {
+  background: #818cf8;
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.7);
+}
+
+input[type="range"].quota-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #6366f1;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+}
+
+input[type="range"].quota-slider::-moz-range-thumb:hover {
+  background: #818cf8;
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.7);
+}
+
+/* ============================================
+   Mission Control HUD Animations
+   ============================================ */
+
+/* Slide in from top for success cards */
+@keyframes slide-in-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: slide-in-from-top 0.5s ease-out;
+}
+
+.slide-in-from-top-2 {
+  animation: slide-in-from-top 0.5s ease-out;
+}
+
+/* Glow pulse for active states */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(139, 92, 246, 0.7);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Typing dots animation */
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Progress line shimmer */
+@keyframes progress-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-progress-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.8) 0%,
+    rgba(6, 182, 212, 1) 50%,
+    rgba(139, 92, 246, 0.8) 100%
+  );
+  background-size: 200% 100%;
+  animation: progress-shimmer 3s linear infinite;
+}
+
+/* ============================================
+   Hide Number Input Spinners
+   ============================================ */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
 }

@@ -8,11 +8,11 @@ import {
   Server,
   Settings,
   FileText,
-  ChevronDown,
   Terminal,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
+import { version as appVersion } from '../../../package.json';
 
 interface NavItemProps {
   to: string;
@@ -94,7 +94,7 @@ export default function Sidebar() {
               <h1 className="text-white text-sm font-semibold tracking-tight">
                 Stitch Manager
               </h1>
-              <span className="text-slate-500 text-2xs font-mono">v0.1.0</span>
+              <span className="text-slate-500 text-2xs font-mono">v{appVersion}</span>
             </div>
           )}
         </div>
@@ -120,23 +120,20 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* User Profile - Compact */}
+      {/* App Info Footer */}
       <div className="h-12 px-3 border-t border-white/5 flex items-center">
-        <button className="flex items-center gap-2 w-full hover:bg-white/[0.03] px-2 py-1.5 rounded transition-all duration-200 group active:scale-[0.98]">
+        <div className="flex items-center gap-2 w-full px-2 py-1.5">
           <div className="w-6 h-6 rounded-full flex items-center justify-center text-2xs font-bold text-white" style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 12px rgba(99, 102, 241, 0.4)' }}>
-            AD
+            <Terminal className="w-3 h-3" />
           </div>
           {!sidebarCollapsed && (
-            <>
-              <div className="flex flex-col items-start overflow-hidden flex-1">
-                <span className="text-xs font-medium text-white truncate w-full text-left">
-                  {t('sidebar.adminUser')}
-                </span>
-              </div>
-              <ChevronDown className="text-slate-500 group-hover:text-slate-400 w-3 h-3 transition-colors duration-200" />
-            </>
+            <div className="flex flex-col items-start overflow-hidden flex-1">
+              <span className="text-xs font-medium text-slate-400 truncate w-full text-left">
+                {t('sidebar.localMode')}
+              </span>
+            </div>
           )}
-        </button>
+        </div>
       </div>
     </aside>
   );

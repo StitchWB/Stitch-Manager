@@ -16,7 +16,7 @@ import { listen } from '@tauri-apps/api/event';
 
 import { cn } from '../lib/utils';
 import { StatusBar } from '../components/ui/KPICard';
-import { Terminal } from '../components/ui/Terminal';
+import { MissionControlHUD } from '../components/ui/MissionControlHUD';
 import { IdentitySystemCard, type IdentityConfig } from '../components/ui/IdentitySystemCard';
 import { NetworkCard, type NetworkConfig } from '../components/ui/NetworkCard';
 
@@ -37,15 +37,44 @@ const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
 // Tab types for the command center
 type ConfigTab = 'identity' | 'engine' | 'network';
 
-// Simple Tooltip component
+// Tooltip component with portal rendering to avoid z-index issues
 function Tooltip({ children, text }: { children: React.ReactNode; text: string }) {
+  const [show, setShow] = useState(false);
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseEnter = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setCoords({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8
+      });
+    }
+    setShow(true);
+  };
+
   return (
-    <div className="relative group">
+    <div 
+      ref={triggerRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setShow(false)}
+    >
       {children}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-[10px] text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 border border-white/10">
-        {text}
-        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
-      </div>
+      {show && (
+        <div 
+          className="fixed px-2 py-1 text-[10px] text-white bg-slate-800 rounded shadow-lg pointer-events-none whitespace-nowrap border border-white/10"
+          style={{ 
+            left: coords.x, 
+            top: coords.y,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 9999
+          }}
+        >
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+        </div>
+      )}
     </div>
   );
 }
@@ -387,8 +416,10 @@ export default function AutoRegNext() {
             } catch (err) {
               const errMsg = String(err);
               if (errMsg.includes('already exists') || errMsg.includes('Duplicate')) {
-                skipCount++;
-                addLog({ level: 'warn', message: `[${i + 1}/${totalCount}] Account ${result.email} already exists, skipping` });
+                // Account exists but registration succeeded - count as success (credentials updated)
+                successCount++;
+                addLog({ level: 'success', message: `[${i + 1}/${totalCount}] Account ${result.email} updated (was already in database)` });
+                addHistoryEntry({ provider: config.provider, email: result.email, status: 'completed' });
               } else {
                 failCount++;
                 addLog({ level: 'error', message: `[${i + 1}/${totalCount}] Failed to save account: ${errMsg}` });
@@ -567,8 +598,8 @@ export default function AutoRegNext() {
                       )}
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-slate-200">Headless Mode</div>
-                      <div className="text-[10px] text-slate-500">Run browser without visible window</div>
+                      <div className="text-sm font-medium text-slate-200">{t('autoReg.headless')}</div>
+                      <div className="text-[10px] text-slate-500">{t('autoReg.headlessDescription')}</div>
                     </div>
                   </div>
                   <div className={cn(
@@ -593,10 +624,10 @@ export default function AutoRegNext() {
               {/* Speed & Delay Row */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Speed Multiplier */}
-                <Tooltip text="Multiplier for all delays (0.5x = faster, 2x = slower)">
+                <Tooltip text={t('autoReg.tooltips.speed')}>
                   <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-slate-400">Speed</span>
+                      <span className="text-xs text-slate-400">{t('autoReg.speed')}</span>
                       <span className="text-xs font-mono text-indigo-400">{config.advanced.speedMultiplier.toFixed(1)}x</span>
                     </div>
                     <input
@@ -611,17 +642,17 @@ export default function AutoRegNext() {
                       style={{ background: 'rgba(255,255,255,0.1)' }}
                     />
                     <div className="flex justify-between mt-1">
-                      <span className="text-[9px] text-slate-600">Slow</span>
-                      <span className="text-[9px] text-slate-600">Fast</span>
+                      <span className="text-[9px] text-slate-600">{t('autoReg.slow')}</span>
+                      <span className="text-[9px] text-slate-600">{t('autoReg.fast')}</span>
                     </div>
                   </div>
                 </Tooltip>
 
                 {/* Delay Between Accounts */}
-                <Tooltip text="Pause between registrations to avoid rate limiting">
+                <Tooltip text={t('autoReg.tooltips.delay')}>
                   <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-slate-400">Delay</span>
+                      <span className="text-xs text-slate-400">{t('autoReg.delay')}</span>
                       <span className="text-xs font-mono text-indigo-400">{config.advanced.delayBetweenAccounts}s</span>
                     </div>
                     <input
@@ -647,70 +678,70 @@ export default function AutoRegNext() {
               <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <Timer className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">Timeouts</span>
+                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">{t('autoReg.timeouts')}</span>
                 </div>
                 
                 {/* 2-Column Grid for Timeouts */}
                 <div className="grid grid-cols-2 gap-2">
                   <TimeoutInput
-                    label="Verification"
+                    label={t('autoReg.verification')}
                     value={config.advanced.verificationCodeTimeout}
                     onChange={(v) => setAdvancedSettings({ verificationCodeTimeout: v })}
                     min={60}
                     max={180}
                     step={10}
                     disabled={isRunning}
-                    tooltip="Time to wait for email verification code"
+                    tooltip={t('autoReg.tooltips.verification')}
                   />
                   <TimeoutInput
-                    label="OAuth"
+                    label={t('autoReg.oauth')}
                     value={config.advanced.oauthCallbackTimeout}
                     onChange={(v) => setAdvancedSettings({ oauthCallbackTimeout: v })}
                     min={30}
                     max={180}
                     step={10}
                     disabled={isRunning}
-                    tooltip="Time to wait for OAuth redirect from AWS"
+                    tooltip={t('autoReg.tooltips.oauth')}
                   />
                   <TimeoutInput
-                    label="Allow Access"
+                    label={t('autoReg.allowAccess')}
                     value={config.advanced.allowAccessWait}
                     onChange={(v) => setAdvancedSettings({ allowAccessWait: v })}
                     min={60}
                     max={300}
                     step={10}
                     disabled={isRunning}
-                    tooltip="Time to wait for 'Allow access' button click"
+                    tooltip={t('autoReg.tooltips.allowAccess')}
                   />
                   <TimeoutInput
-                    label="Page Load"
+                    label={t('autoReg.pageLoad')}
                     value={config.advanced.pageLoadTimeout}
                     onChange={(v) => setAdvancedSettings({ pageLoadTimeout: v })}
                     min={2}
                     max={15}
                     step={1}
                     disabled={isRunning}
-                    tooltip="Max time to wait for page to load"
+                    tooltip={t('autoReg.tooltips.pageLoad')}
                   />
                   <TimeoutInput
-                    label="Element Wait"
+                    label={t('autoReg.elementWait')}
                     value={config.advanced.elementWaitTimeout}
                     onChange={(v) => setAdvancedSettings({ elementWaitTimeout: v })}
                     min={1}
                     max={10}
                     step={1}
                     disabled={isRunning}
-                    tooltip="Time to wait for UI elements to appear"
+                    tooltip={t('autoReg.tooltips.elementWait')}
                   />
                   <TimeoutInput
-                    label="IMAP Poll"
+                    label={t('autoReg.imapPoll')}
                     value={config.advanced.imapPollInterval}
                     onChange={(v) => setAdvancedSettings({ imapPollInterval: v })}
                     min={0.5}
                     max={5}
                     step={0.5}
                     disabled={isRunning}
-                    tooltip="How often to check inbox for verification code"
+                    tooltip={t('autoReg.tooltips.imapPoll')}
                   />
                 </div>
               </div>
@@ -719,14 +750,14 @@ export default function AutoRegNext() {
               <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <Keyboard className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">Behavior</span>
+                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">{t('autoReg.behavior')}</span>
                 </div>
                 
                 {/* Password Length */}
-                <Tooltip text="Length of generated account password">
+                <Tooltip text={t('autoReg.tooltips.passwordLength')}>
                   <div className="mb-3">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-slate-400">Password Length</span>
+                      <span className="text-xs text-slate-400">{t('autoReg.passwordLength')}</span>
                       <span className="text-xs font-mono text-indigo-400">{config.advanced.passwordLength}</span>
                     </div>
                     <input
@@ -746,25 +777,25 @@ export default function AutoRegNext() {
                 {/* Toggle Switches - 2 rows */}
                 <div className="grid grid-cols-2 gap-2">
                   <ToggleSwitch
-                    label="Realistic Typing"
+                    label={t('autoReg.realisticTyping')}
                     checked={config.advanced.realisticTyping}
                     onChange={(v) => setAdvancedSettings({ realisticTyping: v })}
                     disabled={isRunning}
-                    tooltip="Type like a human with random delays"
+                    tooltip={t('autoReg.tooltips.realisticTyping')}
                   />
                   <ToggleSwitch
-                    label="Human Delays"
+                    label={t('autoReg.humanDelays')}
                     checked={config.advanced.humanDelays}
                     onChange={(v) => setAdvancedSettings({ humanDelays: v })}
                     disabled={isRunning}
-                    tooltip="Add random pauses between actions"
+                    tooltip={t('autoReg.tooltips.humanDelays')}
                   />
                   <ToggleSwitch
-                    label="Screenshots"
+                    label={t('autoReg.screenshots')}
                     checked={config.advanced.screenshotsOnError}
                     onChange={(v) => setAdvancedSettings({ screenshotsOnError: v })}
                     disabled={isRunning}
-                    tooltip="Save screenshot when error occurs"
+                    tooltip={t('autoReg.tooltips.screenshots')}
                   />
                 </div>
               </div>
@@ -784,7 +815,7 @@ export default function AutoRegNext() {
         {/* Zone C: Launch Pad (Fixed Bottom) */}
         <div className="shrink-0 p-4 border-t border-white/5">
           <div className="flex rounded-lg overflow-hidden" style={{ boxShadow: '0 0 20px rgba(99, 102, 241, 0.15)' }}>
-            {/* Count Input - attached to button */}
+            {/* Count Input - cleaner, no # symbol */}
             <div className="relative">
               <input
                 type="number"
@@ -793,10 +824,9 @@ export default function AutoRegNext() {
                 value={config.count}
                 onChange={(e) => setCount(parseInt(e.target.value) || 1)}
                 disabled={isRunning}
-                className="w-16 h-11 text-center font-mono font-bold text-white rounded-l-lg rounded-r-none border-r-0 focus:outline-none focus:ring-0"
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRight: 'none' }}
+                className="w-14 h-11 text-center font-mono font-bold text-white text-lg rounded-l-lg rounded-r-none border-r-0 focus:outline-none focus:ring-0"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRight: 'none' }}
               />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-600">#</span>
             </div>
             
             {/* Start/Stop Button - attached to input */}
@@ -837,11 +867,11 @@ export default function AutoRegNext() {
         </div>
       </div>
 
-      {/* Right Panel - Console Output Card */}
+      {/* Right Panel - Mission Control HUD */}
       <div className="flex-1 flex flex-col min-w-0 p-4" style={{ background: '#050508' }}>
-        <div className="card h-full flex flex-col border border-white/5">
+        <div className="card h-full flex flex-col border border-white/5 overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+          <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/5">
             <div>
               <h3 className="text-sm font-semibold text-white">{t('autoReg.consoleOutput')}</h3>
               <p className="text-2xs text-slate-500 mt-0.5">{t('autoReg.liveRegistrationLogs')}</p>
@@ -857,9 +887,16 @@ export default function AutoRegNext() {
             </div>
           </div>
           
-          {/* Terminal */}
+          {/* Mission Control HUD */}
           <div className="flex-1 min-h-0">
-            <Terminal logs={logs} className="h-full" />
+            <MissionControlHUD 
+              logs={logs} 
+              isRunning={activeThreads > 0}
+              canStart={canStart}
+              onStart={handleStart}
+              onClear={clearLogs} 
+              className="h-full" 
+            />
           </div>
         </div>
       </div>
