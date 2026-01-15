@@ -204,7 +204,7 @@ export default function Logs() {
               onChange={(e) => handleSourceChange(e.target.value)}
               className="input-ds text-sm py-1.5 w-36 appearance-none pr-8"
             >
-              <option value="">{t('common.all')} Sources</option>
+              <option value="">{t('logs.allSources')}</option>
               {LOG_SOURCES.map((source) => (
                 <option key={source} value={source}>
                   {source}
@@ -232,7 +232,7 @@ export default function Logs() {
               onClick={handleResetFilters}
               className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
             >
-              Reset filters
+              {t('logs.resetFilters')}
             </button>
           )}
         </div>
@@ -307,7 +307,7 @@ export default function Logs() {
                   onClick={loadMore}
                   className="btn-secondary text-sm"
                 >
-                  Load more
+                  {t('logs.loadMore')}
                 </button>
               </div>
             )}
@@ -324,7 +324,7 @@ export default function Logs() {
             </span>
             {hasMore && (
               <span className="text-2xs text-slate-600">
-                Scroll or click "Load more" to see older logs
+                {t('logs.scrollHint')}
               </span>
             )}
           </div>
@@ -335,9 +335,9 @@ export default function Logs() {
       {showClearConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 border border-white/10 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-2">Clear all logs?</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">{t('logs.clearConfirmTitle')}</h3>
             <p className="text-sm text-slate-400 mb-6">
-              This action cannot be undone. All logs will be permanently deleted.
+              {t('logs.clearConfirmMessage')}
             </p>
             <div className="flex justify-end gap-3">
               <button

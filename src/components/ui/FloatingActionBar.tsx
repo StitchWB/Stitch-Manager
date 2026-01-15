@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Trash2, X, RefreshCw } from 'lucide-react';
+import { Download, Trash2, X, RefreshCw, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { t } from '../../lib/i18n';
 
 interface FloatingActionBarProps {
   selectedCount: number;
@@ -9,6 +10,9 @@ interface FloatingActionBarProps {
   onRefreshAll: () => void;
   onClear: () => void;
   className?: string;
+  // Bulk refresh state
+  isRefreshing?: boolean;
+  refreshProgress?: { current: number; total: number };
 }
 
 export function FloatingActionBar({
@@ -18,7 +22,16 @@ export function FloatingActionBar({
   onRefreshAll,
   onClear,
   className,
+  isRefreshing = false,
+  refreshProgress,
 }: FloatingActionBarProps) {
+  const progressText = refreshProgress 
+    ? t('accounts.syncing', { 
+        current: refreshProgress.current.toString(), 
+        total: refreshProgress.total.toString() 
+      }) || `Syncing ${refreshProgress.current}/${refreshProgress.total}...`
+    : null;
+
   return (
     <AnimatePresence>
       {selectedCount > 0 && (
@@ -28,53 +41,80 @@ export function FloatingActionBar({
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
           className={cn(
-            'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
-            'flex items-center gap-1 px-2 py-1.5',
-            'bg-vsc-sidebar border border-vsc-border rounded-sm shadow-2xl',
+            'fixed bottom-0 left-0 right-0 z-50',
+            'h-14 flex items-center justify-between px-6',
+            'border-t border-white/10',
+            'shadow-action-bar',
             className
           )}
+          style={{ background: '#18181b' }}
         >
-          {/* Count */}
-          <div className="px-2 py-1 text-xs font-medium text-vsc-text-muted">
-            <span className="text-vsc-text font-semibold">{selectedCount}</span> selected
+          {/* Left: Selection count or progress */}
+          <div className="text-sm text-white font-medium">
+            {isRefreshing && progressText ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                <span className="text-indigo-300">{progressText}</span>
+              </span>
+            ) : (
+              <>
+                <span className="text-white font-semibold">{selectedCount}</span>
+                <span className="text-slate-400 ml-1.5">{t('accounts.accountsSelected') || 'selected'}</span>
+              </>
+            )}
           </div>
 
-          <div className="w-px h-5 bg-vsc-border" />
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onRefreshAll}
+              disabled={isRefreshing}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg transition-colors",
+                isRefreshing
+                  ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 cursor-not-allowed"
+                  : "text-slate-300 hover:text-white border border-white/10 hover:border-white/20"
+              )}
+              aria-label={`Refresh ${selectedCount} selected accounts`}
+            >
+              {isRefreshing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+              {isRefreshing ? (progressText || 'Syncing...') : (t('common.refresh') || 'Refresh')}
+            </button>
 
-          {/* Actions */}
-          <button
-            onClick={onRefreshAll}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-vsc-text-muted hover:text-vsc-text hover:bg-vsc-hover rounded-sm transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh
-          </button>
+            <button
+              onClick={onExport}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label={`Export ${selectedCount} selected accounts`}
+            >
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+              {t('common.export') || 'Export'}
+            </button>
 
-          <button
-            onClick={onExport}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-vsc-text-muted hover:text-vsc-text hover:bg-vsc-hover rounded-sm transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export
-          </button>
+            <button
+              onClick={onDelete}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label={`Delete ${selectedCount} selected accounts`}
+            >
+              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+              {t('common.delete') || 'Delete'}
+            </button>
 
-          <button
-            onClick={onDelete}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-vsc-red hover:text-vsc-red hover:bg-vsc-red/10 rounded-sm transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete
-          </button>
-
-          <div className="w-px h-5 bg-vsc-border" />
-
-          {/* Close */}
-          <button
-            onClick={onClear}
-            className="p-1.5 text-vsc-text-muted hover:text-vsc-text hover:bg-vsc-hover rounded-sm transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+            {/* Close button */}
+            <button
+              onClick={onClear}
+              disabled={isRefreshing}
+              className="ml-2 p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label={t('accounts.clearSelection')}
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

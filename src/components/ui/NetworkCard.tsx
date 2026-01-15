@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Wifi, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { Wifi, ChevronRight, Eye, EyeOff, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { t } from '../../lib/i18n';
 
 export interface NetworkConfig {
   enabled: boolean;
@@ -9,22 +10,77 @@ export interface NetworkConfig {
   password?: string;
 }
 
+export type TestConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
+
 interface NetworkCardProps {
   config: NetworkConfig;
   onChange: (config: Partial<NetworkConfig>) => void;
+  onTest?: () => Promise<boolean> | void;
   disabled?: boolean;
+  testStatus?: TestConnectionStatus;
+  testError?: string;
 }
 
-export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
+export function NetworkCard({ 
+  config, 
+  onChange, 
+  onTest,
+  disabled,
+  testStatus: externalTestStatus,
+  testError: externalTestError,
+}: NetworkCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [internalTestStatus, setInternalTestStatus] = useState<TestConnectionStatus>('idle');
+  const [internalTestError, setInternalTestError] = useState<string>('');
+  
+  // Use external status if provided, otherwise use internal
+  const testStatus = externalTestStatus ?? internalTestStatus;
+  const testError = externalTestError ?? internalTestError;
 
   const isReady = !config.enabled || (config.enabled && !!config.url);
   const summary = config.enabled
     ? config.url
       ? `Proxy: ${config.url.slice(0, 30)}${config.url.length > 30 ? '...' : ''}`
-      : 'Proxy URL required'
-    : 'Direct Connection';
+      : t('autoReg.proxyUrlRequired')
+    : t('autoReg.directConnection');
+
+  // Handle test connection
+  const handleTest = async () => {
+    if (!onTest) return;
+    
+    if (externalTestStatus !== undefined) {
+      // External state management - just call onTest
+      onTest();
+      return;
+    }
+    
+    // Internal state management
+    setInternalTestStatus('testing');
+    setInternalTestError('');
+    try {
+      const result = await onTest();
+      if (result === false) {
+        setInternalTestStatus('error');
+        setInternalTestError('Connection failed');
+      } else {
+        setInternalTestStatus('success');
+      }
+      // Auto-reset after 3 seconds
+      setTimeout(() => {
+        setInternalTestStatus('idle');
+        setInternalTestError('');
+      }, 3000);
+    } catch (err) {
+      setInternalTestStatus('error');
+      setInternalTestError(err instanceof Error ? err.message : 'Connection failed');
+      // Auto-reset after 5 seconds
+      setTimeout(() => {
+        setInternalTestStatus('idle');
+        setInternalTestError('');
+      }, 5000);
+    }
+  };
 
   return (
     <div className="card border border-white/5">
@@ -39,7 +95,7 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-slate-200">Network</div>
+          <div className="text-sm font-medium text-slate-200">{t('autoReg.network')}</div>
           {!isExpanded && (
             <div className={cn('text-2xs font-mono truncate', isReady ? 'text-emerald-400' : 'text-amber-400')}>
               {summary}
@@ -70,7 +126,7 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
         <div className="px-4 pb-4 space-y-3 border-t border-white/5">
           {/* Proxy Toggle */}
           <label className="flex items-center justify-between pt-3">
-            <span className="text-xs text-slate-400">Use Proxy</span>
+            <span className="text-xs text-slate-400">{t('autoReg.useProxy')}</span>
             <input
               type="checkbox"
               checked={config.enabled}
@@ -84,10 +140,10 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
             <>
               {/* Proxy URL */}
               <div>
-                <label className="input-label">Proxy URL</label>
+                <label className="input-label">{t('autoReg.proxyUrl')}</label>
                 <input
                   type="text"
-                  placeholder="http://user:pass@proxy:8080"
+                  placeholder={t('autoReg.placeholders.proxyUrl')}
                   value={config.url}
                   onChange={(e) => onChange({ url: e.target.value })}
                   disabled={disabled}
@@ -98,10 +154,10 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
               {/* Optional Credentials */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="input-label">Username</label>
+                  <label className="input-label">{t('autoReg.username')}</label>
                   <input
                     type="text"
-                    placeholder="Optional"
+                    placeholder={t('autoReg.placeholders.optional')}
                     value={config.username || ''}
                     onChange={(e) => onChange({ username: e.target.value })}
                     disabled={disabled}
@@ -109,11 +165,11 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
                   />
                 </div>
                 <div>
-                  <label className="input-label">Password</label>
+                  <label className="input-label">{t('accounts.password')}</label>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Optional"
+                      placeholder={t('autoReg.placeholders.optional')}
                       value={config.password || ''}
                       onChange={(e) => onChange({ password: e.target.value })}
                       disabled={disabled}
@@ -133,6 +189,56 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Test Connection Button */}
+              {onTest && (
+                <div className="flex items-center justify-between pt-2">
+                  <div className="h-4 flex items-center">
+                    {testStatus === 'success' && (
+                      <span className="text-2xs text-emerald-500 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        {t('autoReg.connected')}
+                      </span>
+                    )}
+                    {testStatus === 'error' && (
+                      <span className="text-2xs text-red-500 flex items-center gap-1" title={testError}>
+                        <XCircle className="w-3 h-3" />
+                        {testError || t('status.failed')}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleTest}
+                    disabled={!isReady || disabled || testStatus === 'testing'}
+                    className={cn(
+                      "text-xs py-1.5 px-3 rounded-md border transition-colors flex items-center gap-1.5",
+                      "border-white/10 text-slate-400 hover:text-white hover:border-white/20",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                      testStatus === 'success' && "border-emerald-500/30 text-emerald-400",
+                      testStatus === 'error' && "border-red-500/30 text-red-400"
+                    )}
+                  >
+                    {testStatus === 'testing' ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        {t('autoReg.testing')}
+                      </>
+                    ) : testStatus === 'success' ? (
+                      <>
+                        <CheckCircle className="w-3 h-3" />
+                        {t('autoReg.success')}
+                      </>
+                    ) : testStatus === 'error' ? (
+                      <>
+                        <XCircle className="w-3 h-3" />
+                        {t('autoReg.retry')}
+                      </>
+                    ) : (
+                      t('autoReg.testConnection')
+                    )}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
