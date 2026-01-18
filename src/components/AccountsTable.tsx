@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import type { Account, AccountStatus } from '../types';
 import { useAppStore } from '../stores/app';
+import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { ProviderLogo } from './ui/ProviderLogo';
@@ -24,6 +25,7 @@ import { UsageBar } from './ui/UsageBar';
 import { StatusBadge } from './ui/StatusBadge';
 import { AccountDrawer } from './ui/AccountDrawer';
 import { FloatingActionBar } from './ui/FloatingActionBar';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
 
 // Helper function for middle truncation of emails
@@ -56,7 +58,6 @@ const getStatusLabel = (status: AccountStatus): string => {
 };
 
 type SortField = 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt';
-type SortDirection = 'asc' | 'desc';
 
 interface AccountsTableProps {
   accounts: Account[];
@@ -76,7 +77,7 @@ interface AccountsTableProps {
 }
 
 function formatRelativeTime(dateString?: string): string {
-  if (!dateString) return '—';
+  if (!dateString) return 'Never';
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -108,8 +109,12 @@ export default function AccountsTable({
   onCheckStatus,
 }: AccountsTableProps) {
   const { language } = useAppStore();
-  const [sortField, setSortField] = useState<SortField>('email');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const { 
+    sortField, 
+    sortDirection, 
+    setSortField, 
+    setSortDirection 
+  } = useAccountsStore();
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const [activatingIds, setActivatingIds] = useState<Set<number>>(new Set());
   const [checkingStatusIds, setCheckingStatusIds] = useState<Set<number>>(new Set());
@@ -117,6 +122,15 @@ export default function AccountsTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerAccount, setDrawerAccount] = useState<Account | null>(null);
   const itemsPerPage = 50;
+
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    type: 'single' | 'bulk';
+    accountId?: number;
+    accountIds?: number[];
+  }>({ isOpen: false, type: 'single' });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Bulk refresh hook
   const { 
@@ -147,13 +161,13 @@ export default function AccountsTable({
         case 'email': comparison = a.email.localeCompare(b.email); break;
         case 'status': comparison = a.status.localeCompare(b.status); break;
         case 'quota':
-          const aRatio = a.quota.limit > 0 ? a.quota.used / a.quota.limit : 0;
-          const bRatio = b.quota.limit > 0 ? b.quota.used / b.quota.limit : 0;
+          const aRatio = (a.quota && a.quota.limit > 0) ? a.quota.used / a.quota.limit : 0;
+          const bRatio = (b.quota && b.quota.limit > 0) ? b.quota.used / b.quota.limit : 0;
           comparison = aRatio - bRatio;
           break;
         case 'tokenExpires':
-          const aDate = a.quota.resetAt ? new Date(a.quota.resetAt).getTime() : 0;
-          const bDate = b.quota.resetAt ? new Date(b.quota.resetAt).getTime() : 0;
+          const aDate = a.quota?.resetAt ? new Date(a.quota.resetAt).getTime() : 0;
+          const bDate = b.quota?.resetAt ? new Date(b.quota.resetAt).getTime() : 0;
           comparison = aDate - bDate;
           break;
         case 'createdAt':
@@ -240,6 +254,81 @@ export default function AccountsTable({
 
   const isAccountActive = (account: Account) => activeAccountIds[account.provider] === account.id;
 
+  const handleDeleteClick = (accountId: number) => {
+    setConfirmDialog({ isOpen: true, type: 'single', accountId });
+  };
+
+  const handleBulkDeleteClick = (ids: number[]) => {
+    setConfirmDialog({ isOpen: true, type: 'bulk', accountIds: ids });
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      if (confirmDialog.type === 'single' && confirmDialog.accountId) {
+        await onDelete(confirmDialog.accountId);
+      } else if (confirmDialog.type === 'bulk' && confirmDialog.accountIds) {
+        await onDeleteSelected(confirmDialog.accountIds);
+      }
+      setConfirmDialog({ isOpen: false, type: 'single' });
+    } catch (error) {
+      console.error('Delete failed:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const getConfirmDialogContent = () => {
+    if (confirmDialog.type === 'single' && confirmDialog.accountId) {
+      const account = accounts.find(a => a.id === confirmDialog.accountId);
+      return {
+        title: t('accounts.deleteAccountTitle'),
+        message: (
+          <div>
+            <p className="mb-3">{t('accounts.deleteAccountMessage')}</p>
+            {account && (
+              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <p className="text-xs text-slate-400 mb-1">Email:</p>
+                <p className="text-sm font-mono text-slate-200">{account.email}</p>
+              </div>
+            )}
+          </div>
+        ),
+      };
+    } else if (confirmDialog.type === 'bulk' && confirmDialog.accountIds) {
+      const accountsToDelete = accounts.filter(a => confirmDialog.accountIds?.includes(a.id));
+      const previewCount = 3;
+      const hasMore = accountsToDelete.length > previewCount;
+      
+      return {
+        title: t('accounts.deleteBulkTitle'),
+        message: (
+          <div>
+            <p className="mb-3">{t('accounts.deleteBulkMessage', { count: confirmDialog.accountIds.length })}</p>
+            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+              <p className="text-xs text-slate-400 mb-2">{t('accounts.deleteBulkPreview')}</p>
+              <ul className="space-y-1">
+                {accountsToDelete.slice(0, previewCount).map(account => (
+                  <li key={account.id} className="text-xs font-mono text-slate-300">
+                    • {account.email}
+                  </li>
+                ))}
+                {hasMore && (
+                  <li className="text-xs text-slate-500 italic">
+                    ... and {accountsToDelete.length - previewCount} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          </div>
+        ),
+      };
+    }
+    return { title: '', message: '' };
+  };
+
+  const dialogContent = getConfirmDialogContent();
+
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null;
     return sortDirection === 'asc' 
@@ -260,7 +349,7 @@ export default function AccountsTable({
       >
         {/* Table */}
         <div className={cn(
-          "flex-1 overflow-auto transition-[padding] duration-300",
+          "flex-1 overflow-auto transition-[padding] duration-300 accounts-table-container",
           selectedIds.size > 0 && "pb-16" // Account for FloatingActionBar height (h-14 + margin)
         )}>
           <table className="w-full" role="table" aria-label={t('accounts.accountsTable')}>
@@ -290,6 +379,11 @@ export default function AccountsTable({
                 <th className="w-28 px-3 text-left">
                   <button onClick={() => handleSort('quota')} className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors">
                     {t('accountsTable.usage')} <SortIcon field="quota" />
+                  </button>
+                </th>
+                <th className="w-32 px-3 text-left">
+                  <button onClick={() => handleSort('createdAt')} className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors">
+                    {t('accountsTable.created')} <SortIcon field="createdAt" />
                   </button>
                 </th>
                 <th className="w-20 px-3 text-left">
@@ -340,6 +434,8 @@ export default function AccountsTable({
                         // Selection and active states
                         isSelected && 'bg-indigo-500/10',
                         isActive && 'bg-emerald-500/5 border-l-2 border-l-emerald-400',
+                        // Syncing state - subtle pulse
+                        isSyncing && 'bg-indigo-500/5 animate-pulse',
                         // Improved hover effect
                         !isSelected && !isActive && 'hover:bg-white/[0.03]'
                       )}
@@ -397,21 +493,50 @@ export default function AccountsTable({
 
                       {/* Status */}
                       <td className="py-3 px-3 align-middle">
-                        {isSyncing ? (
-                          <div className="flex items-center gap-1.5">
-                            <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-                            <span className="text-[10px] text-indigo-300">Syncing...</span>
-                          </div>
-                        ) : (
-                          <StatusBadge variant={getStatusVariant(account.status)}>
-                            {getStatusLabel(account.status)}
-                          </StatusBadge>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {isSyncing ? (
+                            <div className="flex items-center gap-1.5 animate-pulse">
+                              <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
+                              <span className="text-[10px] text-indigo-300 font-medium">Syncing...</span>
+                            </div>
+                          ) : account.status === 'expired' ? (
+                            <>
+                              <StatusBadge variant="warning">
+                                {getStatusLabel(account.status)}
+                              </StatusBadge>
+                              <span className="text-[9px] text-amber-400/70" title="Re-authentication required">⚠️</span>
+                            </>
+                          ) : account.status === 'active' ? (
+                            <StatusBadge variant="success" minimal>
+                              Active
+                            </StatusBadge>
+                          ) : (
+                            <StatusBadge variant={getStatusVariant(account.status)}>
+                              {getStatusLabel(account.status)}
+                            </StatusBadge>
+                          )}
+                          {/* Quota warning badge when >80% */}
+                          {account.quota && account.quota.limit > 0 && (account.quota.used / account.quota.limit) > 0.8 && (
+                            <span 
+                              className="text-[9px] text-amber-400/70" 
+                              title={`Quota almost full: ${Math.round((account.quota.used / account.quota.limit) * 100)}% used`}
+                            >
+                              ⚠️
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Usage Bar */}
                       <td className="py-3 px-3 align-middle">
-                        <UsageBar used={account.quota.used} limit={account.quota.limit} />
+                        <UsageBar used={account.quota?.used || 0} limit={account.quota?.limit || 0} />
+                      </td>
+
+                      {/* Created At */}
+                      <td className="py-3 px-3 align-middle">
+                        <span className="text-[10px] text-slate-500 tabular-nums">
+                          {formatRelativeTime(account.createdAt)}
+                        </span>
                       </td>
 
                       {/* Last Active */}
@@ -421,9 +546,20 @@ export default function AccountsTable({
                         </span>
                       </td>
 
-                      {/* Actions - Hover visible */}
+                      {/* Actions - Always visible */}
                       <td className="py-3 px-3 align-middle">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1">
+                          {/* Refresh */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRefresh(account.id); }}
+                            disabled={isRefreshing}
+                            className="p-1.5 rounded-sm text-slate-400 hover:text-white hover:bg-white/[0.03] transition-colors disabled:opacity-30"
+                            aria-label={t('accountsTable.refresh')}
+                            title={t('accountsTable.refresh')}
+                          >
+                            <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+                          </button>
+
                           {/* Play/Stop */}
                           <button
                             onClick={(e) => { e.stopPropagation(); handleActivate(account); }}
@@ -446,8 +582,8 @@ export default function AccountsTable({
                             )}
                           </button>
 
-                          {/* More Menu */}
-                          <div className="relative">
+                          {/* More Menu - Only visible on hover */}
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity relative">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -463,27 +599,30 @@ export default function AccountsTable({
                             
                             {openMenuId === account.id && (
                               <div 
-                                className="absolute right-0 top-full mt-1 w-36 rounded-sm shadow-xl z-50 py-1"
-                                style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.05)' }}
+                                className="absolute right-0 top-full mt-1 w-40 rounded-lg shadow-2xl z-50 py-1 backdrop-blur-xl"
+                                style={{ 
+                                  background: 'rgba(26, 26, 26, 0.95)', 
+                                  border: '1px solid rgba(255,255,255,0.1)' 
+                                }}
                                 role="menu"
                                 aria-label={t('accounts.accountActions')}
                               >
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleCheckStatus(account.id); setOpenMenuId(null); }}
                                   disabled={isCheckingStatus}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200 disabled:opacity-50"
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-slate-200 disabled:opacity-50 transition-colors"
                                   role="menuitem"
                                 >
-                                  <Activity size={10} className={isCheckingStatus ? 'animate-pulse' : ''} aria-hidden="true" />
-                                  {t('accountsTable.checkStatus')}
+                                  <Activity size={12} className={isCheckingStatus ? 'animate-pulse' : ''} aria-hidden="true" />
+                                  <span>{t('accountsTable.checkStatus')}</span>
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleRefresh(account.id); setOpenMenuId(null); }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200"
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
                                   role="menuitem"
                                 >
-                                  <RefreshCw size={10} className={isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
-                                  {t('accountsTable.refresh')}
+                                  <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
+                                  <span>{t('accountsTable.refresh')}</span>
                                 </button>
                                 <button
                                   onClick={(e) => { 
@@ -493,19 +632,20 @@ export default function AccountsTable({
                                     setOpenMenuId(null); 
                                   }}
                                   disabled={!account.token}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-slate-500 hover:bg-white/[0.03] hover:text-slate-200 disabled:opacity-50"
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-slate-200 disabled:opacity-50 transition-colors"
                                   role="menuitem"
                                 >
-                                  <Copy size={10} aria-hidden="true" />
-                                  {t('accountsTable.copyToken')}
+                                  <Copy size={12} aria-hidden="true" />
+                                  <span>{t('accountsTable.copyToken')}</span>
                                 </button>
+                                <div className="h-px bg-white/5 my-1" />
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); onDelete(account.id); setOpenMenuId(null); }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-400/10"
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteClick(account.id); setOpenMenuId(null); }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
                                   role="menuitem"
                                 >
-                                  <Trash2 size={10} aria-hidden="true" />
-                                  {t('accountsTable.delete')}
+                                  <Trash2 size={12} aria-hidden="true" />
+                                  <span>{t('accountsTable.delete')}</span>
                                 </button>
                               </div>
                             )}
@@ -556,11 +696,24 @@ export default function AccountsTable({
       <FloatingActionBar
         selectedCount={selectedIds.size}
         onExport={onExportCSV}
-        onDelete={() => onDeleteSelected([...selectedIds])}
+        onDelete={() => handleBulkDeleteClick([...selectedIds])}
         onRefreshAll={() => startBulkRefresh([...selectedIds])}
         onClear={onClearSelection}
         isRefreshing={isBulkRefreshing}
         refreshProgress={bulkProgress}
+      />
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, type: 'single' })}
+        onConfirm={handleConfirmDelete}
+        title={dialogContent.title}
+        message={dialogContent.message}
+        confirmText={t('accounts.confirmDelete')}
+        cancelText={t('common.cancel')}
+        variant="danger"
+        isLoading={isDeleting}
       />
 
       {/* Account Drawer */}
