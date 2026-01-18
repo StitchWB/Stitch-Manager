@@ -1,38 +1,31 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, RefreshCw, Download, Users, AlertCircle } from 'lucide-react';
 import Header from '../components/layout/Header';
 import AccountsTable from '../components/AccountsTable';
 import AddAccountModal from '../components/AddAccountModal';
 import { StatusFilterChip, QuotaFilterChip } from '../components/ui/FilterChip';
+import { ProviderFilter } from '../components/accounts/ProviderFilter';
 import { useAccountsStore } from '../stores/accounts';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
-import { copyToClipboard, checkAccountStatus } from '../lib/tauri';
+import { copyToClipboard, checkAccountStatus, getAccounts, type GetAccountsParams } from '../lib/tauri';
 import { t } from '../lib/i18n';
-import type { ProviderName, AccountStatus } from '../types';
-
-// Provider tabs are derived from the app store's providers list
-const getProviderTabs = (providers: { id: ProviderName; name: string }[]): { id: ProviderName | null; labelKey: string; label: string }[] => [
-  { id: null, labelKey: 'accounts.filterAll', label: 'All' },
-  ...providers.map(p => ({ id: p.id, labelKey: '', label: p.name })),
-];
+import type { ProviderName, AccountStatus, Account } from '../types';
 
 export default function Accounts() {
-  const { language, providers } = useAppStore();
+  const navigate = useNavigate();
+  const { language } = useAppStore();
   const { addLog } = useLogsStore();
-  const providerTabs = getProviderTabs(providers);
   const {
     loading: isLoading,
     error: storeError,
     searchQuery,
     setSearchQuery,
-    selectedProvider: filterProvider,
-    setSelectedProvider: setFilterProvider,
     statusFilter,
     setStatusFilter,
     quotaFilter,
     setQuotaFilter,
-    getFilteredAccounts,
     selectedIds,
     toggleSelection,
     selectAll,
@@ -43,15 +36,58 @@ export default function Accounts() {
     deleteAccounts: removeSelectedAccounts,
     refreshAccount,
     refreshAllAccounts,
+    refreshExpiredAccounts,
     activeAccountIds,
     setActiveAccount,
   } = useAccountsStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [isRefreshingExpired, setIsRefreshingExpired] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [providerFilter, setProviderFilter] = useState('all');
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
-  const accounts = getFilteredAccounts();
+  // Custom fetch function that uses the new getAccounts API with filtering
+  const fetchAccountsWithFilter = useCallback(async () => {
+    try {
+      const params: GetAccountsParams = {};
+      
+      if (providerFilter !== 'all') {
+        // Map filter values to actual provider names in database
+        let providerSubtype = providerFilter;
+        if (providerFilter === 'aws') {
+          providerSubtype = 'aws_builder_id'; // Map 'aws' filter to 'aws_builder_id' provider
+        }
+        
+        params.providerSubtype = providerSubtype;
+        
+        // Set provider_type based on subtype
+        if (['kiro', 'windsurf', 'trae'].includes(providerFilter)) {
+          params.providerType = 'ide';
+        } else if (providerFilter === 'aws') {
+          params.providerType = 'cloud';
+        } else if (providerFilter === 'github') {
+          params.providerType = 'git';
+        }
+      }
+      
+      const data = await getAccounts(params);
+      setAccounts(data);
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: 'Failed to fetch accounts',
+        message: String(error),
+      });
+    }
+  }, [providerFilter]);
+  
+  // Get all accounts to count expired ones
+  const allAccounts = useAccountsStore.getState().accounts;
+  const expiredCount = allAccounts.filter(a => a.status === 'expired').length;
 
   // Force re-render when language changes
   void language; // Force re-render on language change
@@ -59,6 +95,54 @@ export default function Accounts() {
   useEffect(() => {
     fetchAccounts();
   }, [fetchAccounts]);
+
+  // Fetch accounts when provider filter changes
+  useEffect(() => {
+    fetchAccountsWithFilter();
+  }, [fetchAccountsWithFilter, providerFilter]);
+
+  // Keyboard shortcuts for accounts page
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Delete key - delete selected accounts (with confirmation)
+      if (e.key === 'Delete' && selectedIds.size > 0) {
+        e.preventDefault();
+        if (window.confirm(t('accounts.confirmDeleteSelected', { count: selectedIds.size }) || `Delete ${selectedIds.size} selected account(s)?`)) {
+          removeSelectedAccounts([...selectedIds]);
+        }
+      }
+
+      // 'r' key - refresh selected accounts
+      if (e.key === 'r' && selectedIds.size > 0 && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        selectedIds.forEach(id => refreshAccount(id));
+      }
+
+      // 'a' key - select all / deselect all
+      if (e.key === 'a' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (selectedIds.size === accounts.length) {
+          clearSelection();
+        } else {
+          selectAll();
+        }
+      }
+
+      // Escape key - clear selection
+      if (e.key === 'Escape' && selectedIds.size > 0) {
+        e.preventDefault();
+        clearSelection();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIds, accounts.length, selectAll, clearSelection, removeSelectedAccounts, refreshAccount]);
 
   const handleAddAccount = async (data: {
     provider: ProviderName;
@@ -115,6 +199,29 @@ export default function Accounts() {
       await refreshAllAccounts();
     } finally {
       setIsRefreshingAll(false);
+    }
+  };
+
+  const handleRefreshExpired = async () => {
+    setIsRefreshingExpired(true);
+    try {
+      await refreshExpiredAccounts();
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'success',
+        title: t('notifications.refreshComplete'),
+        message: `Refreshed ${expiredCount} expired account${expiredCount !== 1 ? 's' : ''}`,
+      });
+    } catch (error) {
+      console.error('Failed to refresh expired accounts:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: t('notifications.refreshFailed'),
+        message: String(error),
+      });
+    } finally {
+      setIsRefreshingExpired(false);
     }
   };
 
@@ -269,8 +376,8 @@ export default function Accounts() {
       account.provider,
       account.email,
       account.status,
-      account.quota.used.toString(),
-      account.quota.limit.toString(),
+      (account.quota?.used || 0).toString(),
+      (account.quota?.limit || 0).toString(),
       account.token ?? '',
     ]);
 
@@ -309,26 +416,37 @@ export default function Accounts() {
           </div>
         )}
 
+        {/* Expired Accounts Warning */}
+        {expiredCount > 0 && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-xs text-amber-300 flex-1">
+              {expiredCount} {expiredCount === 1 ? 'account requires' : 'accounts require'} re-authentication. 
+              Refresh tokens have expired.
+            </span>
+            <button 
+              onClick={handleRefreshExpired}
+              disabled={isRefreshingExpired}
+              className="px-3 py-1 text-xs font-medium rounded-md bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <RefreshCw size={12} className={isRefreshingExpired ? 'animate-spin' : ''} />
+              {isRefreshingExpired ? 'Refreshing...' : 'Refresh All Expired'}
+            </button>
+            <button 
+              onClick={() => setStatusFilter('expired')}
+              className="text-amber-400 hover:text-amber-300 text-xs shrink-0 underline"
+            >
+              Show expired
+            </button>
+          </div>
+        )}
+
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-4 mb-4">
-          {/* Left: Provider Tabs + Filter Chips */}
+          {/* Left: Provider Filter + Filter Chips */}
           <div className="flex items-center gap-3">
-            {/* Provider Tabs - Pill/Segmented control style */}
-            <div className="flex items-center gap-1">
-              {providerTabs.map((tab) => (
-                <button
-                  key={tab.id ?? 'all'}
-                  onClick={() => setFilterProvider(tab.id)}
-                  className={`px-3 py-1.5 text-sm rounded-md transition-all duration-200 ${
-                    filterProvider === tab.id
-                      ? 'bg-white/[0.08] text-white'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]'
-                  }`}
-                >
-                  {tab.labelKey ? t(tab.labelKey) : tab.label}
-                </button>
-              ))}
-            </div>
+            {/* Provider Filter */}
+            <ProviderFilter value={providerFilter} onChange={setProviderFilter} />
 
             {/* Separator */}
             <div className="w-px h-5 bg-white/10" />
@@ -380,7 +498,7 @@ export default function Accounts() {
             </button>
 
             <button 
-              onClick={() => setIsModalOpen(true)} 
+              onClick={() => navigate('/autoreg', { state: { provider: providerFilter !== 'all' ? providerFilter : null } })}
               className="h-9 px-4 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 transition-colors"
             >
               <Plus size={14} />
@@ -391,17 +509,61 @@ export default function Accounts() {
 
         {/* Table */}
         <div className="flex-1 overflow-hidden">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
-              <RefreshCw size={32} className="animate-spin text-indigo-400" />
-              <p className="text-sm">{t('common.loading') || 'Loading...'}</p>
+          {isLoading && accounts.length === 0 ? (
+            // Skeleton loader for initial load
+            <div 
+              className="flex flex-col h-full rounded-lg overflow-hidden"
+              style={{ border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}
+            >
+              <div className="flex-1 overflow-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="h-10 border-b border-white/5" style={{ background: 'rgba(30, 41, 59, 0.7)' }}>
+                      <th className="w-10 px-3"></th>
+                      <th className="w-10 px-2"></th>
+                      <th className="px-3 text-left">
+                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.account')}</span>
+                      </th>
+                      <th className="w-24 px-3 text-left">
+                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.status')}</span>
+                      </th>
+                      <th className="w-28 px-3 text-left">
+                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.usage')}</span>
+                      </th>
+                      <th className="w-20 px-3 text-left">
+                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.last')}</span>
+                      </th>
+                      <th className="w-16 px-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <tr key={i} className="animate-pulse">
+                        <td className="py-3 px-3"><div className="w-4 h-4 bg-white/5 rounded" /></td>
+                        <td className="py-3 px-2"><div className="w-5 h-5 bg-white/5 rounded" /></td>
+                        <td className="py-3 px-3">
+                          <div className="h-3 bg-white/5 rounded w-48 mb-1.5" />
+                          <div className="h-2 bg-white/5 rounded w-24" />
+                        </td>
+                        <td className="py-3 px-3"><div className="h-5 bg-white/5 rounded w-16" /></td>
+                        <td className="py-3 px-3"><div className="h-2 bg-white/5 rounded w-24" /></td>
+                        <td className="py-3 px-3"><div className="h-2 bg-white/5 rounded w-12" /></td>
+                        <td className="py-3 px-3"><div className="flex gap-1"><div className="w-6 h-6 bg-white/5 rounded" /><div className="w-6 h-6 bg-white/5 rounded" /></div></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="h-8 px-3 flex items-center justify-between border-t border-white/5" style={{ background: 'rgba(30, 41, 59, 0.5)' }}>
+                <span className="text-[10px] text-slate-500">{t('common.loading')}...</span>
+              </div>
             </div>
           ) : accounts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
               <Users size={48} className="opacity-30" />
               <p className="text-sm">{t('accounts.noAccountsFound') || 'No accounts found'}</p>
               <button 
-                onClick={() => setIsModalOpen(true)} 
+                onClick={() => navigate('/autoreg')}
                 className="mt-2 px-4 py-2 text-xs font-medium rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
               >
                 {t('accounts.addFirstAccount') || 'Add your first account'}
