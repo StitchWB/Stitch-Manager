@@ -642,7 +642,7 @@ class SessionManager:
         """
         all_sessions = self.list_sessions()
         
-        stats = {
+        stats: Dict[str, Any] = {
             "total_sessions": len(all_sessions),
             "active_sessions": len([s for s in all_sessions if s.is_active()]),
             "by_provider": {},

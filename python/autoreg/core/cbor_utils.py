@@ -50,7 +50,8 @@ def cbor_decode(data: bytes) -> Union[Dict[str, Any], list]:
         {'name': 'John', 'age': 30}
     """
     try:
-        return cbor2.loads(data)
+        result: Union[Dict[str, Any], list] = cbor2.loads(data)
+        return result
     except Exception as e:
         raise ValueError(f"CBOR decode failed: {e}")
 
