@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { ArrowDown, Trash2, Rocket, Copy, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 
 interface LogEntry {
   id: string;
@@ -182,6 +183,7 @@ export function Terminal({ logs, onClear, className }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const { copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
@@ -200,14 +202,6 @@ export function Terminal({ logs, onClear, className }: TerminalProps) {
   const scrollToBottom = () => {
     containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'smooth' });
     setAutoScroll(true);
-  };
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (e) {
-      console.error('Failed to copy:', e);
-    }
   };
 
   return (
@@ -248,7 +242,7 @@ export function Terminal({ logs, onClear, className }: TerminalProps) {
                 key={log.id} 
                 log={log} 
                 isLatest={index === logs.length - 1}
-                onCopy={copyToClipboard}
+                onCopy={copy}
               />
             ))}
           </div>

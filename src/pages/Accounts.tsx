@@ -12,6 +12,7 @@ import { useLogsStore } from '../stores/logs';
 import { copyToClipboard, checkAccountStatus, getAccounts, type GetAccountsParams } from '../lib/tauri';
 import { t } from '../lib/i18n';
 import { useUrlState } from '../hooks/useUrlState';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import type { ProviderName, AccountStatus, Account } from '../types';
 
 export default function Accounts() {
@@ -39,8 +40,8 @@ export default function Accounts() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isRefreshingExpired, setIsRefreshingExpired] = useState(false);
-  const [copiedToast, setCopiedToast] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const { copy } = useCopyToClipboard();
   
   // URL-synced state for filters
   const [providerFilter, setProviderFilter] = useUrlState<string>('provider', 'all');
@@ -269,23 +270,11 @@ export default function Accounts() {
   const handleCopyToken = useCallback(async (token: string) => {
     try {
       await copyToClipboard({ text: token });
-      setCopiedToast(true);
     } catch {
-      try {
-        await navigator.clipboard.writeText(token);
-        setCopiedToast(true);
-      } catch (e) {
-        console.error('Failed to copy token:', e);
-      }
+      // Fallback to direct clipboard API
+      await copy(token);
     }
-  }, []);
-
-  // Auto-hide copied toast with cleanup
-  useEffect(() => {
-    if (!copiedToast) return;
-    const timer = setTimeout(() => setCopiedToast(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copiedToast]);
+  }, [copy]);
 
   const handleDelete = async (accountId: number) => {
     try {
@@ -630,12 +619,7 @@ export default function Accounts() {
           )}
         </div>
 
-        {/* Toast */}
-        {copiedToast && (
-          <div className="fixed bottom-6 right-6 bg-white text-black text-xs font-medium px-4 py-2 rounded-lg shadow-lg animate-slide-up z-50">
-            {t('common.copied')}
-          </div>
-        )}
+        {/* Toast - Removed, using hook's built-in toast */}
       </div>
 
       <AddAccountModal

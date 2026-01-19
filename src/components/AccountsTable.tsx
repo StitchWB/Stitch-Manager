@@ -14,7 +14,6 @@ import {
   Activity,
   Loader2,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import type { Account, AccountStatus } from '../types';
 import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
@@ -26,6 +25,7 @@ import { AccountDrawer } from './ui/AccountDrawer';
 import { FloatingActionBar } from './ui/FloatingActionBar';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 // Helper function for middle truncation of emails
 function truncateEmail(email: string, startChars = 10, endChars = 15): string {
@@ -109,6 +109,7 @@ export default function AccountsTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [drawerAccount, setDrawerAccount] = useState<Account | null>(null);
   const itemsPerPage = 50;
+  const { copy } = useCopyToClipboard();
 
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -230,13 +231,11 @@ export default function AccountsTable({
   };
 
   const handleCopyEmail = (email: string) => {
-    navigator.clipboard.writeText(email);
-    toast.success('Email copied!', { duration: 1500 });
+    copy(email);
   };
 
   const handleCopyToken = (token: string) => {
-    onCopyToken(token);
-    toast.success('Token copied!', { duration: 1500 });
+    copy(token);
   };
 
   const isAccountActive = (account: Account) => activeAccountIds[account.provider] === account.id;
@@ -621,8 +620,7 @@ export default function AccountsTable({
                                 <button
                                   onClick={(e) => { 
                                     e.stopPropagation(); 
-                                    onCopyToken(account.token ?? ''); 
-                                    toast.success(t('accounts.tokenCopied'));
+                                    copy(account.token ?? ''); 
                                     setOpenMenuId(null); 
                                   }}
                                   disabled={!account.token}

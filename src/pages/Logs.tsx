@@ -6,6 +6,7 @@ import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel } from '../stores/logs';
 import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 // ============================================
 // Constants
@@ -49,6 +50,7 @@ export default function Logs() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { copy } = useCopyToClipboard();
 
   // Force re-render when language changes
   void language;
@@ -137,14 +139,10 @@ export default function Logs() {
   }, []);
 
   const copyToClipboard = useCallback(async (text: string, logId: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(logId);
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  }, []);
+    await copy(text);
+    setCopiedId(logId);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, [copy]);
 
   // ============================================
   // Render

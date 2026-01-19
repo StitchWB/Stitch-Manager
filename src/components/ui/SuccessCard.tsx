@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { Copy, Check, Key, CheckCircle2, FileText } from 'lucide-react';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 
 interface SuccessCardProps {
   email: string;
@@ -13,15 +14,12 @@ export function SuccessCard({ email, hasToken, onCopyToken, className }: Success
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const { copy } = useCopyToClipboard();
 
   const handleCopyEmail = async () => {
-    try {
-      await navigator.clipboard.writeText(email);
-      setCopiedEmail(true);
-      setTimeout(() => setCopiedEmail(false), 2000);
-    } catch (e) {
-      console.error('Failed to copy:', e);
-    }
+    await copy(email);
+    setCopiedEmail(true);
+    setTimeout(() => setCopiedEmail(false), 2000);
   };
 
   const handleCopyToken = async () => {
@@ -33,14 +31,10 @@ export function SuccessCard({ email, hasToken, onCopyToken, className }: Success
   };
 
   const handleCopyJson = async () => {
-    try {
-      const jsonData = JSON.stringify({ email, hasToken }, null, 2);
-      await navigator.clipboard.writeText(jsonData);
-      setCopiedJson(true);
-      setTimeout(() => setCopiedJson(false), 2000);
-    } catch (e) {
-      console.error('Failed to copy:', e);
-    }
+    const jsonData = JSON.stringify({ email, hasToken }, null, 2);
+    await copy(jsonData);
+    setCopiedJson(true);
+    setTimeout(() => setCopiedJson(false), 2000);
   };
 
   // COMPACT MODE: Thin alert strip (h-12) instead of large card
