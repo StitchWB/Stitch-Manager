@@ -7,14 +7,13 @@
 import json
 import random
 import platform
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 # Cross-platform file locking
-if platform.system() == 'Windows':
-    import msvcrt
-else:
+if sys.platform != 'win32':
     import fcntl
 
 from .ip_timezone import detect_ip_geo, get_system_timezone, IPGeoData
@@ -294,7 +293,7 @@ def generate_random_profile() -> SpoofProfile:
 
 def get_profile_path(email: str) -> Path:
     """Возвращает путь к файлу профиля для email"""
-    from core.paths import get_paths
+    from autoreg.core.paths import get_paths
     profiles_dir = get_paths().tokens_dir / 'profiles'
     profiles_dir.mkdir(parents=True, exist_ok=True)
     # Используем email как имя файла (заменяем @ и .)
@@ -316,7 +315,8 @@ def save_profile(email: str, profile: SpoofProfile) -> bool:
         
         with open(path, 'w', encoding='utf-8') as f:
             # Use platform-specific file locking
-            if platform.system() != 'Windows':
+            if sys.platform != 'win32':
+                import fcntl
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 try:
                     json.dump(data, f, indent=2)
@@ -346,7 +346,8 @@ def load_profile(email: str) -> Optional[SpoofProfile]:
         
         with open(path, 'r', encoding='utf-8') as f:
             # Use platform-specific file locking
-            if platform.system() != 'Windows':
+            if sys.platform != 'win32':
+                import fcntl
                 fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                 try:
                     data = json.load(f)
@@ -364,7 +365,7 @@ def load_profile(email: str) -> Optional[SpoofProfile]:
         return None
 
 
-def get_or_create_profile(email: str = None) -> SpoofProfile:
+def get_or_create_profile(email: Optional[str] = None) -> SpoofProfile:
     """
     Получает профиль для email или создаёт новый.
     

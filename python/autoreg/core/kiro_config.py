@@ -63,7 +63,7 @@ def get_kiro_version() -> str:
                 data = json.loads(pkg_path.read_text(encoding='utf-8'))
                 version = data.get('version')
                 if version:
-                    return version
+                    return str(version)
             except (json.JSONDecodeError, IOError):
                 pass
     
