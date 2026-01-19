@@ -13,6 +13,8 @@
   - RegistrationError (ошибки регистрации)
 """
 
+from typing import Optional
+
 
 class KiroError(Exception):
     """Базовое исключение для всех ошибок Kiro"""
@@ -26,7 +28,7 @@ class KiroError(Exception):
 class ValidationError(KiroError):
     """Базовое исключение для ошибок валидации"""
     
-    def __init__(self, message: str, field: str = None, value: str = None):
+    def __init__(self, message: str, field: Optional[str] = None, value: Optional[str] = None):
         self.field = field
         self.value = value
         super().__init__(message)
@@ -71,7 +73,7 @@ class NameValidationError(ValidationError):
 class ImapConfigValidationError(ValidationError):
     """Ошибка валидации IMAP конфигурации"""
     
-    def __init__(self, reason: str, field: str = None):
+    def __init__(self, reason: str, field: Optional[str] = None):
         super().__init__(
             message=f"IMAP configuration validation failed: {reason}",
             field=field or "imap_config",

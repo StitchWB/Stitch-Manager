@@ -303,6 +303,7 @@ class BrowserWorker:
         if not url:
             return {'status': 'error', 'error': 'URL is required', 'error_type': 'invalid_params'}
         
+        assert self.browser is not None, "Browser not initialized"
         self._last_url = self.browser.page.url
         self.browser.navigate(url)
         return {'status': 'ok'}
@@ -336,6 +337,7 @@ class BrowserWorker:
         if not selector:
             return {'status': 'error', 'error': 'Selector is required', 'error_type': 'invalid_params'}
         
+        assert self.browser is not None, "Browser not initialized"
         element = self.browser.page.ele(selector, timeout=timeout)
         if not element:
             raise ElementNotFoundError(f'Element not found: {selector}')
@@ -354,6 +356,7 @@ class BrowserWorker:
         # Use human-like typing if enabled
         if self.human_delays_enabled and hasattr(self.browser, 'human_type'):
             log_stderr(f"[WORKER_TYPE] Using human_type method")
+            assert self.browser is not None
             self.browser.human_type(element, text, click_first=False)
         else:
             log_stderr(f"[WORKER_TYPE] Using direct input method")
@@ -393,6 +396,7 @@ class BrowserWorker:
         if not selector:
             return {'status': 'error', 'error': 'Selector is required', 'error_type': 'invalid_params'}
         
+        assert self.browser is not None, "Browser not initialized"
         element = self.browser.page.ele(selector, timeout=timeout)
         if not element:
             raise ElementNotFoundError(f'Element not found: {selector}')
@@ -425,6 +429,7 @@ class BrowserWorker:
         if not selector:
             return {'status': 'error', 'error': 'Selector is required', 'error_type': 'invalid_params'}
         
+        assert self.browser is not None, "Browser not initialized"
         element = self.browser.page.ele(selector, timeout=timeout)
         found = element is not None
         
@@ -447,6 +452,7 @@ class BrowserWorker:
         timeout = cmd.get('timeout', 10)
         url_contains = cmd.get('url_contains')
         
+        assert self.browser is not None, "Browser not initialized"
         old_url = self._last_url or self.browser.page.url
         start_time = time.time()
         
@@ -487,6 +493,7 @@ class BrowserWorker:
         if not text:
             return {'status': 'error', 'error': 'Text is required', 'error_type': 'invalid_params'}
         
+        assert self.browser is not None, "Browser not initialized"
         start_time = time.time()
         
         while time.time() - start_time < timeout:
@@ -507,6 +514,7 @@ class BrowserWorker:
         Returns:
             {'status': 'ok', 'url': str}
         """
+        assert self.browser is not None, "Browser not initialized"
         url = self.browser.page.url
         return {'status': 'ok', 'url': url}
     
@@ -530,6 +538,7 @@ class BrowserWorker:
         if not selector:
             return {'status': 'error', 'error': 'Selector is required', 'error_type': 'invalid_params'}
         
+        assert self.browser is not None, "Browser not initialized"
         element = self.browser.page.ele(selector, timeout=timeout)
         if not element:
             raise ElementNotFoundError(f'Element not found: {selector}')
@@ -569,6 +578,7 @@ class BrowserWorker:
         """
         path = cmd.get('path', 'screenshot.png')
         
+        assert self.browser is not None, "Browser not initialized"
         try:
             self.browser.page.get_screenshot(path=path)
             return {'status': 'ok', 'path': path}
@@ -595,6 +605,7 @@ class BrowserWorker:
         if not script:
             return {'status': 'error', 'error': 'Script is required', 'error_type': 'invalid_params'}
         
+        assert self.browser is not None, "Browser not initialized"
         try:
             result = self.browser.page.run_js(script, *args)
             
@@ -631,6 +642,7 @@ class BrowserWorker:
         """
         domain = cmd.get('domain')
         
+        assert self.browser is not None, "Browser not initialized"
         try:
             # Get cookies via CDP
             result = self.browser.page.run_cdp('Network.getAllCookies')

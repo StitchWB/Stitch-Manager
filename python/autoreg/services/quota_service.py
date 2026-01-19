@@ -86,7 +86,7 @@ class QuotaInfo:
     days_until_reset: int = 0
     
     usage: Optional[UsageInfo] = None
-    raw_response: Dict = None
+    raw_response: Optional[Dict] = None
     error: str = None
     
     @property

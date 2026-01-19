@@ -16,7 +16,7 @@ class DebugRecorder:
     Сохраняет: скриншоты, HTML, логи, сетевые запросы.
     """
     
-    def __init__(self, session_name: str = None, output_dir: str = None):
+    def __init__(self, session_name: Optional[str] = None, output_dir: Optional[str] = None):
         """
         Args:
             session_name: Имя сессии (по умолчанию timestamp)
@@ -51,7 +51,7 @@ class DebugRecorder:
         
         print(f"[DEBUG] Recording enabled: {self.session_dir}")
     
-    def record_action(self, action_type: str, details: Dict[str, Any] = None, 
+    def record_action(self, action_type: str, details: Optional[Dict[str, Any]] = None, 
                      page=None, screenshot: bool = True):
         """
         Записывает действие.
@@ -93,7 +93,7 @@ class DebugRecorder:
         # Сохраняем лог после каждого действия
         self._save_log()
     
-    def record_page_html(self, page, name: str = None):
+    def record_page_html(self, page, name: Optional[str] = None):
         """Сохраняет HTML страницы"""
         if not self.enabled:
             return
@@ -173,14 +173,14 @@ def get_recorder() -> Optional[DebugRecorder]:
     return _recorder
 
 
-def init_recorder(session_name: str = None) -> DebugRecorder:
+def init_recorder(session_name: Optional[str] = None) -> DebugRecorder:
     """Инициализирует глобальный рекордер"""
     global _recorder
     _recorder = DebugRecorder(session_name)
     return _recorder
 
 
-def record(action_type: str, details: Dict = None, page=None, screenshot: bool = True):
+def record(action_type: str, details: Optional[Dict] = None, page=None, screenshot: bool = True):
     """Shortcut для записи действия"""
     if _recorder:
         _recorder.record_action(action_type, details, page, screenshot)

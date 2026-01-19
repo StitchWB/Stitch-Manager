@@ -15,6 +15,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class OAuthHTTPServer(HTTPServer):
+    """Типизированный HTTPServer с атрибутами для OAuth"""
+    auth_code: Optional[str]
+    auth_state: Optional[str]
+    auth_error: Optional[str]
+    auth_error_description: Optional[str]
+    callback_received: bool
+    on_callback: Optional[Callable[[str, Optional[str]], None]]
+
+
 class CallbackHandler(BaseHTTPRequestHandler):
     """HTTP handler для OAuth callback"""
     
@@ -233,7 +243,7 @@ class OAuthCallbackServer:
         """
         self.port = port
         self.on_callback = on_callback
-        self.server: Optional[HTTPServer] = None
+        self.server: Optional[OAuthHTTPServer] = None
         self.thread: Optional[threading.Thread] = None
         
         # Результаты callback
@@ -250,7 +260,7 @@ class OAuthCallbackServer:
             return
         
         try:
-            self.server = HTTPServer(('127.0.0.1', self.port), CallbackHandler)
+            self.server = OAuthHTTPServer(('127.0.0.1', self.port), CallbackHandler)
             
             # Передаём callback в сервер
             self.server.auth_code = None

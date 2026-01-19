@@ -65,7 +65,7 @@ class BehaviorSpoofModule:
         self._typos_made = 0
         self._session_start = time.time()
     
-    def human_delay(self, min_delay: float = None, max_delay: float = None):
+    def human_delay(self, min_delay: Optional[float] = None, max_delay: Optional[float] = None):
         """Человеческая задержка между действиями"""
         min_d = min_delay or self.action_delay_range[0]
         max_d = max_delay or self.action_delay_range[1]
@@ -85,7 +85,7 @@ class BehaviorSpoofModule:
         
         time.sleep(delay)
     
-    def simulate_reading(self, duration: float = None):
+    def simulate_reading(self, duration: Optional[float] = None):
         """Симулирует чтение страницы"""
         if duration is None:
             duration = random.uniform(1.0, 3.0)
@@ -232,7 +232,7 @@ class BehaviorSpoofModule:
         
         self.human_delay(0.1, 0.3)
     
-    def random_mouse_movement(self, browser, count: int = None):
+    def random_mouse_movement(self, browser, count: Optional[int] = None):
         """
         Случайные движения мыши по странице.
         
@@ -261,7 +261,7 @@ class BehaviorSpoofModule:
         except Exception:
             pass
     
-    def scroll_page(self, browser, direction: str = 'down', amount: int = None):
+    def scroll_page(self, browser, direction: str = 'down', amount: Optional[int] = None):
         """
         Прокручивает страницу.
         
@@ -289,7 +289,7 @@ class BehaviorSpoofModule:
     # ADVANCED HUMAN SIMULATION
     # ========================================================================
     
-    def simulate_page_reading(self, page, duration: float = None):
+    def simulate_page_reading(self, page, duration: Optional[float] = None):
         """
         Симулирует чтение страницы: движения глаз (мыши), скролл, паузы.
         
@@ -402,7 +402,7 @@ class BehaviorSpoofModule:
     
 
     
-    def random_micro_movements(self, page, count: int = None):
+    def random_micro_movements(self, page, count: Optional[int] = None):
         """
         Микро-движения мыши (тремор руки, небольшие корректировки).
         Делает поведение более человечным.

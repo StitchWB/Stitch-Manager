@@ -6,9 +6,10 @@ CDP-based спуфинг для DrissionPage
 """
 
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Type
 
 from .profile import SpoofProfile, PROFILES, generate_random_profile
+from .base import BaseSpoofModule
 from .automation import AutomationSpoofModule
 from .navigator_spoofer import NavigatorSpoofModule  # Consolidated: navigator + capabilities
 from .display_spoofer import DisplaySpoofModule      # Consolidated: screen + performance
@@ -27,7 +28,7 @@ from .storage import StorageSpoofModule
 
 
 # All JS modules in order of application
-JS_MODULES = [
+JS_MODULES: List[Type[BaseSpoofModule]] = [
     AutomationSpoofModule,   # First hide automation
     CDPHideSpoofModule,      # Hide CDP traces
     NavigatorSpoofModule,    # Navigator properties + capabilities (consolidated)
@@ -57,7 +58,7 @@ class CDPSpoofer:
         spoofer.apply(page)  # Применить к DrissionPage
     """
     
-    def __init__(self, profile: SpoofProfile = None):
+    def __init__(self, profile: Optional[SpoofProfile] = None):
         self.profile = profile or generate_random_profile()
         self._modules = [ModuleClass(self.profile) for ModuleClass in JS_MODULES]
     
@@ -381,13 +382,13 @@ class CDPSpoofer:
 
 # === Удобные функции ===
 
-def apply_cdp_spoofing(page, profile: SpoofProfile = None) -> Dict[str, bool]:
+def apply_cdp_spoofing(page, profile: Optional[SpoofProfile] = None) -> Dict[str, bool]:
     """Применяет CDP спуфинг к странице"""
     spoofer = CDPSpoofer(profile)
     return spoofer.apply(page)
 
 
-def apply_pre_navigation_spoofing(page, profile: SpoofProfile = None) -> CDPSpoofer:
+def apply_pre_navigation_spoofing(page, profile: Optional[SpoofProfile] = None) -> CDPSpoofer:
     """
     Применяет спуфинг ДО навигации.
     
