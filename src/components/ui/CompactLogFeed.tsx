@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 
 interface LogEntry {
   id: string;
@@ -258,6 +259,7 @@ export function CompactLogFeed({ logs, onClear, className }: CompactLogFeedProps
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const { copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
@@ -276,14 +278,6 @@ export function CompactLogFeed({ logs, onClear, className }: CompactLogFeedProps
   const scrollToBottom = () => {
     containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'smooth' });
     setAutoScroll(true);
-  };
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (e) {
-      console.error('Failed to copy:', e);
-    }
   };
 
   // Filter out success logs (they're shown as cards above)
@@ -319,7 +313,7 @@ export function CompactLogFeed({ logs, onClear, className }: CompactLogFeedProps
         ) : (
           <div className="py-1">
             {filteredLogs.map((log) => (
-              <CompactLogRow key={log.id} log={log} onCopy={copyToClipboard} />
+              <CompactLogRow key={log.id} log={log} onCopy={copy} />
             ))}
           </div>
         )}
