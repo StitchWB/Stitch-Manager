@@ -14,6 +14,14 @@ class Paths:
     
     _instance: Optional['Paths'] = None
     
+    # Kiro paths (могут быть None если Kiro не установлен)
+    kiro_user_dir: Optional[Path]
+    kiro_global_storage: Optional[Path]
+    kiro_storage_json: Optional[Path]
+    kiro_state_db: Optional[Path]
+    kiro_agent_storage: Optional[Path]
+    kiro_install_path: Optional[Path]
+    
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -170,7 +178,7 @@ class Paths:
         """Возвращает список всех файлов токенов"""
         return list(self.tokens_dir.glob('token-*.json'))
     
-    def list_backups(self, prefix: str = None) -> list[Path]:
+    def list_backups(self, prefix: Optional[str] = None) -> list[Path]:
         """Возвращает список бэкапов"""
         pattern = f"{prefix}-*.json" if prefix else "*.json"
         return sorted(self.backups_dir.glob(pattern), reverse=True)
