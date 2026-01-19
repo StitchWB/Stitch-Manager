@@ -13,7 +13,6 @@ import {
   Plus,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
 
 import { cn } from '../lib/utils';
 import { StatusBar } from '../components/ui/KPICard';
@@ -199,7 +198,6 @@ export default function AutoRegNext() {
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
   const [activeThreads, setActiveThreads] = useState(0);
   const [activeTab, setActiveTab] = useState<ConfigTab>('identity');
-  const [useRustFlow, setUseRustFlow] = useState(true); // Toggle between Rust and Python flows
   
   // Ref to track if registration should be cancelled
   const cancelledRef = useRef(false);
@@ -283,142 +281,8 @@ export default function AutoRegNext() {
     return config.imap.email?.split('@')[1] || 'example.com';
   }, [config.imap.strategy, config.imap.email]);
 
-  // New Rust-based registration handler
-  const handleStartV2 = useCallback(async () => {
-    if (!canStart) {
-      addNotification({ type: 'error', title: 'Configuration Required', message: 'Please configure IMAP settings' });
-      return;
-    }
-
-    // Reset cancellation flag
-    cancelledRef.current = false;
-
-    const totalCount = config.count || 1;
-    setActiveThreads(1);
-    addLog({ level: 'info', message: `Starting ${config.provider} registration (${totalCount} account${totalCount > 1 ? 's' : ''}) using Rust engine...` });
-
-    try {
-      // Loop for multiple account registration
-      for (let i = 0; i < totalCount; i++) {
-        // Check if cancelled
-        if (cancelledRef.current) {
-          addLog({ level: 'warn', message: `Registration cancelled by user at account ${i + 1}/${totalCount}` });
-          break;
-        }
-
-        addLog({ level: 'info', message: `[${i + 1}/${totalCount}] Starting registration...` });
-
-        // Listen for progress events from Rust
-        const unlisten = await listen<{ step: string; progress: number; message: string }>('REGISTRATION_PROGRESS', (event) => {
-          const { progress, message } = event.payload;
-          addLog({ level: 'info', message: `  ${message} (${progress}%)` });
-        });
-
-        try {
-          // Determine email strategy and template based on UI configuration
-          let emailStrategy: string;
-          let aliasTemplate: string | undefined;
-          
-          // DEBUG: Log current configuration
-          console.log('[AutoReg] Email generation config:', {
-            'imap.strategy': config.imap.strategy,
-            'imap.gmailAlias': config.imap.gmailAlias,
-            'patterns.emailPattern': config.patterns.emailPattern,
-            'identityConfig.emailPattern': identityConfig.emailPattern,
-          });
-          
-          if (config.imap.strategy === 'gmail' && config.imap.gmailAlias) {
-            // Gmail with alias template (e.g., acc{counter})
-            emailStrategy = 'plus_alias';
-            aliasTemplate = config.imap.gmailAlias;
-          } else if (identityConfig.emailPattern && identityConfig.emailPattern.trim()) {
-            // Custom email pattern (e.g., aau1{counter}) - use catch_all strategy
-            emailStrategy = 'catch_all';
-            aliasTemplate = identityConfig.emailPattern;
-          } else {
-            // Fallback to single email
-            emailStrategy = 'single';
-            aliasTemplate = undefined;
-          }
-          
-          console.log('[AutoReg] Determined strategy:', { emailStrategy, aliasTemplate });
-          addLog({ level: 'debug', message: `Email generation: strategy=${emailStrategy}, template=${aliasTemplate || 'none'}` });
-          
-          // Start registration via Rust command
-          const result = await invoke<{ success: boolean; email?: string; access_token?: string; refresh_token?: string; error?: string }>('start_registration', {
-            provider: config.provider,
-            email: undefined, // Will be generated
-            password: undefined, // Will be generated
-            config: {
-              provider: config.provider,
-              autoGenerate: true,
-              headless: config.advanced.headless,
-              emailStrategy: emailStrategy,
-              aliasTemplate: aliasTemplate,
-            },
-          });
-
-          unlisten();
-
-          if (result.success && result.email) {
-            addResult({ email: result.email, status: 'success', token: result.access_token });
-            addLog({ level: 'success', message: `[${i + 1}/${totalCount}] Account created: ${result.email}` });
-            addHistoryEntry({ provider: config.provider, email: result.email, status: 'completed' });
-          } else {
-            const errorMsg = result.error || 'Unknown error';
-            
-            // Map error messages to user-friendly text
-            let friendlyError = errorMsg;
-            if (errorMsg.includes('AccountExists') || errorMsg.includes('already exists')) {
-              friendlyError = 'Account already exists';
-            } else if (errorMsg.includes('InvalidCode')) {
-              friendlyError = 'Invalid verification code';
-            } else if (errorMsg.includes('PasswordError')) {
-              friendlyError = 'Password does not meet requirements';
-            } else if (errorMsg.includes('ImapError')) {
-              friendlyError = 'IMAP connection failed';
-            } else if (errorMsg.includes('BrowserError')) {
-              friendlyError = 'Browser automation failed';
-            } else if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
-              friendlyError = 'Operation timed out';
-            }
-            
-            addResult({ email: result.email || 'unknown', status: 'failed', error: friendlyError });
-            addLog({ level: 'error', message: `[${i + 1}/${totalCount}] Registration failed: ${friendlyError}` });
-          }
-        } catch (error) {
-          unlisten();
-          const errorMsg = String(error);
-          addResult({ email: 'unknown', status: 'failed', error: errorMsg });
-          addLog({ level: 'error', message: `[${i + 1}/${totalCount}] Error: ${errorMsg}` });
-        }
-
-        // Delay between registrations
-        if (i < totalCount - 1) {
-          await new Promise(resolve => setTimeout(resolve, config.advanced.delayBetweenAccounts * 1000));
-        }
-      }
-
-      // Summary notification using store counts
-      const summary = `✓ ${successCount} created, ✗ ${failedCount} failed`;
-      addLog({ level: 'info', message: `Registration complete: ${summary}` });
-      addNotification({ 
-        type: successCount > 0 ? 'success' : 'error', 
-        title: 'Registration Complete', 
-        message: summary 
-      });
-    } catch (error) {
-      addLog({ level: 'error', message: `Fatal error: ${String(error)}` });
-      addNotification({ type: 'error', title: 'Error', message: String(error) });
-    } finally {
-      setActiveThreads(0);
-    }
-  }, [config, canStart, addLog, addNotification, addHistoryEntry, addResult, successCount, failedCount]);
-
-  // Original Python-based registration handler (kept for backward compatibility)
+  // Registration handler - uses direct Python commands with proper timeout handling
   const handleStart = useCallback(async () => {
-
-    // IDE/Git providers flow
     if (!canStart) {
       addNotification({ type: 'error', title: 'Configuration Required', message: 'Please configure IMAP settings' });
       return;
@@ -819,37 +683,6 @@ export default function AutoRegNext() {
           {/* Engine Tab */}
           {activeTab === 'engine' && (
             <div className="space-y-4">
-              {/* Registration Engine Toggle */}
-              <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <label className="flex items-center justify-between cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                      <Settings2 className="w-4 h-4 text-indigo-400" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-slate-200">Use Rust Engine</div>
-                      <div className="text-[10px] text-slate-500">New Rust-based registration flow (recommended)</div>
-                    </div>
-                  </div>
-                  <div className={cn(
-                    "w-10 h-5 rounded-full transition-colors relative cursor-pointer",
-                    useRustFlow ? "bg-indigo-500" : "bg-white/10"
-                  )}>
-                    <div className={cn(
-                      "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm",
-                      useRustFlow ? "translate-x-5" : "translate-x-0.5"
-                    )} />
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={useRustFlow}
-                    onChange={(e) => setUseRustFlow(e.target.checked)}
-                    disabled={false}  // Allow changing engine during registration (won't affect current run)
-                    className="sr-only"
-                  />
-                </label>
-              </div>
-
               {/* Headless Mode - Full Width Toggle */}
               <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <label className="flex items-center justify-between cursor-pointer">
@@ -1096,7 +929,7 @@ export default function AutoRegNext() {
             {/* Start/Stop Button - attached to input */}
             {activeThreads === 0 ? (
               <button
-                onClick={useRustFlow ? handleStartV2 : handleStart}
+                onClick={handleStart}
                 disabled={!canStart || pythonAvailable === false}
                 className={cn(
                   'flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2',

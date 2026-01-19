@@ -23,7 +23,6 @@ import {
   getServerStatus,
   getRegistrationJobs,
   clearRegistrationJobs,
-  startRegistration,
   startLLMServer,
   getDashboardStats,
 } from '../lib/tauri';
@@ -309,7 +308,6 @@ export default function Dashboard() {
   
   const [serverStatus, setServerStatus] = useState<LLMServerStatus | null>(null);
   const [registrationJobs, setRegistrationJobs] = useState<RegistrationJob[]>([]);
-  const [isStartingRegistration, setIsStartingRegistration] = useState(false);
   const [isRefreshingTokens, setIsRefreshingTokens] = useState(false);
   const [isStartingServer, setIsStartingServer] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
@@ -488,31 +486,9 @@ export default function Dashboard() {
     return date.toLocaleDateString();
   }
 
-  const handleStartRegistration = async () => {
-    if (!selectedProvider) {
-      addNotification({ type: 'warning', title: t('dashboard.noProviderSelected'), message: t('dashboard.selectProviderFirst') });
-      return;
-    }
-    setIsStartingRegistration(true);
-    try {
-      await startRegistration({ provider: selectedProvider });
-      addNotification({ type: 'success', title: t('dashboard.registrationStarted'), message: `Started registration for ${selectedProvider}` });
-      addLog({
-        level: 'info',
-        message: `Registration started for provider: ${selectedProvider}`,
-        source: 'registration',
-      });
-      await loadRegistrationJobs();
-    } catch (error) {
-      addNotification({ type: 'error', title: t('dashboard.registrationFailed'), message: error instanceof Error ? error.message : 'Unknown error' });
-      addLog({
-        level: 'error',
-        message: `Registration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        source: 'registration',
-      });
-    } finally {
-      setIsStartingRegistration(false);
-    }
+  const handleStartRegistration = () => {
+    // Navigate to AutoReg page instead of calling removed startRegistration
+    navigate('/autoreg');
   };
 
   const handleRefreshAllTokens = async () => {
@@ -639,8 +615,8 @@ export default function Dashboard() {
 
           {/* Quick Actions */}
           <section className="flex flex-wrap gap-3">
-            <button onClick={handleStartRegistration} disabled={!selectedProvider || isStartingRegistration} className="bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white py-2 px-4 text-sm rounded-lg flex items-center gap-2 transition-colors">
-              {isStartingRegistration ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            <button onClick={handleStartRegistration} className="bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 text-sm rounded-lg flex items-center gap-2 transition-colors">
+              <Play size={16} />
               {t('dashboard.startRegistration')}
             </button>
             <button onClick={handleRefreshAllTokens} disabled={isRefreshingTokens} className="btn-secondary py-2 px-4 text-sm">
