@@ -157,7 +157,7 @@ class DebugRecorder:
             return
         
         self._metadata['finished_at'] = datetime.now().isoformat()
-        self._metadata['total_steps'] = self._step_counter
+        self._metadata['total_steps'] = str(self._step_counter)
         self._save_log()
         
         print(f"[DEBUG] Session saved: {self.session_dir}")

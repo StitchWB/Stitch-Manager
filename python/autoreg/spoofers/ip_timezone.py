@@ -406,8 +406,8 @@ def get_system_timezone() -> Tuple[str, int]:
             import zoneinfo
             # Пробуем получить системный timezone
             local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
-            if hasattr(local_tz, 'key'):
-                tz_name = local_tz.key
+            if local_tz and hasattr(local_tz, 'key'):
+                tz_name = local_tz.key  # type: ignore[attr-defined]
         except Exception:
             pass
     

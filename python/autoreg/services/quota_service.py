@@ -87,7 +87,7 @@ class QuotaInfo:
     
     usage: Optional[UsageInfo] = None
     raw_response: Optional[Dict] = None
-    error: str = None
+    error: Optional[str] = None
     
     @property
     def is_pro(self) -> bool:
@@ -95,7 +95,7 @@ class QuotaInfo:
     
     @property
     def is_banned(self) -> bool:
-        return self.error and 'BANNED' in self.error
+        return bool(self.error and 'BANNED' in self.error)
 
 
 # CodeWhisperer API config
@@ -170,13 +170,13 @@ class QuotaService:
         
         # User info
         user_info = data.get('userInfo', {})
-        info.email = user_info.get('email') or ''
-        info.user_id = user_info.get('userId', '')
+        info.email = str(user_info.get('email') or '')
+        info.user_id = str(user_info.get('userId', ''))
         
         # Subscription
         sub_info = data.get('subscriptionInfo', {})
-        info.subscription_type = sub_info.get('type', 'Free')
-        info.subscription_title = sub_info.get('subscriptionTitle', '')
+        info.subscription_type = str(sub_info.get('type', 'Free'))
+        info.subscription_title = str(sub_info.get('subscriptionTitle', ''))
         
         info.days_until_reset = data.get('daysUntilReset', 0)
         
@@ -246,8 +246,9 @@ class QuotaService:
             # 1. Пробуем из токена
             if self.paths.kiro_token_file.exists():
                 token_data = json.loads(self.paths.kiro_token_file.read_text())
-                if token_data.get('email'):
-                    return token_data['email']
+                email = token_data.get('email')
+                if email:
+                    return str(email)
             
             # 2. Пробуем из accounts.json
             if self.paths.accounts_file.exists():
@@ -255,10 +256,12 @@ class QuotaService:
                 # Ищем активный аккаунт
                 for acc in accounts:
                     if acc.get('status') == 'active':
-                        return acc.get('email', '')
+                        email = acc.get('email', '')
+                        return str(email)
                 # Если нет активного, берём первый
                 if accounts:
-                    return accounts[0].get('email', '')
+                    email = accounts[0].get('email', '')
+                    return str(email)
         except Exception:
             pass
         
@@ -520,13 +523,13 @@ class QuotaService:
         
         # User info
         user_info = data.get('userInfo', {})
-        info.email = user_info.get('email', '')
-        info.user_id = user_info.get('userId', '')
+        info.email = str(user_info.get('email', ''))
+        info.user_id = str(user_info.get('userId', ''))
         
         # Subscription
         sub_info = data.get('subscriptionInfo', {})
-        info.subscription_type = sub_info.get('type', 'Free')
-        info.subscription_title = sub_info.get('subscriptionTitle', '')
+        info.subscription_type = str(sub_info.get('type', 'Free'))
+        info.subscription_title = str(sub_info.get('subscriptionTitle', ''))
         
         info.days_until_reset = data.get('daysUntilReset', 0)
         

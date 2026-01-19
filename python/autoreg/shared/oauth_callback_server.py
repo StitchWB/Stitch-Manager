@@ -43,10 +43,10 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 code = query['code'][0]
                 state = query.get('state', [None])[0]
                 
-                # Сохраняем в сервер
-                self.server.auth_code = code
-                self.server.auth_state = state
-                self.server.callback_received = True
+                # Сохраняем в сервер (type: ignore для BaseServer attributes)
+                self.server.auth_code = code  # type: ignore[attr-defined]
+                self.server.auth_state = state  # type: ignore[attr-defined]
+                self.server.callback_received = True  # type: ignore[attr-defined]
                 
                 logger.info(f"[OAuth] Callback received: code={code[:20]}..., state={state[:20] if state else None}...")
                 
@@ -136,9 +136,9 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 error = query['error'][0]
                 error_description = query.get('error_description', ['Unknown error'])[0]
                 
-                self.server.auth_error = error
-                self.server.auth_error_description = error_description
-                self.server.callback_received = True
+                self.server.auth_error = error  # type: ignore[attr-defined]
+                self.server.auth_error_description = error_description  # type: ignore[attr-defined]
+                self.server.callback_received = True  # type: ignore[attr-defined]
                 
                 logger.error(f"[OAuth] Error callback: {error} - {error_description}")
                 
@@ -285,14 +285,15 @@ class OAuthCallbackServer:
         """Запустить сервер (вызывается в отдельном потоке)"""
         try:
             # Обрабатываем только один запрос
-            self.server.handle_request()
-            
-            # Копируем результаты из сервера
-            self.auth_code = self.server.auth_code
-            self.auth_state = self.server.auth_state
-            self.auth_error = self.server.auth_error
-            self.auth_error_description = self.server.auth_error_description
-            self.callback_received = self.server.callback_received
+            if self.server:
+                self.server.handle_request()
+                
+                # Копируем результаты из сервера
+                self.auth_code = self.server.auth_code
+                self.auth_state = self.server.auth_state
+                self.auth_error = self.server.auth_error
+                self.auth_error_description = self.server.auth_error_description
+                self.callback_received = self.server.callback_received
             
         except Exception as e:
             logger.error(f"[OAuth] Server error: {e}")

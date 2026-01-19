@@ -168,7 +168,7 @@ class AutoregResult(BaseModel):
     
     @field_validator('success')
     @classmethod
-    def validate_success_error(cls, v: bool, info) -> bool:
+    def validate_success_error(cls, v: bool, info: Any) -> bool:
         """Ensure error is provided when success is False"""
         # Note: info.data contains the raw data being validated
         if not v and 'error' in info.data and not info.data.get('error'):

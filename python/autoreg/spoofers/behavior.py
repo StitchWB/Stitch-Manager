@@ -14,6 +14,7 @@
 import random
 import time
 import string
+from typing import Optional, Tuple, cast
 
 
 class BehaviorSpoofModule:
@@ -103,8 +104,8 @@ class BehaviorSpoofModule:
         """
         # Получаем настройки для типа поля
         field_config = self.FIELD_SPEEDS.get(field_type, self.FIELD_SPEEDS['default'])
-        delay_range = field_config['delay']
-        typo_prob = field_config['typo_prob']
+        delay_range: Tuple[float, float] = cast(Tuple[float, float], field_config['delay'])
+        typo_prob: float = cast(float, field_config['typo_prob'])
         
         # Пауза "на подумать" перед вводом (особенно для паролей и кодов)
         if field_type in ('password', 'code'):
@@ -461,7 +462,7 @@ class BehaviorSpoofModule:
         """
         # Получаем настройки для типа поля
         field_config = self.FIELD_SPEEDS.get(field_type, self.FIELD_SPEEDS['default'])
-        delay_range = field_config['delay']
+        delay_range: Tuple[float, float] = cast(Tuple[float, float], field_config['delay'])
         
         # В быстром режиме уменьшаем задержки
         if fast:

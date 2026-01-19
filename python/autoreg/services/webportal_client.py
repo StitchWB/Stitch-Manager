@@ -159,9 +159,11 @@ class KiroWebPortalClient:
                 result = cbor_decode(response.content)
                 if isinstance(result, dict):
                     logger.debug("[WebPortal] Response data keys: %s", list(result.keys()))
+                    return result  # type: ignore[return-value]
                 else:
                     logger.debug("[WebPortal] Response is not a dict: %r", type(result))
-                return result
+                    # Convert to dict if possible, otherwise return empty dict
+                    return dict(result) if result else {}
             except Exception as e:  # noqa: BLE001
                 logger.error("[WebPortal] Failed to decode response: %s", e)
                 raise ValueError(f"Failed to decode response: {e}") from e

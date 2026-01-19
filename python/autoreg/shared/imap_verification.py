@@ -234,7 +234,7 @@ def _extract_verification_code(mail, email_ids: list, target_email: str) -> Opti
             code_matches = re.findall(r'\b(\d{6})\b', body)
             if code_matches:
                 print(f"[IMAP] ✓ Found verification code: {code_matches[0]}")
-                return code_matches[0]
+                return str(code_matches[0])
             else:
                 print(f"[IMAP] No 6-digit code found in email {email_id}")
                 
