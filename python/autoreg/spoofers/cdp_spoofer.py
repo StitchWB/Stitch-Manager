@@ -5,57 +5,44 @@ CDP-based спуфинг для DrissionPage
 Собирает JS из всех модулей и инжектит через CDP.
 """
 
+import sys
 from typing import Dict, List, Optional
 
 from .profile import SpoofProfile, PROFILES, generate_random_profile
 from .automation import AutomationSpoofModule
-from .navigator import NavigatorSpoofModule
-from .screen import ScreenSpoofModule
-from .webgl import WebGLSpoofModule
-from .canvas import CanvasSpoofModule
+from .navigator_spoofer import NavigatorSpoofModule  # Consolidated: navigator + capabilities
+from .display_spoofer import DisplaySpoofModule      # Consolidated: screen + performance
+from .graphics_spoofer import GraphicsSpoofModule    # Consolidated: webgl + canvas + fonts
+from .media_spoofer import MediaSpoofModule          # Consolidated: audio + media
+from .device_spoofer import DeviceSpoofModule        # Consolidated: battery + network + sensors
 from .timezone import TimezoneSpoofModule
 from .intl import IntlSpoofModule
-from .audio import AudioSpoofModule
-from .battery import BatterySpoofModule
-from .network import NetworkSpoofModule
 from .webrtc import WebRTCSpoofModule
-from .fonts import FontsSpoofModule
-from .sensors import SensorsSpoofModule
 from .geolocation import GeolocationSpoofModule
 from .cdp_hide import CDPHideSpoofModule
 from .client_hints import ClientHintsSpoofModule
-from .performance import PerformanceSpoofModule
 from .math import MathSpoofModule
 from .history import HistorySpoofModule
-from .capabilities import CapabilitiesSpoofModule
 from .storage import StorageSpoofModule
-from .media import MediaDevicesSpoofModule
 
 
-# Все JS-модули в порядке применения
+# All JS modules in order of application
 JS_MODULES = [
-    AutomationSpoofModule,   # Сначала скрываем автоматизацию
-    CDPHideSpoofModule,      # Скрываем следы CDP
-    NavigatorSpoofModule,    # Navigator properties
-    ScreenSpoofModule,       # Screen properties
-    WebGLSpoofModule,        # WebGL vendor/renderer
-    CanvasSpoofModule,       # Canvas fingerprint
+    AutomationSpoofModule,   # First hide automation
+    CDPHideSpoofModule,      # Hide CDP traces
+    NavigatorSpoofModule,    # Navigator properties + capabilities (consolidated)
+    DisplaySpoofModule,      # Screen properties + performance (consolidated)
+    GraphicsSpoofModule,     # WebGL + Canvas + Fonts (consolidated)
+    MediaSpoofModule,        # Audio + MediaDevices (consolidated)
+    DeviceSpoofModule,       # Battery + Network + Sensors (consolidated)
     TimezoneSpoofModule,     # Timezone offset
     IntlSpoofModule,         # Intl API (locales/timezones)
-    AudioSpoofModule,        # Audio fingerprint
-    BatterySpoofModule,      # Battery API
-    NetworkSpoofModule,      # Network info
     WebRTCSpoofModule,       # WebRTC IP leak
-    FontsSpoofModule,        # Font fingerprint
-    SensorsSpoofModule,      # Device sensors
     GeolocationSpoofModule,  # Geolocation (JS fallback)
     ClientHintsSpoofModule,  # Client Hints API (userAgentData)
-    PerformanceSpoofModule,  # Performance timing
     MathSpoofModule,         # Math fingerprint (sin/cos/tan)
     HistorySpoofModule,      # History length
-    CapabilitiesSpoofModule, # JS/CSS capabilities
     StorageSpoofModule,      # Storage quota and DBs
-    MediaDevicesSpoofModule, # Media devices enumeration
 ]
 
 
@@ -155,7 +142,7 @@ class CDPSpoofer:
         results = {}
         p = self.profile
         
-        print("[SPOOF] Applying CDP-based spoofing...")
+        # Silent - no output to avoid breaking JSON protocol
         
         # 0. Отключаем webdriver через Proxy (КРИТИЧНО!)
         try:
@@ -181,10 +168,10 @@ class CDPSpoofer:
                 });
             ''')
             results['webdriver_hide'] = True
-            print("   [OK] WebDriver flag hidden via CDP")
+            # OK: WebDriver flag hidden via CDP")
         except Exception as e:
             results['webdriver_hide'] = False
-            print(f"   [FAIL] WebDriver hide: {self._fmt_err(e)}")
+            # FAIL: WebDriver hide: {self._fmt_err(e)}")
         
         # 1. User-Agent через CDP
         try:
@@ -194,19 +181,19 @@ class CDPSpoofer:
                 acceptLanguage=f"{p.locale},en;q=0.9"
             )
             results['user_agent'] = True
-            print(f"   [OK] User-Agent: {p.user_agent[:50]}...")
+            # OK: User-Agent: {p.user_agent[:50]}...")
         except Exception as e:
             results['user_agent'] = False
-            print(f"   [FAIL] User-Agent: {self._fmt_err(e)}")
+            # FAIL: User-Agent: {self._fmt_err(e)}")
         
         # 2. Timezone через CDP
         try:
             page.run_cdp('Emulation.setTimezoneOverride', timezoneId=p.timezone)
             results['timezone'] = True
-            print(f"   [OK] Timezone: {p.timezone}")
+            # OK: Timezone: {p.timezone}")
         except Exception as e:
             results['timezone'] = False
-            print(f"   [FAIL] Timezone: {self._fmt_err(e)}")
+            # FAIL: Timezone: {self._fmt_err(e)}")
         
         # 3. Geolocation через CDP
         try:
@@ -216,10 +203,10 @@ class CDPSpoofer:
                 accuracy=p.accuracy
             )
             results['geolocation'] = True
-            print(f"   [OK] Geolocation: {p.latitude:.4f}, {p.longitude:.4f}")
+            # OK: Geolocation: {p.latitude:.4f}, {p.longitude:.4f}")
         except Exception as e:
             results['geolocation'] = False
-            print(f"   [FAIL] Geolocation: {self._fmt_err(e)}")
+            # FAIL: Geolocation: {self._fmt_err(e)}")
         
         # 4. Device metrics через CDP
         try:
@@ -230,10 +217,10 @@ class CDPSpoofer:
                 mobile=False
             )
             results['device_metrics'] = True
-            print(f"   [OK] Screen: {p.screen_width}x{p.screen_height}")
+            # OK: Screen: {p.screen_width}x{p.screen_height}")
         except Exception as e:
             results['device_metrics'] = False
-            print(f"   [FAIL] Device metrics: {self._fmt_err(e)}")
+            # FAIL: Device metrics: {self._fmt_err(e)}")
         
         # 5. Locale через CDP (опционально)
         try:
@@ -247,10 +234,10 @@ class CDPSpoofer:
             js_code = self._collect_js()
             page.run_cdp('Page.addScriptToEvaluateOnNewDocument', source=js_code)
             results['js_persistent'] = True
-            print(f"   [OK] Persistent JS injection ({len(self._modules)} modules)")
+            # OK: Persistent JS injection ({len(self._modules)} modules)")
         except Exception as e:
             results['js_persistent'] = False
-            print(f"   [FAIL] Persistent JS: {self._fmt_err(e)}")
+            # FAIL: Persistent JS: {self._fmt_err(e)}")
         
         # 7. Также выполняем JS сразу для текущей страницы
         try:
@@ -281,7 +268,7 @@ class CDPSpoofer:
         p = self.profile
         success = True
         
-        print("[SPOOF] Applying pre-navigation spoofing...")
+        # Silent - no output to avoid breaking JSON protocol
         
         # 0. Отключаем webdriver через Proxy (КРИТИЧНО!)
         # Proxy нужен чтобы 'webdriver' in navigator возвращал false
@@ -309,7 +296,7 @@ class CDPSpoofer:
                     configurable: true
                 });
             ''')
-            print("   [OK] WebDriver hidden")
+            # OK: WebDriver hidden")
         except Exception as e:
             print(f"   [WARN] WebDriver hide: {self._fmt_err(e)}")
             success = False
@@ -321,14 +308,14 @@ class CDPSpoofer:
                 platform=p.platform,
                 acceptLanguage=f"{p.locale},en;q=0.9"
             )
-            print(f"   [OK] User-Agent")
+            # OK: User-Agent")
         except Exception as e:
             print(f"   [WARN] User-Agent: {self._fmt_err(e)}")
             success = False
         
         try:
             page.run_cdp('Emulation.setTimezoneOverride', timezoneId=p.timezone)
-            print(f"   [OK] Timezone: {p.timezone}")
+            # OK: Timezone: {p.timezone}")
         except Exception as e:
             print(f"   [WARN] Timezone: {self._fmt_err(e)}")
         
@@ -338,7 +325,7 @@ class CDPSpoofer:
                 longitude=p.longitude,
                 accuracy=p.accuracy
             )
-            print(f"   [OK] Geolocation: {p.latitude}, {p.longitude}")
+            # OK: Geolocation: {p.latitude}, {p.longitude}")
         except Exception as e:
             print(f"   [WARN] Geolocation: {self._fmt_err(e)}")
         
@@ -349,7 +336,7 @@ class CDPSpoofer:
                 deviceScaleFactor=p.pixel_ratio,
                 mobile=False
             )
-            print(f"   [OK] Screen: {p.screen_width}x{p.screen_height}")
+            # OK: Screen: {p.screen_width}x{p.screen_height}")
         except Exception as e:
             print(f"   [WARN] Device metrics: {self._fmt_err(e)}")
         
@@ -360,7 +347,7 @@ class CDPSpoofer:
                 permission={'name': 'notifications'},
                 setting='prompt'
             )
-            print(f"   [OK] Notification permission: prompt")
+            # OK: Notification permission: prompt")
         except Exception as e:
             # Fallback: пробуем через Emulation
             try:
@@ -368,7 +355,7 @@ class CDPSpoofer:
                     permission={'name': 'notifications'},
                     setting='prompt'
                 )
-                print(f"   [OK] Notification permission (emulation): prompt")
+                # OK: Notification permission (emulation): prompt")
             except Exception as e:
                 print(f"   [WARN] Notification permission: {self._fmt_err(e)}")
         
@@ -376,12 +363,12 @@ class CDPSpoofer:
         try:
             js_code = self._collect_js()
             page.run_cdp('Page.addScriptToEvaluateOnNewDocument', source=js_code)
-            print(f"   [OK] Persistent JS ({len(self._modules)} modules)")
+            # OK: Persistent JS ({len(self._modules)} modules)")
         except Exception as e:
-            print(f"   [FAIL] Persistent JS: {self._fmt_err(e)}")
+            # FAIL: Persistent JS: {self._fmt_err(e)}")
             success = False
         
-        print("[SPOOF] Pre-navigation spoofing ready")
+        # Silent - spoofing ready
         return success
     
     def get_modules_info(self) -> List[Dict]:
@@ -414,3 +401,4 @@ def apply_pre_navigation_spoofing(page, profile: SpoofProfile = None) -> CDPSpoo
     spoofer = CDPSpoofer(profile)
     spoofer.apply_pre_navigation(page)
     return spoofer
+

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { invoke } from '@tauri-apps/api/core';
 import { getSettings, updateSettings } from '../lib/tauri';
 import type { 
   ProviderName, 
@@ -275,12 +276,14 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         
         // If emailPattern is being updated, also update patterns
         if ('emailPattern' in imap) {
+          const imapWithPattern = imap as Partial<IMAPConfig> & { emailPattern: EmailPattern };
           updates.patterns = {
             ...state.config.patterns,
-            emailPattern: (imap as any).emailPattern
+            emailPattern: imapWithPattern.emailPattern
           };
           // Remove emailPattern from imap updates
-          const { emailPattern, ...imapWithoutPattern } = imap as any;
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { emailPattern, ...imapWithoutPattern } = imapWithPattern;
           updates.imap = { ...state.config.imap, ...imapWithoutPattern };
         }
         
@@ -358,6 +361,11 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
                 nameCustomFirst: settings.name_custom_first || '',
                 nameCustomLast: settings.name_custom_last || '',
               },
+              advanced: {
+                ...state.config.advanced,
+                // CRITICAL FIX: Load headless setting from database
+                headless: settings.headless === true,
+              },
               count: settings.count || 1,
             },
             settingsLoaded: true,
@@ -407,6 +415,8 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           name_custom_first: config.patterns.nameCustomFirst,
           name_custom_last: config.patterns.nameCustomLast,
           count: config.count,
+          // CRITICAL FIX: Save headless setting to database
+          headless: config.advanced.headless,
         };
         
         // Only include passwords if they have actual values
@@ -431,16 +441,28 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     },
 
     // Log actions
-    addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => set((state) => ({
-      logs: [
-        ...state.logs,
-        {
-          ...log,
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-        }
-      ]
-    })),
+    addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => {
+      const newLog = {
+        ...log,
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+      };
+      
+      // Add to local registration logs
+      set((state) => ({
+        logs: [...state.logs, newLog]
+      }));
+      
+      // Also save to global logging system for persistence
+      invoke('add_log', {
+        level: log.level,
+        source: 'registration',
+        message: log.message,
+        details: null
+      }).catch((err: unknown) => {
+        console.error('Failed to save log to database:', err);
+      });
+    },
 
     clearLogs: () => set({ logs: [] }),
 

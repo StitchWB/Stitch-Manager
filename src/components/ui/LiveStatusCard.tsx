@@ -11,8 +11,7 @@ import {
   Rocket,
   Server,
   Eye,
-  AlertCircle,
-  Play
+  AlertCircle
 } from 'lucide-react';
 
 export type LiveAction = 
@@ -149,17 +148,6 @@ function getActionConfig(): Record<LiveAction, {
   };
 }
 
-// Typing animation dots
-function TypingDots() {
-  return (
-    <div className="flex gap-1 mt-1">
-      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms', animationDuration: '600ms' }} />
-      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms', animationDuration: '600ms' }} />
-      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms', animationDuration: '600ms' }} />
-    </div>
-  );
-}
-
 export function LiveStatusCard({ action, detail, onStart, canStart = true, className }: LiveStatusCardProps) {
   const ACTION_CONFIG = getActionConfig();
   const config = ACTION_CONFIG[action];
@@ -175,98 +163,62 @@ export function LiveStatusCard({ action, detail, onStart, canStart = true, class
     }
   };
 
+  // COMPACT MODE: Thin status strip instead of hero card
   return (
     <div 
       onClick={handleClick}
       className={cn(
-        'relative rounded-xl p-6 backdrop-blur-sm border overflow-hidden transition-all duration-300',
+        'relative h-10 px-3 backdrop-blur-sm border-y overflow-hidden transition-all duration-300 flex items-center gap-3',
         isIdle && canStart && onStart
-          ? 'border-white/15 cursor-pointer hover:border-white/25 hover:scale-[1.01] active:scale-[0.99]'
-          : 'border-white/[0.08]',
+          ? 'border-white/10 cursor-pointer hover:border-white/20 hover:bg-white/[0.02]'
+          : 'border-white/[0.05]',
         // Golden glow for code actions
-        isCodeAction && 'shadow-[0_0_30px_rgba(234,179,8,0.2)]',
+        isCodeAction && 'bg-amber-500/5 border-amber-500/20',
+        isActive && !isCodeAction && 'bg-white/[0.02]',
         className
       )}
-      style={{ 
-        background: `linear-gradient(145deg, ${config.bgGlow}, rgba(0,0,0,0.3))`,
-      }}
     >
-      {/* Subtle animated border glow for active states */}
-      {isActive && (
-        <div 
-          className="absolute inset-0 rounded-xl opacity-60"
-          style={{ 
-            background: `linear-gradient(145deg, ${config.bgGlow}, transparent)`,
-            filter: 'blur(25px)',
-          }}
-        />
-      )}
+      {/* Compact icon - small */}
+      <div className={cn('shrink-0', config.color)}>
+        {action === 'idle' ? <Rocket className="w-3.5 h-3.5" /> : 
+         action === 'processing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+         action === 'connecting' ? <Server className="w-3.5 h-3.5" /> :
+         action === 'scanning_inbox' ? <Mail className="w-3.5 h-3.5" /> :
+         action === 'launching_browser' ? <Globe className="w-3.5 h-3.5" /> :
+         action === 'navigating' ? <Eye className="w-3.5 h-3.5" /> :
+         action === 'typing_email' ? <Keyboard className="w-3.5 h-3.5" /> :
+         action === 'typing_password' ? <Key className="w-3.5 h-3.5" /> :
+         action === 'typing_code' ? <Shield className="w-3.5 h-3.5" /> :
+         action === 'waiting_code' ? <Mail className="w-3.5 h-3.5" /> :
+         action === 'verifying' ? <Shield className="w-3.5 h-3.5" /> :
+         action === 'getting_token' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+         action === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> :
+         <AlertCircle className="w-3.5 h-3.5" />}
+      </div>
 
-      {/* Content */}
-      <div className="relative flex items-center gap-5">
-        {/* Icon container with background */}
-        <div className={cn(
-          'w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300',
-          config.iconBg,
-          isActive && 'animate-pulse'
-        )}>
-          <div className={cn('transition-colors duration-300', config.color)}>
-            {config.icon}
-          </div>
-        </div>
-
-        {/* Text content */}
-        <div className="flex-1 min-w-0">
-          {/* Title - large and prominent */}
-          <h3 className={cn(
-            'text-xl font-bold mb-1 transition-colors duration-300',
-            config.color
-          )}>
-            {config.title}
-          </h3>
-
-          {/* Detail or typing indicator */}
-          {isTyping ? (
-            <div className={cn('flex items-center gap-2', config.color)}>
-              {/* Code display - larger for verification codes */}
-              {isCodeAction && detail ? (
-                <span className="text-2xl font-bold font-mono tracking-wider">{detail}</span>
-              ) : (
-                <span className="text-sm text-slate-400">{detail || 'Processing...'}</span>
-              )}
-              <TypingDots />
-            </div>
-          ) : detail ? (
-            <p className={cn(
-              'font-mono truncate',
-              isCodeAction ? 'text-xl font-bold text-amber-300' : 'text-sm text-slate-400'
-            )}>
-              {detail}
-            </p>
-          ) : isIdle && onStart ? (
-            <p className="text-sm text-slate-400 flex items-center gap-2">
-              <Play className="w-4 h-4" />
-              {t('liveStatus.clickToStart')}
-            </p>
-          ) : (
-            <p className="text-sm text-slate-500">
-              {action === 'idle' ? t('liveStatus.configureFirst') : t('liveStatus.processing')}
-            </p>
-          )}
-        </div>
-
-        {/* Activity indicator */}
-        {isActive && (
-          <div className="shrink-0">
-            <div className={cn(
-              'w-3 h-3 rounded-full animate-pulse',
-              action === 'typing_code' || action === 'waiting_code' ? 'bg-amber-400' : 'bg-indigo-400'
-            )} 
-            style={{ boxShadow: `0 0 12px currentColor` }}
-            />
-          </div>
+      {/* Compact text - single line, monospace with blinking cursor */}
+      <div className="flex-1 min-w-0 font-mono text-xs">
+        {isIdle ? (
+          <span className="text-slate-500">
+            &gt; {canStart && onStart ? 'Ready to initialize. Waiting for user input' : 'Configure settings first'}
+            <span className="inline-block w-2 animate-pulse">_</span>
+          </span>
+        ) : (
+          <span className={cn('truncate', config.color)}>
+            &gt; {config.title}
+            {detail && `: ${detail}`}
+            {isTyping && <span className="inline-block w-2 animate-pulse">_</span>}
+          </span>
         )}
       </div>
+
+      {/* Activity indicator - minimal */}
+      {isActive && (
+        <div className={cn(
+          'w-1.5 h-1.5 rounded-full animate-pulse shrink-0',
+          isCodeAction ? 'bg-amber-400' : 'bg-indigo-400'
+        )} />
+      )}
     </div>
   );
 }

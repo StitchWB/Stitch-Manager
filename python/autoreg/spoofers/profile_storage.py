@@ -69,12 +69,12 @@ class ProfileStorage:
         """
         profile = self.load(email)
         if profile:
-            print(f"[ProfileStorage] Loaded existing profile for {email}")
+            # Loaded existing profile - no output to avoid breaking JSON protocol
             return profile
         
         # Создаём новый профиль
         from .profile import generate_random_profile
         profile = generate_random_profile()
         self.save(email, profile)
-        print(f"[ProfileStorage] Created new profile for {email}")
+        # Created new profile - no output to avoid breaking JSON protocol
         return profile

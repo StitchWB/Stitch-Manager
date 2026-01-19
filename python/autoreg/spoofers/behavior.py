@@ -478,7 +478,19 @@ class BehaviorSpoofModule:
         # Очищаем поле через select + delete (работает с React)
         page.run_js('''
             const el = arguments[0];
-            el.select();
+            try {
+                if (el.select && typeof el.select === 'function') {
+                    el.select();
+                } else if (el.setSelectionRange && typeof el.setSelectionRange === 'function') {
+                    el.focus();
+                    el.setSelectionRange(0, el.value.length);
+                } else {
+                    el.focus();
+                }
+            } catch (e) {
+                console.log('Select failed, using focus:', e);
+                el.focus();
+            }
         ''', element)
         time.sleep(0.02)
         
@@ -582,10 +594,21 @@ class BehaviorSpoofModule:
             
             // КРИТИЧНО: Используем нативный setter для React-совместимости
             // React перехватывает setter и обновляет state
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value'
-            ).set;
-            nativeInputValueSetter.call(el, el.value + char);
+            try {
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                if (nativeInputValueSetter) {
+                    nativeInputValueSetter.call(el, el.value + char);
+                } else {
+                    // Fallback: прямое изменение value
+                    el.value = el.value + char;
+                }
+            } catch (e) {
+                console.log('Native setter failed, using direct assignment:', e);
+                // Fallback: прямое изменение value
+                el.value = el.value + char;
+            }
             
             // Input event (React слушает это)
             el.dispatchEvent(new InputEvent('input', {

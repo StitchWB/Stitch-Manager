@@ -12,6 +12,7 @@ export interface ProviderConfig {
   gradient: string;        // Gradient classes for cards
   hexColor: string;        // Hex color for charts
   disabled?: boolean;      // Whether registration is disabled
+  category?: 'ide' | 'cloud' | 'git';  // Provider category for unified UI
 }
 
 export const PROVIDERS: ProviderConfig[] = [
@@ -23,6 +24,7 @@ export const PROVIDERS: ProviderConfig[] = [
     gradient: 'from-indigo-500/20 to-purple-500/20 text-indigo-400',
     hexColor: '#8b5cf6',
     disabled: false,
+    category: 'ide',
   },
   {
     id: 'windsurf',
@@ -32,6 +34,7 @@ export const PROVIDERS: ProviderConfig[] = [
     gradient: 'from-cyan-500/20 to-blue-500/20 text-cyan-400',
     hexColor: '#06b6d4',
     disabled: false,
+    category: 'ide',
   },
   {
     id: 'trae',
@@ -40,7 +43,28 @@ export const PROVIDERS: ProviderConfig[] = [
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     gradient: 'from-orange-500/20 to-amber-500/20 text-orange-400',
     hexColor: '#f97316',
-    disabled: true,
+    disabled: false,
+    category: 'ide',
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    icon: 'GH',
+    color: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+    gradient: 'from-gray-500/20 to-slate-500/20 text-gray-400',
+    hexColor: '#6b7280',
+    disabled: false,
+    category: 'git',
+  },
+  {
+    id: 'aws',
+    name: 'AWS',
+    icon: 'AWS',
+    color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    gradient: 'from-orange-500/20 to-amber-500/20 text-orange-400',
+    hexColor: '#ff9900',
+    disabled: false,
+    category: 'cloud',
   },
   {
     id: 'copilot',
@@ -50,6 +74,7 @@ export const PROVIDERS: ProviderConfig[] = [
     gradient: 'from-gray-500/20 to-slate-500/20 text-gray-400',
     hexColor: '#6b7280',
     disabled: true,
+    category: 'ide',
   },
 ] as const;
 

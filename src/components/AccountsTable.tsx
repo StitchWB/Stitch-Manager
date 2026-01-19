@@ -22,7 +22,6 @@ import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { ProviderLogo } from './ui/ProviderLogo';
 import { UsageBar } from './ui/UsageBar';
-import { StatusBadge } from './ui/StatusBadge';
 import { AccountDrawer } from './ui/AccountDrawer';
 import { FloatingActionBar } from './ui/FloatingActionBar';
 import { ConfirmDialog } from './ui/ConfirmDialog';
@@ -33,18 +32,6 @@ function truncateEmail(email: string, startChars = 10, endChars = 15): string {
   if (email.length <= startChars + endChars + 3) return email;
   return `${email.slice(0, startChars)}...${email.slice(-endChars)}`;
 }
-
-// Status badge variant mapping
-const getStatusVariant = (status: AccountStatus): 'success' | 'error' | 'warning' | 'neutral' => {
-  const variantMap: Record<AccountStatus, 'success' | 'error' | 'warning' | 'neutral'> = {
-    active: 'success',
-    banned: 'error',
-    limit_hit: 'warning',
-    expired: 'neutral',
-    unknown: 'neutral',
-  };
-  return variantMap[status];
-};
 
 const getStatusLabel = (status: AccountStatus): string => {
   const statusMap: Record<AccountStatus, string> = {
@@ -499,30 +486,37 @@ export default function AccountsTable({
                               <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
                               <span className="text-[10px] text-indigo-300 font-medium">Syncing...</span>
                             </div>
-                          ) : account.status === 'expired' ? (
-                            <>
-                              <StatusBadge variant="warning">
-                                {getStatusLabel(account.status)}
-                              </StatusBadge>
-                              <span className="text-[9px] text-amber-400/70" title="Re-authentication required">⚠️</span>
-                            </>
-                          ) : account.status === 'active' ? (
-                            <StatusBadge variant="success" minimal>
-                              Active
-                            </StatusBadge>
                           ) : (
-                            <StatusBadge variant={getStatusVariant(account.status)}>
-                              {getStatusLabel(account.status)}
-                            </StatusBadge>
-                          )}
-                          {/* Quota warning badge when >80% */}
-                          {account.quota && account.quota.limit > 0 && (account.quota.used / account.quota.limit) > 0.8 && (
-                            <span 
-                              className="text-[9px] text-amber-400/70" 
-                              title={`Quota almost full: ${Math.round((account.quota.used / account.quota.limit) * 100)}% used`}
-                            >
-                              ⚠️
-                            </span>
+                            <>
+                              {/* Unified minimal dot + text style for ALL statuses */}
+                              <div className="flex items-center gap-1.5">
+                                <div className={cn(
+                                  "w-1.5 h-1.5 rounded-full",
+                                  account.status === 'active' && "bg-emerald-400",
+                                  account.status === 'banned' && "bg-red-400",
+                                  account.status === 'limit_hit' && "bg-amber-400",
+                                  account.status === 'expired' && "bg-slate-400"
+                                )} />
+                                <span className={cn(
+                                  "text-xs font-medium",
+                                  account.status === 'active' && "text-emerald-400",
+                                  account.status === 'banned' && "text-red-400",
+                                  account.status === 'limit_hit' && "text-amber-400",
+                                  account.status === 'expired' && "text-slate-400"
+                                )}>
+                                  {getStatusLabel(account.status)}
+                                </span>
+                              </div>
+                              {/* Quota warning badge when >80% */}
+                              {account.quota && account.quota.limit > 0 && (account.quota.used / account.quota.limit) > 0.8 && (
+                                <span 
+                                  className="text-[9px] text-amber-400/70" 
+                                  title={`Quota almost full: ${Math.round((account.quota.used / account.quota.limit) * 100)}% used`}
+                                >
+                                  ⚠️
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>

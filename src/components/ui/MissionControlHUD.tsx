@@ -240,8 +240,8 @@ export function MissionControlHUD({ logs, isRunning = false, canStart = true, on
         <ProcessTimeline currentStep={currentStep} />
       </div>
 
-      {/* Live Status Card - Hero Section (clickable when idle) */}
-      <div className="shrink-0 p-4">
+      {/* Live Status Strip - Compact, no padding */}
+      <div className="shrink-0">
         <LiveStatusCard 
           action={action} 
           detail={detail} 
@@ -250,16 +250,16 @@ export function MissionControlHUD({ logs, isRunning = false, canStart = true, on
         />
       </div>
 
-      {/* Success Cards - Loot Drops */}
+      {/* Success Strips - Compact, no padding */}
       {successAccounts.length > 0 && (
-        <div className="shrink-0 px-4 pb-2 space-y-2">
+        <div className="shrink-0">
           {successAccounts.map((email) => (
             <SuccessCard key={email} email={email} hasToken />
           ))}
         </div>
       )}
 
-      {/* Compact Log Feed - Under the hood */}
+      {/* Compact Log Feed - Takes remaining space */}
       <div className="flex-1 min-h-0 border-t border-white/5">
         <CompactLogFeed logs={logs} onClear={onClear} />
       </div>

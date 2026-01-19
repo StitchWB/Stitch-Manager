@@ -188,7 +188,7 @@ export const usePatcherStore = create<PatcherState>()(
               traeWorkbenchPatched: workbenchPatched,
             });
             return storagePatched ?? false;
-          } catch (error) {
+          } catch {
             // Trae not installed or storage not found
             set({ traePatched: null, traeExtensionPatched: null, traeWorkbenchPatched: null });
             return false;

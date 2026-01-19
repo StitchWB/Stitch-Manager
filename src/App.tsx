@@ -9,6 +9,7 @@ import Patcher from './pages/Patcher';
 import Server from './pages/Server';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
+import Chat from './pages/Chat';
 import NotFound from './pages/NotFound';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { useAppStore } from './stores/app';
@@ -59,6 +60,11 @@ function App() {
 
   return (
     <>
+      {/* Skip to main content link for keyboard navigation */}
+      <a href="#main-content" className="skip-to-content">
+        Skip to main content
+      </a>
+      
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -68,6 +74,7 @@ function App() {
           <Route path="/server" element={<Server />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="/chat" element={<Chat />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Layout>

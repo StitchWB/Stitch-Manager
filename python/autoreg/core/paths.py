@@ -32,9 +32,9 @@ class Paths:
         self.project_dir = self.autoreg_dir.parent
         
         # =====================================================================
-        # User data paths (~/.kiro-manager-wb/)
+        # User data paths (stitch-manager)
         # =====================================================================
-        self.user_data_dir = self.home / '.kiro-manager-wb'
+        self.user_data_dir = self.home / '.stitch-manager'
         self.tokens_dir = self.user_data_dir / 'tokens'
         self.backups_dir = self.user_data_dir / 'backups'
         self.logs_dir = self.user_data_dir / 'logs'

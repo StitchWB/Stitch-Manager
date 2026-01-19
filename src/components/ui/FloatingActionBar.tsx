@@ -55,6 +55,11 @@ export function FloatingActionBar({
               <span className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
                 <span className="text-indigo-300">{progressText}</span>
+                {refreshProgress && (
+                  <span className="text-slate-500 text-xs ml-1">
+                    ({Math.round((refreshProgress.current / refreshProgress.total) * 100)}%)
+                  </span>
+                )}
               </span>
             ) : (
               <>

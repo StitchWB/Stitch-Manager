@@ -290,7 +290,7 @@ def detect_ip_geo(use_external_api: bool = True) -> Optional[IPGeoData]:
     
     # Если не используем внешние API - возвращаем локальные данные
     if not use_external_api:
-        print("[IP-GEO] Using local timezone data (no external API)")
+        # Silent - using local data
         return get_local_geo_data()
     
     # Попытка 1: ip-api.com (бесплатный, без ключа)
@@ -359,7 +359,7 @@ def detect_ip_geo(use_external_api: bool = True) -> Optional[IPGeoData]:
         print(f"[IP-GEO] ipinfo.io failed: {e}")
     
     # Fallback на локальные данные если все API недоступны
-    print("[IP-GEO] All external APIs failed, using local timezone fallback")
+    # Silent fallback
     return get_local_geo_data()
 
 

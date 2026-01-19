@@ -6,9 +6,16 @@
 
 import json
 import random
+import platform
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+# Cross-platform file locking
+if platform.system() == 'Windows':
+    import msvcrt
+else:
+    import fcntl
 
 from .ip_timezone import detect_ip_geo, get_system_timezone, IPGeoData
 
@@ -233,7 +240,7 @@ def generate_random_profile() -> SpoofProfile:
     if profile:
         return profile
     
-    print("[PROFILE] IP geo failed, using random US profile")
+    # IP geo failed - silent fallback
     
     # Fallback на случайный US профиль
     us_profiles = ['new_york', 'los_angeles', 'chicago']
@@ -308,7 +315,16 @@ def save_profile(email: str, profile: SpoofProfile) -> bool:
         data['saved_at'] = __import__('datetime').datetime.now().isoformat()
         
         with open(path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2)
+            # Use platform-specific file locking
+            if platform.system() != 'Windows':
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    json.dump(data, f, indent=2)
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            else:
+                # Windows: simple write without locking (for now)
+                json.dump(data, f, indent=2)
         
         print(f"[PROFILE] Saved fingerprint for {email}")
         return True
@@ -329,7 +345,16 @@ def load_profile(email: str) -> Optional[SpoofProfile]:
             return None
         
         with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            # Use platform-specific file locking
+            if platform.system() != 'Windows':
+                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                try:
+                    data = json.load(f)
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            else:
+                # Windows: simple read without locking (for now)
+                data = json.load(f)
         
         profile = SpoofProfile.from_dict(data)
         print(f"[PROFILE] Loaded fingerprint for {email}")

@@ -89,6 +89,7 @@ export interface Translations {
     autoReg: string;
     idePatch: string;
     apiServer: string;
+    chat: string;
     system: string;
     settings: string;
     logs: string;
@@ -151,12 +152,22 @@ export interface Translations {
     rawData: string;
     copyJson: string;
     created: string;
+    authToken: string;
+    lastUsed: string;
     importToken: string;
     importing: string;
     pasteTokenHere: string;
     noToken: string;
     clickCheckNow: string;
     clearSelection: string;
+    // Confirmation dialogs
+    deleteAccountTitle: string;
+    deleteAccountMessage: string;
+    deleteBulkTitle: string;
+    deleteBulkMessage: string;
+    deleteBulkPreview: string;
+    confirmDelete: string;
+    deleting: string;
   };
   accountsTable: {
     account: string;
@@ -164,6 +175,7 @@ export interface Translations {
     usage: string;
     expires: string;
     registrationDate: string;
+    created: string;
     refresh: string;
     copyToken: string;
     delete: string;
@@ -244,6 +256,12 @@ export interface Translations {
     host: string;
     port: string;
     emailPattern: string;
+    
+    // AWS-specific
+    paymentMethod: string;
+    billingInformation: string;
+    phoneVerification: string;
+    smsService: string;
     
     // Placeholders
     placeholders: {
@@ -332,6 +350,9 @@ export interface Translations {
     activeTokens: string;
     quotaUsage: string;
     llmServer: string;
+    accountsNearLimit: string;
+    clickToFilter: string;
+    allAccountsHealthy: string;
     inactive: string;
     clickToStart: string;
     startRegistration: string;
@@ -385,6 +406,7 @@ export interface Translations {
       requests: string;
       connections: string;
       latency: string;
+      status: string;
     };
     tabs: {
       liveLogs: string;
@@ -566,7 +588,6 @@ export interface Translations {
   };
   notifications: {
     registrationComplete: string;
-    accountRegistrationFinished: string;
     registrationFailed: string;
     copied: string;
     resultsCopiedToClipboard: string;
@@ -577,6 +598,7 @@ export interface Translations {
     accountAdded: string;
     addFailed: string;
     refreshFailed: string;
+    refreshComplete: string;
     deleteFailed: string;
   };
   time: {
@@ -597,6 +619,11 @@ export interface Translations {
     invalidEmail: string;
     invalidUrl: string;
     invalidPort: string;
+    invalidHostname: string;
+    testConnection: string;
+    testing: string;
+    connectionSuccess: string;
+    connectionFailed: string;
   };
   quickSwitch: {
     title: string;
@@ -783,6 +810,7 @@ export interface Translations {
     hasQuota: string;
     empty: string;
     full: string;
+    lowQuota: string;
     status: string;
     quota: string;
     minRemaining: string;
@@ -794,6 +822,23 @@ export interface Translations {
     errorBanned: string;
     unlimited: string;
     used: string;
+  };
+  chat: {
+    title: string;
+    subtitle: string;
+    placeholder: string;
+    clear: string;
+    settings: string;
+    error: string;
+    retry: string;
+    apiUrl: string;
+    model: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    you: string;
+    assistant: string;
+    thinking: string;
+    typing: string;
   };
 }
 
