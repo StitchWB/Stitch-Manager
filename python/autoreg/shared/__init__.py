@@ -3,16 +3,21 @@ Shared module - Common utilities used by all providers.
 
 Contains:
 - OAuth callback server
-- IMAP mail handler
-- Base browser automation
+- OAuth session manager
 """
 
-from .mail_handler import MailHandler, create_mail_handler_from_env
 from .oauth_callback_server import OAuthCallbackServer, CallbackHandler
+from .session_manager import (
+    SessionManager, SessionData, SessionStatus, Provider,
+    get_session_manager
+)
 
 __all__ = [
-    'MailHandler',
-    'create_mail_handler_from_env',
     'OAuthCallbackServer', 
     'CallbackHandler',
+    'SessionManager',
+    'SessionData',
+    'SessionStatus',
+    'Provider',
+    'get_session_manager',
 ]

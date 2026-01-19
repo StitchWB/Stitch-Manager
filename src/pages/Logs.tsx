@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Search, Download, Trash2, RefreshCw, ChevronDown, Loader2 } from 'lucide-react';
+import { FileText, Search, Download, Trash2, RefreshCw, ChevronDown, Loader2, Copy, Check } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel } from '../stores/logs';
 import { t } from '../lib/i18n';
+import { cn } from '../lib/utils';
 
 // ============================================
 // Constants
@@ -18,22 +19,6 @@ const LOG_SOURCES = [
   'server',
   'system',
 ] as const;
-
-const LEVEL_COLORS: Record<LogLevel, string> = {
-  debug: 'text-slate-400',
-  info: 'text-vsc-blue',
-  success: 'text-vsc-green',
-  warn: 'text-vsc-yellow',
-  error: 'text-vsc-red',
-};
-
-const LEVEL_BADGES: Record<LogLevel, string> = {
-  debug: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-  info: 'bg-vsc-blue/20 text-vsc-blue border-vsc-blue/30',
-  success: 'bg-vsc-green/20 text-vsc-green border-vsc-green/30',
-  warn: 'bg-vsc-yellow/20 text-vsc-yellow border-vsc-yellow/30',
-  error: 'bg-vsc-red/20 text-vsc-red border-vsc-red/30',
-};
 
 // ============================================
 // Component
@@ -62,6 +47,8 @@ export default function Logs() {
   const [sourceFilter, setSourceFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Force re-render when language changes
   void language;
@@ -136,6 +123,28 @@ export default function Logs() {
     setSearchQuery('');
     resetFilter();
   }, [resetFilter]);
+
+  const toggleLogExpansion = useCallback((logId: string) => {
+    setExpandedLogs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const copyToClipboard = useCallback(async (text: string, logId: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(logId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }, []);
 
   // ============================================
   // Render
@@ -244,8 +253,8 @@ export default function Logs() {
           </div>
         )}
 
-        {/* Logs Table */}
-        <div className="card flex-1 overflow-hidden flex flex-col">
+        {/* Logs Table - Terminal Mode */}
+        <div className="card flex-1 overflow-hidden flex flex-col bg-[#0a0a0a]">
           <div className="overflow-auto flex-1">
             {logs.length === 0 && !isLoading ? (
               <EmptyState
@@ -254,43 +263,77 @@ export default function Logs() {
                 description="No logs to display"
               />
             ) : (
-              <table className="table-ds w-full">
-                <thead>
-                  <tr>
-                    <th className="w-28">{t('logs.time')}</th>
-                    <th className="w-20">{t('logs.level')}</th>
-                    <th className="w-28">{t('logs.source')}</th>
-                    <th>{t('logs.message')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-white/[0.02]">
-                      <td className="font-mono text-xs text-slate-500 tabular-nums">
+              <div className="font-mono text-xs">
+                {logs.map((log) => {
+                  const isCopied = copiedId === log.id;
+                  const isLongMessage = log.message.length > 200;
+                  const isExpanded = expandedLogs.has(log.id);
+                  
+                  return (
+                    <div 
+                      key={log.id} 
+                      className="flex items-start gap-3 px-4 py-1 hover:bg-white/[0.02] transition-colors border-b border-white/[0.02] group"
+                    >
+                      {/* Timestamp - Gray */}
+                      <span className="text-slate-600 tabular-nums shrink-0">
                         {new Date(log.timestamp).toLocaleTimeString('en-US', { 
                           hour12: false,
                           hour: '2-digit',
                           minute: '2-digit',
                           second: '2-digit'
                         })}
-                      </td>
-                      <td>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${LEVEL_BADGES[log.level]}`}>
-                          {log.level}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="text-xs text-slate-400 bg-white/5 px-2 py-0.5 rounded">
-                          {log.source || '—'}
-                        </span>
-                      </td>
-                      <td className={`text-sm ${LEVEL_COLORS[log.level]}`}>
-                        {log.message}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </span>
+                      
+                      {/* Level - Color coded, 3 chars */}
+                      <span className={cn(
+                        'shrink-0 w-12 text-center font-bold uppercase',
+                        log.level === 'debug' && 'text-slate-500',
+                        log.level === 'info' && 'text-vsc-blue',
+                        log.level === 'success' && 'text-vsc-green',
+                        log.level === 'warn' && 'text-vsc-yellow',
+                        log.level === 'error' && 'text-vsc-red'
+                      )}>
+                        {log.level === 'debug' ? 'DBG' :
+                         log.level === 'info' ? 'INF' :
+                         log.level === 'success' ? 'OK' :
+                         log.level === 'warn' ? 'WRN' :
+                         'ERR'}
+                      </span>
+                      
+                      {/* Source - Purple */}
+                      <span className="text-purple-400 shrink-0 w-24 truncate">
+                        [{log.source || 'system'}]
+                      </span>
+                      
+                      {/* Message - White, expandable */}
+                      <div className="flex-1 min-w-0">
+                        <div 
+                          className={cn(
+                            'text-slate-300 break-words cursor-pointer',
+                            !isExpanded && isLongMessage && 'line-clamp-1'
+                          )}
+                          onClick={() => isLongMessage && toggleLogExpansion(log.id)}
+                        >
+                          {log.message}
+                        </div>
+                      </div>
+                      
+                      {/* Copy button - appears on hover */}
+                      <button
+                        onClick={() => copyToClipboard(log.message, log.id)}
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
+                        title="Copy message"
+                      >
+                        {isCopied ? (
+                          <Check className="w-3 h-3 text-vsc-green" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             )}
 
             {/* Loading Spinner */}
@@ -314,8 +357,8 @@ export default function Logs() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-white/5 px-4 py-3 flex items-center justify-between bg-slate-900/50">
-            <span className="text-2xs text-slate-500">
+          <div className="border-t border-white/5 px-4 py-2 flex items-center justify-between bg-slate-900/50">
+            <span className="text-2xs text-slate-500 font-mono">
               {t('logs.showing')}{' '}
               <span className="text-slate-300 tabular-nums">{logs.length}</span>{' '}
               {t('logs.of')}{' '}

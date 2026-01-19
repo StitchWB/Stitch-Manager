@@ -4,7 +4,6 @@ import {
   Users,
   Key,
   PieChart,
-  Server,
   Play,
   RefreshCw,
   ExternalLink,
@@ -56,6 +55,24 @@ const Sparkline = ({ data = [3, 7, 4, 9, 5, 8, 6] }: { data?: number[] }) => {
     </svg>
   );
 };
+
+// ============================================
+// Skeleton Loader for Stat Cards
+// ============================================
+const StatCardSkeleton = () => (
+  <div className="relative p-5 flex flex-col gap-4 rounded-xl"
+    style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.04), transparent)' }}
+  >
+    <div className="flex items-center justify-between">
+      <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse" />
+      <div className="w-20 h-5 bg-white/5 rounded animate-pulse" />
+    </div>
+    <div>
+      <div className="w-24 h-10 bg-white/5 rounded animate-pulse mb-2" />
+      <div className="w-32 h-3 bg-white/5 rounded animate-pulse" />
+    </div>
+  </div>
+);
 
 // ============================================
 // Stat Card Component (Deep Space Void Style)
@@ -236,16 +253,19 @@ function ProviderBreakdownChart({ data }: ProviderChartProps) {
     );
   }
 
-  let cumulativePercent = 0;
+  // Use reduce to calculate gradient stops without mutation
   const gradientStops = data
     .filter((item) => item.count > 0)
-    .map((item) => {
+    .reduce((acc, item) => {
       const percent = (item.count / total) * 100;
-      const start = cumulativePercent;
-      cumulativePercent += percent;
+      const start = acc.cumulative;
+      const end = start + percent;
       const color = PROVIDER_HEX_COLORS[item.provider] || '#64748b';
-      return `${color} ${start}% ${cumulativePercent}%`;
-    })
+      acc.stops.push(`${color} ${start}% ${end}%`);
+      acc.cumulative = end;
+      return acc;
+    }, { stops: [] as string[], cumulative: 0 })
+    .stops
     .join(', ');
 
   return (
@@ -357,12 +377,20 @@ export default function Dashboard() {
         color: p.color,
       }));
       
+      // Calculate accounts near quota limit (>80%)
+      const accountsNearLimit = accounts.filter(a => {
+        if (!a.quota || a.quota.limit <= 0) return false;
+        const percentUsed = (a.quota.used / a.quota.limit) * 100;
+        return percentUsed > 80;
+      }).length;
+      
       return {
         totalAccounts: dashboardStats.total_accounts,
         accountsByProvider,
         activeTokens: dashboardStats.active_tokens,
         quotaUsage: { used: dashboardStats.quota_used, limit: dashboardStats.quota_limit },
         quotaPercent: Math.round(dashboardStats.quota_usage),
+        accountsNearLimit,
       };
     }
     
@@ -378,8 +406,15 @@ export default function Dashboard() {
       { used: 0, limit: 0 }
     );
     const quotaPercent = quotaUsage.limit > 0 ? Math.round((quotaUsage.used / quotaUsage.limit) * 100) : 0;
+    
+    // Calculate accounts near quota limit (>80%)
+    const accountsNearLimit = accounts.filter(a => {
+      if (!a.quota || a.quota.limit <= 0) return false;
+      const percentUsed = (a.quota.used / a.quota.limit) * 100;
+      return percentUsed > 80;
+    }).length;
 
-    return { totalAccounts, accountsByProvider, activeTokens, quotaUsage, quotaPercent };
+    return { totalAccounts, accountsByProvider, activeTokens, quotaUsage, quotaPercent, accountsNearLimit };
   }, [accounts, providers, dashboardStats]);
 
   const recentActivity = useMemo(() => {
@@ -551,30 +586,55 @@ export default function Dashboard() {
           
           {/* Bento Grid - Stats */}
           <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard
-              title={t('dashboard.totalAccounts')}
-              value={isLoadingStats ? '—' : summaryData.totalAccounts}
-              subtitle={`${t('dashboard.across')} ${providers.filter((p) => summaryData.accountsByProvider.find((a) => a.provider === p.id && a.count > 0)).length} ${t('dashboard.providers')}`}
-              icon={<Users size={18} />}
-            />
-            <StatCard
-              title={t('dashboard.activeTokens')}
-              value={isLoadingStats ? '—' : summaryData.activeTokens}
-              subtitle={`${summaryData.totalAccounts - summaryData.activeTokens} ${t('dashboard.inactive')}`}
-              icon={<Key size={18} />}
-            />
-            <StatCard
-              title={t('dashboard.quotaUsage')}
-              value={isLoadingStats ? '—' : `${summaryData.quotaPercent}%`}
-              subtitle={`${summaryData.quotaUsage.used.toLocaleString()} / ${summaryData.quotaUsage.limit.toLocaleString()}`}
-              icon={<PieChart size={18} />}
-            />
-            <StatCard
-              title={t('dashboard.llmServer')}
-              value={serverStatus?.isRunning ? t('status.running') : t('status.stopped')}
-              subtitle={serverStatus?.isRunning ? `${t('dashboard.port')} ${serverStatus.port}` : t('dashboard.clickToStart')}
-              icon={<Server size={18} />}
-            />
+            {isLoadingStats ? (
+              <>
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+              </>
+            ) : (
+              <>
+                <StatCard
+                  title={t('dashboard.totalAccounts')}
+                  value={summaryData.totalAccounts}
+                  subtitle={`${t('dashboard.across')} ${providers.filter((p) => summaryData.accountsByProvider.find((a) => a.provider === p.id && a.count > 0)).length} ${t('dashboard.providers')}`}
+                  icon={<Users size={18} />}
+                />
+                <StatCard
+                  title={t('dashboard.activeTokens')}
+                  value={summaryData.activeTokens}
+                  subtitle={`${summaryData.totalAccounts - summaryData.activeTokens} ${t('dashboard.inactive')}`}
+                  icon={<Key size={18} />}
+                />
+                <StatCard
+                  title={t('dashboard.quotaUsage')}
+                  value={`${summaryData.quotaPercent}%`}
+                  subtitle={`${summaryData.quotaUsage.used.toLocaleString()} / ${summaryData.quotaUsage.limit.toLocaleString()}`}
+                  icon={<PieChart size={18} />}
+                />
+                <div 
+                  onClick={() => {
+                    if (summaryData.accountsNearLimit > 0) {
+                      navigate('/accounts');
+                      // Set the low quota filter after navigation
+                      setTimeout(() => {
+                        useAccountsStore.getState().setQuotaFilter('low_quota');
+                      }, 100);
+                    }
+                  }}
+                  className={summaryData.accountsNearLimit > 0 ? 'cursor-pointer' : ''}
+                >
+                  <StatCard
+                    title={t('dashboard.accountsNearLimit')}
+                    value={summaryData.accountsNearLimit}
+                    subtitle={summaryData.accountsNearLimit > 0 ? t('dashboard.clickToFilter') : t('dashboard.allAccountsHealthy')}
+                    icon={<AlertCircle size={18} />}
+                    className={summaryData.accountsNearLimit > 0 ? 'border border-amber-500/30' : ''}
+                  />
+                </div>
+              </>
+            )}
           </section>
 
           {/* Quick Actions */}

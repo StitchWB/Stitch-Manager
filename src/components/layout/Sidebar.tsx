@@ -9,6 +9,7 @@ import {
   Settings,
   FileText,
   Terminal,
+  MessageSquare,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
@@ -39,7 +40,7 @@ function NavItem({ to, icon, label, collapsed, index = 0 }: NavItemProps) {
         transition: `opacity 250ms ease-out, transform 250ms ease-out`,
       }}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2 transition-all duration-200 ${
+        `flex items-center gap-3 px-3 py-2 transition-all duration-200 rounded-md mx-2 ${
           isActive
             ? 'bg-indigo-500/10 border-l-2 border-indigo-400 font-medium text-white'
             : 'border-l-2 border-transparent text-slate-400 hover:text-white hover:bg-white/[0.03]'
@@ -107,6 +108,7 @@ export default function Sidebar() {
         <NavItem to="/autoreg" icon={<RefreshCw size={18} />} label={t('sidebar.autoReg')} collapsed={sidebarCollapsed} index={2} />
         <NavItem to="/patcher" icon={<Code size={18} />} label={t('sidebar.idePatch')} collapsed={sidebarCollapsed} index={3} />
         <NavItem to="/server" icon={<Server size={18} />} label={t('sidebar.apiServer')} collapsed={sidebarCollapsed} index={4} />
+        <NavItem to="/chat" icon={<MessageSquare size={18} />} label={t('sidebar.chat')} collapsed={sidebarCollapsed} index={5} />
 
         {/* System Section */}
         <div className="pt-4 mt-4 border-t border-white/5">
@@ -115,8 +117,8 @@ export default function Sidebar() {
               {t('sidebar.system')}
             </p>
           )}
-          <NavItem to="/settings" icon={<Settings size={18} />} label={t('sidebar.settings')} collapsed={sidebarCollapsed} index={5} />
-          <NavItem to="/logs" icon={<FileText size={18} />} label={t('sidebar.logs')} collapsed={sidebarCollapsed} index={6} />
+          <NavItem to="/settings" icon={<Settings size={18} />} label={t('sidebar.settings')} collapsed={sidebarCollapsed} index={6} />
+          <NavItem to="/logs" icon={<FileText size={18} />} label={t('sidebar.logs')} collapsed={sidebarCollapsed} index={7} />
         </div>
       </nav>
 

@@ -28,10 +28,14 @@ interface AccountsState {
   selectedIds: Set<number>;
   searchQuery: string;
   statusFilter: AccountStatus | null;
-  quotaFilter: 'any' | 'has_quota' | 'empty' | 'full';
+  quotaFilter: 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota';
   
   // Active accounts per provider (provider -> accountId)
   activeAccountIds: Record<string, number | null>;
+  
+  // Sorting state
+  sortField: 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt';
+  sortDirection: 'asc' | 'desc';
   
   // Actions
   fetchAccounts: (provider?: ProviderName) => Promise<void>;
@@ -58,12 +62,18 @@ interface AccountsState {
   setSelectedProvider: (provider: ProviderName | null) => void;
   setSearchQuery: (query: string) => void;
   setStatusFilter: (status: AccountStatus | null) => void;
-  setQuotaFilter: (filter: 'any' | 'has_quota' | 'empty' | 'full') => void;
+  setQuotaFilter: (filter: 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota') => void;
   clearFilters: () => void;
+  
+  // Sorting
+  setSortField: (field: 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt') => void;
+  setSortDirection: (direction: 'asc' | 'desc') => void;
   
   // Computed helpers
   getFilteredAccounts: () => Account[];
   getAccountsByProvider: (provider: ProviderName) => Account[];
+  getAccountsNearQuotaLimit: () => Account[];
+  refreshExpiredAccounts: () => Promise<void>;
   
 }
 
@@ -86,6 +96,8 @@ export const useAccountsStore = create<AccountsState>()(
         statusFilter: null,
         quotaFilter: 'any',
         activeAccountIds: {},
+        sortField: 'email',
+        sortDirection: 'asc',
 
         // ============================================
         // Core Actions
@@ -311,6 +323,18 @@ export const useAccountsStore = create<AccountsState>()(
       },
 
       // ============================================
+      // Sorting
+      // ============================================
+
+      setSortField: (field) => {
+        set({ sortField: field });
+      },
+
+      setSortDirection: (direction) => {
+        set({ sortDirection: direction });
+      },
+
+      // ============================================
       // Computed Helpers
       // ============================================
 
@@ -346,11 +370,13 @@ export const useAccountsStore = create<AccountsState>()(
             const hasQuota = remaining > 0;
             const isEmpty = a.quota.used === 0;
             const isFull = a.quota.limit > 0 && a.quota.used >= a.quota.limit;
+            const isLowQuota = a.quota.limit > 0 && (a.quota.used / a.quota.limit) > 0.8;
             
             switch (quotaFilter) {
               case 'has_quota': return hasQuota;
               case 'empty': return isEmpty;
               case 'full': return isFull;
+              case 'low_quota': return isLowQuota;
               default: return true;
             }
           });
@@ -362,11 +388,60 @@ export const useAccountsStore = create<AccountsState>()(
       getAccountsByProvider: (provider) => {
         return get().accounts.filter((a) => a.provider === provider);
       },
+
+      // Get accounts with low quota (>80% used)
+      getAccountsNearQuotaLimit: () => {
+        return get().accounts.filter(a => {
+          if (a.quota.limit <= 0) return false; // Skip unlimited accounts
+          const percentUsed = (a.quota.used / a.quota.limit) * 100;
+          return percentUsed > 80;
+        });
+      },
+
+      // Refresh all expired accounts
+      refreshExpiredAccounts: async () => {
+        const { accounts } = get();
+        const expiredAccounts = accounts.filter(a => a.status === 'expired');
+        
+        if (expiredAccounts.length === 0) {
+          return;
+        }
+
+        set({ loading: true, error: null });
+        
+        try {
+          const results = await Promise.allSettled(
+            expiredAccounts.map((account) => refreshAccountQuota({ accountId: account.id }))
+          );
+          
+          const updatedAccounts = accounts.map((account) => {
+            const expiredIndex = expiredAccounts.findIndex(a => a.id === account.id);
+            if (expiredIndex === -1) return account;
+            
+            const result = results[expiredIndex];
+            if (result.status === 'fulfilled') {
+              return result.value;
+            }
+            return account;
+          });
+          
+          set({ accounts: updatedAccounts, loading: false });
+        } catch (error) {
+          const message = error instanceof TauriError ? error.message : String(error);
+          set({ error: message, loading: false });
+          throw error;
+        }
+      },
     }),
     { 
       name: 'accounts-store',
       partialize: (state) => ({ 
-        activeAccountIds: state.activeAccountIds 
+        activeAccountIds: state.activeAccountIds,
+        selectedProvider: state.selectedProvider,
+        statusFilter: state.statusFilter,
+        quotaFilter: state.quotaFilter,
+        sortField: state.sortField,
+        sortDirection: state.sortDirection,
       }),
     }
   ),

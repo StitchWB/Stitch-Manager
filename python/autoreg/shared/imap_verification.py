@@ -77,13 +77,17 @@ def _search_verification_emails(mail, target_email: str) -> list:
     
     print(f"[IMAP] Strategy 1: Searching by TO '{target_email}'...")
     
-    # Strategy 1: Quoted TO search
+    # Strategy 1: Quoted TO search (encode to ASCII for IMAP)
     try:
-        result, data = mail.search(None, 'TO', f'"{target_email}"')
+        # Encode email to ASCII bytes for IMAP protocol
+        email_bytes = target_email.encode('ascii')
+        result, data = mail.search(None, 'TO', f'"{target_email}"'.encode('ascii'))
         if result == 'OK' and data[0]:
             found = data[0].split()
             print(f"[IMAP] Strategy 1: Found {len(found)} emails")
             email_ids.extend(found)
+    except UnicodeEncodeError:
+        print(f"[IMAP] Strategy 1 skipped: Email contains non-ASCII characters")
     except Exception as e:
         print(f"[IMAP] Strategy 1 failed: {e}")
     
@@ -91,11 +95,13 @@ def _search_verification_emails(mail, target_email: str) -> list:
     if not email_ids:
         print(f"[IMAP] Strategy 2: Searching by TO (unquoted)...")
         try:
-            result, data = mail.search(None, 'TO', target_email)
+            result, data = mail.search(None, 'TO', target_email.encode('ascii'))
             if result == 'OK' and data[0]:
                 found = data[0].split()
                 print(f"[IMAP] Strategy 2: Found {len(found)} emails")
                 email_ids.extend(found)
+        except UnicodeEncodeError:
+            print(f"[IMAP] Strategy 2 skipped: Email contains non-ASCII characters")
         except Exception as e:
             print(f"[IMAP] Strategy 2 failed: {e}")
     

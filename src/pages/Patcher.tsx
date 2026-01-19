@@ -272,10 +272,22 @@ export default function Patcher() {
           <section className="glass-card overflow-hidden">
             <div className="divide-y divide-white/[0.03]">
               {scanning && detectedIDEs.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 flex flex-col items-center gap-2">
-                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                  <span className="text-xs">{t('patcher.scanningForIdes')}</span>
-                </div>
+                // Skeleton loaders during scan
+                <>
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-4 p-4 animate-pulse">
+                      <div className="w-9 h-9 rounded-lg bg-white/5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="h-4 bg-white/5 rounded w-32 mb-2" />
+                        <div className="h-3 bg-white/5 rounded w-48" />
+                      </div>
+                      <div className="flex items-center gap-3 ml-auto shrink-0">
+                        <div className="h-7 bg-white/5 rounded-full w-24" />
+                        <div className="h-8 w-8 bg-white/5 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </>
               ) : detectedIDEs.length === 0 ? (
                 <div className="p-8 text-center text-slate-600 text-xs">
                   {t('patcher.noIdesDetected')}

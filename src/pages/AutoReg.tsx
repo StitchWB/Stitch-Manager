@@ -13,6 +13,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 
 import { cn } from '../lib/utils';
 import { StatusBar } from '../components/ui/KPICard';
@@ -22,7 +23,7 @@ import { NetworkCard, type NetworkConfig } from '../components/ui/NetworkCard';
 
 import { useRegistrationStore } from '../stores/registration';
 import { useAppStore } from '../stores/app';
-import { startWindsurfAutoreg, startPythonAutoreg, checkPythonAutoreg, testImapConnection, addAccount, stopRegistration, getNextCounter, listAccounts } from '../lib/tauri';
+import { startWindsurfAutoreg, startPythonAutoreg, startTraeAutoreg, startGithubAutoreg, checkPythonAutoreg, testImapConnection, addAccount, stopRegistration, getNextCounter, listAccounts } from '../lib/tauri';
 import { t } from '../lib/i18n';
 
 import {
@@ -177,7 +178,6 @@ export default function AutoRegNext() {
   const { addNotification } = useAppStore();
   const {
     config,
-    isRunning,
     logs,
     successCount,
     failedCount,
@@ -193,11 +193,13 @@ export default function AutoRegNext() {
     addLog,
     clearLogs,
     addHistoryEntry,
+    addResult,
   } = useRegistrationStore();
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
   const [activeThreads, setActiveThreads] = useState(0);
   const [activeTab, setActiveTab] = useState<ConfigTab>('identity');
+  const [useRustFlow, setUseRustFlow] = useState(true); // Toggle between Rust and Python flows
   
   // Ref to track if registration should be cancelled
   const cancelledRef = useRef(false);
@@ -211,8 +213,35 @@ export default function AutoRegNext() {
     const unlistenLog = listen<{ level: string; message: string }>('REGISTRATION_LOG', (event) => {
       addLog({ level: event.payload.level as 'info' | 'error' | 'success' | 'warn' | 'debug', message: event.payload.message });
     });
-    return () => { unlistenLog.then(fn => fn()); };
-  }, [addLog]);
+    
+    const unlistenComplete = listen<{ success: boolean }>('REGISTRATION_COMPLETE', (event) => {
+      if (event.payload.success) {
+        addLog({ level: 'success', message: 'Registration completed successfully!' });
+      }
+    });
+    
+    const unlistenError = listen<{ error: string }>('REGISTRATION_ERROR', (event) => {
+      addLog({ level: 'error', message: `Registration error: ${event.payload.error}` });
+    });
+    
+    // CRITICAL: Listen for ACCOUNT_ADDED events to update counters in real-time
+    const unlistenAccountAdded = listen<{ id: number; email: string; provider: string; has_token: boolean }>('ACCOUNT_ADDED', (event) => {
+      const { email, provider, has_token } = event.payload;
+      addLog({ level: 'success', message: `✓ Account created: ${email} (${provider})` });
+      addResult({ 
+        email, 
+        status: 'success', 
+        token: has_token ? 'present' : undefined 
+      });
+    });
+    
+    return () => { 
+      unlistenLog.then(fn => fn());
+      unlistenComplete.then(fn => fn());
+      unlistenError.then(fn => fn());
+      unlistenAccountAdded.then(fn => fn());
+    };
+  }, [addLog, addResult]);
 
   // Check if mail configuration is ready
   const isMailReady = useMemo(() => {
@@ -222,7 +251,8 @@ export default function AutoRegNext() {
     return !!(config.imap.server && config.imap.email && (config.imap.password || imapPasswordSet));
   }, [config.imap, imapPasswordSet, gmailAppPasswordSet]);
 
-  const canStart = isMailReady;
+  // AWS doesn't require IMAP configuration (can work without email verification in some cases)
+  const canStart = config.provider === 'aws' ? true : isMailReady;
 
   // Identity config adapter for IdentitySystemCard
   const identityConfig: IdentityConfig = {
@@ -253,7 +283,142 @@ export default function AutoRegNext() {
     return config.imap.email?.split('@')[1] || 'example.com';
   }, [config.imap.strategy, config.imap.email]);
 
+  // New Rust-based registration handler
+  const handleStartV2 = useCallback(async () => {
+    if (!canStart) {
+      addNotification({ type: 'error', title: 'Configuration Required', message: 'Please configure IMAP settings' });
+      return;
+    }
+
+    // Reset cancellation flag
+    cancelledRef.current = false;
+
+    const totalCount = config.count || 1;
+    setActiveThreads(1);
+    addLog({ level: 'info', message: `Starting ${config.provider} registration (${totalCount} account${totalCount > 1 ? 's' : ''}) using Rust engine...` });
+
+    try {
+      // Loop for multiple account registration
+      for (let i = 0; i < totalCount; i++) {
+        // Check if cancelled
+        if (cancelledRef.current) {
+          addLog({ level: 'warn', message: `Registration cancelled by user at account ${i + 1}/${totalCount}` });
+          break;
+        }
+
+        addLog({ level: 'info', message: `[${i + 1}/${totalCount}] Starting registration...` });
+
+        // Listen for progress events from Rust
+        const unlisten = await listen<{ step: string; progress: number; message: string }>('REGISTRATION_PROGRESS', (event) => {
+          const { progress, message } = event.payload;
+          addLog({ level: 'info', message: `  ${message} (${progress}%)` });
+        });
+
+        try {
+          // Determine email strategy and template based on UI configuration
+          let emailStrategy: string;
+          let aliasTemplate: string | undefined;
+          
+          // DEBUG: Log current configuration
+          console.log('[AutoReg] Email generation config:', {
+            'imap.strategy': config.imap.strategy,
+            'imap.gmailAlias': config.imap.gmailAlias,
+            'patterns.emailPattern': config.patterns.emailPattern,
+            'identityConfig.emailPattern': identityConfig.emailPattern,
+          });
+          
+          if (config.imap.strategy === 'gmail' && config.imap.gmailAlias) {
+            // Gmail with alias template (e.g., acc{counter})
+            emailStrategy = 'plus_alias';
+            aliasTemplate = config.imap.gmailAlias;
+          } else if (identityConfig.emailPattern && identityConfig.emailPattern.trim()) {
+            // Custom email pattern (e.g., aau1{counter}) - use catch_all strategy
+            emailStrategy = 'catch_all';
+            aliasTemplate = identityConfig.emailPattern;
+          } else {
+            // Fallback to single email
+            emailStrategy = 'single';
+            aliasTemplate = undefined;
+          }
+          
+          console.log('[AutoReg] Determined strategy:', { emailStrategy, aliasTemplate });
+          addLog({ level: 'debug', message: `Email generation: strategy=${emailStrategy}, template=${aliasTemplate || 'none'}` });
+          
+          // Start registration via Rust command
+          const result = await invoke<{ success: boolean; email?: string; access_token?: string; refresh_token?: string; error?: string }>('start_registration', {
+            provider: config.provider,
+            email: undefined, // Will be generated
+            password: undefined, // Will be generated
+            config: {
+              provider: config.provider,
+              autoGenerate: true,
+              headless: config.advanced.headless,
+              emailStrategy: emailStrategy,
+              aliasTemplate: aliasTemplate,
+            },
+          });
+
+          unlisten();
+
+          if (result.success && result.email) {
+            addResult({ email: result.email, status: 'success', token: result.access_token });
+            addLog({ level: 'success', message: `[${i + 1}/${totalCount}] Account created: ${result.email}` });
+            addHistoryEntry({ provider: config.provider, email: result.email, status: 'completed' });
+          } else {
+            const errorMsg = result.error || 'Unknown error';
+            
+            // Map error messages to user-friendly text
+            let friendlyError = errorMsg;
+            if (errorMsg.includes('AccountExists') || errorMsg.includes('already exists')) {
+              friendlyError = 'Account already exists';
+            } else if (errorMsg.includes('InvalidCode')) {
+              friendlyError = 'Invalid verification code';
+            } else if (errorMsg.includes('PasswordError')) {
+              friendlyError = 'Password does not meet requirements';
+            } else if (errorMsg.includes('ImapError')) {
+              friendlyError = 'IMAP connection failed';
+            } else if (errorMsg.includes('BrowserError')) {
+              friendlyError = 'Browser automation failed';
+            } else if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
+              friendlyError = 'Operation timed out';
+            }
+            
+            addResult({ email: result.email || 'unknown', status: 'failed', error: friendlyError });
+            addLog({ level: 'error', message: `[${i + 1}/${totalCount}] Registration failed: ${friendlyError}` });
+          }
+        } catch (error) {
+          unlisten();
+          const errorMsg = String(error);
+          addResult({ email: 'unknown', status: 'failed', error: errorMsg });
+          addLog({ level: 'error', message: `[${i + 1}/${totalCount}] Error: ${errorMsg}` });
+        }
+
+        // Delay between registrations
+        if (i < totalCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, config.advanced.delayBetweenAccounts * 1000));
+        }
+      }
+
+      // Summary notification using store counts
+      const summary = `✓ ${successCount} created, ✗ ${failedCount} failed`;
+      addLog({ level: 'info', message: `Registration complete: ${summary}` });
+      addNotification({ 
+        type: successCount > 0 ? 'success' : 'error', 
+        title: 'Registration Complete', 
+        message: summary 
+      });
+    } catch (error) {
+      addLog({ level: 'error', message: `Fatal error: ${String(error)}` });
+      addNotification({ type: 'error', title: 'Error', message: String(error) });
+    } finally {
+      setActiveThreads(0);
+    }
+  }, [config, canStart, addLog, addNotification, addHistoryEntry, addResult, successCount, failedCount]);
+
+  // Original Python-based registration handler (kept for backward compatibility)
   const handleStart = useCallback(async () => {
+
+    // IDE/Git providers flow
     if (!canStart) {
       addNotification({ type: 'error', title: 'Configuration Required', message: 'Please configure IMAP settings' });
       return;
@@ -268,8 +433,15 @@ export default function AutoRegNext() {
 
     // Determine IMAP credentials based on strategy (once, outside loop)
     const imapServer = config.imap.strategy === 'gmail' ? 'imap.gmail.com' : config.imap.server;
-    const imapUser = config.imap.strategy === 'gmail' ? config.imap.gmailBase : config.imap.email;
+    // For Gmail, ensure gmailBase has @gmail.com suffix
+    let imapUser = config.imap.strategy === 'gmail' ? config.imap.gmailBase : config.imap.email;
+    if (config.imap.strategy === 'gmail' && imapUser && !imapUser.includes('@')) {
+      imapUser = `${imapUser}@gmail.com`;
+    }
     const imapPassword = config.imap.strategy === 'gmail' ? config.imap.gmailAppPassword : (config.imap.password || '********');
+    
+    // Debug log IMAP config (without password)
+    addLog({ level: 'debug', message: `IMAP config: server=${imapServer}, user=${imapUser}, password=${imapPassword ? '***set***' : '***empty***'}` });
 
     let successCount = 0;
     let skipCount = 0;
@@ -345,6 +517,7 @@ export default function AutoRegNext() {
             success: boolean; 
             email?: string; 
             password?: string; 
+            name?: string;
             token?: string;
             refresh_token?: string;
             error?: string 
@@ -366,6 +539,38 @@ export default function AutoRegNext() {
                 name_pattern: config.patterns.namePattern,
                 name_custom_first: config.patterns.nameCustomFirst,
                 name_custom_last: config.patterns.nameCustomLast,
+              }),
+              REGISTRATION_TIMEOUT_MS,
+              `Registration timed out after ${REGISTRATION_TIMEOUT_MS / 60000} minutes`
+            );
+          } else if (config.provider === 'trae') {
+            // Trae uses email + verification code - wrap with timeout
+            result = await withTimeout(
+              startTraeAutoreg({
+                email,
+                headless: config.advanced.headless,
+                proxy_url: config.proxy.enabled ? config.proxy.url : undefined,
+                imap_server: imapServer,
+                imap_port: config.imap.port || DEFAULT_IMAP_PORT,
+                imap_user: imapUser,
+                imap_password: imapPassword,
+              }),
+              REGISTRATION_TIMEOUT_MS,
+              `Registration timed out after ${REGISTRATION_TIMEOUT_MS / 60000} minutes`
+            );
+          } else if (config.provider === 'github') {
+            // GitHub uses email + password + verification code - wrap with timeout
+            // Generate a strong password that meets GitHub requirements
+            const githubPassword = `Gh${Math.random().toString(36).substring(2, 10)}!1`;
+            result = await withTimeout(
+              startGithubAutoreg({
+                email,
+                password: githubPassword,
+                username: undefined, // Let provider generate from email
+                headless: config.advanced.headless,
+                imap_server: imapServer,
+                imap_user: imapUser,
+                imap_password: imapPassword,
               }),
               REGISTRATION_TIMEOUT_MS,
               `Registration timed out after ${REGISTRATION_TIMEOUT_MS / 60000} minutes`
@@ -408,7 +613,9 @@ export default function AutoRegNext() {
                 email: result.email, 
                 password: result.password,
                 token: result.token,
-                refresh_token: result.refresh_token
+                refresh_token: result.refresh_token,
+                // Pass name in metadata for Windsurf account switching
+                metadata: result.name ? { name: result.name } : undefined
               });
               successCount++;
               addLog({ level: 'success', message: `[${i + 1}/${totalCount}] Account created: ${result.email}` });
@@ -472,8 +679,14 @@ export default function AutoRegNext() {
     try {
       // Determine credentials based on strategy
       const server = config.imap.strategy === 'gmail' ? 'imap.gmail.com' : config.imap.server;
-      const user = config.imap.strategy === 'gmail' ? config.imap.gmailBase : config.imap.email;
+      let user = config.imap.strategy === 'gmail' ? config.imap.gmailBase : config.imap.email;
+      // For Gmail, ensure user has @gmail.com suffix
+      if (config.imap.strategy === 'gmail' && user && !user.includes('@')) {
+        user = `${user}@gmail.com`;
+      }
       const password = config.imap.strategy === 'gmail' ? config.imap.gmailAppPassword : (config.imap.password || '********');
+      
+      addLog({ level: 'debug', message: `Testing: server=${server}, user=${user}` });
 
       const result = await testImapConnection({
         imap_server: server,
@@ -524,7 +737,7 @@ export default function AutoRegNext() {
               <button
                 key={provider.id}
                 onClick={() => !provider.disabled && setProvider(provider.id)}
-                disabled={isRunning || provider.disabled}
+                disabled={activeThreads > 0 || provider.disabled}
                 className={cn(
                   'flex-1 py-2 text-xs font-medium rounded-md transition-all duration-200',
                   config.provider === provider.id
@@ -546,7 +759,7 @@ export default function AutoRegNext() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                disabled={isRunning}
+                disabled={false}  // Allow tab switching during registration
                 className={cn(
                   'flex-1 py-2 px-2 text-xs font-medium rounded-md transition-all duration-200 flex items-center justify-center gap-1.5',
                   activeTab === tab.id
@@ -566,26 +779,77 @@ export default function AutoRegNext() {
           
           {/* Identity Tab */}
           {activeTab === 'identity' && (
-            <IdentitySystemCard
-              config={identityConfig}
-              onChange={(updates) => {
-                if ('emailPattern' in updates) {
-                  setIMAPConfig({ ...updates });
-                } else {
-                  setIMAPConfig(updates);
-                }
-              }}
-              onTest={handleTestImap}
-              disabled={isRunning}
-              saveStatus={saveStatus}
-              passwordSet={imapPasswordSet}
-              gmailAppPasswordSet={gmailAppPasswordSet}
-            />
+            config.provider === 'aws' ? (
+              /* AWS Mode - Show ready card */
+              <div className="card border border-orange-500/20 p-8 text-center">
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6.763 10.036c.022.615.022 1.194.022 1.773 0 .615 0 1.195-.022 1.773h-6.74c-.022-.578-.022-1.158-.022-1.773s0-1.195.022-1.773h6.74zm6.104 6.741c.434.638.868 1.195 1.302 1.753.434.558.868 1.116 1.302 1.674-1.085.434-2.17.723-3.255.868-.434-.578-.868-1.116-1.302-1.674-.434-.558-.868-1.116-1.302-1.753 1.085-.145 2.17-.434 3.255-.868zm-6.104-13.482c.022.615.022 1.194.022 1.773 0 .615 0 1.195-.022 1.773h-6.74c-.022-.578-.022-1.158-.022-1.773s0-1.195.022-1.773h6.74zm13.482 6.741c.022.578.022 1.158.022 1.773s0 1.195-.022 1.773h-6.74c.022-.578.022-1.158.022-1.773s0-1.195-.022-1.773h6.74zm-6.104-6.741c.434.638.868 1.195 1.302 1.753.434.558.868 1.116 1.302 1.674-1.085.434-2.17.723-3.255.868-.434-.578-.868-1.116-1.302-1.674-.434-.558-.868-1.116-1.302-1.753 1.085-.145 2.17-.434 3.255-.868zm-6.104 13.482c-.434-.638-.868-1.195-1.302-1.753-.434-.558-.868-1.116-1.302-1.674 1.085-.434 2.17-.723 3.255-.868.434.578.868 1.116 1.302 1.674.434.558.868 1.116 1.302 1.753-1.085.145-2.17.434-3.255.868z"/>
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">AWS Builder ID</h3>
+                <p className="text-sm text-slate-400 mb-6">
+                  Configure count and headless mode in Engine tab, then click START
+                </p>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 border border-orange-500/30 text-sm text-orange-400">
+                  <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px] shadow-orange-500/50 animate-pulse" />
+                  Ready
+                </div>
+              </div>
+            ) : (
+              /* IDE/Git Mode - Show IMAP Card */
+              <IdentitySystemCard
+                config={identityConfig}
+                onChange={(updates) => {
+                  if ('emailPattern' in updates) {
+                    setIMAPConfig({ ...updates });
+                  } else {
+                    setIMAPConfig(updates);
+                  }
+                }}
+                onTest={handleTestImap}
+                disabled={activeThreads > 0}
+                saveStatus={saveStatus}
+                passwordSet={imapPasswordSet}
+                gmailAppPasswordSet={gmailAppPasswordSet}
+              />
+            )
           )}
 
           {/* Engine Tab */}
           {activeTab === 'engine' && (
             <div className="space-y-4">
+              {/* Registration Engine Toggle */}
+              <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                      <Settings2 className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-200">Use Rust Engine</div>
+                      <div className="text-[10px] text-slate-500">New Rust-based registration flow (recommended)</div>
+                    </div>
+                  </div>
+                  <div className={cn(
+                    "w-10 h-5 rounded-full transition-colors relative cursor-pointer",
+                    useRustFlow ? "bg-indigo-500" : "bg-white/10"
+                  )}>
+                    <div className={cn(
+                      "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm",
+                      useRustFlow ? "translate-x-5" : "translate-x-0.5"
+                    )} />
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={useRustFlow}
+                    onChange={(e) => setUseRustFlow(e.target.checked)}
+                    disabled={false}  // Allow changing engine during registration (won't affect current run)
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+
               {/* Headless Mode - Full Width Toggle */}
               <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <label className="flex items-center justify-between cursor-pointer">
@@ -615,7 +879,7 @@ export default function AutoRegNext() {
                     type="checkbox"
                     checked={config.advanced.headless}
                     onChange={(e) => setAdvancedSettings({ headless: e.target.checked })}
-                    disabled={isRunning}
+                    disabled={false}  // Allow changing for next registration
                     className="sr-only"
                   />
                 </label>
@@ -637,7 +901,7 @@ export default function AutoRegNext() {
                       step="0.1"
                       value={config.advanced.speedMultiplier}
                       onChange={(e) => setAdvancedSettings({ speedMultiplier: parseFloat(e.target.value) })}
-                      disabled={isRunning}
+                      disabled={false}  // Allow adjusting speed
                       className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
                       style={{ background: 'rgba(255,255,255,0.1)' }}
                     />
@@ -662,7 +926,7 @@ export default function AutoRegNext() {
                       step="1"
                       value={config.advanced.delayBetweenAccounts}
                       onChange={(e) => setAdvancedSettings({ delayBetweenAccounts: parseInt(e.target.value) })}
-                      disabled={isRunning}
+                      disabled={false}  // Allow adjusting delay
                       className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
                       style={{ background: 'rgba(255,255,255,0.1)' }}
                     />
@@ -690,7 +954,7 @@ export default function AutoRegNext() {
                     min={60}
                     max={180}
                     step={10}
-                    disabled={isRunning}
+                    disabled={false}  // Allow adjusting timeouts
                     tooltip={t('autoReg.tooltips.verification')}
                   />
                   <TimeoutInput
@@ -700,7 +964,7 @@ export default function AutoRegNext() {
                     min={30}
                     max={180}
                     step={10}
-                    disabled={isRunning}
+                    disabled={false}  // Allow adjusting timeouts
                     tooltip={t('autoReg.tooltips.oauth')}
                   />
                   <TimeoutInput
@@ -710,7 +974,7 @@ export default function AutoRegNext() {
                     min={60}
                     max={300}
                     step={10}
-                    disabled={isRunning}
+                    disabled={false}  // Allow adjusting timeouts
                     tooltip={t('autoReg.tooltips.allowAccess')}
                   />
                   <TimeoutInput
@@ -720,7 +984,7 @@ export default function AutoRegNext() {
                     min={2}
                     max={15}
                     step={1}
-                    disabled={isRunning}
+                    disabled={false}  // Allow adjusting timeouts
                     tooltip={t('autoReg.tooltips.pageLoad')}
                   />
                   <TimeoutInput
@@ -730,7 +994,7 @@ export default function AutoRegNext() {
                     min={1}
                     max={10}
                     step={1}
-                    disabled={isRunning}
+                    disabled={false}  // Allow adjusting timeouts
                     tooltip={t('autoReg.tooltips.elementWait')}
                   />
                   <TimeoutInput
@@ -740,7 +1004,7 @@ export default function AutoRegNext() {
                     min={0.5}
                     max={5}
                     step={0.5}
-                    disabled={isRunning}
+                    disabled={false}  // Allow adjusting timeouts
                     tooltip={t('autoReg.tooltips.imapPoll')}
                   />
                 </div>
@@ -767,7 +1031,7 @@ export default function AutoRegNext() {
                       step="1"
                       value={config.advanced.passwordLength}
                       onChange={(e) => setAdvancedSettings({ passwordLength: parseInt(e.target.value) })}
-                      disabled={isRunning}
+                      disabled={false}  // Allow adjusting password length
                       className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
                       style={{ background: 'rgba(255,255,255,0.1)' }}
                     />
@@ -780,21 +1044,21 @@ export default function AutoRegNext() {
                     label={t('autoReg.realisticTyping')}
                     checked={config.advanced.realisticTyping}
                     onChange={(v) => setAdvancedSettings({ realisticTyping: v })}
-                    disabled={isRunning}
+                    disabled={false}  // Allow changing behavior settings
                     tooltip={t('autoReg.tooltips.realisticTyping')}
                   />
                   <ToggleSwitch
                     label={t('autoReg.humanDelays')}
                     checked={config.advanced.humanDelays}
                     onChange={(v) => setAdvancedSettings({ humanDelays: v })}
-                    disabled={isRunning}
+                    disabled={false}  // Allow changing behavior settings
                     tooltip={t('autoReg.tooltips.humanDelays')}
                   />
                   <ToggleSwitch
                     label={t('autoReg.screenshots')}
                     checked={config.advanced.screenshotsOnError}
                     onChange={(v) => setAdvancedSettings({ screenshotsOnError: v })}
-                    disabled={isRunning}
+                    disabled={false}  // Allow changing behavior settings
                     tooltip={t('autoReg.tooltips.screenshots')}
                   />
                 </div>
@@ -807,7 +1071,7 @@ export default function AutoRegNext() {
             <NetworkCard
               config={networkConfig}
               onChange={(updates) => setProxyConfig(updates)}
-              disabled={isRunning}
+              disabled={false}  // Allow changing network settings
             />
           )}
         </div>
@@ -823,16 +1087,16 @@ export default function AutoRegNext() {
                 max={100}
                 value={config.count}
                 onChange={(e) => setCount(parseInt(e.target.value) || 1)}
-                disabled={isRunning}
+                disabled={activeThreads > 0}
                 className="w-14 h-11 text-center font-mono font-bold text-white text-lg rounded-l-lg rounded-r-none border-r-0 focus:outline-none focus:ring-0"
                 style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRight: 'none' }}
               />
             </div>
             
             {/* Start/Stop Button - attached to input */}
-            {!isRunning ? (
+            {activeThreads === 0 ? (
               <button
-                onClick={handleStart}
+                onClick={useRustFlow ? handleStartV2 : handleStart}
                 disabled={!canStart || pythonAvailable === false}
                 className={cn(
                   'flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2',

@@ -21,9 +21,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.cbor_utils import cbor_encode, cbor_decode
 from core.kiro_config import get_kiro_user_agent
-from core.config import get_api_config
 
 logger = logging.getLogger(__name__)
+
+# Default endpoint
+DEFAULT_WEBPORTAL_URL = "https://prod.us-east-1.webportal.kiro.dev"
 
 
 class KiroWebPortalClient:
@@ -49,12 +51,11 @@ class KiroWebPortalClient:
         self.timeout = timeout
         self.session = requests.Session()
         
-        # Get endpoint from: parameter > env > config > default
+        # Get endpoint from: parameter > env > default
         if endpoint:
             self.endpoint = endpoint
         else:
-            api_config = get_api_config()
-            self.endpoint = api_config.kiro_webportal_url
+            self.endpoint = os.getenv("KIRO_WEBPORTAL_URL", DEFAULT_WEBPORTAL_URL)
 
     def _make_request(
         self,

@@ -1,6 +1,7 @@
 import { cn } from '../../lib/utils';
 import { useState } from 'react';
 import { t } from '../../lib/i18n';
+import { AlertTriangle } from 'lucide-react';
 
 interface UsageBarProps {
   used: number;
@@ -41,10 +42,9 @@ export function UsageBar({ used, limit, showLabel = true, className, isError = f
   }
 
   const remaining = Math.max(limit - used, 0);
-  const remainingPercent = (remaining / limit) * 100;
   const usedPercent = Math.min((used / limit) * 100, 100);
   
-  // Color based on remaining percentage
+  // Color based on usage percentage (0-70% green, 70-90% yellow, 90-100% red)
   const getBarStyles = () => {
     if (remaining === 0) {
       // Empty - gray, no glow
@@ -53,14 +53,21 @@ export function UsageBar({ used, limit, showLabel = true, className, isError = f
         glowClass: ''
       };
     }
-    if (remainingPercent < 20) {
-      // Low remaining - amber with glow
+    if (usedPercent >= 90) {
+      // Critical (90-100%) - red with glow
       return {
-        colorClass: 'bg-amber-500',
-        glowClass: 'shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+        colorClass: 'bg-red-500',
+        glowClass: 'shadow-[0_0_8px_rgba(239,68,68,0.4)]'
       };
     }
-    // High remaining (>50%) - emerald with glow
+    if (usedPercent >= 70) {
+      // Warning (70-90%) - yellow with glow
+      return {
+        colorClass: 'bg-yellow-500',
+        glowClass: 'shadow-[0_0_8px_rgba(234,179,8,0.3)]'
+      };
+    }
+    // Good (0-70%) - green with glow
     return {
       colorClass: 'bg-emerald-500',
       glowClass: 'shadow-[0_0_10px_rgba(16,185,129,0.4)]'
@@ -75,6 +82,11 @@ export function UsageBar({ used, limit, showLabel = true, className, isError = f
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
+      {/* Warning icon when >80% used */}
+      {usedPercent > 80 && (
+        <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+      )}
+      
       {/* Remaining number on the left */}
       {showLabel && (
         <span className="font-mono font-bold text-white text-xs w-8 text-right">
@@ -84,16 +96,16 @@ export function UsageBar({ used, limit, showLabel = true, className, isError = f
       
       {/* Progress bar on the right */}
       <div 
-        className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden"
+        className="flex-1 h-2 bg-white/15 rounded-full overflow-hidden"
         role="progressbar"
-        aria-valuenow={Math.round(remainingPercent)}
+        aria-valuenow={Math.round(usedPercent)}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`Remaining: ${remaining} of ${limit} (${Math.round(remainingPercent)}%)`}
+        aria-label={`Used: ${used} of ${limit} (${Math.round(usedPercent)}%)`}
       >
         <div
           className={cn('h-full rounded-full transition-all duration-300', colorClass, glowClass)}
-          style={{ width: `${100 - usedPercent}%` }}
+          style={{ width: `${usedPercent}%` }}
         />
       </div>
 

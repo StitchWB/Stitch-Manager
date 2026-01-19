@@ -21,6 +21,7 @@ const getStatusOptions = () => [
 
 export function StatusFilterChip({ value, onChange }: StatusFilterChipProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   const statusOptions = getStatusOptions();
@@ -35,6 +36,44 @@ export function StatusFilterChip({ value, onChange }: StatusFilterChipProps) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [isOpen]);
+
+  // Arrow key navigation
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev + 1) % statusOptions.length);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev - 1 + statusOptions.length) % statusOptions.length);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          onChange(statusOptions[focusedIndex].value);
+          setIsOpen(false);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setIsOpen(false);
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, focusedIndex, statusOptions, onChange]);
+
+  // Reset focused index when opening
+  useEffect(() => {
+    if (isOpen) {
+      const currentIndex = statusOptions.findIndex(opt => opt.value === value);
+      setFocusedIndex(currentIndex >= 0 ? currentIndex : 0);
+    }
+  }, [isOpen, value, statusOptions]);
 
   return (
     <div className="relative" ref={ref}>
@@ -53,17 +92,20 @@ export function StatusFilterChip({ value, onChange }: StatusFilterChipProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-2 left-0 min-w-[140px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in">
-          {statusOptions.map((opt) => (
+        <div className="absolute z-50 mt-2 left-0 min-w-[140px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in" role="listbox">
+          {statusOptions.map((opt, index) => (
             <button
               key={opt.value ?? 'any'}
               onClick={() => { onChange(opt.value); setIsOpen(false); }}
+              onMouseEnter={() => setFocusedIndex(index)}
               className={cn(
                 'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
-                value === opt.value
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                value === opt.value && 'bg-white/10 text-white',
+                focusedIndex === index && 'bg-white/5',
+                value !== opt.value && focusedIndex !== index && 'text-slate-400 hover:bg-white/5 hover:text-white'
               )}
+              role="option"
+              aria-selected={value === opt.value}
             >
               {opt.dot ? (
                 <span className={cn('w-2 h-2 rounded-full', opt.dot)} />
@@ -83,7 +125,7 @@ export function StatusFilterChip({ value, onChange }: StatusFilterChipProps) {
 // Quota Filter Chip
 // ============================================
 
-type QuotaFilterValue = 'any' | 'has_quota' | 'empty' | 'full';
+type QuotaFilterValue = 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota';
 
 interface QuotaFilterChipProps {
   value: QuotaFilterValue;
@@ -95,10 +137,12 @@ const getQuotaOptions = (): { value: QuotaFilterValue; label: string }[] => [
   { value: 'has_quota', label: t('filters.hasQuota') },
   { value: 'empty', label: t('filters.empty') },
   { value: 'full', label: t('filters.full') },
+  { value: 'low_quota', label: t('filters.lowQuota') },
 ];
 
 export function QuotaFilterChip({ value, onChange }: QuotaFilterChipProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   const quotaOptions = getQuotaOptions();
@@ -113,6 +157,44 @@ export function QuotaFilterChip({ value, onChange }: QuotaFilterChipProps) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [isOpen]);
+
+  // Arrow key navigation
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev + 1) % quotaOptions.length);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev - 1 + quotaOptions.length) % quotaOptions.length);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          onChange(quotaOptions[focusedIndex].value);
+          setIsOpen(false);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setIsOpen(false);
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, focusedIndex, quotaOptions, onChange]);
+
+  // Reset focused index when opening
+  useEffect(() => {
+    if (isOpen) {
+      const currentIndex = quotaOptions.findIndex(opt => opt.value === value);
+      setFocusedIndex(currentIndex >= 0 ? currentIndex : 0);
+    }
+  }, [isOpen, value, quotaOptions]);
 
   return (
     <div className="relative" ref={ref}>
@@ -131,17 +213,20 @@ export function QuotaFilterChip({ value, onChange }: QuotaFilterChipProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-2 left-0 min-w-[130px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in">
-          {quotaOptions.map((opt) => (
+        <div className="absolute z-50 mt-2 left-0 min-w-[130px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in" role="listbox">
+          {quotaOptions.map((opt, index) => (
             <button
               key={opt.value}
               onClick={() => { onChange(opt.value); setIsOpen(false); }}
+              onMouseEnter={() => setFocusedIndex(index)}
               className={cn(
                 'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
-                value === opt.value
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                value === opt.value && 'bg-white/10 text-white',
+                focusedIndex === index && 'bg-white/5',
+                value !== opt.value && focusedIndex !== index && 'text-slate-400 hover:bg-white/5 hover:text-white'
               )}
+              role="option"
+              aria-selected={value === opt.value}
             >
               <span className={cn(
                 'w-3 h-3 rounded-full border flex items-center justify-center',

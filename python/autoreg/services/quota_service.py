@@ -26,7 +26,6 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.paths import get_paths
-from core.config import get_config
 from .webportal_client import KiroWebPortalClient
 
 logger = logging.getLogger(__name__)
@@ -115,7 +114,6 @@ class QuotaService:
     
     def __init__(self):
         self.paths = get_paths()
-        self.config = get_config()
         self.client = KiroWebPortalClient()
     
     def get_quota_from_cw_api(self, access_token: str, region: str = 'us-east-1') -> Optional[QuotaInfo]:
@@ -142,10 +140,16 @@ class QuotaService:
             response = requests.get(url, headers=headers, timeout=CW_API_TIMEOUT)
             
             if response.status_code == 401:
-                return QuotaInfo(error="UNAUTHORIZED: Token expired or invalid")
+                # 401 = Token expired or invalid - can be refreshed
+                return QuotaInfo(error="UNAUTHORIZED: Token expired or invalid. Please refresh token.")
             
             if response.status_code == 403:
-                return QuotaInfo(error="BANNED: Account suspended")
+                # 403 = Account banned/suspended - cannot be fixed by refresh
+                return QuotaInfo(error="BANNED: Account suspended or access denied (403)")
+            
+            if response.status_code == 423:
+                # 423 = Account locked
+                return QuotaInfo(error="BANNED: Account locked (423)")
             
             if not response.ok:
                 return QuotaInfo(error=f"API error: {response.status_code}")

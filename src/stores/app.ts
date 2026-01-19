@@ -18,7 +18,7 @@ const initializeLocale = (): Language => {
         return parsed.state.language;
       }
     }
-  } catch {}
+  } catch { /* Ignore localStorage errors */ }
   
   // Fall back to system preference
   const systemLang = navigator.language.split('-')[0];

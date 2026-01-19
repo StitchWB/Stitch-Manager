@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   ArrowDown, 
-  Trash2, 
+  Trash2,
   ChevronRight,
   Mail,
   Globe,
@@ -12,8 +12,7 @@ import {
   Shield,
   Server,
   User,
-  FileText,
-  Copy
+  FileText
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
@@ -153,7 +152,7 @@ function isJsonArtifact(message: string): boolean {
          (message.includes('"email"') && message.includes('"token"'));
 }
 
-// JSON Artifact component - collapsible token data
+// JSON Artifact component - inline text link instead of button block
 function JsonArtifact({ message, onCopy }: { message: string; onCopy: (text: string) => void }) {
   const [copied, setCopied] = useState(false);
 
@@ -164,11 +163,11 @@ function JsonArtifact({ message, onCopy }: { message: string; onCopy: (text: str
   };
 
   // Try to extract email from JSON
-  let label = t('logFeed.authTokenData');
+  let label = 'token data';
   try {
     const parsed = JSON.parse(message);
     if (parsed.email) {
-      label = `Token: ${parsed.email.split('@')[0]}...`;
+      label = parsed.email.split('@')[0];
     }
   } catch {
     // Not valid JSON, use default label
@@ -177,25 +176,9 @@ function JsonArtifact({ message, onCopy }: { message: string; onCopy: (text: str
   return (
     <button
       onClick={handleCopy}
-      className={cn(
-        'flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-all text-[10px] font-medium',
-        copied 
-          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-          : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10 hover:text-slate-300'
-      )}
+      className="inline text-cyan-400 hover:text-cyan-300 hover:underline decoration-dashed transition-colors text-[10px]"
     >
-      {copied ? (
-        <>
-          <CheckCircle className="w-3 h-3" />
-          <span>{t('logFeed.copied')}</span>
-        </>
-      ) : (
-        <>
-          <Key className="w-3 h-3" />
-          <span>{label}</span>
-          <Copy className="w-2.5 h-2.5 opacity-50" />
-        </>
-      )}
+      {copied ? '✓ copied' : `[view ${label}]`}
     </button>
   );
 }
@@ -234,17 +217,19 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
     );
   }
 
-  // JSON artifact - show as collapsible button
+  // JSON artifact - show as inline text link
   if (isJson) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/[0.03] transition-colors">
-        <div className={cn('shrink-0', color)}>
+      <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors">
+        <div className={cn('shrink-0 mt-0.5', color)}>
           {icon}
         </div>
         <span className="text-[11px] text-slate-400 font-mono shrink-0 tabular-nums">
           {formatTime(log.timestamp)}
         </span>
-        <JsonArtifact message={log.message} onCopy={onCopy} />
+        <span className="text-[11px] text-slate-300 flex-1">
+          Token received successfully <JsonArtifact message={log.message} onCopy={onCopy} />
+        </span>
       </div>
     );
   }

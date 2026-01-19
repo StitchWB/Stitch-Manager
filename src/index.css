@@ -57,6 +57,25 @@
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
+/* Accounts Table Custom Scrollbar */
+.accounts-table-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.accounts-table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.accounts-table-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.accounts-table-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 /* ============================================
    Selection & Focus Styles
    ============================================ */
@@ -65,8 +84,61 @@
   color: white;
 }
 
-:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.5);
+/* Enhanced focus indicators for WCAG compliance */
+*:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  transition: outline-offset 0.15s ease;
+}
+
+/* Specific focus styles for interactive elements */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2);
+}
+
+/* Focus styles for inputs */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 0;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+}
+
+/* Focus styles for navigation items */
+nav a:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: -2px;
+}
+
+/* ============================================
+   Skip to Content Link (Accessibility)
+   ============================================ */
+.skip-to-content {
+  position: absolute;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 0.75rem 1.5rem;
+  background: #1e293b;
+  color: white;
+  text-decoration: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 2px solid #60a5fa;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  transition: top 0.2s ease;
+}
+
+.skip-to-content:focus {
+  top: 1rem;
+  outline: 2px solid #60a5fa;
   outline-offset: 2px;
 }
 
@@ -389,6 +461,36 @@
 
   .table-ds td {
     @apply py-3 px-4 text-sm;
+  }
+
+  /* Enhanced logs table styles */
+  .table-ds.logs-table tbody tr {
+    @apply transition-all duration-150;
+  }
+
+  .table-ds.logs-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .table-ds.logs-table td {
+    @apply align-top;
+  }
+
+  /* Log message cell with better wrapping */
+  .log-message {
+    @apply font-mono text-xs leading-relaxed;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .log-message.expanded {
+    @apply whitespace-pre-wrap;
+  }
+
+  .log-message.collapsed {
+    @apply truncate;
+    max-width: 600px;
   }
 }
 

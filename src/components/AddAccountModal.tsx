@@ -4,6 +4,7 @@ import type { ProviderName } from '../types';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
 import { PROVIDERS } from '../constants/providers';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface AddAccountModalProps {
   isOpen: boolean;
@@ -25,6 +26,9 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
+  
+  // Focus trap for modal
+  const modalRef = useFocusTrap(isOpen);
 
   // Force re-render when language changes
   void language; // Force re-render on language change
@@ -42,14 +46,6 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, isSubmitting]);
-
-  // Autofocus email input when modal opens
-  useEffect(() => {
-    if (isOpen && emailInputRef.current) {
-      // Small delay to ensure modal is rendered
-      setTimeout(() => emailInputRef.current?.focus(), 50);
-    }
-  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,11 +91,37 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
 
       {/* Modal */}
       <div 
+        ref={modalRef}
         className="relative bg-surface-dark border border-border-dark rounded-xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-account-modal-title"
       >
+        {/* Loading Overlay */}
+        {isSubmitting && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <svg className="animate-spin h-8 w-8 text-primary" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              <span className="text-sm text-white font-medium">{t('accounts.addingAccount')}</span>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-dark">
           <h3 id="add-account-modal-title" className="text-lg font-semibold text-white">{t('accounts.addAccount')}</h3>

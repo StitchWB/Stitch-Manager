@@ -28,6 +28,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
 import PoolSettingsPanel from '../components/settings/PoolSettingsPanel';
+import { validatePort, validateHostname, validateEmail, validateUrl } from '../lib/validation';
 
 interface SettingsData {
   theme: string;
@@ -89,6 +90,9 @@ export default function Settings() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [dbPath, setDbPath] = useState<string>('');
+
+  // Validation errors
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Refs for timer cleanup to prevent memory leaks
   const categoryChangeOuterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,6 +194,47 @@ export default function Settings() {
     const timer = setTimeout(() => setSaveStatus('idle'), 3000);
     return () => clearTimeout(timer);
   }, [saveStatus]);
+
+  // Validate fields on change
+  const validateField = (field: string, value: string) => {
+    let error: string | null = null;
+
+    switch (field) {
+      case 'imapServer':
+        if (value.trim()) {
+          error = validateHostname(value);
+        }
+        break;
+      case 'imapPort':
+        if (value.trim()) {
+          error = validatePort(value);
+        }
+        break;
+      case 'imapEmail':
+        if (value.trim()) {
+          error = validateEmail(value);
+        }
+        break;
+      case 'proxyUrl':
+        if (proxyEnabled && value.trim()) {
+          error = validateUrl(value);
+        }
+        break;
+    }
+
+    setValidationErrors(prev => {
+      const next = { ...prev };
+      if (error) {
+        next[field] = error;
+      } else {
+        delete next[field];
+      }
+      return next;
+    });
+  };
+
+  // Check if form has validation errors
+  const hasValidationErrors = Object.keys(validationErrors).length > 0;
 
   const handleSave = async () => {
     try {
@@ -438,30 +483,66 @@ export default function Settings() {
           <input
             type="text"
             value={imapServer}
-            onChange={(e) => setImapServer(e.target.value)}
+            onChange={(e) => {
+              setImapServer(e.target.value);
+              validateField('imapServer', e.target.value);
+            }}
+            onBlur={(e) => validateField('imapServer', e.target.value)}
             placeholder="imap.example.com"
-            className="input-ds text-sm transition-all duration-200 focus:border-primary"
+            className={`input-ds text-sm transition-all duration-200 ${
+              validationErrors.imapServer ? 'border-red-500 focus:border-red-500' : 'focus:border-primary'
+            }`}
           />
+          {validationErrors.imapServer && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
+              <AlertCircle className="w-3 h-3" />
+              {validationErrors.imapServer}
+            </div>
+          )}
         </div>
         <div style={getAnimationStyle(2)}>
           <label className="input-label">{t('settings.imap.port')}</label>
           <input
             type="text"
             value={imapPort}
-            onChange={(e) => setImapPort(e.target.value)}
+            onChange={(e) => {
+              setImapPort(e.target.value);
+              validateField('imapPort', e.target.value);
+            }}
+            onBlur={(e) => validateField('imapPort', e.target.value)}
             placeholder="993"
-            className="input-ds text-sm transition-all duration-200 focus:border-primary"
+            className={`input-ds text-sm transition-all duration-200 ${
+              validationErrors.imapPort ? 'border-red-500 focus:border-red-500' : 'focus:border-primary'
+            }`}
           />
+          {validationErrors.imapPort && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
+              <AlertCircle className="w-3 h-3" />
+              {validationErrors.imapPort}
+            </div>
+          )}
         </div>
         <div style={getAnimationStyle(3)}>
           <label className="input-label">{t('settings.imap.emailAddress')}</label>
           <input
             type="email"
             value={imapEmail}
-            onChange={(e) => setImapEmail(e.target.value)}
+            onChange={(e) => {
+              setImapEmail(e.target.value);
+              validateField('imapEmail', e.target.value);
+            }}
+            onBlur={(e) => validateField('imapEmail', e.target.value)}
             placeholder="user@example.com"
-            className="input-ds text-sm transition-all duration-200 focus:border-primary"
+            className={`input-ds text-sm transition-all duration-200 ${
+              validationErrors.imapEmail ? 'border-red-500 focus:border-red-500' : 'focus:border-primary'
+            }`}
           />
+          {validationErrors.imapEmail && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
+              <AlertCircle className="w-3 h-3" />
+              {validationErrors.imapEmail}
+            </div>
+          )}
         </div>
         <div style={getAnimationStyle(4)}>
           <label className="input-label">{t('settings.imap.password')}</label>
@@ -511,10 +592,22 @@ export default function Settings() {
             <input
               type="text"
               value={proxyUrl}
-              onChange={(e) => setProxyUrl(e.target.value)}
+              onChange={(e) => {
+                setProxyUrl(e.target.value);
+                validateField('proxyUrl', e.target.value);
+              }}
+              onBlur={(e) => validateField('proxyUrl', e.target.value)}
               placeholder="http://proxy:8080"
-              className="input-ds text-sm transition-all duration-200 focus:border-primary"
+              className={`input-ds text-sm transition-all duration-200 ${
+                validationErrors.proxyUrl ? 'border-red-500 focus:border-red-500' : 'focus:border-primary'
+              }`}
             />
+            {validationErrors.proxyUrl && (
+              <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
+                <AlertCircle className="w-3 h-3" />
+                {validationErrors.proxyUrl}
+              </div>
+            )}
             <p className="text-slate-500 text-xs mt-2">
               {t('settings.proxy.proxyUrlHint')}
             </p>
@@ -717,9 +810,9 @@ export default function Settings() {
               )}
               <button 
                 onClick={handleSave} 
-                disabled={isSaving} 
+                disabled={isSaving || hasValidationErrors} 
                 className={`btn-primary py-2 px-5 text-sm flex items-center gap-2 active:scale-95 transition-all duration-75 ${
-                  !isSaving ? 'hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]' : ''
+                  !isSaving && !hasValidationErrors ? 'hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'opacity-50 cursor-not-allowed'
                 }`}
               >
                 {isSaving ? (

@@ -26,29 +26,22 @@ from .profile import SpoofProfile, PROFILES, generate_random_profile
 # Base
 from .base import BaseSpoofModule
 
-# JS Modules
+# JS Modules (consolidated)
 from .automation import AutomationSpoofModule
-from .navigator import NavigatorSpoofModule
-from .screen import ScreenSpoofModule
-from .webgl import WebGLSpoofModule
-from .canvas import CanvasSpoofModule
+from .navigator_spoofer import NavigatorSpoofModule
+from .display_spoofer import DisplaySpoofModule
+from .graphics_spoofer import GraphicsSpoofModule
+from .media_spoofer import MediaSpoofModule
+from .device_spoofer import DeviceSpoofModule
 from .timezone import TimezoneSpoofModule
 from .intl import IntlSpoofModule
-from .audio import AudioSpoofModule
-from .battery import BatterySpoofModule
-from .network import NetworkSpoofModule
 from .webrtc import WebRTCSpoofModule
-from .fonts import FontsSpoofModule
-from .sensors import SensorsSpoofModule
 from .geolocation import GeolocationSpoofModule
 from .cdp_hide import CDPHideSpoofModule
 from .client_hints import ClientHintsSpoofModule
-from .performance import PerformanceSpoofModule
 from .math import MathSpoofModule
 from .history import HistorySpoofModule
-from .capabilities import CapabilitiesSpoofModule
 from .storage import StorageSpoofModule
-from .media import MediaDevicesSpoofModule
 
 # CDP Spoofer (main entry point)
 from .cdp_spoofer import (
@@ -61,30 +54,23 @@ from .cdp_spoofer import (
 from .behavior import BehaviorSpoofModule
 
 
-# Все JS-модули (22 модуля)
+# Все JS-модули (consolidated to 15 modules)
 ALL_JS_MODULES = [
     AutomationSpoofModule,
     CDPHideSpoofModule,
     NavigatorSpoofModule,
-    ScreenSpoofModule,
-    WebGLSpoofModule,
-    CanvasSpoofModule,
+    DisplaySpoofModule,
+    GraphicsSpoofModule,
+    MediaSpoofModule,
+    DeviceSpoofModule,
     TimezoneSpoofModule,
     IntlSpoofModule,
-    AudioSpoofModule,
-    BatterySpoofModule,
-    NetworkSpoofModule,
     WebRTCSpoofModule,
-    FontsSpoofModule,
-    SensorsSpoofModule,
     GeolocationSpoofModule,
     ClientHintsSpoofModule,
-    PerformanceSpoofModule,
     MathSpoofModule,
     HistorySpoofModule,
-    CapabilitiesSpoofModule,
     StorageSpoofModule,
-    MediaDevicesSpoofModule,
 ]
 
 

@@ -38,29 +38,27 @@ def quota_info_to_dict(info: QuotaInfo | None) -> dict:
     if info.usage is not None:
         usage: UsageInfo = info.usage
         
-        # Check if we have active trial/bonus - use that instead of base quota
-        # Kiro shows "Free Bonus X/Y" when freeTrialStatus is ACTIVE
-        if usage.trial_status == "ACTIVE" and usage.trial_limit > 0:
-            # Use trial quota (Free Bonus)
+        # Kiro shows both "Bonus Credits" (trial) and "Credits" (base)
+        # We need to SUM them: total_limit = trial_limit + base_limit
+        # and total_used = trial_used + base_used
+        
+        # Calculate total quota (bonus + balance)
+        total_limit = usage.limit + (usage.trial_limit if usage.trial_status == "ACTIVE" else 0)
+        total_used = usage.used + (usage.trial_used if usage.trial_status == "ACTIVE" else 0)
+        
+        if total_limit > 0:
+            # Use combined quota (bonus + balance)
             data["usage"] = {
-                "limit": usage.trial_limit,
-                "used": usage.trial_used,
-                "type": "trial",
-                "display_name": usage.display_name or "Free Bonus",
-            }
-        elif usage.limit > 0:
-            # Use base quota
-            data["usage"] = {
-                "limit": usage.limit,
-                "used": usage.used,
-                "type": "base",
-                "display_name": usage.display_name,
+                "limit": total_limit,
+                "used": total_used,
+                "type": "combined",
+                "display_name": usage.display_name or "Credits",
             }
         else:
             # No quota limit - unlimited plan
             data["usage"] = {
                 "limit": -1,  # -1 means unlimited
-                "used": usage.used,
+                "used": total_used,
                 "type": "unlimited",
                 "display_name": usage.display_name,
             }
