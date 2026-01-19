@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, RefreshCw, Download, Users, AlertCircle } from 'lucide-react';
 import Header from '../components/layout/Header';
@@ -11,6 +11,7 @@ import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
 import { copyToClipboard, checkAccountStatus, getAccounts, type GetAccountsParams } from '../lib/tauri';
 import { t } from '../lib/i18n';
+import { useUrlState } from '../hooks/useUrlState';
 import type { ProviderName, AccountStatus, Account } from '../types';
 
 export default function Accounts() {
@@ -20,12 +21,6 @@ export default function Accounts() {
   const {
     loading: isLoading,
     error: storeError,
-    searchQuery,
-    setSearchQuery,
-    statusFilter,
-    setStatusFilter,
-    quotaFilter,
-    setQuotaFilter,
     selectedIds,
     toggleSelection,
     selectAll,
@@ -45,8 +40,13 @@ export default function Accounts() {
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isRefreshingExpired, setIsRefreshingExpired] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
-  const [providerFilter, setProviderFilter] = useState('all');
   const [accounts, setAccounts] = useState<Account[]>([]);
+  
+  // URL-synced state for filters
+  const [providerFilter, setProviderFilter] = useUrlState<string>('provider', 'all');
+  const [searchQuery, setSearchQuery] = useUrlState<string>('q', '');
+  const [statusFilter, setStatusFilter] = useUrlState<string>('status', 'all');
+  const [quotaFilter, setQuotaFilter] = useUrlState<string>('quota', 'any');
 
   // Custom fetch function that uses the new getAccounts API with filtering
   const fetchAccountsWithFilter = useCallback(async () => {
@@ -55,12 +55,12 @@ export default function Accounts() {
       
       if (providerFilter !== 'all') {
         // Map filter values to actual provider names in database
-        let providerSubtype = providerFilter;
+        let providerSubtype: string = providerFilter;
         if (providerFilter === 'aws') {
           providerSubtype = 'aws_builder_id'; // Map 'aws' filter to 'aws_builder_id' provider
         }
         
-        params.providerSubtype = providerSubtype;
+        params.providerSubtype = providerSubtype as any;
         
         // Set provider_type based on subtype
         if (['kiro', 'windsurf', 'trae'].includes(providerFilter)) {
@@ -84,6 +84,47 @@ export default function Accounts() {
       });
     }
   }, [providerFilter]);
+  
+  // Apply client-side filters (search, status, quota)
+  const filteredAccounts = useMemo(() => {
+    let filtered = [...accounts];
+    
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (acc) =>
+          acc.email.toLowerCase().includes(query) ||
+          acc.provider.toLowerCase().includes(query)
+      );
+    }
+    
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((acc) => acc.status === statusFilter);
+    }
+    
+    // Quota filter
+    if (quotaFilter === 'low_quota') {
+      filtered = filtered.filter(
+        (acc) => acc.quota && acc.quota.limit > 0 && (acc.quota.used / acc.quota.limit) > 0.8
+      );
+    } else if (quotaFilter === 'has_quota') {
+      filtered = filtered.filter(
+        (acc) => acc.quota && acc.quota.limit > 0 && (acc.quota.used / acc.quota.limit) < 0.5
+      );
+    } else if (quotaFilter === 'empty') {
+      filtered = filtered.filter(
+        (acc) => !acc.quota || acc.quota.used === 0
+      );
+    } else if (quotaFilter === 'full') {
+      filtered = filtered.filter(
+        (acc) => acc.quota && acc.quota.limit > 0 && acc.quota.used >= acc.quota.limit
+      );
+    }
+    
+    return filtered;
+  }, [accounts, searchQuery, statusFilter, quotaFilter]);
   
   // Get all accounts to count expired ones
   const allAccounts = useAccountsStore.getState().accounts;
@@ -126,7 +167,7 @@ export default function Accounts() {
       // 'a' key - select all / deselect all
       if (e.key === 'a' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
-        if (selectedIds.size === accounts.length) {
+        if (selectedIds.size === filteredAccounts.length) {
           clearSelection();
         } else {
           selectAll();
@@ -142,7 +183,7 @@ export default function Accounts() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, accounts.length, selectAll, clearSelection, removeSelectedAccounts, refreshAccount]);
+  }, [selectedIds, filteredAccounts.length, selectAll, clearSelection, removeSelectedAccounts, refreshAccount]);
 
   const handleAddAccount = async (data: {
     provider: ProviderName;
@@ -248,7 +289,7 @@ export default function Accounts() {
 
   const handleDelete = async (accountId: number) => {
     try {
-      const account = accounts.find(a => a.id === accountId);
+      const account = filteredAccounts.find(a => a.id === accountId);
       await removeAccount(accountId);
       addLog({
         level: 'info',
@@ -277,7 +318,7 @@ export default function Accounts() {
       // Show success notification
       const { addNotification } = useAppStore.getState();
       if (accountId) {
-        const account = accounts.find(a => a.id === accountId);
+        const account = filteredAccounts.find(a => a.id === accountId);
         addNotification({
           type: 'success',
           title: t('notifications.accountActivated'),
@@ -319,7 +360,7 @@ export default function Accounts() {
   const handleCheckStatus = async (accountId: number) => {
     try {
       const { addNotification } = useAppStore.getState();
-      const account = accounts.find(a => a.id === accountId);
+      const account = filteredAccounts.find(a => a.id === accountId);
       
       if (!account) {
         addNotification({
@@ -372,7 +413,7 @@ export default function Accounts() {
 
   const handleExportCSV = () => {
     const headers = ['Provider', 'Email', 'Status', 'Quota Used', 'Quota Limit', 'Token'];
-    const rows = accounts.map((account) => [
+    const rows = filteredAccounts.map((account) => [
       account.provider,
       account.email,
       account.status,
@@ -453,12 +494,12 @@ export default function Accounts() {
 
             {/* Filter Chips */}
             <StatusFilterChip 
-              value={statusFilter} 
-              onChange={(value) => setStatusFilter(value as AccountStatus | null)}
+              value={statusFilter === 'all' ? null : (statusFilter as AccountStatus)} 
+              onChange={(value) => setStatusFilter(value || 'all')}
             />
             <QuotaFilterChip 
-              value={quotaFilter} 
-              onChange={setQuotaFilter}
+              value={quotaFilter as 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota'} 
+              onChange={(value) => setQuotaFilter(value)}
             />
           </div>
 
@@ -509,7 +550,7 @@ export default function Accounts() {
 
         {/* Table */}
         <div className="flex-1 overflow-hidden">
-          {isLoading && accounts.length === 0 ? (
+          {isLoading && filteredAccounts.length === 0 ? (
             // Skeleton loader for initial load
             <div 
               className="flex flex-col h-full rounded-lg overflow-hidden"
@@ -558,7 +599,7 @@ export default function Accounts() {
                 <span className="text-[10px] text-slate-500">{t('common.loading')}...</span>
               </div>
             </div>
-          ) : accounts.length === 0 ? (
+          ) : filteredAccounts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
               <Users size={48} className="opacity-30" />
               <p className="text-sm">{t('accounts.noAccountsFound') || 'No accounts found'}</p>
@@ -571,7 +612,7 @@ export default function Accounts() {
             </div>
           ) : (
             <AccountsTable
-              accounts={accounts}
+              accounts={filteredAccounts}
               isLoading={isLoading}
               selectedIds={selectedIds}
               activeAccountIds={activeAccountIds}
