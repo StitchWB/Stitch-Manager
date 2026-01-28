@@ -8,15 +8,16 @@ import { QuotaFilterChip } from '../components/ui/FilterChip';
 import { useAccountsStore } from '../stores/accounts';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
+import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
   copyToClipboard,
   checkAccountStatus,
   getAccounts,
   openAccountBrowser,
+  bulkExportAccounts,
   type GetAccountsParams,
 } from '../lib/tauri';
 import { t } from '../lib/i18n';
-import { useUrlState } from '../hooks/useUrlState';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
 import type { ProviderName, Account } from '../types';
@@ -61,11 +62,19 @@ export default function Accounts() {
     delayMs: 500,
   });
 
-  // URL-synced state for filters
-  const [providerFilter, setProviderFilter] = useUrlState<string>('provider', 'all');
-  const [searchQuery, setSearchQuery] = useUrlState<string>('q', '');
-  const [statusFilter, setStatusFilter] = useUrlState<string>('status', 'all');
-  const [quotaFilter, setQuotaFilter] = useUrlState<string>('quota', 'any');
+  // UI preferences from store (persisted in localStorage)
+  const {
+    accountsPage: {
+      providerFilter,
+      statusFilter,
+      quotaFilter,
+      searchQuery,
+    },
+    setAccountsProviderFilter,
+    setAccountsStatusFilter,
+    setAccountsQuotaFilter,
+    setAccountsSearchQuery,
+  } = useUIPreferencesStore();
 
   // Provider counts for sidebar
   const providerCounts = useMemo(() => {
@@ -447,10 +456,20 @@ export default function Accounts() {
   };
 
   const handleOpenBrowser = async (accountId: number) => {
+    console.log('[Accounts] Opening browser for account:', accountId);
     try {
+      console.log('[Accounts] Calling openAccountBrowser...');
       await openAccountBrowser({ accountId });
+      console.log('[Accounts] Browser opened successfully');
+      
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'success',
+        title: 'Browser opened',
+        message: `Browser opened for account ${accountId}`,
+      });
     } catch (error) {
-      console.error('Failed to open browser:', error);
+      console.error('[Accounts] Failed to open browser:', error);
       const { addNotification } = useAppStore.getState();
       addNotification({
         type: 'error',
@@ -460,36 +479,59 @@ export default function Accounts() {
     }
   };
 
-  const handleExportCSV = () => {
-    const headers = ['Provider', 'Email', 'Status', 'Quota Used', 'Quota Limit', 'Token'];
-    const rows = filteredAccounts.map(account => [
-      account.provider,
-      account.email,
-      account.status,
-      (account.quota?.used || 0).toString(),
-      (account.quota?.limit || 0).toString(),
-      account.token ?? '',
-    ]);
+  const handleExportCSV = async () => {
+    try {
+      // If accounts are selected, use bulk export; otherwise export all filtered accounts
+      const accountsToExport = selectedIds.size > 0 
+        ? Array.from(selectedIds) 
+        : filteredAccounts.map(a => a.id);
+      
+      if (accountsToExport.length === 0) {
+        const { addNotification } = useAppStore.getState();
+        addNotification({
+          type: 'warning',
+          title: 'No accounts to export',
+          message: 'Please select accounts or adjust filters',
+        });
+        return;
+      }
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
-    ].join('\n');
+      // Use bulk export command
+      const csvContent = await bulkExportAccounts({
+        accountIds: accountsToExport,
+        format: 'csv',
+      });
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `accounts_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `accounts_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'success',
+        title: 'Export successful',
+        message: `Exported ${accountsToExport.length} account(s)`,
+      });
+    } catch (error) {
+      console.error('Failed to export accounts:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: 'Export failed',
+        message: String(error),
+      });
+    }
   };
 
   const SidebarItem = ({ id, label, icon: Icon }: { id: string; label: string; icon?: any }) => (
     <button
-      onClick={() => setProviderFilter(id)}
+      onClick={() => setAccountsProviderFilter(id)}
       className={cn(
         'w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all',
         providerFilter === id
@@ -550,7 +592,7 @@ export default function Accounts() {
           {/* Status Filters - Minimal visual representation in sidebar */}
           <div className="space-y-1">
             <button
-              onClick={() => setStatusFilter('all')}
+              onClick={() => setAccountsStatusFilter('all')}
               className={cn(
                 'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
                 statusFilter === 'all'
@@ -561,7 +603,7 @@ export default function Accounts() {
               <span>Any Status</span>
             </button>
             <button
-              onClick={() => setStatusFilter('active')}
+              onClick={() => setAccountsStatusFilter('active')}
               className={cn(
                 'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
                 statusFilter === 'active'
@@ -573,7 +615,7 @@ export default function Accounts() {
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             </button>
             <button
-              onClick={() => setStatusFilter('banned')}
+              onClick={() => setAccountsStatusFilter('banned')}
               className={cn(
                 'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
                 statusFilter === 'banned'
@@ -585,7 +627,7 @@ export default function Accounts() {
               <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
             </button>
             <button
-              onClick={() => setStatusFilter('expired')}
+              onClick={() => setAccountsStatusFilter('expired')}
               className={cn(
                 'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
                 statusFilter === 'expired'
@@ -641,7 +683,7 @@ export default function Accounts() {
               <div className="flex items-center gap-2">
                 <QuotaFilterChip
                   value={quotaFilter as 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota'}
-                  onChange={value => setQuotaFilter(value)}
+                  onChange={value => setAccountsQuotaFilter(value)}
                 />
               </div>
 
@@ -652,7 +694,7 @@ export default function Accounts() {
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
+                    onChange={e => setAccountsSearchQuery(e.target.value)}
                     className="w-64 h-9 bg-white/5 rounded-lg pl-9 pr-16 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-white/20 focus:outline-none transition-colors"
                     placeholder={t('accounts.searchPlaceholder')}
                   />

@@ -70,6 +70,11 @@ export type RegistrationStatus = { isRunning: boolean; success: boolean | null; 
  */
 export type TokenRefreshResult = { success: boolean; accessToken: string | null; refreshToken: string | null; expiresAt: string | null; message: string }
 
+/**
+ * Result of a bulk operation
+ */
+export type BulkOperationResult = { total: number; succeeded: number; failed: number; errors: string[] }
+
 export type EmailCounterStatus = { provider: string; strategy: string; counter: number; updatedAt: string | null; databasePath: string; databaseExists: boolean; databaseWritable: boolean }
 
 export type EmailCounterDiagnostics = { databasePath: string; databaseExists: boolean; databaseWritable: boolean; counters: EmailCounterStatus[]; lastGeneratedEmails: GeneratedEmailRecord[]; currentStrategy: string }

@@ -9,9 +9,7 @@ import {
   validateAccount,
   setActiveAccount as setActiveAccountTauri,
   getActiveAccounts as getActiveAccountsTauri,
-  // Note: These functions are defined in tauri.ts but not yet implemented in Rust backend
-  // importAccounts,
-  // exportAccounts,
+  bulkDeleteAccounts,
   TauriError,
 } from '../lib/tauri';
 
@@ -163,8 +161,14 @@ export const useAccountsStore = create<AccountsState>()(
         }));
 
         try {
-          // Delete accounts in parallel
-          await Promise.all(accountIds.map((id) => deleteAccount({ accountId: id })));
+          // Use bulk delete command
+          const result = await bulkDeleteAccounts({ accountIds });
+          
+          // If some deletions failed, show error but keep optimistic update for succeeded ones
+          if (result.failed > 0) {
+            const message = `Deleted ${result.succeeded}/${result.total} accounts. ${result.failed} failed.`;
+            set({ error: message });
+          }
         } catch (error) {
           // Rollback on error
           set({ accounts: previousAccounts });

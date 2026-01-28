@@ -4,6 +4,7 @@ import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel } from '../stores/logs';
+import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
@@ -43,10 +44,14 @@ export default function Logs() {
     unsubscribeFromLogs,
   } = useLogsStore();
 
-  // Local filter state
-  const [levelFilter, setLevelFilter] = useState<string>('');
-  const [sourceFilter, setSourceFilter] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // UI preferences from store (persisted in localStorage)
+  const {
+    logsPage: { levelFilter, sourceFilter, searchQuery },
+    setLogsLevelFilter,
+    setLogsSourceFilter,
+    setLogsSearchQuery,
+    resetLogsFilters,
+  } = useUIPreferencesStore();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -77,19 +82,35 @@ export default function Logs() {
     return () => clearTimeout(timer);
   }, [searchQuery, setFilter]);
 
+  // Apply filters on mount from persisted state
+  useEffect(() => {
+    // Only apply non-'all' filters
+    if (levelFilter && levelFilter !== 'all') {
+      setFilter({ levels: [levelFilter as LogLevel] });
+    }
+    if (sourceFilter && sourceFilter !== 'all') {
+      setFilter({ sources: [sourceFilter] });
+    }
+    if (searchQuery) {
+      setFilter({ search: searchQuery });
+    }
+  }, []); // Only on mount
+
   // ============================================
   // Handlers
   // ============================================
 
   const handleLevelChange = useCallback((level: string) => {
-    setLevelFilter(level);
-    setFilter({ levels: level ? [level as LogLevel] : [] });
-  }, [setFilter]);
+    setLogsLevelFilter(level);
+    // Convert 'all' to empty array (no filter)
+    setFilter({ levels: (level && level !== 'all') ? [level as LogLevel] : [] });
+  }, [setFilter, setLogsLevelFilter]);
 
   const handleSourceChange = useCallback((source: string) => {
-    setSourceFilter(source);
-    setFilter({ sources: source ? [source] : [] });
-  }, [setFilter]);
+    setLogsSourceFilter(source);
+    // Convert 'all' to empty array (no filter)
+    setFilter({ sources: (source && source !== 'all') ? [source] : [] });
+  }, [setFilter, setLogsSourceFilter]);
 
   const handleRefresh = useCallback(() => {
     fetchLogs();
@@ -120,11 +141,9 @@ export default function Logs() {
   }, [exportLogs]);
 
   const handleResetFilters = useCallback(() => {
-    setLevelFilter('');
-    setSourceFilter('');
-    setSearchQuery('');
+    resetLogsFilters();
     resetFilter();
-  }, [resetFilter]);
+  }, [resetFilter, resetLogsFilters]);
 
   const toggleLogExpansion = useCallback((logId: string) => {
     setExpandedLogs(prev => {
@@ -194,7 +213,7 @@ export default function Logs() {
               onChange={(e) => handleLevelChange(e.target.value)}
               className="input-ds text-sm py-1.5 w-32 appearance-none pr-8"
             >
-              <option value="">{t('logs.allLevels')}</option>
+              <option value="all">{t('logs.allLevels')}</option>
               <option value="debug">{t('logs.debug')}</option>
               <option value="info">{t('logs.info')}</option>
               <option value="success">{t('logs.success')}</option>
@@ -211,7 +230,7 @@ export default function Logs() {
               onChange={(e) => handleSourceChange(e.target.value)}
               className="input-ds text-sm py-1.5 w-36 appearance-none pr-8"
             >
-              <option value="">{t('logs.allSources')}</option>
+              <option value="all">{t('logs.allSources')}</option>
               {LOG_SOURCES.map((source) => (
                 <option key={source} value={source}>
                   {source}
@@ -227,7 +246,7 @@ export default function Logs() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => setLogsSearchQuery(e.target.value)}
               placeholder={t('logs.searchPlaceholder')}
               className="input-ds text-sm py-1.5 pl-9 w-full"
             />
