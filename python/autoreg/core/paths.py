@@ -11,9 +11,9 @@ from typing import Optional
 
 class Paths:
     """Singleton для управления всеми путями в системе"""
-    
-    _instance: Optional['Paths'] = None
-    
+
+    _instance: Optional["Paths"] = None
+
     # Kiro paths (могут быть None если Kiro не установлен)
     kiro_user_dir: Optional[Path]
     kiro_global_storage: Optional[Path]
@@ -21,120 +21,122 @@ class Paths:
     kiro_state_db: Optional[Path]
     kiro_agent_storage: Optional[Path]
     kiro_install_path: Optional[Path]
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._init_paths()
         return cls._instance
-    
+
     def _init_paths(self):
         """Инициализация всех путей"""
         self.os_type = platform.system().lower()
         self.home = Path.home()
-        
+
         # =====================================================================
         # Project paths
         # =====================================================================
         self.autoreg_dir = Path(__file__).parent.parent
         self.project_dir = self.autoreg_dir.parent
-        
+
         # =====================================================================
         # User data paths (stitch-manager)
         # =====================================================================
-        self.user_data_dir = self.home / '.stitch-manager'
-        self.tokens_dir = self.user_data_dir / 'tokens'
-        self.backups_dir = self.user_data_dir / 'backups'
-        self.logs_dir = self.user_data_dir / 'logs'
-        self.cache_dir = self.user_data_dir / 'cache'
-        self.debug_sessions_dir = self.user_data_dir / 'debug_sessions'
-        
+        self.user_data_dir = self.home / ".stitch-manager"
+        self.tokens_dir = self.user_data_dir / "tokens"
+        self.backups_dir = self.user_data_dir / "backups"
+        self.logs_dir = self.user_data_dir / "logs"
+        self.cache_dir = self.user_data_dir / "cache"
+        self.debug_sessions_dir = self.user_data_dir / "debug_sessions"
+        self.browser_profiles_dir = self.user_data_dir / "profiles" / "browser"
+
         # Files
-        self.accounts_file = self.user_data_dir / 'accounts.json'
-        self.settings_file = self.user_data_dir / 'settings.json'
-        self.log_file = self.logs_dir / 'autoreg.log'
-        
+
+        self.accounts_file = self.user_data_dir / "accounts.json"
+        self.settings_file = self.user_data_dir / "settings.json"
+        self.log_file = self.logs_dir / "autoreg.log"
+
         # =====================================================================
         # AWS SSO cache (~/.aws/sso/cache/)
         # =====================================================================
         # Support for isolated Kiro instances via KIRO_USER_DATA_DIR env var
-        kiro_user_data = os.environ.get('KIRO_USER_DATA_DIR')
+        kiro_user_data = os.environ.get("KIRO_USER_DATA_DIR")
         if kiro_user_data:
             # Isolated mode: use token path relative to Kiro's user-data-dir
             base_dir = Path(kiro_user_data)
-            self.aws_dir = base_dir / '.aws'
-            self.aws_sso_cache = self.aws_dir / 'sso' / 'cache'
-            self.kiro_token_file = self.aws_sso_cache / 'kiro-auth-token.json'
+            self.aws_dir = base_dir / ".aws"
+            self.aws_sso_cache = self.aws_dir / "sso" / "cache"
+            self.kiro_token_file = self.aws_sso_cache / "kiro-auth-token.json"
         else:
             # Standard mode: use home directory
-            self.aws_dir = self.home / '.aws'
-            self.aws_sso_cache = self.aws_dir / 'sso' / 'cache'
-            self.kiro_token_file = self.aws_sso_cache / 'kiro-auth-token.json'
-        
+            self.aws_dir = self.home / ".aws"
+            self.aws_sso_cache = self.aws_dir / "sso" / "cache"
+            self.kiro_token_file = self.aws_sso_cache / "kiro-auth-token.json"
+
         # =====================================================================
         # Kiro IDE paths
         # =====================================================================
-        if self.os_type == 'windows':
-            appdata = os.environ.get('APPDATA', '')
-            self.kiro_data_dir = Path(appdata) / 'Kiro' if appdata else None
-        elif self.os_type == 'darwin':  # macOS
-            self.kiro_data_dir = self.home / 'Library' / 'Application Support' / 'Kiro'
+        if self.os_type == "windows":
+            appdata = os.environ.get("APPDATA", "")
+            self.kiro_data_dir = Path(appdata) / "Kiro" if appdata else None
+        elif self.os_type == "darwin":  # macOS
+            self.kiro_data_dir = self.home / "Library" / "Application Support" / "Kiro"
         else:  # Linux
-            self.kiro_data_dir = self.home / '.config' / 'Kiro'
-        
+            self.kiro_data_dir = self.home / ".config" / "Kiro"
+
         if self.kiro_data_dir:
-            self.kiro_user_dir = self.kiro_data_dir / 'User'
-            self.kiro_global_storage = self.kiro_user_dir / 'globalStorage'
-            self.kiro_storage_json = self.kiro_global_storage / 'storage.json'
-            self.kiro_state_db = self.kiro_global_storage / 'state.vscdb'
-            self.kiro_agent_storage = self.kiro_global_storage / 'kiro.kiroagent'
+            self.kiro_user_dir = self.kiro_data_dir / "User"
+            self.kiro_global_storage = self.kiro_user_dir / "globalStorage"
+            self.kiro_storage_json = self.kiro_global_storage / "storage.json"
+            self.kiro_state_db = self.kiro_global_storage / "state.vscdb"
+            self.kiro_agent_storage = self.kiro_global_storage / "kiro.kiroagent"
         else:
             self.kiro_user_dir = None
             self.kiro_global_storage = None
             self.kiro_storage_json = None
             self.kiro_state_db = None
             self.kiro_agent_storage = None
-        
+
         # =====================================================================
         # Kiro installation path
         # =====================================================================
         self.kiro_install_path: Optional[Path] = None
-        if self.os_type == 'windows':
+        if self.os_type == "windows":
             possible_paths = [
-                Path(os.environ.get('LOCALAPPDATA', '')) / 'Programs' / 'kiro',
-                Path(os.environ.get('PROGRAMFILES', '')) / 'Kiro',
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "kiro",
+                Path(os.environ.get("PROGRAMFILES", "")) / "Kiro",
             ]
             # Additional paths for non-standard installations
-            for drive in ['C:', 'D:', 'E:', 'S:', 'F:', 'G:']:
-                possible_paths.append(Path(drive) / 'Kiro')
-                possible_paths.append(Path(drive) / 'Programs' / 'Kiro')
-                possible_paths.append(Path(drive) / 'kiro')
-        elif self.os_type == 'darwin':
+            for drive in ["C:", "D:", "E:", "S:", "F:", "G:"]:
+                possible_paths.append(Path(drive) / "Kiro")
+                possible_paths.append(Path(drive) / "Programs" / "Kiro")
+                possible_paths.append(Path(drive) / "kiro")
+        elif self.os_type == "darwin":
             possible_paths = [
-                Path('/Applications/Kiro.app/Contents/Resources/app'),
-                self.home / 'Applications' / 'Kiro.app' / 'Contents' / 'Resources' / 'app',
+                Path("/Applications/Kiro.app/Contents/Resources/app"),
+                self.home / "Applications" / "Kiro.app" / "Contents" / "Resources" / "app",
             ]
         else:  # Linux
             possible_paths = [
-                Path('/usr/share/kiro'),
-                Path('/opt/kiro'),
-                self.home / '.local' / 'share' / 'kiro',
+                Path("/usr/share/kiro"),
+                Path("/opt/kiro"),
+                self.home / ".local" / "share" / "kiro",
             ]
-        
+
         for path in possible_paths:
             if path.exists():
                 self.kiro_install_path = path
                 break
-        
+
         # =====================================================================
         # Kiro settings (~/.kiro/)
         # =====================================================================
-        self.kiro_settings_dir = self.home / '.kiro' / 'settings'
-        self.kiro_mcp_config = self.kiro_settings_dir / 'mcp.json'
-        
+        self.kiro_settings_dir = self.home / ".kiro" / "settings"
+        self.kiro_mcp_config = self.kiro_settings_dir / "mcp.json"
+
         # Ensure directories exist
         self._ensure_dirs()
-    
+
     def _ensure_dirs(self):
         """Создаёт необходимые директории"""
         dirs_to_create = [
@@ -144,40 +146,42 @@ class Paths:
             self.logs_dir,
             self.cache_dir,
             self.debug_sessions_dir,
+            self.browser_profiles_dir,
             self.aws_sso_cache,
         ]
-        
+
         for dir_path in dirs_to_create:
             dir_path.mkdir(parents=True, exist_ok=True)
-    
+
     # =========================================================================
     # Helper methods
     # =========================================================================
-    
+
     def is_kiro_installed(self) -> bool:
         """Проверяет установлен ли Kiro"""
         return self.kiro_data_dir is not None and self.kiro_data_dir.exists()
-    
+
     def get_token_file(self, name: str) -> Path:
         """Возвращает путь к файлу токена"""
-        if not name.endswith('.json'):
+        if not name.endswith(".json"):
             name = f"token-{name}.json"
         return self.tokens_dir / name
-    
-    def get_backup_file(self, prefix: str, ext: str = 'json') -> Path:
+
+    def get_backup_file(self, prefix: str, ext: str = "json") -> Path:
         """Генерирует путь для нового бэкапа с timestamp"""
         from datetime import datetime
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return self.backups_dir / f"{prefix}-{timestamp}.{ext}"
-    
+
     def get_client_registration_file(self, client_id_hash: str) -> Path:
         """Возвращает путь к файлу регистрации клиента"""
         return self.aws_sso_cache / f"{client_id_hash}.json"
-    
+
     def list_tokens(self) -> list[Path]:
         """Возвращает список всех файлов токенов"""
-        return list(self.tokens_dir.glob('token-*.json'))
-    
+        return list(self.tokens_dir.glob("token-*.json"))
+
     def list_backups(self, prefix: Optional[str] = None) -> list[Path]:
         """Возвращает список бэкапов"""
         pattern = f"{prefix}-*.json" if prefix else "*.json"
