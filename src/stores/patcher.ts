@@ -4,7 +4,7 @@ import type {
   DetectedIDE,
   PatchStatus,
   PatchStatusType,
-  BackupInfo,
+  UIBackupInfo,
   PatchResult,
 } from '../types';
 import {
@@ -30,7 +30,7 @@ interface PatcherState {
   // State
   detectedIDEs: DetectedIDE[];
   patchStatus: Record<string, PatchStatus>;
-  backups: Record<string, BackupInfo[]>;
+  backups: Record<string, UIBackupInfo[]>;
   scanning: boolean;
   backupsLoading: boolean;
   error: string | null;
@@ -61,7 +61,7 @@ interface PatcherState {
   patchTraeFull: () => Promise<PatchResult>;
   
   // Backup management
-  listBackups: (ideId?: string) => Promise<BackupInfo[]>;
+  listBackups: (ideId?: string) => Promise<UIBackupInfo[]>;
   restoreBackup: (backupId: string) => Promise<PatchResult>;
   deleteBackup: (backupId: string) => Promise<void>;
   
@@ -242,7 +242,7 @@ export const usePatcherStore = create<PatcherState>()(
               }));
 
               // Refresh backups if a backup was created
-              if (result.backupId) {
+              if (result.backupPath) {
                 await get().listBackups(ideId);
               }
             } else {
@@ -315,7 +315,7 @@ export const usePatcherStore = create<PatcherState>()(
             const backupList = await listBackups({ ideId });
             
             // Group backups by IDE
-            const groupedBackups: Record<string, BackupInfo[]> = {};
+            const groupedBackups: Record<string, UIBackupInfo[]> = {};
             for (const backup of backupList) {
               if (!groupedBackups[backup.ideId]) {
                 groupedBackups[backup.ideId] = [];
@@ -342,10 +342,10 @@ export const usePatcherStore = create<PatcherState>()(
           // Find the IDE and backup info for this backup
           const { backups, detectedIDEs } = get();
           let ideId: string | null = null;
-          let backup: BackupInfo | null = null;
+          let backup: UIBackupInfo | null = null;
           
           for (const [id, backupList] of Object.entries(backups)) {
-            const foundBackup = backupList.find((b: BackupInfo) => b.id === backupId);
+            const foundBackup = backupList.find((b: UIBackupInfo) => b.id === backupId);
             if (foundBackup) {
               ideId = id;
               backup = foundBackup;
@@ -414,7 +414,7 @@ export const usePatcherStore = create<PatcherState>()(
             set((state) => {
               const newBackups = { ...state.backups };
               for (const ideId of Object.keys(newBackups)) {
-                newBackups[ideId] = newBackups[ideId].filter((b: BackupInfo) => b.path !== backupId);
+                newBackups[ideId] = newBackups[ideId].filter((b: UIBackupInfo) => b.path !== backupId);
               }
               return { backups: newBackups };
             });

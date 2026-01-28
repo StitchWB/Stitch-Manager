@@ -27,20 +27,8 @@ import {
   getDashboardStats,
 } from '../lib/tauri';
 import { t } from '../lib/i18n';
-import type { ProviderName, RegistrationJob, LLMServerStatus } from '../types';
+import type { ProviderName, RegistrationJob, LLMServerStatus, DashboardStats } from '../types';
 import { PROVIDER_HEX_COLORS } from '../constants';
-
-// ============================================
-// Dashboard Stats Type
-// ============================================
-interface DashboardStats {
-  total_accounts: number;
-  active_tokens: number;
-  quota_usage: number;
-  quota_used: number;
-  quota_limit: number;
-  accounts_by_provider: Record<string, number>;
-}
 
 // ============================================
 // Sparkline Component (Mini SVG Chart)
@@ -371,7 +359,7 @@ export default function Dashboard() {
     if (dashboardStats) {
       const accountsByProvider = providers.map((p) => ({
         provider: p.id,
-        count: dashboardStats.accounts_by_provider[p.id] || 0,
+        count: dashboardStats.accountsByProvider[p.id] || 0,
         color: p.color,
       }));
       
@@ -383,11 +371,11 @@ export default function Dashboard() {
       }).length;
       
       return {
-        totalAccounts: dashboardStats.total_accounts,
+        totalAccounts: dashboardStats.totalAccounts,
         accountsByProvider,
-        activeTokens: dashboardStats.active_tokens,
-        quotaUsage: { used: dashboardStats.quota_used, limit: dashboardStats.quota_limit },
-        quotaPercent: Math.round(dashboardStats.quota_usage),
+        activeTokens: dashboardStats.activeTokens,
+        quotaUsage: { used: dashboardStats.quotaUsed, limit: dashboardStats.quotaLimit },
+        quotaPercent: Math.round(dashboardStats.quotaUsage),
         accountsNearLimit,
       };
     }

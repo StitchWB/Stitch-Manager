@@ -1,19 +1,27 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, RefreshCw, Download, Users, AlertCircle } from 'lucide-react';
+import { Plus, Search, RefreshCw, Download, Users, AlertCircle, LayoutGrid } from 'lucide-react';
 import Header from '../components/layout/Header';
 import AccountsTable from '../components/AccountsTable';
 import AddAccountModal from '../components/AddAccountModal';
-import { StatusFilterChip, QuotaFilterChip } from '../components/ui/FilterChip';
-import { ProviderFilter } from '../components/accounts/ProviderFilter';
+import { QuotaFilterChip } from '../components/ui/FilterChip';
 import { useAccountsStore } from '../stores/accounts';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
-import { copyToClipboard, checkAccountStatus, getAccounts, type GetAccountsParams } from '../lib/tauri';
+import {
+  copyToClipboard,
+  checkAccountStatus,
+  getAccounts,
+  openAccountBrowser,
+  type GetAccountsParams,
+} from '../lib/tauri';
 import { t } from '../lib/i18n';
 import { useUrlState } from '../hooks/useUrlState';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
-import type { ProviderName, AccountStatus, Account } from '../types';
+import { useBulkRefresh } from '../hooks/useBulkRefresh';
+import type { ProviderName, Account } from '../types';
+import { ProviderLogo } from '../components/ui/ProviderLogo';
+import { cn } from '../lib/utils';
 
 export default function Accounts() {
   const navigate = useNavigate();
@@ -31,7 +39,6 @@ export default function Accounts() {
     deleteAccount: removeAccount,
     deleteAccounts: removeSelectedAccounts,
     refreshAccount,
-    refreshAllAccounts,
     refreshExpiredAccounts,
     activeAccountIds,
     setActiveAccount,
@@ -42,27 +49,48 @@ export default function Accounts() {
   const [isRefreshingExpired, setIsRefreshingExpired] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const { copy } = useCopyToClipboard();
-  
+
+  // Bulk refresh hook
+  const {
+    startBulkRefresh,
+    isRefreshing: isBulkRefreshing,
+    progress: bulkProgress,
+    isAccountRefreshing,
+  } = useBulkRefresh({
+    concurrency: 3,
+    delayMs: 500,
+  });
+
   // URL-synced state for filters
   const [providerFilter, setProviderFilter] = useUrlState<string>('provider', 'all');
   const [searchQuery, setSearchQuery] = useUrlState<string>('q', '');
   const [statusFilter, setStatusFilter] = useUrlState<string>('status', 'all');
   const [quotaFilter, setQuotaFilter] = useUrlState<string>('quota', 'any');
 
+  // Provider counts for sidebar
+  const providerCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: 0 };
+    accounts.forEach(acc => {
+      counts.all++;
+      counts[acc.provider] = (counts[acc.provider] || 0) + 1;
+    });
+    return counts;
+  }, [accounts]);
+
   // Custom fetch function that uses the new getAccounts API with filtering
   const fetchAccountsWithFilter = useCallback(async () => {
     try {
       const params: GetAccountsParams = {};
-      
+
       if (providerFilter !== 'all') {
         // Map filter values to actual provider names in database
         let providerSubtype: string = providerFilter;
         if (providerFilter === 'aws') {
           providerSubtype = 'aws_builder_id'; // Map 'aws' filter to 'aws_builder_id' provider
         }
-        
+
         params.providerSubtype = providerSubtype as any;
-        
+
         // Set provider_type based on subtype
         if (['kiro', 'windsurf', 'trae'].includes(providerFilter)) {
           params.providerType = 'ide';
@@ -72,7 +100,7 @@ export default function Accounts() {
           params.providerType = 'git';
         }
       }
-      
+
       const data = await getAccounts(params);
       setAccounts(data);
     } catch (error) {
@@ -85,48 +113,44 @@ export default function Accounts() {
       });
     }
   }, [providerFilter]);
-  
+
   // Apply client-side filters (search, status, quota)
   const filteredAccounts = useMemo(() => {
     let filtered = [...accounts];
-    
+
     // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
-        (acc) =>
-          acc.email.toLowerCase().includes(query) ||
-          acc.provider.toLowerCase().includes(query)
+        acc => acc.email.toLowerCase().includes(query) || acc.provider.toLowerCase().includes(query)
       );
     }
-    
+
     // Status filter
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((acc) => acc.status === statusFilter);
+      filtered = filtered.filter(acc => acc.status === statusFilter);
     }
-    
+
     // Quota filter
     if (quotaFilter === 'low_quota') {
       filtered = filtered.filter(
-        (acc) => acc.quota && acc.quota.limit > 0 && (acc.quota.used / acc.quota.limit) > 0.8
+        acc => acc.quota && acc.quota.limit > 0 && acc.quota.used / acc.quota.limit > 0.8
       );
     } else if (quotaFilter === 'has_quota') {
       filtered = filtered.filter(
-        (acc) => acc.quota && acc.quota.limit > 0 && (acc.quota.used / acc.quota.limit) < 0.5
+        acc => acc.quota && acc.quota.limit > 0 && acc.quota.used / acc.quota.limit < 0.5
       );
     } else if (quotaFilter === 'empty') {
-      filtered = filtered.filter(
-        (acc) => !acc.quota || acc.quota.used === 0
-      );
+      filtered = filtered.filter(acc => !acc.quota || acc.quota.used === 0);
     } else if (quotaFilter === 'full') {
       filtered = filtered.filter(
-        (acc) => acc.quota && acc.quota.limit > 0 && acc.quota.used >= acc.quota.limit
+        acc => acc.quota && acc.quota.limit > 0 && acc.quota.used >= acc.quota.limit
       );
     }
-    
+
     return filtered;
   }, [accounts, searchQuery, statusFilter, quotaFilter]);
-  
+
   // Get all accounts to count expired ones
   const allAccounts = useAccountsStore.getState().accounts;
   const expiredCount = allAccounts.filter(a => a.status === 'expired').length;
@@ -154,7 +178,12 @@ export default function Accounts() {
       // Delete key - delete selected accounts (with confirmation)
       if (e.key === 'Delete' && selectedIds.size > 0) {
         e.preventDefault();
-        if (window.confirm(t('accounts.confirmDeleteSelected', { count: selectedIds.size }) || `Delete ${selectedIds.size} selected account(s)?`)) {
+        if (
+          window.confirm(
+            t('accounts.confirmDeleteSelected', { count: selectedIds.size }) ||
+              `Delete ${selectedIds.size} selected account(s)?`
+          )
+        ) {
           removeSelectedAccounts([...selectedIds]);
         }
       }
@@ -184,7 +213,14 @@ export default function Accounts() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, filteredAccounts.length, selectAll, clearSelection, removeSelectedAccounts, refreshAccount]);
+  }, [
+    selectedIds,
+    filteredAccounts.length,
+    selectAll,
+    clearSelection,
+    removeSelectedAccounts,
+    refreshAccount,
+  ]);
 
   const handleAddAccount = async (data: {
     provider: ProviderName;
@@ -238,7 +274,8 @@ export default function Accounts() {
   const handleRefreshAll = async () => {
     setIsRefreshingAll(true);
     try {
-      await refreshAllAccounts();
+      // Use useBulkRefresh for deep status check
+      await startBulkRefresh(filteredAccounts.map(a => a.id));
     } finally {
       setIsRefreshingAll(false);
     }
@@ -267,14 +304,17 @@ export default function Accounts() {
     }
   };
 
-  const handleCopyToken = useCallback(async (token: string) => {
-    try {
-      await copyToClipboard({ text: token });
-    } catch {
-      // Fallback to direct clipboard API
-      await copy(token);
-    }
-  }, [copy]);
+  const handleCopyToken = useCallback(
+    async (token: string) => {
+      try {
+        await copyToClipboard({ text: token });
+      } catch {
+        // Fallback to direct clipboard API
+        await copy(token);
+      }
+    },
+    [copy]
+  );
 
   const handleDelete = async (accountId: number) => {
     try {
@@ -350,7 +390,7 @@ export default function Accounts() {
     try {
       const { addNotification } = useAppStore.getState();
       const account = filteredAccounts.find(a => a.id === accountId);
-      
+
       if (!account) {
         addNotification({
           type: 'error',
@@ -367,28 +407,34 @@ export default function Accounts() {
       });
 
       const statusInfo = await checkAccountStatus({ accountId });
-      
+
       if (!statusInfo || typeof statusInfo !== 'object') {
-        throw new Error("Invalid response from server");
+        throw new Error('Invalid response from server');
       }
-      
+
+      // Force refresh account data from store/DB to update UI
+      // We do this immediately after checkAccountStatus succeeds, as DB is already updated by backend
+      const updatedAccount = await useAccountsStore.getState().refreshAccount(accountId);
+
+      // Update local state if needed (though store update should trigger re-render)
+      setAccounts(prev => prev.map(a => (a.id === accountId ? updatedAccount : a)));
+
       // Show detailed status notification
-      const quotaText = statusInfo.quotaLimit < 0 
-        ? 'Unlimited' 
-        : `${statusInfo.quotaUsed}/${statusInfo.quotaLimit} (${Math.round(statusInfo.quotaPercent)}%)`;
-      
-      const flowText = statusInfo.flowCreditsLimit !== undefined
-        ? `\nFlow: ${statusInfo.flowCreditsUsed}/${statusInfo.flowCreditsLimit < 0 ? '∞' : statusInfo.flowCreditsLimit}`
-        : '';
+      const quotaText =
+        statusInfo.quotaLimit < 0
+          ? 'Unlimited'
+          : `${statusInfo.quotaUsed}/${statusInfo.quotaLimit} (${Math.round(statusInfo.quotaPercent)}%)`;
+
+      const flowText =
+        statusInfo.flowCreditsLimit !== undefined
+          ? `\nFlow: ${statusInfo.flowCreditsUsed}/${statusInfo.flowCreditsLimit < 0 ? '∞' : statusInfo.flowCreditsLimit}`
+          : '';
 
       addNotification({
         type: statusInfo.isActive ? 'success' : 'warning',
         title: `${statusInfo.provider.toUpperCase()} Status`,
-        message: `${statusInfo.email}\nPlan: ${statusInfo.plan}\nQuota: ${quotaText}${flowText}`,
+        message: `${statusInfo.email}\nStatus: ${statusInfo.isActive ? 'Active' : 'Inactive/Banned'}\nPlan: ${statusInfo.plan}\nQuota: ${quotaText}${flowText}`,
       });
-
-      // Refresh account data
-      await refreshAccount(accountId);
     } catch (error) {
       console.error('Failed to check account status:', error);
       const { addNotification } = useAppStore.getState();
@@ -400,9 +446,23 @@ export default function Accounts() {
     }
   };
 
+  const handleOpenBrowser = async (accountId: number) => {
+    try {
+      await openAccountBrowser({ accountId });
+    } catch (error) {
+      console.error('Failed to open browser:', error);
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'error',
+        title: 'Failed to open browser',
+        message: String(error),
+      });
+    }
+  };
+
   const handleExportCSV = () => {
     const headers = ['Provider', 'Email', 'Status', 'Quota Used', 'Quota Limit', 'Token'];
-    const rows = filteredAccounts.map((account) => [
+    const rows = filteredAccounts.map(account => [
       account.provider,
       account.email,
       account.status,
@@ -413,7 +473,7 @@ export default function Accounts() {
 
     const csvContent = [
       headers.join(','),
-      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -427,199 +487,267 @@ export default function Accounts() {
     document.body.removeChild(link);
   };
 
+  const SidebarItem = ({ id, label, icon: Icon }: { id: string; label: string; icon?: any }) => (
+    <button
+      onClick={() => setProviderFilter(id)}
+      className={cn(
+        'w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all',
+        providerFilter === id
+          ? 'bg-indigo-500/20 text-white border border-indigo-500/30 shadow-[0_0_10px_rgba(99,102,241,0.1)]'
+          : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        {Icon ? (
+          <Icon
+            size={14}
+            className={providerFilter === id ? 'text-indigo-400' : 'text-slate-500'}
+          />
+        ) : (
+          <ProviderLogo provider={id as any} size={14} colored={providerFilter === id} />
+        )}
+        <span>{label}</span>
+      </div>
+      {(providerCounts[id] || 0) > 0 && (
+        <span
+          className={cn(
+            'px-1.5 py-0.5 rounded text-[10px]',
+            providerFilter === id
+              ? 'bg-indigo-500/30 text-indigo-300'
+              : 'bg-white/10 text-slate-500'
+          )}
+        >
+          {providerCounts[id]}
+        </span>
+      )}
+    </button>
+  );
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Header title={t('accounts.title')} icon={<Users size={18} />} />
 
-      <div className="flex-1 flex flex-col overflow-hidden p-4">
-        {/* Error Alert */}
-        {storeError && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-3">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-            <span className="text-xs text-red-400 flex-1">{storeError}</span>
-            <button 
-              onClick={() => useAccountsStore.setState({ error: null })}
-              className="text-red-400 hover:text-red-300 text-xs shrink-0"
-            >
-              {t('common.dismiss')}
-            </button>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar Filters */}
+        <div className="w-[200px] shrink-0 border-r border-white/5 bg-slate-900/30 p-3 flex flex-col gap-1 overflow-y-auto">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold px-3 py-2">
+            Providers
           </div>
-        )}
 
-        {/* Expired Accounts Warning */}
-        {expiredCount > 0 && (
-          <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="text-xs text-amber-300 flex-1">
-              {expiredCount} {expiredCount === 1 ? 'account requires' : 'accounts require'} re-authentication. 
-              Refresh tokens have expired.
-            </span>
-            <button 
-              onClick={handleRefreshExpired}
-              disabled={isRefreshingExpired}
-              className="px-3 py-1 text-xs font-medium rounded-md bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+          <SidebarItem id="all" label="All Accounts" icon={LayoutGrid} />
+          <SidebarItem id="kiro" label="Kiro" />
+          <SidebarItem id="windsurf" label="Windsurf" />
+          <SidebarItem id="trae" label="Trae" />
+          <SidebarItem id="aws" label="AWS Builder ID" />
+          <SidebarItem id="github" label="GitHub" />
+
+          <div className="h-px bg-white/5 my-2 mx-3" />
+
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold px-3 py-2">
+            Status
+          </div>
+
+          {/* Status Filters - Minimal visual representation in sidebar */}
+          <div className="space-y-1">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
+                statusFilter === 'all'
+                  ? 'text-white bg-white/5'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
             >
-              <RefreshCw size={12} className={isRefreshingExpired ? 'animate-spin' : ''} />
-              {isRefreshingExpired ? 'Refreshing...' : 'Refresh All Expired'}
+              <span>Any Status</span>
             </button>
-            <button 
+            <button
+              onClick={() => setStatusFilter('active')}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
+                statusFilter === 'active'
+                  ? 'text-emerald-400 bg-emerald-500/10'
+                  : 'text-slate-400 hover:text-emerald-400/80'
+              )}
+            >
+              <span>Active</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            </button>
+            <button
+              onClick={() => setStatusFilter('banned')}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
+                statusFilter === 'banned'
+                  ? 'text-red-400 bg-red-500/10'
+                  : 'text-slate-400 hover:text-red-400/80'
+              )}
+            >
+              <span>Banned</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            </button>
+            <button
               onClick={() => setStatusFilter('expired')}
-              className="text-amber-400 hover:text-amber-300 text-xs shrink-0 underline"
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors',
+                statusFilter === 'expired'
+                  ? 'text-amber-400 bg-amber-500/10'
+                  : 'text-slate-400 hover:text-amber-400/80'
+              )}
             >
-              Show expired
-            </button>
-          </div>
-        )}
-
-        {/* Toolbar */}
-        <div className="flex items-center justify-between gap-4 mb-4">
-          {/* Left: Provider Filter + Filter Chips */}
-          <div className="flex items-center gap-3">
-            {/* Provider Filter */}
-            <ProviderFilter value={providerFilter} onChange={setProviderFilter} />
-
-            {/* Separator */}
-            <div className="w-px h-5 bg-white/10" />
-
-            {/* Filter Chips */}
-            <StatusFilterChip 
-              value={statusFilter === 'all' ? null : (statusFilter as AccountStatus)} 
-              onChange={(value) => setStatusFilter(value || 'all')}
-            />
-            <QuotaFilterChip 
-              value={quotaFilter as 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota'} 
-              onChange={(value) => setQuotaFilter(value)}
-            />
-          </div>
-
-          {/* Right: Search & Actions */}
-          <div className="flex items-center gap-2">
-            {/* Search with shortcut hint */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64 h-9 bg-white/5 rounded-lg pl-9 pr-16 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-white/20 focus:outline-none transition-colors"
-                placeholder={t('accounts.searchPlaceholder')}
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/10 text-slate-500 text-[10px] font-mono px-1.5 py-0.5 rounded">
-                ⌘K
-              </span>
-            </div>
-
-            <button
-              onClick={handleRefreshAll}
-              disabled={isRefreshingAll}
-              className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
-              title={t('accounts.refreshAll')}
-            >
-              <RefreshCw size={15} className={isRefreshingAll ? 'animate-spin' : ''} />
-            </button>
-
-            <button
-              onClick={handleExportCSV}
-              disabled={accounts.length === 0}
-              className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
-              title={t('accounts.exportCsv')}
-            >
-              <Download size={15} />
-            </button>
-
-            <button 
-              onClick={() => navigate('/autoreg', { state: { provider: providerFilter !== 'all' ? providerFilter : null } })}
-              className="h-9 px-4 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 transition-colors"
-            >
-              <Plus size={14} />
-              {t('common.add')}
+              <span>Expired</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
             </button>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-hidden">
-          {isLoading && filteredAccounts.length === 0 ? (
-            // Skeleton loader for initial load
-            <div 
-              className="flex flex-col h-full rounded-lg overflow-hidden"
-              style={{ border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}
-            >
-              <div className="flex-1 overflow-auto">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="h-10 border-b border-white/5" style={{ background: 'rgba(30, 41, 59, 0.7)' }}>
-                      <th className="w-10 px-3"></th>
-                      <th className="w-10 px-2"></th>
-                      <th className="px-3 text-left">
-                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.account')}</span>
-                      </th>
-                      <th className="w-24 px-3 text-left">
-                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.status')}</span>
-                      </th>
-                      <th className="w-28 px-3 text-left">
-                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.usage')}</span>
-                      </th>
-                      <th className="w-20 px-3 text-left">
-                        <span className="text-xs uppercase tracking-wider text-white/60 font-medium">{t('accountsTable.last')}</span>
-                      </th>
-                      <th className="w-16 px-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <tr key={i} className="animate-pulse">
-                        <td className="py-3 px-3"><div className="w-4 h-4 bg-white/5 rounded" /></td>
-                        <td className="py-3 px-2"><div className="w-5 h-5 bg-white/5 rounded" /></td>
-                        <td className="py-3 px-3">
-                          <div className="h-3 bg-white/5 rounded w-48 mb-1.5" />
-                          <div className="h-2 bg-white/5 rounded w-24" />
-                        </td>
-                        <td className="py-3 px-3"><div className="h-5 bg-white/5 rounded w-16" /></td>
-                        <td className="py-3 px-3"><div className="h-2 bg-white/5 rounded w-24" /></td>
-                        <td className="py-3 px-3"><div className="h-2 bg-white/5 rounded w-12" /></td>
-                        <td className="py-3 px-3"><div className="flex gap-1"><div className="w-6 h-6 bg-white/5 rounded" /><div className="w-6 h-6 bg-white/5 rounded" /></div></td>
-                      </tr>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-slate-950/30">
+          <div className="p-4 flex flex-col h-full overflow-hidden">
+            {/* Error Alert */}
+            {storeError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-3 shrink-0">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span className="text-xs text-red-400 flex-1">{storeError}</span>
+                <button
+                  onClick={() => useAccountsStore.setState({ error: null })}
+                  className="text-red-400 hover:text-red-300 text-xs shrink-0"
+                >
+                  {t('common.dismiss')}
+                </button>
+              </div>
+            )}
+
+            {/* Expired Accounts Warning */}
+            {expiredCount > 0 && (
+              <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 shrink-0">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="text-xs text-amber-300 flex-1">
+                  {expiredCount} {expiredCount === 1 ? 'account requires' : 'accounts require'}{' '}
+                  re-authentication. Refresh tokens have expired.
+                </span>
+                <button
+                  onClick={handleRefreshExpired}
+                  disabled={isRefreshingExpired}
+                  className="px-3 py-1 text-xs font-medium rounded-md bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <RefreshCw size={12} className={isRefreshingExpired ? 'animate-spin' : ''} />
+                  {isRefreshingExpired ? 'Refreshing...' : 'Refresh All Expired'}
+                </button>
+              </div>
+            )}
+
+            {/* Toolbar */}
+            <div className="flex items-center justify-between gap-4 mb-4 shrink-0">
+              {/* Left: Quick Filters */}
+              <div className="flex items-center gap-2">
+                <QuotaFilterChip
+                  value={quotaFilter as 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota'}
+                  onChange={value => setQuotaFilter(value)}
+                />
+              </div>
+
+              {/* Right: Search & Actions */}
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-64 h-9 bg-white/5 rounded-lg pl-9 pr-16 text-sm text-white placeholder-slate-600 border border-white/10 focus:border-white/20 focus:outline-none transition-colors"
+                    placeholder={t('accounts.searchPlaceholder')}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/10 text-slate-500 text-[10px] font-mono px-1.5 py-0.5 rounded">
+                    ⌘K
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleRefreshAll}
+                  disabled={isRefreshingAll}
+                  className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+                  title={t('accounts.refreshAll')}
+                >
+                  <RefreshCw size={15} className={isRefreshingAll ? 'animate-spin' : ''} />
+                </button>
+
+                <button
+                  onClick={handleExportCSV}
+                  disabled={accounts.length === 0}
+                  className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+                  title={t('accounts.exportCsv')}
+                >
+                  <Download size={15} />
+                </button>
+
+                <button
+                  onClick={() =>
+                    navigate('/autoreg', {
+                      state: { provider: providerFilter !== 'all' ? providerFilter : null },
+                    })
+                  }
+                  className="h-9 px-4 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-900/20"
+                >
+                  <Plus size={14} />
+                  {t('common.add')}
+                </button>
+              </div>
+            </div>
+
+            {/* Table Area */}
+            <div className="flex-1 overflow-hidden bg-slate-900/20 rounded-xl border border-white/5">
+              {isLoading && filteredAccounts.length === 0 ? (
+                // Skeleton loader
+                <div className="flex flex-col h-full">
+                  <div className="flex-1 overflow-auto p-4 space-y-3">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <div key={i} className="h-12 bg-white/5 rounded-lg animate-pulse" />
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="h-8 px-3 flex items-center justify-between border-t border-white/5" style={{ background: 'rgba(30, 41, 59, 0.5)' }}>
-                <span className="text-[10px] text-slate-500">{t('common.loading')}...</span>
-              </div>
+                  </div>
+                </div>
+              ) : filteredAccounts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-2">
+                    <Users size={32} className="opacity-30" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-400">
+                    {t('accounts.noAccountsFound') || 'No accounts found'}
+                  </p>
+                  <p className="text-xs text-slate-600 max-w-[200px] text-center">
+                    Try adjusting your filters or add a new account to get started.
+                  </p>
+                  <button
+                    onClick={() => navigate('/autoreg')}
+                    className="mt-4 px-4 py-2 text-xs font-medium rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20 transition-colors"
+                  >
+                    {t('accounts.addFirstAccount') || 'Add your first account'}
+                  </button>
+                </div>
+              ) : (
+                <AccountsTable
+                  accounts={filteredAccounts}
+                  isLoading={isLoading}
+                  selectedIds={selectedIds}
+                  activeAccountIds={activeAccountIds}
+                  onToggleSelection={toggleSelection}
+                  onSelectAll={selectAll}
+                  onClearSelection={clearSelection}
+                  onRefreshToken={handleRefreshToken}
+                  onCopyToken={handleCopyToken}
+                  onDelete={handleDelete}
+                  onDeleteSelected={removeSelectedAccounts}
+                  onActivate={handleActivate}
+                  onExportCSV={handleExportCSV}
+                  onCheckStatus={handleCheckStatus}
+                  onBulkRefresh={startBulkRefresh}
+                  isBulkRefreshing={isBulkRefreshing}
+                  bulkProgress={bulkProgress}
+                  isAccountRefreshing={isAccountRefreshing}
+                  onOpenBrowser={handleOpenBrowser}
+                />
+              )}
             </div>
-          ) : filteredAccounts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
-              <Users size={48} className="opacity-30" />
-              <p className="text-sm">{t('accounts.noAccountsFound') || 'No accounts found'}</p>
-              <button 
-                onClick={() => navigate('/autoreg')}
-                className="mt-2 px-4 py-2 text-xs font-medium rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
-              >
-                {t('accounts.addFirstAccount') || 'Add your first account'}
-              </button>
-            </div>
-          ) : (
-            <AccountsTable
-              accounts={filteredAccounts}
-              isLoading={isLoading}
-              selectedIds={selectedIds}
-              activeAccountIds={activeAccountIds}
-              onToggleSelection={toggleSelection}
-              onSelectAll={selectAll}
-              onClearSelection={clearSelection}
-              onRefreshToken={handleRefreshToken}
-              onCopyToken={handleCopyToken}
-              onDelete={handleDelete}
-              onDeleteSelected={removeSelectedAccounts}
-              onActivate={handleActivate}
-              onExportCSV={handleExportCSV}
-              onCheckStatus={handleCheckStatus}
-            />
-          )}
+          </div>
         </div>
-
-        {/* Toast - Removed, using hook's built-in toast */}
       </div>
 
       <AddAccountModal

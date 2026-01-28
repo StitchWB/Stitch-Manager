@@ -13,7 +13,9 @@ import {
   Square,
   Activity,
   Loader2,
+  Globe,
 } from 'lucide-react';
+
 import type { Account, AccountStatus } from '../types';
 import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
@@ -24,7 +26,6 @@ import { UsageBar } from './ui/UsageBar';
 import { AccountDrawer } from './ui/AccountDrawer';
 import { FloatingActionBar } from './ui/FloatingActionBar';
 import { ConfirmDialog } from './ui/ConfirmDialog';
-import { useBulkRefresh } from '../hooks/useBulkRefresh';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 // Helper function for middle truncation of emails
@@ -61,6 +62,11 @@ interface AccountsTableProps {
   onActivate: (provider: string, accountId: number | null) => Promise<void>;
   onExportCSV: () => void;
   onCheckStatus: (accountId: number) => Promise<void>;
+  onBulkRefresh: (ids: number[]) => Promise<any>;
+  isBulkRefreshing: boolean;
+  bulkProgress: { current: number; total: number };
+  isAccountRefreshing: (accountId: number) => boolean;
+  onOpenBrowser?: (accountId: number) => Promise<void>;
 }
 
 function formatRelativeTime(dateString?: string): string {
@@ -71,7 +77,7 @@ function formatRelativeTime(dateString?: string): string {
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
-  
+
   if (diffMins < 1) return t('time.now');
   if (diffMins < 60) return t('time.minutesAgo', { count: diffMins });
   if (diffHours < 24) return t('time.hoursAgo', { count: diffHours });
@@ -94,14 +100,14 @@ export default function AccountsTable({
   onActivate,
   onExportCSV,
   onCheckStatus,
+  onBulkRefresh,
+  isBulkRefreshing,
+  bulkProgress,
+  isAccountRefreshing,
+  onOpenBrowser,
 }: AccountsTableProps) {
   const { language } = useAppStore();
-  const { 
-    sortField, 
-    sortDirection, 
-    setSortField, 
-    setSortDirection 
-  } = useAccountsStore();
+  const { sortField, sortDirection, setSortField, setSortDirection } = useAccountsStore();
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const [activatingIds, setActivatingIds] = useState<Set<number>>(new Set());
   const [checkingStatusIds, setCheckingStatusIds] = useState<Set<number>>(new Set());
@@ -120,17 +126,6 @@ export default function AccountsTable({
   }>({ isOpen: false, type: 'single' });
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Bulk refresh hook
-  const { 
-    isRefreshing: isBulkRefreshing, 
-    progress: bulkProgress, 
-    startBulkRefresh,
-    isAccountRefreshing,
-  } = useBulkRefresh({
-    concurrency: 3,
-    delayMs: 500,
-  });
-
   void language;
 
   useEffect(() => {
@@ -145,12 +140,18 @@ export default function AccountsTable({
     return [...accounts].sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
-        case 'provider': comparison = a.provider.localeCompare(b.provider); break;
-        case 'email': comparison = a.email.localeCompare(b.email); break;
-        case 'status': comparison = a.status.localeCompare(b.status); break;
+        case 'provider':
+          comparison = a.provider.localeCompare(b.provider);
+          break;
+        case 'email':
+          comparison = a.email.localeCompare(b.email);
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
         case 'quota':
-          const aRatio = (a.quota && a.quota.limit > 0) ? a.quota.used / a.quota.limit : 0;
-          const bRatio = (b.quota && b.quota.limit > 0) ? b.quota.used / b.quota.limit : 0;
+          const aRatio = a.quota && a.quota.limit > 0 ? a.quota.used / a.quota.limit : 0;
+          const bRatio = b.quota && b.quota.limit > 0 ? b.quota.used / b.quota.limit : 0;
           comparison = aRatio - bRatio;
           break;
         case 'tokenExpires':
@@ -184,11 +185,11 @@ export default function AccountsTable({
   };
 
   const handleRefresh = async (accountId: number) => {
-    setRefreshingIds((prev) => new Set([...prev, accountId]));
+    setRefreshingIds(prev => new Set([...prev, accountId]));
     try {
       await onRefreshToken(accountId);
     } finally {
-      setRefreshingIds((prev) => {
+      setRefreshingIds(prev => {
         const next = new Set(prev);
         next.delete(accountId);
         return next;
@@ -198,11 +199,11 @@ export default function AccountsTable({
 
   const handleActivate = async (account: Account) => {
     const isCurrentlyActive = activeAccountIds[account.provider] === account.id;
-    setActivatingIds((prev) => new Set([...prev, account.id]));
+    setActivatingIds(prev => new Set([...prev, account.id]));
     try {
       await onActivate(account.provider, isCurrentlyActive ? null : account.id);
     } finally {
-      setActivatingIds((prev) => {
+      setActivatingIds(prev => {
         const next = new Set(prev);
         next.delete(account.id);
         return next;
@@ -211,11 +212,11 @@ export default function AccountsTable({
   };
 
   const handleCheckStatus = async (accountId: number) => {
-    setCheckingStatusIds((prev) => new Set([...prev, accountId]));
+    setCheckingStatusIds(prev => new Set([...prev, accountId]));
     try {
       await onCheckStatus(accountId);
     } finally {
-      setCheckingStatusIds((prev) => {
+      setCheckingStatusIds(prev => {
         const next = new Set(prev);
         next.delete(accountId);
         return next;
@@ -285,12 +286,14 @@ export default function AccountsTable({
       const accountsToDelete = accounts.filter(a => confirmDialog.accountIds?.includes(a.id));
       const previewCount = 3;
       const hasMore = accountsToDelete.length > previewCount;
-      
+
       return {
         title: t('accounts.deleteBulkTitle'),
         message: (
           <div>
-            <p className="mb-3">{t('accounts.deleteBulkMessage', { count: confirmDialog.accountIds.length })}</p>
+            <p className="mb-3">
+              {t('accounts.deleteBulkMessage', { count: confirmDialog.accountIds.length })}
+            </p>
             <div className="bg-white/5 rounded-lg p-3 border border-white/10">
               <p className="text-xs text-slate-400 mb-2">{t('accounts.deleteBulkPreview')}</p>
               <ul className="space-y-1">
@@ -317,9 +320,11 @@ export default function AccountsTable({
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null;
-    return sortDirection === 'asc' 
-      ? <ChevronUp size={10} className="text-slate-500" />
-      : <ChevronDown size={10} className="text-slate-500" />;
+    return sortDirection === 'asc' ? (
+      <ChevronUp size={10} className="text-slate-500" />
+    ) : (
+      <ChevronDown size={10} className="text-slate-500" />
+    );
   };
 
   const allSelected = accounts.length > 0 && selectedIds.size === accounts.length;
@@ -327,48 +332,67 @@ export default function AccountsTable({
 
   return (
     <>
-      <div 
+      <div
         className="flex flex-col h-full rounded-lg overflow-hidden"
         style={{ border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}
         role="region"
         aria-label={t('accounts.tableRegion')}
       >
         {/* Table */}
-        <div className={cn(
-          "flex-1 overflow-auto transition-[padding] duration-300 accounts-table-container",
-          selectedIds.size > 0 && "pb-16" // Account for FloatingActionBar height (h-14 + margin)
-        )}>
+        <div
+          className={cn(
+            'flex-1 overflow-auto transition-[padding] duration-300 accounts-table-container',
+            selectedIds.size > 0 && 'pb-16' // Account for FloatingActionBar height (h-14 + margin)
+          )}
+        >
           <table className="w-full" role="table" aria-label={t('accounts.accountsTable')}>
             <thead className="sticky top-0 z-10">
-              <tr className="h-10 border-b border-white/5" style={{ background: 'rgba(30, 41, 59, 0.7)' }}>
+              <tr
+                className="h-10 border-b border-white/5"
+                style={{ background: 'rgba(30, 41, 59, 0.7)' }}
+              >
                 <th className="w-10 px-3">
                   <input
                     type="checkbox"
                     checked={allSelected}
-                    ref={(el) => { if (el) el.indeterminate = someSelected; }}
-                    onChange={(e) => (e.target.checked ? onSelectAll() : onClearSelection())}
+                    ref={el => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={e => (e.target.checked ? onSelectAll() : onClearSelection())}
                     className="w-4 h-4 rounded"
                     aria-label={allSelected ? t('accounts.deselectAll') : t('accounts.selectAll')}
                   />
                 </th>
                 <th className="w-10 px-2"></th>
                 <th className="px-3 text-left">
-                  <button onClick={() => handleSort('email')} className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors">
+                  <button
+                    onClick={() => handleSort('email')}
+                    className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors"
+                  >
                     {t('accountsTable.account')} <SortIcon field="email" />
                   </button>
                 </th>
                 <th className="w-24 px-3 text-left">
-                  <button onClick={() => handleSort('status')} className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors">
+                  <button
+                    onClick={() => handleSort('status')}
+                    className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors"
+                  >
                     {t('accountsTable.status')} <SortIcon field="status" />
                   </button>
                 </th>
                 <th className="w-28 px-3 text-left">
-                  <button onClick={() => handleSort('quota')} className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors">
+                  <button
+                    onClick={() => handleSort('quota')}
+                    className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors"
+                  >
                     {t('accountsTable.usage')} <SortIcon field="quota" />
                   </button>
                 </th>
                 <th className="w-32 px-3 text-left">
-                  <button onClick={() => handleSort('createdAt')} className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors">
+                  <button
+                    onClick={() => handleSort('createdAt')}
+                    className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/60 font-medium hover:text-white/90 transition-colors"
+                  >
                     {t('accountsTable.created')} <SortIcon field="createdAt" />
                   </button>
                 </th>
@@ -402,7 +426,8 @@ export default function AccountsTable({
                 </tr>
               ) : (
                 paginatedAccounts.map((account, index) => {
-                  const isRefreshing = refreshingIds.has(account.id) || isAccountRefreshing(account.id);
+                  const isRefreshing =
+                    refreshingIds.has(account.id) || isAccountRefreshing(account.id);
                   const isActivating = activatingIds.has(account.id);
                   const isCheckingStatus = checkingStatusIds.has(account.id);
                   const isActive = isAccountActive(account);
@@ -410,9 +435,9 @@ export default function AccountsTable({
                   const isSyncing = isAccountRefreshing(account.id);
 
                   return (
-                    <tr 
-                      key={account.id} 
-                      onClick={(e) => handleRowClick(account, e)}
+                    <tr
+                      key={account.id}
+                      onClick={e => handleRowClick(account, e)}
                       className={cn(
                         'transition-colors group cursor-pointer',
                         // Subtle zebra striping (even rows - 0, 2, 4...)
@@ -446,24 +471,35 @@ export default function AccountsTable({
                       <td className="py-3 px-3 min-w-0 align-middle">
                         <div className="flex flex-col min-w-0 gap-0.5">
                           {/* Email row - clickable to copy */}
-                          <div 
+                          <div
                             className="group/email flex items-center gap-1.5 cursor-pointer"
-                            onClick={(e) => { e.stopPropagation(); handleCopyEmail(account.email); }}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleCopyEmail(account.email);
+                            }}
                           >
-                            <span className={cn(
-                              'text-xs font-medium truncate',
-                              account.status === 'banned' ? 'text-slate-500 line-through' : 'text-slate-200'
-                            )} title={account.email}>
+                            <span
+                              className={cn(
+                                'text-xs font-medium truncate',
+                                account.status === 'banned'
+                                  ? 'text-slate-500 line-through'
+                                  : 'text-slate-200'
+                              )}
+                              title={account.email}
+                            >
                               {truncateEmail(account.email)}
                             </span>
                             <Copy className="w-3 h-3 text-slate-600 opacity-0 group-hover/email:opacity-100 transition-opacity shrink-0" />
                           </div>
-                          
+
                           {/* Token row - clickable to copy */}
                           {account.token && (
-                            <div 
+                            <div
                               className="group/token flex items-center gap-1.5 cursor-pointer"
-                              onClick={(e) => { e.stopPropagation(); handleCopyToken(account.token!); }}
+                              onClick={e => {
+                                e.stopPropagation();
+                                handleCopyToken(account.token!);
+                              }}
                             >
                               <span className="text-[10px] font-mono text-slate-500 truncate">
                                 tk_...{account.token.slice(-8)}
@@ -483,38 +519,46 @@ export default function AccountsTable({
                           {isSyncing ? (
                             <div className="flex items-center gap-1.5 animate-pulse">
                               <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-                              <span className="text-[10px] text-indigo-300 font-medium">Syncing...</span>
+                              <span className="text-[10px] text-indigo-300 font-medium">
+                                Syncing...
+                              </span>
                             </div>
                           ) : (
                             <>
                               {/* Unified minimal dot + text style for ALL statuses */}
                               <div className="flex items-center gap-1.5">
-                                <div className={cn(
-                                  "w-1.5 h-1.5 rounded-full",
-                                  account.status === 'active' && "bg-emerald-400",
-                                  account.status === 'banned' && "bg-red-400",
-                                  account.status === 'limit_hit' && "bg-amber-400",
-                                  account.status === 'expired' && "bg-slate-400"
-                                )} />
-                                <span className={cn(
-                                  "text-xs font-medium",
-                                  account.status === 'active' && "text-emerald-400",
-                                  account.status === 'banned' && "text-red-400",
-                                  account.status === 'limit_hit' && "text-amber-400",
-                                  account.status === 'expired' && "text-slate-400"
-                                )}>
-                                  {getStatusLabel(account.status)}
+                                <div
+                                  className={cn(
+                                    'w-1.5 h-1.5 rounded-full',
+                                    account.status === 'active' && 'bg-emerald-400',
+                                    account.status === 'banned' && 'bg-red-400',
+                                    account.status === 'limit_hit' && 'bg-amber-400',
+                                    account.status === 'expired' && 'bg-slate-400'
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    'text-xs font-medium',
+                                    account.status === 'active' && 'text-emerald-400',
+                                    account.status === 'banned' && 'text-red-400',
+                                    account.status === 'limit_hit' && 'text-amber-400',
+                                    account.status === 'expired' && 'text-slate-400'
+                                  )}
+                                >
+                                  {getStatusLabel(account.status as AccountStatus)}
                                 </span>
                               </div>
                               {/* Quota warning badge when >80% */}
-                              {account.quota && account.quota.limit > 0 && (account.quota.used / account.quota.limit) > 0.8 && (
-                                <span 
-                                  className="text-[9px] text-amber-400/70" 
-                                  title={`Quota almost full: ${Math.round((account.quota.used / account.quota.limit) * 100)}% used`}
-                                >
-                                  ⚠️
-                                </span>
-                              )}
+                              {account.quota &&
+                                account.quota.limit > 0 &&
+                                account.quota.used / account.quota.limit > 0.8 && (
+                                  <span
+                                    className="text-[9px] text-amber-400/70"
+                                    title={`Quota almost full: ${Math.round((account.quota.used / account.quota.limit) * 100)}% used`}
+                                  >
+                                    ⚠️
+                                  </span>
+                                )}
                             </>
                           )}
                         </div>
@@ -522,7 +566,10 @@ export default function AccountsTable({
 
                       {/* Usage Bar */}
                       <td className="py-3 px-3 align-middle">
-                        <UsageBar used={account.quota?.used || 0} limit={account.quota?.limit || 0} />
+                        <UsageBar
+                          used={account.quota?.used || 0}
+                          limit={account.quota?.limit || 0}
+                        />
                       </td>
 
                       {/* Created At */}
@@ -542,29 +589,57 @@ export default function AccountsTable({
                       {/* Actions - Always visible */}
                       <td className="py-3 px-3 align-middle">
                         <div className="flex items-center gap-1">
-                          {/* Refresh */}
+                          {/* Refresh / Check Status */}
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleRefresh(account.id); }}
-                            disabled={isRefreshing}
+                            onClick={e => {
+                              e.stopPropagation();
+                              // Prefer status check over simple refresh for Kiro/Windsurf
+                              if (account.provider === 'kiro' || account.provider === 'windsurf') {
+                                handleCheckStatus(account.id);
+                              } else {
+                                handleRefresh(account.id);
+                              }
+                            }}
+                            disabled={isRefreshing || isCheckingStatus}
                             className="p-1.5 rounded-sm text-slate-400 hover:text-white hover:bg-white/[0.03] transition-colors disabled:opacity-30"
                             aria-label={t('accountsTable.refresh')}
-                            title={t('accountsTable.refresh')}
+                            title={t('accountsTable.checkStatus')}
                           >
-                            <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+                            <RefreshCw
+                              size={12}
+                              className={isRefreshing || isCheckingStatus ? 'animate-spin' : ''}
+                            />
+                          </button>
+
+                          {/* Open Browser */}
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              onOpenBrowser?.(account.id);
+                            }}
+                            className="p-1.5 rounded-sm text-slate-400 hover:text-indigo-400 hover:bg-indigo-400/10 transition-colors"
+                            title="Open in Browser"
+                          >
+                            <Globe size={12} />
                           </button>
 
                           {/* Play/Stop */}
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleActivate(account); }}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleActivate(account);
+                            }}
                             disabled={isActivating || account.status !== 'active'}
                             className={cn(
                               'p-1.5 rounded-sm transition-colors',
-                              isActive 
-                                ? 'text-amber-400 hover:bg-amber-400/10' 
+                              isActive
+                                ? 'text-amber-400 hover:bg-amber-400/10'
                                 : 'text-emerald-400 hover:bg-emerald-400/10',
                               'disabled:opacity-30 disabled:cursor-not-allowed'
                             )}
-                            aria-label={isActive ? t('accounts.deactivate') : t('accounts.activate')}
+                            aria-label={
+                              isActive ? t('accounts.deactivate') : t('accounts.activate')
+                            }
                           >
                             {isActivating ? (
                               <RefreshCw size={12} className="animate-spin" />
@@ -578,7 +653,7 @@ export default function AccountsTable({
                           {/* More Menu - Only visible on hover */}
                           <div className="opacity-0 group-hover:opacity-100 transition-opacity relative">
                             <button
-                              onClick={(e) => {
+                              onClick={e => {
                                 e.stopPropagation();
                                 setOpenMenuId(openMenuId === account.id ? null : account.id);
                               }}
@@ -589,39 +664,59 @@ export default function AccountsTable({
                             >
                               <MoreHorizontal size={12} aria-hidden="true" />
                             </button>
-                            
+
                             {openMenuId === account.id && (
-                              <div 
+                              <div
                                 className="absolute right-0 top-full mt-1 w-40 rounded-lg shadow-2xl z-50 py-1 backdrop-blur-xl"
-                                style={{ 
-                                  background: 'rgba(26, 26, 26, 0.95)', 
-                                  border: '1px solid rgba(255,255,255,0.1)' 
+                                style={{
+                                  background: 'rgba(26, 26, 26, 0.95)',
+                                  border: '1px solid rgba(255,255,255,0.1)',
                                 }}
                                 role="menu"
                                 aria-label={t('accounts.accountActions')}
                               >
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleCheckStatus(account.id); setOpenMenuId(null); }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleCheckStatus(account.id);
+                                    setOpenMenuId(null);
+                                  }}
                                   disabled={isCheckingStatus}
                                   className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-slate-200 disabled:opacity-50 transition-colors"
                                   role="menuitem"
                                 >
-                                  <Activity size={12} className={isCheckingStatus ? 'animate-pulse' : ''} aria-hidden="true" />
-                                  <span>{t('accountsTable.checkStatus')}</span>
+                                  <Activity
+                                    size={12}
+                                    className={isCheckingStatus ? 'animate-pulse' : ''}
+                                    aria-hidden="true"
+                                  />
+                                  <span>
+                                    {isCheckingStatus
+                                      ? t('accountsTable.checkingStatus') || 'Checking...'
+                                      : t('accountsTable.checkStatus')}
+                                  </span>
                                 </button>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleRefresh(account.id); setOpenMenuId(null); }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleRefresh(account.id);
+                                    setOpenMenuId(null);
+                                  }}
                                   className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
                                   role="menuitem"
                                 >
-                                  <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
+                                  <RefreshCw
+                                    size={12}
+                                    className={isRefreshing ? 'animate-spin' : ''}
+                                    aria-hidden="true"
+                                  />
                                   <span>{t('accountsTable.refresh')}</span>
                                 </button>
                                 <button
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    copy(account.token ?? ''); 
-                                    setOpenMenuId(null); 
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    copy(account.token ?? '');
+                                    setOpenMenuId(null);
                                   }}
                                   disabled={!account.token}
                                   className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-slate-200 disabled:opacity-50 transition-colors"
@@ -632,7 +727,11 @@ export default function AccountsTable({
                                 </button>
                                 <div className="h-px bg-white/5 my-1" />
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteClick(account.id); setOpenMenuId(null); }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleDeleteClick(account.id);
+                                    setOpenMenuId(null);
+                                  }}
                                   className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
                                   role="menuitem"
                                 >
@@ -653,11 +752,14 @@ export default function AccountsTable({
         </div>
 
         {/* Footer */}
-        <div className="h-8 px-3 flex items-center justify-between border-t border-white/5" style={{ background: 'rgba(30, 41, 59, 0.5)' }}>
+        <div
+          className="h-8 px-3 flex items-center justify-between border-t border-white/5"
+          style={{ background: 'rgba(30, 41, 59, 0.5)' }}
+        >
           <span className="text-[10px] text-slate-500" aria-live="polite">
             {sortedAccounts.length} {t('accountsTable.accounts')}
           </span>
-          
+
           {totalPages > 1 && (
             <nav className="flex items-center gap-1" aria-label={t('accounts.pagination')}>
               <button
@@ -689,7 +791,7 @@ export default function AccountsTable({
         selectedCount={selectedIds.size}
         onExport={onExportCSV}
         onDelete={() => handleBulkDeleteClick([...selectedIds])}
-        onRefreshAll={() => startBulkRefresh([...selectedIds])}
+        onRefreshAll={() => onBulkRefresh([...selectedIds])}
         onClear={onClearSelection}
         isRefreshing={isBulkRefreshing}
         refreshProgress={bulkProgress}

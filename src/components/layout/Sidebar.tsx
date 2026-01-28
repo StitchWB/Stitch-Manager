@@ -10,6 +10,7 @@ import {
   FileText,
   Terminal,
   MessageSquare,
+  Wrench,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
@@ -118,7 +119,8 @@ export default function Sidebar() {
             </p>
           )}
           <NavItem to="/settings" icon={<Settings size={18} />} label={t('sidebar.settings')} collapsed={sidebarCollapsed} index={6} />
-          <NavItem to="/logs" icon={<FileText size={18} />} label={t('sidebar.logs')} collapsed={sidebarCollapsed} index={7} />
+          <NavItem to="/kiro-patch-settings" icon={<Wrench size={18} />} label={t('kiroPatch.title')} collapsed={sidebarCollapsed} index={7} />
+          <NavItem to="/logs" icon={<FileText size={18} />} label={t('sidebar.logs')} collapsed={sidebarCollapsed} index={8} />
         </div>
       </nav>
 

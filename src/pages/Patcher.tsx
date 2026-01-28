@@ -23,7 +23,7 @@ import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
-import type { DetectedIDE, BackupInfo } from '../types';
+import type { DetectedIDE, UIBackupInfo } from '../types';
 
 const IDE_CONFIG: Record<string, { icon: React.ReactNode; gradient: string; label: string }> = {
   kiro: { icon: <Code2 size={18} />, gradient: 'from-purple-500 to-violet-600', label: 'Kiro' },
@@ -178,8 +178,8 @@ export default function Patcher() {
     } 
   };
 
-  const allBackups: BackupInfo[] = Object.values(backups).flat() as BackupInfo[];
-  const filteredBackups = selectedIDEFilter ? allBackups.filter((b: BackupInfo) => b.ideId === selectedIDEFilter) : allBackups;
+  const allBackups: UIBackupInfo[] = Object.values(backups).flat() as UIBackupInfo[];
+  const filteredBackups = selectedIDEFilter ? allBackups.filter((b: UIBackupInfo) => b.ideId === selectedIDEFilter) : allBackups;
 
   const formatSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -481,7 +481,7 @@ export default function Patcher() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto scrollbar-thin">
-                {filteredBackups.map((backup: BackupInfo) => {
+                {filteredBackups.map((backup: UIBackupInfo) => {
                   const ide = detectedIDEs.find((i: DetectedIDE) => i.id === backup.ideId);
                   const isRestoring = operationInProgress[backup.ideId] === 'restoring';
 

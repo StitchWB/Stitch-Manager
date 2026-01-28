@@ -45,5 +45,12 @@ pytest>=7.4.0
 pytest-asyncio>=0.21.0
 hypothesis>=6.92.0
 
-# Optional: Playwright (если нужен fallback)
+# OpenCV for Turnstile checkbox detection
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Patchright (stealth Playwright fork - bypasses Cloudflare Turnstile)
+patchright>=1.0.0
+
+# Optional: Regular Playwright (fallback if Patchright not available)
 # playwright>=1.40.0
