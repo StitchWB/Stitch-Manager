@@ -37,6 +37,7 @@ import {
   testAddyioConnection,
   getAddyioAccount,
   getAddyioDomains,
+  startRegistrationV2,
 } from '../lib/tauri';
 import { t } from '../lib/i18n';
 import type {
@@ -186,6 +187,7 @@ export default function AutoRegNext() {
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
   const [activeThreads, setActiveThreads] = useState(0);
   const [activeTab, setActiveTab] = useState<ConfigTab>('identity');
+  const [useRegistrationV2, setUseRegistrationV2] = useState(false);
 
   // Addy.io state
   const [addyioDomains, setAddyioDomains] = useState<string[]>([]);
@@ -267,6 +269,14 @@ export default function AutoRegNext() {
       addLog({ level: 'error', message: `Registration error: ${event.payload.error}` });
     });
 
+    // Listen for Registration V2 progress events
+    const unlistenProgress = listen<{ step: string; message: string }>('REGISTRATION_PROGRESS', event => {
+      addLog({
+        level: 'info',
+        message: `[V2] ${event.payload.step}: ${event.payload.message}`,
+      });
+    });
+
     // CRITICAL: Listen for ACCOUNT_ADDED events to update counters in real-time
     const unlistenAccountAdded = listen<{
       id: number;
@@ -287,6 +297,7 @@ export default function AutoRegNext() {
       unlistenLog.then(fn => fn());
       unlistenComplete.then(fn => fn());
       unlistenError.then(fn => fn());
+      unlistenProgress.then(fn => fn());
       unlistenAccountAdded.then(fn => fn());
     };
   }, [addLog, addResult]);
@@ -502,6 +513,61 @@ export default function AutoRegNext() {
         }
 
         try {
+          // Use Registration V2 for AWS/Kiro if enabled
+          if (useRegistrationV2 && config.provider === 'aws') {
+            addLog({
+              level: 'info',
+              message: `[${i + 1}/${totalCount}] Using Registration V2 (Rust-based flow)...`,
+            });
+
+            try {
+              const result = await withTimeout(
+                startRegistrationV2({
+                  email: null,
+                  name: null,
+                  password: null,
+                }),
+                REGISTRATION_TIMEOUT_MS,
+                `Registration timed out after ${REGISTRATION_TIMEOUT_MS / 60000} minutes`
+              );
+
+              if (result.success && result.email) {
+                successCount++;
+                addLog({
+                  level: 'success',
+                  message: `[${i + 1}/${totalCount}] Account created: ${result.email}`,
+                });
+                addHistoryEntry({
+                  provider: config.provider,
+                  email: result.email,
+                  status: 'completed',
+                });
+              } else {
+                failCount++;
+                addLog({
+                  level: 'error',
+                  message: `[${i + 1}/${totalCount}] Registration failed: ${result.error || 'Unknown error'}`,
+                });
+              }
+            } catch (error) {
+              failCount++;
+              const errorMsg = String(error);
+              addLog({
+                level: 'error',
+                message: `[${i + 1}/${totalCount}] V2 Registration error: ${errorMsg}`,
+              });
+            }
+
+            // Delay between registrations
+            if (i < totalCount - 1) {
+              await new Promise(resolve =>
+                setTimeout(resolve, config.advanced.delayBetweenAccounts * 1000)
+              );
+            }
+            continue; // Skip to next iteration
+          }
+
+          // Original flow (V1) - continue with existing logic
           const timestamp = Date.now();
           let email: string | null;
 
@@ -972,6 +1038,59 @@ export default function AutoRegNext() {
           {/* Engine Tab - Settings */}
           {activeTab === 'engine' && (
             <div className="space-y-4">
+              {/* Registration V2 Toggle - Only for AWS/Kiro */}
+              {config.provider === 'aws' && (
+                <div
+                  className="rounded-lg p-3"
+                  style={{
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                        <Settings2 className={cn(
+                          "w-4 h-4",
+                          useRegistrationV2 ? "text-indigo-400" : "text-slate-500"
+                        )} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                          Registration V2
+                          <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                            NEW
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Rust-based flow with better error handling
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        'w-10 h-5 rounded-full transition-colors relative cursor-pointer',
+                        useRegistrationV2 ? 'bg-indigo-500' : 'bg-white/10'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm',
+                          useRegistrationV2 ? 'translate-x-5' : 'translate-x-0.5'
+                        )}
+                      />
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={useRegistrationV2}
+                      onChange={e => setUseRegistrationV2(e.target.checked)}
+                      disabled={activeThreads > 0}
+                      className="sr-only"
+                    />
+                  </label>
+                </div>
+              )}
+
               {/* Headless Mode - Full Width Toggle */}
               <div
                 className="rounded-lg p-3"

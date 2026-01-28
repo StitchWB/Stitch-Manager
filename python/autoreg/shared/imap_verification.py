@@ -138,17 +138,15 @@ def _search_verification_emails(mail, target_email: str) -> list:
             if result == 'OK' and data[0]:
                 all_ids = data[0].split()
                 print(f"[IMAP] Strategy 4: Found {len(all_ids)} total emails")
-                # Take last 100 emails
-                recent_ids = all_ids[-100:] if len(all_ids) > 100 else all_ids
+                # Take last 50 emails (reduced from 100 for efficiency)
+                recent_ids = all_ids[-50:] if len(all_ids) > 50 else all_ids
                 email_ids.extend(recent_ids)
         except Exception as e:
             print(f"[IMAP] Strategy 4 failed: {e}")
     
-    print(f"[IMAP] Total email IDs to check: {len(email_ids)}")
-    return list(set(email_ids))
-    
-    # Strategy 4: FROM GitHub senders
+    # Strategy 5: FROM GitHub senders (for GitHub registrations)
     if not email_ids:
+        print(f"[IMAP] Strategy 5: Searching by FROM (GitHub senders)...")
         github_senders = [
             'noreply@github.com',
             'no-reply@github.com',
@@ -156,9 +154,10 @@ def _search_verification_emails(mail, target_email: str) -> list:
         ]
         for sender in github_senders:
             try:
+                print(f"[IMAP]   Trying sender: {sender}")
                 result, data = mail.search(None, 'FROM', sender)
                 if result == 'OK' and data[0]:
-                    # Filter by TO header
+                    # Filter by TO header to match target email
                     for eid in data[0].split():
                         try:
                             result, data = mail.fetch(eid, '(BODY[HEADER.FIELDS (TO)])')
@@ -168,17 +167,23 @@ def _search_verification_emails(mail, target_email: str) -> list:
                                     email_ids.append(eid)
                         except Exception:
                             continue
-            except Exception:
+                    if email_ids:
+                        print(f"[IMAP]   Found {len(email_ids)} matching emails")
+                        break
+            except Exception as e:
+                print(f"[IMAP]   Failed for {sender}: {e}")
                 continue
     
-    # Strategy 5: SUBJECT containing verification keywords
+    # Strategy 6: SUBJECT containing verification keywords (last resort)
     if not email_ids:
-        verification_keywords = ['verification', 'verify']
+        print(f"[IMAP] Strategy 6: Searching by SUBJECT (verification keywords)...")
+        verification_keywords = ['verification', 'verify', 'code', 'confirm']
         for keyword in verification_keywords:
             try:
+                print(f"[IMAP]   Trying keyword: {keyword}")
                 result, data = mail.search(None, 'SUBJECT', keyword)
                 if result == 'OK' and data[0]:
-                    # Filter by TO header
+                    # Filter by TO header to match target email
                     for eid in data[0].split():
                         try:
                             result, data = mail.fetch(eid, '(BODY[HEADER.FIELDS (TO)])')
@@ -188,9 +193,14 @@ def _search_verification_emails(mail, target_email: str) -> list:
                                     email_ids.append(eid)
                         except Exception:
                             continue
-            except Exception:
+                    if email_ids:
+                        print(f"[IMAP]   Found {len(email_ids)} matching emails")
+                        break
+            except Exception as e:
+                print(f"[IMAP]   Failed for keyword '{keyword}': {e}")
                 continue
     
+    print(f"[IMAP] Total email IDs to check: {len(email_ids)}")
     return list(set(email_ids))
 
 
