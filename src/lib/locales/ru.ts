@@ -340,6 +340,38 @@ export const ru: Translations = {
       humanDelays: 'Добавлять случайные паузы между действиями',
       screenshots: 'Сохранять скриншот при ошибке',
     },
+    addyio: {
+      title: 'Настройка Addy.io',
+      subtitle: 'Генерация email алиасов',
+      testConnection: 'Проверить соединение и загрузить данные',
+      testing: 'Проверка соединения...',
+      connectionSuccess: 'Успешно подключено! Токен: {tokenName}',
+      connectionError: 'Ошибка подключения',
+      accountStatus: 'Статус аккаунта',
+      subscription: 'Подписка',
+      activeAliases: 'Активные алиасы',
+      recipients: 'Получатели',
+      bandwidth: 'Трафик',
+      domain: 'Домен',
+      domainPlaceholder: 'Выберите домен...',
+      domainHint: 'Проверьте соединение для загрузки доменов',
+      domainHintLoaded: 'Выберите из доступных доменов',
+      recipient: 'Получатель по умолчанию',
+      recipientPlaceholder: 'Использовать из аккаунта',
+      recipientHint: 'Email адрес, который получает пересылаемые письма',
+      aliasFormat: 'Формат алиаса',
+      formatUuid: 'UUID (например, 50c9e585-e7f5-41c4-9016@...)',
+      formatWords: 'Случайные слова (например, happy-elephant-123@...)',
+      formatChars: 'Случайные символы (например, a8f3k2m@...)',
+      descriptionTemplate: 'Шаблон описания (опционально)',
+      descriptionPlaceholder: 'например, Регистрация - {provider} - {date}',
+      descriptionHint: 'Шаблон для описания алиасов. Переменные: {provider}, {date}, {timestamp}',
+      fromName: 'Имя отправителя (опционально)',
+      fromNamePlaceholder: 'например, Иван Иванов',
+      fromNameHint: 'Пользовательское имя "От кого" для писем с алиасов',
+      autoDelete: 'Автоматически удалять алиасы после использования',
+      howItWorks: 'Как это работает: Addy.io создаёт алиасы, которые пересылают письма на ваш IMAP email. Коды подтверждения читаются из вашего IMAP ящика. Настройте API токен на странице Settings.',
+    },
   },
   dashboard: {
     title: 'Обзор',
@@ -856,6 +888,118 @@ export const ru: Translations = {
     title: '404',
     description: 'Страница не найдена',
     goHome: 'На главную',
+  },
+  kiroPatch: {
+    title: 'Настройки Kiro Patch V2',
+    subtitle: 'Настройка расширенных опций патча с модульными функциями',
+    
+    // Секция статуса
+    statusTitle: 'Статус патча',
+    statusDescription: 'Текущий статус установки',
+    statusInstalled: 'Патч установлен',
+    statusNotInstalled: 'Патч не установлен',
+    statusChecking: 'Проверка статуса...',
+    
+    // Секция Machine ID
+    machineIdTitle: 'Управление Machine ID',
+    machineIdDescription: 'Уникальный идентификатор для защиты от банов мультиаккаунтов',
+    currentMachineId: 'Текущий Machine ID',
+    defaultMachineId: 'Machine ID по умолчанию',
+    accountSpecificId: 'ID для конкретного аккаунта',
+    generateNew: 'Сгенерировать новый',
+    importFromFile: 'Импорт из файла',
+    copyId: 'Копировать ID',
+    idCopied: 'Machine ID скопирован в буфер обмена',
+    
+    // Секция привязки аккаунтов
+    bindingsTitle: 'Привязка аккаунтов',
+    bindingsDescription: 'Привяжите конкретные Machine ID к аккаунтам для автоматического переключения',
+    bindingsEmpty: 'Нет настроенных привязок аккаунтов',
+    bindingsEmptyHint: 'Нажмите "Привязать аккаунт" для создания привязки',
+    accountId: 'ID аккаунта',
+    machineId: 'Machine ID',
+    bindNewAccount: 'Привязать аккаунт',
+    unbind: 'Отвязать',
+    currentAccount: 'Текущий',
+    
+    // Модальное окно привязки
+    bindModalTitle: 'Привязать аккаунт к Machine ID',
+    bindModalAccountId: 'ID аккаунта',
+    bindModalAccountIdPlaceholder: 'Введите ID аккаунта или email',
+    bindModalMachineId: 'Machine ID',
+    bindModalMachineIdPlaceholder: 'Введите или сгенерируйте Machine ID',
+    bindModalGenerate: 'Сгенерировать',
+    bindModalBind: 'Привязать',
+    bindModalCancel: 'Отмена',
+    
+    // Секция модулей
+    modulesTitle: 'Модули патча',
+    modulesDescription: 'Включите или отключите конкретные функции патча',
+    
+    // Названия и описания модулей
+    machineIdSpoofing: 'Подмена Machine ID',
+    machineIdSpoofingDesc: 'Заменяет ваш реальный Machine ID во всех HTTP запросах, переменных окружения и системных вызовах. Предотвращает отслеживание между аккаунтами.',
+    
+    telemetryBlocking: 'Блокировка телеметрии',
+    telemetryBlockingDesc: 'Блокирует все запросы телеметрии, аналитики и метрик на серверы Kiro. Предотвращает отслеживание использования и сбор данных.',
+    
+    rateLimitBypass: 'Обход лимитов запросов',
+    rateLimitBypassDesc: 'Убирает искусственные задержки и ограничения частоты API вызовов. Позволяет быструю обработку запросов без троттлинга.',
+    
+    errorSuppression: 'Подавление ошибок',
+    errorSuppressionDesc: 'Подавляет известные некритичные ошибки (предупреждения о квоте, ошибки доступа). Уменьшает шум в консоли и предотвращает диалоги ошибок.',
+    
+    osSpoofing: 'Подмена ОС',
+    osSpoofingDesc: 'Подменяет имя хоста и MAC адрес для предотвращения аппаратной идентификации. Делает вашу систему похожей на другую машину.',
+    
+    commandSpoofing: 'Подмена команд',
+    commandSpoofingDesc: 'Перехватывает системные команды, читающие Machine ID (реестр, ioreg и т.д.) и возвращает подменённые значения.',
+    
+    authWatcher: 'Отслеживание авторизации',
+    authWatcherDesc: 'Отслеживает auth.json на изменения аккаунта и автоматически переключает Machine ID. Обеспечивает бесшовное использование мультиаккаунтов.',
+    
+    constantPatching: 'Патчинг констант',
+    constantPatchingDesc: 'Патчит константы в extension.js (лимиты записи, переходы графа, лимиты токенов)',
+    
+    customPrompts: 'Кастомные промпты',
+    customPromptsDesc: 'Позволяет настраивать поведение AI через изменение системных промптов',
+    
+    // Секция уровня логирования
+    logLevelTitle: 'Уровень логирования',
+    logLevelDescription: 'Управление детальностью логов патча',
+    logLevelDebug: 'Отладка',
+    logLevelInfo: 'Информация',
+    logLevelWarn: 'Предупреждения',
+    logLevelError: 'Только ошибки',
+    
+    // Действия
+    applyPatch: 'Применить патч',
+    applyPatchDesc: 'Применить патч с текущей конфигурацией',
+    saveConfig: 'Сохранить конфиг',
+    saveConfigDesc: 'Сохранить конфигурацию без применения',
+    removePatch: 'Удалить патч',
+    removePatchDesc: 'Удалить патч и восстановить оригинальные файлы',
+    resetDefaults: 'Сбросить настройки',
+    resetDefaultsDesc: 'Сбросить все настройки на значения по умолчанию',
+    
+    // Сообщения
+    applySuccess: 'Патч успешно применён',
+    applyError: 'Не удалось применить патч',
+    saveSuccess: 'Конфигурация сохранена',
+    saveError: 'Не удалось сохранить конфигурацию',
+    removeSuccess: 'Патч успешно удалён',
+    removeError: 'Не удалось удалить патч',
+    resetSuccess: 'Настройки сброшены на значения по умолчанию',
+    bindSuccess: 'Аккаунт успешно привязан',
+    bindError: 'Не удалось привязать аккаунт',
+    unbindSuccess: 'Аккаунт успешно отвязан',
+    unbindError: 'Не удалось отвязать аккаунт',
+    generateSuccess: 'Новый Machine ID сгенерирован',
+    
+    // Подтверждения
+    confirmRemove: 'Вы уверены, что хотите удалить патч?',
+    confirmReset: 'Вы уверены, что хотите сбросить все настройки на значения по умолчанию?',
+    confirmUnbind: 'Вы уверены, что хотите отвязать этот аккаунт?',
   },
 };
 

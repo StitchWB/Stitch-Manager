@@ -10,6 +10,7 @@ import Server from './pages/Server';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import Chat from './pages/Chat';
+import KiroPatchSettings from './pages/KiroPatchSettings';
 import NotFound from './pages/NotFound';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { useAppStore } from './stores/app';
@@ -71,6 +72,7 @@ function App() {
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/autoreg" element={<AutoReg />} />
           <Route path="/patcher" element={<Patcher />} />
+          <Route path="/kiro-patch-settings" element={<KiroPatchSettings />} />
           <Route path="/server" element={<Server />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />

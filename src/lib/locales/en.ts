@@ -336,6 +336,38 @@ export const en: Translations = {
       humanDelays: 'Add random pauses between actions',
       screenshots: 'Save screenshot when error occurs',
     },
+    addyio: {
+      title: 'Addy.io Configuration',
+      subtitle: 'Email alias generation settings',
+      testConnection: 'Test Connection & Load Data',
+      testing: 'Testing Connection...',
+      connectionSuccess: 'Connected successfully! Token: {tokenName}',
+      connectionError: 'Connection failed',
+      accountStatus: 'Account Status',
+      subscription: 'Subscription',
+      activeAliases: 'Active Aliases',
+      recipients: 'Recipients',
+      bandwidth: 'Bandwidth',
+      domain: 'Domain',
+      domainPlaceholder: 'Select domain...',
+      domainHint: 'Test connection to load domains',
+      domainHintLoaded: 'Select from your available domains',
+      recipient: 'Default Recipient',
+      recipientPlaceholder: 'Use account default',
+      recipientHint: 'Email address that receives forwarded emails',
+      aliasFormat: 'Alias Format',
+      formatUuid: 'UUID (e.g., 50c9e585-e7f5-41c4-9016@...)',
+      formatWords: 'Random Words (e.g., happy-elephant-123@...)',
+      formatChars: 'Random Characters (e.g., a8f3k2m@...)',
+      descriptionTemplate: 'Description Template (Optional)',
+      descriptionPlaceholder: 'e.g., Registration - {provider} - {date}',
+      descriptionHint: 'Template for alias descriptions. Variables: {provider}, {date}, {timestamp}',
+      fromName: 'From Name (Optional)',
+      fromNamePlaceholder: 'e.g., John Doe',
+      fromNameHint: 'Custom "From" name for emails sent from aliases',
+      autoDelete: 'Auto-delete aliases after use',
+      howItWorks: 'How it works: Addy.io creates aliases that forward to your IMAP email. Verification codes are read from your IMAP inbox. Configure API token in Settings page.',
+    },
   },
   dashboard: {
     title: 'Dashboard Overview',
@@ -852,6 +884,118 @@ export const en: Translations = {
     assistant: 'Assistant',
     thinking: 'Thinking...',
     typing: 'Typing...',
+  },
+  kiroPatch: {
+    title: 'Kiro Patch V2 Settings',
+    subtitle: 'Configure advanced patching options with modular features',
+    
+    // Status section
+    statusTitle: 'Patch Status',
+    statusDescription: 'Current installation status',
+    statusInstalled: 'Patch is installed',
+    statusNotInstalled: 'Patch is not installed',
+    statusChecking: 'Checking status...',
+    
+    // Machine ID section
+    machineIdTitle: 'Machine ID Management',
+    machineIdDescription: 'Unique identifier used to prevent multi-account bans',
+    currentMachineId: 'Current Machine ID',
+    defaultMachineId: 'Default Machine ID',
+    accountSpecificId: 'Account-specific ID',
+    generateNew: 'Generate New',
+    importFromFile: 'Import from File',
+    copyId: 'Copy ID',
+    idCopied: 'Machine ID copied to clipboard',
+    
+    // Account bindings section
+    bindingsTitle: 'Account Bindings',
+    bindingsDescription: 'Bind specific Machine IDs to accounts for automatic switching',
+    bindingsEmpty: 'No account bindings configured',
+    bindingsEmptyHint: 'Click "Bind New Account" to create a binding',
+    accountId: 'Account ID',
+    machineId: 'Machine ID',
+    bindNewAccount: 'Bind New Account',
+    unbind: 'Unbind',
+    currentAccount: 'Current',
+    
+    // Bind modal
+    bindModalTitle: 'Bind Account to Machine ID',
+    bindModalAccountId: 'Account ID',
+    bindModalAccountIdPlaceholder: 'Enter account ID or email',
+    bindModalMachineId: 'Machine ID',
+    bindModalMachineIdPlaceholder: 'Enter or generate Machine ID',
+    bindModalGenerate: 'Generate',
+    bindModalBind: 'Bind',
+    bindModalCancel: 'Cancel',
+    
+    // Modules section
+    modulesTitle: 'Patch Modules',
+    modulesDescription: 'Enable or disable specific patching features',
+    
+    // Module names and descriptions
+    machineIdSpoofing: 'Machine ID Spoofing',
+    machineIdSpoofingDesc: 'Replaces your real machine ID in all HTTP requests, environment variables, and system calls. Prevents tracking across accounts.',
+    
+    telemetryBlocking: 'Telemetry Blocking',
+    telemetryBlockingDesc: 'Blocks all telemetry, analytics, and metrics requests to Kiro servers. Prevents usage tracking and data collection.',
+    
+    rateLimitBypass: 'Rate Limit Bypass',
+    rateLimitBypassDesc: 'Removes artificial delays and rate limiting in API calls. Allows faster request processing without throttling.',
+    
+    errorSuppression: 'Error Suppression',
+    errorSuppressionDesc: 'Suppresses known non-critical errors (quota warnings, access errors). Reduces console noise and prevents error dialogs.',
+    
+    osSpoofing: 'OS Spoofing',
+    osSpoofingDesc: 'Spoofs hostname and MAC address to prevent hardware fingerprinting. Makes your system appear as a different machine.',
+    
+    commandSpoofing: 'Command Spoofing',
+    commandSpoofingDesc: 'Intercepts system commands that read machine ID (registry, ioreg, etc.) and returns spoofed values.',
+    
+    authWatcher: 'Auth Watcher',
+    authWatcherDesc: 'Monitors auth.json for account changes and automatically switches Machine ID. Enables seamless multi-account usage.',
+    
+    constantPatching: 'Constant Patching',
+    constantPatchingDesc: 'Patches extension.js constants (write limits, graph transitions, token limits)',
+    
+    customPrompts: 'Custom Prompts',
+    customPromptsDesc: 'Allows customizing AI behavior by modifying system prompts',
+    
+    // Log level section
+    logLevelTitle: 'Log Level',
+    logLevelDescription: 'Control verbosity of patch logging',
+    logLevelDebug: 'Debug',
+    logLevelInfo: 'Info',
+    logLevelWarn: 'Warnings',
+    logLevelError: 'Errors Only',
+    
+    // Actions
+    applyPatch: 'Apply Patch',
+    applyPatchDesc: 'Apply patch with current configuration',
+    saveConfig: 'Save Config',
+    saveConfigDesc: 'Save configuration without applying',
+    removePatch: 'Remove Patch',
+    removePatchDesc: 'Remove patch and restore original files',
+    resetDefaults: 'Reset to Defaults',
+    resetDefaultsDesc: 'Reset all settings to default values',
+    
+    // Messages
+    applySuccess: 'Patch applied successfully',
+    applyError: 'Failed to apply patch',
+    saveSuccess: 'Configuration saved',
+    saveError: 'Failed to save configuration',
+    removeSuccess: 'Patch removed successfully',
+    removeError: 'Failed to remove patch',
+    resetSuccess: 'Settings reset to defaults',
+    bindSuccess: 'Account bound successfully',
+    bindError: 'Failed to bind account',
+    unbindSuccess: 'Account unbound successfully',
+    unbindError: 'Failed to unbind account',
+    generateSuccess: 'New Machine ID generated',
+    
+    // Confirmations
+    confirmRemove: 'Are you sure you want to remove the patch?',
+    confirmReset: 'Are you sure you want to reset all settings to defaults?',
+    confirmUnbind: 'Are you sure you want to unbind this account?',
   },
 };
 

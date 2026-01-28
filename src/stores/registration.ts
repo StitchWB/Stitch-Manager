@@ -1,19 +1,25 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { getSettings, updateSettings } from '../lib/tauri';
-import type { 
-  ProviderName, 
-  RegistrationLog, 
+import type {
+  ProviderName,
+  RegistrationLog,
   RegistrationProgress,
-  RegistrationStatus 
+  RegistrationStatus,
 } from '../types';
+import type { SettingsData } from '../types/generated';
 
 // Mail strategy type
 export type MailStrategy = 'custom' | 'gmail';
 
+// Email strategy type
+export type EmailStrategy = 'static' | 'counter' | 'addyio' | 'addyio_counter';
+
 // IMAP configuration (kept for future email verification)
 export interface IMAPConfig {
   strategy: MailStrategy;
+  // Email generation strategy
+  emailStrategy?: EmailStrategy;
   // Custom domain fields
   server: string;
   port: number;
@@ -24,6 +30,19 @@ export interface IMAPConfig {
   gmailBase: string;
   gmailAlias: string;
   gmailAppPassword: string;
+  // Addy.io fields
+  addyioEnabled?: boolean;
+  addyioApiToken?: string;
+  addyioDomain?: string;
+  addyioAliasFormat?: string;
+  addyioAutoDelete?: boolean;
+  addyioDefaultRecipientId?: string;
+  addyioDescriptionTemplate?: string;
+  addyioFromName?: string;
+  // 33mail fields
+  thirtyThreeMailEnabled?: boolean;
+  thirtyThreeMailUsername?: string;
+  thirtyThreeMailDomain?: string;
 }
 
 // Proxy configuration
@@ -41,9 +60,14 @@ export interface AutoRegCredentials {
 }
 
 // Email pattern types
-export type EmailPattern = 'random' | 'name_random' | 'provider_timestamp' | 'custom_prefix' | 'name_counter';
+export type EmailPattern =
+  | 'random'
+  | 'name_random'
+  | 'provider_timestamp'
+  | 'custom_prefix'
+  | 'name_counter';
 
-// Name pattern types  
+// Name pattern types
 export type NamePattern = 'random' | 'from_email' | 'custom';
 
 // Pattern configuration
@@ -61,7 +85,7 @@ export interface AdvancedSettings {
   headless: boolean;
   speedMultiplier: number; // 0.5 to 2.0
   delayBetweenAccounts: number; // 1-10 seconds
-  
+
   // Advanced settings (collapsible)
   verificationCodeTimeout: number; // 60-180s
   oauthCallbackTimeout: number; // 30-180s
@@ -114,58 +138,59 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 interface RegistrationState {
   // Configuration
   config: RegistrationConfig;
-  
+
   // Status
   isRunning: boolean;
   status: RegistrationStatus;
-  
+
   // Progress
   progress: RegistrationProgress;
-  
+
   // Logs
   logs: RegistrationLog[];
-  
+
   // Results
   results: RegistrationResult[];
   successCount: number;
   failedCount: number;
-  
+
   // History
   history: RegistrationHistoryEntry[];
-  
+
   // WebSocket
   wsConnected: boolean;
-  
+
   // Settings state
   settingsLoaded: boolean;
   saveStatus: SaveStatus;
   imapPasswordSet: boolean;
   gmailAppPasswordSet: boolean;
-  
+
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
   setProxyConfig: (proxy: Partial<ProxyConfig>) => void;
   setAdvancedSettings: (settings: Partial<AdvancedSettings>) => void;
   setCount: (count: number) => void;
-  
+
   // Actions - Settings persistence
   loadSettings: () => Promise<void>;
   saveSettings: () => Promise<void>;
-  
+  saveImmediately: () => Promise<void>;
+
   // Actions - Logs
   addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => void;
   clearLogs: () => void;
-  
+
   // Actions - Progress
   setProgress: (progress: Partial<RegistrationProgress>) => void;
-  
+
   // Actions - Results
   addResult: (result: Omit<RegistrationResult, 'id' | 'createdAt'>) => void;
-  
+
   // Actions - History
   addHistoryEntry: (entry: Omit<RegistrationHistoryEntry, 'id' | 'createdAt'>) => void;
-  
+
   // Actions - WebSocket
   setWsConnected: (connected: boolean) => void;
 }
@@ -235,21 +260,32 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
   // Helper to trigger debounced save
   const triggerSave = () => {
     const store = get();
-    if (!store.settingsLoaded) return;
-    
-    if (saveTimeout) clearTimeout(saveTimeout);
+    console.log('[REGISTRATION_STORE] triggerSave called, settingsLoaded:', store.settingsLoaded);
+    if (!store.settingsLoaded) {
+      console.log('[REGISTRATION_STORE] triggerSave: settings not loaded yet, skipping');
+      return;
+    }
+
+    if (saveTimeout) {
+      console.log('[REGISTRATION_STORE] triggerSave: clearing existing timeout');
+      clearTimeout(saveTimeout);
+    }
+
+    console.log('[REGISTRATION_STORE] triggerSave: setting status to saving');
     set({ saveStatus: 'saving' });
-    
+
+    console.log('[REGISTRATION_STORE] triggerSave: setting timeout for 500ms');
     saveTimeout = setTimeout(async () => {
+      console.log('[REGISTRATION_STORE] triggerSave: timeout fired, calling saveSettings');
       await store.saveSettings();
-    }, 800);
+    }, 500); // Reduced from 800ms to 500ms for faster saving
   };
 
   return {
     // Initial state
     config: DEFAULT_CONFIG,
     isRunning: false,
-    status: 'pending',  // Changed from 'idle' to 'pending' to match new RegistrationStatus type
+    status: 'pending', // Changed from 'idle' to 'pending' to match new RegistrationStatus type
     progress: DEFAULT_PROGRESS,
     logs: [],
     results: [],
@@ -264,102 +300,135 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
 
     // Config actions - all trigger auto-save
     setProvider: (provider: ProviderName) => {
-      set((state) => ({ config: { ...state.config, provider } }));
+      console.log('[REGISTRATION_STORE] setProvider called:', provider);
+      set(state => ({ config: { ...state.config, provider } }));
+      console.log('[REGISTRATION_STORE] setProvider: triggering save');
       triggerSave();
     },
 
     setIMAPConfig: (imap: Partial<IMAPConfig>) => {
-      set((state) => {
+      console.log('[REGISTRATION_STORE] setIMAPConfig called:', imap);
+      set(state => {
         const updates: Partial<RegistrationConfig> = {
-          imap: { ...state.config.imap, ...imap }
+          imap: { ...state.config.imap, ...imap },
         };
-        
+
         // If emailPattern is being updated, also update patterns
         if ('emailPattern' in imap) {
           const imapWithPattern = imap as Partial<IMAPConfig> & { emailPattern: EmailPattern };
           updates.patterns = {
             ...state.config.patterns,
-            emailPattern: imapWithPattern.emailPattern
+            emailPattern: imapWithPattern.emailPattern,
           };
           // Remove emailPattern from imap updates
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { emailPattern, ...imapWithoutPattern } = imapWithPattern;
           updates.imap = { ...state.config.imap, ...imapWithoutPattern };
         }
-        
+
+        console.log('[REGISTRATION_STORE] setIMAPConfig: new config updates:', updates);
         return { config: { ...state.config, ...updates } };
       });
+      console.log('[REGISTRATION_STORE] setIMAPConfig: triggering save');
       triggerSave();
     },
 
     setProxyConfig: (proxy: Partial<ProxyConfig>) => {
-      set((state) => ({
-        config: { 
-          ...state.config, 
-          proxy: { ...state.config.proxy, ...proxy } 
-        }
+      console.log('[REGISTRATION_STORE] setProxyConfig called:', proxy);
+      set(state => ({
+        config: {
+          ...state.config,
+          proxy: { ...state.config.proxy, ...proxy },
+        },
       }));
+      console.log('[REGISTRATION_STORE] setProxyConfig: triggering save');
       triggerSave();
     },
 
     setAdvancedSettings: (settings: Partial<AdvancedSettings>) => {
-      set((state) => ({
+      console.log('[REGISTRATION_STORE] setAdvancedSettings called:', settings);
+      set(state => ({
         config: {
           ...state.config,
-          advanced: { ...state.config.advanced, ...settings }
-        }
+          advanced: { ...state.config.advanced, ...settings },
+        },
       }));
+      console.log('[REGISTRATION_STORE] setAdvancedSettings: triggering save');
       triggerSave();
     },
 
     setCount: (count: number) => {
-      set((state) => ({
-        config: { ...state.config, count: Math.max(1, Math.min(100, count)) }
+      console.log('[REGISTRATION_STORE] setCount called:', count);
+      set(state => ({
+        config: { ...state.config, count: Math.max(1, Math.min(100, count)) },
       }));
+      console.log('[REGISTRATION_STORE] setCount: triggering save');
       triggerSave();
     },
 
-    // Settings persistence
+    // Actions - Settings persistence
     loadSettings: async () => {
+      console.log('[REGISTRATION_STORE] loadSettings: starting');
       try {
-        const settings = await getSettings();
-        set((state) => {
+        const settings: SettingsData = await getSettings();
+        console.log('[REGISTRATION_STORE] loadSettings: got settings from DB:', settings);
+
+        set(state => {
           // Check if passwords are masked (meaning they exist in DB)
-          const imapPasswordMasked = settings.imap_password === '********';
-          const gmailAppPasswordMasked = settings.gmail_app_password === '********';
-          const proxyPasswordMasked = settings.proxy_password === '********';
-          
-          return {
+          const imapPasswordMasked = settings.imapPassword === '********';
+          const gmailAppPasswordMasked = settings.gmailAppPassword === '********';
+          const proxyPasswordMasked = settings.proxyPassword === '********';
+
+          const newConfig = {
             config: {
               ...state.config,
               provider: (settings.provider as ProviderName) || 'kiro',
               imap: {
                 ...state.config.imap,
-                strategy: (settings.mail_strategy as MailStrategy) || 'custom',
-                server: settings.imap_server || '',
-                port: settings.imap_port || 993,
-                email: settings.imap_email || '',
+                strategy: (settings.mailStrategy as MailStrategy) || 'custom',
+                server: settings.imapServer || '',
+                port: settings.imapPort || 993,
+                email: settings.imapEmail || '',
                 // Don't overwrite password with masked value - keep existing or empty
-                password: imapPasswordMasked ? state.config.imap.password : (settings.imap_password || ''),
-                gmailBase: settings.gmail_base || '',
-                gmailAlias: settings.gmail_alias || '',
-                gmailAppPassword: gmailAppPasswordMasked ? state.config.imap.gmailAppPassword : (settings.gmail_app_password || ''),
+                password: imapPasswordMasked
+                  ? state.config.imap.password
+                  : settings.imapPassword || '',
+                gmailBase: settings.gmailBase || '',
+                gmailAlias: settings.gmailAlias || '',
+                gmailAppPassword: gmailAppPasswordMasked
+                  ? state.config.imap.gmailAppPassword
+                  : settings.gmailAppPassword || '',
+                // Load addy.io settings
+                addyioEnabled: settings.addyioEnabled || false,
+                addyioApiToken: settings.addyioApiToken || '',
+                addyioDomain: settings.addyioDomain || '',
+                addyioAliasFormat: settings.addyioAliasFormat || 'uuid',
+                addyioAutoDelete: settings.addyioAutoDelete || false,
+                addyioDefaultRecipientId: settings.addyioDefaultRecipientId || '',
+                addyioDescriptionTemplate: settings.addyioDescriptionTemplate || '',
+                addyioFromName: settings.addyioFromName || '',
+                // Load 33mail settings
+                thirtyThreeMailEnabled: settings.thirtyThreeMailEnabled || false,
+                thirtyThreeMailUsername: settings.thirtyThreeMailUsername || '',
+                thirtyThreeMailDomain: settings.thirtyThreeMailDomain || '33mail.com',
               },
               proxy: {
                 ...state.config.proxy,
-                enabled: settings.proxy_enabled || false,
-                url: settings.proxy_url || '',
-                username: settings.proxy_username || '',
+                enabled: settings.proxyEnabled || false,
+                url: settings.proxyUrl || '',
+                username: settings.proxyUsername || '',
                 // Don't overwrite password with masked value - keep existing or empty
-                password: proxyPasswordMasked ? state.config.proxy.password : (settings.proxy_password || ''),
+                password: proxyPasswordMasked
+                  ? state.config.proxy.password
+                  : settings.proxyPassword || '',
               },
               patterns: {
                 ...state.config.patterns,
-                emailPattern: (settings.email_pattern as EmailPattern) || 'provider_timestamp',
-                emailCustomPrefix: settings.email_custom_prefix || '',
-                namePattern: (settings.name_pattern as NamePattern) || 'random',
-                nameCustomFirst: settings.name_custom_first || '',
-                nameCustomLast: settings.name_custom_last || '',
+                emailPattern: (settings.emailPattern as EmailPattern) || 'provider_timestamp',
+                emailCustomPrefix: settings.emailCustomPrefix || '',
+                namePattern: (settings.namePattern as NamePattern) || 'random',
+                nameCustomFirst: settings.nameCustomFirst || '',
+                nameCustomLast: settings.nameCustomLast || '',
               },
               advanced: {
                 ...state.config.advanced,
@@ -370,28 +439,43 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             },
             settingsLoaded: true,
             // Track that password exists in DB even if we don't have the actual value
-            imapPasswordSet: imapPasswordMasked || !!settings.imap_password,
-            gmailAppPasswordSet: gmailAppPasswordMasked || !!settings.gmail_app_password,
+            imapPasswordSet: imapPasswordMasked || !!settings.imapPassword,
+            gmailAppPasswordSet: gmailAppPasswordMasked || !!settings.gmailAppPassword,
           };
+
+          console.log('[REGISTRATION_STORE] loadSettings: setting new config:', newConfig.config);
+          return newConfig;
         });
+        console.log('[REGISTRATION_STORE] loadSettings: completed successfully');
       } catch (error) {
-        console.error('Failed to load settings:', error);
+        console.error('[REGISTRATION_STORE] loadSettings: failed:', error);
         set({ settingsLoaded: true });
       }
     },
 
     saveSettings: async () => {
       const { config } = get();
+      console.log('[REGISTRATION_STORE] saveSettings: starting with config:', config);
+      console.log('[REGISTRATION_STORE] saveSettings: addy.io config:', {
+        addyioEnabled: config.imap.addyioEnabled,
+        addyioApiToken: config.imap.addyioApiToken ? '***' : 'empty',
+        addyioDomain: config.imap.addyioDomain,
+        addyioAliasFormat: config.imap.addyioAliasFormat,
+        addyioAutoDelete: config.imap.addyioAutoDelete,
+        addyioDefaultRecipientId: config.imap.addyioDefaultRecipientId,
+        addyioDescriptionTemplate: config.imap.addyioDescriptionTemplate,
+        addyioFromName: config.imap.addyioFromName,
+      });
 
       // Basic validation
       if (config.imap.email && !config.imap.email.includes('@')) {
-        console.warn('Invalid email format, skipping save');
+        console.warn('[REGISTRATION_STORE] saveSettings: invalid email format, skipping save');
         set({ saveStatus: 'error' });
         setTimeout(() => set({ saveStatus: 'idle' }), 3000);
         return;
       }
       if (isNaN(config.imap.port) || config.imap.port < 1 || config.imap.port > 65535) {
-        console.warn('Invalid IMAP port, skipping save');
+        console.warn('[REGISTRATION_STORE] saveSettings: invalid IMAP port, skipping save');
         set({ saveStatus: 'error' });
         setTimeout(() => set({ saveStatus: 'idle' }), 3000);
         return;
@@ -400,44 +484,88 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       try {
         const updateData: Record<string, unknown> = {
           provider: config.provider,
-          mail_strategy: config.imap.strategy,
-          imap_server: config.imap.server,
-          imap_port: config.imap.port,
-          imap_email: config.imap.email,
-          gmail_base: config.imap.gmailBase,
-          gmail_alias: config.imap.gmailAlias,
-          proxy_enabled: config.proxy.enabled,
-          proxy_url: config.proxy.url,
-          proxy_username: config.proxy.username,
-          email_pattern: config.patterns.emailPattern,
-          email_custom_prefix: config.patterns.emailCustomPrefix,
-          name_pattern: config.patterns.namePattern,
-          name_custom_first: config.patterns.nameCustomFirst,
-          name_custom_last: config.patterns.nameCustomLast,
+          mailStrategy: config.imap.strategy,
+          imapServer: config.imap.server,
+          imapPort: config.imap.port,
+          imapEmail: config.imap.email,
+          imapUser: config.imap.email, // Copy email to user field for Python IMAP login
+          gmailBase: config.imap.gmailBase,
+          gmailAlias: config.imap.gmailAlias,
+          proxyEnabled: config.proxy.enabled,
+          proxyUrl: config.proxy.url,
+          proxyUsername: config.proxy.username,
+          emailPattern: config.patterns.emailPattern,
+          emailCustomPrefix: config.patterns.emailCustomPrefix,
+          namePattern: config.patterns.namePattern,
+          nameCustomFirst: config.patterns.nameCustomFirst,
+          nameCustomLast: config.patterns.nameCustomLast,
           count: config.count,
-          // CRITICAL FIX: Save headless setting to database
           headless: config.advanced.headless,
+          // Save addy.io settings
+          addyioEnabled: config.imap.addyioEnabled || false,
+          addyioApiToken: config.imap.addyioApiToken || '',
+          addyioDomain: config.imap.addyioDomain || '',
+          addyioAliasFormat: config.imap.addyioAliasFormat || 'uuid',
+          addyioAutoDelete: config.imap.addyioAutoDelete || false,
+          addyioDefaultRecipientId: config.imap.addyioDefaultRecipientId || '',
+          addyioDescriptionTemplate: config.imap.addyioDescriptionTemplate || '',
+          addyioFromName: config.imap.addyioFromName || '',
+          // Save 33mail settings
+          thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled || false,
+          thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername || '',
+          thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain || '33mail.com',
         };
-        
+
         // Only include passwords if they have actual values
         if (config.imap.password) {
-          updateData.imap_password = config.imap.password;
+          updateData.imapPassword = config.imap.password;
         }
         if (config.imap.gmailAppPassword) {
-          updateData.gmail_app_password = config.imap.gmailAppPassword;
+          updateData.gmailAppPassword = config.imap.gmailAppPassword;
         }
         if (config.proxy.password) {
-          updateData.proxy_password = config.proxy.password;
+          updateData.proxyPassword = config.proxy.password;
         }
-        
+
+        console.log(
+          '[REGISTRATION_STORE] saveSettings: calling updateSettings with data:',
+          updateData
+        );
         await updateSettings(updateData);
+        console.log('[REGISTRATION_STORE] saveSettings: updateSettings completed successfully');
+
         set({ saveStatus: 'saved' });
         setTimeout(() => set({ saveStatus: 'idle' }), 2000);
+        console.log('[REGISTRATION_STORE] saveSettings: status set to saved');
       } catch (error) {
-        console.error('Failed to save settings:', error);
+        console.error('[REGISTRATION_STORE] saveSettings: failed:', error);
         set({ saveStatus: 'error' });
         setTimeout(() => set({ saveStatus: 'idle' }), 3000);
       }
+    },
+
+    // Immediate save function for critical moments (page unload, tab switch)
+    saveImmediately: async () => {
+      const state = get();
+      console.log(
+        '[REGISTRATION_STORE] saveImmediately: called, settingsLoaded:',
+        state.settingsLoaded
+      );
+      if (!state.settingsLoaded) {
+        console.log('[REGISTRATION_STORE] saveImmediately: settings not loaded, skipping');
+        return;
+      }
+
+      // Clear any pending debounced save
+      if (saveTimeout) {
+        console.log('[REGISTRATION_STORE] saveImmediately: clearing pending timeout');
+        clearTimeout(saveTimeout);
+        saveTimeout = null;
+      }
+
+      // Save immediately without debounce
+      console.log('[REGISTRATION_STORE] saveImmediately: calling saveSettings directly');
+      await state.saveSettings();
     },
 
     // Log actions
@@ -447,18 +575,18 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
       };
-      
+
       // Add to local registration logs
-      set((state) => ({
-        logs: [...state.logs, newLog]
+      set(state => ({
+        logs: [...state.logs, newLog],
       }));
-      
+
       // Also save to global logging system for persistence
       invoke('add_log', {
         level: log.level,
         source: 'registration',
         message: log.message,
-        details: null
+        details: null,
       }).catch((err: unknown) => {
         console.error('Failed to save log to database:', err);
       });
@@ -467,35 +595,38 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     clearLogs: () => set({ logs: [] }),
 
     // Progress actions
-    setProgress: (progress: Partial<RegistrationProgress>) => set((state) => ({
-      progress: { ...state.progress, ...progress }
-    })),
+    setProgress: (progress: Partial<RegistrationProgress>) =>
+      set(state => ({
+        progress: { ...state.progress, ...progress },
+      })),
 
     // Result actions
-    addResult: (result: Omit<RegistrationResult, 'id' | 'createdAt'>) => set((state) => {
-      const newResult: RegistrationResult = {
-        ...result,
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-      };
-      return {
-        results: [...state.results, newResult],
-        successCount: result.status === 'success' ? state.successCount + 1 : state.successCount,
-        failedCount: result.status === 'failed' ? state.failedCount + 1 : state.failedCount,
-      };
-    }),
-
-    // History actions
-    addHistoryEntry: (entry: Omit<RegistrationHistoryEntry, 'id' | 'createdAt'>) => set((state) => ({
-      history: [
-        {
-          ...entry,
+    addResult: (result: Omit<RegistrationResult, 'id' | 'createdAt'>) =>
+      set(state => {
+        const newResult: RegistrationResult = {
+          ...result,
           id: crypto.randomUUID(),
           createdAt: new Date().toISOString(),
-        },
-        ...state.history,
-      ].slice(0, 50), // Keep only last 50 entries
-    })),
+        };
+        return {
+          results: [...state.results, newResult],
+          successCount: result.status === 'success' ? state.successCount + 1 : state.successCount,
+          failedCount: result.status === 'failed' ? state.failedCount + 1 : state.failedCount,
+        };
+      }),
+
+    // History actions
+    addHistoryEntry: (entry: Omit<RegistrationHistoryEntry, 'id' | 'createdAt'>) =>
+      set(state => ({
+        history: [
+          {
+            ...entry,
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+          },
+          ...state.history,
+        ].slice(0, 50), // Keep only last 50 entries
+      })),
 
     // WebSocket actions
     setWsConnected: (connected: boolean) => set({ wsConnected: connected }),

@@ -211,29 +211,63 @@ def _extract_verification_code(mail, email_ids: list, target_email: str) -> Opti
             raw_email = data[0][1]
             email_message = email_module.message_from_bytes(raw_email)
             
-            # Get TO header - for catch-all, check if target_email is in TO
+            # Get TO and FROM headers
             to_header = email_message.get('To', '')
+            from_header = email_message.get('From', '')
             
-            # Debug: print TO header for first few emails
+            # Debug: print headers for first few emails
             if email_ids_sorted.index(email_id) < 5:
                 print(f"[IMAP] Email {email_id} TO: {to_header[:100]}")
+                print(f"[IMAP] Email {email_id} FROM: {from_header[:100]}")
             
-            # Check if target email is in TO header (catch-all: testmail@whitebite.ru receives, but TO is test5684@whitebite.ru)
-            if target_email.lower() not in to_header.lower():
-                continue
-            
-            print(f"[IMAP] ✓ Found email for {target_email}")
-            
-            # Get email body
+            # Get email body first (we'll need it for both checks)
             body = _get_email_body(email_message)
             if not body:
                 print(f"[IMAP] No body in email {email_id}")
                 continue
             
+            # Check 1: Target email in TO header (direct email)
+            target_match = target_email.lower() in to_header.lower()
+            
+            # Check 2: For 33mail forwarding - check if target_email is mentioned in body
+            # 33mail adds: "This email was sent to the alias 'kiro-xxx@whitebite.33mail.com'"
+            body_match = target_email.lower() in body.lower()
+            
+            # Check 3: AWS sender (for catch-all scenarios)
+            aws_sender = any(sender in from_header.lower() for sender in [
+                'no-reply@signin.aws',
+                'no-reply@amazon.com',
+                'noreply@signin.aws'
+            ])
+            
+            # Accept email if:
+            # - AWS sender AND target email mentioned in body (33mail forwarding)
+            # This ensures we only get AWS verification emails for the specific alias
+            if not (aws_sender and body_match):
+                continue
+            
+            print(f"[IMAP] ✓ Found AWS email for {target_email} (email #{email_id})")
+            
             # Extract 6-digit code
             code_matches = re.findall(r'\b(\d{6})\b', body)
             if code_matches:
-                print(f"[IMAP] ✓ Found verification code: {code_matches[0]}")
+                # Return the FIRST 6-digit code found (verification code)
+                # Skip codes that might be in 33mail unsubscribe links
+                for code in code_matches:
+                    # Simple heuristic: verification codes are usually not in URLs
+                    # Check context around the code
+                    code_index = body.find(code)
+                    context = body[max(0, code_index-50):code_index+50].lower()
+                    
+                    # Skip if code is in unsubscribe link or URL
+                    if 'unsub' in context or 'http' in context or 'link' in context:
+                        continue
+                    
+                    print(f"[IMAP] ✓ Found verification code: {code}")
+                    return str(code)
+                
+                # Fallback: return first code if no valid code found
+                print(f"[IMAP] ✓ Found verification code (fallback): {code_matches[0]}")
                 return str(code_matches[0])
             else:
                 print(f"[IMAP] No 6-digit code found in email {email_id}")
