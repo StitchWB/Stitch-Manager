@@ -486,6 +486,8 @@ export const ru: Translations = {
     backupsCreatedWhenPatching: 'Бэкапы создаются при патче IDE',
     restore: 'Восстановить',
     patchInformation: 'Информация о патче',
+    information: 'Информация',
+    patchSettings: 'Настройки патча',
     currentVersion: 'Текущая версия',
     patchedIdes: 'Пропатченные IDE',
     totalBackups: 'Всего бэкапов',

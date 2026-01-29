@@ -489,6 +489,8 @@ export interface Translations {
     backupsCreatedWhenPatching: string;
     restore: string;
     patchInformation: string;
+    information: string;
+    patchSettings: string;
     currentVersion: string;
     patchedIdes: string;
     totalBackups: string;

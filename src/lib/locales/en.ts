@@ -482,6 +482,8 @@ export const en: Translations = {
     backupsCreatedWhenPatching: 'Backups are created when patching IDEs',
     restore: 'Restore',
     patchInformation: 'Patch Information',
+    information: 'Information',
+    patchSettings: 'Patch Settings',
     currentVersion: 'Current Version',
     patchedIdes: 'Patched IDEs',
     totalBackups: 'Total Backups',
