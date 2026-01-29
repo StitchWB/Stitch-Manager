@@ -10,24 +10,24 @@ from .base import BaseSpoofModule
 
 class GeolocationSpoofModule(BaseSpoofModule):
     """Спуфинг геолокации (JS fallback)"""
-    
+
     name = "geolocation"
     description = "Spoof geolocation (JS fallback)"
-    
+
     def get_js(self) -> str:
         p = self.profile
         return f'''
 (function() {{
     'use strict';
-    
+
     const LATITUDE = {p.latitude};
     const LONGITUDE = {p.longitude};
     const ACCURACY = {p.accuracy};
-    
+
     // Переопределяем getCurrentPosition
     if (navigator.geolocation) {{
         const originalGetCurrentPosition = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
-        
+
         navigator.geolocation.getCurrentPosition = function(success, error, options) {{
             success({{
                 coords: {{
@@ -42,7 +42,7 @@ class GeolocationSpoofModule(BaseSpoofModule):
                 timestamp: Date.now()
             }});
         }};
-        
+
         // Переопределяем watchPosition
         navigator.geolocation.watchPosition = function(success, error, options) {{
             success({{

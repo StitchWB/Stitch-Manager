@@ -12,14 +12,14 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 import requests
 
 # Ensure autoreg is in path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.cbor_utils import cbor_encode, cbor_decode
+from core.cbor_utils import cbor_decode, cbor_encode
 from core.kiro_config import get_kiro_user_agent
 
 logger = logging.getLogger(__name__)
@@ -43,14 +43,14 @@ class KiroWebPortalClient:
     - RefreshToken - обновить токены
     """
 
-    def __init__(self, timeout: int = 30, endpoint: Optional[str] = None):
+    def __init__(self, timeout: int = 30, endpoint: str | None = None):
         """Args:
         timeout: Таймаут запросов в секундах
         endpoint: Custom endpoint URL (defaults to config/env)
         """
         self.timeout = timeout
         self.session = requests.Session()
-        
+
         # Get endpoint from: parameter > env > default
         if endpoint:
             self.endpoint = endpoint
@@ -60,12 +60,12 @@ class KiroWebPortalClient:
     def _make_request(
         self,
         operation: str,
-        request_data: Dict[str, Any],
+        request_data: dict[str, Any],
         access_token: str,
         idp: str = "Google",
-        csrf_token: Optional[str] = None,
-        session_token: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        csrf_token: str | None = None,
+        session_token: str | None = None,
+    ) -> dict[str, Any]:
         """Выполняет CBOR RPC запрос к Web Portal.
 
         Args:
@@ -176,7 +176,7 @@ class KiroWebPortalClient:
         self,
         access_token: str,
         idp: str = "Google",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Получает информацию о квоте и использовании.
 
         Returns структура как у CodeWhisperer GetUsageLimits.
@@ -192,7 +192,7 @@ class KiroWebPortalClient:
         self,
         access_token: str,
         idp: str = "Google",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Получает информацию о пользователе."""
         request_data = {"origin": "KIRO_IDE"}
 
@@ -204,7 +204,7 @@ class KiroWebPortalClient:
         csrf_token: str,
         session_token: str,
         idp: str = "Google",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Обновляет токены через RefreshToken."""
         request_data = {"csrfToken": csrf_token}
 

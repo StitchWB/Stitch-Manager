@@ -10,15 +10,15 @@ from .base import BaseSpoofModule
 
 class StorageSpoofModule(BaseSpoofModule):
     """Спуфинг Storage API"""
-    
+
     name = "storage"
     description = "Spoof storage estimate and indexedDB databases"
-    
+
     def get_js(self) -> str:
         return '''
 (function() {
     'use strict';
-    
+
     // ============================================
     // navigator.storage.estimate
     // ============================================
@@ -47,7 +47,7 @@ class StorageSpoofModule(BaseSpoofModule):
             return Promise.resolve([]);
         };
     }
-    
+
     // ============================================
     // Permissions API (query)
     // ============================================

@@ -7,18 +7,18 @@ Combines:
 """
 
 from .base import BaseSpoofModule
-from .js_utils import wrap_iife, define_properties
+from .js_utils import define_properties, wrap_iife
 
 
 class DisplaySpoofModule(BaseSpoofModule):
     """Consolidated screen and performance spoofing"""
-    
+
     name = "display"
     description = "Spoof screen properties and performance timing"
-    
+
     def get_js(self) -> str:
         p = self.profile
-        
+
         # Screen properties
         screen_props = {
             'width': str(p.screen_width),
@@ -31,7 +31,7 @@ class DisplaySpoofModule(BaseSpoofModule):
             'logicalXDPI': '96',
             'fontSmoothingEnabled': 'true',
         }
-        
+
         # Window dimensions
         window_props = {
             'innerWidth': str(p.screen_width),
@@ -40,10 +40,10 @@ class DisplaySpoofModule(BaseSpoofModule):
             'outerHeight': str(p.screen_height),
             'devicePixelRatio': str(p.pixel_ratio),
         }
-        
+
         screen_props_js = define_properties('screen', screen_props)
         window_props_js = define_properties('window', window_props)
-        
+
         return wrap_iife(f'''
 // ============================================
 // SCREEN PROPERTIES
@@ -66,7 +66,7 @@ const originalTiming = window.performance.timing;
 
 if (originalTiming && originalTiming.toJSON) {{
     const originalToJSON = originalTiming.toJSON.bind(originalTiming);
-    
+
     // Add minimal noise to timing values
     Object.defineProperty(originalTiming, 'toJSON', {{
         value: function() {{

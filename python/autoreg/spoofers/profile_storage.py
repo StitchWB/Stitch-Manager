@@ -7,23 +7,23 @@ Profile Storage - сохранение и загрузка профилей сп
 
 import json
 from pathlib import Path
-from typing import Optional
+
 from .profile import SpoofProfile
 
 
 class ProfileStorage:
     """Хранилище профилей спуфинга"""
-    
+
     def __init__(self, tokens_dir: Path):
         self.tokens_dir = Path(tokens_dir)
         self.profiles_dir = self.tokens_dir / '.profiles'
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def _get_profile_path(self, email: str) -> Path:
         """Путь к файлу профиля для email"""
         safe_name = email.replace('@', '_at_').replace('.', '_')
         return self.profiles_dir / f"{safe_name}.json"
-    
+
     def save(self, email: str, profile: SpoofProfile) -> bool:
         """Сохраняет профиль для аккаунта"""
         try:
@@ -34,8 +34,8 @@ class ProfileStorage:
         except Exception as e:
             print(f"[ProfileStorage] Failed to save: {e}")
             return False
-    
-    def load(self, email: str) -> Optional[SpoofProfile]:
+
+    def load(self, email: str) -> SpoofProfile | None:
         """Загружает профиль для аккаунта"""
         try:
             path = self._get_profile_path(email)
@@ -50,7 +50,7 @@ class ProfileStorage:
     def exists(self, email: str) -> bool:
         """Проверяет есть ли сохранённый профиль"""
         return self._get_profile_path(email).exists()
-    
+
     def delete(self, email: str) -> bool:
         """Удаляет профиль"""
         try:
@@ -60,18 +60,18 @@ class ProfileStorage:
             return True
         except Exception:
             return False
-    
+
     def get_or_create(self, email: str) -> SpoofProfile:
         """
         Загружает существующий профиль или создаёт новый.
-        
+
         Это основной метод - гарантирует консистентность fingerprint.
         """
         profile = self.load(email)
         if profile:
             # Loaded existing profile - no output to avoid breaking JSON protocol
             return profile
-        
+
         # Создаём новый профиль
         from .profile import generate_random_profile
         profile = generate_random_profile()

@@ -5,25 +5,24 @@ Kiro Config - динамическое чтение конфигурации и�
 чтобы не хардкодить значения которые могут измениться.
 """
 
-import os
-import json
 import hashlib
+import json
+import os
 import platform
-from pathlib import Path
-from typing import Optional, Dict, Any
 from functools import lru_cache
-
+from pathlib import Path
+from typing import Any
 
 # Fallback значения если Kiro не установлен
 FALLBACK_VERSION = "0.7.45"
 FALLBACK_MACHINE_ID = None
 
 
-def get_kiro_install_path() -> Optional[Path]:
+def get_kiro_install_path() -> Path | None:
     """
     Находит путь установки Kiro IDE.
     Uses centralized paths from core.paths module.
-    
+
     Приоритет:
     1. Переменная окружения KIRO_PATH
     2. Централизованные пути из core.paths
@@ -34,7 +33,7 @@ def get_kiro_install_path() -> Optional[Path]:
         kiro_path = Path(kiro_env)
         if kiro_path.exists():
             return kiro_path
-    
+
     # Priority 2: Use centralized paths
     from .paths import get_paths
     return get_paths().kiro_install_path
@@ -47,16 +46,16 @@ def get_kiro_version() -> str:
     Кэшируется для производительности.
     """
     kiro_path = get_kiro_install_path()
-    
+
     if not kiro_path:
         return FALLBACK_VERSION
-    
+
     # Ищем package.json
     package_paths = [
         kiro_path / 'resources' / 'app' / 'package.json',  # Windows
         kiro_path / 'package.json',  # macOS/Linux
     ]
-    
+
     for pkg_path in package_paths:
         if pkg_path.exists():
             try:
@@ -64,9 +63,9 @@ def get_kiro_version() -> str:
                 version = data.get('version')
                 if version:
                     return str(version)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 pass
-    
+
     return FALLBACK_VERSION
 
 
@@ -78,17 +77,17 @@ def get_custom_machine_id_path() -> Path:
 def get_machine_id(use_custom: bool = True) -> str:
     """
     Получает Machine ID.
-    
+
     ВАЖНО: Эта функция НЕ кэшируется! Каждый вызов читает файл заново,
     чтобы корректно обрабатывать ротацию machine-id.txt.
-    
+
     Приоритет:
     1. Кастомный ID из ~/.stitch-manager/machine-id.txt (если use_custom=True)
     2. Системный ID (как node-machine-id):
        - Windows: SHA256 от MachineGuid из реестра
        - Linux: SHA256 от /etc/machine-id
        - macOS: SHA256 от IOPlatformUUID
-    
+
     Args:
         use_custom: Использовать кастомный ID если есть (по умолчанию True)
     """
@@ -103,7 +102,7 @@ def get_machine_id(use_custom: bool = True) -> str:
                     return custom_id.lower()
             except Exception:
                 pass
-    
+
     # Fallback на системный ID (этот кэшируется - системный ID не меняется)
     return _get_system_machine_id()
 
@@ -111,10 +110,10 @@ def get_machine_id(use_custom: bool = True) -> str:
 def clear_machine_id_cache() -> None:
     """
     Очищает кэш системного Machine ID.
-    
+
     Вызывайте эту функцию если нужно принудительно перечитать
     системный machine ID (редкий случай, обычно не нужно).
-    
+
     Примечание: get_machine_id() НЕ кэшируется и всегда читает
     файл ~/.stitch-manager/machine-id.txt заново.
     """
@@ -129,7 +128,7 @@ def _get_system_machine_id() -> str:
     """
     try:
         system = platform.system()
-        
+
         if system == 'Windows':
             import winreg
             key = winreg.OpenKey(
@@ -140,13 +139,13 @@ def _get_system_machine_id() -> str:
             value, _ = winreg.QueryValueEx(key, "MachineGuid")
             winreg.CloseKey(key)
             return hashlib.sha256(value.encode()).hexdigest()
-        
+
         elif system == 'Linux':
             for path in ['/etc/machine-id', '/var/lib/dbus/machine-id']:
                 if Path(path).exists():
                     machine_id = Path(path).read_text().strip()
                     return hashlib.sha256(machine_id.encode()).hexdigest()
-        
+
         elif system == 'Darwin':
             # macOS - используем IOPlatformUUID
             import subprocess
@@ -158,10 +157,10 @@ def _get_system_machine_id() -> str:
                 if 'IOPlatformUUID' in line:
                     uuid = line.split('"')[-2]
                     return hashlib.sha256(uuid.encode()).hexdigest()
-    
+
     except Exception:
         pass
-    
+
     # Fallback: hostname-based ID
     hostname = platform.node()
     return hashlib.sha256(hostname.encode()).hexdigest()
@@ -201,26 +200,26 @@ def get_client_id_hash(start_url: str = "https://view.awsapps.com/start") -> str
 
 
 @lru_cache(maxsize=1)
-def get_kiro_storage_path() -> Optional[Path]:
+def get_kiro_storage_path() -> Path | None:
     """
     Возвращает путь к Kiro storage (где хранятся настройки и токены).
     """
     system = platform.system()
-    
+
     if system == 'Windows':
         base = Path(os.environ.get('APPDATA', '')) / 'Kiro'
     elif system == 'Darwin':
         base = Path.home() / 'Library' / 'Application Support' / 'Kiro'
     else:
         base = Path.home() / '.config' / 'Kiro'
-    
+
     if base.exists():
         return base
-    
+
     return None
 
 
-def get_kiro_info() -> Dict[str, Any]:
+def get_kiro_info() -> dict[str, Any]:
     """
     Возвращает полную информацию о Kiro IDE.
     Полезно для отладки.

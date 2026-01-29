@@ -5,15 +5,9 @@ NOTE: config.py, validators.py, email_generator.py, process_utils.py removed.
 These are now implemented in Rust. Only browser-related utilities remain.
 """
 
-from .paths import Paths
-from .exceptions import (
-    KiroError,
-    TokenError,
-    AuthError,
-    QuotaError,
-    MachineIdError
-)
 from .constants import *
+from .exceptions import AuthError, KiroError, MachineIdError, QuotaError, TokenError
+from .paths import Paths
 
 __all__ = [
     'Paths',

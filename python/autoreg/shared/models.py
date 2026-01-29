@@ -5,9 +5,10 @@ All configuration models use Pydantic for runtime type validation,
 providing type safety, automatic validation, and clear error messages.
 """
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Optional, Literal, Dict, Any
 from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EmailStrategy(str, Enum):
@@ -54,11 +55,11 @@ class AddyIoConfig(BaseModel):
 
     api_token: str = Field(..., description="Addy.io API token")
     base_url: str = Field("https://app.addy.io", description="Addy.io API base URL")
-    default_domain: Optional[str] = Field(None, description="Default domain for aliases")
+    default_domain: str | None = Field(None, description="Default domain for aliases")
     alias_format: str = Field(
         "uuid", description="Alias format: uuid, random_words, random_characters"
     )
-    description_template: Optional[str] = Field(None, description="Template for alias descriptions")
+    description_template: str | None = Field(None, description="Template for alias descriptions")
     auto_delete: bool = Field(False, description="Auto-delete aliases after use")
 
     @field_validator("api_token")
@@ -76,9 +77,9 @@ class PythonAutoregConfig(BaseModel):
     model_config = ConfigDict(frozen=False, extra="allow")  # Allow extra fields
 
     # Basic registration fields
-    email: Optional[str] = Field(None, description="Registration email address")
-    name: Optional[str] = Field(None, description="Display name")
-    password: Optional[str] = Field(None, description="Account password")
+    email: str | None = Field(None, description="Registration email address")
+    name: str | None = Field(None, description="Display name")
+    password: str | None = Field(None, description="Account password")
 
     # Browser settings
     headless: bool = Field(True, description="Run browser in headless mode")
@@ -97,48 +98,48 @@ class PythonAutoregConfig(BaseModel):
     imap_password: str = Field(..., description="IMAP password")
 
     # Addy.io settings (optional, only for addyio strategies)
-    addyio_config: Optional[AddyIoConfig] = Field(None, description="Addy.io configuration")
+    addyio_config: AddyIoConfig | None = Field(None, description="Addy.io configuration")
 
     # 33mail settings
-    thirty_three_mail_username: Optional[str] = Field(
+    thirty_three_mail_username: str | None = Field(
         None, description="33mail username (e.g. whitebite)"
     )
-    thirty_three_mail_domain: Optional[str] = Field("33mail.com", description="33mail domain")
+    thirty_three_mail_domain: str | None = Field("33mail.com", description="33mail domain")
 
     # Advanced settings with validation
-    speed_multiplier: Optional[float] = Field(
+    speed_multiplier: float | None = Field(
         None, ge=0.1, le=10.0, description="Speed multiplier for automation (0.1-10.0)"
     )
-    verification_code_timeout: Optional[int] = Field(
+    verification_code_timeout: int | None = Field(
         None, ge=10, le=600, description="Timeout for verification code retrieval (10-600 seconds)"
     )
-    oauth_callback_timeout: Optional[int] = Field(
+    oauth_callback_timeout: int | None = Field(
         None, ge=10, le=600, description="Timeout for OAuth callback (10-600 seconds)"
     )
-    allow_access_wait: Optional[int] = Field(
+    allow_access_wait: int | None = Field(
         None, ge=10, le=600, description="Wait time for allow access page (10-600 seconds)"
     )
-    page_load_timeout: Optional[int] = Field(
+    page_load_timeout: int | None = Field(
         None, ge=5, le=300, description="Page load timeout (5-300 seconds)"
     )
-    element_wait_timeout: Optional[int] = Field(
+    element_wait_timeout: int | None = Field(
         None, ge=1, le=60, description="Element wait timeout (1-60 seconds)"
     )
-    imap_poll_interval: Optional[int] = Field(
+    imap_poll_interval: int | None = Field(
         None, ge=1, le=60, description="IMAP polling interval (1-60 seconds)"
     )
-    password_length: Optional[int] = Field(
+    password_length: int | None = Field(
         None, ge=8, le=128, description="Generated password length (8-128 characters)"
     )
 
     # Feature flags
-    realistic_typing: Optional[bool] = Field(None, description="Use realistic typing simulation")
-    human_delays: Optional[bool] = Field(None, description="Add human-like delays")
-    screenshots_on_error: Optional[bool] = Field(None, description="Take screenshots on errors")
+    realistic_typing: bool | None = Field(None, description="Use realistic typing simulation")
+    human_delays: bool | None = Field(None, description="Add human-like delays")
+    screenshots_on_error: bool | None = Field(None, description="Take screenshots on errors")
 
     @field_validator("email")
     @classmethod
-    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+    def validate_email(cls, v: str | None) -> str | None:
         """Validate email format if provided"""
         if v and "@" not in v:
             raise ValueError("Invalid email format: must contain @")
@@ -160,7 +161,7 @@ class PythonAutoregConfig(BaseModel):
             raise ValueError("IMAP user cannot be empty")
         return v.strip()
 
-    def to_imap_config(self) -> Dict[str, Any]:
+    def to_imap_config(self) -> dict[str, Any]:
         """Convert to IMAP config dict for legacy code"""
         return {
             "host": self.imap_server,
@@ -176,27 +177,27 @@ class AutoregResult(BaseModel):
     model_config = ConfigDict(frozen=False, extra="allow")  # Allow extra fields
 
     success: bool = Field(..., description="Whether registration succeeded")
-    email: Optional[str] = Field(None, description="Registered email address")
-    password: Optional[str] = Field(None, description="Account password")
-    name: Optional[str] = Field(None, description="Display name")
-    username: Optional[str] = Field(None, description="Username (for GitHub, etc.)")
+    email: str | None = Field(None, description="Registered email address")
+    password: str | None = Field(None, description="Account password")
+    name: str | None = Field(None, description="Display name")
+    username: str | None = Field(None, description="Username (for GitHub, etc.)")
 
     # Token data
-    token: Optional[str] = Field(None, description="Access token")
-    refresh_token: Optional[str] = Field(None, description="Refresh token")
-    token_data: Optional[Dict[str, Any]] = Field(None, description="Full token data")
+    token: str | None = Field(None, description="Access token")
+    refresh_token: str | None = Field(None, description="Refresh token")
+    token_data: dict[str, Any] | None = Field(None, description="Full token data")
 
     # Provider info
-    provider: Optional[str] = Field(None, description="Provider name (kiro, github, etc.)")
+    provider: str | None = Field(None, description="Provider name (kiro, github, etc.)")
 
     # Error info
-    error: Optional[str] = Field(None, description="Error message if failed")
+    error: str | None = Field(None, description="Error message if failed")
 
     # Additional flags
-    requires_verification: Optional[bool] = Field(
+    requires_verification: bool | None = Field(
         None, description="Whether manual verification is required"
     )
-    verification_url: Optional[str] = Field(None, description="URL for manual verification")
+    verification_url: str | None = Field(None, description="URL for manual verification")
 
     @field_validator("success")
     @classmethod
@@ -212,10 +213,10 @@ class KiroRegistrationConfig(PythonAutoregConfig):
     """Kiro-specific registration configuration"""
 
     # OAuth settings
-    callback_port: Optional[int] = Field(
+    callback_port: int | None = Field(
         43210, ge=1024, le=65535, description="OAuth callback server port (1024-65535)"
     )
-    oauth_timeout: Optional[int] = Field(
+    oauth_timeout: int | None = Field(
         300, ge=10, le=600, description="OAuth flow timeout (10-600 seconds)"
     )
 
@@ -223,16 +224,16 @@ class KiroRegistrationConfig(PythonAutoregConfig):
 class GithubRegistrationConfig(PythonAutoregConfig):
     """GitHub-specific registration configuration"""
 
-    username: Optional[str] = Field(
+    username: str | None = Field(
         None, description="GitHub username (generated from email if not provided)"
     )
-    verification_code: Optional[str] = Field(
+    verification_code: str | None = Field(
         None, description="Manual verification code (if not using IMAP)"
     )
 
     @field_validator("username")
     @classmethod
-    def validate_username(cls, v: Optional[str]) -> Optional[str]:
+    def validate_username(cls, v: str | None) -> str | None:
         """Validate GitHub username format"""
         if v:
             # GitHub username requirements:
@@ -259,8 +260,8 @@ class TraeRegistrationConfig(PythonAutoregConfig):
 class WindsurfRegistrationConfig(PythonAutoregConfig):
     """Windsurf-specific registration configuration"""
 
-    first_name: Optional[str] = Field(None, description="First name")
-    last_name: Optional[str] = Field(None, description="Last name")
+    first_name: str | None = Field(None, description="First name")
+    last_name: str | None = Field(None, description="Last name")
     collect_scripts: bool = Field(False, description="Collect JavaScript files for analysis")
 
 

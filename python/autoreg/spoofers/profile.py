@@ -6,28 +6,26 @@
 
 import json
 import random
-import platform
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # Cross-platform file locking
 if sys.platform != 'win32':
-    import fcntl
+    pass
 
-from .ip_timezone import detect_ip_geo, get_system_timezone, IPGeoData
+from .ip_timezone import detect_ip_geo
 
 
 @dataclass
 class SpoofProfile:
     """Профиль для спуфинга - все параметры в одном месте"""
-    
+
     # Browser - актуальная версия Chrome (декабрь 2024)
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     platform: str = "Win32"
     vendor: str = "Google Inc."
-    
+
     # Screen
     screen_width: int = 1920
     screen_height: int = 1080
@@ -35,36 +33,36 @@ class SpoofProfile:
     avail_height: int = 1040  # height - taskbar
     color_depth: int = 24
     pixel_ratio: float = 1.0
-    
+
     # Hardware
     hardware_concurrency: int = 8
     device_memory: int = 8
     max_touch_points: int = 0
-    
+
     # WebGL
     webgl_vendor: str = "Google Inc. (NVIDIA)"
     webgl_renderer: str = "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"
-    
+
     # Timezone
     timezone: str = "America/New_York"
     timezone_offset: int = 300  # минуты от UTC
     locale: str = "en-US"
-    
+
     # Geolocation
     latitude: float = 40.7128
     longitude: float = -74.0060
     accuracy: float = 50.0
-    
+
     # Canvas/Audio noise seed (для консистентного fingerprint)
     noise_seed: int = field(default_factory=lambda: random.randint(1, 1000000))
-    
+
     # Fonts
     fonts: list = field(default_factory=lambda: [
         'Arial', 'Arial Black', 'Calibri', 'Cambria', 'Comic Sans MS',
         'Consolas', 'Courier New', 'Georgia', 'Impact', 'Lucida Console',
         'Segoe UI', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana'
     ])
-    
+
     def to_dict(self) -> dict:
         """Сериализует профиль в словарь для сохранения"""
         return {
@@ -91,7 +89,7 @@ class SpoofProfile:
             'noise_seed': self.noise_seed,
             'fonts': self.fonts,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> 'SpoofProfile':
         """Создаёт профиль из словаря"""
@@ -170,24 +168,24 @@ PROFILES = {
 }
 
 
-def generate_profile_from_ip() -> Optional[SpoofProfile]:
+def generate_profile_from_ip() -> SpoofProfile | None:
     """
     Генерирует профиль на основе IP геолокации.
-    
+
     Timezone и координаты берутся из IP, остальное рандомизируется.
     Это важно чтобы timezone совпадал с IP!
     """
     geo = detect_ip_geo()
     if not geo:
         return None
-    
+
     print(f"[PROFILE] Detected IP geo: {geo.city}, {geo.country} ({geo.timezone})")
-    
+
     # Случайное разрешение экрана
     resolutions = [(1920, 1080), (1366, 768), (1536, 864), (1440, 900), (1280, 720)]
     screen_width, screen_height = random.choice(resolutions)
     taskbar_height = random.choice([40, 48, 30])
-    
+
     # Случайный WebGL
     webgl_configs = [
         ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
@@ -196,12 +194,12 @@ def generate_profile_from_ip() -> Optional[SpoofProfile]:
         ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
     ]
     webgl_vendor, webgl_renderer = random.choice(webgl_configs)
-    
+
     # Актуальные версии Chrome
     chrome_versions = ['131.0.0.0', '130.0.0.0', '129.0.0.0']
     chrome_version = random.choice(chrome_versions)
     user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version} Safari/537.36"
-    
+
     return SpoofProfile(
         user_agent=user_agent,
         platform="Win32",
@@ -229,7 +227,7 @@ def generate_profile_from_ip() -> Optional[SpoofProfile]:
 def generate_random_profile() -> SpoofProfile:
     """
     Генерирует профиль спуфинга.
-    
+
     Приоритет:
     1. По IP геолокации (timezone совпадает с IP)
     2. Fallback на случайный US профиль
@@ -238,18 +236,18 @@ def generate_random_profile() -> SpoofProfile:
     profile = generate_profile_from_ip()
     if profile:
         return profile
-    
+
     # IP geo failed - silent fallback
-    
+
     # Fallback на случайный US профиль
     us_profiles = ['new_york', 'los_angeles', 'chicago']
     base = PROFILES[random.choice(us_profiles)]
-    
+
     # Случайное разрешение экрана
     resolutions = [(1920, 1080), (1366, 768), (1536, 864), (1440, 900), (1280, 720)]
     screen_width, screen_height = random.choice(resolutions)
     taskbar_height = random.choice([40, 48, 30])
-    
+
     # Случайный WebGL
     webgl_configs = [
         ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
@@ -258,12 +256,12 @@ def generate_random_profile() -> SpoofProfile:
         ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
     ]
     webgl_vendor, webgl_renderer = random.choice(webgl_configs)
-    
+
     # Актуальные версии Chrome
     chrome_versions = ['131.0.0.0', '130.0.0.0', '129.0.0.0']
     chrome_version = random.choice(chrome_versions)
     user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version} Safari/537.36"
-    
+
     return SpoofProfile(
         user_agent=user_agent,
         platform=base.platform,
@@ -304,7 +302,7 @@ def get_profile_path(email: str) -> Path:
 def save_profile(email: str, profile: SpoofProfile) -> bool:
     """
     Сохраняет профиль спуфинга для аккаунта.
-    
+
     Вызывается после успешной регистрации.
     """
     try:
@@ -312,7 +310,7 @@ def save_profile(email: str, profile: SpoofProfile) -> bool:
         data = profile.to_dict()
         data['email'] = email
         data['saved_at'] = __import__('datetime').datetime.now().isoformat()
-        
+
         with open(path, 'w', encoding='utf-8') as f:
             # Use platform-specific file locking
             if sys.platform != 'win32':
@@ -325,7 +323,7 @@ def save_profile(email: str, profile: SpoofProfile) -> bool:
             else:
                 # Windows: simple write without locking (for now)
                 json.dump(data, f, indent=2)
-        
+
         print(f"[PROFILE] Saved fingerprint for {email}")
         return True
     except Exception as e:
@@ -333,18 +331,18 @@ def save_profile(email: str, profile: SpoofProfile) -> bool:
         return False
 
 
-def load_profile(email: str) -> Optional[SpoofProfile]:
+def load_profile(email: str) -> SpoofProfile | None:
     """
     Загружает сохранённый профиль для аккаунта.
-    
+
     Используется при работе с токеном для консистентности fingerprint.
     """
     try:
         path = get_profile_path(email)
         if not path.exists():
             return None
-        
-        with open(path, 'r', encoding='utf-8') as f:
+
+        with open(path, encoding='utf-8') as f:
             # Use platform-specific file locking
             if sys.platform != 'win32':
                 import fcntl
@@ -356,7 +354,7 @@ def load_profile(email: str) -> Optional[SpoofProfile]:
             else:
                 # Windows: simple read without locking (for now)
                 data = json.load(f)
-        
+
         profile = SpoofProfile.from_dict(data)
         print(f"[PROFILE] Loaded fingerprint for {email}")
         return profile
@@ -365,10 +363,10 @@ def load_profile(email: str) -> Optional[SpoofProfile]:
         return None
 
 
-def get_or_create_profile(email: Optional[str] = None) -> SpoofProfile:
+def get_or_create_profile(email: str | None = None) -> SpoofProfile:
     """
     Получает профиль для email или создаёт новый.
-    
+
     Если email указан и профиль существует - загружает его.
     Иначе генерирует новый.
     """
@@ -376,5 +374,5 @@ def get_or_create_profile(email: Optional[str] = None) -> SpoofProfile:
         profile = load_profile(email)
         if profile:
             return profile
-    
+
     return generate_random_profile()

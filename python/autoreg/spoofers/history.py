@@ -6,25 +6,26 @@ Amazon FWCIM проверяет history.length
 """
 
 import random
+
 from .base import BaseSpoofModule
 
 
 class HistorySpoofModule(BaseSpoofModule):
     """Спуфинг History API"""
-    
+
     name = "history"
     description = "History length spoof"
-    
+
     def get_js(self) -> str:
         # Реалистичная длина истории (2-15)
         history_length = random.randint(2, 15)
-        
+
         return f"""
 (function() {{
     // Спуфим history.length
     // Реальные пользователи обычно имеют историю 2-15
     const fakeLength = {history_length};
-    
+
     try {{
         Object.defineProperty(window.history, 'length', {{
             get: function() {{ return fakeLength; }},
@@ -43,7 +44,7 @@ class HistorySpoofModule(BaseSpoofModule):
                 return value;
             }}
         }});
-        
+
         try {{
             Object.defineProperty(window, 'history', {{
                 get: () => historyProxy,

@@ -6,18 +6,17 @@ AWS может проверять соответствие между UA и Clie
 """
 
 import re
-from typing import Tuple
 
 from .base import BaseSpoofModule
 
 
-def parse_platform_from_ua(user_agent: str) -> Tuple[str, str, str, str]:
+def parse_platform_from_ua(user_agent: str) -> tuple[str, str, str, str]:
     """
     Извлекает информацию о платформе из User-Agent строки.
-    
+
     Returns:
         Tuple[platform, platform_version, architecture, bitness]
-        
+
     Примеры User-Agent:
     - Windows: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36..."
     - macOS: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36..."
@@ -28,7 +27,7 @@ def parse_platform_from_ua(user_agent: str) -> Tuple[str, str, str, str]:
     platform_version = "10.0.0"
     architecture = "x86"
     bitness = "64"
-    
+
     # Определяем платформу
     if "Macintosh" in user_agent or "Mac OS X" in user_agent:
         platform = "macOS"
@@ -43,7 +42,7 @@ def parse_platform_from_ua(user_agent: str) -> Tuple[str, str, str, str]:
             platform_version = "10.15.7"  # Безопасный default для macOS
         architecture = "arm"  # Современные Mac на Apple Silicon
         bitness = "64"
-        
+
     elif "Linux" in user_agent:
         platform = "Linux"
         platform_version = ""  # Linux не передаёт версию в Client Hints
@@ -56,17 +55,17 @@ def parse_platform_from_ua(user_agent: str) -> Tuple[str, str, str, str]:
         else:
             architecture = "x86"
             bitness = "64"
-            
+
     elif "Windows" in user_agent:
         platform = "Windows"
         architecture = "x86"
-        
+
         # Определяем битность
         if "Win64" in user_agent or "x64" in user_agent or "WOW64" in user_agent:
             bitness = "64"
         else:
             bitness = "32"
-        
+
         # Windows NT версия
         # Windows NT 10.0 может быть Windows 10 или Windows 11
         # Различаем по build number если есть, иначе default = Windows 10
@@ -97,55 +96,55 @@ def parse_platform_from_ua(user_agent: str) -> Tuple[str, str, str, str]:
                 platform_version = "6.1.0"  # Windows 7
             else:
                 platform_version = "10.0.0"  # Default
-    
+
     return platform, platform_version, architecture, bitness
 
 
 class ClientHintsSpoofModule(BaseSpoofModule):
     """Спуфинг Client Hints API"""
-    
+
     name = "client_hints"
     description = "Spoof navigator.userAgentData (Client Hints)"
-    
+
     def get_js(self) -> str:
         p = self.profile
-        
+
         # Извлекаем версию Chrome из user_agent
         chrome_match = re.search(r'Chrome/(\d+)', p.user_agent)
         chrome_version = chrome_match.group(1) if chrome_match else '131'
-        
+
         # Извлекаем информацию о платформе из User-Agent
         platform, platform_version, architecture, bitness = parse_platform_from_ua(p.user_agent)
-        
+
         return f'''
 (function() {{
     'use strict';
-    
+
     const CHROME_VERSION = '{chrome_version}';
     const PLATFORM = '{platform}';
     const PLATFORM_VERSION = '{platform_version}';
     const ARCHITECTURE = '{architecture}';
     const BITNESS = '{bitness}';
-    
+
     // Brands array (как в реальном Chrome)
     const brands = [
         {{ brand: 'Google Chrome', version: CHROME_VERSION }},
         {{ brand: 'Chromium', version: CHROME_VERSION }},
         {{ brand: 'Not_A Brand', version: '24' }}
     ];
-    
+
     const fullVersionList = [
         {{ brand: 'Google Chrome', version: CHROME_VERSION + '.0.0.0' }},
         {{ brand: 'Chromium', version: CHROME_VERSION + '.0.0.0' }},
         {{ brand: 'Not_A Brand', version: '24.0.0.0' }}
     ];
-    
+
     // Создаём fake userAgentData с правильным prototype
     const NavigatorUAData = function() {{}};
     NavigatorUAData.prototype.brands = brands;
     NavigatorUAData.prototype.mobile = false;
     NavigatorUAData.prototype.platform = PLATFORM;
-    
+
     NavigatorUAData.prototype.getHighEntropyValues = function(hints) {{
         return Promise.resolve({{
             architecture: ARCHITECTURE,
@@ -161,7 +160,7 @@ class ClientHintsSpoofModule(BaseSpoofModule):
             formFactors: ['Desktop']
         }});
     }};
-    
+
     NavigatorUAData.prototype.toJSON = function() {{
         return {{
             brands: brands,
@@ -169,20 +168,20 @@ class ClientHintsSpoofModule(BaseSpoofModule):
             platform: PLATFORM
         }};
     }};
-    
+
     const fakeUserAgentData = new NavigatorUAData();
     fakeUserAgentData.brands = brands;
     fakeUserAgentData.mobile = false;
     fakeUserAgentData.platform = PLATFORM;
-    
+
     // Замораживаем brands array
     Object.freeze(fakeUserAgentData.brands);
-    
+
     // Регистрируем в Proxy системе (если доступна)
     if (typeof window.__registerSpoofedProp === 'function') {{
         window.__registerSpoofedProp('userAgentData', () => fakeUserAgentData);
     }}
-    
+
     // Также пробуем напрямую переопределить (для случаев без Proxy)
     try {{
         Object.defineProperty(navigator, 'userAgentData', {{
@@ -191,7 +190,7 @@ class ClientHintsSpoofModule(BaseSpoofModule):
             enumerable: true
         }});
     }} catch(e) {{}}
-    
+
     // Добавляем Symbol.toStringTag для правильного typeof
     try {{
         Object.defineProperty(NavigatorUAData.prototype, Symbol.toStringTag, {{

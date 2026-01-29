@@ -1,35 +1,35 @@
-import os
-import re
-import json
 import hashlib
+import json
+import os
 import time
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
-from typing import Optional, List, Dict, Any
+
 
 class ScriptCollector:
     """
     Класс для сбора и сохранения JavaScript файлов из браузера.
     Использует DrissionPage listen() для перехвата сетевых запросов.
     """
-    def __init__(self, output_dir: Optional[str] = None):
+    def __init__(self, output_dir: str | None = None):
         if output_dir is None:
             # По умолчанию сохраняем в prepared-area/collected-scripts
             root = Path(__file__).parent.parent.parent.parent.parent
             self.output_dir = root / "prepared-area" / "collected-scripts"
         else:
             self.output_dir = Path(output_dir)
-            
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.manifest_path = self.output_dir / "manifest.json"
         self.manifest = self._load_manifest()
         self.collected_hashes = set(self.manifest.keys())
-        self.collected_urls = set(item["url"] for item in self.manifest.values())
+        self.collected_urls = {item["url"] for item in self.manifest.values()}
 
-    def _load_manifest(self) -> Dict[str, Any]:
+    def _load_manifest(self) -> dict[str, Any]:
         if self.manifest_path.exists():
             try:
-                with open(self.manifest_path, 'r', encoding='utf-8') as f:
+                with open(self.manifest_path, encoding='utf-8') as f:
                     data = json.load(f)
                     return dict(data) if data else {}
             except Exception:
@@ -55,21 +55,21 @@ class ScriptCollector:
             # Пытаемся собрать пакеты быстро, чтобы не блокировать основной поток
             count = 0
             max_packets_per_call = 50 # Ограничиваем количество за один вызов
-            
+
             while count < max_packets_per_call:
                 # Используем минимальный таймаут
                 packet = page.listen.wait(timeout=0.01)
                 if not packet:
                     break
-                
+
                 count += 1
                 url = packet.url
-                
+
                 # Фильтруем JS
-                is_js = ('.js' in url.lower() or 
-                         packet.resourceType == 'Script' or 
+                is_js = ('.js' in url.lower() or
+                         packet.resourceType == 'Script' or
                          (packet.response and 'javascript' in (packet.response.headers.get('Content-Type', '').lower())))
-                
+
                 if is_js and url not in self.collected_urls:
                     try:
                         content = packet.response.body
@@ -80,7 +80,7 @@ class ScriptCollector:
                             self.collected_urls.add(url)
                     except Exception:
                         pass
-            
+
             if count > 0:
                 self._save_manifest() # Сохраняем один раз после пачки
         except Exception:
@@ -92,7 +92,7 @@ class ScriptCollector:
         """
         # Сначала собираем то, что перехватили через listen
         self.collect_from_listen(page)
-        
+
         # Затем ищем инлайновые скрипты в DOM
         try:
             scripts = page.eles('tag:script')
@@ -112,7 +112,7 @@ class ScriptCollector:
                         if url not in self.collected_urls:
                             self._save_script(url, text.encode('utf-8'), is_inline=True)
                             self.collected_urls.add(url)
-            
+
             # Сохраняем манифест после всех изменений
             self._save_manifest()
         except Exception:
@@ -124,15 +124,15 @@ class ScriptCollector:
             content_bytes = content.encode('utf-8')
         else:
             content_bytes = content
-            
+
         self._save_script(f"inline_from_{page_url}", content_bytes, is_inline=True)
 
     def _save_script(self, url: str, content: bytes, is_inline: bool = False):
         if not content:
             return
-            
+
         sha256 = hashlib.sha256(content).hexdigest()
-        
+
         if sha256 in self.collected_hashes:
             return
 
@@ -140,7 +140,7 @@ class ScriptCollector:
         parsed = urlparse(url)
         path_part = parsed.path
         filename = os.path.basename(path_part)
-        
+
         if not filename or not filename.endswith('.js'):
             if is_inline:
                 filename = f"inline_{sha256[:8]}.js"

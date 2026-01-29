@@ -15,12 +15,12 @@ class Paths:
     _instance: Optional["Paths"] = None
 
     # Kiro paths (могут быть None если Kiro не установлен)
-    kiro_user_dir: Optional[Path]
-    kiro_global_storage: Optional[Path]
-    kiro_storage_json: Optional[Path]
-    kiro_state_db: Optional[Path]
-    kiro_agent_storage: Optional[Path]
-    kiro_install_path: Optional[Path]
+    kiro_user_dir: Path | None
+    kiro_global_storage: Path | None
+    kiro_storage_json: Path | None
+    kiro_state_db: Path | None
+    kiro_agent_storage: Path | None
+    kiro_install_path: Path | None
 
     def __new__(cls):
         if cls._instance is None:
@@ -100,7 +100,7 @@ class Paths:
         # =====================================================================
         # Kiro installation path
         # =====================================================================
-        self.kiro_install_path: Optional[Path] = None
+        self.kiro_install_path: Path | None = None
         if self.os_type == "windows":
             possible_paths = [
                 Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "kiro",
@@ -182,14 +182,14 @@ class Paths:
         """Возвращает список всех файлов токенов"""
         return list(self.tokens_dir.glob("token-*.json"))
 
-    def list_backups(self, prefix: Optional[str] = None) -> list[Path]:
+    def list_backups(self, prefix: str | None = None) -> list[Path]:
         """Возвращает список бэкапов"""
         pattern = f"{prefix}-*.json" if prefix else "*.json"
         return sorted(self.backups_dir.glob(pattern), reverse=True)
 
 
 # Singleton instance
-_paths: Optional[Paths] = None
+_paths: Paths | None = None
 
 
 def get_paths() -> Paths:
