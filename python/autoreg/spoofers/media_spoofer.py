@@ -7,18 +7,18 @@ Combines:
 """
 
 from .base import BaseSpoofModule
-from .js_utils import wrap_iife, mulberry32_prng
+from .js_utils import mulberry32_prng, wrap_iife
 
 
 class MediaSpoofModule(BaseSpoofModule):
     """Consolidated audio and media devices spoofing"""
-    
+
     name = "media"
     description = "Spoof AudioContext and MediaDevices"
-    
+
     def get_js(self) -> str:
         p = self.profile
-        
+
         return wrap_iife(f'''
 const NOISE_SEED = {p.noise_seed};
 
@@ -31,31 +31,31 @@ const NOISE_SEED = {p.noise_seed};
 if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {{
     const AC = AudioContext || webkitAudioContext;
     const originalGetChannelData = AudioBuffer.prototype.getChannelData;
-    
+
     AudioBuffer.prototype.getChannelData = function(channel) {{
         const data = originalGetChannelData.call(this, channel);
-        
+
         // Add minimal noise to first 100 samples
         for (let i = 0; i < Math.min(data.length, 100); i++) {{
             data[i] += (rng() - 0.5) * 0.0001;
         }}
-        
+
         return data;
     }};
-    
+
     // Spoof createAnalyser
     const originalCreateAnalyser = AC.prototype.createAnalyser;
     AC.prototype.createAnalyser = function() {{
         const analyser = originalCreateAnalyser.call(this);
         const originalGetFloatFrequencyData = analyser.getFloatFrequencyData.bind(analyser);
-        
+
         analyser.getFloatFrequencyData = function(array) {{
             originalGetFloatFrequencyData(array);
             for (let i = 0; i < Math.min(array.length, 10); i++) {{
                 array[i] += (rng() - 0.5) * 0.1;
             }}
         }};
-        
+
         return analyser;
     }};
 }}
@@ -66,7 +66,7 @@ if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefi
 // ============================================
 if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {{
     const originalEnumerate = navigator.mediaDevices.enumerateDevices;
-    
+
     const mockDevices = [
         {{
             deviceId: "",
@@ -87,7 +87,7 @@ if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {{
             groupId: "mock-group-1"
         }}
     ];
-    
+
     navigator.mediaDevices.enumerateDevices = function() {{
         return Promise.resolve(mockDevices);
     }};

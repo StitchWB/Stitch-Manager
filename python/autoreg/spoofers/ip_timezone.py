@@ -5,11 +5,11 @@
 Поддерживает локальный режим без внешних запросов для приватности.
 """
 
-import requests
-import time
 import datetime
-from typing import Optional, Tuple, Dict
+import time
 from dataclasses import dataclass
+
+import requests
 
 
 @dataclass
@@ -35,7 +35,7 @@ TIMEZONE_OFFSETS = {
     'America/Phoenix': 420,       # UTC-7 (no DST)
     'America/Anchorage': 540,     # UTC-9
     'Pacific/Honolulu': 600,      # UTC-10
-    
+
     # Европа
     'Europe/London': 0,           # UTC+0
     'Europe/Paris': -60,          # UTC+1
@@ -50,7 +50,7 @@ TIMEZONE_OFFSETS = {
     'Europe/Helsinki': -120,      # UTC+2
     'Europe/Athens': -120,        # UTC+2
     'Europe/Istanbul': -180,      # UTC+3
-    
+
     # Азия
     'Asia/Tokyo': -540,           # UTC+9
     'Asia/Shanghai': -480,        # UTC+8
@@ -68,13 +68,13 @@ TIMEZONE_OFFSETS = {
     'Asia/Karachi': -300,         # UTC+5
     'Asia/Tehran': -210,          # UTC+3:30
     'Asia/Jerusalem': -120,       # UTC+2
-    
+
     # Другие
     'Australia/Sydney': -660,     # UTC+11
     'Australia/Melbourne': -660,  # UTC+11
     'Australia/Perth': -480,      # UTC+8
     'Pacific/Auckland': -780,     # UTC+13
-    
+
     # Южная Америка
     'America/Sao_Paulo': 180,     # UTC-3
     'America/Buenos_Aires': 180,  # UTC-3
@@ -82,12 +82,12 @@ TIMEZONE_OFFSETS = {
     'America/Lima': 300,          # UTC-5
     'America/Bogota': 300,        # UTC-5
     'America/Mexico_City': 360,   # UTC-6
-    
+
     # Канада
     'America/Toronto': 300,       # UTC-5
     'America/Vancouver': 480,     # UTC-8
     'America/Edmonton': 420,      # UTC-7
-    
+
     # Африка
     'Africa/Cairo': -120,         # UTC+2
     'Africa/Johannesburg': -120,  # UTC+2
@@ -98,7 +98,7 @@ TIMEZONE_OFFSETS = {
 
 # Маппинг timezone -> геоданные (country, city, lat, lon)
 # Используется для локального режима без внешних API
-TIMEZONE_GEO_DATA: Dict[str, Dict] = {
+TIMEZONE_GEO_DATA: dict[str, dict] = {
     # США
     'America/New_York': {'country': 'US', 'city': 'New York', 'lat': 40.7128, 'lon': -74.0060},
     'America/Chicago': {'country': 'US', 'city': 'Chicago', 'lat': 41.8781, 'lon': -87.6298},
@@ -107,7 +107,7 @@ TIMEZONE_GEO_DATA: Dict[str, Dict] = {
     'America/Phoenix': {'country': 'US', 'city': 'Phoenix', 'lat': 33.4484, 'lon': -112.0740},
     'America/Anchorage': {'country': 'US', 'city': 'Anchorage', 'lat': 61.2181, 'lon': -149.9003},
     'Pacific/Honolulu': {'country': 'US', 'city': 'Honolulu', 'lat': 21.3069, 'lon': -157.8583},
-    
+
     # Европа
     'Europe/London': {'country': 'GB', 'city': 'London', 'lat': 51.5074, 'lon': -0.1278},
     'Europe/Paris': {'country': 'FR', 'city': 'Paris', 'lat': 48.8566, 'lon': 2.3522},
@@ -122,7 +122,7 @@ TIMEZONE_GEO_DATA: Dict[str, Dict] = {
     'Europe/Helsinki': {'country': 'FI', 'city': 'Helsinki', 'lat': 60.1699, 'lon': 24.9384},
     'Europe/Athens': {'country': 'GR', 'city': 'Athens', 'lat': 37.9838, 'lon': 23.7275},
     'Europe/Istanbul': {'country': 'TR', 'city': 'Istanbul', 'lat': 41.0082, 'lon': 28.9784},
-    
+
     # Азия
     'Asia/Tokyo': {'country': 'JP', 'city': 'Tokyo', 'lat': 35.6762, 'lon': 139.6503},
     'Asia/Shanghai': {'country': 'CN', 'city': 'Shanghai', 'lat': 31.2304, 'lon': 121.4737},
@@ -140,13 +140,13 @@ TIMEZONE_GEO_DATA: Dict[str, Dict] = {
     'Asia/Karachi': {'country': 'PK', 'city': 'Karachi', 'lat': 24.8607, 'lon': 67.0011},
     'Asia/Tehran': {'country': 'IR', 'city': 'Tehran', 'lat': 35.6892, 'lon': 51.3890},
     'Asia/Jerusalem': {'country': 'IL', 'city': 'Jerusalem', 'lat': 31.7683, 'lon': 35.2137},
-    
+
     # Австралия и Океания
     'Australia/Sydney': {'country': 'AU', 'city': 'Sydney', 'lat': -33.8688, 'lon': 151.2093},
     'Australia/Melbourne': {'country': 'AU', 'city': 'Melbourne', 'lat': -37.8136, 'lon': 144.9631},
     'Australia/Perth': {'country': 'AU', 'city': 'Perth', 'lat': -31.9505, 'lon': 115.8605},
     'Pacific/Auckland': {'country': 'NZ', 'city': 'Auckland', 'lat': -36.8485, 'lon': 174.7633},
-    
+
     # Южная Америка
     'America/Sao_Paulo': {'country': 'BR', 'city': 'São Paulo', 'lat': -23.5505, 'lon': -46.6333},
     'America/Buenos_Aires': {'country': 'AR', 'city': 'Buenos Aires', 'lat': -34.6037, 'lon': -58.3816},
@@ -154,12 +154,12 @@ TIMEZONE_GEO_DATA: Dict[str, Dict] = {
     'America/Lima': {'country': 'PE', 'city': 'Lima', 'lat': -12.0464, 'lon': -77.0428},
     'America/Bogota': {'country': 'CO', 'city': 'Bogotá', 'lat': 4.7110, 'lon': -74.0721},
     'America/Mexico_City': {'country': 'MX', 'city': 'Mexico City', 'lat': 19.4326, 'lon': -99.1332},
-    
+
     # Канада
     'America/Toronto': {'country': 'CA', 'city': 'Toronto', 'lat': 43.6532, 'lon': -79.3832},
     'America/Vancouver': {'country': 'CA', 'city': 'Vancouver', 'lat': 49.2827, 'lon': -123.1207},
     'America/Edmonton': {'country': 'CA', 'city': 'Edmonton', 'lat': 53.5461, 'lon': -113.4938},
-    
+
     # Африка
     'Africa/Cairo': {'country': 'EG', 'city': 'Cairo', 'lat': 30.0444, 'lon': 31.2357},
     'Africa/Johannesburg': {'country': 'ZA', 'city': 'Johannesburg', 'lat': -26.2041, 'lon': 28.0473},
@@ -228,18 +228,18 @@ def get_locale_for_country(country_code: str) -> str:
 def get_local_geo_data() -> IPGeoData:
     """
     Получает геоданные на основе системного timezone.
-    
+
     Не делает внешних запросов - полностью локальная функция.
     Используется для приватности (не раскрывает реальный IP).
-    
+
     Returns:
         IPGeoData с примерными данными на основе системного timezone
     """
     tz_name, offset_minutes = get_system_timezone()
-    
+
     # Ищем геоданные для timezone
     geo_data = TIMEZONE_GEO_DATA.get(tz_name)
-    
+
     if not geo_data:
         # Если timezone не найден, пробуем найти по offset
         for tz, data in TIMEZONE_GEO_DATA.items():
@@ -247,15 +247,15 @@ def get_local_geo_data() -> IPGeoData:
                 geo_data = data
                 tz_name = tz
                 break
-    
+
     # Fallback на New York если ничего не найдено
     if not geo_data:
         geo_data = TIMEZONE_GEO_DATA['America/New_York']
         tz_name = 'America/New_York'
         offset_minutes = TIMEZONE_OFFSETS['America/New_York']
-    
+
     country = geo_data['country']
-    
+
     return IPGeoData(
         ip='127.0.0.1',  # Локальный IP - не раскрываем реальный
         timezone=tz_name,
@@ -268,31 +268,31 @@ def get_local_geo_data() -> IPGeoData:
     )
 
 
-def detect_ip_geo(use_external_api: bool = True) -> Optional[IPGeoData]:
+def detect_ip_geo(use_external_api: bool = True) -> IPGeoData | None:
     """
     Определяет геолокацию по текущему IP.
-    
+
     Args:
         use_external_api: Если True, использует внешние API (ip-api.com и др.)
                          Если False, возвращает данные на основе системного timezone
                          (не раскрывает реальный IP - для приватности)
-    
+
     Returns:
         IPGeoData или None если не удалось определить
-    
+
     Note:
         При use_external_api=False IP будет '127.0.0.1', а геоданные
         будут примерными на основе системного timezone.
-        
+
         При use_external_api=True, если все API недоступны,
         автоматически используется fallback на локальные данные.
     """
-    
+
     # Если не используем внешние API - возвращаем локальные данные
     if not use_external_api:
         # Silent - using local data
         return get_local_geo_data()
-    
+
     # Попытка 1: ip-api.com (бесплатный, без ключа)
     try:
         resp = requests.get(
@@ -316,7 +316,7 @@ def detect_ip_geo(use_external_api: bool = True) -> Optional[IPGeoData]:
                 )
     except Exception as e:
         print(f"[IP-GEO] ip-api.com failed: {e}")
-    
+
     # Попытка 2: ipapi.co (бесплатный лимит)
     try:
         resp = requests.get('https://ipapi.co/json/', timeout=5)
@@ -336,7 +336,7 @@ def detect_ip_geo(use_external_api: bool = True) -> Optional[IPGeoData]:
             )
     except Exception as e:
         print(f"[IP-GEO] ipapi.co failed: {e}")
-    
+
     # Попытка 3: ipinfo.io (бесплатный лимит)
     try:
         resp = requests.get('https://ipinfo.io/json', timeout=5)
@@ -357,16 +357,16 @@ def detect_ip_geo(use_external_api: bool = True) -> Optional[IPGeoData]:
             )
     except Exception as e:
         print(f"[IP-GEO] ipinfo.io failed: {e}")
-    
+
     # Fallback на локальные данные если все API недоступны
     # Silent fallback
     return get_local_geo_data()
 
 
-def get_system_timezone() -> Tuple[str, int]:
+def get_system_timezone() -> tuple[str, int]:
     """
     Получает timezone из системы.
-    
+
     Returns:
         (timezone_name, offset_minutes)
     """
@@ -375,13 +375,13 @@ def get_system_timezone() -> Tuple[str, int]:
         offset_seconds = -time.altzone
     else:
         offset_seconds = -time.timezone
-    
+
     # Конвертируем в минуты (положительное = запад от UTC)
     offset_minutes = -offset_seconds // 60
-    
+
     # Пытаемся получить имя timezone
     tz_name = None
-    
+
     # Метод 1: через datetime.astimezone()
     try:
         local_tz = datetime.datetime.now().astimezone().tzinfo
@@ -392,29 +392,28 @@ def get_system_timezone() -> Tuple[str, int]:
                 tz_name = tz_str
     except Exception:
         pass
-    
+
     # Метод 2: через переменную окружения TZ
     if not tz_name:
         import os
         env_tz = os.environ.get('TZ')
         if env_tz and env_tz in TIMEZONE_GEO_DATA:
             tz_name = env_tz
-    
+
     # Метод 3: через zoneinfo (Python 3.9+)
     if not tz_name:
         try:
-            import zoneinfo
             # Пробуем получить системный timezone
-            local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+            local_tz = datetime.datetime.now(datetime.UTC).astimezone().tzinfo
             if local_tz and hasattr(local_tz, 'key'):
                 tz_name = local_tz.key  # type: ignore[attr-defined]
         except Exception:
             pass
-    
+
     # Fallback - угадываем по offset
     if not tz_name:
         tz_name = _guess_timezone_by_offset(offset_minutes)
-    
+
     return tz_name, offset_minutes
 
 
@@ -430,7 +429,7 @@ if __name__ == '__main__':
     print("=" * 50)
     print("Testing IP geolocation")
     print("=" * 50)
-    
+
     # Тест 1: Локальные данные (без внешних API)
     print("\n[TEST 1] Local timezone data (use_external_api=False)")
     print("-" * 50)
@@ -443,7 +442,7 @@ if __name__ == '__main__':
         print(f"  TZ Offset: {geo_local.timezone_offset} min")
         print(f"  Coords: {geo_local.latitude}, {geo_local.longitude}")
         print(f"  Locale: {geo_local.locale}")
-    
+
     # Тест 2: Внешние API (по умолчанию)
     print("\n[TEST 2] External API data (use_external_api=True)")
     print("-" * 50)
@@ -456,14 +455,14 @@ if __name__ == '__main__':
         print(f"  TZ Offset: {geo_external.timezone_offset} min")
         print(f"  Coords: {geo_external.latitude}, {geo_external.longitude}")
         print(f"  Locale: {geo_external.locale}")
-    
+
     # Тест 3: Системный timezone
     print("\n[TEST 3] System timezone detection")
     print("-" * 50)
     tz, offset = get_system_timezone()
     print(f"  Timezone: {tz}")
     print(f"  Offset: {offset} min")
-    
+
     print("\n" + "=" * 50)
     print("Tests completed!")
     print("=" * 50)

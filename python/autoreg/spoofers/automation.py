@@ -10,26 +10,26 @@ from .base import BaseSpoofModule
 
 class AutomationSpoofModule(BaseSpoofModule):
     """Скрытие признаков автоматизации браузера"""
-    
+
     name = "automation"
     description = "Hide automation/webdriver detection"
-    
+
     def get_js(self) -> str:
         return '''
 (function() {
     'use strict';
-    
+
     // ============================================
     // WEBDRIVER FLAG - handled by Proxy in cdp_spoofer.py
     // ============================================
     // НЕ трогаем webdriver здесь - Proxy уже установлен
-    
+
     // ============================================
     // AUTOMATION PROPERTIES
-    // Списки из app-min.js: WEBDRIVER_DOCUMENT_PROPERTIES, 
+    // Списки из app-min.js: WEBDRIVER_DOCUMENT_PROPERTIES,
     // WEBDRIVER_WINDOW_PROPERTIES, WEBDRIVER_NAVIGATOR_PROPERTIES
     // ============================================
-    
+
     const windowProps = [
         // WEBDRIVER_WINDOW_PROPERTIES
         '__webdriverFunc', 'domAutomation', 'domAutomationController',
@@ -44,7 +44,7 @@ class AutomationSpoofModule(BaseSpoofModule):
         // Others
         '_selenium', 'calledSelenium', '_Selenium_IDE_Recorder'
     ];
-    
+
     const documentProps = [
         // WEBDRIVER_DOCUMENT_PROPERTIES
         '__selenium_evaluate', '__webdriver_evaluate', '__driver_evaluate',
@@ -54,12 +54,12 @@ class AutomationSpoofModule(BaseSpoofModule):
         '$cdc_asdjflasutopfhvcZLmcfl_', '$chrome_asyncScriptInfo',
         '__$webdriverAsyncExecutor'
     ];
-    
+
     const navigatorProps = [
         'webdriver', '__webdriver_evaluate', '__selenium_evaluate',
         '__webdriver_unwrapped', '__selenium_unwrapped'
     ];
-    
+
     // Удаляем из window
     windowProps.forEach(prop => {
         try {
@@ -68,7 +68,7 @@ class AutomationSpoofModule(BaseSpoofModule):
             }
         } catch(e) {}
     });
-    
+
     // Удаляем из document
     documentProps.forEach(prop => {
         try {
@@ -84,7 +84,7 @@ class AutomationSpoofModule(BaseSpoofModule):
         // Если плагинов нет - это подозрительно (headless)
         // Но navigator.py должен был их добавить.
     }
-    
+
     // ============================================
     // CHROME RUNTIME (headless detection)
     // ============================================
@@ -122,7 +122,7 @@ class AutomationSpoofModule(BaseSpoofModule):
             configurable: true
         });
     }
-    
+
     // ============================================
     // Permissions Query
     // ============================================
@@ -139,6 +139,6 @@ class AutomationSpoofModule(BaseSpoofModule):
     // Avoid "Cloudflare" useragent check mentioned in report
     // ============================================
     // (UserAgent is handled by DrissionPage/CDP, but we can double check)
-    
+
 })();
 '''

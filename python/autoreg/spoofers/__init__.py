@@ -10,38 +10,26 @@
 
 Использование:
     from autoreg.spoofers import apply_pre_navigation_spoofing, BehaviorSpoofModule
-    
+
     # Спуфинг (до навигации)
     spoofer = apply_pre_navigation_spoofing(page)
     page.get('https://...')
-    
+
     # Человеческое поведение
     behavior = BehaviorSpoofModule()
     behavior.human_delay()
 """
 
 # Profile
-from .profile import SpoofProfile, PROFILES, generate_random_profile
+# JS Modules (consolidated)
+from .automation import AutomationSpoofModule
 
 # Base
 from .base import BaseSpoofModule
 
-# JS Modules (consolidated)
-from .automation import AutomationSpoofModule
-from .navigator_spoofer import NavigatorSpoofModule
-from .display_spoofer import DisplaySpoofModule
-from .graphics_spoofer import GraphicsSpoofModule
-from .media_spoofer import MediaSpoofModule
-from .device_spoofer import DeviceSpoofModule
-from .timezone import TimezoneSpoofModule
-from .intl import IntlSpoofModule
-from .webrtc import WebRTCSpoofModule
-from .geolocation import GeolocationSpoofModule
+# Behavior (Python module, not JS)
+from .behavior import BehaviorSpoofModule
 from .cdp_hide import CDPHideSpoofModule
-from .client_hints import ClientHintsSpoofModule
-from .math import MathSpoofModule
-from .history import HistorySpoofModule
-from .storage import StorageSpoofModule
 
 # CDP Spoofer (main entry point)
 from .cdp_spoofer import (
@@ -49,10 +37,20 @@ from .cdp_spoofer import (
     apply_cdp_spoofing,
     apply_pre_navigation_spoofing,
 )
-
-# Behavior (Python module, not JS)
-from .behavior import BehaviorSpoofModule
-
+from .client_hints import ClientHintsSpoofModule
+from .device_spoofer import DeviceSpoofModule
+from .display_spoofer import DisplaySpoofModule
+from .geolocation import GeolocationSpoofModule
+from .graphics_spoofer import GraphicsSpoofModule
+from .history import HistorySpoofModule
+from .intl import IntlSpoofModule
+from .math import MathSpoofModule
+from .media_spoofer import MediaSpoofModule
+from .navigator_spoofer import NavigatorSpoofModule
+from .profile import PROFILES, SpoofProfile, generate_random_profile
+from .storage import StorageSpoofModule
+from .timezone import TimezoneSpoofModule
+from .webrtc import WebRTCSpoofModule
 
 # Все JS-модули (consolidated to 15 modules)
 ALL_JS_MODULES = [

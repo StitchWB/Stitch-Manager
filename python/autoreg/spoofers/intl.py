@@ -10,19 +10,19 @@ from .base import BaseSpoofModule
 
 class IntlSpoofModule(BaseSpoofModule):
     """Спуфинг Intl API"""
-    
+
     name = "intl"
     description = "Spoof Intl API (locales and timezones)"
-    
+
     def get_js(self) -> str:
         p = self.profile
         return f'''
 (function() {{
     'use strict';
-    
+
     const PROFILE_LOCALE = '{p.locale}';
     const PROFILE_TIMEZONE = '{p.timezone}';
-    
+
     // ============================================
     // Intl.DateTimeFormat
     // ============================================
@@ -33,7 +33,7 @@ class IntlSpoofModule(BaseSpoofModule):
         if (!finalOptions.timeZone) {{
             finalOptions.timeZone = PROFILE_TIMEZONE;
         }}
-        
+
         // Handle call without 'new'
         if (!(this instanceof Intl.DateTimeFormat)) {{
             return OriginalDTF(finalLocales, finalOptions);
@@ -86,7 +86,7 @@ class IntlSpoofModule(BaseSpoofModule):
         Intl.RelativeTimeFormat.prototype = OriginalRTF.prototype;
         Intl.RelativeTimeFormat.supportedLocalesOf = OriginalRTF.supportedLocalesOf;
     }}
-    
+
     // ============================================
     // Intl.DisplayNames
     // ============================================

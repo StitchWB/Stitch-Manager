@@ -11,9 +11,10 @@ Addy.io creates aliases that FORWARD to a real email inbox.
 IMAP is still required to read the forwarded emails.
 """
 
-from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
-from .addyio import AddyIoService, AddyIoConfig
+from typing import Any
+
+from .addyio import AddyIoConfig, AddyIoService
 
 # Import EmailStrategy - handle both relative and absolute imports
 try:
@@ -27,9 +28,9 @@ class EmailContext:
     """Context for generated email"""
 
     email: str
-    alias_id: Optional[str] = None
+    alias_id: str | None = None
     should_cleanup: bool = False
-    metadata: Optional[Dict[str, Any]] = field(default_factory=dict)
+    metadata: dict[str, Any] | None = field(default_factory=dict)
 
 
 class EmailManager:
@@ -39,8 +40,8 @@ class EmailManager:
         self,
         strategy: EmailStrategy,
         base_email: str,
-        addyio_config: Optional[AddyIoConfig] = None,
-        thirty_three_mail_config: Optional[Dict[str, str]] = None,
+        addyio_config: AddyIoConfig | None = None,
+        thirty_three_mail_config: dict[str, str] | None = None,
         counter: int = 0,
     ):
         """
@@ -64,7 +65,7 @@ class EmailManager:
                 raise ValueError("Addy.io config required for addyio strategies")
             self.addyio_service = AddyIoService(addyio_config)
 
-    def generate_email(self, description: Optional[str] = None) -> EmailContext:
+    def generate_email(self, description: str | None = None) -> EmailContext:
         """
         Generate email based on strategy.
 

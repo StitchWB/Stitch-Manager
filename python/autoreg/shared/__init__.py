@@ -10,33 +10,27 @@ Contains:
 - Logging utilities
 """
 
-from .oauth_callback_server import OAuthCallbackServer, CallbackHandler
-from .session_manager import (
-    SessionManager, SessionData, SessionStatus, Provider,
-    get_session_manager
-)
-from .password_utils import generate_secure_password
-from .name_utils import (
-    generate_name_from_email,
-    generate_github_username,
-    split_name
-)
 from .browser_utils import (
-    create_browser_options,
+    clear_browser_data,
     create_browser,
+    create_browser_options,
     wait_for_cdp_ready,
-    clear_browser_data
 )
-from .logging_utils import (
-    safe_log,
-    create_safe_logger,
-    SafeLogger,
-    strip_ansi_codes
+from .logging_utils import SafeLogger, create_safe_logger, safe_log, strip_ansi_codes
+from .name_utils import generate_github_username, generate_name_from_email, split_name
+from .oauth_callback_server import CallbackHandler, OAuthCallbackServer
+from .password_utils import generate_secure_password
+from .session_manager import (
+    Provider,
+    SessionData,
+    SessionManager,
+    SessionStatus,
+    get_session_manager,
 )
 
 __all__ = [
     # OAuth
-    'OAuthCallbackServer', 
+    'OAuthCallbackServer',
     'CallbackHandler',
     # Session management
     'SessionManager',

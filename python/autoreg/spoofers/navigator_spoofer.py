@@ -7,18 +7,18 @@ Combines:
 """
 
 from .base import BaseSpoofModule
-from .js_utils import wrap_iife, define_properties
+from .js_utils import define_properties, wrap_iife
 
 
 class NavigatorSpoofModule(BaseSpoofModule):
     """Consolidated navigator properties and capabilities spoofing"""
-    
+
     name = "navigator"
     description = "Spoof navigator properties, plugins, and JS capabilities"
-    
+
     def get_js(self) -> str:
         p = self.profile
-        
+
         # Basic navigator properties
         nav_props = {
             'platform': f"'{p.platform}'",
@@ -32,9 +32,9 @@ class NavigatorSpoofModule(BaseSpoofModule):
             'doNotTrack': 'null',
             'msDoNotTrack': 'undefined',
         }
-        
+
         nav_props_js = define_properties('navigator', nav_props)
-        
+
         return wrap_iife(f'''
 // ============================================
 // BASIC NAVIGATOR PROPERTIES
@@ -114,7 +114,7 @@ const createMimeType = (type, suffixes, description, enabledPlugin) => {{
 // Create Plugin with proper prototype
 const createPlugin = (name, filename, description, mimeTypes = []) => {{
     const plugin = Object.create(originalPlugin ? originalPlugin.prototype : Object.prototype);
-    
+
     Object.defineProperties(plugin, {{
         name: {{ value: name, enumerable: true }},
         filename: {{ value: filename, enumerable: true }},
@@ -122,19 +122,19 @@ const createPlugin = (name, filename, description, mimeTypes = []) => {{
         version: {{ value: '', enumerable: true }},
         length: {{ value: mimeTypes.length, enumerable: true }}
     }});
-    
+
     // Add methods
     plugin.item = function(i) {{ return mimeTypes[i]; }};
     plugin.namedItem = function(n) {{ return mimeTypes.find(m => m.type === n); }};
     plugin[Symbol.iterator] = function* () {{
         for (let i = 0; i < mimeTypes.length; i++) yield mimeTypes[i];
     }};
-    
+
     // Add indexed access
     mimeTypes.forEach((mt, i) => {{
         Object.defineProperty(plugin, i, {{ value: mt, enumerable: true }});
     }});
-    
+
     return plugin;
 }};
 

@@ -13,7 +13,6 @@
   - RegistrationError (ошибки регистрации)
 """
 
-from typing import Optional
 
 
 class KiroError(Exception):
@@ -27,8 +26,8 @@ class KiroError(Exception):
 
 class ValidationError(KiroError):
     """Базовое исключение для ошибок валидации"""
-    
-    def __init__(self, message: str, field: Optional[str] = None, value: Optional[str] = None):
+
+    def __init__(self, message: str, field: str | None = None, value: str | None = None):
         self.field = field
         self.value = value
         super().__init__(message)
@@ -36,7 +35,7 @@ class ValidationError(KiroError):
 
 class EmailValidationError(ValidationError):
     """Ошибка валидации email"""
-    
+
     def __init__(self, email: str, reason: str = "Invalid email format"):
         super().__init__(
             message=f"Email validation failed for '{email}': {reason}",
@@ -48,7 +47,7 @@ class EmailValidationError(ValidationError):
 
 class PasswordValidationError(ValidationError):
     """Ошибка валидации пароля"""
-    
+
     def __init__(self, reason: str):
         super().__init__(
             message=f"Password validation failed: {reason}",
@@ -60,7 +59,7 @@ class PasswordValidationError(ValidationError):
 
 class NameValidationError(ValidationError):
     """Ошибка валидации имени"""
-    
+
     def __init__(self, name: str, reason: str):
         super().__init__(
             message=f"Name validation failed for '{name}': {reason}",
@@ -72,8 +71,8 @@ class NameValidationError(ValidationError):
 
 class ImapConfigValidationError(ValidationError):
     """Ошибка валидации IMAP конфигурации"""
-    
-    def __init__(self, reason: str, field: Optional[str] = None):
+
+    def __init__(self, reason: str, field: str | None = None):
         super().__init__(
             message=f"IMAP configuration validation failed: {reason}",
             field=field or "imap_config",
@@ -84,7 +83,7 @@ class ImapConfigValidationError(ValidationError):
 
 class ProxyValidationError(ValidationError):
     """Ошибка валидации прокси"""
-    
+
     def __init__(self, proxy_url: str, reason: str):
         super().__init__(
             message=f"Proxy validation failed for '{proxy_url}': {reason}",

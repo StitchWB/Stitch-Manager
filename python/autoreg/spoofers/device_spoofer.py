@@ -13,10 +13,10 @@ from .js_utils import wrap_iife
 
 class DeviceSpoofModule(BaseSpoofModule):
     """Consolidated device hardware spoofing"""
-    
+
     name = "device"
     description = "Spoof battery, network, and sensor APIs"
-    
+
     def get_js(self) -> str:
         return wrap_iife('''
 // ============================================
@@ -33,7 +33,7 @@ if (navigator.getBattery) {
         removeEventListener: () => {},
         dispatchEvent: () => true
     };
-    
+
     navigator.getBattery = () => Promise.resolve(fakeBattery);
 }
 

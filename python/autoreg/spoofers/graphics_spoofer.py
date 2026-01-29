@@ -8,19 +8,19 @@ Combines:
 """
 
 from .base import BaseSpoofModule
-from .js_utils import wrap_iife, mulberry32_prng, add_noise_function
+from .js_utils import add_noise_function, mulberry32_prng, wrap_iife
 
 
 class GraphicsSpoofModule(BaseSpoofModule):
     """Consolidated WebGL, Canvas, and Font spoofing"""
-    
+
     name = "graphics"
     description = "Spoof WebGL, Canvas, and Font fingerprints"
-    
+
     def get_js(self) -> str:
         p = self.profile
         fonts_js = ', '.join(f'"{f}"' for f in p.fonts)
-        
+
         return wrap_iife(f'''
 const NOISE_SEED = {p.noise_seed};
 const WEBGL_VENDOR = '{p.webgl_vendor}';
@@ -42,7 +42,7 @@ const spoofWebGL = (proto) => {{
         if (param === 37446) return WEBGL_RENDERER; // UNMASKED_RENDERER_WEBGL
         if (param === 7936) return WEBGL_VENDOR;    // VENDOR
         if (param === 7937) return WEBGL_RENDERER;  // RENDERER
-        
+
         // Common limits often used for fingerprinting
         if (param === 34921) return new Float32Array([1, 1024]); // ALIASED_LINE_WIDTH_RANGE
         if (param === 34930) return 16384;  // MAX_RENDERBUFFER_SIZE
@@ -51,10 +51,10 @@ const spoofWebGL = (proto) => {{
         if (param === 3386) return new Int32Array([16384, 16384]); // MAX_VIEWPORT_DIMS
         if (param === 36347) return 4096;   // MAX_VERTEX_UNIFORM_VECTORS
         if (param === 36348) return 4096;   // MAX_FRAGMENT_UNIFORM_VECTORS
-        
+
         return originalGetParameter.call(this, param);
     }};
-    
+
     // Spoof getExtension for WEBGL_debug_renderer_info
     const originalGetExtension = proto.getExtension;
     proto.getExtension = function(name) {{
@@ -92,7 +92,7 @@ HTMLCanvasElement.prototype.toDataURL = function(type, quality) {{
                 const h = Math.min(this.height, 4);
                 const imageData = ctx.getImageData(0, 0, w, h);
                 const data = imageData.data;
-                
+
                 for (let i = 0; i < data.length; i += 4) {{
                     const noise = Math.floor(rng() * 3) - 1;
                     data[i] = Math.max(0, Math.min(255, data[i] + noise));
@@ -109,7 +109,7 @@ const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
 CanvasRenderingContext2D.prototype.getImageData = function(sx, sy, sw, sh) {{
     const imageData = originalGetImageData.call(this, sx, sy, sw, sh);
     const data = imageData.data;
-    
+
     for (let i = 0; i < Math.min(data.length, 64); i += 4) {{
         const noise = Math.floor(rng() * 3) - 1;
         data[i] = Math.max(0, Math.min(255, data[i] + noise));
@@ -153,7 +153,7 @@ if (document.fonts && document.fonts.check) {{
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 Element.prototype.getBoundingClientRect = function() {{
     const rect = originalGetBoundingClientRect.call(this);
-    
+
     const res = {{
         x: addNoise(rect.x),
         y: addNoise(rect.y),
