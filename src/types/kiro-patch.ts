@@ -12,6 +12,7 @@ export interface PatchModules {
   authWatcher: boolean;
   constantPatching: boolean;
   customPrompts: boolean;
+  requestSpy: boolean;
 }
 
 export interface PatchConstants {

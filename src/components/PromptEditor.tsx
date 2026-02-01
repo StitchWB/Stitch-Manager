@@ -7,6 +7,8 @@ import {
   getDefaultPromptContent,
   resetPromptToDefault,
 } from '../lib/tauri';
+import { Tooltip } from './Tooltip';
+import { Button } from './ui/Button';
 
 interface PromptEditorProps {
   promptName: string;
@@ -28,11 +30,11 @@ export default function PromptEditor({ promptName, title, description }: PromptE
   const loadPrompt = async () => {
     try {
       setIsLoading(true);
-      
+
       // Load default content
       const defContent = await getDefaultPromptContent(promptName);
       setDefaultContent(defContent);
-      
+
       // Try to load user content, fallback to default
       try {
         const userContent = await getPromptContent(promptName);
@@ -103,27 +105,28 @@ export default function PromptEditor({ promptName, title, description }: PromptE
           )}
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={handleReset}
-            disabled={isSaving || !isModified}
-            className="btn-secondary text-sm flex items-center gap-2"
-            title="Reset to Kiro default"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset to Default
-          </button>
-          <button
+          <Tooltip content="Reset to Kiro default">
+            <Button
+              onClick={handleReset}
+              disabled={isSaving || !isModified}
+              variant="secondary"
+              size="sm"
+              leftIcon={<RotateCcw className="w-4 h-4" />}
+            >
+              Reset to Default
+            </Button>
+          </Tooltip>
+          <Button
             onClick={handleSave}
             disabled={isSaving}
-            className="btn-primary text-sm flex items-center gap-2"
+            variant="primary"
+            size="sm"
+            leftIcon={
+              isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />
+            }
           >
-            {isSaving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
             Save
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -131,7 +134,7 @@ export default function PromptEditor({ promptName, title, description }: PromptE
       <div className="relative">
         <textarea
           value={content}
-          onChange={(e) => {
+          onChange={e => {
             setContent(e.target.value);
             setIsModified(e.target.value !== defaultContent);
           }}

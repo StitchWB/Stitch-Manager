@@ -2,412 +2,1003 @@
 // DO NOT EDIT MANUALLY
 // Run `npm run generate:types` to regenerate
 
-export type DetectedIDE = { id: string; name: string; ideType: string; path: string; version: string | null; isRunning: boolean; isPatched: boolean; patchVersion: string | null; patchedAt: string | null; canPatch: boolean; error: string | null; installed: boolean }
+export type DetectedIDE = {
+  id: string;
+  name: string;
+  type: string;
+  path: string;
+  version: string | null;
+  isRunning: boolean;
+  isPatched: boolean;
+  patchVersion: string | null;
+  patchedAt: string | null;
+  canPatch: boolean;
+  error: string | null;
+  installed: boolean;
+};
 
-export type DetectedIde = { id: string; name: string; ideType: string; path: string | null; version: string | null; isPatched: boolean; patchVersion: string | null; patchedAt: string | null; canPatch: boolean; error: string | null; installed: boolean }
+export type DetectedIde = {
+  id: string;
+  name: string;
+  ideType: string;
+  path: string | null;
+  version: string | null;
+  isPatched: boolean;
+  patchVersion: string | null;
+  patchedAt: string | null;
+  canPatch: boolean;
+  error: string | null;
+  installed: boolean;
+};
 
-export type PatchResult = { success: boolean; message: string; backupPath: string | null }
+export type PatchResult = { success: boolean; message: string; backupPath: string | null };
 
-export type BackupInfo = { path: string; originalPath: string; sha256Hash: string; createdAt: string; fileSize: number }
+export type BackupInfo = {
+  path: string;
+  originalPath: string;
+  sha256Hash: string;
+  createdAt: string;
+  fileSize: number;
+};
 
-export type PatchStatus = "applied" | "not_applied" | "partially_applied" | "unknown"
+export type PatchStatus = 'applied' | 'not_applied' | 'partially_applied' | 'unknown';
 
-export type PatchStatusResult = { ideType: string; status: PatchStatus; extensionValid: boolean; extensionPath: string | null; backupExists: boolean; backupValid: boolean; backupPath: string | null; patternsApplied: number; totalPatterns: number; fileHash: string | null; patchVersion: string | null }
+export type PatchStatusResult = {
+  ideType: string;
+  status: PatchStatus;
+  extensionValid: boolean;
+  extensionPath: string | null;
+  backupExists: boolean;
+  backupValid: boolean;
+  backupPath: string | null;
+  patternsApplied: number;
+  totalPatterns: number;
+  fileHash: string | null;
+  patchVersion: string | null;
+};
 
-export type Account = { id: number; provider: string; email: string; token: string | null; refreshToken: string | null; quota: SimpleQuotaInfo; status: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string; updatedAt: string | null; metadata: string | null; providerType: string | null; providerSubtype: string | null; providerMetadata: string | null }
+export type Account = {
+  id: number;
+  provider: string;
+  email: string;
+  token: string | null;
+  refreshToken: string | null;
+  quota: SimpleQuotaInfo;
+  status: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  metadata: string | null;
+  providerType: string | null;
+  providerSubtype: string | null;
+  providerMetadata: string | null;
+  machineId: string | null;
+  patchConfig: string | null;
+  patchAppliedAt: string | null;
+  registrationPassword: string | null;
+  registrationDate: string | null;
+  registrationMethod: string | null;
+  registrationMetadata: string | null;
+  browserProfilePath: string | null;
+  cookies: string | null;
+  sessionData: string | null;
+  useCount: number;
+  lastError: string | null;
+  errorCount: number;
+  successRate: number;
+  notes: string | null;
+  tags: string | null;
+  lastLoginAt: string | null;
+  loginCount: number;
+  accountRegion: string | null;
+};
 
-export type SimpleQuotaInfo = { used: number; limit: number; resetAt?: string | null }
+export type SimpleQuotaInfo = { used: number; limit: number; resetAt?: string | null };
 
-export type QuotaInfoResponse = { accountId: number; provider: string; email: string; quotaUsed: number; quotaLimit: number; quotaRemaining: number; percentageUsed: number }
+export type QuotaInfoResponse = {
+  accountId: number;
+  provider: string;
+  email: string;
+  quotaUsed: number;
+  quotaLimit: number;
+  quotaRemaining: number;
+  percentageUsed: number;
+};
 
-export type ServerStatus = { isRunning: boolean; port: number; host: string; uptime: number | null; requestCount: number; activeConnections: number }
+export type ServerStatus = {
+  isRunning: boolean;
+  port: number;
+  host: string;
+  uptime: number | null;
+  requestCount: number;
+  activeConnections: number;
+};
 
-export type PoolRefreshResult = { success: boolean; message: string; refreshedCount: number; failedCount: number; errors: string[] }
+export type PoolRefreshResult = {
+  success: boolean;
+  message: string;
+  refreshedCount: number;
+  failedCount: number;
+  errors: string[];
+};
 
-export type PoolReloadResult = { success: boolean; message: string; loadedCount: number; previousCount: number }
+export type PoolReloadResult = {
+  success: boolean;
+  message: string;
+  loadedCount: number;
+  previousCount: number;
+};
 
-export type HealthResponse = { status: string; appName: string; version: string }
+export type HealthResponse = { status: string; appName: string; version: string };
 
-export type AppConfig = { general: GeneralConfigSettings; registration: RegistrationConfigSettings; imap: ImapConfig; llmServer: LLMServerConfig; proxy: ProxyConfigSettings; idePaths: IDEPathsConfigSettings }
+export type AppConfig = {
+  general: GeneralConfigSettings;
+  registration: RegistrationConfigSettings;
+  imap: ImapConfig;
+  llmServer: LLMServerConfig;
+  proxy: ProxyConfigSettings;
+  idePaths: IDEPathsConfigSettings;
+};
 
-export type GeneralConfigSettings = { theme: string; language: string; autoSave: boolean }
+export type GeneralConfigSettings = { theme: string; language: string; autoSave: boolean };
 
-export type RegistrationConfigSettings = { defaultProvider: string; autoGenerateEmail: boolean; emailStrategy: string; provider: string; mode: string; headless: boolean; count: number }
+export type RegistrationConfigSettings = {
+  defaultProvider: string;
+  autoGenerateEmail: boolean;
+  emailStrategy: string;
+  provider: string;
+  mode: string;
+  headless: boolean;
+  count: number;
+};
 
-export type ProxyConfigSettings = { enabled: boolean; url: string | null; username: string | null; password: string | null }
+export type ProxyConfigSettings = {
+  enabled: boolean;
+  url: string | null;
+  username: string | null;
+  password: string | null;
+};
 
-export type IDEPathsConfigSettings = { kiroPath: string | null; windsurfPath: string | null; traePath: string | null; vscodePath: string | null }
+export type IDEPathsConfigSettings = {
+  kiroPath: string | null;
+  windsurfPath: string | null;
+  traePath: string | null;
+  vscodePath: string | null;
+};
 
-export type DeviceFlowSessionResponse = { sessionId: string; deviceCode: string; userCode: string; verificationUri: string; expiresIn: number; expiresAt: string; interval: number; clientId: string; clientSecret: string }
+export type DeviceFlowSessionResponse = {
+  sessionId: string;
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  expiresAt: string;
+  interval: number;
+  clientId: string;
+  clientSecret: string;
+};
 
-export type DeviceFlowTokenResponse = { accessToken: string; refreshToken: string | null; expiresIn: number | null; tokenType: string; tokenPath: string | null }
+export type DeviceFlowTokenResponse = {
+  accessToken: string;
+  refreshToken: string | null;
+  expiresIn: number | null;
+  tokenType: string;
+  tokenPath: string | null;
+};
 
-export type AccountCreate = { provider: string; email: string; password: string; token: string | null; refreshToken: string | null; quotaLimit: number | null; metadata: string | null }
+export type AccountCreate = {
+  provider: string;
+  email: string;
+  password: string;
+  token: string | null;
+  refreshToken: string | null;
+  quotaLimit: number | null;
+  metadata: string | null;
+};
 
-export type IDEStatusResponse = { totalDetected: number; runningCount: number; totalInstalled: number; totalRunning: number; ides: IDEStatus[] }
+export type IDEStatusResponse = {
+  totalDetected: number;
+  runningCount: number;
+  totalInstalled: number;
+  totalRunning: number;
+  ides: IDEStatus[];
+};
 
-export type IDEStatus = { id: string; name: string; displayName: string; path: string; version: string | null; isRunning: boolean; running: boolean; installed: boolean; isPatched: boolean; dataPath: string; installPath: string; pid: number | null }
+export type IDEStatus = {
+  id: string;
+  name: string;
+  displayName: string;
+  path: string;
+  version: string | null;
+  isRunning: boolean;
+  running: boolean;
+  installed: boolean;
+  isPatched: boolean;
+  dataPath: string;
+  installPath: string;
+  pid: number | null;
+};
 
-export type IDEPathsResponse = { ide: string; name: string; paths: string[]; defaultPath: string | null; dataPath: string | null; installPath: string | null; extensionPath: string | null; configPath: string | null; logsPath: string | null }
+export type IDEPathsResponse = {
+  ide: string;
+  name: string;
+  paths: string[];
+  defaultPath: string | null;
+  dataPath: string | null;
+  installPath: string | null;
+  extensionPath: string | null;
+  configPath: string | null;
+  logsPath: string | null;
+};
 
-export type IDEKillResult = { success: boolean; message: string; name: string; processesKilled: number; killedPids: number[] }
+export type IDEKillResult = {
+  success: boolean;
+  message: string;
+  name: string;
+  processesKilled: number;
+  killedPids: number[];
+};
 
-export type AutoRegResponse = { success: boolean; email: string | null; password: string | null; error: string | null; needsConfirmation: boolean }
+export type AutoRegResponse = {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  error: string | null;
+  needsConfirmation: boolean;
+};
 
-export type PythonAutoregResult = { success: boolean; email: string | null; password: string | null; tokenFile: string | null; token: string | null; refreshToken: string | null; error: string | null; name: string | null }
+export type PythonAutoregResult = {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  tokenFile: string | null;
+  token: string | null;
+  refreshToken: string | null;
+  error: string | null;
+  name: string | null;
+};
 
-export type RegistrationJob = { id: number; provider: string; status: string; step: string | null; progress: number | null; email: string | null; error: string | null; createdAt: string; completedAt: string | null }
+export type RegistrationJob = {
+  id: number;
+  provider: string;
+  status: string;
+  step: string | null;
+  progress: number | null;
+  email: string | null;
+  error: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
 
-export type PoolConfig = { switchStrategy: string; autoRefreshEnabled: boolean; switchOnError: boolean; switchOnRateLimit: boolean; maxErrorsBeforeBan: number }
+export type PoolConfig = {
+  switchStrategy: string;
+  autoRefreshEnabled: boolean;
+  switchOnError: boolean;
+  switchOnRateLimit: boolean;
+  maxErrorsBeforeBan: number;
+};
 
 /**
  * Registration status for tracking ongoing registration processes
  */
-export type RegistrationStatus = { isRunning: boolean; success: boolean | null; status: string | null; provider: string | null; email: string | null; step: string | null; progress: number | null; error: string | null; startedAt: string | null }
+export type RegistrationStatus = {
+  isRunning: boolean;
+  success: boolean | null;
+  status: string | null;
+  provider: string | null;
+  email: string | null;
+  step: string | null;
+  progress: number | null;
+  error: string | null;
+  startedAt: string | null;
+};
 
 /**
  * Result of token refresh operation
  */
-export type TokenRefreshResult = { success: boolean; accessToken: string | null; refreshToken: string | null; expiresAt: string | null; message: string }
+export type TokenRefreshResult = {
+  success: boolean;
+  accessToken: string | null;
+  refreshToken: string | null;
+  expiresAt: string | null;
+  message: string;
+};
 
 /**
  * Result of a bulk operation
  */
-export type BulkOperationResult = { total: number; succeeded: number; failed: number; errors: string[] }
+export type BulkOperationResult = {
+  total: number;
+  succeeded: number;
+  failed: number;
+  errors: string[];
+};
 
-export type EmailCounterStatus = { provider: string; strategy: string; counter: number; updatedAt: string | null; databasePath: string; databaseExists: boolean; databaseWritable: boolean }
+export type EmailCounterStatus = {
+  provider: string;
+  strategy: string;
+  counter: number;
+  updatedAt: string | null;
+  databasePath: string;
+  databaseExists: boolean;
+  databaseWritable: boolean;
+};
 
-export type EmailCounterDiagnostics = { databasePath: string; databaseExists: boolean; databaseWritable: boolean; counters: EmailCounterStatus[]; lastGeneratedEmails: GeneratedEmailRecord[]; currentStrategy: string }
+export type EmailCounterDiagnostics = {
+  databasePath: string;
+  databaseExists: boolean;
+  databaseWritable: boolean;
+  counters: EmailCounterStatus[];
+  lastGeneratedEmails: GeneratedEmailRecord[];
+  currentStrategy: string;
+};
 
-export type GeneratedEmailRecord = { email: string; counter: number; provider: string; createdAt: string }
+export type GeneratedEmailRecord = {
+  email: string;
+  counter: number;
+  provider: string;
+  createdAt: string;
+};
 
-export type TestEmailResult = { email: string; counterUsed: number; counterBefore: number; counterAfter: number; strategy: string; imapUser: string }
+export type TestEmailResult = {
+  email: string;
+  counterUsed: number;
+  counterBefore: number;
+  counterAfter: number;
+  strategy: string;
+  imapUser: string;
+};
 
 /**
  * OAuth session info returned to frontend
  */
-export type OAuthSessionInfo = { 
-/**
- * Unique session ID for tracking
- */
-sessionId: string; 
-/**
- * OIDC client ID
- */
-clientId: string; 
-/**
- * Authorization URL to open in browser
- */
-authUrl: string; 
-/**
- * Redirect URI for callback
- */
-redirectUri: string; 
-/**
- * State parameter for CSRF protection
- */
-state: string }
+export type OAuthSessionInfo = {
+  /**
+   * Unique session ID for tracking
+   */
+  sessionId: string;
+  /**
+   * OIDC client ID
+   */
+  clientId: string;
+  /**
+   * Authorization URL to open in browser
+   */
+  authUrl: string;
+  /**
+   * Redirect URI for callback
+   */
+  redirectUri: string;
+  /**
+   * State parameter for CSRF protection
+   */
+  state: string;
+};
 
 /**
  * Token response returned to frontend
  */
-export type OAuthTokenResponse = { accessToken: string; refreshToken?: string | null; expiresIn: number; tokenType: string }
+export type OAuthTokenResponse = {
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresIn: number;
+  tokenType: string;
+};
 
-export type ProfileCommandError = { message: string }
+export type ProfileCommandError = { message: string };
 
-export type PythonAutoregConfig = { email: string | null; name: string | null; password: string | null; headless: boolean; deviceFlow: boolean; autoGenerate: boolean; imapServer: string; imapPort: number | null; imapUser: string; imapPassword: string; emailStrategy: string | null; proxyUrl: string | null; speedMultiplier: number | null; verificationCodeTimeout: number | null; oauthCallbackTimeout: number | null; allowAccessWait: number | null; pageLoadTimeout: number | null; elementWaitTimeout: number | null; imapPollInterval: number | null; passwordLength: number | null; realisticTyping: boolean | null; humanDelays: boolean | null; screenshotsOnError: boolean | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null }
+export type PythonAutoregConfig = {
+  email: string | null;
+  name: string | null;
+  password: string | null;
+  headless: boolean;
+  deviceFlow: boolean;
+  autoGenerate: boolean;
+  imapServer: string;
+  imapPort: number | null;
+  imapUser: string;
+  imapPassword: string;
+  emailStrategy: string | null;
+  proxyUrl: string | null;
+  speedMultiplier: number | null;
+  verificationCodeTimeout: number | null;
+  oauthCallbackTimeout: number | null;
+  allowAccessWait: number | null;
+  pageLoadTimeout: number | null;
+  elementWaitTimeout: number | null;
+  imapPollInterval: number | null;
+  passwordLength: number | null;
+  realisticTyping: boolean | null;
+  humanDelays: boolean | null;
+  screenshotsOnError: boolean | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+};
 
-export type WindsurfAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; loginOnly: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; emailPattern: string | null; namePattern: string | null; nameCustomFirst: string | null; nameCustomLast: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null }
+export type WindsurfAutoregConfig = {
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  headless: boolean;
+  loginOnly: boolean;
+  proxyUrl: string | null;
+  imapServer: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+  emailPattern: string | null;
+  namePattern: string | null;
+  nameCustomFirst: string | null;
+  nameCustomLast: string | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+};
 
-export type WindsurfAutoregResult = { success: boolean; email: string | null; password: string | null; name: string | null; apiKey: string | null; installationId: string | null; error: string | null }
+export type WindsurfAutoregResult = {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  apiKey: string | null;
+  installationId: string | null;
+  error: string | null;
+};
 
-export type TraeAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null }
+export type TraeAutoregConfig = {
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  headless: boolean;
+  proxyUrl: string | null;
+  imapServer: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+};
 
-export type TraeAutoregResult = { success: boolean; email: string | null; password: string | null; name: string | null; error: string | null }
+export type TraeAutoregResult = {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  error: string | null;
+};
 
-export type GithubAutoregConfig = { email: string | null; password: string; username: string | null; verificationCode: string | null; headless: boolean; imapServer: string | null; imapUser: string | null; imapPassword: string | null }
+export type GithubAutoregConfig = {
+  email: string | null;
+  password: string;
+  username: string | null;
+  verificationCode: string | null;
+  headless: boolean;
+  imapServer: string | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+};
 
-export type GithubAutoregResult = { success: boolean; email: string | null; username: string | null; password: string | null; error: string | null; requiresVerification: boolean | null; verificationUrl: string | null }
+export type GithubAutoregResult = {
+  success: boolean;
+  email: string | null;
+  username: string | null;
+  password: string | null;
+  error: string | null;
+  requiresVerification: boolean | null;
+  verificationUrl: string | null;
+};
 
 /**
  * Result type for registration_v2 command
  */
-export type RegistrationResultV2 = { success: boolean; email: string; accessToken: string | null; refreshToken: string | null; error: string | null }
+export type RegistrationResultV2 = {
+  success: boolean;
+  email: string;
+  accessToken: string | null;
+  refreshToken: string | null;
+  error: string | null;
+};
 
 /**
  * Serializable routing rule for frontend
  */
-export type RoutingRuleInfo = { pattern: string; provider: string; fallback: string | null; description: string }
+export type RoutingRuleInfo = {
+  pattern: string;
+  provider: string;
+  fallback: string | null;
+  description: string;
+};
 
 /**
  * Route result with optional fallback
  */
-export type RouteResult = { modelId: string; provider: string | null; fallback: string | null; matched: boolean }
+export type RouteResult = {
+  modelId: string;
+  provider: string | null;
+  fallback: string | null;
+  matched: boolean;
+};
 
 /**
  * Settings data structure
  */
-export type SettingsData = { theme?: string; provider?: string; registrationMode?: string; emailStrategy?: string; mailStrategy?: string; imapServer?: string; imapPort?: number; imapEmail?: string; imapUser?: string; imapPassword?: string; addyioEnabled?: boolean; addyioApiToken?: string; addyioAliasFormat?: string; addyioAutoDelete?: boolean; addyioDomain?: string; addyioDefaultRecipientId?: string; addyioDescriptionTemplate?: string; addyioFromName?: string; thirtyThreeMailEnabled?: boolean; thirtyThreeMailUsername?: string; thirtyThreeMailDomain?: string; gmailBase?: string; gmailAlias?: string; gmailAppPassword?: string; proxyEnabled?: boolean; proxyUrl?: string; proxyUsername?: string; proxyPassword?: string; emailPattern?: string; emailCustomPrefix?: string; namePattern?: string; nameCustomFirst?: string; nameCustomLast?: string; count?: number; headless?: boolean; customIdePaths?: { [key in string]: string }; patcherStrategy?: string; patcherLogRequests?: boolean; autoRotateEnabled?: boolean; logRequestsEnabled?: boolean; spoofMachineIdEnabled?: boolean }
+export type SettingsData = {
+  theme?: string;
+  provider?: string;
+  registrationMode?: string;
+  emailStrategy?: string;
+  mailStrategy?: string;
+  imapServer?: string;
+  imapPort?: number;
+  imapEmail?: string;
+  imapUser?: string;
+  imapPassword?: string;
+  addyioEnabled?: boolean;
+  addyioApiToken?: string;
+  addyioAliasFormat?: string;
+  addyioAutoDelete?: boolean;
+  addyioDomain?: string;
+  addyioDefaultRecipientId?: string;
+  addyioDescriptionTemplate?: string;
+  addyioFromName?: string;
+  thirtyThreeMailEnabled?: boolean;
+  thirtyThreeMailUsername?: string;
+  thirtyThreeMailDomain?: string;
+  gmailBase?: string;
+  gmailAlias?: string;
+  gmailAppPassword?: string;
+  proxyEnabled?: boolean;
+  proxyUrl?: string;
+  proxyUsername?: string;
+  proxyPassword?: string;
+  emailPattern?: string;
+  emailCustomPrefix?: string;
+  namePattern?: string;
+  nameCustomFirst?: string;
+  nameCustomLast?: string;
+  count?: number;
+  headless?: boolean;
+  customIdePaths?: { [key in string]: string };
+  patcherStrategy?: string;
+  autoRotateEnabled?: boolean;
+  spoofMachineIdEnabled?: boolean;
+  tokenRefreshEnabled?: boolean;
+  tokenRefreshCheckInterval?: number;
+  tokenRefreshBuffer?: number;
+  uiScale?: number;
+};
 
 /**
  * Response types for addy.io API calls
  * Note: API returns snake_case, we use camelCase field names with serde alias for deserialization
  */
-export type AddyIoTokenDetails = { name: string; createdAt: string; expiresAt: string | null }
+export type AddyIoTokenDetails = { name: string; createdAt: string; expiresAt: string | null };
 
-export type AddyIoAccountDetails = { id: string; username: string; fromName: string | null; emailSubject: string | null; bannerLocation: string; bandwidth: number; usernameCount: number; usernameLimit: number; defaultUsernameId: string; defaultRecipientId: string; defaultAliasDomain: string; defaultAliasFormat: string; subscription: string; subscriptionType: string | null; subscriptionEndsAt: string | null; bandwidthLimit: number; recipientCount: number; recipientLimit: number; activeDomainCount: number; activeDomainLimit: number; activeSharedDomainAliasCount: number; activeSharedDomainAliasLimit: number; activeRuleCount: number; activeRuleLimit: number; totalEmailsForwarded: number; totalEmailsBlocked: number; totalEmailsReplied: number; totalEmailsSent: number; totalAliases: number; totalActiveAliases: number; totalInactiveAliases: number; totalDeletedAliases: number; disabled: boolean; createdAt: string; updatedAt: string }
+export type AddyIoAccountDetails = {
+  id: string;
+  username: string;
+  fromName: string | null;
+  emailSubject: string | null;
+  bannerLocation: string;
+  bandwidth: number;
+  usernameCount: number;
+  usernameLimit: number;
+  defaultUsernameId: string;
+  defaultRecipientId: string;
+  defaultAliasDomain: string;
+  defaultAliasFormat: string;
+  subscription: string;
+  subscriptionType: string | null;
+  subscriptionEndsAt: string | null;
+  bandwidthLimit: number;
+  recipientCount: number;
+  recipientLimit: number;
+  activeDomainCount: number;
+  activeDomainLimit: number;
+  activeSharedDomainAliasCount: number;
+  activeSharedDomainAliasLimit: number;
+  activeRuleCount: number;
+  activeRuleLimit: number;
+  totalEmailsForwarded: number;
+  totalEmailsBlocked: number;
+  totalEmailsReplied: number;
+  totalEmailsSent: number;
+  totalAliases: number;
+  totalActiveAliases: number;
+  totalInactiveAliases: number;
+  totalDeletedAliases: number;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 
-export type AddyIoRecipient = { id: string; userId: string; email: string; canReplySend: boolean; shouldEncrypt: boolean; inlineEncryption: boolean; protectedHeaders: boolean; removePgpKeys: boolean; removePgpSignatures: boolean; fingerprint: string | null; emailVerifiedAt: string | null; aliasesCount: number; createdAt: string; updatedAt: string }
+export type AddyIoRecipient = {
+  id: string;
+  userId: string;
+  email: string;
+  canReplySend: boolean;
+  shouldEncrypt: boolean;
+  inlineEncryption: boolean;
+  protectedHeaders: boolean;
+  removePgpKeys: boolean;
+  removePgpSignatures: boolean;
+  fingerprint: string | null;
+  emailVerifiedAt: string | null;
+  aliasesCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
-export type AddyIoDomainOptions = { data: string[]; sharedDomains: string[]; defaultAliasDomain: string; defaultAliasFormat: string }
+export type AddyIoDomainOptions = {
+  data: string[];
+  sharedDomains: string[];
+  defaultAliasDomain: string;
+  defaultAliasFormat: string;
+};
 
 /**
  * Request for counting tokens in text
  */
-export type CountTokensRequest = { text: string }
+export type CountTokensRequest = { text: string };
 
 /**
  * Request for counting tokens in messages
  */
-export type CountMessageTokensRequest = { messages: Message[] }
+export type CountMessageTokensRequest = { messages: Message[] };
 
 /**
  * Response for token counting
  */
-export type TokenCountResponse = { tokens: number }
+export type TokenCountResponse = { tokens: number };
 
 /**
  * Extended server status with logs
  */
-export type ExtendedServerStatus = { isRunning: boolean; port: number; host: string; uptime?: number | null; requestCount: number; activeConnections: number; pid?: number | null; startedAt?: string | null; logs: string[]; error?: string | null }
+export type ExtendedServerStatus = {
+  isRunning: boolean;
+  port: number;
+  host: string;
+  uptime?: number | null;
+  requestCount: number;
+  activeConnections: number;
+  pid?: number | null;
+  startedAt?: string | null;
+  logs: string[];
+  error?: string | null;
+};
 
 /**
  * Dashboard statistics
  */
-export type DashboardStats = { totalAccounts: number; activeTokens: number; quotaUsage: number; quotaUsed: number; quotaLimit: number; accountsByProvider: { [key in string]: number } }
+export type DashboardStats = {
+  totalAccounts: number;
+  activeTokens: number;
+  quotaUsage: number;
+  quotaUsed: number;
+  quotaLimit: number;
+  accountsByProvider: { [key in string]: number };
+};
 
-export type ValidationResult = { valid: boolean; value: string | null; error: string | null }
+export type ValidationResult = { valid: boolean; value: string | null; error: string | null };
 
-export type KiroPatchConfig = { version: number; modules: PatchModules; machineId: string; accountBindings: { [key in string]: string }; currentAccountId: string | null; logLevel: string; constants?: PatchConstants; promptsPath?: string | null }
+export type KiroPatchConfig = {
+  version: number;
+  modules: PatchModules;
+  machineId: string;
+  accountBindings: { [key in string]: string };
+  currentAccountId: string | null;
+  logLevel: string;
+  constants?: PatchConstants;
+  promptsPath?: string | null;
+};
 
-export type PatchModules = { machineIdSpoofing: boolean; telemetryBlocking: boolean; rateLimitBypass: boolean; errorSuppression: boolean; osSpoofing: boolean; commandSpoofing: boolean; authWatcher: boolean; constantPatching?: boolean; customPrompts?: boolean; requestSpy?: boolean }
+export type PatchModules = {
+  machineIdSpoofing: boolean;
+  telemetryBlocking: boolean;
+  rateLimitBypass: boolean;
+  errorSuppression: boolean;
+  osSpoofing: boolean;
+  commandSpoofing: boolean;
+  authWatcher: boolean;
+  constantPatching?: boolean;
+  customPrompts?: boolean;
+  requestSpy?: boolean;
+};
 
-export type PatchConstants = { writeLimit?: string; graphTransitionLimit?: number; subAgentGraphTransitionLimit?: number; defaultMaxTokens?: number; defaultContextLength?: number; maxSnippetContentLength?: number }
+export type PatchConstants = {
+  writeLimit?: string;
+  graphTransitionLimit?: number;
+  subAgentGraphTransitionLimit?: number;
+  defaultMaxTokens?: number;
+  defaultContextLength?: number;
+  maxSnippetContentLength?: number;
+};
 
 /**
  * Generate email request
  */
-export type GenerateEmailRequest = { 
-/**
- * Generation strategy
- */
-strategy: string; 
-/**
- * IMAP user email
- */
-imapUser: string | null; 
-/**
- * Domain for catch_all strategy
- */
-domain: string | null; 
-/**
- * Email pool for pool strategy
- */
-emailPool: string[] | null; 
-/**
- * Custom login name (for catch_all with custom prefix)
- */
-customLoginName: string | null }
+export type GenerateEmailRequest = {
+  /**
+   * Generation strategy
+   */
+  strategy: string;
+  /**
+   * IMAP user email
+   */
+  imapUser: string | null;
+  /**
+   * Domain for catch_all strategy
+   */
+  domain: string | null;
+  /**
+   * Email pool for pool strategy
+   */
+  emailPool: string[] | null;
+  /**
+   * Custom login name (for catch_all with custom prefix)
+   */
+  customLoginName: string | null;
+};
 
 /**
  * Message structure for token counting
  */
-export type Message = { role: string; content: MessageContent }
+export type Message = { role: string; content: MessageContent };
 
 /**
  * Message content can be text or array of content blocks
  */
-export type MessageContent = string | ContentBlock[]
+export type MessageContent = string | ContentBlock[];
 
 /**
  * Content block for multimodal messages
  */
-export type ContentBlock = { type: "text"; text: string } | { type: "image"; source: ImageSource }
+export type ContentBlock = { type: 'text'; text: string } | { type: 'image'; source: ImageSource };
 
 /**
  * Image source for image content blocks
  */
-export type ImageSource = { sourceType: string; mediaType: string | null; data: string | null }
+export type ImageSource = { sourceType: string; mediaType: string | null; data: string | null };
 
 /**
  * IMAP connection configuration
  */
-export type ImapConfig = { host: string; port: number; username: string; password: string; useTls?: boolean }
+export type ImapConfig = {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  useTls?: boolean;
+};
 
-export type DeviceFlowSession = { client: DeviceFlowClient; deviceCode: string; userCode: string; verificationUri: string; interval: number; expiresAt: number }
+export type DeviceFlowSession = {
+  client: DeviceFlowClient;
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  interval: number;
+  expiresAt: number;
+};
 
-export type DeviceFlowClient = { clientId: string; clientSecret: string }
+export type DeviceFlowClient = { clientId: string; clientSecret: string };
 
 /**
  * Detailed quota information response
  */
-export type QuotaInfo = { machineId: string; tier: QuotaTier; tokensUsed: number; tokensLimit: number; tokensRemaining: number; requestsMade: number; requestsLimit: number; requestsRemaining: number; usagePercentage: number; isQuotaExceeded: boolean; date: string; resetAt: string; lastRequestAt: string | null }
+export type QuotaInfo = {
+  machineId: string;
+  tier: QuotaTier;
+  tokensUsed: number;
+  tokensLimit: number;
+  tokensRemaining: number;
+  requestsMade: number;
+  requestsLimit: number;
+  requestsRemaining: number;
+  usagePercentage: number;
+  isQuotaExceeded: boolean;
+  date: string;
+  resetAt: string;
+  lastRequestAt: string | null;
+};
 
 /**
  * Subscription tier levels for quota management
  */
-export type QuotaTier = "free" | "pro" | "enterprise"
+export type QuotaTier = 'free' | 'pro' | 'enterprise';
 
 /**
  * Browser configuration for automation
  */
-export type BrowserConfig = { 
-/**
- * Run browser in headless mode (no visible window)
- */
-headless: boolean; 
-/**
- * Use incognito/private mode
- */
-incognito: boolean; 
-/**
- * Slow motion delay in milliseconds (0 = disabled)
- */
-slowMo: number; 
-/**
- * Open DevTools automatically
- */
-devtools: boolean; 
-/**
- * Take screenshots on errors
- */
-screenshotsOnError: boolean; 
-/**
- * Use realistic typing speed (human-like)
- */
-realisticTyping: boolean; 
-/**
- * Add human-like delays between actions
- */
-humanDelays: boolean; 
-/**
- * Multiplier for all delays (1.0 = normal, 2.0 = double speed, 0.5 = half speed)
- */
-delayMultiplier: number; 
-/**
- * Proxy URL (format: "http://host:port" or "socks5://host:port")
- */
-proxy: string | null; 
-/**
- * Proxy authentication (username, password)
- */
-proxyAuth: [string, string] | null }
+export type BrowserConfig = {
+  /**
+   * Run browser in headless mode (no visible window)
+   */
+  headless: boolean;
+  /**
+   * Use incognito/private mode
+   */
+  incognito: boolean;
+  /**
+   * Slow motion delay in milliseconds (0 = disabled)
+   */
+  slowMo: number;
+  /**
+   * Open DevTools automatically
+   */
+  devtools: boolean;
+  /**
+   * Take screenshots on errors
+   */
+  screenshotsOnError: boolean;
+  /**
+   * Use realistic typing speed (human-like)
+   */
+  realisticTyping: boolean;
+  /**
+   * Add human-like delays between actions
+   */
+  humanDelays: boolean;
+  /**
+   * Multiplier for all delays (1.0 = normal, 2.0 = double speed, 0.5 = half speed)
+   */
+  delayMultiplier: number;
+  /**
+   * Proxy URL (format: "http://host:port" or "socks5://host:port")
+   */
+  proxy: string | null;
+  /**
+   * Proxy authentication (username, password)
+   */
+  proxyAuth: [string, string] | null;
+};
 
 /**
  * Timeout configuration for browser operations
  */
-export type TimeoutConfig = { 
-/**
- * Page load timeout (seconds)
- */
-pageLoad: number; 
-/**
- * Element wait timeout (seconds)
- */
-elementWait: number; 
-/**
- * Verification code timeout (seconds)
- */
-verificationCode: number; 
-/**
- * OAuth callback timeout (seconds)
- */
-oauthCallback: number; 
-/**
- * Delay between account registrations (seconds)
- */
-betweenAccounts: number; 
-/**
- * IMAP poll interval (seconds)
- */
-imapPollInterval: number; 
-/**
- * API request timeout (seconds)
- */
-apiRequest: number; 
-/**
- * Element polling interval (seconds)
- */
-elementPollInterval: number; 
-/**
- * Page transition timeout (seconds)
- */
-pageTransition: number; 
-/**
- * Password redirect timeout for AWS fingerprint check (seconds)
- */
-passwordRedirect: number; 
-/**
- * Allow access wait timeout (seconds)
- */
-allowAccessWait: number }
+export type TimeoutConfig = {
+  /**
+   * Page load timeout (seconds)
+   */
+  pageLoad: number;
+  /**
+   * Element wait timeout (seconds)
+   */
+  elementWait: number;
+  /**
+   * Verification code timeout (seconds)
+   */
+  verificationCode: number;
+  /**
+   * OAuth callback timeout (seconds)
+   */
+  oauthCallback: number;
+  /**
+   * Delay between account registrations (seconds)
+   */
+  betweenAccounts: number;
+  /**
+   * IMAP poll interval (seconds)
+   */
+  imapPollInterval: number;
+  /**
+   * API request timeout (seconds)
+   */
+  apiRequest: number;
+  /**
+   * Element polling interval (seconds)
+   */
+  elementPollInterval: number;
+  /**
+   * Page transition timeout (seconds)
+   */
+  pageTransition: number;
+  /**
+   * Password redirect timeout for AWS fingerprint check (seconds)
+   */
+  passwordRedirect: number;
+  /**
+   * Allow access wait timeout (seconds)
+   */
+  allowAccessWait: number;
+};
 
 /**
  * Email generation configuration
  */
-export type EmailConfig = { 
-/**
- * Email domain (e.g., "example.com")
- */
-domain: string; 
-/**
- * Email prefix pattern (e.g., "kiro_auto")
- */
-prefix: string; 
-/**
- * Default name for registrations
- */
-defaultName: string; 
-/**
- * Auto-inject tokens to Kiro after registration
- */
-autoInjectToKiro: boolean; 
-/**
- * Password length for generated passwords
- */
-passwordLength: number }
+export type EmailConfig = {
+  /**
+   * Email domain (e.g., "example.com")
+   */
+  domain: string;
+  /**
+   * Email prefix pattern (e.g., "kiro_auto")
+   */
+  prefix: string;
+  /**
+   * Default name for registrations
+   */
+  defaultName: string;
+  /**
+   * Auto-inject tokens to Kiro after registration
+   */
+  autoInjectToKiro: boolean;
+  /**
+   * Password length for generated passwords
+   */
+  passwordLength: number;
+};
 
 /**
  * Debug configuration
  */
-export type DebugConfig = { 
-/**
- * Enable verbose logging
- */
-verbose: boolean; 
-/**
- * Save HTML on errors
- */
-saveHtmlOnError: boolean; 
-/**
- * Pause on errors (for debugging)
- */
-pauseOnError: boolean; 
-/**
- * Log API responses
- */
-logApiResponses: boolean }
+export type DebugConfig = {
+  /**
+   * Enable verbose logging
+   */
+  verbose: boolean;
+  /**
+   * Save HTML on errors
+   */
+  saveHtmlOnError: boolean;
+  /**
+   * Pause on errors (for debugging)
+   */
+  pauseOnError: boolean;
+  /**
+   * Log API responses
+   */
+  logApiResponses: boolean;
+};
 
 /**
  * LLM Server Configuration
  * Mirrors the Python Settings class from llm_api_server/config.py
  */
-export type LLMServerConfig = { apiPort: number; apiHost: string; logLevel: string; kiroAuthUrl: string; kiroWebportalUrl: string; bedrockRegion: string; anthropicApiKey: string | null; openaiApiKey: string | null; quotaStorage: string; redisUrl: string | null; quotaDailyLimit: number; quotaRequestLimit: number; useMockProvider: boolean; devAuthMode: boolean }
+export type LLMServerConfig = {
+  apiPort: number;
+  apiHost: string;
+  logLevel: string;
+  kiroAuthUrl: string;
+  kiroWebportalUrl: string;
+  bedrockRegion: string;
+  anthropicApiKey: string | null;
+  openaiApiKey: string | null;
+  quotaStorage: string;
+  redisUrl: string | null;
+  quotaDailyLimit: number;
+  quotaRequestLimit: number;
+  useMockProvider: boolean;
+  devAuthMode: boolean;
+};
 
 /**
  * Unified application configuration
- * 
+ *
  * Aggregates all configuration sections (browser, timeouts, email, IMAP, debug)
  * and provides methods to load from environment variables and database settings.
  */
-export type AutoregConfig = { browser: BrowserConfig; timeouts: TimeoutConfig; email: EmailConfig; imap: ImapConfig; debug: DebugConfig }
+export type AutoregConfig = {
+  browser: BrowserConfig;
+  timeouts: TimeoutConfig;
+  email: EmailConfig;
+  imap: ImapConfig;
+  debug: DebugConfig;
+};

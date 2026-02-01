@@ -32,7 +32,7 @@ interface AccountsState {
   activeAccountIds: Record<string, number | null>;
   
   // Sorting state
-  sortField: 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt';
+  sortField: 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt' | 'useCount' | 'loginCount' | 'lastLoginAt' | 'successRate';
   sortDirection: 'asc' | 'desc';
   
   // Actions
@@ -64,7 +64,7 @@ interface AccountsState {
   clearFilters: () => void;
   
   // Sorting
-  setSortField: (field: 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt') => void;
+  setSortField: (field: 'provider' | 'email' | 'status' | 'quota' | 'tokenExpires' | 'createdAt' | 'useCount' | 'loginCount' | 'lastLoginAt' | 'successRate') => void;
   setSortDirection: (direction: 'asc' | 'desc') => void;
   
   // Computed helpers

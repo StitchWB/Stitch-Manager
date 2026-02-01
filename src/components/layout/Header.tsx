@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bell, Globe, X, Info, CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
+import { IconButton } from '../ui/IconButton';
 
 const languages = [
   { code: 'en', label: 'English' },
@@ -16,7 +17,14 @@ interface HeaderProps {
 }
 
 export default function Header({ title, subtitle, icon, actions }: HeaderProps) {
-  const { serverStatus, language, setLanguage, notifications, removeNotification, clearNotifications } = useAppStore();
+  const {
+    serverStatus,
+    language,
+    setLanguage,
+    notifications,
+    removeNotification,
+    clearNotifications,
+  } = useAppStore();
   const [langOpen, setLangOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -40,10 +48,14 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'success': return <CheckCircle className="w-4 h-4 text-emerald-400" />;
-      case 'warning': return <AlertTriangle className="w-4 h-4 text-amber-400" />;
-      case 'error': return <AlertCircle className="w-4 h-4 text-red-400" />;
-      default: return <Info className="w-4 h-4 text-blue-400" />;
+      case 'success':
+        return <CheckCircle className="w-4 h-4 text-emerald-400" />;
+      case 'warning':
+        return <AlertTriangle className="w-4 h-4 text-amber-400" />;
+      case 'error':
+        return <AlertCircle className="w-4 h-4 text-red-400" />;
+      default:
+        return <Info className="w-4 h-4 text-blue-400" />;
     }
   };
 
@@ -58,34 +70,43 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
   };
 
   return (
-    <header 
+    <header
       className="h-14 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 border-t border-t-white/[0.03] flex items-center justify-between px-6 shrink-0 sticky top-0 z-20"
       role="banner"
     >
       <div className="flex items-center gap-3">
-        {icon && <span className="text-primary" aria-hidden="true">{icon}</span>}
+        {icon && (
+          <span className="text-primary" aria-hidden="true">
+            {icon}
+          </span>
+        )}
         <div className="flex items-center gap-3">
           <h1 className="text-base font-semibold text-white">{title}</h1>
           {subtitle && (
             <>
-              <span className="text-slate-600" aria-hidden="true">•</span>
+              <span className="text-slate-600" aria-hidden="true">
+                •
+              </span>
               <p className="text-xs text-slate-500">{subtitle}</p>
             </>
           )}
         </div>
       </div>
-      
+
       <div className="flex items-center gap-3">
         {actions}
-        
+
         {/* Status Indicator */}
-        <div 
+        <div
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10"
           role="status"
           aria-live="polite"
           aria-label={isOnline ? t('header.systemOnline') : t('header.serverOffline')}
         >
-          <span className={`status-dot ${isOnline ? 'status-dot-online' : 'status-dot-offline'}`} aria-hidden="true" />
+          <span
+            className={`status-dot ${isOnline ? 'status-dot-online' : 'status-dot-offline'}`}
+            aria-hidden="true"
+          />
           <span className="text-2xs font-medium text-slate-400">
             {isOnline ? t('header.systemOnline') : t('header.serverOffline')}
           </span>
@@ -93,17 +114,20 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
         {/* Language Switcher */}
         <div className="relative" ref={langRef}>
-          <button 
-            onClick={() => { setLangOpen(!langOpen); setNotifOpen(false); }} 
-            className="btn-icon"
+          <IconButton
+            onClick={() => {
+              setLangOpen(!langOpen);
+              setNotifOpen(false);
+            }}
+            size="md"
             aria-label={t('header.changeLanguage')}
             aria-expanded={langOpen}
             aria-haspopup="listbox"
           >
             <Globe size={18} aria-hidden="true" />
-          </button>
+          </IconButton>
           {langOpen && (
-            <div 
+            <div
               className="absolute right-0 top-full mt-1 w-32 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 py-1"
               role="listbox"
               aria-label={t('header.selectLanguage')}
@@ -111,7 +135,10 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
               {languages.map(lang => (
                 <button
                   key={lang.code}
-                  onClick={() => { setLanguage(lang.code); setLangOpen(false); }}
+                  onClick={() => {
+                    setLanguage(lang.code);
+                    setLangOpen(false);
+                  }}
                   className={`w-full px-3 py-1.5 text-xs text-left hover:bg-white/5 ${language === lang.code ? 'text-primary' : 'text-slate-300'}`}
                   role="option"
                   aria-selected={language === lang.code}
@@ -125,26 +152,36 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
-          <button 
-            onClick={() => { setNotifOpen(!notifOpen); setLangOpen(false); }} 
-            className="btn-icon relative"
-            aria-label={t('header.notifications') + (notifications.length > 0 ? ` (${notifications.length})` : '')}
+          <IconButton
+            onClick={() => {
+              setNotifOpen(!notifOpen);
+              setLangOpen(false);
+            }}
+            size="md"
+            className="relative"
+            aria-label={
+              t('header.notifications') +
+              (notifications.length > 0 ? ` (${notifications.length})` : '')
+            }
             aria-expanded={notifOpen}
             aria-haspopup="true"
           >
             <Bell size={18} aria-hidden="true" />
             {notifications.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-400 rounded-full ring-2 ring-[#050508] animate-pulse" aria-hidden="true" />
+              <span
+                className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-400 rounded-full ring-2 ring-[#050508] animate-pulse"
+                aria-hidden="true"
+              />
             )}
-          </button>
-          
+          </IconButton>
+
           {notifOpen && (
             <div className="absolute right-0 top-full mt-1 w-80 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
                 <span className="text-xs font-medium text-white">{t('header.notifications')}</span>
                 {notifications.length > 0 && (
-                  <button 
+                  <button
                     onClick={clearNotifications}
                     className="text-2xs text-slate-500 hover:text-slate-300 transition-colors"
                   >
@@ -152,18 +189,22 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
                   </button>
                 )}
               </div>
-              
+
               {/* Notifications List */}
-              <div className="max-h-64 overflow-y-auto" role="list" aria-label={t('header.notificationsList')}>
+              <div
+                className="max-h-64 overflow-y-auto"
+                role="list"
+                aria-label={t('header.notificationsList')}
+              >
                 {notifications.length === 0 ? (
                   <div className="px-3 py-6 text-center">
                     <Bell className="w-8 h-8 text-slate-600 mx-auto mb-2" />
                     <p className="text-xs text-slate-500">{t('header.noNotifications')}</p>
                   </div>
                 ) : (
-                  notifications.map((notif) => (
-                    <div 
-                      key={notif.id} 
+                  notifications.map(notif => (
+                    <div
+                      key={notif.id}
                       className="px-3 py-2.5 border-b border-white/5 hover:bg-white/[0.02] transition-colors group"
                       role="listitem"
                     >
@@ -172,11 +213,15 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-white truncate">{notif.title}</p>
                           {notif.message && (
-                            <p className="text-2xs text-slate-400 mt-0.5 line-clamp-2">{notif.message}</p>
+                            <p className="text-2xs text-slate-400 mt-0.5 line-clamp-2">
+                              {notif.message}
+                            </p>
                           )}
-                          <p className="text-2xs text-slate-600 mt-1">{formatTime(notif.timestamp)}</p>
+                          <p className="text-2xs text-slate-600 mt-1">
+                            {formatTime(notif.timestamp)}
+                          </p>
                         </div>
-                        <button 
+                        <button
                           onClick={() => removeNotification(notif.id)}
                           className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-white transition-all"
                         >

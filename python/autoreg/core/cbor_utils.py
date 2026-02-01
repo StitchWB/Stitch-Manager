@@ -30,7 +30,7 @@ def cbor_encode(data: dict[str, Any] | list) -> bytes:
     try:
         return cbor2.dumps(data)
     except Exception as e:
-        raise ValueError(f"CBOR encode failed: {e}")
+        raise ValueError(f"CBOR encode failed: {e}") from e
 
 
 def cbor_decode(data: bytes) -> dict[str, Any] | list:
@@ -54,7 +54,7 @@ def cbor_decode(data: bytes) -> dict[str, Any] | list:
         result: dict[str, Any] | list = cbor2.loads(data)
         return result
     except Exception as e:
-        raise ValueError(f"CBOR decode failed: {e}")
+        raise ValueError(f"CBOR decode failed: {e}") from e
 
 
 def cbor_encode_hex(data: dict[str, Any] | list) -> str:

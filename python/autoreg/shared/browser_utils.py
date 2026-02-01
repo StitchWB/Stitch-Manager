@@ -49,7 +49,8 @@ def create_browser_options(
 
     # Headless mode
     if headless:
-        co.headless()
+        # CRITICAL: Use --headless=new instead of deprecated --headless
+        co.set_argument('--headless=new')
         co.set_argument('--disable-gpu')
         co.set_argument('--no-sandbox')
         co.set_argument('--disable-dev-shm-usage')

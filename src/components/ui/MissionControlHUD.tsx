@@ -20,6 +20,8 @@ interface MissionControlHUDProps {
   onStart?: () => void;
   onClear?: () => void;
   className?: string;
+  activeProvider?: string;
+  onProviderChange?: (provider: string) => void;
 }
 
 // Parse log message to determine current step
@@ -228,7 +230,7 @@ function TelemetryBar({ logs }: { logs: LogEntry[] }) {
   );
 }
 
-export function MissionControlHUD({ logs, isRunning = false, canStart = true, onStart, onClear, className }: MissionControlHUDProps) {
+export function MissionControlHUD({ logs, isRunning = false, canStart = true, onStart, onClear, className, activeProvider = 'all', onProviderChange }: MissionControlHUDProps) {
   const currentStep = useMemo(() => parseCurrentStep(logs, isRunning), [logs, isRunning]);
   const { action, detail } = useMemo(() => parseLiveAction(logs, isRunning), [logs, isRunning]);
   const successAccounts = useMemo(() => extractSuccessAccounts(logs), [logs]);
@@ -261,7 +263,12 @@ export function MissionControlHUD({ logs, isRunning = false, canStart = true, on
 
       {/* Compact Log Feed - Takes remaining space */}
       <div className="flex-1 min-h-0 border-t border-white/5">
-        <CompactLogFeed logs={logs} onClear={onClear} />
+        <CompactLogFeed 
+          logs={logs} 
+          onClear={onClear} 
+          activeProvider={activeProvider}
+          onProviderChange={onProviderChange}
+        />
       </div>
 
       {/* Telemetry Bar */}

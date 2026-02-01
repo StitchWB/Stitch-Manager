@@ -278,7 +278,7 @@ class OAuthCallbackServer:
 
         except OSError as e:
             if 'Address already in use' in str(e):
-                raise RuntimeError(f"Port {self.port} already in use. Another OAuth server running?")
+                raise RuntimeError(f"Port {self.port} already in use. Another OAuth server running?") from e
             raise
 
     def _run(self):

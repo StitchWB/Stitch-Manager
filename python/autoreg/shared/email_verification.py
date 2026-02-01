@@ -70,7 +70,9 @@ def get_verification_code_from_imap(
         return None
     
     start_time = time.time()
-    registration_start = datetime.datetime.now(datetime.timezone.utc)
+    # Search start time: 30 seconds before NOW to account for email delivery delay
+    # This ensures we only get emails that arrived AFTER registration started
+    registration_start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=30)
     last_error = None
     
     # Build search query for primary keyword
@@ -109,28 +111,28 @@ def get_verification_code_from_imap(
                         if not any(keyword.lower() in from_addr for keyword in sender_keywords):
                             continue
                         
-                        # Check email timestamp (only recent emails)
+                        # Check email timestamp (only emails AFTER registration started)
                         try:
                             email_date = parsedate_to_datetime(date_str)
-                            time_diff = (registration_start - email_date).total_seconds()
                             
-                            # Skip old emails (older than time_window)
-                            if time_diff > time_window:
+                            # Skip emails that arrived BEFORE registration started
+                            # (prevents using codes from previous registration attempts)
+                            if email_date < registration_start:
                                 continue
                             
                             # Skip future emails (clock skew tolerance: 1 minute)
-                            if time_diff < -60:
+                            if email_date > datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60):
                                 continue
                         except Exception:
-                            # If date parsing fails, still try to extract code
-                            pass
+                            # If date parsing fails, skip this email (safer than using old code)
+                            continue
                         
                         # Try to extract code from subject first (if pattern provided)
                         if subject_pattern:
                             subject_codes = re.findall(subject_pattern, subject)
                             if subject_codes:
                                 mail.logout()
-                                log(f"[Email] Found code in subject: {subject_codes[0]}")
+                                log(f"[Email] Found code in subject: {subject_codes[0]} (email date: {date_str})")
                                 return subject_codes[0]
                         
                         # Extract from body (fallback or primary method)
@@ -147,7 +149,7 @@ def get_verification_code_from_imap(
                         codes = re.findall(r'\b(\d{6})\b', body)
                         if codes:
                             mail.logout()
-                            log(f"[Email] Found code in body: {codes[0]}")
+                            log(f"[Email] Found code in body: {codes[0]} (email date: {date_str})")
                             return codes[0]
                     
                     except Exception as e:

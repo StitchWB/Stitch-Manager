@@ -5,9 +5,7 @@ import {
   Sun,
   Monitor,
   Database,
-  Mail,
   Globe,
-  Save,
   Loader2,
   CheckCircle,
   AlertCircle,
@@ -16,13 +14,14 @@ import {
   Code,
   Eye,
   EyeOff,
-  Palette,
-  Zap,
   RefreshCw,
-  Coins,
+  Server,
+  Shield,
+  Copy,
 } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
+import { useRegistrationStore } from '../stores/registration';
 import {
   getSettings,
   updateSettings,
@@ -31,22 +30,21 @@ import {
   getAddyioAccount,
   getAddyioDomains,
   getAddyioRecipients,
+  getEmailCounter,
+  setEmailCounter,
 } from '../lib/tauri';
 import { SettingsData } from '../types/generated';
 import { open } from '@tauri-apps/plugin-dialog';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
-import PoolSettingsPanel from '../components/settings/PoolSettingsPanel';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Select } from '../components/ui/Select';
+import { Tooltip } from '../components/Tooltip';
 import { validatePort, validateHostname, validateEmail, validateUrl } from '../lib/validation';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
-type SettingsCategory =
-  | 'general'
-  | 'patcher'
-  | 'token-pool'
-  | 'imap'
-  | 'proxy'
-  | 'ide-paths'
-  | 'database';
+type SettingsCategory = 'general' | 'connectivity';
 
 interface CategoryConfig {
   id: SettingsCategory;
@@ -55,26 +53,29 @@ interface CategoryConfig {
 }
 
 const categories: CategoryConfig[] = [
-  { id: 'general', labelKey: 'settings.categories.general', icon: <Palette className="w-4 h-4" /> },
-  { id: 'patcher', labelKey: 'settings.categories.patcher', icon: <Zap className="w-4 h-4" /> },
   {
-    id: 'token-pool',
-    labelKey: 'settings.categories.tokenPool',
-    icon: <Coins className="w-4 h-4" />,
+    id: 'general',
+    labelKey: 'settings.categories.general',
+    icon: <SettingsIcon className="w-4 h-4" />,
   },
-  { id: 'imap', labelKey: 'settings.categories.imap', icon: <Mail className="w-4 h-4" /> },
-  { id: 'proxy', labelKey: 'settings.categories.proxy', icon: <Globe className="w-4 h-4" /> },
-  { id: 'ide-paths', labelKey: 'settings.categories.idePaths', icon: <Code className="w-4 h-4" /> },
   {
-    id: 'database',
-    labelKey: 'settings.categories.database',
-    icon: <Database className="w-4 h-4" />,
+    id: 'connectivity',
+    labelKey: 'settings.categories.connectivity',
+    icon: <Globe className="w-4 h-4" />,
   },
 ];
 
 export default function Settings() {
-  const { theme, setTheme, language, setLanguage } = useAppStore();
-  const { addLog } = useLogsStore();
+  const theme = useAppStore(state => state.theme);
+  const setTheme = useAppStore(state => state.setTheme);
+  const language = useAppStore(state => state.language);
+  const setLanguage = useAppStore(state => state.setLanguage);
+
+  const uiScale = useRegistrationStore(state => state.config.uiScale);
+  const setUIScale = useRegistrationStore(state => state.setUIScale);
+
+  const addLog = useLogsStore(state => state.addLog);
+  const { copy } = useCopyToClipboard();
 
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('general');
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -115,10 +116,9 @@ export default function Settings() {
   const [proxyUrl, setProxyUrl] = useState('');
   const [customIdePaths, setCustomIdePaths] = useState<Record<string, string>>({});
 
-  // Patcher settings
-  const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
-  const [logRequestsEnabled, setLogRequestsEnabled] = useState(true);
-  const [spoofMachineIdEnabled, setSpoofMachineIdEnabled] = useState(true);
+  // Email counter state
+  const [emailCounter, setEmailCounterState] = useState<number>(0);
+  const [isLoadingCounter, setIsLoadingCounter] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -157,14 +157,6 @@ export default function Settings() {
       setIsLoading(true);
       const data = (await getSettings()) as unknown as SettingsData;
 
-      console.log('[Settings] Loaded settings from DB:', {
-        imapServer: data.imapServer,
-        imapPort: data.imapPort,
-        imapEmail: data.imapEmail,
-        imapUser: (data as any).imapUser,
-        hasPassword: !!data.imapPassword,
-      });
-
       setImapServer(data.imapServer || '');
       setImapPort(String(data.imapPort || 993));
       setImapEmail(data.imapEmail || '');
@@ -191,13 +183,23 @@ export default function Settings() {
       setProxyUrl(data.proxyUrl || '');
       setCustomIdePaths(data.customIdePaths || {});
 
-      // Load patcher settings
-      setAutoRotateEnabled(data.autoRotateEnabled ?? true);
-      setLogRequestsEnabled(data.logRequestsEnabled ?? true);
-      setSpoofMachineIdEnabled(data.spoofMachineIdEnabled ?? true);
-
       if (data.theme && ['light', 'dark', 'system'].includes(data.theme)) {
         setTheme(data.theme as 'light' | 'dark' | 'system');
+      }
+
+      // Load email counter for current provider and strategy
+      try {
+        setIsLoadingCounter(true);
+        const counter = await getEmailCounter({
+          provider: data.provider || 'kiro',
+          strategy: data.emailStrategy || 'counter',
+        });
+        setEmailCounterState(counter);
+      } catch (e) {
+        console.error('Failed to load email counter:', e);
+        setEmailCounterState(0);
+      } finally {
+        setIsLoadingCounter(false);
       }
 
       // Load database path
@@ -228,7 +230,6 @@ export default function Settings() {
   const handleCategoryChange = (category: SettingsCategory) => {
     if (category === activeCategory) return;
 
-    // Clear any existing timers to prevent memory leaks
     if (categoryChangeOuterTimerRef.current) {
       clearTimeout(categoryChangeOuterTimerRef.current);
       categoryChangeOuterTimerRef.current = null;
@@ -302,9 +303,6 @@ export default function Settings() {
     });
   };
 
-  // Check if form has validation errors
-  const hasValidationErrors = Object.keys(validationErrors).length > 0;
-
   // Test addy.io connection
   const handleTestAddyioConnection = useCallback(async () => {
     if (!addyioApiToken) {
@@ -318,10 +316,7 @@ export default function Settings() {
     setConnectionMessage('');
 
     try {
-      // Test token validity
       const tokenDetails = await testAddyioConnection(addyioApiToken);
-
-      // Fetch account info, domains, and recipients
       const [account, domains, recipients] = await Promise.all([
         getAddyioAccount(addyioApiToken),
         getAddyioDomains(addyioApiToken),
@@ -332,12 +327,10 @@ export default function Settings() {
       setAddyioDomains(domains.data);
       setAddyioRecipients(recipients);
 
-      // Set default domain if not set
       if (!addyioDomain && domains.defaultAliasDomain) {
         setAddyioDomain(domains.defaultAliasDomain);
       }
 
-      // Set default recipient if not set
       if (!addyioDefaultRecipientId && account.defaultRecipientId) {
         setAddyioDefaultRecipientId(account.defaultRecipientId);
       }
@@ -364,13 +357,6 @@ export default function Settings() {
   }, [addyioApiToken, addyioDomain, addyioDefaultRecipientId, addLog]);
 
   const handleSave = useCallback(async () => {
-    console.log('[Settings] ===== STARTING SAVE =====');
-    console.log('[Settings] Current state:', {
-      imapServer,
-      imapEmail,
-      imapPassword: imapPassword ? '***set***' : '***empty***',
-    });
-
     try {
       setIsSaving(true);
       setSaveStatus('idle');
@@ -381,7 +367,7 @@ export default function Settings() {
         imapServer: imapServer,
         imapPort: parseInt(imapPort, 10) || 993,
         imapEmail: imapEmail,
-        imapUser: imapEmail, // Copy email to user field for Python IMAP login
+        imapUser: imapEmail,
         proxyEnabled: proxyEnabled,
         proxyUrl: proxyUrl,
         imapPassword: imapPassword !== '********' ? imapPassword : '',
@@ -397,31 +383,12 @@ export default function Settings() {
         thirtyThreeMailUsername: thirtyThreeMailUsername,
         thirtyThreeMailDomain: thirtyThreeMailDomain,
         customIdePaths: customIdePaths,
-        // Patcher settings
-        autoRotateEnabled: autoRotateEnabled,
-        logRequestsEnabled: logRequestsEnabled,
-        spoofMachineIdEnabled: spoofMachineIdEnabled,
+        // Removed automation settings (managed in PatcherSettingsDrawer)
       };
 
-      // Log IMAP settings being saved (for debugging)
-      console.log('[Settings] Saving IMAP settings:', {
-        imapServer: imapServer,
-        imapPort: parseInt(imapPort, 10) || 993,
-        imapEmail: imapEmail,
-        imapUser: imapEmail,
-        imapPasswordLength: imapPassword && imapPassword !== '********' ? imapPassword.length : 0,
-      });
-
-      console.log('[Settings] Calling updateSettings with:', settingsToSave);
       await updateSettings(settingsToSave);
-      console.log('[Settings] updateSettings completed successfully');
 
       setSaveStatus('success');
-      addLog({
-        level: 'success',
-        message: 'Settings saved successfully',
-        source: 'settings',
-      });
     } catch (error) {
       console.error('[Settings] Save failed:', error);
       setSaveStatus('error');
@@ -433,7 +400,6 @@ export default function Settings() {
       });
     } finally {
       setIsSaving(false);
-      console.log('[Settings] ===== SAVE COMPLETED =====');
     }
   }, [
     theme,
@@ -455,33 +421,50 @@ export default function Settings() {
     proxyEnabled,
     proxyUrl,
     customIdePaths,
-    autoRotateEnabled,
-    logRequestsEnabled,
-    spoofMachineIdEnabled,
     addLog,
     t,
   ]);
 
-  // Debounced auto-save function
   const debouncedAutoSave = useCallback(() => {
-    console.log('[DEBUG] debouncedAutoSave called');
-    // Clear existing timer
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-
-    // Set new timer
     autoSaveTimerRef.current = setTimeout(() => {
-      console.log('[DEBUG] Auto-save timer fired');
       handleSave();
     }, 800);
-  }, [handleSave]); // Include handleSave in dependencies
+  }, [handleSave]);
+
+  const handleEmailCounterChange = useCallback(
+    async (newCounter: number) => {
+      setEmailCounterState(newCounter);
+      try {
+        const settings = await getSettings();
+        await setEmailCounter({
+          provider: settings.provider || 'kiro',
+          strategy: settings.emailStrategy || 'counter',
+          counter: newCounter,
+        });
+        addLog({
+          level: 'success',
+          message: `Email counter updated to ${newCounter}`,
+          source: 'settings',
+        });
+      } catch (error) {
+        console.error('Failed to update email counter:', error);
+        addLog({
+          level: 'error',
+          message: `Failed to update email counter: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          source: 'settings',
+        });
+      }
+    },
+    [addLog]
+  );
 
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
     setTheme(newTheme);
   };
 
-  // Staggered animation helper
   const getAnimationStyle = (index: number) => ({
     opacity: mounted ? 1 : 0,
     transform: mounted ? 'translateY(0)' : 'translateY(8px)',
@@ -503,26 +486,23 @@ export default function Settings() {
   const renderGeneralSettings = () => (
     <div className="space-y-8" style={getAnimationStyle(0)}>
       {/* Theme Section */}
-      <div>
+      <div className="space-y-4">
         <div>
           <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
             <Sun className="w-4 h-4 text-primary" />
             {t('settings.general.appearance')}
           </h3>
-          <p className="text-slate-500 text-xs mb-4">
-            {t('settings.general.appearanceDescription')}
-          </p>
+          <p className="text-slate-500 text-xs">{t('settings.general.appearanceDescription')}</p>
         </div>
         <div className="flex gap-3">
           {[
             { value: 'light', icon: Sun, labelKey: 'settings.general.light' },
             { value: 'dark', icon: Moon, labelKey: 'settings.general.dark' },
             { value: 'system', icon: Monitor, labelKey: 'settings.general.system' },
-          ].map(({ value, icon: Icon, labelKey }, i) => (
+          ].map(({ value, icon: Icon, labelKey }) => (
             <button
               key={value}
               onClick={() => handleThemeChange(value as 'light' | 'dark' | 'system')}
-              style={getAnimationStyle(i + 1)}
               className={`flex items-center gap-2 px-5 py-3 rounded-lg border text-sm font-medium transition-all active:scale-95 duration-75 ${
                 theme === value
                   ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_15px_rgba(99,102,241,0.2)]'
@@ -537,23 +517,22 @@ export default function Settings() {
       </div>
 
       {/* Language Section */}
-      <div>
+      <div className="space-y-4">
         <div>
           <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
             <Globe className="w-4 h-4 text-primary" />
             {t('settings.general.language')}
           </h3>
-          <p className="text-slate-500 text-xs mb-4">{t('settings.general.languageDescription')}</p>
+          <p className="text-slate-500 text-xs">{t('settings.general.languageDescription')}</p>
         </div>
         <div className="flex gap-3">
           {[
             { value: 'en', label: 'English', flag: '🇺🇸' },
             { value: 'ru', label: 'Русский', flag: '🇷🇺' },
-          ].map(({ value, label, flag }, i) => (
+          ].map(({ value, label, flag }) => (
             <button
               key={value}
               onClick={() => setLanguage(value as 'en' | 'ru')}
-              style={getAnimationStyle(i + 4)}
               className={`flex items-center gap-2 px-5 py-3 rounded-lg border text-sm font-medium transition-all active:scale-95 duration-75 ${
                 language === value
                   ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_15px_rgba(99,102,241,0.2)]'
@@ -566,741 +545,585 @@ export default function Settings() {
           ))}
         </div>
       </div>
+
+      {/* UI Scale Section */}
+      <div className="space-y-4 pt-6 border-t border-white/10">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-primary" />
+            {t('settings.general.uiScale')}
+          </h3>
+          <p className="text-slate-500 text-xs">{t('settings.general.uiScaleDescription')}</p>
+        </div>
+        <div className="max-w-md bg-white/[0.02] border border-white/5 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-slate-300">
+              {t('settings.general.scale')}
+            </span>
+            <span className="text-sm font-mono font-bold text-primary">
+              {Math.round(uiScale * 100)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0.7"
+            max="1.3"
+            step="0.05"
+            value={uiScale}
+            onChange={e => setUIScale(parseFloat(e.target.value))}
+            className="w-full accent-primary h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer"
+          />
+          <div className="flex justify-between mt-2 text-[10px] text-slate-500 font-medium uppercase tracking-tighter">
+            <span>{t('settings.general.scaleSmall')}</span>
+            <button
+              onClick={() => setUIScale(1.0)}
+              className="text-primary/60 hover:text-primary transition-colors"
+            >
+              {t('settings.general.scaleReset')}
+            </button>
+            <span>{t('settings.general.scaleLarge')}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* IDE Paths Section */}
+      <div className="space-y-4 pt-6 border-t border-white/10">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+            <Code className="w-4 h-4 text-primary" />
+            {t('settings.idePaths.title')}
+          </h3>
+          <p className="text-slate-500 text-xs">{t('settings.idePaths.description')}</p>
+        </div>
+        <div className="space-y-4">
+          {['kiro', 'windsurf', 'trae'].map(ide => (
+            <div key={ide} className="flex items-center gap-4">
+              <span className="text-[10px] uppercase font-bold text-slate-500 w-20 px-1">
+                {ide}
+              </span>
+              <Input
+                placeholder={`Path to ${ide} extension folder...`}
+                value={customIdePaths[ide] || ''}
+                onChange={e => setCustomIdePaths(prev => ({ ...prev, [ide]: e.target.value }))}
+                className="font-mono text-xs"
+                rightElement={
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={async () => {
+                        try {
+                          const selected = await open({
+                            directory: true,
+                            title: `Select ${ide} extension folder`,
+                          });
+                          if (selected) {
+                            setCustomIdePaths(prev => ({ ...prev, [ide]: selected as string }));
+                          }
+                        } catch (e) {
+                          console.error('Failed to open folder dialog:', e);
+                        }
+                      }}
+                    >
+                      <FolderOpen size={14} />
+                    </Button>
+                    {customIdePaths[ide] && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-red-500/50 hover:text-red-400"
+                        onClick={() =>
+                          setCustomIdePaths(prev => {
+                            const next = { ...prev };
+                            delete next[ide];
+                            return next;
+                          })
+                        }
+                      >
+                        <X size={14} />
+                      </Button>
+                    )}
+                  </div>
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Database Info Section */}
+      <div className="space-y-4 pt-6 border-t border-white/10">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+            <Database className="w-4 h-4 text-slate-500" />
+            {t('settings.database.title')}
+          </h3>
+        </div>
+        <div className="glass-card rounded-lg p-3 bg-white/[0.02]">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 text-xs">{t('settings.database.location')}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-300 font-mono text-xs break-all max-w-[400px] text-right">
+                {dbPath || './stitch.db'}
+              </span>
+              <Tooltip content={t('common.copy')}>
+                <button
+                  onClick={() => copy(dbPath || './stitch.db')}
+                  className="p-1 hover:bg-white/10 rounded transition-colors text-slate-400 hover:text-white"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 
-  const renderPatcherSettings = () => (
-    <div className="space-y-6">
-      <div style={getAnimationStyle(0)}>
-        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-          <Zap className="w-4 h-4 text-amber-400" />
-          {t('settings.patcher.title')}
-        </h3>
-        <p className="text-slate-500 text-xs mb-4">{t('settings.patcher.description')}</p>
-      </div>
-
-      {/* Auto-Rotate Toggle */}
-      <div
-        className="glass-card rounded-lg p-4 border border-white/10"
-        style={getAnimationStyle(1)}
-      >
-        <label className="flex items-start gap-4 cursor-pointer">
-          <div className="pt-0.5">
+  const renderConnectivitySettings = () => (
+    <div className="space-y-8" style={getAnimationStyle(0)}>
+      {/* Proxy Settings */}
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+            <Globe className="w-4 h-4 text-primary" />
+            {t('settings.proxy.title')}
+          </h3>
+          <p className="text-slate-500 text-xs">{t('settings.proxy.description')}</p>
+        </div>
+        <div className="glass-card rounded-lg p-4 border border-white/10 space-y-4">
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
-              checked={autoRotateEnabled}
-              onChange={e => setAutoRotateEnabled(e.target.checked)}
-              className="w-5 h-5 rounded border-white/20 bg-white/5 text-amber-500 focus:ring-amber-500/50 focus:ring-offset-0 transition-colors"
-            />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <RefreshCw className="w-4 h-4 text-amber-400" />
-              <span className="text-white font-medium text-sm">
-                {t('settings.patcher.autoRotate')}
-              </span>
-            </div>
-            <p className="text-slate-500 text-xs leading-relaxed">
-              {t('settings.patcher.autoRotateDescription')}
-            </p>
-          </div>
-        </label>
-      </div>
-
-      {/* Log Requests Toggle */}
-      <div
-        className="glass-card rounded-lg p-4 border border-white/10"
-        style={getAnimationStyle(2)}
-      >
-        <label className="flex items-start gap-4 cursor-pointer">
-          <div className="pt-0.5">
-            <input
-              type="checkbox"
-              checked={logRequestsEnabled}
-              onChange={e => setLogRequestsEnabled(e.target.checked)}
-              className="w-5 h-5 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50 focus:ring-offset-0 transition-colors"
-            />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <Code className="w-4 h-4 text-primary" />
-              <span className="text-white font-medium text-sm">
-                {t('settings.patcher.logRequests')}
-              </span>
-            </div>
-            <p className="text-slate-500 text-xs leading-relaxed">
-              {t('settings.patcher.logRequestsDescription')}
-            </p>
-          </div>
-        </label>
-      </div>
-
-      {/* Spoof Machine ID Toggle */}
-      <div
-        className="glass-card rounded-lg p-4 border border-white/10"
-        style={getAnimationStyle(3)}
-      >
-        <label className="flex items-start gap-4 cursor-pointer">
-          <div className="pt-0.5">
-            <input
-              type="checkbox"
-              checked={spoofMachineIdEnabled}
-              onChange={e => setSpoofMachineIdEnabled(e.target.checked)}
-              className="w-5 h-5 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500/50 focus:ring-offset-0 transition-colors"
-            />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <Monitor className="w-4 h-4 text-emerald-400" />
-              <span className="text-white font-medium text-sm">
-                {t('settings.patcher.spoofMachineId')}
-              </span>
-            </div>
-            <p className="text-slate-500 text-xs leading-relaxed">
-              {t('settings.patcher.spoofMachineIdDescription')}
-            </p>
-          </div>
-        </label>
-      </div>
-
-      {/* Info Box */}
-      <div
-        className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4"
-        style={getAnimationStyle(4)}
-      >
-        <p className="text-amber-200/80 text-xs leading-relaxed">
-          <strong className="text-amber-300">⚡ {t('settings.patcher.note')}:</strong>{' '}
-          {t('settings.patcher.noteDescription')}
-        </p>
-      </div>
-    </div>
-  );
-
-  const renderImapSettings = () => (
-    <div className="space-y-6">
-      <div style={getAnimationStyle(0)}>
-        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-          <Mail className="w-4 h-4 text-primary" />
-          {t('settings.imap.title')}
-        </h3>
-        <p className="text-slate-500 text-xs mb-4">{t('settings.imap.description')}</p>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div style={getAnimationStyle(1)}>
-          <label className="input-label">{t('settings.imap.server')}</label>
-          <input
-            type="text"
-            value={imapServer}
-            onChange={e => {
-              console.log('[DEBUG] imapServer onChange:', e.target.value);
-              setImapServer(e.target.value);
-              validateField('imapServer', e.target.value);
-              // Auto-save after 800ms delay
-              debouncedAutoSave();
-            }}
-            onBlur={e => validateField('imapServer', e.target.value)}
-            placeholder="imap.example.com"
-            className={`input-ds text-sm transition-all duration-200 ${
-              validationErrors.imapServer
-                ? 'border-red-500 focus:border-red-500'
-                : 'focus:border-primary'
-            }`}
-          />
-          {validationErrors.imapServer && (
-            <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
-              <AlertCircle className="w-3 h-3" />
-              {validationErrors.imapServer}
-            </div>
-          )}
-        </div>
-        <div style={getAnimationStyle(2)}>
-          <label className="input-label">{t('settings.imap.port')}</label>
-          <input
-            type="text"
-            value={imapPort}
-            onChange={e => {
-              setImapPort(e.target.value);
-              validateField('imapPort', e.target.value);
-            }}
-            onBlur={e => validateField('imapPort', e.target.value)}
-            placeholder="993"
-            className={`input-ds text-sm transition-all duration-200 ${
-              validationErrors.imapPort
-                ? 'border-red-500 focus:border-red-500'
-                : 'focus:border-primary'
-            }`}
-          />
-          {validationErrors.imapPort && (
-            <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
-              <AlertCircle className="w-3 h-3" />
-              {validationErrors.imapPort}
-            </div>
-          )}
-        </div>
-        <div style={getAnimationStyle(3)}>
-          <label className="input-label">{t('settings.imap.emailAddress')}</label>
-          <input
-            type="email"
-            value={imapEmail}
-            onChange={e => {
-              setImapEmail(e.target.value);
-              validateField('imapEmail', e.target.value);
-              // Auto-save after 800ms delay
-              debouncedAutoSave();
-            }}
-            onBlur={e => validateField('imapEmail', e.target.value)}
-            placeholder="user@example.com"
-            className={`input-ds text-sm transition-all duration-200 ${
-              validationErrors.imapEmail
-                ? 'border-red-500 focus:border-red-500'
-                : 'focus:border-primary'
-            }`}
-          />
-          {validationErrors.imapEmail && (
-            <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
-              <AlertCircle className="w-3 h-3" />
-              {validationErrors.imapEmail}
-            </div>
-          )}
-        </div>
-        <div style={getAnimationStyle(4)}>
-          <label className="input-label">{t('settings.imap.password')}</label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={imapPassword}
+              checked={proxyEnabled}
               onChange={e => {
-                setImapPassword(e.target.value);
-                // Auto-save after 800ms delay
+                setProxyEnabled(e.target.checked);
                 debouncedAutoSave();
               }}
-              placeholder="••••••••"
-              className="input-ds text-sm pr-10 transition-all duration-200 focus:border-primary"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 transition-colors"
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white transition-colors active:scale-95"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+            <span className="text-slate-300 text-sm">{t('settings.proxy.enableProxy')}</span>
+          </label>
+          {proxyEnabled && (
+            <div>
+              <label className="input-label">{t('settings.proxy.proxyUrl')}</label>
+              <input
+                type="text"
+                value={proxyUrl}
+                onChange={e => {
+                  setProxyUrl(e.target.value);
+                  validateField('proxyUrl', e.target.value);
+                  debouncedAutoSave();
+                }}
+                onBlur={e => validateField('proxyUrl', e.target.value)}
+                placeholder="http://user:pass@host:port"
+                className={`input-ds text-sm transition-all duration-200 ${
+                  validationErrors.proxyUrl
+                    ? 'border-red-500 focus:border-red-500'
+                    : 'focus:border-primary'
+                }`}
+              />
+              {validationErrors.proxyUrl && (
+                <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
+                  <AlertCircle className="w-3 h-3" />
+                  {validationErrors.proxyUrl}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* IMAP Settings */}
+      <div className="space-y-6 pt-6 border-t border-white/10">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+            <Server className="w-4 h-4 text-primary" />
+            {t('settings.imap.title')}
+          </h3>
+          <p className="text-slate-500 text-xs">{t('settings.imap.description')}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="input-label">{t('settings.imap.server')}</label>
+            <input
+              type="text"
+              value={imapServer}
+              onChange={e => {
+                setImapServer(e.target.value);
+                validateField('imapServer', e.target.value);
+                debouncedAutoSave();
+              }}
+              onBlur={e => validateField('imapServer', e.target.value)}
+              placeholder="imap.example.com"
+              className={`input-ds text-sm transition-all duration-200 ${
+                validationErrors.imapServer ? 'border-red-500' : 'focus:border-primary'
+              }`}
+            />
+          </div>
+          <div>
+            <label className="input-label">{t('settings.imap.port')}</label>
+            <input
+              type="text"
+              value={imapPort}
+              onChange={e => {
+                setImapPort(e.target.value);
+                validateField('imapPort', e.target.value);
+                debouncedAutoSave();
+              }}
+              className="input-ds text-sm transition-all duration-200"
+            />
+          </div>
+          <div>
+            <label className="input-label">{t('settings.imap.emailAddress')}</label>
+            <input
+              type="email"
+              value={imapEmail}
+              onChange={e => {
+                setImapEmail(e.target.value);
+                validateField('imapEmail', e.target.value);
+                debouncedAutoSave();
+              }}
+              className="input-ds text-sm transition-all duration-200"
+            />
+          </div>
+          <div>
+            <label className="input-label">{t('settings.imap.password')}</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={imapPassword}
+                onChange={e => {
+                  setImapPassword(e.target.value);
+                  debouncedAutoSave();
+                }}
+                placeholder="••••••••"
+                className="input-ds text-sm pr-10 transition-all duration-200"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
 
-  const renderAddyioSettings = () => (
-    <div className="space-y-6">
-      <div style={getAnimationStyle(0)}>
-        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-          <Mail className="w-4 h-4 text-primary" />
-          Addy.io Email Aliases
-        </h3>
-        <p className="text-slate-500 text-xs mb-4">
-          Generate temporary email aliases for privacy. Requires IMAP configured above.
-        </p>
+      {/* Email Counter Section */}
+      <div className="space-y-6 pt-6 border-t border-white/10">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-primary" />
+            Email Counter
+          </h3>
+          <p className="text-slate-500 text-xs">
+            Current counter value for COUNTER email strategy (e.g., user+1@domain.com, user+2@domain.com)
+          </p>
+        </div>
+        <div className="max-w-xs">
+          <label className="input-label">Counter Value</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              value={emailCounter}
+              onChange={e => handleEmailCounterChange(parseInt(e.target.value, 10) || 0)}
+              disabled={isLoadingCounter}
+              className="input-ds text-sm transition-all duration-200"
+              placeholder="0"
+            />
+            {isLoadingCounter && (
+              <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+            )}
+          </div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            Next registration will use: user+{emailCounter + 1}@domain.com
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        <label className="flex items-center gap-3 cursor-pointer" style={getAnimationStyle(1)}>
-          <input
-            type="checkbox"
-            checked={addyioEnabled}
-            onChange={e => {
-              setAddyioEnabled(e.target.checked);
-              debouncedAutoSave();
-            }}
-            className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 transition-colors"
-          />
-          <span className="text-slate-300 text-sm">Enable Addy.io aliases</span>
-        </label>
+      {/* Email Services (Addy.io / 33mail) */}
+      <div className="space-y-6 pt-6 border-t border-white/10">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+            <Shield className="w-4 h-4 text-indigo-400" />
+            {t('autoReg.emailAliases')}
+          </h3>
+          <p className="text-slate-500 text-xs">Configure third-party email alias services.</p>
+        </div>
 
-        {addyioEnabled && (
-          <>
-            <div style={getAnimationStyle(2)}>
-              <label className="input-label">API Token</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={addyioApiToken}
-                  onChange={e => {
-                    setAddyioApiToken(e.target.value);
-                    setConnectionStatus('idle');
-                    debouncedAutoSave();
-                  }}
-                  placeholder="addy_io_..."
-                  className="input-ds text-sm pr-10 transition-all duration-200 focus:border-primary"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white transition-colors active:scale-95"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+        {/* Addy.io */}
+        <div
+          className={`glass-card rounded-lg p-4 border border-white/10 space-y-4 transition-opacity duration-200 ${
+            !addyioEnabled ? 'opacity-60 hover:opacity-100' : ''
+          }`}
+        >
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={addyioEnabled}
+              onChange={e => {
+                setAddyioEnabled(e.target.checked);
+                if (e.target.checked) setThirtyThreeMailEnabled(false);
+                debouncedAutoSave();
+              }}
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-0 transition-colors"
+            />
+            <span className="text-slate-300 text-sm">{t('autoReg.configureAddyio')}</span>
+          </label>
+          {addyioEnabled && (
+            <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
+              <div>
+                <label className="input-label">API Token</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={addyioApiToken}
+                    onChange={e => {
+                      setAddyioApiToken(e.target.value);
+                      setConnectionStatus('idle'); // Reset status on change
+                      debouncedAutoSave();
+                    }}
+                    className="input-ds text-sm pr-10"
+                    placeholder="addy_..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              <p className="text-slate-500 text-xs mt-1">
-                Get your API token from{' '}
-                <a
-                  href="https://app.addy.io/settings/api"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  addy.io settings
-                </a>
-              </p>
-            </div>
 
-            {/* Test Connection Button */}
-            <div style={getAnimationStyle(3)}>
-              <button
-                onClick={handleTestAddyioConnection}
-                disabled={isTestingConnection || !addyioApiToken}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-medium"
-              >
-                {isTestingConnection ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Testing Connection...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    Test Connection
-                  </>
+              {/* Test Connection Button */}
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={handleTestAddyioConnection}
+                  disabled={isTestingConnection || !addyioApiToken}
+                  variant="secondary"
+                  size="sm"
+                  className="self-start"
+                  leftIcon={
+                    isTestingConnection ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )
+                  }
+                >
+                  {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                </Button>
+
+                {connectionStatus !== 'idle' && (
+                  <div
+                    className={`text-xs flex items-center gap-1.5 ${
+                      connectionStatus === 'success' ? 'text-emerald-400' : 'text-red-400'
+                    }`}
+                  >
+                    {connectionStatus === 'success' ? (
+                      <CheckCircle className="w-3 h-3" />
+                    ) : (
+                      <AlertCircle className="w-3 h-3" />
+                    )}
+                    {connectionMessage}
+                  </div>
                 )}
-              </button>
+              </div>
 
-              {connectionStatus !== 'idle' && (
-                <div
-                  className={`mt-2 flex items-center gap-2 text-xs ${
-                    connectionStatus === 'success' ? 'text-green-400' : 'text-red-400'
-                  }`}
-                >
-                  {connectionStatus === 'success' ? (
-                    <CheckCircle className="w-4 h-4" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4" />
-                  )}
-                  {connectionMessage}
+              {/* Account Status Card */}
+              {addyioAccountInfo && (
+                <div className="glass-card rounded-lg p-3 border border-indigo-500/20 bg-indigo-500/5 mt-2">
+                  <h4 className="text-white font-medium text-xs mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-3 h-3 text-emerald-400" />
+                    Account Status
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-slate-500">Subscription:</span>
+                      <span className="text-white ml-2 font-medium">
+                        {addyioAccountInfo.subscription}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Bandwidth:</span>
+                      <span className="text-white ml-2 font-medium">
+                        {(addyioAccountInfo.bandwidth / 1024 / 1024).toFixed(1)} MB
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* Account Status Card */}
-            {addyioAccountInfo && (
-              <div
-                style={getAnimationStyle(4)}
-                className="glass-card rounded-lg p-4 border border-primary/20"
-              >
-                <h4 className="text-white font-medium text-sm mb-3 flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-400" />
-                  Account Status
-                </h4>
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-slate-500">Subscription:</span>
-                    <span className="text-white ml-2 font-medium">
-                      {addyioAccountInfo.subscription}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Active Aliases:</span>
-                    <span className="text-white ml-2 font-medium">
-                      {addyioAccountInfo.totalActiveAliases} / {addyioAccountInfo.totalAliases}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Recipients:</span>
-                    <span className="text-white ml-2 font-medium">
-                      {addyioAccountInfo.recipientCount} / {addyioAccountInfo.recipientLimit}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Bandwidth:</span>
-                    <span className="text-white ml-2 font-medium">
-                      {(addyioAccountInfo.bandwidth / 1024 / 1024).toFixed(1)} MB
-                      {addyioAccountInfo.bandwidthLimit > 0 &&
-                        ` / ${(addyioAccountInfo.bandwidthLimit / 1024 / 1024).toFixed(0)} MB`}
-                    </span>
-                  </div>
+              {/* Dynamic Fields (only show if domains loaded or manual entry) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="input-label">Domain</label>
+                  {addyioDomains.length > 0 ? (
+                    <Select
+                      value={addyioDomain}
+                      onChange={e => {
+                        setAddyioDomain(e.target.value);
+                        debouncedAutoSave();
+                      }}
+                      options={[
+                        { value: '', label: 'Select domain...' },
+                        ...addyioDomains.map(d => ({ value: d, label: d })),
+                      ]}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={addyioDomain}
+                      onChange={e => {
+                        setAddyioDomain(e.target.value);
+                        debouncedAutoSave();
+                      }}
+                      className="input-ds text-sm"
+                      placeholder="anonaddy.me"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="input-label">Format</label>
+                  <Select
+                    value={addyioAliasFormat}
+                    onChange={e => {
+                      setAddyioAliasFormat(e.target.value);
+                      debouncedAutoSave();
+                    }}
+                    options={[
+                      { value: 'uuid', label: 'UUID' },
+                      { value: 'random_words', label: 'Random Words' },
+                      { value: 'random_characters', label: 'Random Chars' },
+                    ]}
+                  />
                 </div>
               </div>
-            )}
 
-            {/* Domain Dropdown */}
-            <div style={getAnimationStyle(5)}>
-              <label className="input-label">Domain</label>
-              {addyioDomains.length > 0 ? (
-                <select
-                  value={addyioDomain}
-                  onChange={e => {
-                    setAddyioDomain(e.target.value);
-                    debouncedAutoSave();
-                  }}
-                  className="input-ds text-sm transition-all duration-200 focus:border-primary"
-                >
-                  <option value="">Select domain...</option>
-                  {addyioDomains.map(domain => (
-                    <option key={domain} value={domain}>
-                      {domain}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={addyioDomain}
-                  onChange={e => {
-                    setAddyioDomain(e.target.value);
-                    debouncedAutoSave();
-                  }}
-                  placeholder="anonaddy.me"
-                  className="input-ds text-sm transition-all duration-200 focus:border-primary"
-                />
-              )}
-              <p className="text-slate-500 text-xs mt-1">
-                {addyioDomains.length > 0
-                  ? 'Select from your available domains'
-                  : 'Test connection to load domains'}
-              </p>
-            </div>
-
-            {/* Recipient Dropdown */}
-            {addyioRecipients.length > 0 && (
-              <div style={getAnimationStyle(6)}>
-                <label className="input-label">Default Recipient</label>
-                <select
+              {/* Default Recipient */}
+              {addyioRecipients.length > 0 && (
+                <Select
                   value={addyioDefaultRecipientId}
                   onChange={e => {
                     setAddyioDefaultRecipientId(e.target.value);
                     debouncedAutoSave();
                   }}
-                  className="input-ds text-sm transition-all duration-200 focus:border-primary"
-                >
-                  <option value="">Use account default</option>
-                  {addyioRecipients.map(recipient => (
-                    <option key={recipient.id} value={recipient.id}>
-                      {recipient.email}
-                      {recipient.emailVerifiedAt ? ' ✓' : ' (unverified)'}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-slate-500 text-xs mt-1">
-                  Email address that receives forwarded emails
-                </p>
+                  options={[
+                    { value: '', label: 'Use account default' },
+                    ...addyioRecipients.map(r => ({
+                      value: r.id,
+                      label: `${r.email} ${r.emailVerifiedAt ? '✓' : '(unverified)'}`,
+                    })),
+                  ]}
+                />
+              )}
+
+              {/* Advanced Options */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="input-label">Description Template</label>
+                  <input
+                    type="text"
+                    value={addyioDescriptionTemplate}
+                    onChange={e => {
+                      setAddyioDescriptionTemplate(e.target.value);
+                      debouncedAutoSave();
+                    }}
+                    className="input-ds text-sm"
+                    placeholder="{provider} - {date}"
+                  />
+                </div>
+                <div>
+                  <label className="input-label">From Name</label>
+                  <input
+                    type="text"
+                    value={addyioFromName}
+                    onChange={e => {
+                      setAddyioFromName(e.target.value);
+                      debouncedAutoSave();
+                    }}
+                    className="input-ds text-sm"
+                    placeholder="My Alias"
+                  />
+                </div>
               </div>
-            )}
 
-            <div style={getAnimationStyle(7)}>
-              <label className="input-label">Alias Format</label>
-              <select
-                value={addyioAliasFormat}
-                onChange={e => {
-                  setAddyioAliasFormat(e.target.value);
-                  debouncedAutoSave();
-                }}
-                className="input-ds text-sm transition-all duration-200 focus:border-primary"
-              >
-                <option value="uuid">UUID (e.g., 50c9e585-e7f5-41c4-9016@...)</option>
-                <option value="random_words">Random Words (e.g., happy-elephant-123@...)</option>
-                <option value="random_characters">Random Characters (e.g., a8f3k2m@...)</option>
-              </select>
+              <label className="flex items-center gap-3 cursor-pointer mt-2">
+                <input
+                  type="checkbox"
+                  checked={addyioAutoDelete}
+                  onChange={e => {
+                    setAddyioAutoDelete(e.target.checked);
+                    debouncedAutoSave();
+                  }}
+                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-0 transition-colors"
+                />
+                <span className="text-slate-300 text-sm">Auto-delete aliases</span>
+              </label>
             </div>
-
-            {/* Description Template */}
-            <div style={getAnimationStyle(8)}>
-              <label className="input-label">Description Template (Optional)</label>
-              <input
-                type="text"
-                value={addyioDescriptionTemplate}
-                onChange={e => {
-                  setAddyioDescriptionTemplate(e.target.value);
-                  debouncedAutoSave();
-                }}
-                placeholder="e.g., Registration - {provider} - {date}"
-                className="input-ds text-sm transition-all duration-200 focus:border-primary"
-              />
-              <p className="text-slate-500 text-xs mt-1">
-                Template for alias descriptions. Variables: {'{provider}'}, {'{date}'},{' '}
-                {'{timestamp}'}
-              </p>
-            </div>
-
-            {/* From Name */}
-            <div style={getAnimationStyle(9)}>
-              <label className="input-label">From Name (Optional)</label>
-              <input
-                type="text"
-                value={addyioFromName}
-                onChange={e => {
-                  setAddyioFromName(e.target.value);
-                  debouncedAutoSave();
-                }}
-                placeholder="e.g., John Doe"
-                className="input-ds text-sm transition-all duration-200 focus:border-primary"
-              />
-              <p className="text-slate-500 text-xs mt-1">
-                Custom "From" name for emails sent from aliases
-              </p>
-            </div>
-
-            <label className="flex items-center gap-3 cursor-pointer" style={getAnimationStyle(10)}>
-              <input
-                type="checkbox"
-                checked={addyioAutoDelete}
-                onChange={e => {
-                  setAddyioAutoDelete(e.target.checked);
-                  debouncedAutoSave();
-                }}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 transition-colors"
-              />
-              <span className="text-slate-300 text-sm">Auto-delete aliases after use</span>
-            </label>
-
-            <div
-              style={getAnimationStyle(11)}
-              className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3"
-            >
-              <p className="text-blue-300 text-xs">
-                <strong>How it works:</strong> Addy.io creates aliases that forward to your IMAP
-                email. Verification codes are read from your IMAP inbox.
-              </p>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* 33mail Settings */}
-      <div className="space-y-6 mt-8 pt-6 border-t border-white/10">
-        <div style={getAnimationStyle(12)}>
-          <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-            <Mail className="w-4 h-4 text-purple-400" />
-            33mail.com Aliases
-          </h3>
-          <p className="text-slate-500 text-xs mb-4">
-            Use 33mail wildcard domains (e.g. any@user.33mail.com). Requires 33mail account
-            forwarding to your IMAP email.
-          </p>
+          )}
         </div>
 
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer" style={getAnimationStyle(13)}>
+        {/* 33mail */}
+        <div
+          className={`glass-card rounded-lg p-4 border border-white/10 space-y-4 transition-opacity duration-200 ${
+            !thirtyThreeMailEnabled ? 'opacity-60 hover:opacity-100' : ''
+          }`}
+        >
+          <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={thirtyThreeMailEnabled}
               onChange={e => {
                 setThirtyThreeMailEnabled(e.target.checked);
-                // Disable Addy.io if 33mail is enabled
                 if (e.target.checked) setAddyioEnabled(false);
                 debouncedAutoSave();
               }}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-500 focus:ring-0 focus:ring-offset-0 transition-colors"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-500 focus:ring-0 transition-colors"
             />
-            <span className="text-slate-300 text-sm">Enable 33mail aliases</span>
+            <span className="text-slate-300 text-sm">{t('autoReg.configure33mail')}</span>
           </label>
-
           {thirtyThreeMailEnabled && (
-            <>
-              <div style={getAnimationStyle(14)}>
-                <label className="input-label">33mail Username</label>
-                <input
-                  type="text"
-                  value={thirtyThreeMailUsername}
-                  onChange={e => {
-                    setThirtyThreeMailUsername(e.target.value);
-                    debouncedAutoSave();
-                  }}
-                  placeholder="your-username"
-                  className="input-ds text-sm transition-all duration-200 focus:border-purple-500"
-                />
-                <p className="text-slate-500 text-xs mt-1">
-                  Your 33mail username (subdomain prefix)
-                </p>
+            <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="input-label">Username</label>
+                  <input
+                    type="text"
+                    value={thirtyThreeMailUsername}
+                    onChange={e => {
+                      setThirtyThreeMailUsername(e.target.value);
+                      debouncedAutoSave();
+                    }}
+                    className="input-ds text-sm"
+                    placeholder="user"
+                  />
+                </div>
+                <div>
+                  <label className="input-label">Domain</label>
+                  <input
+                    type="text"
+                    value={thirtyThreeMailDomain}
+                    onChange={e => {
+                      setThirtyThreeMailDomain(e.target.value);
+                      debouncedAutoSave();
+                    }}
+                    className="input-ds text-sm"
+                    placeholder="33mail.com"
+                  />
+                </div>
               </div>
-
-              <div style={getAnimationStyle(15)}>
-                <label className="input-label">Domain</label>
-                <input
-                  type="text"
-                  value={thirtyThreeMailDomain}
-                  onChange={e => {
-                    setThirtyThreeMailDomain(e.target.value);
-                    debouncedAutoSave();
-                  }}
-                  placeholder="33mail.com"
-                  className="input-ds text-sm transition-all duration-200 focus:border-purple-500"
-                />
-                <p className="text-slate-500 text-xs mt-1">
-                  Usually 33mail.com, unless you have a custom domain
-                </p>
-              </div>
-
-              <div
-                style={getAnimationStyle(16)}
-                className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3"
-              >
-                <p className="text-purple-300 text-xs">
-                  <strong>Example:</strong> Emails will be generated as{' '}
-                  <code>
-                    random-string@{thirtyThreeMailUsername || 'username'}.
-                    {thirtyThreeMailDomain || '33mail.com'}
-                  </code>
-                </p>
-              </div>
-            </>
+            </div>
           )}
         </div>
-      </div>
-    </div>
-  );
-
-  const renderProxySettings = () => (
-    <div className="space-y-6">
-      <div style={getAnimationStyle(0)}>
-        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-          <Globe className="w-4 h-4 text-primary" />
-          {t('settings.proxy.title')}
-        </h3>
-        <p className="text-slate-500 text-xs mb-4">{t('settings.proxy.description')}</p>
-      </div>
-      <div className="space-y-4">
-        <label className="flex items-center gap-3 cursor-pointer" style={getAnimationStyle(1)}>
-          <input
-            type="checkbox"
-            checked={proxyEnabled}
-            onChange={e => setProxyEnabled(e.target.checked)}
-            className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 transition-colors"
-          />
-          <span className="text-slate-300 text-sm">{t('settings.proxy.enableProxy')}</span>
-        </label>
-        {proxyEnabled && (
-          <div style={getAnimationStyle(2)}>
-            <label className="input-label">{t('settings.proxy.proxyUrl')}</label>
-            <input
-              type="text"
-              value={proxyUrl}
-              onChange={e => {
-                setProxyUrl(e.target.value);
-                validateField('proxyUrl', e.target.value);
-              }}
-              onBlur={e => validateField('proxyUrl', e.target.value)}
-              placeholder="http://proxy:8080"
-              className={`input-ds text-sm transition-all duration-200 ${
-                validationErrors.proxyUrl
-                  ? 'border-red-500 focus:border-red-500'
-                  : 'focus:border-primary'
-              }`}
-            />
-            {validationErrors.proxyUrl && (
-              <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
-                <AlertCircle className="w-3 h-3" />
-                {validationErrors.proxyUrl}
-              </div>
-            )}
-            <p className="text-slate-500 text-xs mt-2">{t('settings.proxy.proxyUrlHint')}</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderIdePathsSettings = () => (
-    <div className="space-y-6">
-      <div style={getAnimationStyle(0)}>
-        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-          <Code className="w-4 h-4 text-primary" />
-          {t('settings.idePaths.title')}
-        </h3>
-        <p className="text-slate-500 text-xs mb-4">{t('settings.idePaths.description')}</p>
-      </div>
-      <div className="space-y-3">
-        {['kiro', 'windsurf', 'trae'].map((ide, index) => (
-          <div key={ide} className="flex items-center gap-3" style={getAnimationStyle(index + 1)}>
-            <span className="text-slate-400 w-20 capitalize text-sm font-medium">{ide}</span>
-            <input
-              type="text"
-              value={customIdePaths[ide] || ''}
-              onChange={e => setCustomIdePaths(prev => ({ ...prev, [ide]: e.target.value }))}
-              placeholder={`Path to ${ide} extension folder...`}
-              className="flex-1 input-ds text-xs transition-all duration-200 focus:border-primary"
-            />
-            <button
-              onClick={async () => {
-                try {
-                  const selected = await open({
-                    directory: true,
-                    title: `Select ${ide} extension folder`,
-                  });
-                  if (selected) {
-                    setCustomIdePaths(prev => ({ ...prev, [ide]: selected as string }));
-                  }
-                } catch (e) {
-                  console.error('Failed to open folder dialog:', e);
-                  const { addNotification } = useAppStore.getState();
-                  addNotification({
-                    type: 'error',
-                    title: t('settings.folderDialogFailed'),
-                    message: String(e),
-                  });
-                }
-              }}
-              className="btn-icon active:scale-95 transition-transform duration-75 hover:bg-white/[0.08]"
-              title={t('common.browse')}
-            >
-              <FolderOpen className="w-4 h-4" />
-            </button>
-            {customIdePaths[ide] && (
-              <button
-                onClick={() =>
-                  setCustomIdePaths(prev => {
-                    const next = { ...prev };
-                    delete next[ide];
-                    return next;
-                  })
-                }
-                className="btn-icon text-red-400 hover:text-red-300 hover:bg-red-500/10 active:scale-95 transition-all duration-75"
-                title={t('common.clear')}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="text-slate-500 text-xs mt-4" style={getAnimationStyle(4)}>
-        {t('settings.idePaths.pathExample')}
-      </p>
-    </div>
-  );
-
-  const renderDatabaseSettings = () => (
-    <div className="space-y-6">
-      <div style={getAnimationStyle(0)}>
-        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-          <Database className="w-4 h-4 text-primary" />
-          {t('settings.database.title')}
-        </h3>
-        <p className="text-slate-500 text-xs mb-4">{t('settings.database.description')}</p>
-      </div>
-      <div className="space-y-4">
-        <div className="glass-card rounded-lg p-4" style={getAnimationStyle(1)}>
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-slate-400 text-sm">{t('settings.database.location')}</span>
-            <span className="text-slate-200 font-mono text-xs break-all max-w-[300px] text-right">
-              {dbPath || './stitch.db'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400 text-sm">{t('settings.database.type')}</span>
-            <span className="text-slate-200 text-sm">SQLite</span>
-          </div>
-        </div>
-        <p className="text-slate-500 text-xs" style={getAnimationStyle(2)}>
-          {t('settings.database.sqliteDescription')}
-        </p>
       </div>
     </div>
   );
@@ -1309,119 +1132,69 @@ export default function Settings() {
     switch (activeCategory) {
       case 'general':
         return renderGeneralSettings();
-      case 'patcher':
-        return renderPatcherSettings();
-      case 'token-pool':
-        return <PoolSettingsPanel getAnimationStyle={getAnimationStyle} />;
-      case 'imap':
-        return (
-          <>
-            {renderImapSettings()}
-            <div className="mt-6">{renderAddyioSettings()}</div>
-          </>
-        );
-      case 'proxy':
-        return renderProxySettings();
-      case 'ide-paths':
-        return renderIdePathsSettings();
-      case 'database':
-        return renderDatabaseSettings();
+      case 'connectivity':
+        return renderConnectivitySettings();
       default:
         return null;
     }
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <Header
-        title={t('settings.title')}
-        subtitle={t('settings.subtitle')}
-        icon={<SettingsIcon size={18} />}
-      />
+    <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0c]">
+      <Header title={t('settings.title')} icon={<SettingsIcon size={18} />} />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - Deep Space Void with improved spacing */}
-        <div
-          className="w-52 shrink-0 border-r border-white/5 flex flex-col"
-          style={{ background: 'rgba(15, 23, 42, 0.3)' }}
-        >
-          <nav className="flex-1 py-4">
-            {categories.map((category, index) => (
-              <button
-                key={category.id}
-                onClick={() => handleCategoryChange(category.id)}
-                style={getAnimationStyle(index + 1)}
-                className={`relative w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all duration-200 ${
-                  activeCategory === category.id
-                    ? 'bg-white/5 text-white'
-                    : 'text-slate-500 hover:bg-white/[0.02] hover:text-slate-300'
-                }`}
-              >
-                {/* Active indicator bar */}
-                {activeCategory === category.id && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-purple-500 rounded-r" />
-                )}
-                <span
-                  className={`transition-colors duration-200 ${activeCategory === category.id ? 'text-purple-400' : ''}`}
-                >
-                  {category.icon}
-                </span>
-                {t(category.labelKey)}
-              </button>
-            ))}
-          </nav>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <div className="w-64 border-r border-white/5 bg-[#0f1115]/50 flex flex-col p-4 gap-1 overflow-y-auto">
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => handleCategoryChange(cat.id)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                activeCategory === cat.id
+                  ? 'bg-primary/10 text-primary border border-primary/20 shadow-[0_0_10px_rgba(99,102,241,0.1)]'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              {cat.icon}
+              {t(cat.labelKey)}
+            </button>
+          ))}
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Scrollable Form Area */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div
-              className={`max-w-2xl transition-all duration-150 ${
-                isTransitioning ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
-              }`}
-            >
-              {renderContent()}
-            </div>
-          </div>
-
-          {/* Save Button - Fixed at bottom with glassmorphism */}
+        <div className="flex-1 overflow-y-auto p-8 relative">
+          {/* Transition wrapper */}
           <div
-            className="shrink-0 p-4 border-t border-white/10 bg-slate-950/80 backdrop-blur-xl"
-            style={getAnimationStyle(6)}
+            className={`transition-all duration-150 ease-out ${
+              isTransitioning ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+            }`}
           >
-            <div className="flex items-center justify-end gap-3">
-              {saveStatus === 'success' && (
-                <span className="flex items-center gap-1.5 text-emerald-400 text-xs animate-fade-in">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  {t('settings.settingsSaved')}
-                </span>
-              )}
-              {saveStatus === 'error' && (
-                <span className="flex items-center gap-1.5 text-red-400 text-xs animate-fade-in">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {errorMessage || t('settings.failedToSave')}
-                </span>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={isSaving || hasValidationErrors}
-                className={`btn-primary py-2 px-5 text-sm flex items-center gap-2 active:scale-95 transition-all duration-75 ${
-                  !isSaving && !hasValidationErrors
-                    ? 'hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]'
-                    : 'opacity-50 cursor-not-allowed'
-                }`}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
-                {t('settings.saveSettings')}
-              </button>
-            </div>
+            {renderContent()}
           </div>
         </div>
+      </div>
+
+      {/* Footer / Status Bar (optional, for save status) */}
+      <div className="px-6 py-3 border-t border-white/5 bg-[#0f1115] flex justify-end items-center gap-4">
+        {isSaving && (
+          <span className="text-xs text-slate-400 flex items-center gap-1.5 animate-pulse">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Saving...
+          </span>
+        )}
+        {saveStatus === 'success' && !isSaving && (
+          <span className="text-xs text-emerald-400 flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2">
+            <CheckCircle className="w-3.5 h-3.5" />
+            Settings saved
+          </span>
+        )}
+        {saveStatus === 'error' && (
+          <span className="text-xs text-red-400 flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {errorMessage || t('settings.failedToSave')}
+          </span>
+        )}
       </div>
     </div>
   );

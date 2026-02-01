@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
+import { Tooltip } from '../Tooltip';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 
 interface LogEntry {
@@ -29,6 +30,8 @@ interface CompactLogFeedProps {
   logs: LogEntry[];
   onClear?: () => void;
   className?: string;
+  activeProvider?: string;
+  onProviderChange?: (provider: string) => void;
 }
 
 // Get icon based on log content
@@ -283,17 +286,18 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
   );
 }
 
-export function CompactLogFeed({ logs, onClear, className }: CompactLogFeedProps) {
+export function CompactLogFeed({ logs, onClear, className, activeProvider = 'all', onProviderChange }: CompactLogFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   const { copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs, autoScroll]);
+  }, [logs, autoScroll, showDebug]);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -309,10 +313,23 @@ export function CompactLogFeed({ logs, onClear, className }: CompactLogFeedProps
     setAutoScroll(true);
   };
 
-  // Filter out success logs (they're shown as cards above)
-  const filteredLogs = logs.filter(
-    log => log.level !== 'success' || !log.message.includes('Account created')
-  );
+  // Filter logs
+  const filteredLogs = logs.filter(log => {
+    // Hide success logs (they're shown as cards above)
+    if (log.level === 'success' && log.message.includes('Account created')) return false;
+
+    // Hide debug logs unless toggled
+    if (log.level === 'debug' && !showDebug) return false;
+
+    // Filter by provider if not "all"
+    if (activeProvider !== 'all') {
+      const match = log.message.match(/^\[(\w+)\]/);
+      if (!match) return false;
+      return match[1].toLowerCase() === activeProvider.toLowerCase();
+    }
+
+    return true;
+  });
 
   return (
     <div className={cn('relative flex flex-col h-full', className)}>
@@ -321,18 +338,49 @@ export function CompactLogFeed({ logs, onClear, className }: CompactLogFeedProps
         className="flex items-center justify-between px-3 py-2.5 border-b border-white/5"
         style={{ background: 'rgba(0, 0, 0, 0.2)' }}
       >
-        <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-          {t('logFeed.activityLog')}
-        </span>
-        {onClear && (
-          <button
-            onClick={onClear}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            aria-label={t('logs.clearLogs')}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+            {t('logFeed.activityLog')}
+          </span>
+          {onProviderChange && (
+            <select
+              value={activeProvider}
+              onChange={(e) => onProviderChange(e.target.value)}
+              className="text-[10px] px-2 py-1 bg-black/40 border border-white/10 rounded text-slate-300 focus:outline-none focus:border-indigo-500/50"
+            >
+              <option value="all">All Providers</option>
+              <option value="kiro">Kiro</option>
+              <option value="windsurf">Windsurf</option>
+              <option value="github">GitHub</option>
+              <option value="trae">Trae</option>
+            </select>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <Tooltip content={showDebug ? 'Hide Debug Logs' : 'Show Debug Logs'}>
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className={cn(
+                'p-1.5 rounded transition-colors flex items-center gap-1.5',
+                showDebug
+                  ? 'text-indigo-400 bg-indigo-500/10'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+              )}
+            >
+              <Shield className={cn('w-3.5 h-3.5', showDebug && 'animate-pulse')} />
+              <span className="text-[9px] font-bold uppercase tracking-tight">Debug</span>
+            </button>
+          </Tooltip>
+          {onClear && (
+            <button
+              onClick={onClear}
+              className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              aria-label={t('logs.clearLogs')}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Log content with smooth scroll and wider scrollbar */}

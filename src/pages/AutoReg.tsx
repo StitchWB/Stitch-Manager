@@ -23,6 +23,7 @@ import { Tooltip } from '../components/Tooltip';
 
 import { useRegistrationStore } from '../stores/registration';
 import { useAppStore } from '../stores/app';
+import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
   startWindsurfAutoreg,
   startPythonAutoreg,
@@ -109,7 +110,7 @@ function TimeoutInput({
     </div>
   );
 
-  return tooltip ? <Tooltip text={tooltip}>{content}</Tooltip> : content;
+  return tooltip ? <Tooltip content={tooltip}>{content}</Tooltip> : content;
 }
 
 // Compact toggle switch component
@@ -158,7 +159,7 @@ function ToggleSwitch({
     </label>
   );
 
-  return tooltip ? <Tooltip text={tooltip}>{content}</Tooltip> : content;
+  return tooltip ? <Tooltip content={tooltip}>{content}</Tooltip> : content;
 }
 
 export default function AutoRegNext() {
@@ -171,6 +172,7 @@ export default function AutoRegNext() {
     imapPasswordSet,
     gmailAppPasswordSet,
     saveStatus,
+    activeProvider,
     setProvider,
     setIMAPConfig,
     setProxyConfig,
@@ -182,12 +184,40 @@ export default function AutoRegNext() {
     clearLogs,
     addHistoryEntry,
     addResult,
+    setActiveProvider,
   } = useRegistrationStore();
+
+  // Use UI preferences for persistent state
+  const { autoRegPage, setAutoRegTab, setAutoRegV2, setAutoRegRunning } = useUIPreferencesStore();
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
   const [activeThreads, setActiveThreads] = useState(0);
-  const [activeTab, setActiveTab] = useState<ConfigTab>('identity');
-  const [useRegistrationV2, setUseRegistrationV2] = useState(false);
+
+  // Use persisted preferences instead of local state
+  const activeTab = autoRegPage.activeTab;
+  const useRegistrationV2 = autoRegPage.useRegistrationV2;
+
+  // Wrapper functions to update both local state and preferences
+  const handleSetActiveTab = (tab: ConfigTab) => {
+    setAutoRegTab(tab);
+  };
+
+  const handleSetUseRegistrationV2 = (enabled: boolean) => {
+    setAutoRegV2(enabled);
+  };
+
+  // Sync activeThreads with isRunning preference
+  const handleSetActiveThreads = (threads: number) => {
+    setActiveThreads(threads);
+    setAutoRegRunning(threads > 0);
+  };
+
+  // Restore running state on mount
+  useEffect(() => {
+    if (autoRegPage.isRunning) {
+      setActiveThreads(1); // Restore running state
+    }
+  }, []);
 
   // Addy.io state
   const [addyioDomains, setAddyioDomains] = useState<string[]>([]);
@@ -253,9 +283,25 @@ export default function AutoRegNext() {
 
   useEffect(() => {
     const unlistenLog = listen<{ level: string; message: string }>('REGISTRATION_LOG', event => {
+      let level = event.payload.level;
+      let message = event.payload.message;
+
+      // Try parsing nested JSON log
+      if (typeof message === 'string' && message.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(message);
+          if (parsed.type === 'log' && parsed.message) {
+            message = parsed.message;
+            if (parsed.level) level = parsed.level;
+          }
+        } catch (e) {
+          // Not valid JSON, keep original message
+        }
+      }
+
       addLog({
-        level: event.payload.level as 'info' | 'error' | 'success' | 'warn' | 'debug',
-        message: event.payload.message,
+        level: level as 'info' | 'error' | 'success' | 'warn' | 'debug',
+        message: message,
       });
     });
 
@@ -263,18 +309,31 @@ export default function AutoRegNext() {
       if (event.payload.success) {
         addLog({ level: 'success', message: 'Registration completed successfully!' });
       }
+      // Reset active threads when registration completes
+      handleSetActiveThreads(0);
     });
 
     const unlistenError = listen<{ error: string }>('REGISTRATION_ERROR', event => {
       addLog({ level: 'error', message: `Registration error: ${event.payload.error}` });
+      // Reset active threads on error
+      handleSetActiveThreads(0);
     });
 
     // Listen for Registration V2 progress events
-    const unlistenProgress = listen<{ step: string; message: string }>('REGISTRATION_PROGRESS', event => {
-      addLog({
-        level: 'info',
-        message: `[V2] ${event.payload.step}: ${event.payload.message}`,
-      });
+    const unlistenProgress = listen<{ step: string; message: string }>(
+      'REGISTRATION_PROGRESS',
+      event => {
+        addLog({
+          level: 'info',
+          message: `[V2] ${event.payload.step}: ${event.payload.message}`,
+        });
+      }
+    );
+
+    // Sync settings when they are updated elsewhere (e.g., Settings page)
+    const unlistenSettings = listen<any>('SETTINGS_UPDATED', () => {
+      console.log('[AUTOREG] Received SETTINGS_UPDATED event, reloading...');
+      loadSettings();
     });
 
     // CRITICAL: Listen for ACCOUNT_ADDED events to update counters in real-time
@@ -293,14 +352,23 @@ export default function AutoRegNext() {
       });
     });
 
+    // Also sync on window focus to handle external changes
+    const handleFocus = () => {
+      console.log('[AUTOREG] Window focused, reloading settings...');
+      loadSettings();
+    };
+    window.addEventListener('focus', handleFocus);
+
     return () => {
       unlistenLog.then(fn => fn());
       unlistenComplete.then(fn => fn());
       unlistenError.then(fn => fn());
       unlistenProgress.then(fn => fn());
+      unlistenSettings.then(fn => fn());
       unlistenAccountAdded.then(fn => fn());
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [addLog, addResult]);
+  }, [addLog, addResult, loadSettings]);
 
   // Check if mail configuration is ready
   const isMailReady = useMemo(() => {
@@ -326,6 +394,7 @@ export default function AutoRegNext() {
     gmailAppPassword: config.imap.gmailAppPassword,
     addyioEnabled: config.imap.addyioEnabled,
     addyioApiToken: config.imap.addyioApiToken,
+    addyioDomain: config.imap.addyioDomain,
     addyioAliasFormat: config.imap.addyioAliasFormat,
     addyioAutoDelete: config.imap.addyioAutoDelete,
     thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled,
@@ -456,11 +525,30 @@ export default function AutoRegNext() {
       return;
     }
 
+    // Additional validation for alias services
+    if (config.imap.addyioEnabled && !config.imap.addyioApiToken) {
+      addNotification({
+        type: 'error',
+        title: 'Addy.io Token Required',
+        message: 'Please enter your Addy.io API token in the Identity tab',
+      });
+      return;
+    }
+
+    if (config.imap.thirtyThreeMailEnabled && !config.imap.thirtyThreeMailUsername) {
+      addNotification({
+        type: 'error',
+        title: '33mail Username Required',
+        message: 'Please enter your 33mail username in the Identity tab',
+      });
+      return;
+    }
+
     // Reset cancellation flag
     cancelledRef.current = false;
 
     const totalCount = config.count || 1;
-    setActiveThreads(1);
+    handleSetActiveThreads(1);
     addLog({
       level: 'info',
       message: `Starting ${config.provider} registration (${totalCount} account${totalCount > 1 ? 's' : ''})...`,
@@ -864,7 +952,7 @@ export default function AutoRegNext() {
       addLog({ level: 'error', message: `Fatal error: ${String(error)}` });
       addNotification({ type: 'error', title: 'Error', message: String(error) });
     } finally {
-      setActiveThreads(0);
+      handleSetActiveThreads(0);
     }
   }, [config, emailDomain, canStart, addLog, addNotification, addHistoryEntry]);
 
@@ -912,7 +1000,7 @@ export default function AutoRegNext() {
     } catch (e) {
       addLog({ level: 'error', message: `Failed to stop: ${e}` });
     }
-    setActiveThreads(0);
+    handleSetActiveThreads(0);
   }, [addLog, addNotification]);
 
   // Tab configuration
@@ -939,7 +1027,7 @@ export default function AutoRegNext() {
               <button
                 key={provider.id}
                 onClick={() => !provider.disabled && setProvider(provider.id)}
-                disabled={activeThreads > 0 || provider.disabled}
+                disabled={provider.disabled}
                 className={cn(
                   'flex-1 py-2 text-xs font-medium rounded-md transition-all duration-200',
                   config.provider === provider.id
@@ -966,7 +1054,7 @@ export default function AutoRegNext() {
             {tabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleSetActiveTab(tab.id)}
                 disabled={false} // Allow tab switching during registration
                 className={cn(
                   'flex-1 py-2 px-2 text-xs font-medium rounded-md transition-all duration-200 flex items-center justify-center gap-1.5',
@@ -1050,10 +1138,12 @@ export default function AutoRegNext() {
                   <label className="flex items-center justify-between cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                        <Settings2 className={cn(
-                          "w-4 h-4",
-                          useRegistrationV2 ? "text-indigo-400" : "text-slate-500"
-                        )} />
+                        <Settings2
+                          className={cn(
+                            'w-4 h-4',
+                            useRegistrationV2 ? 'text-indigo-400' : 'text-slate-500'
+                          )}
+                        />
                       </div>
                       <div>
                         <div className="text-sm font-medium text-slate-200 flex items-center gap-2">
@@ -1083,7 +1173,7 @@ export default function AutoRegNext() {
                     <input
                       type="checkbox"
                       checked={useRegistrationV2}
-                      onChange={e => setUseRegistrationV2(e.target.checked)}
+                      onChange={e => handleSetUseRegistrationV2(e.target.checked)}
                       disabled={activeThreads > 0}
                       className="sr-only"
                     />
@@ -1143,7 +1233,7 @@ export default function AutoRegNext() {
               {/* Speed & Delay Row */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Speed Multiplier */}
-                <Tooltip text={t('autoReg.tooltips.speed')}>
+                <Tooltip content={t('autoReg.tooltips.speed')}>
                   <div
                     className="rounded-lg p-3"
                     style={{
@@ -1178,7 +1268,7 @@ export default function AutoRegNext() {
                 </Tooltip>
 
                 {/* Delay Between Accounts */}
-                <Tooltip text={t('autoReg.tooltips.delay')}>
+                <Tooltip content={t('autoReg.tooltips.delay')}>
                   <div
                     className="rounded-lg p-3"
                     style={{
@@ -1309,7 +1399,7 @@ export default function AutoRegNext() {
                 </div>
 
                 {/* Password Length */}
-                <Tooltip text={t('autoReg.tooltips.passwordLength')}>
+                <Tooltip content={t('autoReg.tooltips.passwordLength')}>
                   <div className="mb-3">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs text-slate-400">{t('autoReg.passwordLength')}</span>
@@ -1465,6 +1555,8 @@ export default function AutoRegNext() {
               onStart={handleStart}
               onClear={clearLogs}
               className="h-full"
+              activeProvider={activeProvider}
+              onProviderChange={setActiveProvider}
             />
           </div>
         </div>

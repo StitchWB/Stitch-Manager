@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Home, AlertTriangle } from 'lucide-react';
 import { t } from '../lib/i18n';
+import { Button } from '../components/ui/Button';
 
 export default function NotFound() {
   const navigate = useNavigate();
@@ -15,13 +16,15 @@ export default function NotFound() {
         </div>
         <h1 className="text-4xl font-bold text-white mb-2">{t('notFoundPage.title')}</h1>
         <p className="text-slate-400 mb-6">{t('notFoundPage.description')}</p>
-        <button
+        <Button
           onClick={() => navigate('/')}
-          className="btn-primary py-2 px-4 text-sm flex items-center gap-2 mx-auto"
+          variant="primary"
+          size="md"
+          leftIcon={<Home className="w-4 h-4" />}
+          className="mx-auto"
         >
-          <Home className="w-4 h-4" />
           {t('notFoundPage.goHome')}
-        </button>
+        </Button>
       </div>
     </div>
   );

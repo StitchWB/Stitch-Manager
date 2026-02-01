@@ -110,6 +110,7 @@ export interface RegistrationConfig {
   count: number;
   timeout: number;
   retryAttempts: number;
+  uiScale: number;
 }
 
 // Registration result for the results table
@@ -148,6 +149,7 @@ interface RegistrationState {
 
   // Logs
   logs: RegistrationLog[];
+  activeProvider: string;
 
   // Results
   results: RegistrationResult[];
@@ -172,8 +174,10 @@ interface RegistrationState {
   setProxyConfig: (proxy: Partial<ProxyConfig>) => void;
   setAdvancedSettings: (settings: Partial<AdvancedSettings>) => void;
   setCount: (count: number) => void;
+  setUIScale: (scale: number) => void;
 
   // Actions - Settings persistence
+
   loadSettings: () => Promise<void>;
   saveSettings: () => Promise<void>;
   saveImmediately: () => Promise<void>;
@@ -181,6 +185,7 @@ interface RegistrationState {
   // Actions - Logs
   addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => void;
   clearLogs: () => void;
+  setActiveProvider: (provider: string) => void;
 
   // Actions - Progress
   setProgress: (progress: Partial<RegistrationProgress>) => void;
@@ -211,6 +216,19 @@ const DEFAULT_CONFIG: RegistrationConfig = {
     gmailBase: '',
     gmailAlias: '',
     gmailAppPassword: '',
+    // Addy.io defaults
+    addyioEnabled: false,
+    addyioApiToken: '',
+    addyioDomain: '',
+    addyioAliasFormat: 'uuid',
+    addyioAutoDelete: false,
+    addyioDefaultRecipientId: '',
+    addyioDescriptionTemplate: '',
+    addyioFromName: '',
+    // 33mail defaults
+    thirtyThreeMailEnabled: false,
+    thirtyThreeMailUsername: '',
+    thirtyThreeMailDomain: '33mail.com',
   },
   proxy: {
     enabled: false,
@@ -245,6 +263,7 @@ const DEFAULT_CONFIG: RegistrationConfig = {
   count: 1,
   timeout: 60000,
   retryAttempts: 3,
+  uiScale: 1.0,
 };
 
 const DEFAULT_PROGRESS: RegistrationProgress = {
@@ -288,6 +307,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     status: 'pending', // Changed from 'idle' to 'pending' to match new RegistrationStatus type
     progress: DEFAULT_PROGRESS,
     logs: [],
+    activeProvider: 'all',
     results: [],
     successCount: 0,
     failedCount: 0,
@@ -307,10 +327,13 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     },
 
     setIMAPConfig: (imap: Partial<IMAPConfig>) => {
-      console.log('[REGISTRATION_STORE] setIMAPConfig called:', imap);
+      console.log('[REGISTRATION_STORE] setIMAPConfig called with:', imap);
       set(state => {
+        const newImap = { ...state.config.imap, ...imap };
+        console.log('[REGISTRATION_STORE] New IMAP config state:', newImap);
+
         const updates: Partial<RegistrationConfig> = {
-          imap: { ...state.config.imap, ...imap },
+          imap: newImap,
         };
 
         // If emailPattern is being updated, also update patterns
@@ -366,7 +389,16 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       triggerSave();
     },
 
+    setUIScale: (uiScale: number) => {
+      console.log('[REGISTRATION_STORE] setUIScale called:', uiScale);
+      set(state => ({
+        config: { ...state.config, uiScale: Math.max(0.5, Math.min(1.5, uiScale)) },
+      }));
+      triggerSave();
+    },
+
     // Actions - Settings persistence
+
     loadSettings: async () => {
       console.log('[REGISTRATION_STORE] loadSettings: starting');
       try {
@@ -436,8 +468,10 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
                 headless: settings.headless === true,
               },
               count: settings.count || 1,
+              uiScale: settings.uiScale || 1.0,
             },
             settingsLoaded: true,
+
             // Track that password exists in DB even if we don't have the actual value
             imapPasswordSet: imapPasswordMasked || !!settings.imapPassword,
             gmailAppPasswordSet: gmailAppPasswordMasked || !!settings.gmailAppPassword,
@@ -501,7 +535,9 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           nameCustomLast: config.patterns.nameCustomLast,
           count: config.count,
           headless: config.advanced.headless,
+          uiScale: config.uiScale,
           // Save addy.io settings
+
           addyioEnabled: config.imap.addyioEnabled || false,
           addyioApiToken: config.imap.addyioApiToken || '',
           addyioDomain: config.imap.addyioDomain || '',
@@ -570,6 +606,14 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
 
     // Log actions
     addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => {
+      const state = get();
+      const lastLog = state.logs[state.logs.length - 1];
+
+      // Deduplicate identical messages sent consecutively
+      if (lastLog && lastLog.message === log.message) {
+        return;
+      }
+
       const newLog = {
         ...log,
         id: crypto.randomUUID(),
@@ -593,6 +637,8 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     },
 
     clearLogs: () => set({ logs: [] }),
+
+    setActiveProvider: (provider: string) => set({ activeProvider: provider }),
 
     // Progress actions
     setProgress: (progress: Partial<RegistrationProgress>) =>

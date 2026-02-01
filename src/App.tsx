@@ -10,21 +10,38 @@ import Server from './pages/Server';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import Chat from './pages/Chat';
-import KiroPatchSettings from './pages/KiroPatchSettings';
 import NotFound from './pages/NotFound';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
+import { useRegistrationStore } from './stores/registration';
 
 function App() {
-  const { theme } = useAppStore();
-  const { subscribeToLogs, unsubscribeFromLogs, fetchLogs } = useLogsStore();
+  const theme = useAppStore(state => state.theme);
+  const uiScale = useRegistrationStore(state => state.config.uiScale);
+  const loadSettings = useRegistrationStore(state => state.loadSettings);
+
+  const subscribeToLogs = useLogsStore(state => state.subscribeToLogs);
+  const unsubscribeFromLogs = useLogsStore(state => state.unsubscribeFromLogs);
+  const fetchLogs = useLogsStore(state => state.fetchLogs);
+
   const hasInitialized = useRef(false);
 
+  useEffect(() => {
+    const baseSize = 16; // Standard base size
+    const scaledSize = baseSize * uiScale;
+    document.documentElement.style.setProperty('--app-font-size', `${scaledSize}px`);
+    console.log(`[APP] UI Scale applied: ${uiScale} (font-size: ${scaledSize}px)`);
+  }, [uiScale]);
+
   // Apply theme on mount and when it changes
+
   useEffect(() => {
     const applyTheme = () => {
-      if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      if (
+        theme === 'dark' ||
+        (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ) {
         document.documentElement.classList.add('dark');
       } else {
         document.documentElement.classList.remove('dark');
@@ -37,27 +54,30 @@ function App() {
     if (theme === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       const handleChange = () => applyTheme();
-      
+
       mediaQuery.addEventListener('change', handleChange);
       return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [theme]);
 
-  // Initialize logging system - subscribe to real-time events and fetch initial logs
+  // Initialize settings and logging system
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
+    // Load settings from database (includes UI scale)
+    loadSettings();
+
     // Subscribe to real-time log events from backend
     subscribeToLogs();
-    
+
     // Fetch initial logs from database
     fetchLogs();
 
     return () => {
       unsubscribeFromLogs();
     };
-  }, [subscribeToLogs, unsubscribeFromLogs, fetchLogs]);
+  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs]);
 
   return (
     <>
@@ -65,14 +85,13 @@ function App() {
       <a href="#main-content" className="skip-to-content">
         Skip to main content
       </a>
-      
+
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/autoreg" element={<AutoReg />} />
           <Route path="/patcher" element={<Patcher />} />
-          <Route path="/kiro-patch-settings" element={<KiroPatchSettings />} />
           <Route path="/server" element={<Server />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
@@ -80,7 +99,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Layout>
-      <Toaster 
+      <Toaster
         position="bottom-right"
         expand={false}
         richColors
