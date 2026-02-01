@@ -7,6 +7,8 @@ import { useChatStore } from '../stores/chat';
 import { useAppStore } from '../stores/app';
 import { useLLMServerStore } from '../stores/llmServer';
 import { t } from '../lib/i18n';
+import { Button } from '../components/ui/Button';
+import { Tooltip } from '../components/Tooltip';
 
 interface ModelInfo {
   id: string;
@@ -120,23 +122,28 @@ export default function Chat() {
         icon={<MessageSquare size={18} />}
         actions={
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className={`btn-secondary py-1.5 text-xs ${showSettings ? 'bg-white/10' : ''}`}
-              title="Settings"
-            >
-              <Settings2 className="w-3.5 h-3.5" />
-              {t('chat.settings') || 'Settings'}
-            </button>
-            <button
-              onClick={handleClearChat}
-              className="btn-secondary py-1.5 text-xs"
-              disabled={messages.length === 0}
-              title="Clear chat"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              {t('chat.clear') || 'Clear'}
-            </button>
+            <Tooltip content="Settings">
+              <Button
+                onClick={() => setShowSettings(!showSettings)}
+                variant="secondary"
+                size="sm"
+                className={showSettings ? 'bg-white/10' : ''}
+                leftIcon={<Settings2 className="w-3.5 h-3.5" />}
+              >
+                {t('chat.settings') || 'Settings'}
+              </Button>
+            </Tooltip>
+            <Tooltip content="Clear chat">
+              <Button
+                onClick={handleClearChat}
+                disabled={messages.length === 0}
+                variant="secondary"
+                size="sm"
+                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+              >
+                {t('chat.clear') || 'Clear'}
+              </Button>
+            </Tooltip>
           </div>
         }
       />
@@ -175,17 +182,13 @@ export default function Chat() {
                 </label>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-vsc-text">{models.length} models</span>
-                  <button
+                  <Button
                     onClick={fetchModels}
                     disabled={modelsLoading}
-                    className="btn-secondary py-1 px-2 text-xs"
-                  >
-                    {modelsLoading ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <RefreshCw size={12} />
-                    )}
-                  </button>
+                    variant="secondary"
+                    size="xs"
+                    leftIcon={modelsLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  />
                 </div>
                 {modelsError && (
                   <p className="text-2xs text-vsc-red mt-1">{modelsError}</p>

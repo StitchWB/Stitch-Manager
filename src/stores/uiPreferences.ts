@@ -24,11 +24,27 @@ interface ServerPagePreferences {
   selectedTab?: string;
 }
 
+interface AutoRegPagePreferences {
+  activeTab: 'identity' | 'engine' | 'network';
+  useRegistrationV2: boolean;
+  isRunning: boolean; // Track if registration is in progress
+  // Per-provider email settings
+  providerEmailSettings: {
+    [provider: string]: {
+      emailStrategy: 'custom' | 'gmail' | 'addyio' | '33mail';
+      addyioDomain?: string;
+      thirtyThreeMailUsername?: string;
+      gmailBase?: string;
+    };
+  };
+}
+
 interface UIPreferencesState {
   // Page-specific preferences
   accountsPage: AccountsPagePreferences;
   logsPage: LogsPagePreferences;
   serverPage: ServerPagePreferences;
+  autoRegPage: AutoRegPagePreferences;
 
   // Actions for Accounts page
   setAccountsProviderFilter: (provider: string) => void;
@@ -46,6 +62,13 @@ interface UIPreferencesState {
 
   // Actions for Server page
   setServerTab: (tab: string) => void;
+
+  // Actions for AutoReg page
+  setAutoRegTab: (tab: 'identity' | 'engine' | 'network') => void;
+  setAutoRegV2: (enabled: boolean) => void;
+  setAutoRegRunning: (running: boolean) => void;
+  setProviderEmailSettings: (provider: string, settings: Partial<AutoRegPagePreferences['providerEmailSettings'][string]>) => void;
+  resetAutoRegPreferences: () => void;
 
   // Global reset
   resetAllPreferences: () => void;
@@ -74,6 +97,13 @@ const defaultServerPreferences: ServerPagePreferences = {
   selectedTab: 'status',
 };
 
+const defaultAutoRegPreferences: AutoRegPagePreferences = {
+  activeTab: 'identity',
+  useRegistrationV2: false,
+  isRunning: false,
+  providerEmailSettings: {},
+};
+
 // ============================================
 // Store
 // ============================================
@@ -85,6 +115,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       accountsPage: defaultAccountsPreferences,
       logsPage: defaultLogsPreferences,
       serverPage: defaultServerPreferences,
+      autoRegPage: defaultAutoRegPreferences,
 
       // ============================================
       // Accounts Page Actions
@@ -161,6 +192,47 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       },
 
       // ============================================
+      // AutoReg Page Actions
+      // ============================================
+
+      setAutoRegTab: (tab) => {
+        set((state) => ({
+          autoRegPage: { ...state.autoRegPage, activeTab: tab },
+        }));
+      },
+
+      setAutoRegV2: (enabled) => {
+        set((state) => ({
+          autoRegPage: { ...state.autoRegPage, useRegistrationV2: enabled },
+        }));
+      },
+
+      setAutoRegRunning: (running) => {
+        set((state) => ({
+          autoRegPage: { ...state.autoRegPage, isRunning: running },
+        }));
+      },
+
+      setProviderEmailSettings: (provider, settings) => {
+        set((state) => ({
+          autoRegPage: {
+            ...state.autoRegPage,
+            providerEmailSettings: {
+              ...state.autoRegPage.providerEmailSettings,
+              [provider]: {
+                ...state.autoRegPage.providerEmailSettings[provider],
+                ...settings,
+              },
+            },
+          },
+        }));
+      },
+
+      resetAutoRegPreferences: () => {
+        set({ autoRegPage: defaultAutoRegPreferences });
+      },
+
+      // ============================================
       // Global Actions
       // ============================================
 
@@ -169,6 +241,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
           accountsPage: defaultAccountsPreferences,
           logsPage: defaultLogsPreferences,
           serverPage: defaultServerPreferences,
+          autoRegPage: defaultAutoRegPreferences,
         });
       },
     }),

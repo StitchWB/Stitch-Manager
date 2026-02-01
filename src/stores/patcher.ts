@@ -40,7 +40,6 @@ interface PatcherState {
 
   // Patch settings
   patchStrategy: 'injection' | 'legacy';
-  logRequests: boolean;
   
   // Trae storage patch state
   traePatched: boolean | null;
@@ -54,7 +53,6 @@ interface PatcherState {
   applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
   setPatchStrategy: (strategy: 'injection' | 'legacy') => void;
-  setLogRequests: (log: boolean) => void;
   
   // Trae storage patch actions
   checkTraePatched: () => Promise<boolean>;
@@ -86,7 +84,6 @@ export const usePatcherStore = create<PatcherState>()(
         error: null,
         operationInProgress: {},
         patchStrategy: 'injection', // Default to new method
-        logRequests: false,
         traePatched: null,
         traeExtensionPatched: null,
         traeWorkbenchPatched: null,
@@ -169,7 +166,6 @@ export const usePatcherStore = create<PatcherState>()(
         // ============================================
 
         setPatchStrategy: (strategy) => set({ patchStrategy: strategy }),
-        setLogRequests: (log) => set({ logRequests: log }),
 
         // ============================================
         // Trae Storage Patch

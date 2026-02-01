@@ -60,6 +60,10 @@
 - One-click account activation
 - Real-time quota monitoring
 - Import/export accounts
+- **Automatic Machine ID management per account**
+- **Usage statistics and health monitoring**
+- **Session persistence for faster login**
+- **Registration data preservation**
 
 ### 🤖 Auto-Registration
 - Browser automation via DrissionPage
@@ -71,6 +75,65 @@
 - Patch extensions for multi-account support
 - Automatic backup & restore
 - Safe patching with validation
+
+---
+
+## 🆕 Machine ID Management
+
+### What is Machine ID?
+
+Machine ID is a unique identifier used by AI IDEs (like Kiro) to identify your installation. Stitch Manager now automatically manages Machine IDs per account, enabling true multi-account support.
+
+### Key Features
+
+#### 🔄 Automatic Machine ID Switching
+- Each account gets its own unique Machine ID
+- Machine ID automatically switches when you activate an account
+- No manual configuration needed
+- No IDE restart required
+
+#### 📊 Usage Statistics
+Track account health and usage:
+- **Use Count**: How many times the account was activated
+- **Login Count**: Total successful logins
+- **Success Rate**: Percentage of successful operations
+- **Error Tracking**: Last error message and error count
+- **Health Indicators**: Visual indicators (🟢 Good, 🟡 Fair, 🔴 Poor)
+
+#### 💾 Registration Data Preservation
+- Saves registration password for AWS accounts
+- Tracks registration method (manual, auto, OAuth)
+- Stores registration date and metadata
+- Preserves AWS account ID and Kiro account ID
+
+#### ⚡ Session Management
+- Saves browser session data for faster login
+- Stores cookies and browser profile path
+- Enables session reuse without re-entering credentials
+- Reduces login time significantly
+
+#### 🏷️ Account Organization
+- Add custom notes to accounts
+- Tag accounts for easy filtering
+- Filter by registration method, tags, or health status
+- Sort by usage, login count, or last activity
+
+### How It Works
+
+1. **Account Creation**: When you create or register an account, a unique Machine ID is automatically generated
+2. **Account Activation**: When you activate an account, its Machine ID is written to the IDE's config file
+3. **Automatic Switching**: Switch between accounts seamlessly - Machine ID updates automatically
+4. **Statistics Tracking**: Every activation, login, and error is tracked for monitoring
+5. **Session Reuse**: Browser sessions are saved and reused for faster subsequent logins
+
+### Benefits
+
+✅ **True Multi-Account Support**: Each account operates independently with its own Machine ID  
+✅ **No Manual Configuration**: Everything is automatic - just activate and use  
+✅ **Better Monitoring**: Track which accounts are working well and which need attention  
+✅ **Faster Logins**: Session reuse eliminates repetitive credential entry  
+✅ **Better Organization**: Notes, tags, and filters help manage large account collections  
+✅ **Data Preservation**: Never lose registration credentials or account metadata  
 
 ---
 
@@ -156,6 +219,10 @@ MIT License — see [LICENSE](LICENSE)
 - Активация аккаунта в один клик
 - Мониторинг квот в реальном времени
 - Импорт/экспорт аккаунтов
+- **Автоматическое управление Machine ID для каждого аккаунта**
+- **Статистика использования и мониторинг здоровья**
+- **Сохранение сессий для быстрого входа**
+- **Сохранение данных регистрации**
 
 ### 🤖 Авто-регистрация
 - Браузерная автоматизация через DrissionPage
@@ -167,6 +234,65 @@ MIT License — see [LICENSE](LICENSE)
 - Патч расширений для мульти-аккаунтов
 - Автоматический бэкап и восстановление
 - Безопасный патчинг с валидацией
+
+---
+
+## 🆕 Управление Machine ID
+
+### Что такое Machine ID?
+
+Machine ID — это уникальный идентификатор, используемый AI IDE (например, Kiro) для идентификации вашей установки. Stitch Manager теперь автоматически управляет Machine ID для каждого аккаунта, обеспечивая настоящую мульти-аккаунтную поддержку.
+
+### Ключевые возможности
+
+#### 🔄 Автоматическое переключение Machine ID
+- Каждый аккаунт получает свой уникальный Machine ID
+- Machine ID автоматически переключается при активации аккаунта
+- Не требуется ручная настройка
+- Не требуется перезапуск IDE
+
+#### 📊 Статистика использования
+Отслеживание здоровья и использования аккаунтов:
+- **Счётчик использований**: Сколько раз аккаунт был активирован
+- **Счётчик входов**: Общее количество успешных входов
+- **Процент успеха**: Процент успешных операций
+- **Отслеживание ошибок**: Последнее сообщение об ошибке и счётчик ошибок
+- **Индикаторы здоровья**: Визуальные индикаторы (🟢 Хорошо, 🟡 Удовлетворительно, 🔴 Плохо)
+
+#### 💾 Сохранение данных регистрации
+- Сохраняет пароль регистрации для AWS аккаунтов
+- Отслеживает метод регистрации (ручной, авто, OAuth)
+- Хранит дату регистрации и метаданные
+- Сохраняет AWS account ID и Kiro account ID
+
+#### ⚡ Управление сессиями
+- Сохраняет данные браузерной сессии для быстрого входа
+- Хранит cookies и путь к профилю браузера
+- Позволяет переиспользовать сессию без повторного ввода учётных данных
+- Значительно сокращает время входа
+
+#### 🏷️ Организация аккаунтов
+- Добавление пользовательских заметок к аккаунтам
+- Теги для аккаунтов для удобной фильтрации
+- Фильтрация по методу регистрации, тегам или статусу здоровья
+- Сортировка по использованию, количеству входов или последней активности
+
+### Как это работает
+
+1. **Создание аккаунта**: При создании или регистрации аккаунта автоматически генерируется уникальный Machine ID
+2. **Активация аккаунта**: При активации аккаунта его Machine ID записывается в конфигурационный файл IDE
+3. **Автоматическое переключение**: Переключайтесь между аккаунтами без проблем - Machine ID обновляется автоматически
+4. **Отслеживание статистики**: Каждая активация, вход и ошибка отслеживаются для мониторинга
+5. **Переиспользование сессий**: Браузерные сессии сохраняются и переиспользуются для более быстрых последующих входов
+
+### Преимущества
+
+✅ **Настоящая мульти-аккаунтная поддержка**: Каждый аккаунт работает независимо со своим Machine ID  
+✅ **Без ручной настройки**: Всё автоматически - просто активируйте и используйте  
+✅ **Лучший мониторинг**: Отслеживайте, какие аккаунты работают хорошо, а какие требуют внимания  
+✅ **Быстрые входы**: Переиспользование сессий устраняет повторный ввод учётных данных  
+✅ **Лучшая организация**: Заметки, теги и фильтры помогают управлять большими коллекциями аккаунтов  
+✅ **Сохранение данных**: Никогда не теряйте учётные данные регистрации или метаданные аккаунтов  
 
 ---
 

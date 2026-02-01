@@ -1,31 +1,41 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Mail, Eye, EyeOff, Info, RefreshCw, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { useState, useCallback, useEffect, memo } from 'react';
+import {
+  Mail,
+  Eye,
+  EyeOff,
+  Info,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Globe,
+  Shield,
+  AtSign,
+  Server,
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { DEFAULT_IMAP_PORT, EMAIL_SHORTCODES, RANDOM_NAMES } from '../../constants/registration';
+import { Button } from './Button';
+import { Input } from './Input';
+import { Tooltip } from './Tooltip';
 
 export type MailStrategy = 'custom' | 'gmail';
 
 export interface IdentityConfig {
   strategy: MailStrategy;
-  // Pattern (stored as string, not EmailPattern enum)
   emailPattern: string;
-  // Custom domain fields
   server: string;
   port: number;
   email: string;
   password: string;
-  // Gmail alias fields
   gmailBase: string;
   gmailAlias: string;
   gmailAppPassword: string;
-  // Addy.io fields
   addyioEnabled?: boolean;
   addyioApiToken?: string;
   addyioDomain?: string;
   addyioAliasFormat?: string;
   addyioAutoDelete?: boolean;
-  // 33mail fields
   thirtyThreeMailEnabled?: boolean;
   thirtyThreeMailUsername?: string;
   thirtyThreeMailDomain?: string;
@@ -43,7 +53,6 @@ interface IdentitySystemCardProps {
   gmailAppPasswordSet?: boolean;
   testStatus?: TestConnectionStatus;
   testError?: string;
-  // Addy.io specific props
   onTestAddyio?: () => void;
   isTestingAddyio?: boolean;
   addyioConnectionStatus?: 'idle' | 'success' | 'error';
@@ -51,6 +60,91 @@ interface IdentitySystemCardProps {
   addyioAccountInfo?: any;
   addyioDomains?: string[];
 }
+
+// Sub-component moved outside to prevent re-mounting flicker
+const ImapForm = memo(
+  ({
+    config,
+    onChange,
+    disabled,
+    passwordSet,
+    showPassword,
+    setShowPassword,
+  }: {
+    config: IdentityConfig;
+    onChange: (c: Partial<IdentityConfig>) => void;
+    disabled?: boolean;
+    passwordSet?: boolean;
+    showPassword?: boolean;
+    setShowPassword: (v: boolean) => void;
+  }) => (
+    <div className="space-y-4 pt-4 border-t border-white/5">
+      <div className="flex items-center gap-2 px-1">
+        <Server className="w-3.5 h-3.5 text-slate-500" />
+        <span className="text-[10px] uppercase text-slate-500 tracking-wider font-bold">
+          {t('autoReg.imapCredentials')}
+        </span>
+        <Tooltip content="The mailbox where registration emails will arrive">
+          <Info className="w-3 h-3 text-slate-600 cursor-help" />
+        </Tooltip>
+      </div>
+
+      <div className="flex gap-3">
+        <Input
+          label={t('autoReg.host')}
+          placeholder="imap.example.com"
+          value={config.server}
+          onChange={e => onChange({ server: e.target.value })}
+          disabled={disabled}
+          containerClassName="flex-[3]"
+        />
+        <Input
+          label={t('autoReg.port')}
+          type="number"
+          placeholder="993"
+          value={config.port}
+          onChange={e => onChange({ port: parseInt(e.target.value) || DEFAULT_IMAP_PORT })}
+          disabled={disabled}
+          containerClassName="flex-1"
+          className="text-center"
+        />
+      </div>
+
+      <Input
+        label={t('accounts.email')}
+        type="email"
+        placeholder="user@example.com"
+        value={config.email}
+        onChange={e => onChange({ email: e.target.value })}
+        disabled={disabled}
+      />
+
+      <Input
+        label={t('accounts.password')}
+        type={showPassword ? 'text' : 'password'}
+        placeholder={passwordSet ? `(${t('autoReg.saved')})` : '••••••••'}
+        value={config.password || ''}
+        onChange={e => onChange({ password: e.target.value })}
+        disabled={disabled}
+        rightElement={
+          <Button
+            variant="ghost"
+            size="icon"
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="h-7 w-7"
+          >
+            {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+          </Button>
+        }
+      />
+    </div>
+  )
+);
+
+ImapForm.displayName = 'ImapForm';
+
+type GenerationMode = 'custom' | 'gmail' | 'addyio' | '33mail';
 
 export function IdentitySystemCard({
   config,
@@ -75,19 +169,31 @@ export function IdentitySystemCard({
   const [internalTestStatus, setInternalTestStatus] = useState<TestConnectionStatus>('idle');
   const [internalTestError, setInternalTestError] = useState<string>('');
 
-  // Use external status if provided, otherwise use internal
   const testStatus = externalTestStatus ?? internalTestStatus;
   const testError = externalTestError ?? internalTestError;
 
-  // Handle test connection with internal state management
+  const activeMode: GenerationMode = config.addyioEnabled
+    ? 'addyio'
+    : config.thirtyThreeMailEnabled
+      ? '33mail'
+      : config.strategy === 'gmail'
+        ? 'gmail'
+        : 'custom';
+
+  const handleModeChange = (mode: GenerationMode) => {
+    const updates: Partial<IdentityConfig> = {
+      strategy: mode === 'gmail' ? 'gmail' : 'custom',
+      addyioEnabled: mode === 'addyio',
+      thirtyThreeMailEnabled: mode === '33mail',
+    };
+    onChange(updates);
+  };
+
   const handleTest = async () => {
     if (externalTestStatus !== undefined) {
-      // External state management - just call onTest
       onTest();
       return;
     }
-
-    // Internal state management
     setInternalTestStatus('testing');
     setInternalTestError('');
     try {
@@ -98,7 +204,6 @@ export function IdentitySystemCard({
       } else {
         setInternalTestStatus('success');
       }
-      // Auto-reset after 3 seconds
       setTimeout(() => {
         setInternalTestStatus('idle');
         setInternalTestError('');
@@ -106,7 +211,6 @@ export function IdentitySystemCard({
     } catch (err) {
       setInternalTestStatus('error');
       setInternalTestError(err instanceof Error ? err.message : 'Connection failed');
-      // Auto-reset after 5 seconds
       setTimeout(() => {
         setInternalTestStatus('idle');
         setInternalTestError('');
@@ -114,44 +218,43 @@ export function IdentitySystemCard({
     }
   };
 
-  const isGmail = config.strategy === 'gmail';
+  const isReady =
+    activeMode === 'gmail'
+      ? !!(config.gmailBase && (config.gmailAppPassword || gmailAppPasswordSet))
+      : activeMode === 'addyio'
+        ? !!(config.addyioApiToken && config.server && config.email)
+        : activeMode === '33mail'
+          ? !!(config.thirtyThreeMailUsername && config.server && config.email)
+          : !!(config.server && config.email && (config.password || passwordSet));
 
-  // Determine if configuration is ready
-  const isReady = isGmail
-    ? !!(config.gmailBase && (config.gmailAppPassword || gmailAppPasswordSet))
-    : !!(config.server && config.email && (config.password || passwordSet));
-
-  // Get domain for preview
-  const emailDomain = isGmail ? 'gmail.com' : config.email?.split('@')[1] || 'example.com';
-
-  // Generate preview
   const generatePreview = useCallback(() => {
-    if (isGmail) {
+    if (activeMode === 'gmail') {
       const base = config.gmailBase?.replace('@gmail.com', '') || 'your.email';
-      // For Gmail, use gmailAlias directly, or generate from pattern if alias contains shortcodes
       let alias = config.gmailAlias || 'alias';
-      // Show example counter value (1, 2, 3...) instead of replacing
-      alias = alias.replace(/\{counter\}/gi, '1');
-      alias = alias.replace(/\{rnd\}/gi, Math.random().toString(36).substring(2, 6));
-      alias = alias.replace(/\{time\}/gi, Date.now().toString().slice(-6));
-      alias = alias.replace(
-        /\{name\}/gi,
-        RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]
-      );
+      alias = alias
+        .replace(/\{counter\}/gi, '1')
+        .replace(/\{rnd\}/gi, Math.random().toString(36).substring(2, 6))
+        .replace(/\{time\}/gi, Date.now().toString().slice(-6))
+        .replace(/\{name\}/gi, RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]);
       setPreview(`${base}+${alias}@gmail.com`);
-    } else {
+    } else if (activeMode === 'custom') {
       let result = config.emailPattern || 'prefix';
-      // Show example counter value (1, 2, 3...) instead of replacing
-      result = result.replace(/\{counter\}/gi, '1');
-      result = result.replace(/\{rnd\}/gi, Math.random().toString(36).substring(2, 6));
-      result = result.replace(/\{time\}/gi, Date.now().toString().slice(-6));
-      result = result.replace(
-        /\{name\}/gi,
-        RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]
-      );
-      setPreview(`${result}@${emailDomain}`);
+      const domain = config.email?.split('@')[1] || 'example.com';
+      result = result
+        .replace(/\{counter\}/gi, '1')
+        .replace(/\{rnd\}/gi, Math.random().toString(36).substring(2, 6))
+        .replace(/\{time\}/gi, Date.now().toString().slice(-6))
+        .replace(/\{name\}/gi, RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]);
+      setPreview(`${result}@${domain}`);
+    } else if (activeMode === '33mail') {
+      const user = config.thirtyThreeMailUsername?.trim() || 'username';
+      const domain = config.thirtyThreeMailDomain?.trim() || '33mail.com';
+      setPreview(`random@${user}.${domain}`);
+    } else if (activeMode === 'addyio') {
+      const domain = config.addyioDomain || 'anonaddy.me';
+      setPreview(`uuid@${domain}`);
     }
-  }, [config.emailPattern, config.gmailBase, config.gmailAlias, isGmail, emailDomain]);
+  }, [activeMode, config]);
 
   useEffect(() => {
     generatePreview();
@@ -162,19 +265,20 @@ export function IdentitySystemCard({
   };
 
   return (
-    <div className="card border border-white/5">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-            <Mail className={cn('w-4 h-4', isReady ? 'text-emerald-400' : 'text-slate-500')} />
+    <div className="bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden shadow-xl">
+      <div className="px-5 py-4 border-b border-white/5 bg-white/[0.02]">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <Mail className={cn('w-5 h-5', isReady ? 'text-emerald-400' : 'text-slate-500')} />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-white">{t('autoReg.identitySystem')}</h3>
-            <p className="text-2xs text-slate-500 mt-0.5">{t('autoReg.emailGeneration')}</p>
+            <h3 className="text-sm font-bold text-white tracking-tight">
+              {t('autoReg.identitySystem')}
+            </h3>
+            <p className="text-[10px] text-slate-500 font-medium">{t('autoReg.emailGeneration')}</p>
           </div>
           {isReady && (
-            <div className="flex items-center gap-1.5 text-2xs text-emerald-400">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px] shadow-emerald-500/50" />
               {t('autoReg.ready')}
             </div>
@@ -182,577 +286,334 @@ export function IdentitySystemCard({
         </div>
       </div>
 
-      {/* Strategy Switcher - Pill Style */}
-      <div className="px-4 pt-4">
-        <div
-          className="flex gap-1 p-1 rounded-lg"
-          style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.05)',
-          }}
-        >
+      <div className="grid grid-cols-2 gap-2 p-4">
+        {[
+          { id: 'custom', label: t('autoReg.customDomain'), icon: Globe, color: 'text-blue-400' },
+          { id: 'gmail', label: t('autoReg.gmailAlias'), icon: Mail, color: 'text-red-400' },
+          { id: '33mail', label: '33mail', icon: AtSign, color: 'text-purple-400' },
+          { id: 'addyio', label: 'Addy.io', icon: Shield, color: 'text-indigo-400' },
+        ].map(mode => (
           <button
-            onClick={() => onChange({ strategy: 'custom' })}
+            key={mode.id}
+            type="button"
+            onClick={() => handleModeChange(mode.id as GenerationMode)}
             disabled={disabled}
             className={cn(
-              'flex-1 py-2 text-xs font-medium rounded-md transition-all duration-200',
-              config.strategy === 'custom'
-                ? 'text-white bg-white/10'
-                : 'text-slate-500 hover:text-slate-300 hover:bg-white/5',
-              disabled && 'opacity-50 cursor-not-allowed'
+              'flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-300 gap-2 select-none',
+              activeMode === mode.id
+                ? 'bg-white/10 border-white/20 shadow-lg ring-1 ring-white/10'
+                : 'bg-white/[0.02] border-white/5 hover:bg-white/5 hover:border-white/10 text-slate-500'
             )}
           >
-            {t('autoReg.customDomain')}
+            <mode.icon
+              className={cn(
+                'w-5 h-5 transition-transform duration-300',
+                activeMode === mode.id ? mode.color + ' scale-110' : 'opacity-40'
+              )}
+            />
+            <span
+              className={cn(
+                'text-[10px] font-bold uppercase tracking-wider',
+                activeMode === mode.id ? 'text-white' : ''
+              )}
+            >
+              {mode.label}
+            </span>
           </button>
-          <button
-            onClick={() => onChange({ strategy: 'gmail' })}
-            disabled={disabled}
-            className={cn(
-              'flex-1 py-2 text-xs font-medium rounded-md transition-all duration-200',
-              config.strategy === 'gmail'
-                ? 'text-white bg-white/10'
-                : 'text-slate-500 hover:text-slate-300 hover:bg-white/5',
-              disabled && 'opacity-50 cursor-not-allowed'
-            )}
-          >
-            {t('autoReg.gmailAlias')}
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Dynamic Body */}
-      <div className="px-4 py-4 space-y-4">
-        {isGmail ? (
-          <>
-            {/* Gmail Mode */}
-            {/* Master Identity */}
-            <div>
-              <label className="input-label">{t('autoReg.masterGmail')}</label>
-              <input
-                type="email"
-                placeholder="your.email@gmail.com"
-                value={config.gmailBase}
-                onChange={e => {
-                  console.log('[IDENTITY_CARD] gmailBase onChange:', e.target.value);
-                  onChange({ gmailBase: e.target.value });
-                }}
-                disabled={disabled}
-                className="input-ds"
-              />
-            </div>
-
-            {/* Alias Configuration */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="input-label mb-0">{t('autoReg.aliasPattern')}</label>
-                <div className="flex items-center gap-1">
+      <div className="px-5 pb-5 space-y-5">
+        {activeMode === 'custom' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  {t('autoReg.emailPattern')}
+                </label>
+                <div className="flex gap-1">
                   {EMAIL_SHORTCODES.map(({ id, code }) => (
                     <button
                       key={id}
-                      onClick={() => onChange({ gmailAlias: (config.gmailAlias || '') + code })}
-                      disabled={disabled}
-                      className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300 transition-colors border border-white/5"
-                      title={code}
-                    >
-                      {code}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center h-9 rounded-md overflow-hidden input-ds px-0">
-                <span className="pl-3 pr-1 text-xs font-mono text-slate-500 select-none">
-                  {config.gmailBase?.replace('@gmail.com', '') || 'your.email'}+
-                </span>
-                <input
-                  type="text"
-                  placeholder="kiro_{time}_{rnd}"
-                  value={config.gmailAlias}
-                  onChange={e => {
-                    console.log('[IDENTITY_CARD] gmailAlias onChange:', e.target.value);
-                    onChange({ gmailAlias: e.target.value });
-                  }}
-                  disabled={disabled}
-                  className="flex-1 h-full bg-transparent border-none outline-none text-xs font-mono text-white placeholder-slate-600 focus:ring-0"
-                />
-                <span className="pr-3 pl-1 text-xs font-mono text-slate-500 select-none border-l border-white/10">
-                  @gmail.com
-                </span>
-              </div>
-
-              {/* Hint for dynamic patterns */}
-              {config.gmailAlias && !config.gmailAlias.includes('{') && (
-                <div className="text-[10px] text-amber-400/80 mt-1">
-                  ⚠ Static alias - add {'{rnd}'} or {'{time}'} for unique emails
-                </div>
-              )}
-
-              {/* Preview */}
-              <div className="flex items-center justify-between mt-2">
-                <div className="flex-1 min-w-0">
-                  <span className="text-xs text-emerald-400 font-mono truncate block">
-                    {preview}
-                  </span>
-                  <span className="text-[10px] text-slate-600">
-                    ↻ {t('autoReg.clickToRefresh')}
-                  </span>
-                </div>
-                <button onClick={generatePreview} className="btn-icon p-1">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Gmail App Password */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="input-label mb-0">{t('autoReg.appPassword')}</label>
-                <div className="group relative">
-                  <Info className="w-3 h-3 text-slate-600 cursor-help" />
-                  <div className="absolute left-0 bottom-full mb-2 w-56 p-2 rounded-md bg-slate-900 border border-white/10 text-[10px] text-slate-300 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-10">
-                    Generate an App Password in your Google Account settings (Security → 2-Step
-                    Verification → App passwords). Do not use your regular Gmail password.
-                  </div>
-                </div>
-              </div>
-              <div className="relative">
-                <input
-                  type={showAppPassword ? 'text' : 'password'}
-                  placeholder={gmailAppPasswordSet ? `(${t('autoReg.saved')})` : '••••••••••••••••'}
-                  value={config.gmailAppPassword}
-                  onChange={e => onChange({ gmailAppPassword: e.target.value })}
-                  disabled={disabled}
-                  className={cn(
-                    'input-ds pr-10',
-                    gmailAppPasswordSet && !config.gmailAppPassword && 'ring-1 ring-emerald-500/30'
-                  )}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowAppPassword(!showAppPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400"
-                >
-                  {showAppPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Custom Domain Mode */}
-            {/* Pattern Section */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="input-label mb-0">{t('autoReg.emailPattern')}</label>
-                <div className="flex items-center gap-1">
-                  {EMAIL_SHORTCODES.map(({ id, code }) => (
-                    <button
-                      key={id}
+                      type="button"
                       onClick={() => insertShortcode(code)}
                       disabled={disabled}
-                      className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300 transition-colors border border-white/5"
-                      title={code}
+                      className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-slate-500 hover:text-slate-300 border border-white/5 transition-colors"
                     >
                       {code}
                     </button>
                   ))}
                 </div>
               </div>
-
-              <div className="flex items-center h-9 rounded-md overflow-hidden input-ds px-0">
-                <input
-                  type="text"
-                  value={config.emailPattern}
-                  onChange={e => {
-                    console.log('[IDENTITY_CARD] emailPattern onChange:', e.target.value);
-                    onChange({ emailPattern: e.target.value });
-                  }}
-                  disabled={disabled}
-                  placeholder={t('autoReg.placeholders.prefix')}
-                  className="flex-1 h-full bg-transparent border-none outline-none pl-3 text-xs font-mono text-white placeholder-slate-600 focus:ring-0"
-                />
-                <span className="pr-3 pl-1 text-xs font-mono text-slate-500 select-none border-l border-white/10">
-                  @{emailDomain}
+              <Input
+                value={config.emailPattern}
+                onChange={e => onChange({ emailPattern: e.target.value })}
+                disabled={disabled}
+                placeholder="prefix"
+                className="font-mono"
+                suffixText={`@${config.email?.split('@')[1] || 'domain.com'}`}
+              />
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs text-emerald-400 font-mono font-medium truncate">
+                  {preview}
                 </span>
-              </div>
-
-              {/* Preview */}
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-xs text-emerald-400 font-mono truncate">{preview}</span>
-                <button onClick={generatePreview} className="btn-icon p-1">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Credentials Section */}
-            <div className="space-y-3 pt-2 border-t border-white/5">
-              <div className="text-2xs uppercase text-slate-500 tracking-wider">
-                {t('autoReg.imapCredentials')}
-              </div>
-
-              {/* IMAP Host & Port */}
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="input-label">{t('autoReg.host')}</label>
-                  <input
-                    type="text"
-                    placeholder={t('autoReg.placeholders.imapHost')}
-                    value={config.server}
-                    onChange={e => onChange({ server: e.target.value })}
-                    disabled={disabled}
-                    className="input-ds"
-                  />
-                </div>
-                <div className="w-20">
-                  <label className="input-label">{t('autoReg.port')}</label>
-                  <input
-                    type="number"
-                    placeholder="993"
-                    value={config.port}
-                    onChange={e =>
-                      onChange({ port: parseInt(e.target.value) || DEFAULT_IMAP_PORT })
-                    }
-                    disabled={disabled}
-                    className="input-ds text-center"
-                  />
-                </div>
-              </div>
-
-              {/* Email */}
-              <div>
-                <label className="input-label">{t('accounts.email')}</label>
-                <input
-                  type="email"
-                  placeholder={t('autoReg.placeholders.email')}
-                  value={config.email}
-                  onChange={e => onChange({ email: e.target.value })}
-                  disabled={disabled}
-                  className="input-ds"
-                />
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="input-label">{t('accounts.password')}</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder={passwordSet ? `(${t('autoReg.saved')})` : '••••••••'}
-                    value={config.password || ''}
-                    onChange={e => onChange({ password: e.target.value })}
-                    disabled={disabled}
-                    className={cn(
-                      'input-ds pr-10',
-                      passwordSet && !config.password && 'ring-1 ring-emerald-500/30'
-                    )}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-3.5 h-3.5" />
-                    ) : (
-                      <Eye className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  onClick={generatePreview}
+                  className="h-6 w-6"
+                >
+                  <RefreshCw size={12} />
+                </Button>
               </div>
             </div>
-          </>
+            <ImapForm
+              config={config}
+              onChange={onChange}
+              disabled={disabled}
+              passwordSet={passwordSet}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+            />
+          </div>
         )}
 
-        {/* Email Alias Options */}
-        <div className="pt-3 border-t border-white/5 space-y-4">
-          {/* Addy.io Section */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.addyioEnabled || false}
-                  onChange={e =>
-                    onChange({
-                      addyioEnabled: e.target.checked,
-                      // Disable 33mail if enabling Addy.io
-                      thirtyThreeMailEnabled: e.target.checked
-                        ? false
-                        : config.thirtyThreeMailEnabled,
-                    })
-                  }
-                  disabled={disabled}
-                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-0 focus:ring-offset-0 transition-colors"
-                />
-                <span className="text-sm text-slate-300">Use Addy.io for email aliases</span>
+        {activeMode === 'gmail' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <Input
+              label={t('autoReg.masterGmail')}
+              type="email"
+              placeholder="your.email@gmail.com"
+              value={config.gmailBase}
+              onChange={e => onChange({ gmailBase: e.target.value })}
+              disabled={disabled}
+            />
+            <Input
+              label={t('autoReg.appPassword')}
+              type={showAppPassword ? 'text' : 'password'}
+              placeholder={gmailAppPasswordSet ? `(${t('autoReg.saved')})` : '••••••••'}
+              value={config.gmailAppPassword}
+              onChange={e => onChange({ gmailAppPassword: e.target.value })}
+              disabled={disabled}
+              rightElement={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  onClick={() => setShowAppPassword(!showAppPassword)}
+                  className="h-7 w-7"
+                >
+                  {showAppPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </Button>
+              }
+            />
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1">
+                {t('autoReg.aliasPattern')}
               </label>
+              <Input
+                value={config.gmailAlias}
+                onChange={e => onChange({ gmailAlias: e.target.value })}
+                disabled={disabled}
+                placeholder="alias_{rnd}"
+                prefixText={`${config.gmailBase?.replace('@gmail.com', '') || 'user'}+`}
+                suffixText="@gmail.com"
+                className="font-mono"
+              />
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs text-emerald-400 font-mono font-medium truncate">
+                  {preview}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  onClick={generatePreview}
+                  className="h-6 w-6"
+                >
+                  <RefreshCw size={12} />
+                </Button>
+              </div>
             </div>
+          </div>
+        )}
 
-            {/* Addy.io Configuration Panel */}
-            {config.addyioEnabled && (
-              <div className="pl-6 space-y-3 animate-in fade-in zoom-in-95 duration-200">
-                {/* API Token Input */}
-                <div>
-                  <label className="input-label">{t('autoReg.addyio.apiToken')}</label>
-                  <input
-                    type="password"
-                    value={config.addyioApiToken || ''}
-                    onChange={e => onChange({ addyioApiToken: e.target.value })}
-                    placeholder="add_..."
-                    disabled={disabled}
-                    className="input-ds text-sm"
-                  />
-                </div>
+        {activeMode === '33mail' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <Input
+              label="33mail Username"
+              value={config.thirtyThreeMailUsername || ''}
+              onChange={e => onChange({ thirtyThreeMailUsername: e.target.value })}
+              placeholder="username"
+              suffixText={`.${config.thirtyThreeMailDomain || '33mail.com'}`}
+              className="font-mono"
+            />
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 shadow-lg">
+              <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-60">
+                {t('common.preview')}
+              </p>
+              <p className="text-white text-xs font-mono truncate">{preview}</p>
+            </div>
+            <ImapForm
+              config={config}
+              onChange={onChange}
+              disabled={disabled}
+              passwordSet={passwordSet}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+            />
+          </div>
+        )}
 
-                {/* Test Connection Button */}
-                <div>
-                  <button
-                    onClick={onTestAddyio}
-                    disabled={isTestingAddyio || !config.addyioApiToken}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-500/20 border border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-medium w-full justify-center"
-                  >
-                    {isTestingAddyio ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        {t('autoReg.addyio.testing')}
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        {t('autoReg.addyio.testConnection')}
-                      </>
-                    )}
-                  </button>
-
-                  {addyioConnectionStatus !== 'idle' && (
-                    <div
-                      className={cn(
-                        'mt-2 flex items-center gap-2 text-xs',
-                        addyioConnectionStatus === 'success' ? 'text-emerald-400' : 'text-red-400'
-                      )}
-                    >
-                      {addyioConnectionStatus === 'success' ? (
-                        <CheckCircle className="w-3.5 h-3.5" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5" />
-                      )}
-                      {addyioConnectionMessage}
-                    </div>
-                  )}
-                </div>
-
-                {/* Account Status Card */}
-                {addyioAccountInfo && (
-                  <div
-                    className="rounded-lg p-3 border border-indigo-500/20"
-                    style={{ background: 'rgba(99, 102, 241, 0.05)' }}
-                  >
-                    <h4 className="text-white font-medium text-xs mb-2 flex items-center gap-2">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                      {t('autoReg.addyio.accountStatus')}
-                    </h4>
-                    <div className="grid grid-cols-2 gap-2 text-2xs">
-                      <div>
-                        <span className="text-slate-500">{t('autoReg.addyio.subscription')}:</span>
-                        <span className="text-white ml-1.5 font-medium">
-                          {addyioAccountInfo.subscription}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500">{t('autoReg.addyio.activeAliases')}:</span>
-                        <span className="text-white ml-1.5 font-medium">
-                          {addyioAccountInfo.totalActiveAliases} / {addyioAccountInfo.totalAliases}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+        {activeMode === 'addyio' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <Input
+              label={t('autoReg.addyio.apiToken')}
+              type="password"
+              value={config.addyioApiToken || ''}
+              onChange={e => onChange({ addyioApiToken: e.target.value })}
+              placeholder="add_..."
+              disabled={disabled}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onTestAddyio}
+              className="w-full"
+              isLoading={isTestingAddyio}
+              disabled={!config.addyioApiToken}
+              leftIcon={<RefreshCw size={14} />}
+            >
+              {t('autoReg.addyio.testConnection')}
+            </Button>
+            {addyioConnectionStatus !== 'idle' && (
+              <div
+                className={cn(
+                  'flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-lg',
+                  addyioConnectionStatus === 'success'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
                 )}
-
-                {/* Domain Dropdown */}
+              >
+                {addyioConnectionStatus === 'success' ? (
+                  <CheckCircle size={14} />
+                ) : (
+                  <XCircle size={14} />
+                )}
+                {addyioConnectionMessage}
+              </div>
+            )}
+            {addyioAccountInfo && (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-3 grid grid-cols-2 gap-2 text-[10px] font-bold uppercase tracking-widest">
                 <div>
-                  <label className="input-label">{t('autoReg.addyio.domain')}</label>
-                  {addyioDomains.length > 0 ? (
-                    <select
-                      value={config.addyioDomain || ''}
-                      onChange={e => onChange({ addyioDomain: e.target.value })}
-                      disabled={disabled}
-                      className="input-ds text-sm"
-                    >
-                      <option value="">{t('autoReg.addyio.domainPlaceholder')}</option>
-                      {addyioDomains.map(domain => (
-                        <option key={domain} value={domain}>
-                          {domain}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={config.addyioDomain || ''}
-                      onChange={e => onChange({ addyioDomain: e.target.value })}
-                      placeholder="anonaddy.me"
-                      disabled={disabled}
-                      className="input-ds text-sm"
-                    />
-                  )}
+                  <span className="text-slate-500">Plan:</span>{' '}
+                  <span className="text-white ml-2">{addyioAccountInfo.subscription}</span>
                 </div>
-
-                {/* Alias Format */}
                 <div>
-                  <label className="input-label">{t('autoReg.addyio.aliasFormat')}</label>
-                  <select
-                    value={config.addyioAliasFormat || 'uuid'}
-                    onChange={e => onChange({ addyioAliasFormat: e.target.value })}
-                    disabled={disabled}
-                    className="input-ds text-sm"
-                  >
-                    <option value="uuid">{t('autoReg.addyio.formatUuid')}</option>
-                    <option value="random_words">{t('autoReg.addyio.formatWords')}</option>
-                    <option value="random_characters">{t('autoReg.addyio.formatChars')}</option>
-                  </select>
+                  <span className="text-slate-500">Active:</span>{' '}
+                  <span className="text-white ml-2">
+                    {addyioAccountInfo.totalActiveAliases} / {addyioAccountInfo.totalAliases}
+                  </span>
                 </div>
-
-                {/* Auto-delete checkbox */}
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.addyioAutoDelete || false}
-                    onChange={e => onChange({ addyioAutoDelete: e.target.checked })}
-                    disabled={disabled}
-                    className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-0 focus:ring-offset-0 transition-colors"
-                  />
-                  <span className="text-sm text-slate-300">{t('autoReg.addyio.autoDelete')}</span>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1">
+                  Domain
                 </label>
+                {addyioDomains.length > 0 ? (
+                  <select
+                    value={config.addyioDomain || ''}
+                    onChange={e => onChange({ addyioDomain: e.target.value })}
+                    disabled={disabled}
+                    className="w-full h-9 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
+                  >
+                    <option value="" className="bg-[#0f1115]">
+                      Default
+                    </option>
+                    {addyioDomains.map(d => (
+                      <option key={d} value={d} className="bg-[#0f1115]">
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    value={config.addyioDomain || ''}
+                    onChange={e => onChange({ addyioDomain: e.target.value })}
+                    placeholder="anonaddy.me"
+                    disabled={disabled}
+                  />
+                )}
               </div>
-            )}
-          </div>
-
-          {/* 33mail Section */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.thirtyThreeMailEnabled || false}
-                  onChange={e =>
-                    onChange({
-                      thirtyThreeMailEnabled: e.target.checked,
-                      // Disable Addy.io if enabling 33mail
-                      addyioEnabled: e.target.checked ? false : config.addyioEnabled,
-                    })
-                  }
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1">
+                  Format
+                </label>
+                <select
+                  value={config.addyioAliasFormat || 'uuid'}
+                  onChange={e => onChange({ addyioAliasFormat: e.target.value })}
                   disabled={disabled}
-                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-500 focus:ring-0 focus:ring-offset-0 transition-colors"
-                />
-                <span className="text-sm text-slate-300">Use 33mail for email aliases</span>
-              </label>
-            </div>
-
-            {/* 33mail Configuration Panel */}
-            {config.thirtyThreeMailEnabled && (
-              <div className="pl-6 space-y-3 animate-in fade-in zoom-in-95 duration-200">
-                <div>
-                  <label className="input-label">33mail Username</label>
-                  <input
-                    type="text"
-                    value={config.thirtyThreeMailUsername || ''}
-                    onChange={e => onChange({ thirtyThreeMailUsername: e.target.value })}
-                    placeholder="your-username"
-                    disabled={disabled}
-                    className="input-ds text-sm"
-                  />
-                  <p className="text-slate-500 text-2xs mt-1">
-                    Subdomain prefix (e.g. user.33mail.com)
-                  </p>
-                </div>
-
-                <div>
-                  <label className="input-label">Domain</label>
-                  <input
-                    type="text"
-                    value={config.thirtyThreeMailDomain || '33mail.com'}
-                    onChange={e => onChange({ thirtyThreeMailDomain: e.target.value })}
-                    placeholder="33mail.com"
-                    disabled={disabled}
-                    className="input-ds text-sm"
-                  />
-                </div>
-
-                <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
-                  <p className="text-purple-300 text-2xs">
-                    <strong>Preview:</strong>{' '}
-                    <code>
-                      kiro-xyz@{config.thirtyThreeMailUsername || 'user'}.
-                      {config.thirtyThreeMailDomain || '33mail.com'}
-                    </code>
-                  </p>
-                </div>
+                  className="w-full h-9 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
+                >
+                  <option value="uuid" className="bg-[#0f1115]">
+                    UUID
+                  </option>
+                  <option value="random_words" className="bg-[#0f1115]">
+                    Words
+                  </option>
+                  <option value="random_characters" className="bg-[#0f1115]">
+                    Chars
+                  </option>
+                </select>
               </div>
-            )}
+            </div>
+            <ImapForm
+              config={config}
+              onChange={onChange}
+              disabled={disabled}
+              passwordSet={passwordSet}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+            />
           </div>
+        )}
+      </div>
 
-          <p className="text-xs text-slate-500 ml-6">
-            Generate temporary emails via selected service (configure in Settings)
-          </p>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between pt-3 border-t border-white/5">
-          <div className="h-4 flex items-center gap-2">
-            {saveStatus === 'saving' && (
-              <span className="text-2xs text-slate-500">{t('autoReg.saving')}...</span>
-            )}
+      {(activeMode === 'custom' || activeMode === 'gmail') && (
+        <div className="px-5 py-4 border-t border-white/5 bg-white/[0.01] flex items-center justify-between">
+          <div className="flex items-center gap-2">
             {saveStatus === 'saved' && (
-              <span className="text-2xs text-emerald-500">{t('autoReg.saved')}</span>
-            )}
-            {saveStatus === 'error' && (
-              <span className="text-2xs text-red-500">{t('autoReg.saveFailed')}</span>
-            )}
-            {/* Test connection feedback */}
-            {testStatus === 'success' && (
-              <span className="text-2xs text-emerald-500 flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" />
-                {t('autoReg.connected')}
+              <span className="text-[10px] font-bold uppercase text-emerald-500 tracking-widest animate-in fade-in duration-500">
+                {t('autoReg.saved')}
               </span>
+            )}
+            {testStatus === 'success' && (
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md">
+                <CheckCircle size={12} /> IMAP OK
+              </div>
             )}
             {testStatus === 'error' && (
-              <span className="text-2xs text-red-500 flex items-center gap-1" title={testError}>
-                <XCircle className="w-3 h-3" />
-                {testError || t('status.failed')}
-              </span>
+              <Tooltip content={testError || 'Connection failed'}>
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-red-400 uppercase tracking-wider bg-red-500/10 px-2 py-1 rounded-md cursor-help">
+                  <XCircle size={12} /> Error
+                </div>
+              </Tooltip>
             )}
           </div>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleTest}
-            disabled={!isReady || disabled || testStatus === 'testing'}
-            className={cn(
-              'btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5',
-              testStatus === 'success' && 'border-emerald-500/30 text-emerald-400',
-              testStatus === 'error' && 'border-red-500/30 text-red-400'
-            )}
+            isLoading={testStatus === 'testing'}
+            leftIcon={<RefreshCw size={14} />}
           >
-            {testStatus === 'testing' ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                {t('autoReg.testing')}
-              </>
-            ) : testStatus === 'success' ? (
-              <>
-                <CheckCircle className="w-3 h-3" />
-                {t('autoReg.success')}
-              </>
-            ) : testStatus === 'error' ? (
-              <>
-                <XCircle className="w-3 h-3" />
-                {t('autoReg.retry')}
-              </>
-            ) : (
-              t('autoReg.testConnection')
-            )}
-          </button>
+            {t('autoReg.testConnection')}
+          </Button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

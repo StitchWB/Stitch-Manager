@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, Square, Loader2 } from 'lucide-react';
+import { Tooltip } from '../Tooltip';
 
 interface ChatInputProps {
   onSend: (content: string) => void;
@@ -87,29 +88,31 @@ export function ChatInput({
 
         {/* Send/Stop button */}
         {isLoading ? (
-          <button
-            onClick={handleStop}
-            className="p-3 bg-vsc-red/20 hover:bg-vsc-red/30 text-vsc-red 
-                       rounded-lg transition-colors flex items-center justify-center"
-            title="Stop generation"
-          >
-            <Square size={18} fill="currentColor" />
-          </button>
+          <Tooltip content="Stop generation">
+            <button
+              onClick={handleStop}
+              className="p-3 bg-vsc-red/20 hover:bg-vsc-red/30 text-vsc-red 
+                         rounded-lg transition-colors flex items-center justify-center"
+            >
+              <Square size={18} fill="currentColor" />
+            </button>
+          </Tooltip>
         ) : (
-          <button
-            onClick={handleSend}
-            disabled={!value.trim() || disabled}
-            className="p-3 bg-vsc-blue/20 hover:bg-vsc-blue/30 text-vsc-blue 
-                       rounded-lg transition-colors flex items-center justify-center
-                       disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-vsc-blue/20"
-            title="Send message"
-          >
-            {disabled ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Send size={18} />
-            )}
-          </button>
+          <Tooltip content="Send message">
+            <button
+              onClick={handleSend}
+              disabled={!value.trim() || disabled}
+              className="p-3 bg-vsc-blue/20 hover:bg-vsc-blue/30 text-vsc-blue 
+                         rounded-lg transition-colors flex items-center justify-center
+                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-vsc-blue/20"
+            >
+              {disabled ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <Send size={18} />
+              )}
+            </button>
+          </Tooltip>
         )}
       </div>
     </div>

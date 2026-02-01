@@ -11,17 +11,15 @@ export interface Translations {
   common: {
     save: string;
     cancel: string;
+    close: string;
+    confirm: string;
     delete: string;
     add: string;
     edit: string;
+    search: string;
     refresh: string;
     export: string;
     import: string;
-    copy: string;
-    clear: string;
-    confirm: string;
-    close: string;
-    search: string;
     loading: string;
     error: string;
     success: string;
@@ -46,11 +44,12 @@ export interface Translations {
     status: string;
     settings: string;
     dismiss: string;
-    copied: string;
     cleared: string;
-    scrollToBottom: string;
-    copyToClipboard: string;
+    clear: string;
+    copy: string;
+    preview: string;
   };
+
   status: {
     active: string;
     banned: string;
@@ -126,7 +125,9 @@ export interface Translations {
     syncComplete: string;
     syncPartial: string;
     syncing: string;
+    tagPlaceholder: string;
     select: string;
+
     deselect: string;
     selectAll: string;
     deselectAll: string;
@@ -139,7 +140,12 @@ export interface Translations {
     pagination: string;
     previousPage: string;
     nextPage: string;
+    providers: string;
+    allAccounts: string;
+    awsBuilderId: string;
+    statusHeader: string;
     // Account Drawer
+
     accountDetails: string;
     inUse: string;
     usageQuota: string;
@@ -160,6 +166,29 @@ export interface Translations {
     noToken: string;
     clickCheckNow: string;
     clearSelection: string;
+    // Machine ID Management
+    machineId: string;
+    machineIdCopied: string;
+    notAssigned: string;
+    activations: string;
+    logins: string;
+    successRate: string;
+    registrationInfo: string;
+    registrationMethod: string;
+    registrationDate: string;
+    registrationMetadata: string;
+    browserProfilePath: string;
+    sessionData: string;
+    notes: string;
+    tags: string;
+    lastLoginAt: string;
+    accountRegion: string;
+    lastError: string;
+    errorCount: string;
+    // Health status
+    healthGood: string;
+    healthFair: string;
+    healthPoor: string;
     // Confirmation dialogs
     deleteAccountTitle: string;
     deleteAccountMessage: string;
@@ -168,7 +197,11 @@ export interface Translations {
     deleteBulkPreview: string;
     confirmDelete: string;
     deleting: string;
+    expiredWarning: string;
+    refreshAllExpired: string;
+    noAccountsFoundDesc: string;
   };
+
   accountsTable: {
     account: string;
     status: string;
@@ -188,7 +221,12 @@ export interface Translations {
     checkStatus: string;
     loading: string;
     noAccounts: string;
+    uses: string;
+    lastLogin: string;
+    success: string;
+    openBrowser: string;
   };
+
   autoReg: {
     title: string;
     subtitle: string;
@@ -206,26 +244,6 @@ export interface Translations {
     headlessDescription: string;
     accounts: string;
     count: string;
-    
-    // Engine Tab Settings
-    speed: string;
-    slow: string;
-    fast: string;
-    delay: string;
-    timeouts: string;
-    verification: string;
-    oauth: string;
-    allowAccess: string;
-    pageLoad: string;
-    elementWait: string;
-    imapPoll: string;
-    behavior: string;
-    passwordLength: string;
-    realisticTyping: string;
-    humanDelays: string;
-    screenshots: string;
-    
-    // Identity Tab Settings
     identitySystem: string;
     emailGeneration: string;
     ready: string;
@@ -240,8 +258,7 @@ export interface Translations {
     clickToRefresh: string;
     appPassword: string;
     testConnection: string;
-    
-    // Network Tab Settings
+    appPasswordHint: string;
     network: string;
     networkSettings: string;
     proxyEnabled: string;
@@ -250,20 +267,14 @@ export interface Translations {
     username: string;
     directConnection: string;
     proxyUrlRequired: string;
-    
-    // IMAP Credentials
     imapCredentials: string;
     host: string;
     port: string;
     emailPattern: string;
-    
-    // AWS-specific
     paymentMethod: string;
     billingInformation: string;
     phoneVerification: string;
     smsService: string;
-    
-    // Placeholders
     placeholders: {
       gmailEmail: string;
       gmailAlias: string;
@@ -273,12 +284,7 @@ export interface Translations {
       proxyUrl: string;
       optional: string;
     };
-    
-    // Status messages
     staticAliasWarning: string;
-    appPasswordHint: string;
-    
-    // Status & Progress
     saving: string;
     saved: string;
     saveFailed: string;
@@ -307,6 +313,22 @@ export interface Translations {
     configureMailFirst: string;
     consoleOutput: string;
     liveRegistrationLogs: string;
+    speed: string;
+    slow: string;
+    fast: string;
+    delay: string;
+    timeouts: string;
+    verification: string;
+    oauth: string;
+    allowAccess: string;
+    pageLoad: string;
+    elementWait: string;
+    imapPoll: string;
+    behavior: string;
+    passwordLength: string;
+    realisticTyping: string;
+    humanDelays: string;
+    screenshots: string;
     registrationModes: {
       webview: string;
       automated: string;
@@ -343,6 +365,10 @@ export interface Translations {
       humanDelays: string;
       screenshots: string;
     };
+    emailAliases: string;
+    configureAddyio: string;
+    configure33mail: string;
+
     addyio: {
       title: string;
       subtitle: string;
@@ -501,13 +527,42 @@ export interface Translations {
     restoring: string;
     settings: string;
     settingsMenu: string;
+    advancedSettings: string;
     strategy: string;
-    logRequests: string;
     patchFailed: string;
     patchTraeFailed: string;
     unpatchFailed: string;
     restoreFailed: string;
     deleteFailed: string;
+    // Patch options
+    patchOptions: string;
+    patchVersion: string;
+    globalSettings: string;
+    machineIdSpoofing: string;
+    machineIdSpoofingDesc: string;
+    blockTelemetry: string;
+    blockTelemetryDesc: string;
+    bypassRateLimits: string;
+    bypassRateLimitsDesc: string;
+    osSpoofing: string;
+    osSpoofingDesc: string;
+    commandSpoofing: string;
+    commandSpoofingDesc: string;
+    constantPatching: string;
+    constantPatchingDesc: string;
+    authWatcher: string;
+    authWatcherDesc: string;
+    customPrompts: string;
+    customPromptsDesc: string;
+    requestSpy: string;
+    requestSpyDesc: string;
+    errorSuppression: string;
+    errorSuppressionDesc: string;
+    unlockPro: string;
+    unlockProDesc: string;
+    removeWatermark: string;
+    removeWatermarkDesc: string;
+    // Trae
     traeProPatch: string;
     traeProFull: string;
     traeProDescription: string;
@@ -526,6 +581,8 @@ export interface Translations {
     subtitle: string;
     categories: {
       general: string;
+      automation: string;
+      connectivity: string;
       patcher: string;
       tokenPool: string;
       imap: string;
@@ -541,7 +598,14 @@ export interface Translations {
       system: string;
       language: string;
       languageDescription: string;
+      uiScale: string;
+      uiScaleDescription: string;
+      scale: string;
+      scaleSmall: string;
+      scaleLarge: string;
+      scaleReset: string;
     };
+
     imap: {
       title: string;
       description: string;
@@ -582,8 +646,6 @@ export interface Translations {
       description: string;
       autoRotate: string;
       autoRotateDescription: string;
-      logRequests: string;
-      logRequestsDescription: string;
       spoofMachineId: string;
       spoofMachineIdDescription: string;
       note: string;
@@ -647,6 +709,7 @@ export interface Translations {
     inMonths: string;
     soon: string;
     now: string;
+    never: string;
   };
   validation: {
     required: string;
@@ -673,18 +736,18 @@ export interface Translations {
     // Tab and titles
     title: string;
     subtitle: string;
-    
+
     // Stats
     totalTokens: string;
     available: string;
     banned: string;
     quotaLeft: string;
-    
+
     // Current token section
     currentToken: string;
     noActiveToken: string;
     forceSwitch: string;
-    
+
     // Token list
     allTokens: string;
     noTokensInPool: string;
@@ -692,19 +755,19 @@ export interface Translations {
     refreshToken: string;
     refreshAll: string;
     reloadPool: string;
-    
+
     // Token status
     statusAvailable: string;
     statusBanned: string;
     statusExpired: string;
     statusLowQuota: string;
     statusWarning: string;
-    
+
     // Events
     recentEvents: string;
     noRecentEvents: string;
     clearEvents: string;
-    
+
     // Event types
     eventSwitched: string;
     eventQuotaLow: string;
@@ -712,7 +775,7 @@ export interface Translations {
     eventTokenBanned: string;
     eventRefreshed: string;
     eventTokenUsed: string;
-    
+
     // Token details
     quota: string;
     reset: string;
@@ -723,7 +786,7 @@ export interface Translations {
     expired: string;
     lowQuota: string;
     warning: string;
-    
+
     // Tooltips
     forceSwitchTooltip: string;
     refreshTokenTooltip: string;
@@ -851,7 +914,18 @@ export interface Translations {
     reset: string;
     done: string;
     pcs: string;
+    registrationMethod: string;
+    all: string;
+    manual: string;
+    auto: string;
+    oauth: string;
+    unknown: string;
+    health: string;
+    good: string;
+    fair: string;
+    poor: string;
   };
+
   usageBar: {
     errorBanned: string;
     unlimited: string;
@@ -928,6 +1002,8 @@ export interface Translations {
     constantPatchingDesc: string;
     customPrompts: string;
     customPromptsDesc: string;
+    requestSpy: string;
+    requestSpyDesc: string;
     logLevelTitle: string;
     logLevelDescription: string;
     logLevelDebug: string;
@@ -957,9 +1033,18 @@ export interface Translations {
     confirmRemove: string;
     confirmReset: string;
     confirmUnbind: string;
+    advancedTitle: string;
+    advancedSubtitle: string;
+    constantsTitle: string;
+    writeLimit: string;
+    maxTokens: string;
+    promptEditorTitle: string;
+    copyDefaults: string;
+    collapse: string;
+    expand: string;
+    loadError: string;
   };
 }
-
 
 // ============================================
 // Translations Registry
@@ -1008,7 +1093,7 @@ export function setLocale(locale: string): void {
  * @param key - Dot-notation path to the translation (e.g., 'accounts.title')
  * @param params - Optional parameters for interpolation (e.g., { count: 5 })
  * @returns The translated string or the key if not found
- * 
+ *
  * @example
  * t('common.save') // Returns 'Save'
  * t('accounts.deleteConfirm', { count: 5 }) // Returns 'Delete 5 accounts?'
@@ -1055,12 +1140,12 @@ type PathsToStringProps<T> = T extends string
 type Join<T extends string[], D extends string> = T extends []
   ? never
   : T extends [infer F]
-  ? F
-  : T extends [infer F, ...infer R]
-  ? F extends string
-    ? `${F}${D}${Join<Extract<R, string[]>, D>}`
-    : never
-  : string;
+    ? F
+    : T extends [infer F, ...infer R]
+      ? F extends string
+        ? `${F}${D}${Join<Extract<R, string[]>, D>}`
+        : never
+      : string;
 
 export type TranslationKey = Join<PathsToStringProps<Translations>, '.'>;
 

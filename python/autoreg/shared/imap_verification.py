@@ -16,8 +16,8 @@ from typing import Any
 def get_verification_code_from_imap(
     email: str,
     imap_config: dict[str, Any],
-    max_attempts: int = 30,
-    delay: int = 10
+    max_attempts: int = 60,  # Increased from 30 to 60 (1 minute total)
+    delay: int = 1  # Changed from 10s to 1s for faster polling
 ) -> str | None:
     """
     Get verification code from IMAP inbox
@@ -25,8 +25,8 @@ def get_verification_code_from_imap(
     Args:
         email: Email address to search for (registration email, e.g., test5684@whitebite.ru)
         imap_config: IMAP configuration (host, port, user, password)
-        max_attempts: Maximum number of attempts
-        delay: Delay between attempts in seconds
+        max_attempts: Maximum number of attempts (default: 60 = 1 minute with 1s delay)
+        delay: Delay between attempts in seconds (default: 1s for fast polling)
 
     Returns:
         Verification code (6 digits) or None if not found
@@ -63,7 +63,9 @@ def get_verification_code_from_imap(
             print(f"[IMAP] Attempt {attempt + 1}/{max_attempts} failed: {e}")
 
         if attempt < max_attempts - 1:
-            print(f"[IMAP] Waiting {delay}s before next attempt...")
+            # Only log every 10 attempts to reduce noise
+            if (attempt + 1) % 10 == 0:
+                print(f"[IMAP] Still waiting... ({attempt + 1}/{max_attempts} attempts)")
             time.sleep(delay)
 
     print(f"[IMAP] ✗ Failed to find verification code after {max_attempts} attempts")
@@ -120,8 +122,8 @@ def _search_verification_emails(mail, target_email: str) -> list:
                     # For catch-all: get all AWS emails, filter by body content later
                     all_ids = data[0].split()
                     print(f"[IMAP]   Found {len(all_ids)} emails from {sender}")
-                    # Take last 50 emails (most recent)
-                    recent_ids = all_ids[-50:] if len(all_ids) > 50 else all_ids
+                    # Take last 5 emails only (most recent) - optimized from 50
+                    recent_ids = all_ids[-5:] if len(all_ids) > 5 else all_ids
                     email_ids.extend(recent_ids)
                     if recent_ids:
                         break  # Found emails, stop searching other senders
@@ -137,8 +139,8 @@ def _search_verification_emails(mail, target_email: str) -> list:
             if result == 'OK' and data[0]:
                 all_ids = data[0].split()
                 print(f"[IMAP] Strategy 4: Found {len(all_ids)} total emails")
-                # Take last 50 emails (reduced from 100 for efficiency)
-                recent_ids = all_ids[-50:] if len(all_ids) > 50 else all_ids
+                # Take last 5 emails only (optimized from 50)
+                recent_ids = all_ids[-5:] if len(all_ids) > 5 else all_ids
                 email_ids.extend(recent_ids)
         except Exception as e:
             print(f"[IMAP] Strategy 4 failed: {e}")
@@ -210,8 +212,8 @@ def _extract_verification_code(mail, email_ids: list, target_email: str) -> str 
 
     print(f"[IMAP] Checking {len(email_ids_sorted)} emails for target: {target_email}")
 
-    # Check up to 50 most recent emails (increased for catch-all)
-    for email_id in email_ids_sorted[:50]:
+    # Check only last 5 emails (optimized from 50) - AWS sends email within seconds
+    for email_id in email_ids_sorted[:5]:
         try:
             result, data = mail.fetch(str(email_id).encode(), '(RFC822)')
             if result != 'OK':
@@ -236,7 +238,7 @@ def _extract_verification_code(mail, email_ids: list, target_email: str) -> str 
                 continue
 
             # Check 1: Target email in TO header (direct email)
-            target_email.lower() in to_header.lower()
+            # to_match = target_email.lower() in to_header.lower()  # Unused
 
             # Check 2: For 33mail forwarding - check if target_email is mentioned in body
             # 33mail adds: "This email was sent to the alias 'kiro-xxx@whitebite.33mail.com'"

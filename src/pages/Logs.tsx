@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Search, Download, Trash2, RefreshCw, ChevronDown, Loader2, Copy, Check } from 'lucide-react';
+import { FileText, Search, Download, Trash2, RefreshCw, Loader2, Copy, Check } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAppStore } from '../stores/app';
@@ -8,6 +8,9 @@ import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import { Button } from '../components/ui/Button';
+import { Select } from '../components/ui/Select';
+import { Tooltip } from '../components/Tooltip';
 
 // ============================================
 // Constants
@@ -15,7 +18,7 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 const LOG_SOURCES = [
   'accounts',
-  'registration', 
+  'registration',
   'patcher',
   'settings',
   'server',
@@ -68,7 +71,7 @@ export default function Logs() {
   useEffect(() => {
     fetchLogs();
     subscribeToLogs();
-    
+
     return () => {
       unsubscribeFromLogs();
     };
@@ -100,17 +103,23 @@ export default function Logs() {
   // Handlers
   // ============================================
 
-  const handleLevelChange = useCallback((level: string) => {
-    setLogsLevelFilter(level);
-    // Convert 'all' to empty array (no filter)
-    setFilter({ levels: (level && level !== 'all') ? [level as LogLevel] : [] });
-  }, [setFilter, setLogsLevelFilter]);
+  const handleLevelChange = useCallback(
+    (level: string) => {
+      setLogsLevelFilter(level);
+      // Convert 'all' to empty array (no filter)
+      setFilter({ levels: level && level !== 'all' ? [level as LogLevel] : [] });
+    },
+    [setFilter, setLogsLevelFilter]
+  );
 
-  const handleSourceChange = useCallback((source: string) => {
-    setLogsSourceFilter(source);
-    // Convert 'all' to empty array (no filter)
-    setFilter({ sources: (source && source !== 'all') ? [source] : [] });
-  }, [setFilter, setLogsSourceFilter]);
+  const handleSourceChange = useCallback(
+    (source: string) => {
+      setLogsSourceFilter(source);
+      // Convert 'all' to empty array (no filter)
+      setFilter({ sources: source && source !== 'all' ? [source] : [] });
+    },
+    [setFilter, setLogsSourceFilter]
+  );
 
   const handleRefresh = useCallback(() => {
     fetchLogs();
@@ -157,11 +166,14 @@ export default function Logs() {
     });
   }, []);
 
-  const copyToClipboard = useCallback(async (text: string, logId: string) => {
-    await copy(text);
-    setCopiedId(logId);
-    setTimeout(() => setCopiedId(null), 2000);
-  }, [copy]);
+  const copyToClipboard = useCallback(
+    async (text: string, logId: string) => {
+      await copy(text);
+      setCopiedId(logId);
+      setTimeout(() => setCopiedId(null), 2000);
+    },
+    [copy]
+  );
 
   // ============================================
   // Render
@@ -175,30 +187,33 @@ export default function Logs() {
         icon={<FileText size={18} />}
         actions={
           <div className="flex items-center gap-2">
-            <button 
-              onClick={handleRefresh} 
-              className="btn-secondary py-1.5 text-xs"
+            <Button
+              onClick={handleRefresh}
               disabled={isLoading}
+              variant="secondary"
+              size="sm"
+              leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               {t('logs.refresh')}
-            </button>
-            <button 
-              onClick={handleExport} 
-              className="btn-secondary py-1.5 text-xs"
+            </Button>
+            <Button
+              onClick={handleExport}
               disabled={logs.length === 0}
+              variant="secondary"
+              size="sm"
+              leftIcon={<Download className="w-3.5 h-3.5" />}
             >
-              <Download className="w-3.5 h-3.5" />
               {t('logs.export')}
-            </button>
-            <button 
-              onClick={() => setShowClearConfirm(true)} 
-              className="btn-danger py-1.5 text-xs"
+            </Button>
+            <Button
+              onClick={() => setShowClearConfirm(true)}
               disabled={logs.length === 0}
+              variant="danger"
+              size="sm"
+              leftIcon={<Trash2 className="w-3.5 h-3.5" />}
             >
-              <Trash2 className="w-3.5 h-3.5" />
               {t('logs.clear')}
-            </button>
+            </Button>
           </div>
         }
       />
@@ -207,38 +222,33 @@ export default function Logs() {
         {/* Filters */}
         <div className="flex items-center gap-4 mb-4">
           {/* Level Filter */}
-          <div className="relative">
-            <select
-              value={levelFilter}
-              onChange={(e) => handleLevelChange(e.target.value)}
-              className="input-ds text-sm py-1.5 w-32 appearance-none pr-8"
-            >
-              <option value="all">{t('logs.allLevels')}</option>
-              <option value="debug">{t('logs.debug')}</option>
-              <option value="info">{t('logs.info')}</option>
-              <option value="success">{t('logs.success')}</option>
-              <option value="warn">{t('logs.warning')}</option>
-              <option value="error">{t('logs.error')}</option>
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          <Select
+            value={levelFilter}
+            onChange={e => handleLevelChange(e.target.value)}
+            className="w-32"
+            options={[
+              { value: 'all', label: t('logs.allLevels') },
+              { value: 'debug', label: t('logs.debug') },
+              { value: 'info', label: t('logs.info') },
+              { value: 'success', label: t('logs.success') },
+              { value: 'warn', label: t('logs.warning') },
+              { value: 'error', label: t('logs.error') },
+            ]}
+          />
 
           {/* Source Filter */}
-          <div className="relative">
-            <select
-              value={sourceFilter}
-              onChange={(e) => handleSourceChange(e.target.value)}
-              className="input-ds text-sm py-1.5 w-36 appearance-none pr-8"
-            >
-              <option value="all">{t('logs.allSources')}</option>
-              {LOG_SOURCES.map((source) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          <Select
+            value={sourceFilter}
+            onChange={e => handleSourceChange(e.target.value)}
+            className="w-36"
+            options={[
+              { value: 'all', label: t('logs.allSources') },
+              ...LOG_SOURCES.map(source => ({
+                value: source,
+                label: source,
+              })),
+            ]}
+          />
 
           {/* Search Input */}
           <div className="flex-1 relative max-w-md">
@@ -246,7 +256,7 @@ export default function Logs() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setLogsSearchQuery(e.target.value)}
+              onChange={e => setLogsSearchQuery(e.target.value)}
               placeholder={t('logs.searchPlaceholder')}
               className="input-ds text-sm py-1.5 pl-9 w-full"
             />
@@ -281,50 +291,56 @@ export default function Logs() {
               />
             ) : (
               <div className="font-mono text-xs">
-                {logs.map((log) => {
+                {logs.map(log => {
                   const isCopied = copiedId === log.id;
                   const isLongMessage = log.message.length > 200;
                   const isExpanded = expandedLogs.has(log.id);
-                  
+
                   return (
-                    <div 
-                      key={log.id} 
+                    <div
+                      key={log.id}
                       className="flex items-start gap-3 px-4 py-1 hover:bg-white/[0.02] transition-colors border-b border-white/[0.02] group"
                     >
                       {/* Timestamp - Gray */}
                       <span className="text-slate-600 tabular-nums shrink-0">
-                        {new Date(log.timestamp).toLocaleTimeString('en-US', { 
+                        {new Date(log.timestamp).toLocaleTimeString('en-US', {
                           hour12: false,
                           hour: '2-digit',
                           minute: '2-digit',
-                          second: '2-digit'
+                          second: '2-digit',
                         })}
                       </span>
-                      
+
                       {/* Level - Color coded, 3 chars */}
-                      <span className={cn(
-                        'shrink-0 w-12 text-center font-bold uppercase',
-                        log.level === 'debug' && 'text-slate-500',
-                        log.level === 'info' && 'text-vsc-blue',
-                        log.level === 'success' && 'text-vsc-green',
-                        log.level === 'warn' && 'text-vsc-yellow',
-                        log.level === 'error' && 'text-vsc-red'
-                      )}>
-                        {log.level === 'debug' ? 'DBG' :
-                         log.level === 'info' ? 'INF' :
-                         log.level === 'success' ? 'OK' :
-                         log.level === 'warn' ? 'WRN' :
-                         'ERR'}
+                      <span
+                        className={cn(
+                          'shrink-0 w-12 text-center font-bold uppercase',
+                          log.level === 'debug' && 'text-slate-500',
+                          log.level === 'info' && 'text-vsc-blue',
+                          log.level === 'success' && 'text-vsc-green',
+                          log.level === 'warn' && 'text-vsc-yellow',
+                          log.level === 'error' && 'text-vsc-red'
+                        )}
+                      >
+                        {log.level === 'debug'
+                          ? 'DBG'
+                          : log.level === 'info'
+                            ? 'INF'
+                            : log.level === 'success'
+                              ? 'OK'
+                              : log.level === 'warn'
+                                ? 'WRN'
+                                : 'ERR'}
                       </span>
-                      
+
                       {/* Source - Purple */}
                       <span className="text-purple-400 shrink-0 w-24 truncate">
                         [{log.source || 'system'}]
                       </span>
-                      
+
                       {/* Message - White, expandable */}
                       <div className="flex-1 min-w-0">
-                        <div 
+                        <div
                           className={cn(
                             'text-slate-300 break-words cursor-pointer',
                             !isExpanded && isLongMessage && 'line-clamp-1'
@@ -334,19 +350,20 @@ export default function Logs() {
                           {log.message}
                         </div>
                       </div>
-                      
+
                       {/* Copy button - appears on hover */}
-                      <button
-                        onClick={() => copyToClipboard(log.message, log.id)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
-                        title="Copy message"
-                      >
-                        {isCopied ? (
-                          <Check className="w-3 h-3 text-vsc-green" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                      </button>
+                      <Tooltip content="Copy message">
+                        <button
+                          onClick={() => copyToClipboard(log.message, log.id)}
+                          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
+                        >
+                          {isCopied ? (
+                            <Check className="w-3 h-3 text-vsc-green" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+                      </Tooltip>
                     </div>
                   );
                 })}
@@ -363,12 +380,9 @@ export default function Logs() {
             {/* Load More Button */}
             {hasMore && !isLoading && (
               <div className="flex justify-center py-4">
-                <button
-                  onClick={loadMore}
-                  className="btn-secondary text-sm"
-                >
+                <Button onClick={loadMore} variant="secondary" size="sm">
                   {t('logs.loadMore')}
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -376,17 +390,11 @@ export default function Logs() {
           {/* Footer */}
           <div className="border-t border-white/5 px-4 py-2 flex items-center justify-between bg-slate-900/50">
             <span className="text-2xs text-slate-500 font-mono">
-              {t('logs.showing')}{' '}
-              <span className="text-slate-300 tabular-nums">{logs.length}</span>{' '}
-              {t('logs.of')}{' '}
-              <span className="text-slate-300 tabular-nums">{total}</span>{' '}
+              {t('logs.showing')} <span className="text-slate-300 tabular-nums">{logs.length}</span>{' '}
+              {t('logs.of')} <span className="text-slate-300 tabular-nums">{total}</span>{' '}
               {t('logs.entries')}
             </span>
-            {hasMore && (
-              <span className="text-2xs text-slate-600">
-                {t('logs.scrollHint')}
-              </span>
-            )}
+            {hasMore && <span className="text-2xs text-slate-600">{t('logs.scrollHint')}</span>}
           </div>
         </div>
       </div>
@@ -396,22 +404,14 @@ export default function Logs() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 border border-white/10 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
             <h3 className="text-lg font-semibold text-white mb-2">{t('logs.clearConfirmTitle')}</h3>
-            <p className="text-sm text-slate-400 mb-6">
-              {t('logs.clearConfirmMessage')}
-            </p>
+            <p className="text-sm text-slate-400 mb-6">{t('logs.clearConfirmMessage')}</p>
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                className="btn-secondary"
-              >
+              <Button onClick={() => setShowClearConfirm(false)} variant="secondary">
                 {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleClear}
-                className="btn-danger"
-              >
+              </Button>
+              <Button onClick={handleClear} variant="danger">
                 {t('common.clear')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
