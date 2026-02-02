@@ -286,7 +286,7 @@ export function IdentitySystemCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 p-4">
+      <div className="grid grid-cols-2 gap-1.5 p-3">
         {[
           { id: 'custom', label: t('autoReg.customDomain'), icon: Globe, color: 'text-blue-400' },
           { id: 'gmail', label: t('autoReg.gmailAlias'), icon: Mail, color: 'text-red-400' },
@@ -299,22 +299,22 @@ export function IdentitySystemCard({
             onClick={() => handleModeChange(mode.id as GenerationMode)}
             disabled={disabled}
             className={cn(
-              'flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-300 gap-2 select-none',
+              'flex items-center justify-center px-2 py-1.5 rounded-md border transition-all duration-300 gap-1.5 select-none',
               activeMode === mode.id
                 ? 'bg-white/10 border-white/20 shadow-lg ring-1 ring-white/10'
-                : 'bg-white/[0.02] border-white/5 hover:bg-white/5 hover:border-white/10 text-slate-500'
+                : 'bg-white/[0.02] border-white/5 hover:bg-white/5 hover:border-white/10'
             )}
           >
             <mode.icon
               className={cn(
-                'w-5 h-5 transition-transform duration-300',
-                activeMode === mode.id ? mode.color + ' scale-110' : 'opacity-40'
+                'w-3.5 h-3.5 transition-transform duration-300 flex-shrink-0',
+                activeMode === mode.id ? mode.color + ' scale-110' : 'opacity-60'
               )}
             />
             <span
               className={cn(
-                'text-[10px] font-bold uppercase tracking-wider',
-                activeMode === mode.id ? 'text-white' : ''
+                'text-[8px] font-bold uppercase tracking-wider truncate',
+                activeMode === mode.id ? 'text-white' : 'text-slate-400'
               )}
             >
               {mode.label}
