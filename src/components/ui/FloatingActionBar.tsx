@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Trash2, X, RefreshCw, Loader2 } from 'lucide-react';
+import { Download, Trash2, X, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
+import { LoadingSpinner } from './LoadingSpinner';
 
 interface FloatingActionBarProps {
   selectedCount: number;
@@ -53,7 +54,7 @@ export function FloatingActionBar({
           <div className="text-sm text-white font-medium">
             {isRefreshing && progressText ? (
               <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                <LoadingSpinner size="sm" color="primary" />
                 <span className="text-indigo-300">{progressText}</span>
                 {refreshProgress && (
                   <span className="text-slate-500 text-xs ml-1">
@@ -83,7 +84,7 @@ export function FloatingActionBar({
               aria-label={`Refresh ${selectedCount} selected accounts`}
             >
               {isRefreshing ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                <LoadingSpinner size="xs" />
               ) : (
                 <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
               )}

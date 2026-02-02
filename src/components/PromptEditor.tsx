@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, RotateCcw, FileText, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Save, RotateCcw, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   getPromptContent,
@@ -9,6 +9,7 @@ import {
 } from '../lib/tauri';
 import { Tooltip } from './Tooltip';
 import { Button } from './ui/Button';
+import { LoadingSpinner } from './ui';
 
 interface PromptEditorProps {
   promptName: string;
@@ -82,7 +83,7 @@ export default function PromptEditor({ promptName, title, description }: PromptE
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+        <LoadingSpinner size="md" />
         <span className="ml-2 text-slate-400 text-sm">Loading prompt...</span>
       </div>
     );
@@ -122,7 +123,7 @@ export default function PromptEditor({ promptName, title, description }: PromptE
             variant="primary"
             size="sm"
             leftIcon={
-              isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />
+              isSaving ? <LoadingSpinner size="sm" /> : <Save className="w-4 h-4" />
             }
           >
             Save

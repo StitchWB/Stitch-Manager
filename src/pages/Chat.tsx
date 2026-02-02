@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { MessageSquare, Trash2, Settings2, AlertCircle, RefreshCw, ChevronDown, Loader2 } from 'lucide-react';
+import { MessageSquare, Trash2, Settings2, AlertCircle, RefreshCw, ChevronDown } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { ChatHistory, ChatInput } from '../components/chat';
 import { useChat } from '../hooks/useChat';
@@ -8,6 +8,7 @@ import { useAppStore } from '../stores/app';
 import { useLLMServerStore } from '../stores/llmServer';
 import { t } from '../lib/i18n';
 import { Button } from '../components/ui/Button';
+import { LoadingSpinner } from '../components/ui';
 import { Tooltip } from '../components/Tooltip';
 
 interface ModelInfo {
@@ -187,7 +188,7 @@ export default function Chat() {
                     disabled={modelsLoading}
                     variant="secondary"
                     size="xs"
-                    leftIcon={modelsLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    leftIcon={modelsLoading ? <LoadingSpinner size="xs" /> : <RefreshCw size={12} />}
                   />
                 </div>
                 {modelsError && (
@@ -242,7 +243,7 @@ export default function Chat() {
                 <span className="truncate">
                   {modelsLoading ? (
                     <span className="flex items-center gap-2">
-                      <Loader2 size={12} className="animate-spin" />
+                      <LoadingSpinner size="xs" />
                       Loading...
                     </span>
                   ) : selectedModel ? (

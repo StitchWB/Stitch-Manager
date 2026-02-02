@@ -1,4 +1,5 @@
 import React from 'react';
+import { SkeletonLoader } from '../ui';
 
 export const StatCardSkeleton = React.memo(function StatCardSkeleton() {
   return (
@@ -7,12 +8,12 @@ export const StatCardSkeleton = React.memo(function StatCardSkeleton() {
       style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.04), transparent)' }}
     >
       <div className="flex items-center justify-between">
-        <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse" />
-        <div className="w-20 h-5 bg-white/5 rounded animate-pulse" />
+        <SkeletonLoader variant="circle" width="32px" height="32px" />
+        <SkeletonLoader variant="rectangle" width="80px" height="20px" />
       </div>
       <div>
-        <div className="w-24 h-10 bg-white/5 rounded animate-pulse mb-2" />
-        <div className="w-32 h-3 bg-white/5 rounded animate-pulse" />
+        <SkeletonLoader variant="rectangle" width="96px" height="40px" className="mb-2" />
+        <SkeletonLoader variant="rectangle" width="128px" height="12px" />
       </div>
     </div>
   );

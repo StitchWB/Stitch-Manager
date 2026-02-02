@@ -1,5 +1,5 @@
-import { Loader2 } from 'lucide-react';
 import { t } from '../../lib/i18n';
+import { LoadingSpinner } from '../ui';
 
 interface PatchStatusBadgeProps {
   isPatched: boolean;
@@ -15,7 +15,7 @@ export default function PatchStatusBadge({
   if (isOperating) {
     return (
       <div className="flex items-center gap-2">
-        <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+        <LoadingSpinner size="sm" color="primary" />
         <span className="text-sm font-medium text-indigo-400 capitalize">
           {operation === 'patching'
             ? t('patcher.patching')

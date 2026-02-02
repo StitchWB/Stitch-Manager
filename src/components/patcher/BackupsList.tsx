@@ -1,6 +1,7 @@
-import { Archive, RotateCcw, Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { Archive, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { formatDate, formatSize } from '../../lib/patcher';
+import { LoadingSpinner } from '../ui';
 import type { UIBackupInfo } from '../../types';
 import { Tooltip } from '../Tooltip';
 import { Button } from '../ui/Button';
@@ -42,7 +43,7 @@ export default function BackupsList({
 
       {isLoading && backups.length === 0 ? (
         <div className="text-center py-8 text-slate-500 flex flex-col items-center gap-2">
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <LoadingSpinner size="md" color="muted" />
           <span className="text-xs">{t('patcher.loadingBackups')}</span>
         </div>
       ) : backups.length === 0 ? (
@@ -78,7 +79,7 @@ export default function BackupsList({
                       className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded disabled:opacity-40"
                     >
                       {isRestoring ? (
-                        <Loader2 size={14} className="animate-spin" />
+                        <LoadingSpinner size="xs" />
                       ) : (
                         <RotateCcw size={14} />
                       )}

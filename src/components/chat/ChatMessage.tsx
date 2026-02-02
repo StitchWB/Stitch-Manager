@@ -1,7 +1,8 @@
 import { memo, useMemo } from 'react';
-import { User, Bot, Loader2 } from 'lucide-react';
+import { User, Bot } from 'lucide-react';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 import { t } from '../../lib/i18n';
+import { LoadingSpinner } from '../ui';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -175,7 +176,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
             })}
           </span>
           {message.isStreaming && (
-            <Loader2 size={12} className="text-vsc-blue animate-spin" />
+            <LoadingSpinner size="xs" color="primary" />
           )}
         </div>
 
@@ -183,7 +184,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
         <div className="text-sm text-vsc-text break-words">
           {renderedContent || (
             <span className="text-vsc-text-muted italic flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" />
+              <LoadingSpinner size="xs" />
               {t('chat.thinking')}
             </span>
           )}

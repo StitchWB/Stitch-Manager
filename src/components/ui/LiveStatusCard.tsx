@@ -7,12 +7,12 @@ import {
   Shield, 
   Key, 
   CheckCircle2, 
-  Loader2,
   Rocket,
   Server,
   Eye,
   AlertCircle
 } from 'lucide-react';
+import { LoadingSpinner } from './LoadingSpinner';
 
 export type LiveAction = 
   | 'idle'
@@ -55,7 +55,7 @@ function getActionConfig(): Record<LiveAction, {
       iconBg: 'bg-slate-500/15',
     },
     processing: {
-      icon: <Loader2 className="w-8 h-8 animate-spin" />,
+      icon: <LoadingSpinner size="lg" />,
       title: t('liveStatus.processing'),
       color: 'text-indigo-400',
       bgGlow: 'rgba(99, 102, 241, 0.15)',
@@ -125,7 +125,7 @@ function getActionConfig(): Record<LiveAction, {
       iconBg: 'bg-yellow-500/20',
     },
     getting_token: {
-      icon: <Loader2 className="w-8 h-8 animate-spin" />,
+      icon: <LoadingSpinner size="lg" />,
       title: t('liveStatus.gettingToken'),
       color: 'text-teal-400',
       bgGlow: 'rgba(45, 212, 191, 0.15)',
@@ -181,7 +181,7 @@ export function LiveStatusCard({ action, detail, onStart, canStart = true, class
       {/* Compact icon - small */}
       <div className={cn('shrink-0', config.color)}>
         {action === 'idle' ? <Rocket className="w-3.5 h-3.5" /> : 
-         action === 'processing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+         action === 'processing' ? <LoadingSpinner size="xs" /> :
          action === 'connecting' ? <Server className="w-3.5 h-3.5" /> :
          action === 'scanning_inbox' ? <Mail className="w-3.5 h-3.5" /> :
          action === 'launching_browser' ? <Globe className="w-3.5 h-3.5" /> :
@@ -191,7 +191,7 @@ export function LiveStatusCard({ action, detail, onStart, canStart = true, class
          action === 'typing_code' ? <Shield className="w-3.5 h-3.5" /> :
          action === 'waiting_code' ? <Mail className="w-3.5 h-3.5" /> :
          action === 'verifying' ? <Shield className="w-3.5 h-3.5" /> :
-         action === 'getting_token' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+         action === 'getting_token' ? <LoadingSpinner size="xs" /> :
          action === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> :
          <AlertCircle className="w-3.5 h-3.5" />}
       </div>

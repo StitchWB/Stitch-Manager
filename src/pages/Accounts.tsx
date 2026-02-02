@@ -8,7 +8,7 @@ import AddAccountModal from '../components/AddAccountModal';
 import AccountDetailsModal from '../components/ui/AccountDetailsModal';
 import { QuotaFilterChip } from '../components/ui/QuotaFilterChip';
 import { FloatingActionBar } from '../components/ui/FloatingActionBar';
-import { EmptyState } from '../components/ui';
+import { EmptyState, SkeletonLoader } from '../components/ui';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
@@ -481,10 +481,8 @@ export default function Accounts() {
           {/* Table */}
           <div className="flex-1 overflow-hidden">
             {loading && filteredAccounts.length === 0 ? (
-              <div className="p-6 space-y-3">
-                {[1, 2, 3, 4, 5, 6].map(i => (
-                  <div key={i} className="h-14 bg-white/[0.02] rounded-lg animate-pulse" />
-                ))}
+              <div className="p-6">
+                <SkeletonLoader variant="table-row" count={6} />
               </div>
             ) : filteredAccounts.length === 0 ? (
               <EmptyState 

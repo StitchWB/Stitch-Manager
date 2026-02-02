@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Filter, PieChart } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { Filter, PieChart } from 'lucide-react';
 import { t } from '../../lib/i18n';
+import { FilterDropdown, type FilterOption } from './FilterDropdown';
 
 // ============================================
 // Status Filter Chip
@@ -12,127 +11,42 @@ interface StatusFilterChipProps {
   onChange: (value: string | null) => void;
 }
 
-const getStatusOptions = () => [
+const getStatusOptions = (): FilterOption<string | null>[] => [
   { value: null, label: t('filters.any'), dot: null },
   { value: 'active', label: t('filters.active'), dot: 'bg-emerald-500' },
   { value: 'banned', label: t('filters.banned'), dot: 'bg-red-500' },
   { value: 'limit_hit', label: t('filters.limitHit'), dot: 'bg-amber-500' },
-] as const;
+];
 
 export function StatusFilterChip({ value, onChange }: StatusFilterChipProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [focusedIndex, setFocusedIndex] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
-
   const statusOptions = getStatusOptions();
   const currentOption = statusOptions.find(opt => opt.value === value);
-  const isActive = value !== null;
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [isOpen]);
-
-  // Arrow key navigation
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          setFocusedIndex((prev) => (prev + 1) % statusOptions.length);
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setFocusedIndex((prev) => (prev - 1 + statusOptions.length) % statusOptions.length);
-          break;
-        case 'Enter':
-          e.preventDefault();
-          onChange(statusOptions[focusedIndex].value);
-          setIsOpen(false);
-          break;
-        case 'Escape':
-          e.preventDefault();
-          setIsOpen(false);
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, focusedIndex, statusOptions, onChange]);
-
-  // Reset focused index when opening
-  useEffect(() => {
-    if (isOpen) {
-      const currentIndex = statusOptions.findIndex(opt => opt.value === value);
-      setFocusedIndex(currentIndex >= 0 ? currentIndex : 0);
-    }
-  }, [isOpen, value, statusOptions]);
+  const displayLabel = value !== null ? currentOption?.label : t('filters.status');
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200',
-          isActive
-            ? 'bg-indigo-500/20 border border-indigo-500/50 text-indigo-300'
-            : 'bg-transparent border border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-300'
-        )}
-      >
-        <Filter className="w-3 h-3" />
-        <span>{isActive ? currentOption?.label : t('filters.status')}</span>
-        <ChevronDown className={cn('w-3 h-3 transition-transform', isOpen && 'rotate-180')} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-50 mt-2 left-0 min-w-[140px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in" role="listbox">
-          {statusOptions.map((opt, index) => (
-            <button
-              key={opt.value ?? 'any'}
-              onClick={() => { onChange(opt.value); setIsOpen(false); }}
-              onMouseEnter={() => setFocusedIndex(index)}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
-                value === opt.value && 'bg-white/10 text-white',
-                focusedIndex === index && 'bg-white/5',
-                value !== opt.value && focusedIndex !== index && 'text-slate-400 hover:bg-white/5 hover:text-white'
-              )}
-              role="option"
-              aria-selected={value === opt.value}
-            >
-              {opt.dot ? (
-                <span className={cn('w-2 h-2 rounded-full', opt.dot)} />
-              ) : (
-                <span className="w-2 h-2 rounded-full border border-slate-600" />
-              )}
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <FilterDropdown
+      value={value}
+      onChange={onChange}
+      options={statusOptions}
+      icon={<Filter className="w-3 h-3" />}
+      placeholder={displayLabel}
+      showActiveState={true}
+    />
   );
 }
 
 // ============================================
-// Quota Filter Chip
+// Quota Filter Chip (Dropdown Style)
 // ============================================
 
 type QuotaFilterValue = 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota';
 
-interface QuotaFilterChipProps {
+interface QuotaFilterChipDropdownProps {
   value: QuotaFilterValue;
   onChange: (value: QuotaFilterValue) => void;
 }
 
-const getQuotaOptions = (): { value: QuotaFilterValue; label: string }[] => [
+const getQuotaOptions = (): FilterOption<QuotaFilterValue>[] => [
   { value: 'any', label: t('filters.any') },
   { value: 'has_quota', label: t('filters.hasQuota') },
   { value: 'empty', label: t('filters.empty') },
@@ -140,105 +54,19 @@ const getQuotaOptions = (): { value: QuotaFilterValue; label: string }[] => [
   { value: 'low_quota', label: t('filters.lowQuota') },
 ];
 
-export function QuotaFilterChip({ value, onChange }: QuotaFilterChipProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [focusedIndex, setFocusedIndex] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
-
+export function QuotaFilterChipDropdown({ value, onChange }: QuotaFilterChipDropdownProps) {
   const quotaOptions = getQuotaOptions();
   const currentOption = quotaOptions.find(opt => opt.value === value);
-  const isActive = value !== 'any';
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [isOpen]);
-
-  // Arrow key navigation
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          setFocusedIndex((prev) => (prev + 1) % quotaOptions.length);
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setFocusedIndex((prev) => (prev - 1 + quotaOptions.length) % quotaOptions.length);
-          break;
-        case 'Enter':
-          e.preventDefault();
-          onChange(quotaOptions[focusedIndex].value);
-          setIsOpen(false);
-          break;
-        case 'Escape':
-          e.preventDefault();
-          setIsOpen(false);
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, focusedIndex, quotaOptions, onChange]);
-
-  // Reset focused index when opening
-  useEffect(() => {
-    if (isOpen) {
-      const currentIndex = quotaOptions.findIndex(opt => opt.value === value);
-      setFocusedIndex(currentIndex >= 0 ? currentIndex : 0);
-    }
-  }, [isOpen, value, quotaOptions]);
+  const displayLabel = value !== 'any' ? currentOption?.label : t('filters.quota');
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200',
-          isActive
-            ? 'bg-indigo-500/20 border border-indigo-500/50 text-indigo-300'
-            : 'bg-transparent border border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-300'
-        )}
-      >
-        <PieChart className="w-3 h-3" />
-        <span>{isActive ? currentOption?.label : t('filters.quota')}</span>
-        <ChevronDown className={cn('w-3 h-3 transition-transform', isOpen && 'rotate-180')} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-50 mt-2 left-0 min-w-[130px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in" role="listbox">
-          {quotaOptions.map((opt, index) => (
-            <button
-              key={opt.value}
-              onClick={() => { onChange(opt.value); setIsOpen(false); }}
-              onMouseEnter={() => setFocusedIndex(index)}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
-                value === opt.value && 'bg-white/10 text-white',
-                focusedIndex === index && 'bg-white/5',
-                value !== opt.value && focusedIndex !== index && 'text-slate-400 hover:bg-white/5 hover:text-white'
-              )}
-              role="option"
-              aria-selected={value === opt.value}
-            >
-              <span className={cn(
-                'w-3 h-3 rounded-full border flex items-center justify-center',
-                value === opt.value ? 'border-indigo-400' : 'border-slate-600'
-              )}>
-                {value === opt.value && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
-              </span>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <FilterDropdown
+      value={value}
+      onChange={onChange}
+      options={quotaOptions}
+      icon={<PieChart className="w-3 h-3" />}
+      placeholder={displayLabel}
+      showActiveState={true}
+    />
   );
 }

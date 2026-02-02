@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Search, Download, Trash2, RefreshCw, Loader2, Copy, Check } from 'lucide-react';
+import { FileText, Search, Download, Trash2, RefreshCw, Copy, Check } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSpinner } from '../components/ui';
 import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel } from '../stores/logs';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
@@ -373,7 +374,7 @@ export default function Logs() {
             {/* Loading Spinner */}
             {isLoading && (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                <LoadingSpinner size="md" />
               </div>
             )}
 
