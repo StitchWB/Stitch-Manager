@@ -482,8 +482,8 @@ export default function Accounts() {
             ) : filteredAccounts.length === 0 ? (
               <EmptyState 
                 icon={Users} 
-                title="No accounts found" 
-                description="Add your first account to get started"
+                title={t('accounts.noAccountsFound')} 
+                description={t('accounts.addFirstAccountToStart')}
               />
             ) : (
               <AccountsTable

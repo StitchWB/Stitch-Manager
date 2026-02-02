@@ -121,6 +121,7 @@ export interface Translations {
     jsonCopied: string;
     accountsSelected: string;
     noAccountsFound: string;
+    addFirstAccountToStart: string;
     addFirstAccount: string;
     syncComplete: string;
     syncPartial: string;
@@ -620,6 +621,12 @@ export interface Translations {
       enableProxy: string;
       proxyUrl: string;
       proxyUrlHint: string;
+    };
+    emailCounter: {
+      title: string;
+      description: string;
+      counterValue: string;
+      nextRegistration: string;
     };
     idePaths: {
       title: string;

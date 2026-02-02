@@ -113,6 +113,7 @@ export const en: Translations = {
     jsonCopied: 'JSON copied to clipboard',
     accountsSelected: 'selected',
     noAccountsFound: 'No accounts found',
+    addFirstAccountToStart: 'Add your first account to get started',
     addFirstAccount: 'Add your first account',
     syncComplete: 'Synced {success} accounts',
     syncPartial: 'Synced {success}, {failed} failed',
@@ -599,6 +600,12 @@ export const en: Translations = {
       enableProxy: 'Enable',
       proxyUrl: 'URL',
       proxyUrlHint: 'URL hint.',
+    },
+    emailCounter: {
+      title: 'Email Counter',
+      description: 'Current counter value for COUNTER email strategy (e.g., user+1@domain.com, user+2@domain.com)',
+      counterValue: 'Counter Value',
+      nextRegistration: 'Next registration will use',
     },
     idePaths: {
       title: 'IDE Paths',
