@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Settings as SettingsIcon, Globe, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Globe, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
 import { useRegistrationStore } from '../stores/registration';
@@ -30,6 +30,7 @@ import {
   EmailServicesSection,
 } from '../components/settings';
 import { TabButton } from '../components/ui/TabButton';
+import { LoadingSpinner } from '../components/ui';
 
 type SettingsCategory = 'general' | 'connectivity';
 
@@ -470,7 +471,7 @@ export default function Settings() {
       <div className="flex flex-col h-full overflow-hidden">
         <Header title={t('settings.title')} icon={<SettingsIcon size={18} />} />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          <LoadingSpinner size="md" />
           <span className="ml-2 text-slate-500 text-sm">{t('settings.loadingSettings')}</span>
         </div>
       </div>
@@ -669,14 +670,14 @@ export default function Settings() {
       <div className="px-6 py-3 border-t border-white/5 bg-[#0f1115] flex justify-end items-center gap-4">
         {isSaving && (
           <span className="text-xs text-slate-400 flex items-center gap-1.5 animate-pulse">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Saving...
+            <LoadingSpinner size="xs" color="muted" />
+            {t('common.saving')}
           </span>
         )}
         {saveStatus === 'success' && !isSaving && (
           <span className="text-xs text-emerald-400 flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2">
             <CheckCircle className="w-3.5 h-3.5" />
-            Settings saved
+            {t('settings.settingsSaved')}
           </span>
         )}
         {saveStatus === 'error' && (

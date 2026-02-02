@@ -117,6 +117,7 @@ export const ru: Translations = {
     jsonCopied: 'JSON скопирован',
     accountsSelected: 'выбрано',
     noAccountsFound: 'Аккаунты не найдены',
+    addFirstAccountToStart: 'Добавьте первый аккаунт для начала работы',
     addFirstAccount: 'Добавить первый аккаунт',
     syncComplete: 'Синхронизировано {success} аккаунтов',
     syncPartial: 'Синхронизировано {success}, ошибок: {failed}',
@@ -609,6 +610,12 @@ export const ru: Translations = {
       enableProxy: 'Включить прокси',
       proxyUrl: 'URL прокси',
       proxyUrlHint: 'Поддерживаются HTTP, HTTPS и SOCKS5 прокси.',
+    },
+    emailCounter: {
+      title: 'Счетчик Email',
+      description: 'Текущее значение счетчика для стратегии COUNTER (например, user+1@domain.com, user+2@domain.com)',
+      counterValue: 'Значение счетчика',
+      nextRegistration: 'Следующая регистрация использует',
     },
     idePaths: {
       title: 'Пути к расширениям IDE',
