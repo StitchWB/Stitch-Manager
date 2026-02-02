@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Wifi, ChevronRight, Eye, EyeOff, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Wifi, ChevronRight, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
+import { LoadingSpinner } from './LoadingSpinner';
 
 export interface NetworkConfig {
   enabled: boolean;
@@ -220,7 +221,7 @@ export function NetworkCard({
                   >
                     {testStatus === 'testing' ? (
                       <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <LoadingSpinner size="xs" />
                         {t('autoReg.testing')}
                       </>
                     ) : testStatus === 'success' ? (

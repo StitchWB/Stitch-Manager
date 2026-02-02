@@ -1,5 +1,6 @@
 import React from 'react';
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle } from 'lucide-react';
+import { LoadingSpinner } from '../ui';
 
 interface ActivityItemProps {
   status: 'success' | 'pending' | 'failed';
@@ -23,7 +24,7 @@ export const ActivityItem = React.memo(function ActivityItem({
       borderColor: '',
     },
     pending: {
-      icon: <Loader2 size={16} className="animate-spin" />,
+      icon: <LoadingSpinner size="sm" />,
       color: 'text-amber-400',
       bg: 'bg-amber-500/10',
       rowBg: '',

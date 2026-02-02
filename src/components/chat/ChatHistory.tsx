@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react';
-import { MessageSquare, Loader2 } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { EmptyState } from '../ui';
+import { LoadingSpinner } from '../ui';
 import { t } from '../../lib/i18n';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 
@@ -62,7 +63,7 @@ export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
         {isLoading && messages.length > 0 && !messages[messages.length - 1]?.isStreaming && (
           <div className="flex gap-3 p-4 bg-white/[0.02]">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-vsc-green/20 text-vsc-green">
-              <Loader2 size={16} className="animate-spin" />
+              <LoadingSpinner size="sm" color="primary" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">

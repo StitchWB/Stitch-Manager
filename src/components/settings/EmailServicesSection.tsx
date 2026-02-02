@@ -1,6 +1,7 @@
-import { Shield, Eye, EyeOff, RefreshCw, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Shield, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { Button } from '../ui/Button';
+import { LoadingSpinner } from '../ui';
 import { Select } from '../ui/Select';
 import { t } from '../../lib/i18n';
 
@@ -132,7 +133,7 @@ export function EmailServicesSection({
                   className="self-start"
                   leftIcon={
                     isTestingConnection ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <LoadingSpinner size="xs" />
                     ) : (
                       <RefreshCw className="w-3 h-3" />
                     )

@@ -1,6 +1,7 @@
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { t } from '../../lib/i18n';
+import { LoadingSpinner } from '../ui';
 
 interface EmailCounterSectionProps {
   emailCounter: number;
@@ -32,7 +33,7 @@ export function EmailCounterSection({
             className="input-ds text-sm transition-all duration-200"
             placeholder="0"
           />
-          {isLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+          {isLoading && <LoadingSpinner size="sm" color="muted" />}
         </div>
         <p className="text-xs text-slate-500 mt-1.5">
           {t('settings.emailCounter.nextRegistration')}: user+{emailCounter + 1}@domain.com

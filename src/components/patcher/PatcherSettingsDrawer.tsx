@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Plus,
   Save,
-  Loader2,
   HelpCircle,
   Zap,
   Settings as SettingsIcon,
@@ -18,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { t } from '../../lib/i18n';
 import { Tooltip } from '../ui/Tooltip';
+import { LoadingSpinner } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
@@ -213,7 +213,7 @@ export default function PatcherSettingsDrawer({
         <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              <LoadingSpinner size="lg" color="primary" />
               <span className="text-slate-400 text-sm font-medium">{t('common.loading')}</span>
             </div>
           ) : (

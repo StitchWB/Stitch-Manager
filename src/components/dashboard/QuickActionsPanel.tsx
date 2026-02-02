@@ -1,7 +1,8 @@
 import React from 'react';
-import { Play, RefreshCw, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
+import { Play, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { t } from '../../lib/i18n';
+import { LoadingSpinner } from '../ui';
 
 interface QuickActionsPanelProps {
   onStartRegistration: () => void;
@@ -46,7 +47,7 @@ export const QuickActionsPanel = React.memo(function QuickActionsPanel({
         disabled={isStartingServer}
         variant="secondary"
         size="md"
-        leftIcon={isStartingServer ? <Loader2 size={16} className="animate-spin" /> : <ExternalLink size={16} />}
+        leftIcon={isStartingServer ? <LoadingSpinner size="sm" /> : <ExternalLink size={16} />}
       >
         {serverIsRunning
           ? t('dashboard.openLlmServer')

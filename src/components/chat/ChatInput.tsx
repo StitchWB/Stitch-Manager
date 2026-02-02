@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
-import { Send, Square, Loader2 } from 'lucide-react';
+import { Send, Square } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
+import { LoadingSpinner } from '../ui';
 
 interface ChatInputProps {
   onSend: (content: string) => void;
@@ -107,7 +108,7 @@ export function ChatInput({
                          disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-vsc-blue/20"
             >
               {disabled ? (
-                <Loader2 size={18} className="animate-spin" />
+                <LoadingSpinner size="sm" color="primary" />
               ) : (
                 <Send size={18} />
               )}
