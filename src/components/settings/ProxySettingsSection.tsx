@@ -1,5 +1,6 @@
-import { Globe, AlertCircle } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
+import { Input } from '../ui';
 import { t } from '../../lib/i18n';
 
 interface ProxySettingsSectionProps {
@@ -36,30 +37,18 @@ export function ProxySettingsSection({
           <span className="text-slate-300 text-sm">{t('settings.proxy.enableProxy')}</span>
         </label>
         {proxyEnabled && (
-          <div>
-            <label className="input-label">{t('settings.proxy.proxyUrl')}</label>
-            <input
-              type="text"
-              value={proxyUrl}
-              onChange={e => {
-                onProxyUrlChange(e.target.value);
-                onValidate(e.target.value);
-              }}
-              onBlur={e => onValidate(e.target.value)}
-              placeholder="http://user:pass@host:port"
-              className={`input-ds text-sm transition-all duration-200 ${
-                validationError
-                  ? 'border-red-500 focus:border-red-500'
-                  : 'focus:border-primary'
-              }`}
-            />
-            {validationError && (
-              <div className="flex items-center gap-1.5 mt-1.5 text-red-400 text-xs">
-                <AlertCircle className="w-3 h-3" />
-                {validationError}
-              </div>
-            )}
-          </div>
+          <Input
+            type="text"
+            label={t('settings.proxy.proxyUrl')}
+            value={proxyUrl}
+            onChange={e => {
+              onProxyUrlChange(e.target.value);
+              onValidate(e.target.value);
+            }}
+            onBlur={e => onValidate(e.target.value)}
+            placeholder="http://user:pass@host:port"
+            error={validationError}
+          />
         )}
       </div>
     </SectionHeader>

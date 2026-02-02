@@ -23,6 +23,7 @@ import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Tooltip } from './ui/Tooltip';
 import { Button } from './ui/Button';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import { ACCOUNT_STATUS_COLORS, STATUS_COLORS } from '../constants/colors';
 
 function truncateEmail(email: string, startChars = 18, endChars = 18): string {
   if (email.length <= startChars + endChars + 3) return email;
@@ -242,7 +243,7 @@ export default function AccountsTable({
                       isSelected
                         ? 'bg-indigo-500/[0.08] border-l-indigo-500'
                         : isActive 
-                          ? 'bg-emerald-500/[0.04] border-l-emerald-500/50'
+                          ? `${STATUS_COLORS.success.bgOpacity} border-l-${STATUS_COLORS.success.border.replace('border-', '')}/50`
                           : 'hover:bg-white/[0.02] hover:border-l-indigo-500 border-l-transparent',
                       index % 2 === 0 && !isSelected && !isActive && 'bg-white/[0.01]'
                     )}
@@ -263,9 +264,13 @@ export default function AccountsTable({
                         className={cn(
                           'w-2 h-2 rounded-full mx-auto transition-all duration-500',
                           isActive
-                            ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] scale-125'
+                            ? STATUS_COLORS.success.bg
                             : 'bg-slate-700'
                         )}
+                        style={{
+                          boxShadow: isActive ? `0 0 8px ${STATUS_COLORS.success.hex}99` : 'none',
+                          transform: isActive ? 'scale(1.25)' : 'scale(1)'
+                        }}
                       />
                     </td>
                     <td className="px-6 py-2 overflow-hidden">
@@ -291,20 +296,20 @@ export default function AccountsTable({
                           className={cn(
                             'w-1.5 h-1.5 rounded-full',
                             account.status === 'active'
-                              ? 'bg-emerald-500'
+                              ? ACCOUNT_STATUS_COLORS.active.bg
                               : account.status === 'banned'
-                                ? 'bg-red-500'
-                                : 'bg-amber-500'
+                                ? ACCOUNT_STATUS_COLORS.banned.bg
+                                : ACCOUNT_STATUS_COLORS.expired.bg
                           )}
                         />
                         <span
                           className={cn(
                             'text-xs font-medium',
                             account.status === 'active'
-                              ? 'text-emerald-400'
+                              ? ACCOUNT_STATUS_COLORS.active.text
                               : account.status === 'banned'
-                                ? 'text-red-400'
-                                : 'text-amber-400'
+                                ? ACCOUNT_STATUS_COLORS.banned.text
+                                : ACCOUNT_STATUS_COLORS.expired.text
                           )}
                         >
                           {getStatusLabel(account.status as AccountStatus)}
@@ -342,10 +347,10 @@ export default function AccountsTable({
                             account.useCount === 0
                               ? 'text-slate-600'
                               : account.successRate >= 0.8
-                                ? 'text-emerald-400'
+                                ? STATUS_COLORS.success.text
                                 : account.successRate < 0.3
-                                  ? 'text-red-400'
-                                  : 'text-amber-400'
+                                  ? STATUS_COLORS.error.text
+                                  : STATUS_COLORS.warning.text
                           )}
                         >
                           {account.useCount === 0 ? 'N/A' : `${Math.max(0, Math.round(account.successRate * 100))}%`}
@@ -356,14 +361,21 @@ export default function AccountsTable({
                               className={cn(
                                 'h-full transition-all duration-700',
                                 account.successRate >= 0.8
-                                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                  ? STATUS_COLORS.success.bg
                                   : account.successRate <= 0
-                                    ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]'
+                                    ? STATUS_COLORS.error.bg
                                     : account.successRate < 0.5
-                                      ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
-                                      : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                      ? STATUS_COLORS.warning.bg
+                                      : STATUS_COLORS.success.bg
                               )}
-                              style={{ width: `${Math.max(0, Math.min(100, account.successRate * 100))}%` }}
+                              style={{ 
+                                width: `${Math.max(0, Math.min(100, account.successRate * 100))}%`,
+                                boxShadow: account.successRate >= 0.8
+                                  ? `0 0 8px ${STATUS_COLORS.success.hex}66`
+                                  : account.successRate <= 0
+                                    ? `0 0 8px ${STATUS_COLORS.error.hex}66`
+                                    : `0 0 8px ${STATUS_COLORS.warning.hex}66`
+                              }}
                             />
                           </div>
                         )}
@@ -411,8 +423,8 @@ export default function AccountsTable({
                             className={cn(
                               'h-7 w-7 transition-colors',
                               isActive
-                                ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
-                                : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                                ? `${STATUS_COLORS.warning.text} hover:text-amber-300 hover:${STATUS_COLORS.warning.bgOpacity}`
+                                : `${STATUS_COLORS.success.text} hover:text-emerald-300 hover:${STATUS_COLORS.success.bgOpacity}`
                             )}
                           >
                             {isActive ? (
@@ -469,7 +481,7 @@ export default function AccountsTable({
                                   });
                                   setOpenMenuId(null);
                                 }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs ${STATUS_COLORS.error.text} hover:${STATUS_COLORS.error.bgOpacity} transition-colors`}
                               >
                                 <Trash2 size={14} />
                                 <span>{t('accountsTable.delete')}</span>

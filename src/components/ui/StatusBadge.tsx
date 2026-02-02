@@ -1,4 +1,5 @@
 import { cn } from '../../lib/utils';
+import { STATUS_COLORS } from '../../constants/colors';
 
 type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'default' | 'neutral';
 type StatusType = 'active' | 'inactive' | 'error' | 'warning' | 'success' | 'pending';
@@ -21,24 +22,24 @@ interface StatusBadgePropsNew {
 
 type StatusBadgeProps = StatusBadgePropsOld | StatusBadgePropsNew;
 
-// Deep Space Void - Pill style badges
+// Deep Space Void - Pill style badges (using centralized colors)
 const variantStyles: Record<BadgeVariant, string> = {
-  success: 'bg-green-500/10 text-green-400',
-  error: 'bg-red-500/10 text-red-400',
-  warning: 'bg-amber-500/10 text-amber-400',
-  info: 'bg-blue-500/10 text-blue-400',
+  success: `${STATUS_COLORS.success.bgOpacity} ${STATUS_COLORS.success.text}`,
+  error: `${STATUS_COLORS.error.bgOpacity} ${STATUS_COLORS.error.text}`,
+  warning: `${STATUS_COLORS.warning.bgOpacity} ${STATUS_COLORS.warning.text}`,
+  info: `${STATUS_COLORS.info.bgOpacity} ${STATUS_COLORS.info.text}`,
   default: 'bg-white/5 text-white/60',
-  neutral: 'bg-slate-500/10 text-slate-400',
+  neutral: `${STATUS_COLORS.inactive.bgOpacity} ${STATUS_COLORS.inactive.text}`,
 };
 
 // Minimalist styles for "active" status (just dot + text, no background)
 const minimalStyles: Record<BadgeVariant, string> = {
-  success: 'text-emerald-400',
-  error: 'text-red-400',
-  warning: 'text-amber-400',
-  info: 'text-blue-400',
-  default: 'text-slate-400',
-  neutral: 'text-slate-400',
+  success: STATUS_COLORS.success.text,
+  error: STATUS_COLORS.error.text,
+  warning: STATUS_COLORS.warning.text,
+  info: STATUS_COLORS.info.text,
+  default: STATUS_COLORS.inactive.text,
+  neutral: STATUS_COLORS.inactive.text,
 };
 
 const sizeStyles: Record<'sm' | 'md', string> = {
@@ -46,23 +47,23 @@ const sizeStyles: Record<'sm' | 'md', string> = {
   md: 'text-xs px-2.5 py-1',
 };
 
-// New status-based styles
+// New status-based styles (using centralized colors)
 const statusStyles: Record<StatusType, string> = {
-  active: 'bg-emerald-500/10 text-emerald-400',
-  success: 'bg-emerald-500/10 text-emerald-400',
-  error: 'bg-red-500/10 text-red-400',
-  warning: 'bg-amber-500/10 text-amber-400',
-  inactive: 'bg-slate-500/10 text-slate-400',
-  pending: 'bg-blue-500/10 text-blue-400',
+  active: `${STATUS_COLORS.success.bgOpacity} ${STATUS_COLORS.success.text}`,
+  success: `${STATUS_COLORS.success.bgOpacity} ${STATUS_COLORS.success.text}`,
+  error: `${STATUS_COLORS.error.bgOpacity} ${STATUS_COLORS.error.text}`,
+  warning: `${STATUS_COLORS.warning.bgOpacity} ${STATUS_COLORS.warning.text}`,
+  inactive: `${STATUS_COLORS.inactive.bgOpacity} ${STATUS_COLORS.inactive.text}`,
+  pending: `${STATUS_COLORS.info.bgOpacity} ${STATUS_COLORS.info.text}`,
 };
 
 const dotColors: Record<StatusType, string> = {
-  active: 'bg-emerald-400',
-  success: 'bg-emerald-400',
-  error: 'bg-red-400',
-  warning: 'bg-amber-400',
-  inactive: 'bg-slate-500',
-  pending: 'bg-blue-400',
+  active: STATUS_COLORS.success.text.replace('text-', 'bg-'),
+  success: STATUS_COLORS.success.text.replace('text-', 'bg-'),
+  error: STATUS_COLORS.error.text.replace('text-', 'bg-'),
+  warning: STATUS_COLORS.warning.text.replace('text-', 'bg-'),
+  inactive: STATUS_COLORS.inactive.bg,
+  pending: STATUS_COLORS.info.text.replace('text-', 'bg-'),
 };
 
 const newSizeStyles: Record<'sm' | 'md' | 'lg', string> = {
@@ -117,7 +118,7 @@ export function StatusBadge(props: StatusBadgeProps) {
   if (minimal && variant === 'success') {
     return (
       <span className={cn('inline-flex items-center gap-1.5 text-xs', minimalStyles[variant], className)}>
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_COLORS.success.bg)} />
         {children}
       </span>
     );

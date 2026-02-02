@@ -1,7 +1,7 @@
 import { Shield, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { Button } from '../ui/Button';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner, Input } from '../ui';
 import { Select } from '../ui/Select';
 import { t } from '../../lib/i18n';
 
@@ -103,25 +103,22 @@ export function EmailServicesSection({
           </label>
           {addyioEnabled && (
             <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
-              <div>
-                <label className="input-label">API Token</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={addyioApiToken}
-                    onChange={e => onAddyioApiTokenChange(e.target.value)}
-                    className="input-ds text-sm pr-10"
-                    placeholder="addy_..."
-                  />
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                label="API Token"
+                value={addyioApiToken}
+                onChange={e => onAddyioApiTokenChange(e.target.value)}
+                placeholder="addy_..."
+                rightElement={
                   <button
                     type="button"
                     onClick={onShowPasswordToggle}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white"
+                    className="p-1.5 text-slate-400 hover:text-white"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
-                </div>
-              </div>
+                }
+              />
 
               {/* Test Connection Button */}
               <div className="flex flex-col gap-2">
@@ -196,11 +193,10 @@ export function EmailServicesSection({
                       ]}
                     />
                   ) : (
-                    <input
+                    <Input
                       type="text"
                       value={addyioDomain}
                       onChange={e => onAddyioDomainChange(e.target.value)}
-                      className="input-ds text-sm"
                       placeholder="anonaddy.me"
                     />
                   )}
@@ -240,26 +236,20 @@ export function EmailServicesSection({
 
               {/* Advanced Options */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="input-label">Description Template</label>
-                  <input
-                    type="text"
-                    value={addyioDescriptionTemplate}
-                    onChange={e => onAddyioDescriptionTemplateChange(e.target.value)}
-                    className="input-ds text-sm"
-                    placeholder="{provider} - {date}"
-                  />
-                </div>
-                <div>
-                  <label className="input-label">From Name</label>
-                  <input
-                    type="text"
-                    value={addyioFromName}
-                    onChange={e => onAddyioFromNameChange(e.target.value)}
-                    className="input-ds text-sm"
-                    placeholder="My Alias"
-                  />
-                </div>
+                <Input
+                  type="text"
+                  label="Description Template"
+                  value={addyioDescriptionTemplate}
+                  onChange={e => onAddyioDescriptionTemplateChange(e.target.value)}
+                  placeholder="{provider} - {date}"
+                />
+                <Input
+                  type="text"
+                  label="From Name"
+                  value={addyioFromName}
+                  onChange={e => onAddyioFromNameChange(e.target.value)}
+                  placeholder="My Alias"
+                />
               </div>
 
               <label className="flex items-center gap-3 cursor-pointer mt-2">
@@ -296,26 +286,20 @@ export function EmailServicesSection({
           {thirtyThreeMailEnabled && (
             <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="input-label">Username</label>
-                  <input
-                    type="text"
-                    value={thirtyThreeMailUsername}
-                    onChange={e => onThirtyThreeMailUsernameChange(e.target.value)}
-                    className="input-ds text-sm"
-                    placeholder="user"
-                  />
-                </div>
-                <div>
-                  <label className="input-label">Domain</label>
-                  <input
-                    type="text"
-                    value={thirtyThreeMailDomain}
-                    onChange={e => onThirtyThreeMailDomainChange(e.target.value)}
-                    className="input-ds text-sm"
-                    placeholder="33mail.com"
-                  />
-                </div>
+                <Input
+                  type="text"
+                  label="Username"
+                  value={thirtyThreeMailUsername}
+                  onChange={e => onThirtyThreeMailUsernameChange(e.target.value)}
+                  placeholder="user"
+                />
+                <Input
+                  type="text"
+                  label="Domain"
+                  value={thirtyThreeMailDomain}
+                  onChange={e => onThirtyThreeMailDomainChange(e.target.value)}
+                  placeholder="33mail.com"
+                />
               </div>
             </div>
           )}

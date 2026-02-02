@@ -8,7 +8,7 @@ import AddAccountModal from '../components/AddAccountModal';
 import AccountDetailsModal from '../components/ui/AccountDetailsModal';
 import { QuotaFilterChip } from '../components/ui/QuotaFilterChip';
 import { FloatingActionBar } from '../components/ui/FloatingActionBar';
-import { EmptyState, SkeletonLoader } from '../components/ui';
+import { EmptyState, SkeletonLoader, ActionButtonGroup, Button } from '../components/ui';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
@@ -19,12 +19,12 @@ import {
   type GetAccountsParams,
 } from '../lib/tauri';
 import { t } from '../lib/i18n';
-import { Tooltip } from '../components/Tooltip';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
 import { useUrlState } from '../hooks/useUrlState';
 import type { Account, AccountStatus } from '../types';
 import { ProviderLogo } from '../components/ui/ProviderLogo';
 import { cn } from '../lib/utils';
+import { ACCOUNT_STATUS_COLORS } from '../constants/colors';
 
 export default function Accounts() {
   const navigate = useNavigate();
@@ -364,10 +364,10 @@ export default function Accounts() {
             </h3>
             <div className="space-y-0.5">
               {[
-                { id: 'all', label: t('filters.anyStatus'), dot: null },
-                { id: 'active', label: t('status.active'), dot: 'bg-emerald-500' },
-                { id: 'banned', label: t('status.banned'), dot: 'bg-red-500' },
-                { id: 'expired', label: t('status.expired'), dot: 'bg-amber-500' },
+                { id: 'all', label: t('filters.anyStatus'), dot: null, color: null },
+                { id: 'active', label: t('status.active'), dot: ACCOUNT_STATUS_COLORS.active.bg, color: ACCOUNT_STATUS_COLORS.active.hex },
+                { id: 'banned', label: t('status.banned'), dot: ACCOUNT_STATUS_COLORS.banned.bg, color: ACCOUNT_STATUS_COLORS.banned.hex },
+                { id: 'expired', label: t('status.expired'), dot: ACCOUNT_STATUS_COLORS.expired.bg, color: ACCOUNT_STATUS_COLORS.expired.hex },
               ].map(status => (
                 <button
                   key={status.id}
@@ -386,12 +386,8 @@ export default function Accounts() {
                     <div 
                       className={cn('w-2 h-2 rounded-full shrink-0 ml-2', status.dot)}
                       style={{
-                        boxShadow: statusFilter === status.id && status.id !== 'all'
-                          ? status.id === 'active' 
-                            ? '0 0 8px rgba(16,185,129,0.6)' 
-                            : status.id === 'banned'
-                              ? '0 0 8px rgba(239,68,68,0.6)'
-                              : '0 0 8px rgba(245,158,11,0.6)'
+                        boxShadow: statusFilter === status.id && status.color
+                          ? `0 0 8px ${status.color}99`
                           : 'none'
                       }}
                     />
@@ -425,38 +421,35 @@ export default function Accounts() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Tooltip content={t('accounts.refreshAll')}>
-                <button
-                  onClick={handleRefreshAll}
-                  disabled={isBulkRefreshing}
-                  className="h-9 px-3 flex items-center gap-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors disabled:opacity-30"
-                >
-                  <RefreshCw
-                    size={15}
-                    className={cn(isBulkRefreshing && 'animate-spin text-indigo-400')}
-                  />
-                </button>
-              </Tooltip>
-              
-              <Tooltip content={t('accounts.exportCsv')}>
-                <button
-                  onClick={handleExportCSV}
-                  disabled={accounts.length === 0}
-                  className="h-9 px-3 flex items-center gap-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-colors disabled:opacity-30"
-                >
-                  <Download size={15} />
-                </button>
-              </Tooltip>
+              <ActionButtonGroup
+                actions={[
+                  {
+                    icon: RefreshCw,
+                    label: t('accounts.refreshAll'),
+                    onClick: handleRefreshAll,
+                    disabled: isBulkRefreshing,
+                    loading: isBulkRefreshing,
+                  },
+                  {
+                    icon: Download,
+                    label: t('accounts.exportCsv'),
+                    onClick: handleExportCSV,
+                    disabled: accounts.length === 0,
+                  },
+                ]}
+                className="h-9 px-3 rounded-lg bg-white/5 border border-white/10"
+              />
 
               <div className="w-px h-6 bg-white/10" />
               
-              <button
+              <Button
                 onClick={() => navigate('/autoreg')}
-                className="h-9 px-4 text-white text-sm font-semibold rounded-lg flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20"
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus size={18} />}
               >
-                <Plus size={18} />
-                <span>Add account</span>
-              </button>
+                Add account
+              </Button>
             </div>
           </div>
 
@@ -467,14 +460,16 @@ export default function Accounts() {
               <span className="text-sm text-amber-300 flex-1">
                 {expiredCount} {expiredCount === 1 ? 'account has' : 'accounts have'} expired
               </span>
-              <button
+              <Button
                 onClick={handleRefreshExpired}
                 disabled={isBulkRefreshing}
-                className="px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors flex items-center gap-2 border border-amber-500/30 disabled:opacity-50"
+                variant="secondary"
+                size="xs"
+                className="bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border-amber-500/30"
+                leftIcon={<RefreshCw size={12} className={isBulkRefreshing ? 'animate-spin' : ''} />}
               >
-                <RefreshCw size={12} className={isBulkRefreshing ? 'animate-spin' : ''} />
                 Refresh expired
-              </button>
+              </Button>
             </div>
           )}
 
