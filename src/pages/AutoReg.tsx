@@ -1,25 +1,19 @@
 import { useEffect, useCallback, useState, useMemo, useRef } from 'react';
-import {
-  Play,
-  Square,
-  User,
-  Settings2,
-  Wifi,
-  Eye,
-  EyeOff,
-  Keyboard,
-  Timer,
-  Minus,
-  Plus,
-} from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 
-import { cn } from '../lib/utils';
+import { type IdentityConfig } from '../components/ui/IdentitySystemCard';
+import { type NetworkConfig } from '../components/ui/NetworkCard';
 import { StatusBar } from '../components/ui/KPICard';
 import { MissionControlHUD } from '../components/ui/MissionControlHUD';
-import { IdentitySystemCard, type IdentityConfig } from '../components/ui/IdentitySystemCard';
-import { NetworkCard, type NetworkConfig } from '../components/ui/NetworkCard';
-import { Tooltip } from '../components/Tooltip';
+import {
+  ProviderSelector,
+  ConfigTabs,
+  type ConfigTab,
+  IdentityTab,
+  EngineTab,
+  NetworkTab,
+  LaunchPad,
+} from '../components/registration';
 
 import { useRegistrationStore } from '../stores/registration';
 import { useAppStore } from '../stores/app';
@@ -48,119 +42,10 @@ import type {
   GithubAutoregResult,
 } from '../types/generated';
 
-import { PROVIDERS, DEFAULT_IMAP_PORT, RANDOM_NAMES } from '../constants/registration';
+import { DEFAULT_IMAP_PORT, RANDOM_NAMES } from '../constants/registration';
 
 // Timeout for each registration attempt (5 minutes)
 const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
-
-// Tab types for the command center
-type ConfigTab = 'identity' | 'engine' | 'network';
-
-// Compact number input component for timeouts
-function TimeoutInput({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  step = 1,
-  unit = 's',
-  disabled,
-  tooltip,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  min: number;
-  max: number;
-  step?: number;
-  unit?: string;
-  disabled?: boolean;
-  tooltip?: string;
-}) {
-  const decrement = () => onChange(Math.max(min, value - step));
-  const increment = () => onChange(Math.min(max, value + step));
-
-  const content = (
-    <div
-      className="rounded-lg p-2"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
-    >
-      <div className="text-[10px] text-slate-500 mb-1.5">{label}</div>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={decrement}
-          disabled={disabled || value <= min}
-          className="w-5 h-5 rounded flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <Minus className="w-3 h-3" />
-        </button>
-        <span className="flex-1 text-center text-xs font-mono text-indigo-400">
-          {value}
-          {unit}
-        </span>
-        <button
-          onClick={increment}
-          disabled={disabled || value >= max}
-          className="w-5 h-5 rounded flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-        </button>
-      </div>
-    </div>
-  );
-
-  return tooltip ? <Tooltip content={tooltip}>{content}</Tooltip> : content;
-}
-
-// Compact toggle switch component
-function ToggleSwitch({
-  label,
-  checked,
-  onChange,
-  disabled,
-  tooltip,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-  tooltip?: string;
-}) {
-  const content = (
-    <label
-      className={cn(
-        'flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors',
-        checked ? 'bg-indigo-500/10' : 'bg-white/[0.02]',
-        disabled && 'opacity-50 cursor-not-allowed'
-      )}
-    >
-      <span className="text-[10px] text-slate-400 flex-1">{label}</span>
-      <div
-        className={cn(
-          'w-7 h-4 rounded-full transition-colors relative',
-          checked ? 'bg-indigo-500' : 'bg-white/10'
-        )}
-      >
-        <div
-          className={cn(
-            'absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform',
-            checked ? 'translate-x-3.5' : 'translate-x-0.5'
-          )}
-        />
-      </div>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={e => onChange(e.target.checked)}
-        disabled={disabled}
-        className="sr-only"
-      />
-    </label>
-  );
-
-  return tooltip ? <Tooltip content={tooltip}>{content}</Tooltip> : content;
-}
 
 export default function AutoRegNext() {
   const { addNotification } = useAppStore();
@@ -862,12 +747,18 @@ export default function AutoRegNext() {
             );
           }
 
-          if (result.success && result.email && result.password) {
+          // Check if registration succeeded based on provider-specific criteria
+          const isWindsurf = config.provider === 'windsurf';
+          const hasRequiredData = isWindsurf
+            ? result.success && result.email && 'apiKey' in result && result.apiKey
+            : result.success && result.email && result.password;
+
+          if (hasRequiredData) {
             try {
               await addAccount({
                 provider: config.provider,
-                email: result.email,
-                password: result.password,
+                email: result.email!,
+                password: result.password || '',
                 token: 'token' in result && result.token ? result.token : undefined,
                 refreshToken:
                   'refreshToken' in result && result.refreshToken ? result.refreshToken : undefined,
@@ -881,7 +772,7 @@ export default function AutoRegNext() {
               });
               addHistoryEntry({
                 provider: config.provider,
-                email: result.email,
+                email: result.email!,
                 status: 'completed',
               });
             } catch (err) {
@@ -895,7 +786,7 @@ export default function AutoRegNext() {
                 });
                 addHistoryEntry({
                   provider: config.provider,
-                  email: result.email,
+                  email: result.email!,
                   status: 'completed',
                 });
               } else {
@@ -1003,533 +894,120 @@ export default function AutoRegNext() {
     handleSetActiveThreads(0);
   }, [addLog, addNotification]);
 
-  // Tab configuration
-  const tabs: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'identity', label: 'Identity', icon: <User className="w-3.5 h-3.5" /> },
-    { id: 'engine', label: 'Engine', icon: <Settings2 className="w-3.5 h-3.5" /> },
-    { id: 'network', label: 'Network', icon: <Wifi className="w-3.5 h-3.5" /> },
-  ];
-
   return (
     <div className="h-full flex" style={{ background: '#050508' }}>
       {/* Left Panel - Command Center */}
       <div className="w-[360px] shrink-0 flex flex-col h-full border-r border-white/5">
-        {/* Zone A: Provider Selector (Fixed Top) */}
-        <div className="shrink-0 px-4 pt-4 pb-3">
-          <div
-            className="flex gap-1 p-1 rounded-lg"
-            style={{
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.05)',
-            }}
-          >
-            {PROVIDERS.map(provider => (
-              <button
-                key={provider.id}
-                onClick={() => !provider.disabled && setProvider(provider.id)}
-                disabled={provider.disabled}
-                className={cn(
-                  'flex-1 py-2 text-xs font-medium rounded-md transition-all duration-200',
-                  config.provider === provider.id
-                    ? 'text-white bg-white/10'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-white/5',
-                  provider.disabled && 'opacity-30 cursor-not-allowed'
-                )}
-              >
-                {provider.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Provider Selector */}
+        <ProviderSelector
+          activeProvider={config.provider}
+          onProviderChange={setProvider}
+          disabled={activeThreads > 0}
+        />
 
         {/* Tab Bar */}
-        <div className="shrink-0 px-4 pb-3">
-          <div
-            className="flex gap-1 p-1 rounded-lg"
-            style={{
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.05)',
-            }}
-          >
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => handleSetActiveTab(tab.id)}
-                disabled={false} // Allow tab switching during registration
-                className={cn(
-                  'flex-1 py-2 px-2 text-xs font-medium rounded-md transition-all duration-200 flex items-center justify-center gap-1.5',
-                  activeTab === tab.id
-                    ? 'text-white bg-indigo-500/20 shadow-[0_0_10px_rgba(99,102,241,0.3)]'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                )}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ConfigTabs
+          activeTab={activeTab}
+          onTabChange={handleSetActiveTab}
+          disabled={false}
+        />
 
-        {/* Zone B: Tabbed Content (Dynamic, Scrollable) */}
+        {/* Tabbed Content */}
         <div className="flex-1 overflow-y-auto px-4 py-2">
-          {/* Identity Tab */}
-          {activeTab === 'identity' &&
-            (config.provider === 'aws' ? (
-              /* AWS Mode - Show ready card */
-              <div className="card border border-orange-500/20 p-8 text-center">
-                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-orange-500/10 flex items-center justify-center">
-                  <svg
-                    className="w-10 h-10 text-orange-400"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M6.763 10.036c.022.615.022 1.194.022 1.773 0 .615 0 1.195-.022 1.773h-6.74c-.022-.578-.022-1.158-.022-1.773s0-1.195.022-1.773h6.74zm6.104 6.741c.434.638.868 1.195 1.302 1.753.434.558.868 1.116 1.302 1.674-1.085.434-2.17.723-3.255.868-.434-.578-.868-1.116-1.302-1.674-.434-.558-.868-1.116-1.302-1.753 1.085-.145 2.17-.434 3.255-.868zm-6.104-13.482c.022.615.022 1.194.022 1.773 0 .615 0 1.195-.022 1.773h-6.74c-.022-.578-.022-1.158-.022-1.773s0-1.195.022-1.773h6.74zm13.482 6.741c.022.578.022 1.158.022 1.773s0 1.195-.022 1.773h-6.74c.022-.578.022-1.158.022-1.773s0-1.195-.022-1.773h6.74zm-6.104-6.741c.434.638.868 1.195 1.302 1.753.434.558.868 1.116 1.302 1.674-1.085.434-2.17.723-3.255.868-.434-.578-.868-1.116-1.302-1.674-.434-.558-.868-1.116-1.302-1.753 1.085-.145 2.17-.434 3.255-.868zm-6.104 13.482c-.434-.638-.868-1.195-1.302-1.753-.434-.558-.868-1.116-1.302-1.674 1.085-.434 2.17-.723 3.255-.868.434.578.868 1.116 1.302 1.674.434.558.868 1.116 1.302 1.753-1.085.145-2.17.434-3.255.868z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">AWS Builder ID</h3>
-                <p className="text-sm text-slate-400 mb-6">
-                  Configure count and headless mode in Engine tab, then click START
-                </p>
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 border border-orange-500/30 text-sm text-orange-400">
-                  <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px] shadow-orange-500/50 animate-pulse" />
-                  Ready
-                </div>
-              </div>
-            ) : (
-              /* IDE/Git Mode - Show IMAP Card */
-              <div className="space-y-4">
-                <IdentitySystemCard
-                  config={identityConfig}
-                  onChange={updates => {
-                    if ('emailPattern' in updates) {
-                      setIMAPConfig({ ...updates });
-                    } else {
-                      setIMAPConfig(updates);
-                    }
-                  }}
-                  onTest={handleTestImap}
-                  disabled={activeThreads > 0}
-                  saveStatus={saveStatus}
-                  passwordSet={imapPasswordSet}
-                  gmailAppPasswordSet={gmailAppPasswordSet}
-                  // Addy.io props
-                  onTestAddyio={handleTestAddyioConnection}
-                  isTestingAddyio={isTestingAddyio}
-                  addyioConnectionStatus={addyioConnectionStatus}
-                  addyioConnectionMessage={addyioConnectionMessage}
-                  addyioAccountInfo={addyioAccountInfo}
-                  addyioDomains={addyioDomains}
-                />
-              </div>
-            ))}
-
-          {/* Engine Tab - Settings */}
-          {activeTab === 'engine' && (
-            <div className="space-y-4">
-              {/* Registration V2 Toggle - Only for AWS/Kiro */}
-              {config.provider === 'aws' && (
-                <div
-                  className="rounded-lg p-3"
-                  style={{
-                    background: 'rgba(255,255,255,0.02)',
-                    border: '1px solid rgba(255,255,255,0.05)',
-                  }}
-                >
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                        <Settings2
-                          className={cn(
-                            'w-4 h-4',
-                            useRegistrationV2 ? 'text-indigo-400' : 'text-slate-500'
-                          )}
-                        />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-200 flex items-center gap-2">
-                          Registration V2
-                          <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                            NEW
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          Rust-based flow with better error handling
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        'w-10 h-5 rounded-full transition-colors relative cursor-pointer',
-                        useRegistrationV2 ? 'bg-indigo-500' : 'bg-white/10'
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm',
-                          useRegistrationV2 ? 'translate-x-5' : 'translate-x-0.5'
-                        )}
-                      />
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={useRegistrationV2}
-                      onChange={e => handleSetUseRegistrationV2(e.target.checked)}
-                      disabled={activeThreads > 0}
-                      className="sr-only"
-                    />
-                  </label>
-                </div>
-              )}
-
-              {/* Headless Mode - Full Width Toggle */}
-              <div
-                className="rounded-lg p-3"
-                style={{
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                }}
-              >
-                <label className="flex items-center justify-between cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                      {config.advanced.headless ? (
-                        <EyeOff className="w-4 h-4 text-indigo-400" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-slate-500" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-slate-200">
-                        {t('autoReg.headless')}
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        {t('autoReg.headlessDescription')}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className={cn(
-                      'w-10 h-5 rounded-full transition-colors relative cursor-pointer',
-                      config.advanced.headless ? 'bg-indigo-500' : 'bg-white/10'
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm',
-                        config.advanced.headless ? 'translate-x-5' : 'translate-x-0.5'
-                      )}
-                    />
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={config.advanced.headless}
-                    onChange={e => setAdvancedSettings({ headless: e.target.checked })}
-                    disabled={false} // Allow changing for next registration
-                    className="sr-only"
-                  />
-                </label>
-              </div>
-
-              {/* Speed & Delay Row */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Speed Multiplier */}
-                <Tooltip content={t('autoReg.tooltips.speed')}>
-                  <div
-                    className="rounded-lg p-3"
-                    style={{
-                      background: 'rgba(255,255,255,0.02)',
-                      border: '1px solid rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-slate-400">{t('autoReg.speed')}</span>
-                      <span className="text-xs font-mono text-indigo-400">
-                        {config.advanced.speedMultiplier.toFixed(1)}x
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2"
-                      step="0.1"
-                      value={config.advanced.speedMultiplier}
-                      onChange={e =>
-                        setAdvancedSettings({ speedMultiplier: parseFloat(e.target.value) })
-                      }
-                      disabled={false} // Allow adjusting speed
-                      className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                      style={{ background: 'rgba(255,255,255,0.1)' }}
-                    />
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[9px] text-slate-600">{t('autoReg.slow')}</span>
-                      <span className="text-[9px] text-slate-600">{t('autoReg.fast')}</span>
-                    </div>
-                  </div>
-                </Tooltip>
-
-                {/* Delay Between Accounts */}
-                <Tooltip content={t('autoReg.tooltips.delay')}>
-                  <div
-                    className="rounded-lg p-3"
-                    style={{
-                      background: 'rgba(255,255,255,0.02)',
-                      border: '1px solid rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-slate-400">{t('autoReg.delay')}</span>
-                      <span className="text-xs font-mono text-indigo-400">
-                        {config.advanced.delayBetweenAccounts}s
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      step="1"
-                      value={config.advanced.delayBetweenAccounts}
-                      onChange={e =>
-                        setAdvancedSettings({ delayBetweenAccounts: parseInt(e.target.value) })
-                      }
-                      disabled={false} // Allow adjusting delay
-                      className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                      style={{ background: 'rgba(255,255,255,0.1)' }}
-                    />
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[9px] text-slate-600">1s</span>
-                      <span className="text-[9px] text-slate-600">10s</span>
-                    </div>
-                  </div>
-                </Tooltip>
-              </div>
-
-              {/* Timeouts Section */}
-              <div
-                className="rounded-lg p-3"
-                style={{
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                }}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <Timer className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">
-                    {t('autoReg.timeouts')}
-                  </span>
-                </div>
-
-                {/* 2-Column Grid for Timeouts */}
-                <div className="grid grid-cols-2 gap-2">
-                  <TimeoutInput
-                    label={t('autoReg.verification')}
-                    value={config.advanced.verificationCodeTimeout}
-                    onChange={v => setAdvancedSettings({ verificationCodeTimeout: v })}
-                    min={60}
-                    max={180}
-                    step={10}
-                    disabled={false} // Allow adjusting timeouts
-                    tooltip={t('autoReg.tooltips.verification')}
-                  />
-                  <TimeoutInput
-                    label={t('autoReg.oauth')}
-                    value={config.advanced.oauthCallbackTimeout}
-                    onChange={v => setAdvancedSettings({ oauthCallbackTimeout: v })}
-                    min={30}
-                    max={180}
-                    step={10}
-                    disabled={false} // Allow adjusting timeouts
-                    tooltip={t('autoReg.tooltips.oauth')}
-                  />
-                  <TimeoutInput
-                    label={t('autoReg.allowAccess')}
-                    value={config.advanced.allowAccessWait}
-                    onChange={v => setAdvancedSettings({ allowAccessWait: v })}
-                    min={60}
-                    max={300}
-                    step={10}
-                    disabled={false} // Allow adjusting timeouts
-                    tooltip={t('autoReg.tooltips.allowAccess')}
-                  />
-                  <TimeoutInput
-                    label={t('autoReg.pageLoad')}
-                    value={config.advanced.pageLoadTimeout}
-                    onChange={v => setAdvancedSettings({ pageLoadTimeout: v })}
-                    min={2}
-                    max={15}
-                    step={1}
-                    disabled={false} // Allow adjusting timeouts
-                    tooltip={t('autoReg.tooltips.pageLoad')}
-                  />
-                  <TimeoutInput
-                    label={t('autoReg.elementWait')}
-                    value={config.advanced.elementWaitTimeout}
-                    onChange={v => setAdvancedSettings({ elementWaitTimeout: v })}
-                    min={1}
-                    max={10}
-                    step={1}
-                    disabled={false} // Allow adjusting timeouts
-                    tooltip={t('autoReg.tooltips.elementWait')}
-                  />
-                  <TimeoutInput
-                    label={t('autoReg.imapPoll')}
-                    value={config.advanced.imapPollInterval}
-                    onChange={v => setAdvancedSettings({ imapPollInterval: v })}
-                    min={0.5}
-                    max={5}
-                    step={0.5}
-                    disabled={false} // Allow adjusting timeouts
-                    tooltip={t('autoReg.tooltips.imapPoll')}
-                  />
-                </div>
-              </div>
-
-              {/* Browser Behavior Section */}
-              <div
-                className="rounded-lg p-3"
-                style={{
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                }}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <Keyboard className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="text-xs uppercase text-slate-500 tracking-wider font-semibold">
-                    {t('autoReg.behavior')}
-                  </span>
-                </div>
-
-                {/* Password Length */}
-                <Tooltip content={t('autoReg.tooltips.passwordLength')}>
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-slate-400">{t('autoReg.passwordLength')}</span>
-                      <span className="text-xs font-mono text-indigo-400">
-                        {config.advanced.passwordLength}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="12"
-                      max="24"
-                      step="1"
-                      value={config.advanced.passwordLength}
-                      onChange={e =>
-                        setAdvancedSettings({ passwordLength: parseInt(e.target.value) })
-                      }
-                      disabled={false} // Allow adjusting password length
-                      className="w-full h-1 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                      style={{ background: 'rgba(255,255,255,0.1)' }}
-                    />
-                  </div>
-                </Tooltip>
-
-                {/* Toggle Switches - 2 rows */}
-                <div className="grid grid-cols-2 gap-2">
-                  <ToggleSwitch
-                    label={t('autoReg.realisticTyping')}
-                    checked={config.advanced.realisticTyping}
-                    onChange={v => setAdvancedSettings({ realisticTyping: v })}
-                    disabled={false} // Allow changing behavior settings
-                    tooltip={t('autoReg.tooltips.realisticTyping')}
-                  />
-                  <ToggleSwitch
-                    label={t('autoReg.humanDelays')}
-                    checked={config.advanced.humanDelays}
-                    onChange={v => setAdvancedSettings({ humanDelays: v })}
-                    disabled={false} // Allow changing behavior settings
-                    tooltip={t('autoReg.tooltips.humanDelays')}
-                  />
-                  <ToggleSwitch
-                    label={t('autoReg.screenshots')}
-                    checked={config.advanced.screenshotsOnError}
-                    onChange={v => setAdvancedSettings({ screenshotsOnError: v })}
-                    disabled={false} // Allow changing behavior settings
-                    tooltip={t('autoReg.tooltips.screenshots')}
-                  />
-                </div>
-              </div>
-            </div>
+          {activeTab === 'identity' && (
+            <IdentityTab
+              provider={config.provider}
+              identityConfig={identityConfig}
+              onConfigChange={updates => {
+                if ('emailPattern' in updates) {
+                  setIMAPConfig({ ...updates });
+                } else {
+                  setIMAPConfig(updates);
+                }
+              }}
+              onTest={handleTestImap}
+              disabled={activeThreads > 0}
+              saveStatus={saveStatus}
+              passwordSet={imapPasswordSet}
+              gmailAppPasswordSet={gmailAppPasswordSet}
+              onTestAddyio={handleTestAddyioConnection}
+              isTestingAddyio={isTestingAddyio}
+              addyioConnectionStatus={addyioConnectionStatus}
+              addyioConnectionMessage={addyioConnectionMessage}
+              addyioAccountInfo={addyioAccountInfo}
+              addyioDomains={addyioDomains}
+            />
           )}
 
-          {/* Network Tab */}
+          {activeTab === 'engine' && (
+            <EngineTab
+              provider={config.provider}
+              useRegistrationV2={useRegistrationV2}
+              onUseRegistrationV2Change={handleSetUseRegistrationV2}
+              headless={config.advanced.headless}
+              onHeadlessChange={headless => setAdvancedSettings({ headless })}
+              speedMultiplier={config.advanced.speedMultiplier}
+              onSpeedMultiplierChange={speedMultiplier => setAdvancedSettings({ speedMultiplier })}
+              delayBetweenAccounts={config.advanced.delayBetweenAccounts}
+              onDelayBetweenAccountsChange={delayBetweenAccounts =>
+                setAdvancedSettings({ delayBetweenAccounts })
+              }
+              verificationCodeTimeout={config.advanced.verificationCodeTimeout}
+              onVerificationCodeTimeoutChange={verificationCodeTimeout =>
+                setAdvancedSettings({ verificationCodeTimeout })
+              }
+              oauthCallbackTimeout={config.advanced.oauthCallbackTimeout}
+              onOauthCallbackTimeoutChange={oauthCallbackTimeout =>
+                setAdvancedSettings({ oauthCallbackTimeout })
+              }
+              allowAccessWait={config.advanced.allowAccessWait}
+              onAllowAccessWaitChange={allowAccessWait => setAdvancedSettings({ allowAccessWait })}
+              pageLoadTimeout={config.advanced.pageLoadTimeout}
+              onPageLoadTimeoutChange={pageLoadTimeout => setAdvancedSettings({ pageLoadTimeout })}
+              elementWaitTimeout={config.advanced.elementWaitTimeout}
+              onElementWaitTimeoutChange={elementWaitTimeout =>
+                setAdvancedSettings({ elementWaitTimeout })
+              }
+              imapPollInterval={config.advanced.imapPollInterval}
+              onImapPollIntervalChange={imapPollInterval =>
+                setAdvancedSettings({ imapPollInterval })
+              }
+              passwordLength={config.advanced.passwordLength}
+              onPasswordLengthChange={passwordLength => setAdvancedSettings({ passwordLength })}
+              realisticTyping={config.advanced.realisticTyping}
+              onRealisticTypingChange={realisticTyping => setAdvancedSettings({ realisticTyping })}
+              humanDelays={config.advanced.humanDelays}
+              onHumanDelaysChange={humanDelays => setAdvancedSettings({ humanDelays })}
+              screenshotsOnError={config.advanced.screenshotsOnError}
+              onScreenshotsOnErrorChange={screenshotsOnError =>
+                setAdvancedSettings({ screenshotsOnError })
+              }
+              disabled={activeThreads > 0}
+            />
+          )}
+
           {activeTab === 'network' && (
-            <NetworkCard
+            <NetworkTab
               config={networkConfig}
               onChange={updates => setProxyConfig(updates)}
-              disabled={false} // Allow changing network settings
+              disabled={false}
             />
           )}
         </div>
 
-        {/* Zone C: Launch Pad (Fixed Bottom) */}
-        <div className="shrink-0 p-4 border-t border-white/5">
-          <div
-            className="flex rounded-lg overflow-hidden"
-            style={{ boxShadow: '0 0 20px rgba(99, 102, 241, 0.15)' }}
-          >
-            {/* Count Input - cleaner, no # symbol */}
-            <div className="relative">
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={config.count}
-                onChange={e => setCount(parseInt(e.target.value) || 1)}
-                disabled={activeThreads > 0}
-                className="w-14 h-11 text-center font-mono font-bold text-white text-lg rounded-l-lg rounded-r-none border-r-0 focus:outline-none focus:ring-0"
-                style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRight: 'none',
-                }}
-              />
-            </div>
-
-            {/* Start/Stop Button - attached to input */}
-            {activeThreads === 0 ? (
-              <button
-                onClick={handleStart}
-                disabled={!canStart || pythonAvailable === false}
-                className={cn(
-                  'flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2',
-                  'text-white transition-all',
-                  canStart
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500'
-                    : 'bg-slate-700/50 cursor-not-allowed'
-                )}
-              >
-                <Play className="w-4 h-4" />
-                {t('autoReg.start')}
-              </button>
-            ) : (
-              <button
-                onClick={handleStop}
-                className="flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white transition-colors"
-              >
-                <Square className="w-4 h-4" />
-                {t('autoReg.stop')}
-              </button>
-            )}
-          </div>
-
-          {/* Status indicator */}
-          <div className="flex items-center justify-end gap-1.5 mt-2 text-[10px] text-slate-500">
-            {canStart ? (
-              <>
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px] shadow-emerald-500/50" />{' '}
-                {t('autoReg.readyToStart')}
-              </>
-            ) : (
-              <>
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />{' '}
-                {t('autoReg.configureMailFirst')}
-              </>
-            )}
-          </div>
-        </div>
+        {/* Launch Pad */}
+        <LaunchPad
+          count={config.count}
+          onCountChange={setCount}
+          isRunning={activeThreads > 0}
+          canStart={canStart}
+          pythonAvailable={pythonAvailable}
+          onStart={handleStart}
+          onStop={handleStop}
+        />
       </div>
 
-      {/* Right Panel - Mission Control HUD */}
+      {/* Right Panel - Console */}
       <div className="flex-1 flex flex-col min-w-0 p-4" style={{ background: '#050508' }}>
         <div className="card h-full flex flex-col border border-white/5 overflow-hidden">
           {/* Header */}
@@ -1555,8 +1033,8 @@ export default function AutoRegNext() {
               onStart={handleStart}
               onClear={clearLogs}
               className="h-full"
-              activeProvider={activeProvider}
-              onProviderChange={setActiveProvider}
+              activeProvider={activeProvider || undefined}
+              onProviderChange={provider => setActiveProvider(provider || '')}
             />
           </div>
         </div>

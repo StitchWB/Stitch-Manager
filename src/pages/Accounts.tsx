@@ -133,17 +133,29 @@ export default function Accounts() {
   const handleRemoveSelectedAccounts = useCallback(
     async (ids?: number[]) => {
       const targets = ids || Array.from(selectedIds);
-      if (
-        !targets.length ||
-        !window.confirm(t('accounts.deleteConfirm', { count: targets.length }))
-      )
+      console.log('[Accounts] handleRemoveSelectedAccounts called with targets:', targets);
+      
+      if (!targets.length) {
+        console.log('[Accounts] No targets to delete');
+        toast.error('No accounts selected');
         return;
+      }
+      
+      if (!window.confirm(t('accounts.deleteConfirm', { count: targets.length }))) {
+        console.log('[Accounts] User cancelled deletion');
+        return;
+      }
+      
       try {
+        console.log('[Accounts] Calling deleteAccounts...');
         await deleteAccounts(targets);
+        console.log('[Accounts] deleteAccounts completed successfully');
+        toast.success(`Deleted ${targets.length} account${targets.length > 1 ? 's' : ''}`);
         clearSelection();
-        fetchAccountsWithFilter();
+        await fetchAccountsWithFilter();
       } catch (e) {
-        console.error(e);
+        console.error('[Accounts] Error deleting accounts:', e);
+        toast.error(`Failed to delete accounts: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
     [selectedIds, deleteAccounts, clearSelection, fetchAccountsWithFilter]
@@ -220,21 +232,40 @@ export default function Accounts() {
     try {
       const targets =
         selectedIds.size > 0 ? Array.from(selectedIds) : filteredAccounts.map(a => a.id);
-      if (!targets.length) return;
+      if (!targets.length) {
+        toast.info('No accounts to export');
+        return;
+      }
       const csv = await bulkExportAccounts({ accountIds: targets, format: 'csv' });
       const blob = new Blob([csv], { type: 'text/csv' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = `accounts_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
+      toast.success(`Exported ${targets.length} account${targets.length > 1 ? 's' : ''}`);
     } catch (e) {
-      console.error(e);
+      console.error('[Accounts] Error exporting accounts:', e);
+      toast.error(`Failed to export: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
   const handleRefreshAll = async () => {
-    await startBulkRefresh(filteredAccounts.map(a => a.id));
-    fetchAccountsWithFilter();
+    try {
+      const targets = selectedIds.size > 0 
+        ? Array.from(selectedIds) 
+        : filteredAccounts.map(a => a.id);
+      
+      if (targets.length === 0) {
+        toast.info('No accounts to refresh');
+        return;
+      }
+      
+      await startBulkRefresh(targets);
+      await fetchAccountsWithFilter();
+    } catch (e) {
+      console.error('[Accounts] Error refreshing accounts:', e);
+      toast.error(`Failed to refresh: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const handleRefreshExpired = async () => {
@@ -243,8 +274,13 @@ export default function Accounts() {
       toast.info('No expired accounts to refresh');
       return;
     }
-    await startBulkRefresh(expiredAccountIds);
-    fetchAccountsWithFilter();
+    try {
+      await startBulkRefresh(expiredAccountIds);
+      await fetchAccountsWithFilter();
+    } catch (e) {
+      console.error('[Accounts] Error refreshing expired accounts:', e);
+      toast.error(`Failed to refresh: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const expiredCount = storeAccounts.filter(a => a.status === 'expired').length;
