@@ -33,11 +33,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               'bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3E%3Cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'m6 8 4 4 4-4\'/%3E%3C/svg%3E")] bg-[length:1.25rem] bg-[right_0.5rem_center] bg-no-repeat pr-10',
               className
             )}
+            style={{ colorScheme: 'dark' }}
             {...props}
           >
             {options
               ? options.map(opt => (
-                  <option key={opt.value} value={opt.value}>
+                  <option key={opt.value} value={opt.value} className="bg-slate-900 text-slate-200">
                     {opt.label}
                   </option>
                 ))

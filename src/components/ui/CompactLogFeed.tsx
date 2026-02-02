@@ -268,6 +268,22 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
     );
   }
 
+  // Determine text color based on log level
+  const getTextColor = () => {
+    switch (log.level) {
+      case 'error':
+        return 'text-red-300';
+      case 'success':
+        return 'text-emerald-300';
+      case 'warn':
+        return 'text-amber-300';
+      case 'info':
+        return 'text-slate-300';
+      default:
+        return 'text-slate-400';
+    }
+  };
+
   return (
     <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors group">
       {/* Icon instead of dot */}
@@ -278,8 +294,8 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
         {formatTime(log.timestamp)}
       </span>
 
-      {/* Message with highlights - brighter */}
-      <span className="text-[11px] text-slate-300 flex-1 break-words leading-relaxed">
+      {/* Message with highlights - color based on level */}
+      <span className={cn('text-[11px] flex-1 break-words leading-relaxed', getTextColor())}>
         {formatLogMessage(log.message)}
       </span>
     </div>
@@ -347,12 +363,16 @@ export function CompactLogFeed({ logs, onClear, className, activeProvider = 'all
               value={activeProvider}
               onChange={(e) => onProviderChange(e.target.value)}
               className="text-[10px] px-2 py-1 bg-black/40 border border-white/10 rounded text-slate-300 focus:outline-none focus:border-indigo-500/50"
+              style={{
+                backgroundImage: 'none',
+                colorScheme: 'dark',
+              }}
             >
-              <option value="all">All Providers</option>
-              <option value="kiro">Kiro</option>
-              <option value="windsurf">Windsurf</option>
-              <option value="github">GitHub</option>
-              <option value="trae">Trae</option>
+              <option value="all" className="bg-slate-900 text-slate-300">All Providers</option>
+              <option value="kiro" className="bg-slate-900 text-slate-300">Kiro</option>
+              <option value="windsurf" className="bg-slate-900 text-slate-300">Windsurf</option>
+              <option value="github" className="bg-slate-900 text-slate-300">GitHub</option>
+              <option value="trae" className="bg-slate-900 text-slate-300">Trae</option>
             </select>
           )}
         </div>
