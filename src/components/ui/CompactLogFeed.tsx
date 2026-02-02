@@ -13,11 +13,13 @@ import {
   Server,
   User,
   FileText,
+  Activity,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { Tooltip } from '../Tooltip';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
+import { EmptyState } from './EmptyState';
 
 interface LogEntry {
   id: string;
@@ -426,9 +428,11 @@ export function CompactLogFeed({ logs, onClear, className, activeProvider = 'all
           }}
         />
         {filteredLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-slate-700 text-[10px]">
-            {t('logFeed.waitingForActivity')}
-          </div>
+          <EmptyState 
+            icon={Activity} 
+            title={t('logFeed.waitingForActivity')}
+            className="text-[10px]"
+          />
         ) : (
           <div className="py-1">
             {filteredLogs.map(log => (
