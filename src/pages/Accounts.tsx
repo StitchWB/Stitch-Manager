@@ -8,6 +8,7 @@ import AddAccountModal from '../components/AddAccountModal';
 import AccountDetailsModal from '../components/ui/AccountDetailsModal';
 import { QuotaFilterChip } from '../components/ui/QuotaFilterChip';
 import { FloatingActionBar } from '../components/ui/FloatingActionBar';
+import { EmptyState } from '../components/ui';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
@@ -486,10 +487,11 @@ export default function Accounts() {
                 ))}
               </div>
             ) : filteredAccounts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-4">
-                <Users size={48} className="opacity-30" />
-                <p className="text-sm font-medium">No accounts found</p>
-              </div>
+              <EmptyState 
+                icon={Users} 
+                title="No accounts found" 
+                description="Add your first account to get started"
+              />
             ) : (
               <AccountsTable
                 accounts={filteredAccounts}

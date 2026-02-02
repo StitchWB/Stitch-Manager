@@ -5,6 +5,7 @@ import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
 import { PROVIDERS } from '../constants/providers';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { Input, Select } from './ui';
 
 interface AddAccountModalProps {
   isOpen: boolean;
@@ -144,75 +145,58 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
           )}
 
           {/* Provider Select */}
-          <div>
-            <label htmlFor="provider-select" className="block text-sm font-medium text-slate-300 mb-1.5">
-              {t('accounts.provider')}
-            </label>
-            <select
-              id="provider-select"
-              value={provider}
-              onChange={(e) => setProvider(e.target.value as ProviderName)}
-              disabled={isSubmitting}
-              className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label={t('accounts.provider')}
+            id="provider-select"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as ProviderName)}
+            disabled={isSubmitting}
+          >
+            {PROVIDERS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
 
           {/* Email Input */}
-          <div>
-            <label htmlFor="email-input" className="block text-sm font-medium text-slate-300 mb-1.5">
-              {t('accounts.email')}
-            </label>
-            <input
-              ref={emailInputRef}
-              id="email-input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isSubmitting}
-              required
-              placeholder={t('autoReg.placeholders.email')}
-              className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
-              aria-required="true"
-            />
-          </div>
+          <Input
+            ref={emailInputRef}
+            label={t('accounts.email')}
+            id="email-input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={isSubmitting}
+            required
+            placeholder={t('autoReg.placeholders.email')}
+            aria-required="true"
+          />
 
           {/* Password Input */}
-          <div>
-            <label htmlFor="password-input" className="block text-sm font-medium text-slate-300 mb-1.5">
-              {t('accounts.password')}
-            </label>
-            <input
-              id="password-input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isSubmitting}
-              required
-              placeholder="••••••••"
-              className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
-              aria-required="true"
-            />
-          </div>
+          <Input
+            label={t('accounts.password')}
+            id="password-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isSubmitting}
+            required
+            placeholder="••••••••"
+            aria-required="true"
+          />
 
           {/* Token Input (Optional) */}
           <div>
-            <label htmlFor="token-input" className="block text-sm font-medium text-slate-300 mb-1.5">
-              {t('accounts.token')} <span className="text-slate-500">({t('accounts.tokenOptional')})</span>
-            </label>
-            <input
+            <Input
+              label={`${t('accounts.token')} (${t('accounts.tokenOptional')})`}
               id="token-input"
               type="text"
               value={token}
               onChange={(e) => setToken(e.target.value)}
               disabled={isSubmitting}
               placeholder={t('accounts.pasteTokenHere')}
-              className="w-full px-3 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-slate-500 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50"
+              className="font-mono"
               aria-describedby="token-hint"
             />
             <p id="token-hint" className="mt-1 text-xs text-slate-500">

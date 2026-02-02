@@ -3,6 +3,7 @@ import { ArrowDown, Trash2, Rocket, Copy, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
+import { EmptyState } from './EmptyState';
 
 interface LogEntry {
   id: string;
@@ -230,11 +231,11 @@ export function Terminal({ logs, onClear, className }: TerminalProps) {
         className="flex-1 overflow-y-auto min-h-[200px] scrollbar-thin"
       >
         {logs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-600 py-12">
-            <Rocket className="w-10 h-10 mb-3 opacity-30" />
-            <p className="text-sm font-medium text-slate-500">{t('terminal.readyToLaunch')}</p>
-            <p className="text-xs text-slate-700 mt-1">{t('terminal.logsWillAppear')}</p>
-          </div>
+          <EmptyState 
+            icon={Rocket} 
+            title={t('terminal.readyToLaunch')}
+            description={t('terminal.logsWillAppear')}
+          />
         ) : (
           <div className="py-1">
             {logs.map((log, index) => (

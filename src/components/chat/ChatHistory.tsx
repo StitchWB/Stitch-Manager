@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { MessageSquare, Loader2 } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
+import { EmptyState } from '../ui';
 import { t } from '../../lib/i18n';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 
@@ -26,16 +27,12 @@ export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-vsc-panel flex items-center justify-center mb-4">
-          <MessageSquare size={32} className="text-vsc-text-muted" />
-        </div>
-        <h3 className="text-lg font-medium text-vsc-text mb-2">
-          {t('chat.emptyTitle')}
-        </h3>
-        <p className="text-sm text-vsc-text-muted max-w-md">
-          {t('chat.emptyDescription')}
-        </p>
+      <div className="flex-1 flex flex-col items-center justify-center p-8">
+        <EmptyState 
+          icon={MessageSquare} 
+          title={t('chat.emptyTitle')}
+          description={t('chat.emptyDescription')}
+        />
         <div className="mt-6 flex flex-wrap gap-2 justify-center">
           {['Explain this code', 'Help me debug', 'Write a function'].map((suggestion) => (
             <span
