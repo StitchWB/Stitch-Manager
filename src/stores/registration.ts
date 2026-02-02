@@ -45,6 +45,16 @@ export interface IMAPConfig {
   thirtyThreeMailDomain?: string;
 }
 
+// Provider-specific IMAP configurations
+export interface ProviderIMAPConfigs {
+  kiro: IMAPConfig;
+  windsurf: IMAPConfig;
+  trae: IMAPConfig;
+  github: IMAPConfig;
+  aws: IMAPConfig;
+  copilot: IMAPConfig;
+}
+
 // Proxy configuration
 export interface ProxyConfig {
   enabled: boolean;
@@ -103,7 +113,8 @@ export interface AdvancedSettings {
 export interface RegistrationConfig {
   provider: ProviderName;
   credentials: AutoRegCredentials;
-  imap: IMAPConfig;
+  imap: IMAPConfig; // Current active IMAP config (for backward compatibility)
+  providerImapConfigs: ProviderIMAPConfigs; // Provider-specific IMAP configs
   proxy: ProxyConfig;
   patterns: PatternConfig;
   advanced: AdvancedSettings;
@@ -200,35 +211,45 @@ interface RegistrationState {
   setWsConnected: (connected: boolean) => void;
 }
 
+const DEFAULT_IMAP_CONFIG: IMAPConfig = {
+  strategy: 'custom',
+  server: '',
+  port: 993,
+  email: '',
+  password: '',
+  useTLS: true,
+  gmailBase: '',
+  gmailAlias: '',
+  gmailAppPassword: '',
+  // Addy.io defaults
+  addyioEnabled: false,
+  addyioApiToken: '',
+  addyioDomain: '',
+  addyioAliasFormat: 'uuid',
+  addyioAutoDelete: false,
+  addyioDefaultRecipientId: '',
+  addyioDescriptionTemplate: '',
+  addyioFromName: '',
+  // 33mail defaults
+  thirtyThreeMailEnabled: false,
+  thirtyThreeMailUsername: '',
+  thirtyThreeMailDomain: '33mail.com',
+};
+
 const DEFAULT_CONFIG: RegistrationConfig = {
   provider: 'kiro',
   credentials: {
     email: '',
     password: '',
   },
-  imap: {
-    strategy: 'custom',
-    server: '',
-    port: 993,
-    email: '',
-    password: '',
-    useTLS: true,
-    gmailBase: '',
-    gmailAlias: '',
-    gmailAppPassword: '',
-    // Addy.io defaults
-    addyioEnabled: false,
-    addyioApiToken: '',
-    addyioDomain: '',
-    addyioAliasFormat: 'uuid',
-    addyioAutoDelete: false,
-    addyioDefaultRecipientId: '',
-    addyioDescriptionTemplate: '',
-    addyioFromName: '',
-    // 33mail defaults
-    thirtyThreeMailEnabled: false,
-    thirtyThreeMailUsername: '',
-    thirtyThreeMailDomain: '33mail.com',
+  imap: { ...DEFAULT_IMAP_CONFIG },
+  providerImapConfigs: {
+    kiro: { ...DEFAULT_IMAP_CONFIG },
+    windsurf: { ...DEFAULT_IMAP_CONFIG },
+    trae: { ...DEFAULT_IMAP_CONFIG },
+    github: { ...DEFAULT_IMAP_CONFIG },
+    aws: { ...DEFAULT_IMAP_CONFIG },
+    copilot: { ...DEFAULT_IMAP_CONFIG },
   },
   proxy: {
     enabled: false,
@@ -321,7 +342,25 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     // Config actions - all trigger auto-save
     setProvider: (provider: ProviderName) => {
       console.log('[REGISTRATION_STORE] setProvider called:', provider);
-      set(state => ({ config: { ...state.config, provider } }));
+      set(state => {
+        // Save current IMAP config to current provider's slot
+        const updatedProviderConfigs = {
+          ...state.config.providerImapConfigs,
+          [state.config.provider]: state.config.imap,
+        };
+        
+        // Load IMAP config for new provider
+        const newImap = updatedProviderConfigs[provider];
+        
+        return {
+          config: {
+            ...state.config,
+            provider,
+            imap: newImap,
+            providerImapConfigs: updatedProviderConfigs,
+          },
+        };
+      });
       console.log('[REGISTRATION_STORE] setProvider: triggering save');
       triggerSave();
     },
@@ -332,8 +371,15 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         const newImap = { ...state.config.imap, ...imap };
         console.log('[REGISTRATION_STORE] New IMAP config state:', newImap);
 
+        // Update both current imap and provider-specific config
+        const updatedProviderConfigs = {
+          ...state.config.providerImapConfigs,
+          [state.config.provider]: newImap,
+        };
+
         const updates: Partial<RegistrationConfig> = {
           imap: newImap,
+          providerImapConfigs: updatedProviderConfigs,
         };
 
         // If emailPattern is being updated, also update patterns
@@ -347,6 +393,8 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { emailPattern, ...imapWithoutPattern } = imapWithPattern;
           updates.imap = { ...state.config.imap, ...imapWithoutPattern };
+          updatedProviderConfigs[state.config.provider] = updates.imap;
+          updates.providerImapConfigs = updatedProviderConfigs;
         }
 
         console.log('[REGISTRATION_STORE] setIMAPConfig: new config updates:', updates);
@@ -405,45 +453,75 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         const settings: SettingsData = await getSettings();
         console.log('[REGISTRATION_STORE] loadSettings: got settings from DB:', settings);
 
+        // Try to load provider-specific configs from localStorage
+        let providerImapConfigs: ProviderIMAPConfigs | null = null;
+        try {
+          const stored = localStorage.getItem('providerImapConfigs');
+          if (stored) {
+            providerImapConfigs = JSON.parse(stored);
+            console.log('[REGISTRATION_STORE] loadSettings: loaded provider configs from localStorage');
+          }
+        } catch (e) {
+          console.warn('[REGISTRATION_STORE] loadSettings: failed to load provider configs from localStorage:', e);
+        }
+
         set(state => {
           // Check if passwords are masked (meaning they exist in DB)
           const imapPasswordMasked = settings.imapPassword === '********';
           const gmailAppPasswordMasked = settings.gmailAppPassword === '********';
           const proxyPasswordMasked = settings.proxyPassword === '********';
 
+          const currentImap: IMAPConfig = {
+            ...state.config.imap,
+            strategy: (settings.mailStrategy as MailStrategy) || 'custom',
+            server: settings.imapServer || '',
+            port: settings.imapPort || 993,
+            email: settings.imapEmail || '',
+            // Don't overwrite password with masked value - keep existing or empty
+            password: imapPasswordMasked
+              ? state.config.imap.password
+              : settings.imapPassword || '',
+            gmailBase: settings.gmailBase || '',
+            gmailAlias: settings.gmailAlias || '',
+            gmailAppPassword: gmailAppPasswordMasked
+              ? state.config.imap.gmailAppPassword
+              : settings.gmailAppPassword || '',
+            // Load addy.io settings
+            addyioEnabled: settings.addyioEnabled || false,
+            addyioApiToken: settings.addyioApiToken || '',
+            addyioDomain: settings.addyioDomain || '',
+            addyioAliasFormat: settings.addyioAliasFormat || 'uuid',
+            addyioAutoDelete: settings.addyioAutoDelete || false,
+            addyioDefaultRecipientId: settings.addyioDefaultRecipientId || '',
+            addyioDescriptionTemplate: settings.addyioDescriptionTemplate || '',
+            addyioFromName: settings.addyioFromName || '',
+            // Load 33mail settings
+            thirtyThreeMailEnabled: settings.thirtyThreeMailEnabled || false,
+            thirtyThreeMailUsername: settings.thirtyThreeMailUsername || '',
+            thirtyThreeMailDomain: settings.thirtyThreeMailDomain || '33mail.com',
+          };
+
+          const currentProvider = (settings.provider as ProviderName) || 'kiro';
+
+          // Initialize provider configs with defaults, then override with stored values
+          const finalProviderConfigs: ProviderIMAPConfigs = providerImapConfigs || {
+            kiro: { ...DEFAULT_IMAP_CONFIG },
+            windsurf: { ...DEFAULT_IMAP_CONFIG },
+            trae: { ...DEFAULT_IMAP_CONFIG },
+            github: { ...DEFAULT_IMAP_CONFIG },
+            aws: { ...DEFAULT_IMAP_CONFIG },
+            copilot: { ...DEFAULT_IMAP_CONFIG },
+          };
+
+          // Set current provider's config from DB
+          finalProviderConfigs[currentProvider] = currentImap;
+
           const newConfig = {
             config: {
               ...state.config,
-              provider: (settings.provider as ProviderName) || 'kiro',
-              imap: {
-                ...state.config.imap,
-                strategy: (settings.mailStrategy as MailStrategy) || 'custom',
-                server: settings.imapServer || '',
-                port: settings.imapPort || 993,
-                email: settings.imapEmail || '',
-                // Don't overwrite password with masked value - keep existing or empty
-                password: imapPasswordMasked
-                  ? state.config.imap.password
-                  : settings.imapPassword || '',
-                gmailBase: settings.gmailBase || '',
-                gmailAlias: settings.gmailAlias || '',
-                gmailAppPassword: gmailAppPasswordMasked
-                  ? state.config.imap.gmailAppPassword
-                  : settings.gmailAppPassword || '',
-                // Load addy.io settings
-                addyioEnabled: settings.addyioEnabled || false,
-                addyioApiToken: settings.addyioApiToken || '',
-                addyioDomain: settings.addyioDomain || '',
-                addyioAliasFormat: settings.addyioAliasFormat || 'uuid',
-                addyioAutoDelete: settings.addyioAutoDelete || false,
-                addyioDefaultRecipientId: settings.addyioDefaultRecipientId || '',
-                addyioDescriptionTemplate: settings.addyioDescriptionTemplate || '',
-                addyioFromName: settings.addyioFromName || '',
-                // Load 33mail settings
-                thirtyThreeMailEnabled: settings.thirtyThreeMailEnabled || false,
-                thirtyThreeMailUsername: settings.thirtyThreeMailUsername || '',
-                thirtyThreeMailDomain: settings.thirtyThreeMailDomain || '33mail.com',
-              },
+              provider: currentProvider,
+              imap: currentImap,
+              providerImapConfigs: finalProviderConfigs,
               proxy: {
                 ...state.config.proxy,
                 enabled: settings.proxyEnabled || false,
@@ -500,6 +578,14 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         addyioDescriptionTemplate: config.imap.addyioDescriptionTemplate,
         addyioFromName: config.imap.addyioFromName,
       });
+
+      // Save provider-specific configs to localStorage
+      try {
+        localStorage.setItem('providerImapConfigs', JSON.stringify(config.providerImapConfigs));
+        console.log('[REGISTRATION_STORE] saveSettings: saved provider configs to localStorage');
+      } catch (e) {
+        console.warn('[REGISTRATION_STORE] saveSettings: failed to save provider configs to localStorage:', e);
+      }
 
       // Basic validation
       if (config.imap.email && !config.imap.email.includes('@')) {
