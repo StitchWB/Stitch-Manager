@@ -3,6 +3,7 @@ import { Wifi, ChevronRight, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-re
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { LoadingSpinner } from './LoadingSpinner';
+import { Input } from './Input';
 
 export interface NetworkConfig {
   enabled: boolean;
@@ -140,46 +141,37 @@ export function NetworkCard({
           {config.enabled && (
             <>
               {/* Proxy URL */}
-              <div>
-                <label className="input-label">{t('autoReg.proxyUrl')}</label>
-                <input
-                  type="text"
-                  placeholder={t('autoReg.placeholders.proxyUrl')}
-                  value={config.url}
-                  onChange={(e) => onChange({ url: e.target.value })}
-                  disabled={disabled}
-                  className="input-ds"
-                />
-              </div>
+              <Input
+                type="text"
+                label={t('autoReg.proxyUrl')}
+                placeholder={t('autoReg.placeholders.proxyUrl')}
+                value={config.url}
+                onChange={(e) => onChange({ url: e.target.value })}
+                disabled={disabled}
+              />
 
               {/* Optional Credentials */}
               <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="input-label">{t('autoReg.username')}</label>
-                  <input
-                    type="text"
-                    placeholder={t('autoReg.placeholders.optional')}
-                    value={config.username || ''}
-                    onChange={(e) => onChange({ username: e.target.value })}
-                    disabled={disabled}
-                    className="input-ds"
-                  />
-                </div>
-                <div>
-                  <label className="input-label">{t('accounts.password')}</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder={t('autoReg.placeholders.optional')}
-                      value={config.password || ''}
-                      onChange={(e) => onChange({ password: e.target.value })}
-                      disabled={disabled}
-                      className="input-ds pr-8"
-                    />
+                <Input
+                  type="text"
+                  label={t('autoReg.username')}
+                  placeholder={t('autoReg.placeholders.optional')}
+                  value={config.username || ''}
+                  onChange={(e) => onChange({ username: e.target.value })}
+                  disabled={disabled}
+                />
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  label={t('accounts.password')}
+                  placeholder={t('autoReg.placeholders.optional')}
+                  value={config.password || ''}
+                  onChange={(e) => onChange({ password: e.target.value })}
+                  disabled={disabled}
+                  rightElement={
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400"
+                      className="text-slate-600 hover:text-slate-400 p-1"
                     >
                       {showPassword ? (
                         <EyeOff className="w-3.5 h-3.5" />
@@ -187,8 +179,8 @@ export function NetworkCard({
                         <Eye className="w-3.5 h-3.5" />
                       )}
                     </button>
-                  </div>
-                </div>
+                  }
+                />
               </div>
 
               {/* Test Connection Button */}

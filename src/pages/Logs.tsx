@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { FileText, Search, Download, Trash2, RefreshCw, Copy, Check } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
-import { LoadingSpinner } from '../components/ui';
+import { LoadingSpinner, ActionButtonGroup, Input } from '../components/ui';
 import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel } from '../stores/logs';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
@@ -187,35 +187,30 @@ export default function Logs() {
         subtitle={t('logs.subtitle')}
         icon={<FileText size={18} />}
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleRefresh}
-              disabled={isLoading}
-              variant="secondary"
-              size="sm"
-              leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />}
-            >
-              {t('logs.refresh')}
-            </Button>
-            <Button
-              onClick={handleExport}
-              disabled={logs.length === 0}
-              variant="secondary"
-              size="sm"
-              leftIcon={<Download className="w-3.5 h-3.5" />}
-            >
-              {t('logs.export')}
-            </Button>
-            <Button
-              onClick={() => setShowClearConfirm(true)}
-              disabled={logs.length === 0}
-              variant="danger"
-              size="sm"
-              leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-            >
-              {t('logs.clear')}
-            </Button>
-          </div>
+          <ActionButtonGroup
+            actions={[
+              {
+                icon: RefreshCw,
+                label: t('logs.refresh'),
+                onClick: handleRefresh,
+                disabled: isLoading,
+                loading: isLoading,
+              },
+              {
+                icon: Download,
+                label: t('logs.export'),
+                onClick: handleExport,
+                disabled: logs.length === 0,
+              },
+              {
+                icon: Trash2,
+                label: t('logs.clear'),
+                onClick: () => setShowClearConfirm(true),
+                disabled: logs.length === 0,
+                variant: 'danger',
+              },
+            ]}
+          />
         }
       />
 
@@ -252,25 +247,24 @@ export default function Logs() {
           />
 
           {/* Search Input */}
-          <div className="flex-1 relative max-w-md">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setLogsSearchQuery(e.target.value)}
-              placeholder={t('logs.searchPlaceholder')}
-              className="input-ds text-sm py-1.5 pl-9 w-full"
-            />
-          </div>
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLogsSearchQuery(e.target.value)}
+            placeholder={t('logs.searchPlaceholder')}
+            leftIcon={<Search className="w-4 h-4" />}
+            containerClassName="flex-1 max-w-md"
+          />
 
           {/* Reset Filters */}
           {(levelFilter || sourceFilter || searchQuery) && (
-            <button
+            <Button
               onClick={handleResetFilters}
-              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              variant="ghost"
+              size="xs"
             >
               {t('logs.resetFilters')}
-            </button>
+            </Button>
           )}
         </div>
 

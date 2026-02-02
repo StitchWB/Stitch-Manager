@@ -211,14 +211,14 @@ export default function Chat() {
               </p>
               <p className="text-xs text-vsc-red/80 truncate">{error}</p>
             </div>
-            <button
+            <Button
               onClick={() => sendMessage(messages[messages.length - 2]?.content || '')}
-              className="px-3 py-1.5 text-xs bg-vsc-red/20 hover:bg-vsc-red/30 
-                         text-vsc-red rounded-lg transition-colors flex items-center gap-1.5"
+              variant="danger"
+              size="xs"
+              leftIcon={<RefreshCw size={12} />}
             >
-              <RefreshCw size={12} />
               {t('chat.retry') || 'Retry'}
-            </button>
+            </Button>
           </div>
         </div>
       )}

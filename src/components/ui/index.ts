@@ -50,3 +50,6 @@ export type { LoadingOverlayProps } from './LoadingOverlay';
 
 export { FilterDropdown } from './FilterDropdown';
 export type { FilterDropdownProps, FilterOption } from './FilterDropdown';
+
+export { ActionButtonGroup } from './ActionButtonGroup';
+export type { ActionButtonGroupProps, ActionButton } from './ActionButtonGroup';

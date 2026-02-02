@@ -1,7 +1,7 @@
 import { RefreshCw } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { t } from '../../lib/i18n';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner, Input } from '../ui';
 
 interface EmailCounterSectionProps {
   emailCounter: number;
@@ -22,16 +22,16 @@ export function EmailCounterSection({
       className="pt-6 border-t border-white/10"
     >
       <div className="max-w-xs">
-        <label className="input-label">{t('settings.emailCounter.counterValue')}</label>
         <div className="flex items-center gap-2">
-          <input
+          <Input
             type="number"
-            min="0"
+            label={t('settings.emailCounter.counterValue')}
+            min={0}
             value={emailCounter}
             onChange={e => onEmailCounterChange(parseInt(e.target.value, 10) || 0)}
             disabled={isLoading}
-            className="input-ds text-sm transition-all duration-200"
             placeholder="0"
+            containerClassName="flex-1"
           />
           {isLoading && <LoadingSpinner size="sm" color="muted" />}
         </div>
