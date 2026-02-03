@@ -25,8 +25,7 @@ export const PATCH_VERSIONS: Record<
   Array<{ id: string; label: string; description: string }>
 > = {
   kiro: [
-    { id: 'v2', label: 'v2', description: 'Injection-based patch (stable)' },
-    { id: 'v3', label: 'v3', description: 'Enhanced spoofing + injection' },
+    { id: 'v3', label: 'v3', description: 'Enhanced spoofing with per-account Machine ID rotation' },
   ],
   windsurf: [{ id: 'v1', label: 'v1', description: 'Standard patch' }],
   trae: [{ id: 'v1', label: 'v1', description: 'Pro features unlock' }],

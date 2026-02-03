@@ -1,8 +1,9 @@
 import React from 'react';
-import { Users, Key, PieChart, AlertCircle } from 'lucide-react';
+import { Users, Key, AlertCircle } from 'lucide-react';
 import { StatCard } from './StatCard';
 import { StatCardSkeleton } from './StatCardSkeleton';
 import { t } from '../../lib/i18n';
+import { QuotaDisplay } from '../ui/QuotaDisplay';
 
 interface StatsGridProps {
   isLoading: boolean;
@@ -20,7 +21,6 @@ export const StatsGrid = React.memo(function StatsGrid({
   isLoading,
   totalAccounts,
   activeTokens,
-  quotaPercent,
   quotaUsed,
   quotaLimit,
   accountsNearLimit,
@@ -52,12 +52,11 @@ export const StatsGrid = React.memo(function StatsGrid({
         subtitle={`${totalAccounts - activeTokens} ${t('dashboard.inactive')}`}
         icon={<Key size={18} />}
       />
-      <StatCard
-        title={t('dashboard.quotaUsage')}
-        value={`${quotaPercent}%`}
-        subtitle={`${quotaUsed.toLocaleString()} / ${quotaLimit.toLocaleString()}`}
-        icon={<PieChart size={18} />}
-      />
+
+      <div className="p-3 rounded-lg border border-white/10 bg-white/[0.02] flex items-center min-h-[102px]">
+        <QuotaDisplay used={quotaUsed} limit={quotaLimit} />
+      </div>
+
       <div
         onClick={accountsNearLimit > 0 ? onAccountsNearLimitClick : undefined}
         className={accountsNearLimit > 0 ? 'cursor-pointer' : ''}
@@ -66,14 +65,10 @@ export const StatsGrid = React.memo(function StatsGrid({
           title={t('dashboard.accountsNearLimit')}
           value={accountsNearLimit}
           subtitle={
-            accountsNearLimit > 0
-              ? t('dashboard.clickToFilter')
-              : t('dashboard.allAccountsHealthy')
+            accountsNearLimit > 0 ? t('dashboard.clickToFilter') : t('dashboard.allAccountsHealthy')
           }
           icon={<AlertCircle size={18} />}
-          className={
-            accountsNearLimit > 0 ? 'border border-amber-500/30' : ''
-          }
+          className={accountsNearLimit > 0 ? 'border border-amber-500/30' : ''}
         />
       </div>
     </section>

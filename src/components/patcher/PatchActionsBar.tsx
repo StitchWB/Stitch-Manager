@@ -1,4 +1,4 @@
-import { Download, Trash2, ChevronDown } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { Button } from '../ui/Button';
 import PatchVersionSelector from './PatchVersionSelector';
@@ -21,7 +21,6 @@ interface PatchActionsBarProps {
   isPatched: boolean;
   canPatch: boolean;
   isOperating: boolean;
-  patchStrategy: 'injection' | 'legacy';
   availableVersions: PatchVersion[];
   availableOptions: PatchOption[];
   selectedVersion: string | undefined;
@@ -32,14 +31,12 @@ interface PatchActionsBarProps {
   onSelectVersion: (versionId: string) => void;
   onToggleOption: (optionId: string) => void;
   onToggleAllOptions: (enable: boolean) => void;
-  onChangePatchStrategy: (strategy: 'injection' | 'legacy') => void;
 }
 
 export default function PatchActionsBar({
   isPatched,
   canPatch,
   isOperating,
-  patchStrategy,
   availableVersions,
   availableOptions,
   selectedVersion,
@@ -50,7 +47,6 @@ export default function PatchActionsBar({
   onSelectVersion,
   onToggleOption,
   onToggleAllOptions,
-  onChangePatchStrategy,
 }: PatchActionsBarProps) {
   return (
     <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl p-4 border border-white/5 shadow-sm">
@@ -62,19 +58,6 @@ export default function PatchActionsBar({
           currentPatchVersion={currentPatchVersion}
           onSelectVersion={onSelectVersion}
         />
-
-        {/* Strategy Selector */}
-        <div className="relative">
-          <select
-            value={patchStrategy}
-            onChange={e => onChangePatchStrategy(e.target.value as 'injection' | 'legacy')}
-            className="appearance-none bg-[#0a0a0c]/50 border border-white/10 text-white text-xs rounded-lg px-3 py-1.5 pr-8 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
-          >
-            <option value="injection">Injection</option>
-            <option value="legacy">Legacy</option>
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
-        </div>
 
         <div className="flex-1" />
 

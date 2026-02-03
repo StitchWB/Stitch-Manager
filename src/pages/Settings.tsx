@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Settings as SettingsIcon, Globe, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Globe, Repeat } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
 import { useRegistrationStore } from '../stores/registration';
@@ -29,10 +29,11 @@ import {
   EmailCounterSection,
   EmailServicesSection,
 } from '../components/settings';
+import { AutomationTab } from '../components/registration/AutomationTab';
 import { TabButton } from '../components/ui/TabButton';
 import { LoadingSpinner } from '../components/ui';
 
-type SettingsCategory = 'general' | 'connectivity';
+type SettingsCategory = 'general' | 'connectivity' | 'automation';
 
 interface CategoryConfig {
   id: SettingsCategory;
@@ -50,6 +51,11 @@ const categories: CategoryConfig[] = [
     id: 'connectivity',
     labelKey: 'settings.categories.connectivity',
     icon: <Globe className="w-4 h-4" />,
+  },
+  {
+    id: 'automation',
+    labelKey: 'settings.categories.automation',
+    icon: <Repeat className="w-4 h-4" />,
   },
 ];
 
@@ -181,7 +187,7 @@ export default function Settings() {
         setIsLoadingCounter(true);
         const mailStrategy = data.mailStrategy || 'custom';
         const counterStrategy = mailStrategy === 'gmail' ? 'gmail' : 'custom';
-        
+
         const counter = await getEmailCounter({
           provider: data.provider || 'kiro',
           strategy: counterStrategy,
@@ -433,7 +439,7 @@ export default function Settings() {
         const settings = await getSettings();
         const mailStrategy = settings.mailStrategy || 'custom';
         const counterStrategy = mailStrategy === 'gmail' ? 'gmail' : 'custom';
-        
+
         await setEmailCounter({
           provider: settings.provider || 'kiro',
           strategy: counterStrategy,
@@ -629,6 +635,8 @@ export default function Settings() {
         return renderGeneralSettings();
       case 'connectivity':
         return renderConnectivitySettings();
+      case 'automation':
+        return <AutomationTab />;
       default:
         return null;
     }

@@ -243,6 +243,9 @@ export interface Translations {
     proxySettings: string;
     headless: string;
     headlessDescription: string;
+    logVerbosity: string;
+    logVerbosityDescription: string;
+    logVerbosityTooltip: string;
     accounts: string;
     count: string;
     identitySystem: string;

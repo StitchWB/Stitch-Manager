@@ -227,6 +227,10 @@ export const en: Translations = {
     proxySettings: 'Proxy Settings',
     headless: 'Headless',
     headlessDescription: 'Run without window',
+    logVerbosity: 'Log Verbosity',
+    logVerbosityDescription: 'Control log detail level',
+    logVerbosityTooltip:
+      'Control how much detail to show in logs. Minimal shows only results, Normal shows important steps, Verbose shows all details, Debug shows everything.',
     accounts: 'Accounts',
     count: 'Count',
     identitySystem: 'Identity System',
@@ -585,6 +589,8 @@ export const en: Translations = {
       scaleSmall: 'Small (70%)',
       scaleLarge: 'Large (130%)',
       scaleReset: 'Reset (100%)',
+      on: 'On',
+      off: 'Off',
     },
     imap: {
       title: 'IMAP',
@@ -603,7 +609,8 @@ export const en: Translations = {
     },
     emailCounter: {
       title: 'Email Counter',
-      description: 'Current counter value for COUNTER email strategy (e.g., user+1@domain.com, user+2@domain.com)',
+      description:
+        'Current counter value for COUNTER email strategy (e.g., user+1@domain.com, user+2@domain.com)',
       counterValue: 'Counter Value',
       nextRegistration: 'Next registration will use',
     },
@@ -637,6 +644,27 @@ export const en: Translations = {
       note: 'Note',
       noteDescription: 'Note.',
     },
+  },
+  automation: {
+    title: 'Automation',
+    healthReplenishment: 'Health & Replenishment',
+    healthReplenishmentDesc: 'Configure how the system maintains a healthy pool of accounts.',
+    enableReplenishment: 'Enable Auto-Replenishment',
+    enableReplenishmentDesc: 'Automatically register new accounts when pool is low',
+    minActiveAccounts: 'Min Active Accounts',
+    minActiveAccountsTooltip:
+      'The system will trigger registration if active accounts drop below this number',
+    registrationStrategies: 'Registration Strategies',
+    registrationStrategiesDesc: 'Define which registration method to use for each provider.',
+    kiroStrategy: 'Kiro Strategy',
+    windsurfStrategy: 'Windsurf Strategy',
+    traeStrategy: 'Trae Strategy',
+    rotationRules: 'Rotation Rules',
+    rotationRulesDesc:
+      'Configure when an active account is considered dead and should be rotated out.',
+    legacySettings: 'Legacy Settings',
+    legacyAutoSwitching: 'Legacy Auto-Switching',
+    checkInterval: 'Check Interval (sec)',
   },
   logs: {
     title: 'Logs',

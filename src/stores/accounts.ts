@@ -152,6 +152,7 @@ export const useAccountsStore = create<AccountsState>()(
       },
 
       deleteAccounts: async (accountIds) => {
+        console.log('[Store] deleteAccounts called with:', accountIds);
         const previousAccounts = get().accounts;
         
         // Optimistic update
@@ -159,18 +160,24 @@ export const useAccountsStore = create<AccountsState>()(
           accounts: state.accounts.filter((a) => !accountIds.includes(a.id)),
           selectedIds: new Set([...state.selectedIds].filter((id) => !accountIds.includes(id))),
         }));
+        console.log('[Store] Optimistic update applied, calling bulkDeleteAccounts...');
 
         try {
           // Use bulk delete command
           const result = await bulkDeleteAccounts({ accountIds });
+          console.log('[Store] bulkDeleteAccounts result:', result);
           
           // If some deletions failed, show error but keep optimistic update for succeeded ones
           if (result.failed > 0) {
             const message = `Deleted ${result.succeeded}/${result.total} accounts. ${result.failed} failed.`;
+            console.warn('[Store] Some deletions failed:', message);
             set({ error: message });
+          } else {
+            console.log('[Store] All deletions succeeded');
           }
         } catch (error) {
           // Rollback on error
+          console.error('[Store] bulkDeleteAccounts error, rolling back:', error);
           set({ accounts: previousAccounts });
           const message = error instanceof TauriError ? error.message : String(error);
           set({ error: message });

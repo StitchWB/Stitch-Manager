@@ -1,5 +1,8 @@
 /**
- * Kiro Patch V2 Configuration Types
+ * Kiro Patch V3 Configuration Types
+ * 
+ * V3 introduces per-account Machine ID rotation to prevent account bans.
+ * Each account gets its own unique Machine ID that persists across sessions.
  */
 
 export interface PatchModules {

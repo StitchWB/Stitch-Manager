@@ -14,6 +14,8 @@ import {
   PatcherSettingsDrawer,
 } from '../components/patcher';
 import { Button } from '../components/ui/Button';
+import { getKiroPatchConfig, saveKiroPatchConfig } from '../lib/tauri';
+import type { KiroPatchConfig } from '../types/generated';
 
 export default function PatcherV2() {
   const { language } = useAppStore();
@@ -24,8 +26,6 @@ export default function PatcherV2() {
     backupsLoading,
     error,
     operationInProgress,
-    patchStrategy,
-    setPatchStrategy,
     detectIDEs: scanForIDEs,
     applyPatch,
     removePatch,
@@ -41,6 +41,7 @@ export default function PatcherV2() {
   const [selectedPatchVersion, setSelectedPatchVersion] = useState<Record<string, string>>({});
   const [patchOptions, setPatchOptions] = useState<Record<string, Record<string, boolean>>>({});
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
+  const [kiroPatchConfig, setKiroPatchConfig] = useState<KiroPatchConfig | null>(null);
 
   const currentIDE = detectedIDEs.find(ide => ide.id === selectedIDE);
   const currentIDEBackups = currentIDE ? ((backups[currentIDE.id] || []) as UIBackupInfo[]) : [];
@@ -55,29 +56,54 @@ export default function PatcherV2() {
     listBackups();
   }, [scanForIDEs, listBackups]);
 
+  // Load config after IDEs are detected
+  useEffect(() => {
+    if (detectedIDEs.length > 0 && !kiroPatchConfig) {
+      loadKiroPatchConfig();
+    }
+  }, [detectedIDEs.length, kiroPatchConfig]);
+
+  const loadKiroPatchConfig = async () => {
+    try {
+      const config = await getKiroPatchConfig();
+      setKiroPatchConfig(config);
+      
+      // Initialize patch options from loaded config
+      // This runs only once when config is loaded
+      setPatchOptions(prev => {
+        const newOptions = { ...prev };
+        
+        detectedIDEs.forEach(ide => {
+          if (!newOptions[ide.id]) {
+            const ideOptions = PATCH_OPTIONS[ide.type] || [];
+            newOptions[ide.id] = {};
+            
+            if (ide.type === 'kiro') {
+              ideOptions.forEach(opt => {
+                const savedValue = config.modules[opt.id as keyof typeof config.modules];
+                newOptions[ide.id][opt.id] = savedValue !== undefined ? savedValue : opt.defaultEnabled;
+              });
+            } else {
+              ideOptions.forEach(opt => {
+                newOptions[ide.id][opt.id] = opt.defaultEnabled;
+              });
+            }
+          }
+        });
+        
+        return newOptions;
+      });
+    } catch (err) {
+      console.error('Failed to load Kiro patch config:', err);
+    }
+  };
+
   // Auto-select first IDE
   useEffect(() => {
     if (!selectedIDE && detectedIDEs.length > 0) {
       setSelectedIDE(detectedIDEs[0].id);
     }
   }, [detectedIDEs, selectedIDE]);
-
-  // Initialize patch options for each IDE
-  useEffect(() => {
-    const newOptions: Record<string, Record<string, boolean>> = {};
-    detectedIDEs.forEach(ide => {
-      if (!patchOptions[ide.id]) {
-        const ideOptions = PATCH_OPTIONS[ide.type] || [];
-        newOptions[ide.id] = {};
-        ideOptions.forEach(opt => {
-          newOptions[ide.id][opt.id] = opt.defaultEnabled;
-        });
-      }
-    });
-    if (Object.keys(newOptions).length > 0) {
-      setPatchOptions(prev => ({ ...prev, ...newOptions }));
-    }
-  }, [detectedIDEs]);
 
   const handleScan = async () => {
     clearError();
@@ -145,24 +171,78 @@ export default function PatcherV2() {
     }
   };
 
-  const togglePatchOption = (ideId: string, optionId: string) => {
+  const togglePatchOption = async (ideId: string, optionId: string) => {
+    const newValue = !patchOptions[ideId]?.[optionId];
+    
+    // Update local state
     setPatchOptions(prev => ({
       ...prev,
       [ideId]: {
         ...prev[ideId],
-        ...{ [optionId]: !prev[ideId]?.[optionId] },
+        [optionId]: newValue,
       },
     }));
+
+    // Save to Kiro patch config if this is Kiro IDE
+    const ide = detectedIDEs.find(i => i.id === ideId);
+    if (ide?.type === 'kiro' && kiroPatchConfig) {
+      try {
+        const updatedConfig: KiroPatchConfig = {
+          ...kiroPatchConfig,
+          modules: {
+            ...kiroPatchConfig.modules,
+            [optionId]: newValue,
+          },
+        };
+        await saveKiroPatchConfig(updatedConfig);
+        setKiroPatchConfig(updatedConfig);
+      } catch (err) {
+        console.error('Failed to save patch options:', err);
+        const { addNotification } = useAppStore.getState();
+        addNotification({
+          type: 'error',
+          title: 'Failed to save options',
+          message: String(err),
+        });
+      }
+    }
   };
 
-  const toggleAllOptions = (enable: boolean) => {
+  const toggleAllOptions = async (enable: boolean) => {
     if (!currentIDE) return;
     const newOpts = { ...patchOptions[currentIDE.id] };
     const options = PATCH_OPTIONS[currentIDE.type] || [];
     options.forEach(opt => {
       newOpts[opt.id] = enable;
     });
+    
+    // Update local state
     setPatchOptions(prev => ({ ...prev, [currentIDE.id]: newOpts }));
+
+    // Save to Kiro patch config if this is Kiro IDE
+    if (currentIDE.type === 'kiro' && kiroPatchConfig) {
+      try {
+        const updatedModules = { ...kiroPatchConfig.modules };
+        options.forEach(opt => {
+          updatedModules[opt.id as keyof typeof updatedModules] = enable;
+        });
+        
+        const updatedConfig: KiroPatchConfig = {
+          ...kiroPatchConfig,
+          modules: updatedModules,
+        };
+        await saveKiroPatchConfig(updatedConfig);
+        setKiroPatchConfig(updatedConfig);
+      } catch (err) {
+        console.error('Failed to save patch options:', err);
+        const { addNotification } = useAppStore.getState();
+        addNotification({
+          type: 'error',
+          title: 'Failed to save options',
+          message: String(err),
+        });
+      }
+    }
   };
 
   return (
@@ -245,7 +325,6 @@ export default function PatcherV2() {
                     isPatched={currentIDE.isPatched}
                     canPatch={currentIDE.canPatch}
                     isOperating={isOperating}
-                    patchStrategy={patchStrategy}
                     availableVersions={availableVersions}
                     availableOptions={availableOptions}
                     selectedVersion={selectedPatchVersion[currentIDE.id]}
@@ -261,7 +340,6 @@ export default function PatcherV2() {
                     }
                     onToggleOption={optionId => togglePatchOption(currentIDE.id, optionId)}
                     onToggleAllOptions={toggleAllOptions}
-                    onChangePatchStrategy={setPatchStrategy}
                   />
 
                   {/* Backups Section */}

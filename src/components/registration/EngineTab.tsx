@@ -1,12 +1,15 @@
-import { Settings2, Eye, EyeOff, Timer, Keyboard } from 'lucide-react';
+import { Settings2, Eye, EyeOff, Timer, Keyboard, MessageSquare } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';
 import { NumberInput } from '../ui/NumberInput';
 import { Toggle } from '../ui/Toggle';
 import { RangeSlider } from '../ui/RangeSlider';
 import { SectionHeader } from '../ui/SectionHeader';
+import { Select } from '../ui/Select';
 import { t } from '../../lib/i18n';
 import type { ProviderName } from '../../types';
+import type { LogVerbosity } from '../../constants/logging';
+import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
 
 interface EngineTabProps {
   provider: ProviderName;
@@ -18,6 +21,8 @@ interface EngineTabProps {
   onSpeedMultiplierChange: (value: number) => void;
   delayBetweenAccounts: number;
   onDelayBetweenAccountsChange: (value: number) => void;
+  logVerbosity: LogVerbosity;
+  onLogVerbosityChange: (level: LogVerbosity) => void;
   verificationCodeTimeout: number;
   onVerificationCodeTimeoutChange: (value: number) => void;
   oauthCallbackTimeout: number;
@@ -51,6 +56,8 @@ export function EngineTab({
   onSpeedMultiplierChange,
   delayBetweenAccounts,
   onDelayBetweenAccountsChange,
+  logVerbosity,
+  onLogVerbosityChange,
   verificationCodeTimeout,
   onVerificationCodeTimeoutChange,
   oauthCallbackTimeout,
@@ -138,6 +145,36 @@ export function EngineTab({
           onChange={onHeadlessChange}
           disabled={false}
         />
+      </div>
+
+      {/* Log Verbosity */}
+      <div
+        className="rounded-lg p-3"
+        style={{
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.05)',
+        }}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+            <MessageSquare className="w-4 h-4 text-slate-500" />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-medium text-slate-200">{t('autoReg.logVerbosity')}</div>
+            <div className="text-[10px] text-slate-500">{t('autoReg.logVerbosityDescription')}</div>
+          </div>
+        </div>
+        <Tooltip content={t('autoReg.logVerbosityTooltip')}>
+          <Select
+            value={logVerbosity}
+            onChange={(e) => onLogVerbosityChange(e.target.value as LogVerbosity)}
+            options={LOG_VERBOSITY_OPTIONS.map(opt => ({
+              value: opt.value,
+              label: opt.label,
+            }))}
+            disabled={false}
+          />
+        </Tooltip>
       </div>
 
       {/* Speed & Delay Row */}
