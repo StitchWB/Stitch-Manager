@@ -8,6 +8,7 @@ import type {
   RegistrationStatus,
 } from '../types';
 import type { SettingsData } from '../types/generated';
+import type { LogVerbosity } from '../constants/logging';
 
 // Mail strategy type
 export type MailStrategy = 'custom' | 'gmail';
@@ -20,17 +21,17 @@ export interface IMAPConfig {
   strategy: MailStrategy;
   // Email generation strategy
   emailStrategy?: EmailStrategy;
-  // Custom domain fields
+  // Custom domain fields (GLOBAL - shared across providers)
   server: string;
   port: number;
   email: string;
   password: string;
   useTLS: boolean;
-  // Gmail alias fields
+  // Gmail alias fields (GLOBAL - shared across providers)
   gmailBase: string;
   gmailAlias: string;
   gmailAppPassword: string;
-  // Addy.io fields
+  // Addy.io fields (GLOBAL - shared across providers)
   addyioEnabled?: boolean;
   addyioApiToken?: string;
   addyioDomain?: string;
@@ -39,20 +40,31 @@ export interface IMAPConfig {
   addyioDefaultRecipientId?: string;
   addyioDescriptionTemplate?: string;
   addyioFromName?: string;
-  // 33mail fields
+  // 33mail fields (GLOBAL - shared across providers)
   thirtyThreeMailEnabled?: boolean;
   thirtyThreeMailUsername?: string;
   thirtyThreeMailDomain?: string;
 }
 
-// Provider-specific IMAP configurations
-export interface ProviderIMAPConfigs {
-  kiro: IMAPConfig;
-  windsurf: IMAPConfig;
-  trae: IMAPConfig;
-  github: IMAPConfig;
-  aws: IMAPConfig;
-  copilot: IMAPConfig;
+// Provider-specific email strategy settings (NOT including IMAP credentials)
+export interface ProviderEmailStrategy {
+  strategy: MailStrategy; // custom/gmail/33mail/addyio
+  // For custom domain - which domain to use
+  customDomain?: string;
+  // For 33mail - which domain to use
+  thirtyThreeMailDomain?: string;
+  // For addyio - which domain to use
+  addyioDomain?: string;
+}
+
+// Provider-specific configurations (email strategy only, IMAP is global)
+export interface ProviderEmailStrategies {
+  kiro: ProviderEmailStrategy;
+  windsurf: ProviderEmailStrategy;
+  trae: ProviderEmailStrategy;
+  github: ProviderEmailStrategy;
+  aws: ProviderEmailStrategy;
+  copilot: ProviderEmailStrategy;
 }
 
 // Proxy configuration
@@ -113,8 +125,8 @@ export interface AdvancedSettings {
 export interface RegistrationConfig {
   provider: ProviderName;
   credentials: AutoRegCredentials;
-  imap: IMAPConfig; // Current active IMAP config (for backward compatibility)
-  providerImapConfigs: ProviderIMAPConfigs; // Provider-specific IMAP configs
+  imap: IMAPConfig; // Global IMAP config (shared across all providers)
+  providerEmailStrategies: ProviderEmailStrategies; // Provider-specific email strategies
   proxy: ProxyConfig;
   patterns: PatternConfig;
   advanced: AdvancedSettings;
@@ -122,6 +134,16 @@ export interface RegistrationConfig {
   timeout: number;
   retryAttempts: number;
   uiScale: number;
+}
+
+// Stage progress data
+export interface StageProgressData {
+  stage: string;
+  icon?: string;
+  status: 'pending' | 'active' | 'success' | 'error';
+  progress?: { current: number; total: number };
+  startTime: number;
+  message?: string;
 }
 
 // Registration result for the results table
@@ -161,6 +183,7 @@ interface RegistrationState {
   // Logs
   logs: RegistrationLog[];
   activeProvider: string;
+  logVerbosity: LogVerbosity;
 
   // Results
   results: RegistrationResult[];
@@ -179,6 +202,11 @@ interface RegistrationState {
   imapPasswordSet: boolean;
   gmailAppPasswordSet: boolean;
 
+  // Stage progress tracking
+  currentStage: string | null;
+  stageProgress: Map<string, StageProgressData>;
+  stageTimers: Map<string, number>; // start timestamps
+
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
@@ -186,6 +214,7 @@ interface RegistrationState {
   setAdvancedSettings: (settings: Partial<AdvancedSettings>) => void;
   setCount: (count: number) => void;
   setUIScale: (scale: number) => void;
+  setLogVerbosity: (level: LogVerbosity) => void;
 
   // Actions - Settings persistence
 
@@ -200,6 +229,12 @@ interface RegistrationState {
 
   // Actions - Progress
   setProgress: (progress: Partial<RegistrationProgress>) => void;
+
+  // Actions - Stage progress
+  setCurrentStage: (stage: string | null) => void;
+  updateStageProgress: (stage: string, current: number, total: number, message?: string) => void;
+  completeStage: (stage: string, status: 'success' | 'error') => void;
+  clearStageProgress: () => void;
 
   // Actions - Results
   addResult: (result: Omit<RegistrationResult, 'id' | 'createdAt'>) => void;
@@ -236,6 +271,13 @@ const DEFAULT_IMAP_CONFIG: IMAPConfig = {
   thirtyThreeMailDomain: '33mail.com',
 };
 
+const DEFAULT_EMAIL_STRATEGY: ProviderEmailStrategy = {
+  strategy: 'custom',
+  customDomain: '',
+  thirtyThreeMailDomain: '33mail.com',
+  addyioDomain: '',
+};
+
 const DEFAULT_CONFIG: RegistrationConfig = {
   provider: 'kiro',
   credentials: {
@@ -243,13 +285,13 @@ const DEFAULT_CONFIG: RegistrationConfig = {
     password: '',
   },
   imap: { ...DEFAULT_IMAP_CONFIG },
-  providerImapConfigs: {
-    kiro: { ...DEFAULT_IMAP_CONFIG },
-    windsurf: { ...DEFAULT_IMAP_CONFIG },
-    trae: { ...DEFAULT_IMAP_CONFIG },
-    github: { ...DEFAULT_IMAP_CONFIG },
-    aws: { ...DEFAULT_IMAP_CONFIG },
-    copilot: { ...DEFAULT_IMAP_CONFIG },
+  providerEmailStrategies: {
+    kiro: { ...DEFAULT_EMAIL_STRATEGY },
+    windsurf: { ...DEFAULT_EMAIL_STRATEGY },
+    trae: { ...DEFAULT_EMAIL_STRATEGY },
+    github: { ...DEFAULT_EMAIL_STRATEGY },
+    aws: { ...DEFAULT_EMAIL_STRATEGY },
+    copilot: { ...DEFAULT_EMAIL_STRATEGY },
   },
   proxy: {
     enabled: false,
@@ -329,6 +371,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     progress: DEFAULT_PROGRESS,
     logs: [],
     activeProvider: 'all',
+    logVerbosity: 'normal',
     results: [],
     successCount: 0,
     failedCount: 0,
@@ -339,25 +382,46 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     imapPasswordSet: false,
     gmailAppPasswordSet: false,
 
+    // Stage progress tracking
+    currentStage: null,
+    stageProgress: new Map(),
+    stageTimers: new Map(),
+
     // Config actions - all trigger auto-save
     setProvider: (provider: ProviderName) => {
       console.log('[REGISTRATION_STORE] setProvider called:', provider);
       set(state => {
-        // Save current IMAP config to current provider's slot
-        const updatedProviderConfigs = {
-          ...state.config.providerImapConfigs,
-          [state.config.provider]: state.config.imap,
+        // Save current email strategy to current provider's slot
+        const currentStrategy: ProviderEmailStrategy = {
+          strategy: state.config.imap.strategy,
+          customDomain: state.config.imap.server ? `${state.config.imap.email.split('@')[1] || ''}` : '',
+          thirtyThreeMailDomain: state.config.imap.thirtyThreeMailDomain,
+          addyioDomain: state.config.imap.addyioDomain,
         };
         
-        // Load IMAP config for new provider
-        const newImap = updatedProviderConfigs[provider];
+        const updatedStrategies = {
+          ...state.config.providerEmailStrategies,
+          [state.config.provider]: currentStrategy,
+        };
+        
+        // Load email strategy for new provider
+        const newStrategy = updatedStrategies[provider];
+        
+        // Update IMAP config with new provider's strategy (but keep IMAP credentials)
+        const newImap: IMAPConfig = {
+          ...state.config.imap, // Keep all IMAP credentials
+          strategy: newStrategy.strategy, // Update strategy
+          // Update domain-specific fields based on strategy
+          thirtyThreeMailDomain: newStrategy.thirtyThreeMailDomain,
+          addyioDomain: newStrategy.addyioDomain,
+        };
         
         return {
           config: {
             ...state.config,
             provider,
             imap: newImap,
-            providerImapConfigs: updatedProviderConfigs,
+            providerEmailStrategies: updatedStrategies,
           },
         };
       });
@@ -371,15 +435,24 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         const newImap = { ...state.config.imap, ...imap };
         console.log('[REGISTRATION_STORE] New IMAP config state:', newImap);
 
-        // Update both current imap and provider-specific config
-        const updatedProviderConfigs = {
-          ...state.config.providerImapConfigs,
-          [state.config.provider]: newImap,
-        };
+        // If strategy changed, update provider-specific strategy
+        let updatedStrategies = state.config.providerEmailStrategies;
+        if ('strategy' in imap) {
+          const currentStrategy: ProviderEmailStrategy = {
+            strategy: newImap.strategy,
+            customDomain: newImap.server ? `${newImap.email.split('@')[1] || ''}` : '',
+            thirtyThreeMailDomain: newImap.thirtyThreeMailDomain,
+            addyioDomain: newImap.addyioDomain,
+          };
+          updatedStrategies = {
+            ...updatedStrategies,
+            [state.config.provider]: currentStrategy,
+          };
+        }
 
         const updates: Partial<RegistrationConfig> = {
           imap: newImap,
-          providerImapConfigs: updatedProviderConfigs,
+          providerEmailStrategies: updatedStrategies,
         };
 
         // If emailPattern is being updated, also update patterns
@@ -393,8 +466,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { emailPattern, ...imapWithoutPattern } = imapWithPattern;
           updates.imap = { ...state.config.imap, ...imapWithoutPattern };
-          updatedProviderConfigs[state.config.provider] = updates.imap;
-          updates.providerImapConfigs = updatedProviderConfigs;
         }
 
         console.log('[REGISTRATION_STORE] setIMAPConfig: new config updates:', updates);
@@ -445,6 +516,12 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       triggerSave();
     },
 
+    setLogVerbosity: (level: LogVerbosity) => {
+      console.log('[REGISTRATION_STORE] setLogVerbosity called:', level);
+      set({ logVerbosity: level });
+      triggerSave();
+    },
+
     // Actions - Settings persistence
 
     loadSettings: async () => {
@@ -453,16 +530,43 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         const settings: SettingsData = await getSettings();
         console.log('[REGISTRATION_STORE] loadSettings: got settings from DB:', settings);
 
-        // Try to load provider-specific configs from localStorage
-        let providerImapConfigs: ProviderIMAPConfigs | null = null;
+        // Try to load provider-specific email strategies from localStorage
+        let providerEmailStrategies: ProviderEmailStrategies | null = null;
         try {
-          const stored = localStorage.getItem('providerImapConfigs');
+          const stored = localStorage.getItem('providerEmailStrategies');
           if (stored) {
-            providerImapConfigs = JSON.parse(stored);
-            console.log('[REGISTRATION_STORE] loadSettings: loaded provider configs from localStorage');
+            providerEmailStrategies = JSON.parse(stored);
+            console.log('[REGISTRATION_STORE] loadSettings: loaded provider strategies from localStorage');
+          } else {
+            // Migration: Check for old providerImapConfigs format
+            const oldStored = localStorage.getItem('providerImapConfigs');
+            if (oldStored) {
+              console.log('[REGISTRATION_STORE] loadSettings: found old providerImapConfigs, migrating...');
+              try {
+                const oldConfigs = JSON.parse(oldStored);
+                // Convert old format to new format (extract only strategy and domain info)
+                providerEmailStrategies = {} as ProviderEmailStrategies;
+                for (const [provider, oldConfig] of Object.entries(oldConfigs)) {
+                  const old = oldConfig as IMAPConfig;
+                  providerEmailStrategies[provider as ProviderName] = {
+                    strategy: old.strategy || 'custom',
+                    customDomain: old.server ? `${old.email?.split('@')[1] || ''}` : '',
+                    thirtyThreeMailDomain: old.thirtyThreeMailDomain || '33mail.com',
+                    addyioDomain: old.addyioDomain || '',
+                  };
+                }
+                // Save migrated data in new format
+                localStorage.setItem('providerEmailStrategies', JSON.stringify(providerEmailStrategies));
+                // Remove old format
+                localStorage.removeItem('providerImapConfigs');
+                console.log('[REGISTRATION_STORE] loadSettings: migration completed, old data removed');
+              } catch (migrationError) {
+                console.error('[REGISTRATION_STORE] loadSettings: migration failed:', migrationError);
+              }
+            }
           }
         } catch (e) {
-          console.warn('[REGISTRATION_STORE] loadSettings: failed to load provider configs from localStorage:', e);
+          console.warn('[REGISTRATION_STORE] loadSettings: failed to load provider strategies from localStorage:', e);
         }
 
         set(state => {
@@ -471,13 +575,13 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           const gmailAppPasswordMasked = settings.gmailAppPassword === '********';
           const proxyPasswordMasked = settings.proxyPassword === '********';
 
-          const currentImap: IMAPConfig = {
+          // Build global IMAP config (shared across all providers)
+          const globalImap: IMAPConfig = {
             ...state.config.imap,
             strategy: (settings.mailStrategy as MailStrategy) || 'custom',
             server: settings.imapServer || '',
             port: settings.imapPort || 993,
             email: settings.imapEmail || '',
-            // Don't overwrite password with masked value - keep existing or empty
             password: imapPasswordMasked
               ? state.config.imap.password
               : settings.imapPassword || '',
@@ -486,7 +590,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             gmailAppPassword: gmailAppPasswordMasked
               ? state.config.imap.gmailAppPassword
               : settings.gmailAppPassword || '',
-            // Load addy.io settings
+            // Load addy.io settings (global)
             addyioEnabled: settings.addyioEnabled || false,
             addyioApiToken: settings.addyioApiToken || '',
             addyioDomain: settings.addyioDomain || '',
@@ -495,7 +599,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             addyioDefaultRecipientId: settings.addyioDefaultRecipientId || '',
             addyioDescriptionTemplate: settings.addyioDescriptionTemplate || '',
             addyioFromName: settings.addyioFromName || '',
-            // Load 33mail settings
+            // Load 33mail settings (global)
             thirtyThreeMailEnabled: settings.thirtyThreeMailEnabled || false,
             thirtyThreeMailUsername: settings.thirtyThreeMailUsername || '',
             thirtyThreeMailDomain: settings.thirtyThreeMailDomain || '33mail.com',
@@ -503,31 +607,35 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
 
           const currentProvider = (settings.provider as ProviderName) || 'kiro';
 
-          // Initialize provider configs with defaults, then override with stored values
-          const finalProviderConfigs: ProviderIMAPConfigs = providerImapConfigs || {
-            kiro: { ...DEFAULT_IMAP_CONFIG },
-            windsurf: { ...DEFAULT_IMAP_CONFIG },
-            trae: { ...DEFAULT_IMAP_CONFIG },
-            github: { ...DEFAULT_IMAP_CONFIG },
-            aws: { ...DEFAULT_IMAP_CONFIG },
-            copilot: { ...DEFAULT_IMAP_CONFIG },
+          // Initialize provider strategies with defaults, then override with stored values
+          const finalProviderStrategies: ProviderEmailStrategies = providerEmailStrategies || {
+            kiro: { ...DEFAULT_EMAIL_STRATEGY },
+            windsurf: { ...DEFAULT_EMAIL_STRATEGY },
+            trae: { ...DEFAULT_EMAIL_STRATEGY },
+            github: { ...DEFAULT_EMAIL_STRATEGY },
+            aws: { ...DEFAULT_EMAIL_STRATEGY },
+            copilot: { ...DEFAULT_EMAIL_STRATEGY },
           };
 
-          // Set current provider's config from DB
-          finalProviderConfigs[currentProvider] = currentImap;
+          // Set current provider's strategy from DB
+          finalProviderStrategies[currentProvider] = {
+            strategy: globalImap.strategy,
+            customDomain: globalImap.server ? `${globalImap.email.split('@')[1] || ''}` : '',
+            thirtyThreeMailDomain: globalImap.thirtyThreeMailDomain,
+            addyioDomain: globalImap.addyioDomain,
+          };
 
           const newConfig = {
             config: {
               ...state.config,
               provider: currentProvider,
-              imap: currentImap,
-              providerImapConfigs: finalProviderConfigs,
+              imap: globalImap,
+              providerEmailStrategies: finalProviderStrategies,
               proxy: {
                 ...state.config.proxy,
                 enabled: settings.proxyEnabled || false,
                 url: settings.proxyUrl || '',
                 username: settings.proxyUsername || '',
-                // Don't overwrite password with masked value - keep existing or empty
                 password: proxyPasswordMasked
                   ? state.config.proxy.password
                   : settings.proxyPassword || '',
@@ -542,15 +650,13 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
               },
               advanced: {
                 ...state.config.advanced,
-                // CRITICAL FIX: Load headless setting from database
                 headless: settings.headless === true,
               },
               count: settings.count || 1,
               uiScale: settings.uiScale || 1.0,
             },
+            logVerbosity: (settings.logVerbosity as LogVerbosity) || 'normal',
             settingsLoaded: true,
-
-            // Track that password exists in DB even if we don't have the actual value
             imapPasswordSet: imapPasswordMasked || !!settings.imapPassword,
             gmailAppPasswordSet: gmailAppPasswordMasked || !!settings.gmailAppPassword,
           };
@@ -566,25 +672,15 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
     },
 
     saveSettings: async () => {
-      const { config } = get();
+      const { config, logVerbosity } = get();
       console.log('[REGISTRATION_STORE] saveSettings: starting with config:', config);
-      console.log('[REGISTRATION_STORE] saveSettings: addy.io config:', {
-        addyioEnabled: config.imap.addyioEnabled,
-        addyioApiToken: config.imap.addyioApiToken ? '***' : 'empty',
-        addyioDomain: config.imap.addyioDomain,
-        addyioAliasFormat: config.imap.addyioAliasFormat,
-        addyioAutoDelete: config.imap.addyioAutoDelete,
-        addyioDefaultRecipientId: config.imap.addyioDefaultRecipientId,
-        addyioDescriptionTemplate: config.imap.addyioDescriptionTemplate,
-        addyioFromName: config.imap.addyioFromName,
-      });
 
-      // Save provider-specific configs to localStorage
+      // Save provider-specific email strategies to localStorage
       try {
-        localStorage.setItem('providerImapConfigs', JSON.stringify(config.providerImapConfigs));
-        console.log('[REGISTRATION_STORE] saveSettings: saved provider configs to localStorage');
+        localStorage.setItem('providerEmailStrategies', JSON.stringify(config.providerEmailStrategies));
+        console.log('[REGISTRATION_STORE] saveSettings: saved provider strategies to localStorage');
       } catch (e) {
-        console.warn('[REGISTRATION_STORE] saveSettings: failed to save provider configs to localStorage:', e);
+        console.warn('[REGISTRATION_STORE] saveSettings: failed to save provider strategies to localStorage:', e);
       }
 
       // Basic validation
@@ -608,7 +704,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           imapServer: config.imap.server,
           imapPort: config.imap.port,
           imapEmail: config.imap.email,
-          imapUser: config.imap.email, // Copy email to user field for Python IMAP login
+          imapUser: config.imap.email,
           gmailBase: config.imap.gmailBase,
           gmailAlias: config.imap.gmailAlias,
           proxyEnabled: config.proxy.enabled,
@@ -622,8 +718,8 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           count: config.count,
           headless: config.advanced.headless,
           uiScale: config.uiScale,
-          // Save addy.io settings
-
+          logVerbosity: logVerbosity,
+          // Save addy.io settings (global)
           addyioEnabled: config.imap.addyioEnabled || false,
           addyioApiToken: config.imap.addyioApiToken || '',
           addyioDomain: config.imap.addyioDomain || '',
@@ -632,7 +728,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           addyioDefaultRecipientId: config.imap.addyioDefaultRecipientId || '',
           addyioDescriptionTemplate: config.imap.addyioDescriptionTemplate || '',
           addyioFromName: config.imap.addyioFromName || '',
-          // Save 33mail settings
+          // Save 33mail settings (global)
           thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled || false,
           thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername || '',
           thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain || '33mail.com',
@@ -759,6 +855,74 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           ...state.history,
         ].slice(0, 50), // Keep only last 50 entries
       })),
+
+    // Stage progress actions
+    setCurrentStage: (stage: string | null) => {
+      const { stageProgress, stageTimers } = get();
+      const now = Date.now();
+
+      // Update previous stage to success if exists
+      if (get().currentStage) {
+        const prevStage = get().currentStage!;
+        const prevData = stageProgress.get(prevStage);
+        if (prevData) {
+          stageProgress.set(prevStage, { ...prevData, status: 'success' });
+        }
+      }
+
+      // Start new stage
+      if (stage) {
+        stageProgress.set(stage, {
+          stage,
+          status: 'active',
+          startTime: now,
+        });
+        stageTimers.set(stage, now);
+      }
+
+      set({
+        currentStage: stage,
+        stageProgress: new Map(stageProgress),
+        stageTimers: new Map(stageTimers),
+      });
+    },
+
+    updateStageProgress: (stage: string, current: number, total: number, message?: string) => {
+      const { stageProgress } = get();
+      const data = stageProgress.get(stage);
+
+      if (data) {
+        stageProgress.set(stage, {
+          ...data,
+          progress: { current, total },
+          message,
+        });
+        set({ stageProgress: new Map(stageProgress) });
+      }
+    },
+
+    completeStage: (stage: string, status: 'success' | 'error') => {
+      const { stageProgress, stageTimers } = get();
+      const data = stageProgress.get(stage);
+
+      if (data) {
+        stageProgress.set(stage, { ...data, status });
+        stageTimers.delete(stage);
+        set({
+          stageProgress: new Map(stageProgress),
+          stageTimers: new Map(stageTimers),
+          currentStage: null,
+        });
+      }
+    },
+
+    clearStageProgress: () => {
+      set({
+        currentStage: null,
+        stageProgress: new Map(),
+        stageTimers: new Map(),
+      });
+    },
 
     // WebSocket actions
     setWsConnected: (connected: boolean) => set({ wsConnected: connected }),

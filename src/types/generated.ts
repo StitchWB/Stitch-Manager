@@ -576,6 +576,7 @@ export type SettingsData = {
   nameCustomLast?: string;
   count?: number;
   headless?: boolean;
+  logVerbosity?: string;
   customIdePaths?: { [key in string]: string };
   patcherStrategy?: string;
   autoRotateEnabled?: boolean;
@@ -584,6 +585,17 @@ export type SettingsData = {
   tokenRefreshCheckInterval?: number;
   tokenRefreshBuffer?: number;
   uiScale?: number;
+  bg_auto_register_enabled?: string;
+  bg_register_interval_minutes?: string;
+  bg_min_accounts_threshold?: string;
+  bg_auto_switch_enabled?: string;
+  bg_switch_on_zero_credits?: string;
+  bg_check_credits_interval_seconds?: string;
+  autoReplenishEnabled?: boolean;
+  minActiveAccounts?: number;
+  kiroRegStrategy?: string;
+  windsurfRegStrategy?: string;
+  traeRegStrategy?: string;
 };
 
 /**
@@ -699,6 +711,14 @@ export type DashboardStats = {
 
 export type ValidationResult = { valid: boolean; value: string | null; error: string | null };
 
+/**
+ * Kiro Patch V3 Configuration
+ *
+ * V3 introduces per-account Machine ID rotation to prevent account bans.
+ * Each account gets its own unique Machine ID stored in accountBindings.
+ * Network requests extract the account ID from Authorization headers and
+ * use the account-specific Machine ID for spoofing.
+ */
 export type KiroPatchConfig = {
   version: number;
   modules: PatchModules;
@@ -1001,4 +1021,47 @@ export type AutoregConfig = {
   email: EmailConfig;
   imap: ImapConfig;
   debug: DebugConfig;
+};
+
+export type LogLevel = 'minimal' | 'normal' | 'verbose' | 'debug';
+
+export type LogStatus = 'info' | 'success' | 'error' | 'warning' | 'progress';
+
+export type StructuredLogEntry = {
+  accountId: string;
+  stage: string;
+  status: LogStatus;
+  message: string;
+  icon: string | null;
+  duration: number | null;
+  timestamp: string;
+  level: LogLevel;
+};
+
+export type StageProgress = {
+  accountId: string;
+  stage: string;
+  current: number;
+  total: number;
+  message: string;
+};
+
+export type LogGroup = {
+  id: string;
+  stage: string;
+  accountId: string;
+  entries: StructuredLogEntry[];
+  startTime: string;
+  endTime: string | null;
+  status: LogStatus;
+  entryCount: number;
+  duration: number | null;
+};
+
+export type LogFilterConfig = {
+  minLevel: LogLevel;
+  showDebug: boolean;
+  showProgress: boolean;
+  autoCollapseSuccess: boolean;
+  groupByStage: boolean;
 };

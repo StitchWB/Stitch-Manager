@@ -37,9 +37,6 @@ interface PatcherState {
   
   // Operation status
   operationInProgress: Record<string, 'patching' | 'unpatching' | 'restoring' | null>;
-
-  // Patch settings
-  patchStrategy: 'injection' | 'legacy';
   
   // Trae storage patch state
   traePatched: boolean | null;
@@ -52,7 +49,6 @@ interface PatcherState {
   getAllPatchStatuses: () => Promise<void>;
   applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
-  setPatchStrategy: (strategy: 'injection' | 'legacy') => void;
   
   // Trae storage patch actions
   checkTraePatched: () => Promise<boolean>;
@@ -83,7 +79,6 @@ export const usePatcherStore = create<PatcherState>()(
         backupsLoading: false,
         error: null,
         operationInProgress: {},
-        patchStrategy: 'injection', // Default to new method
         traePatched: null,
         traeExtensionPatched: null,
         traeWorkbenchPatched: null,
@@ -162,12 +157,6 @@ export const usePatcherStore = create<PatcherState>()(
         },
 
         // ============================================
-        // Patching Operations
-        // ============================================
-
-        setPatchStrategy: (strategy) => set({ patchStrategy: strategy }),
-
-        // ============================================
         // Trae Storage Patch
         // ============================================
 
@@ -218,8 +207,8 @@ export const usePatcherStore = create<PatcherState>()(
           }));
 
           try {
-            const { patchStrategy } = get();
-            const result = await patchIDE({ ideId, createBackup, strategy: patchStrategy });
+            // Always use injection strategy (v3 patch)
+            const result = await patchIDE({ ideId, createBackup, strategy: 'injection' });
             
             if (result.success) {
               // Update IDE status

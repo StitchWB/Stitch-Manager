@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, RefreshCw, Download, Users, LayoutGrid, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { listen } from '@tauri-apps/api/event';
 import Header from '../components/layout/Header';
 import AccountsTable from '../components/AccountsTable';
 import AddAccountModal from '../components/AddAccountModal';
@@ -67,35 +68,50 @@ export default function Accounts() {
   } = useUIPreferencesStore();
 
   // Initialize state from preferences (use preferences as source of truth)
-  const [providerFilter, setProviderFilter] = useUrlState('provider', accountsPage.providerFilter || 'all');
+  const [providerFilter, setProviderFilter] = useUrlState(
+    'provider',
+    accountsPage.providerFilter || 'all'
+  );
   const [statusFilter, setStatusFilter] = useUrlState('status', accountsPage.statusFilter || 'all');
   const [searchQuery, setSearchQuery] = useState(accountsPage.searchQuery || '');
   const [quotaFilter, setQuotaFilter] = useState<string>(accountsPage.quotaFilter || 'any');
 
   // Memoized handlers to prevent unnecessary re-renders
-  const handleProviderFilterChange = useCallback((value: string) => {
-    setProviderFilter(value);
-    setAccountsProviderFilter(value);
-    setSelectedProvider(value === 'all' ? null : (value as any));
-  }, [setProviderFilter, setAccountsProviderFilter, setSelectedProvider]);
+  const handleProviderFilterChange = useCallback(
+    (value: string) => {
+      setProviderFilter(value);
+      setAccountsProviderFilter(value);
+      setSelectedProvider(value === 'all' ? null : (value as any));
+    },
+    [setProviderFilter, setAccountsProviderFilter, setSelectedProvider]
+  );
 
-  const handleStatusFilterChange = useCallback((value: string) => {
-    setStatusFilter(value);
-    setAccountsStatusFilter(value);
-    setStoreStatusFilter(value === 'all' ? null : (value as AccountStatus));
-  }, [setStatusFilter, setAccountsStatusFilter, setStoreStatusFilter]);
+  const handleStatusFilterChange = useCallback(
+    (value: string) => {
+      setStatusFilter(value);
+      setAccountsStatusFilter(value);
+      setStoreStatusFilter(value === 'all' ? null : (value as AccountStatus));
+    },
+    [setStatusFilter, setAccountsStatusFilter, setStoreStatusFilter]
+  );
 
-  const handleQuotaFilterChange = useCallback((value: string) => {
-    setQuotaFilter(value);
-    setAccountsQuotaFilter(value);
-    setStoreQuotaFilter(value as any);
-  }, [setAccountsQuotaFilter, setStoreQuotaFilter]);
+  const handleQuotaFilterChange = useCallback(
+    (value: string) => {
+      setQuotaFilter(value);
+      setAccountsQuotaFilter(value);
+      setStoreQuotaFilter(value as any);
+    },
+    [setAccountsQuotaFilter, setStoreQuotaFilter]
+  );
 
-  const handleSearchQueryChange = useCallback((value: string) => {
-    setSearchQuery(value);
-    setAccountsSearchQuery(value);
-    setStoreSearchQuery(value);
-  }, [setAccountsSearchQuery, setStoreSearchQuery]);
+  const handleSearchQueryChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      setAccountsSearchQuery(value);
+      setStoreSearchQuery(value);
+    },
+    [setAccountsSearchQuery, setStoreSearchQuery]
+  );
 
   const providerCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
@@ -126,7 +142,25 @@ export default function Accounts() {
 
   useEffect(() => {
     fetchAccounts();
-  }, [fetchAccounts]);
+
+    // Listen for account-created events from backend
+    const unlistenPromise = listen('account-created', () => {
+      console.log('[Accounts] Received account-created event, refreshing...');
+      fetchAccountsWithFilter();
+    });
+
+    // Auto-refresh every 10 seconds when page is visible
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchAccountsWithFilter();
+      }
+    }, 10000);
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+      clearInterval(intervalId);
+    };
+  }, [fetchAccounts, fetchAccountsWithFilter]);
   useEffect(() => {
     fetchAccountsWithFilter();
   }, [fetchAccountsWithFilter, providerFilter]);
@@ -135,18 +169,18 @@ export default function Accounts() {
     async (ids?: number[]) => {
       const targets = ids || Array.from(selectedIds);
       console.log('[Accounts] handleRemoveSelectedAccounts called with targets:', targets);
-      
+
       if (!targets.length) {
         console.log('[Accounts] No targets to delete');
         toast.error('No accounts selected');
         return;
       }
-      
+
       if (!window.confirm(t('accounts.deleteConfirm', { count: targets.length }))) {
         console.log('[Accounts] User cancelled deletion');
         return;
       }
-      
+
       try {
         console.log('[Accounts] Calling deleteAccounts...');
         await deleteAccounts(targets);
@@ -184,7 +218,7 @@ export default function Accounts() {
       );
     }
     if (statusFilter !== 'all') filtered = filtered.filter(a => a.status === statusFilter);
-    
+
     // Apply quota filter (skip if 'any' or 'all')
     if (quotaFilter && quotaFilter !== 'any' && quotaFilter !== 'all') {
       if (quotaFilter === 'low_quota')
@@ -252,15 +286,14 @@ export default function Accounts() {
 
   const handleRefreshAll = async () => {
     try {
-      const targets = selectedIds.size > 0 
-        ? Array.from(selectedIds) 
-        : filteredAccounts.map(a => a.id);
-      
+      const targets =
+        selectedIds.size > 0 ? Array.from(selectedIds) : filteredAccounts.map(a => a.id);
+
       if (targets.length === 0) {
         toast.info('No accounts to refresh');
         return;
       }
-      
+
       await startBulkRefresh(targets);
       await fetchAccountsWithFilter();
     } catch (e) {
@@ -289,10 +322,10 @@ export default function Accounts() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
       <Header title={t('accounts.title')} icon={<Users size={18} />} />
-      
+
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar Filter Panel */}
-        <aside className="w-[220px] shrink-0 bg-[#111116]/50 backdrop-blur-md border-r border-white/5 flex flex-col overflow-hidden">
+        <aside className="w-[200px] lg:w-[220px] shrink-0 bg-[#111116]/50 backdrop-blur-md border-r border-white/5 flex flex-col overflow-hidden hidden md:flex">
           {/* Providers Section */}
           <div className="p-3">
             <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
@@ -317,7 +350,7 @@ export default function Accounts() {
                   {providerCounts.all}
                 </span>
               </button>
-              
+
               {[
                 { id: 'kiro', label: 'Kiro' },
                 { id: 'windsurf', label: 'Windsurf' },
@@ -365,9 +398,24 @@ export default function Accounts() {
             <div className="space-y-0.5">
               {[
                 { id: 'all', label: t('filters.anyStatus'), dot: null, color: null },
-                { id: 'active', label: t('status.active'), dot: ACCOUNT_STATUS_COLORS.active.bg, color: ACCOUNT_STATUS_COLORS.active.hex },
-                { id: 'banned', label: t('status.banned'), dot: ACCOUNT_STATUS_COLORS.banned.bg, color: ACCOUNT_STATUS_COLORS.banned.hex },
-                { id: 'expired', label: t('status.expired'), dot: ACCOUNT_STATUS_COLORS.expired.bg, color: ACCOUNT_STATUS_COLORS.expired.hex },
+                {
+                  id: 'active',
+                  label: t('status.active'),
+                  dot: ACCOUNT_STATUS_COLORS.active.bg,
+                  color: ACCOUNT_STATUS_COLORS.active.hex,
+                },
+                {
+                  id: 'banned',
+                  label: t('status.banned'),
+                  dot: ACCOUNT_STATUS_COLORS.banned.bg,
+                  color: ACCOUNT_STATUS_COLORS.banned.hex,
+                },
+                {
+                  id: 'expired',
+                  label: t('status.expired'),
+                  dot: ACCOUNT_STATUS_COLORS.expired.bg,
+                  color: ACCOUNT_STATUS_COLORS.expired.hex,
+                },
               ].map(status => (
                 <button
                   key={status.id}
@@ -383,12 +431,13 @@ export default function Accounts() {
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-indigo-500 rounded-r shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
                   )}
                   {status.dot ? (
-                    <div 
+                    <div
                       className={cn('w-2 h-2 rounded-full shrink-0 ml-2', status.dot)}
                       style={{
-                        boxShadow: statusFilter === status.id && status.color
-                          ? `0 0 8px ${status.color}99`
-                          : 'none'
+                        boxShadow:
+                          statusFilter === status.id && status.color
+                            ? `0 0 8px ${status.color}99`
+                            : 'none',
                       }}
                     />
                   ) : (
@@ -416,7 +465,7 @@ export default function Accounts() {
                   placeholder={t('accounts.searchPlaceholder')}
                 />
               </div>
-              
+
               <QuotaFilterChip value={quotaFilter as any} onChange={handleQuotaFilterChange} />
             </div>
 
@@ -441,7 +490,7 @@ export default function Accounts() {
               />
 
               <div className="w-px h-6 bg-white/10" />
-              
+
               <Button
                 onClick={() => navigate('/autoreg')}
                 variant="primary"
@@ -466,7 +515,9 @@ export default function Accounts() {
                 variant="secondary"
                 size="xs"
                 className="bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border-amber-500/30"
-                leftIcon={<RefreshCw size={12} className={isBulkRefreshing ? 'animate-spin' : ''} />}
+                leftIcon={
+                  <RefreshCw size={12} className={isBulkRefreshing ? 'animate-spin' : ''} />
+                }
               >
                 Refresh expired
               </Button>
@@ -480,9 +531,9 @@ export default function Accounts() {
                 <SkeletonLoader variant="table-row" count={6} />
               </div>
             ) : filteredAccounts.length === 0 ? (
-              <EmptyState 
-                icon={Users} 
-                title={t('accounts.noAccountsFound')} 
+              <EmptyState
+                icon={Users}
+                title={t('accounts.noAccountsFound')}
                 description={t('accounts.addFirstAccountToStart')}
               />
             ) : (

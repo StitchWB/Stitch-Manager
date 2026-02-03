@@ -73,6 +73,11 @@ interface LogsState {
   isLoading: boolean;
   error: string | null;
   
+  // Grouping state
+  groupingEnabled: boolean;
+  autoCollapseSuccess: boolean;
+  collapsedGroups: Set<string>;
+  
   // Real-time subscription
   unsubscribe: UnlistenFn | null;
   
@@ -86,6 +91,13 @@ interface LogsState {
   // Filter actions
   setFilter: (filter: Partial<LogFilter>) => void;
   resetFilter: () => void;
+  
+  // Grouping actions
+  toggleGroup: (groupId: string) => void;
+  setGroupingEnabled: (enabled: boolean) => void;
+  setAutoCollapseSuccess: (enabled: boolean) => void;
+  expandAllGroups: () => void;
+  collapseAllGroups: () => void;
   
   // Real-time
   subscribeToLogs: () => Promise<void>;
@@ -112,6 +124,11 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   isLoading: false,
   error: null,
   unsubscribe: null,
+  
+  // Grouping state
+  groupingEnabled: true,
+  autoCollapseSuccess: true,
+  collapsedGroups: new Set(),
 
   // Fetch logs from backend
   fetchLogs: async (filter?: LogFilter) => {
@@ -208,6 +225,40 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   resetFilter: () => {
     get().fetchLogs(DEFAULT_FILTER);
   },
+  
+  // Grouping actions
+  toggleGroup: (groupId: string) => {
+    const { collapsedGroups } = get();
+    const newSet = new Set(collapsedGroups);
+    if (newSet.has(groupId)) {
+      newSet.delete(groupId);
+    } else {
+      newSet.add(groupId);
+    }
+    set({ collapsedGroups: newSet });
+  },
+  
+  setGroupingEnabled: (enabled: boolean) => {
+    set({ groupingEnabled: enabled });
+  },
+  
+  setAutoCollapseSuccess: (enabled: boolean) => {
+    set({ autoCollapseSuccess: enabled });
+  },
+  
+  expandAllGroups: () => {
+    set({ collapsedGroups: new Set() });
+  },
+  
+  collapseAllGroups: () => {
+    const { logs } = get();
+    // Collapse all unique stages (detected from messages)
+    const allGroups = new Set(logs.map(log => {
+      const stageMatch = log.message.match(/\[([^\]]+)\]/);
+      return stageMatch ? stageMatch[1] : log.source;
+    }));
+    set({ collapsedGroups: allGroups });
+  },
 
   // Subscribe to real-time log events
   subscribeToLogs: async () => {
@@ -215,7 +266,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
     if (existingUnsub) return; // Already subscribed
     
     const unsub = await listen<LogEntry>('logs:new', (event) => {
-      const { logs, filter } = get();
+      const { logs, filter, groupingEnabled, autoCollapseSuccess, collapsedGroups } = get();
       const newLog = event.payload;
       
       // Check if log matches current filter
@@ -226,8 +277,72 @@ export const useLogsStore = create<LogsState>((set, get) => ({
       );
       
       if (matchesFilter) {
+        const updatedLogs = [newLog, ...logs].slice(0, filter.limit ?? 50);
+        
+        // Auto-collapse logic
+        if (groupingEnabled && autoCollapseSuccess) {
+          // Detect stage from new log
+          const stageMatches = newLog.message.match(/\[([^\]]+)\]/g);
+          let stage = newLog.source;
+          
+          if (stageMatches && stageMatches.length > 0) {
+            const lastMatch = stageMatches[stageMatches.length - 1];
+            const extracted = lastMatch.slice(1, -1);
+            
+            // Filter out account IDs (contain /)
+            if (!extracted.includes('/') && extracted.length > 0) {
+              stage = extracted;
+            } else if (stageMatches.length > 1) {
+              // Try second-to-last if last was account ID
+              const secondLast = stageMatches[stageMatches.length - 2];
+              const extracted2 = secondLast.slice(1, -1);
+              if (!extracted2.includes('/') && extracted2.length > 0) {
+                stage = extracted2;
+              }
+            }
+          }
+          
+          // Check if this is a success log
+          if (newLog.level === 'success' || newLog.message.includes('✅') || newLog.message.includes('[OK]')) {
+            // Count logs in this stage
+            const stageLogs = updatedLogs.filter(l => {
+              const logStageMatches = l.message.match(/\[([^\]]+)\]/g);
+              let logStage = l.source;
+              
+              if (logStageMatches && logStageMatches.length > 0) {
+                const lastMatch = logStageMatches[logStageMatches.length - 1];
+                const extracted = lastMatch.slice(1, -1);
+                if (!extracted.includes('/') && extracted.length > 0) {
+                  logStage = extracted;
+                } else if (logStageMatches.length > 1) {
+                  const secondLast = logStageMatches[logStageMatches.length - 2];
+                  const extracted2 = secondLast.slice(1, -1);
+                  if (!extracted2.includes('/') && extracted2.length > 0) {
+                    logStage = extracted2;
+                  }
+                }
+              }
+              
+              return logStage === stage;
+            });
+            
+            // Auto-collapse if >5 entries
+            if (stageLogs.length > 5) {
+              const newCollapsedGroups = new Set(collapsedGroups);
+              newCollapsedGroups.add(stage);
+              
+              set({ 
+                logs: updatedLogs,
+                total: get().total + 1,
+                collapsedGroups: newCollapsedGroups,
+              });
+              return;
+            }
+          }
+        }
+        
         set({ 
-          logs: [newLog, ...logs].slice(0, filter.limit ?? 50),
+          logs: updatedLogs,
           total: get().total + 1,
         });
       }

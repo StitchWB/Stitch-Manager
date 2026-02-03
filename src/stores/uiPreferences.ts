@@ -25,8 +25,9 @@ interface ServerPagePreferences {
 }
 
 interface AutoRegPagePreferences {
-  activeTab: 'identity' | 'engine' | 'network';
+  activeTab: 'identity' | 'engine' | 'network' | 'automation';
   useRegistrationV2: boolean;
+
   isRunning: boolean; // Track if registration is in progress
   // Per-provider email settings
   providerEmailSettings: {
@@ -64,10 +65,14 @@ interface UIPreferencesState {
   setServerTab: (tab: string) => void;
 
   // Actions for AutoReg page
-  setAutoRegTab: (tab: 'identity' | 'engine' | 'network') => void;
+  setAutoRegTab: (tab: 'identity' | 'engine' | 'network' | 'automation') => void;
   setAutoRegV2: (enabled: boolean) => void;
+
   setAutoRegRunning: (running: boolean) => void;
-  setProviderEmailSettings: (provider: string, settings: Partial<AutoRegPagePreferences['providerEmailSettings'][string]>) => void;
+  setProviderEmailSettings: (
+    provider: string,
+    settings: Partial<AutoRegPagePreferences['providerEmailSettings'][string]>
+  ) => void;
   resetAutoRegPreferences: () => void;
 
   // Global reset
@@ -110,7 +115,7 @@ const defaultAutoRegPreferences: AutoRegPagePreferences = {
 
 export const useUIPreferencesStore = create<UIPreferencesState>()(
   persist(
-    (set) => ({
+    set => ({
       // Initial state
       accountsPage: defaultAccountsPreferences,
       logsPage: defaultLogsPreferences,
@@ -121,32 +126,32 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       // Accounts Page Actions
       // ============================================
 
-      setAccountsProviderFilter: (provider) => {
-        set((state) => ({
+      setAccountsProviderFilter: provider => {
+        set(state => ({
           accountsPage: { ...state.accountsPage, providerFilter: provider },
         }));
       },
 
-      setAccountsStatusFilter: (status) => {
-        set((state) => ({
+      setAccountsStatusFilter: status => {
+        set(state => ({
           accountsPage: { ...state.accountsPage, statusFilter: status },
         }));
       },
 
-      setAccountsQuotaFilter: (quota) => {
-        set((state) => ({
+      setAccountsQuotaFilter: quota => {
+        set(state => ({
           accountsPage: { ...state.accountsPage, quotaFilter: quota },
         }));
       },
 
-      setAccountsSearchQuery: (query) => {
-        set((state) => ({
+      setAccountsSearchQuery: query => {
+        set(state => ({
           accountsPage: { ...state.accountsPage, searchQuery: query },
         }));
       },
 
       setAccountsSorting: (field, direction) => {
-        set((state) => ({
+        set(state => ({
           accountsPage: { ...state.accountsPage, sortField: field, sortDirection: direction },
         }));
       },
@@ -159,20 +164,20 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       // Logs Page Actions
       // ============================================
 
-      setLogsLevelFilter: (level) => {
-        set((state) => ({
+      setLogsLevelFilter: level => {
+        set(state => ({
           logsPage: { ...state.logsPage, levelFilter: level },
         }));
       },
 
-      setLogsSourceFilter: (source) => {
-        set((state) => ({
+      setLogsSourceFilter: source => {
+        set(state => ({
           logsPage: { ...state.logsPage, sourceFilter: source },
         }));
       },
 
-      setLogsSearchQuery: (query) => {
-        set((state) => ({
+      setLogsSearchQuery: query => {
+        set(state => ({
           logsPage: { ...state.logsPage, searchQuery: query },
         }));
       },
@@ -185,8 +190,8 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       // Server Page Actions
       // ============================================
 
-      setServerTab: (tab) => {
-        set((state) => ({
+      setServerTab: tab => {
+        set(state => ({
           serverPage: { ...state.serverPage, selectedTab: tab },
         }));
       },
@@ -195,26 +200,26 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       // AutoReg Page Actions
       // ============================================
 
-      setAutoRegTab: (tab) => {
-        set((state) => ({
+      setAutoRegTab: tab => {
+        set(state => ({
           autoRegPage: { ...state.autoRegPage, activeTab: tab },
         }));
       },
 
-      setAutoRegV2: (enabled) => {
-        set((state) => ({
+      setAutoRegV2: enabled => {
+        set(state => ({
           autoRegPage: { ...state.autoRegPage, useRegistrationV2: enabled },
         }));
       },
 
-      setAutoRegRunning: (running) => {
-        set((state) => ({
+      setAutoRegRunning: running => {
+        set(state => ({
           autoRegPage: { ...state.autoRegPage, isRunning: running },
         }));
       },
 
       setProviderEmailSettings: (provider, settings) => {
-        set((state) => ({
+        set(state => ({
           autoRegPage: {
             ...state.autoRegPage,
             providerEmailSettings: {

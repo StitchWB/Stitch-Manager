@@ -12,6 +12,7 @@ import {
   IdentityTab,
   EngineTab,
   NetworkTab,
+  AutomationTab,
   LaunchPad,
 } from '../components/registration';
 
@@ -58,11 +59,13 @@ export default function AutoRegNext() {
     gmailAppPasswordSet,
     saveStatus,
     activeProvider,
+    logVerbosity,
     setProvider,
     setIMAPConfig,
     setProxyConfig,
     setAdvancedSettings,
     setCount,
+    setLogVerbosity,
     loadSettings,
     saveImmediately,
     addLog,
@@ -77,6 +80,7 @@ export default function AutoRegNext() {
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
   const [activeThreads, setActiveThreads] = useState(0);
+  const [isStopping, setIsStopping] = useState(false);
 
   // Use persisted preferences instead of local state
   const activeTab = autoRegPage.activeTab;
@@ -254,6 +258,45 @@ export default function AutoRegNext() {
       window.removeEventListener('focus', handleFocus);
     };
   }, [addLog, addResult, loadSettings]);
+
+  // Listen for stage tracking events
+  useEffect(() => {
+    const { setCurrentStage, updateStageProgress, completeStage } = useRegistrationStore.getState();
+
+    const unlistenStageChanged = listen<{ stage: string; timestamp: string }>(
+      'stage-changed',
+      event => {
+        setCurrentStage(event.payload.stage);
+      }
+    );
+
+    const unlistenStageProgress = listen<{
+      stage: string;
+      current: number;
+      total: number;
+      message: string;
+    }>('stage-progress', event => {
+      updateStageProgress(
+        event.payload.stage,
+        event.payload.current,
+        event.payload.total,
+        event.payload.message
+      );
+    });
+
+    const unlistenStageComplete = listen<{ stage: string; status: 'success' | 'error' }>(
+      'stage-complete',
+      event => {
+        completeStage(event.payload.stage, event.payload.status);
+      }
+    );
+
+    return () => {
+      unlistenStageChanged.then(fn => fn());
+      unlistenStageProgress.then(fn => fn());
+      unlistenStageComplete.then(fn => fn());
+    };
+  }, []);
 
   // Check if mail configuration is ready
   const isMailReady = useMemo(() => {
@@ -749,8 +792,11 @@ export default function AutoRegNext() {
 
           // Check if registration succeeded based on provider-specific criteria
           const isWindsurf = config.provider === 'windsurf';
+          const windsurfApiKey = isWindsurf
+            ? ((result as any).apiKey ?? (result as any).api_key)
+            : null;
           const hasRequiredData = isWindsurf
-            ? result.success && result.email && 'apiKey' in result && result.apiKey
+            ? result.success && result.email
             : result.success && result.email && result.password;
 
           if (hasRequiredData) {
@@ -799,10 +845,34 @@ export default function AutoRegNext() {
             }
           } else {
             failCount++;
+            const keys =
+              result && typeof result === 'object' ? Object.keys(result as any).sort() : [];
+            const json = (() => {
+              try {
+                return JSON.stringify(result);
+              } catch {
+                return null;
+              }
+            })();
+            const jsonShort = json && json.length > 900 ? `${json.slice(0, 900)}...` : json;
             addLog({
               level: 'error',
               message: `[${i + 1}/${totalCount}] Registration failed: ${result.error || 'Unknown error'}`,
             });
+            addLog({
+              level: 'error',
+              message: `[${i + 1}/${totalCount}] Debug: provider=${config.provider}, success=${String(
+                (result as any)?.success
+              )}, email=${String((result as any)?.email)}, error=${String(
+                (result as any)?.error
+              )}, apiKey=${windsurfApiKey ? 'present' : 'missing'}, keys=${keys.join(',')}`,
+            });
+            if (jsonShort) {
+              addLog({
+                level: 'error',
+                message: `[${i + 1}/${totalCount}] Debug JSON: ${jsonShort}`,
+              });
+            }
           }
 
           // Configurable delay between registrations to avoid rate limiting
@@ -879,20 +949,25 @@ export default function AutoRegNext() {
   }, [config.imap, addLog, addNotification]);
 
   const handleStop = useCallback(async () => {
-    addLog({ level: 'warn', message: 'Stop requested - stopping registration process...' });
+    if (isStopping) return;
 
-    // Set cancellation flag to stop the loop
+    setIsStopping(true);
+    addLog({ level: 'warn', message: 'Stop requested - killing active processes...' });
+
+    // Set cancellation flag to stop the JS loop
     cancelledRef.current = true;
 
     try {
       await stopRegistration();
-      addLog({ level: 'info', message: 'Registration stopped' });
+      addLog({ level: 'info', message: 'All registration processes terminated' });
       addNotification({ type: 'info', title: 'Stopped', message: 'Registration process stopped' });
     } catch (e) {
-      addLog({ level: 'error', message: `Failed to stop: ${e}` });
+      addLog({ level: 'error', message: `Failed to stop processes: ${e}` });
+    } finally {
+      handleSetActiveThreads(0);
+      setIsStopping(false);
     }
-    handleSetActiveThreads(0);
-  }, [addLog, addNotification]);
+  }, [addLog, addNotification, isStopping]);
 
   return (
     <div className="h-full flex" style={{ background: '#050508' }}>
@@ -906,11 +981,7 @@ export default function AutoRegNext() {
         />
 
         {/* Tab Bar */}
-        <ConfigTabs
-          activeTab={activeTab}
-          onTabChange={handleSetActiveTab}
-          disabled={false}
-        />
+        <ConfigTabs activeTab={activeTab} onTabChange={handleSetActiveTab} disabled={false} />
 
         {/* Tabbed Content */}
         <div className="flex-1 overflow-y-auto px-4 py-2">
@@ -952,6 +1023,8 @@ export default function AutoRegNext() {
               onDelayBetweenAccountsChange={delayBetweenAccounts =>
                 setAdvancedSettings({ delayBetweenAccounts })
               }
+              logVerbosity={logVerbosity}
+              onLogVerbosityChange={setLogVerbosity}
               verificationCodeTimeout={config.advanced.verificationCodeTimeout}
               onVerificationCodeTimeoutChange={verificationCodeTimeout =>
                 setAdvancedSettings({ verificationCodeTimeout })
@@ -993,14 +1066,17 @@ export default function AutoRegNext() {
               disabled={false}
             />
           )}
+
+          {activeTab === 'automation' && <AutomationTab disabled={activeThreads > 0} />}
         </div>
 
         {/* Launch Pad */}
+
         <LaunchPad
           count={config.count}
           onCountChange={setCount}
-          isRunning={activeThreads > 0}
-          canStart={canStart}
+          isRunning={activeThreads > 0 || isStopping}
+          canStart={canStart && !isStopping}
           pythonAvailable={pythonAvailable}
           onStart={handleStart}
           onStop={handleStop}
