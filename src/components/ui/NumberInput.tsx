@@ -1,8 +1,9 @@
 import { Minus, Plus } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
+import { cn } from '../../lib/utils';
 
 export interface NumberInputProps {
-  label: string;
+  label?: string;
   value: number;
   onChange: (v: number) => void;
   min: number;
@@ -11,6 +12,7 @@ export interface NumberInputProps {
   unit?: string;
   disabled?: boolean;
   tooltip?: string;
+  className?: string;
 }
 
 export function NumberInput({
@@ -23,32 +25,39 @@ export function NumberInput({
   unit = 's',
   disabled,
   tooltip,
+  className,
 }: NumberInputProps) {
   const decrement = () => onChange(Math.max(min, value - step));
   const increment = () => onChange(Math.min(max, value + step));
 
   const content = (
-    <div
-      className="rounded-lg p-2"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
-    >
-      <div className="text-[10px] text-slate-500 mb-1.5">{label}</div>
-      <div className="flex items-center gap-1">
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      {label && <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider px-1">{label}</div>}
+      <div
+        className={cn(
+          'flex items-stretch h-9 bg-black/40 rounded-lg border border-white/10 overflow-hidden transition-all duration-200 focus-within:border-indigo-500/50',
+          disabled && 'opacity-50 grayscale cursor-not-allowed'
+        )}
+      >
         <button
+          type="button"
           onClick={decrement}
           disabled={disabled || value <= min}
-          className="w-5 h-5 rounded flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="px-3 hover:bg-white/5 text-slate-400 hover:text-white transition-colors disabled:opacity-30 border-r border-white/5"
         >
           <Minus className="w-3 h-3" />
         </button>
-        <span className="flex-1 text-center text-xs font-mono text-indigo-400">
-          {value}
-          {unit}
-        </span>
+        <div className="flex-1 flex items-center justify-center bg-white/[0.02] px-4 min-w-[60px]">
+          <span className="text-sm font-mono font-bold text-indigo-400 tracking-tight">
+            {value}
+            <span className="ml-0.5 text-[10px] text-slate-500 font-medium uppercase">{unit}</span>
+          </span>
+        </div>
         <button
+          type="button"
           onClick={increment}
           disabled={disabled || value >= max}
-          className="w-5 h-5 rounded flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="px-3 hover:bg-white/5 text-slate-400 hover:text-white transition-colors disabled:opacity-30 border-l border-white/5"
         >
           <Plus className="w-3 h-3" />
         </button>

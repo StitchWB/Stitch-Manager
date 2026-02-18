@@ -608,6 +608,8 @@ export interface Translations {
       scaleSmall: string;
       scaleLarge: string;
       scaleReset: string;
+      on: string;
+      off: string;
     };
 
     imap: {
@@ -1053,6 +1055,34 @@ export interface Translations {
     collapse: string;
     expand: string;
     loadError: string;
+  };
+
+  automation: {
+    title: string;
+    healthReplenishment: string;
+    healthReplenishmentDesc: string;
+    enableReplenishment: string;
+    enableReplenishmentDesc: string;
+    minActiveAccounts: string;
+    minActiveAccountsTooltip: string;
+    registrationStrategies: string;
+    registrationStrategiesDesc: string;
+    kiroStrategy: string;
+    windsurfStrategy: string;
+    traeStrategy: string;
+    rotationRules: string;
+    rotationRulesDesc: string;
+    legacySettings: string;
+    legacyAutoSwitching: string;
+    checkInterval: string;
+    switchThreshold: string;
+    maxErrors: string;
+    cooldown: string;
+    rateLimitTrigger: string;
+    rateLimitTriggerDesc: string;
+    minSpareAccounts: string;
+    replenishment: string;
+    providerConfig: string;
   };
 }
 

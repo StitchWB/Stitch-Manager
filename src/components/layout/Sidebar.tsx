@@ -59,6 +59,18 @@ export default function Sidebar() {
 
   useEffect(() => {
     setMounted(true);
+
+    // Auto-collapse sidebar on small screens
+    const handleResize = () => {
+      if (window.innerWidth < 1024 && !useAppStore.getState().sidebarCollapsed) {
+        useAppStore.getState().toggleSidebar();
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial check
+
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   void language;

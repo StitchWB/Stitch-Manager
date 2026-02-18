@@ -8,6 +8,7 @@ Contains:
 - Name generation utilities
 - Browser initialization utilities
 - Logging utilities
+- Structured logging system
 """
 
 from .browser_utils import (
@@ -17,6 +18,8 @@ from .browser_utils import (
     wait_for_cdp_ready,
 )
 from .logging_utils import SafeLogger, create_safe_logger, safe_log, strip_ansi_codes
+from .logging_system import StructuredLogger, create_logger
+from .log_levels import LogLevel, LogStage
 from .name_utils import generate_github_username, generate_name_from_email, split_name
 from .oauth_callback_server import CallbackHandler, OAuthCallbackServer
 from .password_utils import generate_secure_password
@@ -49,9 +52,14 @@ __all__ = [
     'create_browser',
     'wait_for_cdp_ready',
     'clear_browser_data',
-    # Logging utilities
+    # Logging utilities (legacy)
     'safe_log',
     'create_safe_logger',
     'SafeLogger',
     'strip_ansi_codes',
+    # Structured logging system (new)
+    'StructuredLogger',
+    'create_logger',
+    'LogLevel',
+    'LogStage',
 ]
