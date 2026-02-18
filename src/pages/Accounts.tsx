@@ -117,24 +117,61 @@ export default function Accounts() {
     const counts: Record<string, number> = { all: 0 };
     accounts.forEach(acc => {
       counts.all++;
-      counts[acc.provider] = (counts[acc.provider] || 0) + 1;
+      
+      // Map provider names for counting
+      let displayProvider = acc.provider;
+      if (acc.provider === 'aws_builder_id') {
+        // aws_builder_id accounts should be counted as 'kiro' for display
+        // since they represent active Kiro accounts
+        displayProvider = 'kiro';
+      }
+      
+      counts[displayProvider] = (counts[displayProvider] || 0) + 1;
+      
+      // Also count aws_builder_id separately for AWS filter
+      if (acc.provider === 'aws_builder_id') {
+        counts['aws_builder_id'] = (counts['aws_builder_id'] || 0) + 1;
+      }
     });
     return counts;
   }, [accounts]);
 
   const fetchAccountsWithFilter = useCallback(async () => {
     try {
-      const params: GetAccountsParams = {};
-      if (providerFilter !== 'all') {
-        let subtype: string = providerFilter;
-        if (providerFilter === 'aws') subtype = 'aws_builder_id';
-        params.providerSubtype = subtype as any;
-        if (['kiro', 'windsurf', 'trae'].includes(providerFilter)) params.providerType = 'ide';
-        else if (providerFilter === 'aws') params.providerType = 'cloud';
-        else if (providerFilter === 'github') params.providerType = 'git';
+      if (providerFilter === 'all') {
+        // Get all accounts
+        const data = await getAccounts();
+        setAccounts(data);
+      } else {
+        // For specific providers, we need to handle the fact that:
+        // - Active accounts are stored as 'aws_builder_id' 
+        // - Banned accounts are stored as 'kiro', 'windsurf', 'trae'
+        // So when user selects "Kiro", we need both 'kiro' and 'aws_builder_id' accounts
+        
+        let allData: any[] = [];
+        
+        if (providerFilter === 'kiro') {
+          // Get both banned kiro accounts and active aws_builder_id accounts
+          const kiroData = await getAccounts({ providerSubtype: 'kiro' });
+          const awsData = await getAccounts({ providerSubtype: 'aws_builder_id' });
+          allData = [...kiroData, ...awsData];
+        } else if (providerFilter === 'aws') {
+          // AWS filter should only show aws_builder_id accounts
+          allData = await getAccounts({ 
+            providerType: 'cloud',
+            providerSubtype: 'aws_builder_id' 
+          });
+        } else {
+          // For other providers (windsurf, trae, github), use original logic
+          let subtype: string = providerFilter;
+          const params: GetAccountsParams = { providerSubtype: subtype as any };
+          if (['windsurf', 'trae'].includes(providerFilter)) params.providerType = 'ide';
+          else if (providerFilter === 'github') params.providerType = 'git';
+          allData = await getAccounts(params);
+        }
+        
+        setAccounts(allData);
       }
-      const data = await getAccounts(params);
-      setAccounts(data);
     } catch (e) {
       console.error(e);
     }
