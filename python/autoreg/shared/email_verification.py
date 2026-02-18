@@ -14,8 +14,55 @@ import time
 import datetime
 import imaplib
 import email as email_lib
+from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from typing import Optional, Dict, Callable
+
+
+def decode_header_value(header_value: str) -> str:
+    if not header_value:
+        return ""
+    try:
+        decoded = decode_header(header_value)
+        parts: list[str] = []
+        for part, encoding in decoded:
+            if isinstance(part, bytes):
+                parts.append(part.decode(encoding or "utf-8", errors="ignore"))
+            else:
+                parts.append(str(part))
+        return "".join(parts)
+    except Exception:
+        return str(header_value)
+
+
+def extract_body_text(msg: email_lib.message.Message) -> str:
+    plain = ""
+    html = ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            ctype = (part.get_content_type() or "").lower()
+            if ctype not in ("text/plain", "text/html"):
+                continue
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+            text = payload.decode("utf-8", errors="ignore")
+            if ctype == "text/plain" and not plain:
+                plain = text
+            elif ctype == "text/html" and not html:
+                html = text
+    else:
+        payload = msg.get_payload(decode=True)
+        if payload:
+            plain = payload.decode("utf-8", errors="ignore")
+
+    if plain:
+        return plain
+
+    if html:
+        return re.sub(r"<[^>]*>", " ", html)
+
+    return ""
 
 
 def get_verification_code_from_imap(
@@ -27,7 +74,8 @@ def get_verification_code_from_imap(
     log_callback: Optional[Callable] = None,
     target_email: Optional[str] = None,
     session_id: Optional[str] = None,
-    max_retries: int = 3
+    max_retries: int = 3,
+    logger=None,
 ) -> Optional[str]:
     r"""
     Universal function to retrieve verification code from IMAP with retry logic.
@@ -71,6 +119,94 @@ def get_verification_code_from_imap(
         full_message = f"{prefix} {message}" if prefix else message
         if log_callback:
             log_callback(full_message)
+
+    def decode_header_value(header_value: str) -> str:
+        if not header_value:
+            return ""
+        try:
+            decoded = decode_header(header_value)
+            parts: list[str] = []
+            for part, encoding in decoded:
+                if isinstance(part, bytes):
+                    parts.append(part.decode(encoding or "utf-8", errors="ignore"))
+                else:
+                    parts.append(str(part))
+            return "".join(parts)
+        except Exception:
+            return str(header_value)
+
+    def extract_body_text(msg: email_lib.message.Message) -> str:
+        plain = ""
+        html = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                ctype = (part.get_content_type() or "").lower()
+                if ctype not in ("text/plain", "text/html"):
+                    continue
+                payload = part.get_payload(decode=True)
+                if not payload:
+                    continue
+                text = payload.decode("utf-8", errors="ignore")
+                if ctype == "text/plain" and not plain:
+                    plain = text
+                elif ctype == "text/html" and not html:
+                    html = text
+        else:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                plain = payload.decode("utf-8", errors="ignore")
+
+        if plain:
+            return plain
+
+        if html:
+            return re.sub(r"<[^>]*>", " ", html)
+
+        return ""
+
+    def decode_header_value(header_value: str) -> str:
+        if not header_value:
+            return ""
+        try:
+            decoded = decode_header(header_value)
+            parts: list[str] = []
+            for part, encoding in decoded:
+                if isinstance(part, bytes):
+                    parts.append(part.decode(encoding or "utf-8", errors="ignore"))
+                else:
+                    parts.append(str(part))
+            return "".join(parts)
+        except Exception:
+            return str(header_value)
+
+    def extract_body_text(msg: email_lib.message.Message) -> str:
+        plain = ""
+        html = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                ctype = (part.get_content_type() or "").lower()
+                if ctype not in ("text/plain", "text/html"):
+                    continue
+                payload = part.get_payload(decode=True)
+                if not payload:
+                    continue
+                text = payload.decode("utf-8", errors="ignore")
+                if ctype == "text/plain" and not plain:
+                    plain = text
+                elif ctype == "text/html" and not html:
+                    html = text
+        else:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                plain = payload.decode("utf-8", errors="ignore")
+
+        if plain:
+            return plain
+
+        if html:
+            return re.sub(r"<[^>]*>", " ", html)
+
+        return ""
     
     # Retry logic with exponential backoff
     retry_delays = [1, 2, 4, 8]  # Exponential backoff: 1s, 2s, 4s, 8s
@@ -90,7 +226,8 @@ def get_verification_code_from_imap(
             time_window=time_window,
             log_callback=log_callback,
             target_email=target_email,
-            session_id=session_id
+            session_id=session_id,
+            logger=logger,
         )
         
         if code:
@@ -114,7 +251,8 @@ def _get_verification_code_internal(
     time_window: int,
     log_callback: Optional[Callable],
     target_email: Optional[str],
-    session_id: Optional[str]
+    session_id: Optional[str],
+    logger=None,
 ) -> Optional[str]:
     """
     Internal function to retrieve verification code from IMAP (single attempt).
@@ -138,9 +276,7 @@ def _get_verification_code_internal(
         return None
     
     start_time = time.time()
-    # Search start time: 30 seconds before NOW to account for email delivery delay
-    # This ensures we only get emails that arrived AFTER registration started
-    registration_start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=30)
+    cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=time_window)
     last_error = None
     
     # Build search query for primary keyword
@@ -149,20 +285,40 @@ def _get_verification_code_internal(
         log("[Email] No sender keywords provided")
         return None
     
+    poll_interval_sec = 3
+
     while time.time() - start_time < max_wait:
         try:
-            mail = imaplib.IMAP4_SSL(host, port)
+            mail = imaplib.IMAP4_SSL(host, port, timeout=10)
+            try:
+                if getattr(mail, 'sock', None):
+                    mail.sock.settimeout(10)
+            except Exception:
+                pass
             mail.login(user, password)
             mail.select('INBOX')
             
-            # Search by FROM with primary keyword
-            _, messages = mail.search(None, 'FROM', primary_keyword)
+            messages = None
+            search_queries = [
+                ('FROM', primary_keyword),
+                ('FROM', 'verify.windsurf.ai'),
+                ('SUBJECT', 'Windsurf'),
+            ]
+
+            for key, value in search_queries:
+                try:
+                    _, candidate = mail.search(None, key, value)
+                    if candidate and candidate[0]:
+                        messages = candidate
+                        break
+                except Exception:
+                    continue
             
-            if messages[0]:
+            if messages and messages[0]:
                 email_ids = messages[0].split()
                 
-                # Check last 20 emails (newest first)
-                for num in reversed(email_ids[-20:]):
+                # Check only last 10 emails (newest first)
+                for num in reversed(email_ids[-10:]):
                     try:
                         _, msg_data = mail.fetch(num, '(RFC822)')
                         if not msg_data[0]:
@@ -172,38 +328,24 @@ def _get_verification_code_internal(
                         
                         # Get headers
                         date_str = msg.get('Date', '')
-                        from_addr = msg.get('From', '').lower()
-                        subject = msg.get('Subject', '')
+                        from_addr = decode_header_value(msg.get('From', '')).lower()
+                        subject = decode_header_value(msg.get('Subject', '')).strip()
                         
                         # Verify sender matches any keyword
                         if not any(keyword.lower() in from_addr for keyword in sender_keywords):
                             continue
                         
-                        # Check email timestamp (only emails AFTER registration started)
+                        # Check email timestamp
                         try:
                             email_date = parsedate_to_datetime(date_str)
-                            
-                            # Skip emails that arrived BEFORE registration started
-                            # (prevents using codes from previous registration attempts)
-                            if email_date < registration_start:
-                                continue
-                            
-                            # Skip future emails (clock skew tolerance: 1 minute)
-                            if email_date > datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60):
+                            if email_date.tzinfo is None:
+                                email_date = email_date.replace(tzinfo=datetime.timezone.utc)
+                            if email_date < cutoff_time:
                                 continue
                         except Exception:
-                            # If date parsing fails, skip this email (safer than using old code)
-                            continue
+                            pass
                         
-                        # Extract from body (needed for both subject and body extraction)
-                        body = ''
-                        if msg.is_multipart():
-                            for part in msg.walk():
-                                if part.get_content_type() == 'text/plain':
-                                    body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                    break
-                        else:
-                            body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+                        body = extract_body_text(msg)
                         
                         # Email validation: Check if target_email is mentioned in body
                         # This prevents using codes from wrong emails in parallel registrations
@@ -222,6 +364,12 @@ def _get_verification_code_internal(
                                 mail.logout()
                                 log(f"[Email] Found code in subject: {subject_codes[0]} (email date: {date_str})")
                                 return subject_codes[0]
+
+                        subject_fallback = re.findall(r"\b(\d{6})\b", subject)
+                        if subject_fallback:
+                            mail.logout()
+                            log(f"[Email] Found code in subject: {subject_fallback[0]} (email date: {date_str})")
+                            return subject_fallback[0]
                         
                         # Look for 6-digit code in body
                         codes = re.findall(r'\b(\d{6})\b', body)
@@ -240,7 +388,7 @@ def _get_verification_code_internal(
             last_error = str(e)
             log(f"[Email] IMAP error: {e}")
         
-        time.sleep(5)
+        time.sleep(poll_interval_sec)
     
     if last_error:
         log(f"[Email] Failed to get verification code: {last_error}")

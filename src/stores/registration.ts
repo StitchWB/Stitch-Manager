@@ -394,19 +394,21 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
         // Save current email strategy to current provider's slot
         const currentStrategy: ProviderEmailStrategy = {
           strategy: state.config.imap.strategy,
-          customDomain: state.config.imap.server ? `${state.config.imap.email.split('@')[1] || ''}` : '',
+          customDomain: state.config.imap.server
+            ? `${state.config.imap.email.split('@')[1] || ''}`
+            : '',
           thirtyThreeMailDomain: state.config.imap.thirtyThreeMailDomain,
           addyioDomain: state.config.imap.addyioDomain,
         };
-        
+
         const updatedStrategies = {
           ...state.config.providerEmailStrategies,
           [state.config.provider]: currentStrategy,
         };
-        
+
         // Load email strategy for new provider
-        const newStrategy = updatedStrategies[provider];
-        
+        const newStrategy = updatedStrategies[provider] || { ...DEFAULT_EMAIL_STRATEGY };
+
         // Update IMAP config with new provider's strategy (but keep IMAP credentials)
         const newImap: IMAPConfig = {
           ...state.config.imap, // Keep all IMAP credentials
@@ -415,7 +417,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           thirtyThreeMailDomain: newStrategy.thirtyThreeMailDomain,
           addyioDomain: newStrategy.addyioDomain,
         };
-        
+
         return {
           config: {
             ...state.config,
@@ -428,7 +430,6 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
       console.log('[REGISTRATION_STORE] setProvider: triggering save');
       triggerSave();
     },
-
     setIMAPConfig: (imap: Partial<IMAPConfig>) => {
       console.log('[REGISTRATION_STORE] setIMAPConfig called with:', imap);
       set(state => {
@@ -437,7 +438,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
 
         // If strategy changed, update provider-specific strategy
         let updatedStrategies = state.config.providerEmailStrategies;
-        if ('strategy' in imap) {
+        if ('strategy' in imap || 'addyioDomain' in imap || 'thirtyThreeMailDomain' in imap) {
           const currentStrategy: ProviderEmailStrategy = {
             strategy: newImap.strategy,
             customDomain: newImap.server ? `${newImap.email.split('@')[1] || ''}` : '',
@@ -536,12 +537,16 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
           const stored = localStorage.getItem('providerEmailStrategies');
           if (stored) {
             providerEmailStrategies = JSON.parse(stored);
-            console.log('[REGISTRATION_STORE] loadSettings: loaded provider strategies from localStorage');
+            console.log(
+              '[REGISTRATION_STORE] loadSettings: loaded provider strategies from localStorage'
+            );
           } else {
             // Migration: Check for old providerImapConfigs format
             const oldStored = localStorage.getItem('providerImapConfigs');
             if (oldStored) {
-              console.log('[REGISTRATION_STORE] loadSettings: found old providerImapConfigs, migrating...');
+              console.log(
+                '[REGISTRATION_STORE] loadSettings: found old providerImapConfigs, migrating...'
+              );
               try {
                 const oldConfigs = JSON.parse(oldStored);
                 // Convert old format to new format (extract only strategy and domain info)
@@ -556,17 +561,28 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
                   };
                 }
                 // Save migrated data in new format
-                localStorage.setItem('providerEmailStrategies', JSON.stringify(providerEmailStrategies));
+                localStorage.setItem(
+                  'providerEmailStrategies',
+                  JSON.stringify(providerEmailStrategies)
+                );
                 // Remove old format
                 localStorage.removeItem('providerImapConfigs');
-                console.log('[REGISTRATION_STORE] loadSettings: migration completed, old data removed');
+                console.log(
+                  '[REGISTRATION_STORE] loadSettings: migration completed, old data removed'
+                );
               } catch (migrationError) {
-                console.error('[REGISTRATION_STORE] loadSettings: migration failed:', migrationError);
+                console.error(
+                  '[REGISTRATION_STORE] loadSettings: migration failed:',
+                  migrationError
+                );
               }
             }
           }
         } catch (e) {
-          console.warn('[REGISTRATION_STORE] loadSettings: failed to load provider strategies from localStorage:', e);
+          console.warn(
+            '[REGISTRATION_STORE] loadSettings: failed to load provider strategies from localStorage:',
+            e
+          );
         }
 
         set(state => {
@@ -582,9 +598,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
             server: settings.imapServer || '',
             port: settings.imapPort || 993,
             email: settings.imapEmail || '',
-            password: imapPasswordMasked
-              ? state.config.imap.password
-              : settings.imapPassword || '',
+            password: imapPasswordMasked ? state.config.imap.password : settings.imapPassword || '',
             gmailBase: settings.gmailBase || '',
             gmailAlias: settings.gmailAlias || '',
             gmailAppPassword: gmailAppPasswordMasked
@@ -677,10 +691,37 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => {
 
       // Save provider-specific email strategies to localStorage
       try {
-        localStorage.setItem('providerEmailStrategies', JSON.stringify(config.providerEmailStrategies));
+        localStorage.setItem(
+          'providerEmailStrategies',
+          JSON.stringify(config.providerEmailStrategies)
+        );
         console.log('[REGISTRATION_STORE] saveSettings: saved provider strategies to localStorage');
       } catch (e) {
-        console.warn('[REGISTRATION_STORE] saveSettings: failed to save provider strategies to localStorage:', e);
+        console.warn(
+          '[REGISTRATION_STORE] saveSettings: failed to save provider strategies to localStorage:',
+          e
+        );
+      }
+
+      // Basic validation
+      if (
+        config.imap.strategy === 'custom' &&
+        config.imap.email &&
+        !config.imap.email.includes('@')
+      ) {
+        console.warn('[REGISTRATION_STORE] saveSettings: invalid email format, skipping save');
+        set({ saveStatus: 'error' });
+        setTimeout(() => set({ saveStatus: 'idle' }), 3000);
+        return;
+      }
+      if (
+        config.imap.strategy === 'custom' &&
+        (isNaN(config.imap.port) || config.imap.port < 1 || config.imap.port > 65535)
+      ) {
+        console.warn('[REGISTRATION_STORE] saveSettings: invalid IMAP port, skipping save');
+        set({ saveStatus: 'error' });
+        setTimeout(() => set({ saveStatus: 'idle' }), 3000);
+        return;
       }
 
       // Basic validation

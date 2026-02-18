@@ -970,9 +970,9 @@ export default function AutoRegNext() {
   }, [addLog, addNotification, isStopping]);
 
   return (
-    <div className="h-full flex" style={{ background: '#050508' }}>
+    <div className="h-full flex flex-col md:flex-row" style={{ background: '#050508' }}>
       {/* Left Panel - Command Center */}
-      <div className="w-[360px] shrink-0 flex flex-col h-full border-r border-white/5">
+      <div className="w-full md:w-[360px] lg:w-[400px] shrink-0 flex flex-col h-full border-b md:border-b-0 md:border-r border-white/5">
         {/* Provider Selector */}
         <ProviderSelector
           activeProvider={config.provider}

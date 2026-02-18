@@ -106,6 +106,11 @@ class PythonAutoregConfig(BaseModel):
     )
     thirty_three_mail_domain: str | None = Field("33mail.com", description="33mail domain")
 
+    # Logging settings
+    log_verbosity: str = Field(
+        "normal", description="Log verbosity level (minimal, normal, verbose, debug)"
+    )
+
     # Advanced settings with validation
     speed_multiplier: float | None = Field(
         None, ge=0.1, le=10.0, description="Speed multiplier for automation (0.1-10.0)"

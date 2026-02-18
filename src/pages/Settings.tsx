@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Settings as SettingsIcon, Globe, Repeat } from 'lucide-react';
+import { Settings as SettingsIcon, Globe, Repeat, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
 import { useRegistrationStore } from '../stores/registration';
