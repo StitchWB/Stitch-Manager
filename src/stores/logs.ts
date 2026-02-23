@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { getLogs, clearAppLogs, exportAppLogs, getLogStats } from '../lib/tauri/modules/logs';
+import { TauriError } from '../lib/tauri/core/types';
 
 // ============================================
 // Types
@@ -41,6 +42,12 @@ export interface LogStats {
   newestLog?: string;
 }
 
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof TauriError) return error.message;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 // ============================================
 // Default Filter
 // ============================================
@@ -65,47 +72,47 @@ interface LogsState {
   total: number;
   hasMore: boolean;
   stats: LogStats | null;
-  
+
   // Filter state
   filter: LogFilter;
-  
+
   // UI state
   isLoading: boolean;
   error: string | null;
-  
+
   // Grouping state
   groupingEnabled: boolean;
   autoCollapseSuccess: boolean;
   collapsedGroups: Set<string>;
-  
+
   // Real-time subscription
   unsubscribe: UnlistenFn | null;
-  
+
   // Actions
   fetchLogs: (filter?: LogFilter) => Promise<void>;
   loadMore: () => Promise<void>;
   clearLogs: (beforeDate?: string) => Promise<number>;
   exportLogs: (format: 'json' | 'csv' | 'txt') => Promise<string>;
   fetchStats: () => Promise<void>;
-  
+
   // Filter actions
   setFilter: (filter: Partial<LogFilter>) => void;
   resetFilter: () => void;
-  
+
   // Grouping actions
   toggleGroup: (groupId: string) => void;
   setGroupingEnabled: (enabled: boolean) => void;
   setAutoCollapseSuccess: (enabled: boolean) => void;
   expandAllGroups: () => void;
   collapseAllGroups: () => void;
-  
+
   // Real-time
   subscribeToLogs: () => Promise<void>;
   unsubscribeFromLogs: () => void;
-  
+
   // Local actions (for optimistic updates)
   addLocalLog: (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
-  
+
   // Legacy compatibility - alias for addLocalLog
   addLog: (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
 }
@@ -124,7 +131,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   isLoading: false,
   error: null,
   unsubscribe: null,
-  
+
   // Grouping state
   groupingEnabled: true,
   autoCollapseSuccess: true,
@@ -134,12 +141,10 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   fetchLogs: async (filter?: LogFilter) => {
     const currentFilter = filter ?? get().filter;
     set({ isLoading: true, error: null, filter: { ...currentFilter, offset: 0 } });
-    
+
     try {
-      const result = await invoke<LogQueryResult>('get_logs', { 
-        filter: { ...currentFilter, offset: 0 } 
-      });
-      
+      const result = await getLogs({ ...currentFilter, offset: 0 });
+
       set({
         logs: result.logs,
         total: result.total,
@@ -147,9 +152,9 @@ export const useLogsStore = create<LogsState>((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      set({ 
-        error: error instanceof Error ? error.message : String(error),
-        isLoading: false 
+      set({
+        error: normalizeErrorMessage(error),
+        isLoading: false,
       });
     }
   },
@@ -158,15 +163,13 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   loadMore: async () => {
     const { filter, logs, hasMore, isLoading } = get();
     if (!hasMore || isLoading) return;
-    
+
     const newOffset = (filter.offset ?? 0) + (filter.limit ?? 50);
     set({ isLoading: true });
-    
+
     try {
-      const result = await invoke<LogQueryResult>('get_logs', {
-        filter: { ...filter, offset: newOffset }
-      });
-      
+      const result = await getLogs({ ...filter, offset: newOffset });
+
       set({
         logs: [...logs, ...result.logs],
         hasMore: result.hasMore,
@@ -174,9 +177,9 @@ export const useLogsStore = create<LogsState>((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      set({ 
-        error: error instanceof Error ? error.message : String(error),
-        isLoading: false 
+      set({
+        error: normalizeErrorMessage(error),
+        isLoading: false,
       });
     }
   },
@@ -184,12 +187,12 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   // Clear logs
   clearLogs: async (beforeDate?: string) => {
     try {
-      const deleted = await invoke<number>('clear_logs', { beforeDate });
+      const deleted = await clearAppLogs(beforeDate);
       // Refresh logs after clearing
       await get().fetchLogs();
       return deleted;
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : String(error) });
+      set({ error: normalizeErrorMessage(error) });
       throw error;
     }
   },
@@ -198,9 +201,9 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   exportLogs: async (format: 'json' | 'csv' | 'txt') => {
     const { filter } = get();
     try {
-      return await invoke<string>('export_logs', { filter, format });
+      return await exportAppLogs(filter, format);
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : String(error) });
+      set({ error: normalizeErrorMessage(error) });
       throw error;
     }
   },
@@ -208,10 +211,18 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   // Fetch statistics
   fetchStats: async () => {
     try {
-      const stats = await invoke<LogStats>('get_log_stats');
-      set({ stats });
+      const stats = await getLogStats();
+      // Backend returns { total, byLevel, bySource } (camelCase)
+      // Store expects legacy-compatible shape.
+      set({
+        stats: {
+          totalLogs: stats.total,
+          byLevel: stats.byLevel as Record<LogLevel, number>,
+          bySource: stats.bySource,
+        },
+      });
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : String(error) });
+      set({ error: normalizeErrorMessage(error) });
     }
   },
 
@@ -225,7 +236,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   resetFilter: () => {
     get().fetchLogs(DEFAULT_FILTER);
   },
-  
+
   // Grouping actions
   toggleGroup: (groupId: string) => {
     const { collapsedGroups } = get();
@@ -237,26 +248,28 @@ export const useLogsStore = create<LogsState>((set, get) => ({
     }
     set({ collapsedGroups: newSet });
   },
-  
+
   setGroupingEnabled: (enabled: boolean) => {
     set({ groupingEnabled: enabled });
   },
-  
+
   setAutoCollapseSuccess: (enabled: boolean) => {
     set({ autoCollapseSuccess: enabled });
   },
-  
+
   expandAllGroups: () => {
     set({ collapsedGroups: new Set() });
   },
-  
+
   collapseAllGroups: () => {
     const { logs } = get();
     // Collapse all unique stages (detected from messages)
-    const allGroups = new Set(logs.map(log => {
-      const stageMatch = log.message.match(/\[([^\]]+)\]/);
-      return stageMatch ? stageMatch[1] : log.source;
-    }));
+    const allGroups = new Set(
+      logs.map(log => {
+        const stageMatch = log.message.match(/\[([^\]]+)\]/);
+        return stageMatch ? stageMatch[1] : log.source;
+      })
+    );
     set({ collapsedGroups: allGroups });
   },
 
@@ -264,31 +277,30 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   subscribeToLogs: async () => {
     const { unsubscribe: existingUnsub } = get();
     if (existingUnsub) return; // Already subscribed
-    
-    const unsub = await listen<LogEntry>('logs:new', (event) => {
+
+    const unsub = await listen<LogEntry>('logs:new', event => {
       const { logs, filter, groupingEnabled, autoCollapseSuccess, collapsedGroups } = get();
       const newLog = event.payload;
-      
+
       // Check if log matches current filter
-      const matchesFilter = (
+      const matchesFilter =
         (filter.levels?.length === 0 || filter.levels?.includes(newLog.level)) &&
         (filter.sources?.length === 0 || filter.sources?.includes(newLog.source)) &&
-        (!filter.search || newLog.message.toLowerCase().includes(filter.search.toLowerCase()))
-      );
-      
+        (!filter.search || newLog.message.toLowerCase().includes(filter.search.toLowerCase()));
+
       if (matchesFilter) {
         const updatedLogs = [newLog, ...logs].slice(0, filter.limit ?? 50);
-        
+
         // Auto-collapse logic
         if (groupingEnabled && autoCollapseSuccess) {
           // Detect stage from new log
           const stageMatches = newLog.message.match(/\[([^\]]+)\]/g);
           let stage = newLog.source;
-          
+
           if (stageMatches && stageMatches.length > 0) {
             const lastMatch = stageMatches[stageMatches.length - 1];
             const extracted = lastMatch.slice(1, -1);
-            
+
             // Filter out account IDs (contain /)
             if (!extracted.includes('/') && extracted.length > 0) {
               stage = extracted;
@@ -301,14 +313,18 @@ export const useLogsStore = create<LogsState>((set, get) => ({
               }
             }
           }
-          
+
           // Check if this is a success log
-          if (newLog.level === 'success' || newLog.message.includes('✅') || newLog.message.includes('[OK]')) {
+          if (
+            newLog.level === 'success' ||
+            newLog.message.includes('✅') ||
+            newLog.message.includes('[OK]')
+          ) {
             // Count logs in this stage
             const stageLogs = updatedLogs.filter(l => {
               const logStageMatches = l.message.match(/\[([^\]]+)\]/g);
               let logStage = l.source;
-              
+
               if (logStageMatches && logStageMatches.length > 0) {
                 const lastMatch = logStageMatches[logStageMatches.length - 1];
                 const extracted = lastMatch.slice(1, -1);
@@ -322,16 +338,16 @@ export const useLogsStore = create<LogsState>((set, get) => ({
                   }
                 }
               }
-              
+
               return logStage === stage;
             });
-            
+
             // Auto-collapse if >5 entries
             if (stageLogs.length > 5) {
               const newCollapsedGroups = new Set(collapsedGroups);
               newCollapsedGroups.add(stage);
-              
-              set({ 
+
+              set({
                 logs: updatedLogs,
                 total: get().total + 1,
                 collapsedGroups: newCollapsedGroups,
@@ -340,24 +356,24 @@ export const useLogsStore = create<LogsState>((set, get) => ({
             }
           }
         }
-        
-        set({ 
+
+        set({
           logs: updatedLogs,
           total: get().total + 1,
         });
       }
     });
-    
+
     // Also listen for clear events
     const clearUnsub = await listen<number>('logs:cleared', () => {
       get().fetchLogs();
     });
-    
-    set({ 
+
+    set({
       unsubscribe: () => {
         unsub();
         clearUnsub();
-      }
+      },
     });
   },
 
@@ -371,22 +387,22 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   },
 
   // Add local log (for optimistic UI updates)
-  addLocalLog: (log) => {
+  addLocalLog: log => {
     const newLog: LogEntry = {
       ...log,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
     };
-    
+
     const { logs, filter } = get();
-    set({ 
+    set({
       logs: [newLog, ...logs].slice(0, filter.limit ?? 50),
       total: get().total + 1,
     });
   },
-  
+
   // Legacy compatibility - alias for addLocalLog
-  addLog: (log) => {
+  addLog: log => {
     get().addLocalLog(log);
   },
 }));
@@ -395,10 +411,6 @@ export const useLogsStore = create<LogsState>((set, get) => ({
 // Helper function to add logs from anywhere (non-React contexts)
 // ============================================
 
-export const appLog = (
-  level: LogLevel,
-  message: string,
-  source: string = 'system'
-) => {
+export const appLog = (level: LogLevel, message: string, source: string = 'system') => {
   useLogsStore.getState().addLocalLog({ level, message, source });
 };

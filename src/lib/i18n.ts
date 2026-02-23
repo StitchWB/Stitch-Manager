@@ -100,6 +100,7 @@ export interface Translations {
     addAccount: string;
     searchPlaceholder: string;
     refreshAll: string;
+    importAccounts: string;
     exportCsv: string;
     noAccounts: string;
     noAccountsSubtitle: string;
@@ -180,6 +181,13 @@ export interface Translations {
     registrationMetadata: string;
     browserProfilePath: string;
     sessionData: string;
+    profileSession: string;
+    profileSessionReady: string;
+    profileSessionPending: string;
+    profileSessionDisabled: string;
+    profileSessionOpen: string;
+    profileSessionConfirm: string;
+    profileSessionClear: string;
     notes: string;
     tags: string;
     lastLoginAt: string;
@@ -226,6 +234,7 @@ export interface Translations {
     lastLogin: string;
     success: string;
     openBrowser: string;
+    openProfileSession: string;
   };
 
   autoReg: {
@@ -267,7 +276,11 @@ export interface Translations {
     networkSettings: string;
     proxyEnabled: string;
     proxyUrl: string;
+    proxyType: string;
+    proxyList: string;
+    proxyListFormat: string;
     useProxy: string;
+    useProxyList: string;
     username: string;
     directConnection: string;
     proxyUrlRequired: string;
@@ -450,6 +463,7 @@ export interface Translations {
     manageLocalServer: string;
     endpoint: string;
     copyUrl: string;
+    urlCopied: string;
     openInBrowser: string;
     configuration: string;
     stopServerToEdit: string;
@@ -593,6 +607,7 @@ export interface Translations {
       proxy: string;
       idePaths: string;
       database: string;
+      aiProxy: string;
     };
     general: {
       appearance: string;

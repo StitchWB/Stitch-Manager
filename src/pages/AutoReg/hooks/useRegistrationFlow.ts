@@ -1,0 +1,200 @@
+import { useState, useCallback, useRef } from 'react';
+import { useRegistrationStore } from '../../../stores/registration';
+import { useAppStore } from '../../../stores/app';
+import { testImapConnection, stopRegistration } from '../../../lib/tauri';
+import { runRegistration } from '../services';
+import type { ProviderName } from '../../../types';
+
+interface UseRegistrationFlowProps {
+  config: any;
+  emailDomain: string;
+  useRegistrationV2: boolean;
+  canStart: boolean;
+  onThreadsChange: (threads: number) => void;
+}
+
+export const useRegistrationFlow = ({
+  config,
+  emailDomain,
+  useRegistrationV2,
+  canStart,
+  onThreadsChange,
+}: UseRegistrationFlowProps) => {
+  const { addNotification } = useAppStore();
+  const { addLog, addHistoryEntry } = useRegistrationStore();
+
+  const [activeThreads, setActiveThreads] = useState(0);
+  const [isStopping, setIsStopping] = useState(false);
+  const cancelledRef = useRef(false);
+
+  // Wrapper to sync threads with parent
+  const handleSetActiveThreads = useCallback(
+    (threads: number) => {
+      setActiveThreads(threads);
+      onThreadsChange(threads);
+    },
+    [onThreadsChange]
+  );
+
+  const handleStart = useCallback(async () => {
+    // Guard against unsupported providers.
+    // The default Python autoreg fallback is Kiro/AWS; if a user selects a provider
+    // that doesn't have an implementation, we must fail fast instead of silently
+    // registering Kiro.
+    const supportedProviders: ProviderName[] = [
+      'kiro',
+      'aws',
+      'windsurf',
+      'trae',
+      'github',
+      'openai',
+    ];
+    if (!supportedProviders.includes(config.provider)) {
+      const provider = String(config.provider);
+      addNotification({
+        type: 'error',
+        title: 'Provider not supported',
+        message: `AutoReg is not implemented for provider: ${provider}`,
+      });
+      addLog({
+        level: 'error',
+        message: `Unsupported provider selected: ${provider}. Registration aborted.`,
+      });
+      return;
+    }
+
+    if (!canStart) {
+      addNotification({
+        type: 'error',
+        title: 'Configuration Required',
+        message: 'Please configure IMAP settings',
+      });
+      return;
+    }
+
+    // Additional validation for alias services
+    if (config.imap.addyioEnabled && !config.imap.addyioApiToken) {
+      addNotification({
+        type: 'error',
+        title: 'Addy.io Token Required',
+        message: 'Please enter your Addy.io API token in the Identity tab',
+      });
+      return;
+    }
+
+    if (config.imap.thirtyThreeMailEnabled && !config.imap.thirtyThreeMailUsername) {
+      addNotification({
+        type: 'error',
+        title: '33mail Username Required',
+        message: 'Please enter your 33mail username in the Identity tab',
+      });
+      return;
+    }
+
+    // Reset cancellation flag
+    cancelledRef.current = false;
+
+    const totalCount = config.count || 1;
+    handleSetActiveThreads(1);
+    addLog({
+      level: 'info',
+      message: `Starting ${config.provider} registration (${totalCount} account${totalCount > 1 ? 's' : ''})...`,
+    });
+
+    try {
+      // Run registration using service module
+      const summary = await runRegistration({
+        config,
+        emailDomain,
+        useRegistrationV2,
+        onLog: (level, message) => addLog({ level, message }),
+        onHistoryEntry: addHistoryEntry,
+        onCancelled: () => cancelledRef.current,
+      });
+
+      // Summary notification
+      const summaryText = `✓ ${summary.successCount} created, ⊘ ${summary.skipCount} skipped, ✗ ${summary.failCount} failed`;
+      addLog({ level: 'info', message: `Registration complete: ${summaryText}` });
+      addNotification({
+        type: summary.successCount > 0 ? 'success' : summary.failCount > 0 ? 'error' : 'info',
+        title: 'Registration Complete',
+        message: summaryText,
+      });
+    } catch (error) {
+      addLog({ level: 'error', message: `Fatal error: ${String(error)}` });
+      addNotification({ type: 'error', title: 'Error', message: String(error) });
+    } finally {
+      handleSetActiveThreads(0);
+    }
+  }, [
+    config,
+    emailDomain,
+    useRegistrationV2,
+    canStart,
+    addLog,
+    addNotification,
+    addHistoryEntry,
+    handleSetActiveThreads,
+  ]);
+
+  const handleTestImap = useCallback(async (): Promise<boolean> => {
+    addLog({ level: 'info', message: 'Testing IMAP connection...' });
+    try {
+      // Determine credentials based on strategy
+      const server = config.imap.strategy === 'gmail' ? 'imap.gmail.com' : config.imap.server;
+      let user = config.imap.strategy === 'gmail' ? config.imap.gmailBase : config.imap.email;
+      // For Gmail, ensure user has @gmail.com suffix
+      if (config.imap.strategy === 'gmail' && user && !user.includes('@')) {
+        user = `${user}@gmail.com`;
+      }
+      const password =
+        config.imap.strategy === 'gmail'
+          ? config.imap.gmailAppPassword
+          : config.imap.password || '********';
+
+      addLog({ level: 'debug', message: `Testing: server=${server}, user=${user}` });
+
+      const result = await testImapConnection({
+        imapServer: server,
+        imapUser: user,
+        imapPassword: password,
+      });
+      addLog({ level: 'success', message: `IMAP: ${result}` });
+      addNotification({ type: 'success', title: 'IMAP OK', message: 'Connection successful' });
+      return true;
+    } catch (e) {
+      addLog({ level: 'error', message: `IMAP error: ${e}` });
+      return false;
+    }
+  }, [config.imap, addLog, addNotification]);
+
+  const handleStop = useCallback(async () => {
+    if (isStopping) return;
+
+    setIsStopping(true);
+    addLog({ level: 'warn', message: 'Stop requested - killing active processes...' });
+
+    // Set cancellation flag to stop the JS loop
+    cancelledRef.current = true;
+
+    try {
+      await stopRegistration();
+      addLog({ level: 'info', message: 'All registration processes terminated' });
+      addNotification({ type: 'info', title: 'Stopped', message: 'Registration process stopped' });
+    } catch (e) {
+      addLog({ level: 'error', message: `Failed to stop processes: ${e}` });
+    } finally {
+      handleSetActiveThreads(0);
+      setIsStopping(false);
+    }
+  }, [addLog, addNotification, isStopping, handleSetActiveThreads]);
+
+  return {
+    activeThreads,
+    isStopping,
+    cancelledRef,
+    handleStart,
+    handleTestImap,
+    handleStop,
+  };
+};

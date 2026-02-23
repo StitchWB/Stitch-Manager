@@ -1,5 +1,20 @@
-import { Cloud, Github, Code, Wind, Zap } from 'lucide-react';
+import { Cloud, Github } from 'lucide-react';
 import { cn } from '../../lib/utils';
+
+// Import provider icons
+import kiroIcon from '../../assets/providers/kiro.png';
+import traeIcon from '../../assets/providers/trae.png';
+import antigravityIcon from '../../assets/providers/antigravity.png';
+import claudeIcon from '../../assets/providers/claude.png';
+import copilotIcon from '../../assets/providers/copilot.png';
+import cursorIcon from '../../assets/providers/cursor.png';
+import geminiIcon from '../../assets/providers/gemini.png';
+import openaiIcon from '../../assets/providers/openai.png';
+import iflowIcon from '../../assets/providers/iflow.png';
+import glmIcon from '../../assets/providers/glm.png';
+import qwenIcon from '../../assets/providers/qwen.png';
+import warpIcon from '../../assets/providers/warp.png';
+import vertexIcon from '../../assets/providers/vertex.png';
 
 interface ProviderLogoProps {
   provider: string;
@@ -8,61 +23,60 @@ interface ProviderLogoProps {
   colored?: boolean;
 }
 
-// Brand colors with glow effect
-const providerConfig = {
-  kiro: {
-    color: 'text-purple-400',
-    hoverColor: 'group-hover:text-purple-400',
-    glow: 'drop-shadow-[0_0_8px_rgba(167,139,250,0.6)]',
-    Icon: Code,
-  },
-  windsurf: {
-    color: 'text-cyan-400',
-    hoverColor: 'group-hover:text-cyan-400',
-    glow: 'drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]',
-    Icon: Wind,
-  },
-  trae: {
-    color: 'text-orange-400',
-    hoverColor: 'group-hover:text-orange-400',
-    glow: 'drop-shadow-[0_0_8px_rgba(251,146,60,0.6)]',
-    Icon: Zap,
-  },
-  aws: {
-    color: 'text-orange-500',
-    hoverColor: 'group-hover:text-orange-500',
-    glow: 'drop-shadow-[0_0_8px_rgba(249,115,22,0.6)]',
-    Icon: Cloud,
-  },
-  aws_builder_id: {
-    color: 'text-orange-500',
-    hoverColor: 'group-hover:text-orange-500',
-    glow: 'drop-shadow-[0_0_8px_rgba(249,115,22,0.6)]',
-    Icon: Cloud,
-  },
-  github: {
-    color: 'text-white',
-    hoverColor: 'group-hover:text-white',
-    glow: 'drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]',
-    Icon: Github,
-  },
+// Provider icon mapping
+const providerIcons: Record<string, string> = {
+  kiro: kiroIcon,
+  trae: traeIcon,
+  antigravity: antigravityIcon,
+  claude: claudeIcon,
+  copilot: copilotIcon,
+  cursor: cursorIcon,
+  gemini: geminiIcon,
+  openai: openaiIcon,
+  iflow: iflowIcon,
+  glm: glmIcon,
+  qwen: qwenIcon,
+  warp: warpIcon,
+  vertex: vertexIcon,
+};
+
+// Fallback Lucide icons for providers without custom icons
+const fallbackIcons = {
+  aws: Cloud,
+  aws_builder_id: Cloud,
+  github: Github,
 };
 
 export function ProviderLogo({ provider, size = 20, className, colored = false }: ProviderLogoProps) {
   const p = provider.toLowerCase();
-  const config = providerConfig[p as keyof typeof providerConfig] || providerConfig.kiro;
+  const iconSrc = providerIcons[p];
   
-  const Icon = config.Icon;
-  const colorClass = colored ? config.color : `text-slate-500 ${config.hoverColor}`;
-  const glowClass = colored ? config.glow : '';
-
+  // If we have a custom PNG icon, use it
+  if (iconSrc) {
+    return (
+      <img 
+        src={iconSrc}
+        alt={`${provider} logo`}
+        width={size}
+        height={size}
+        className={cn(
+          'transition-all duration-200 object-contain',
+          colored && 'drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]',
+          className
+        )}
+      />
+    );
+  }
+  
+  // Fallback to Lucide icon
+  const FallbackIcon = fallbackIcons[p as keyof typeof fallbackIcons] || Cloud;
+  
   return (
-    <Icon 
+    <FallbackIcon 
       size={size} 
       className={cn(
         'transition-all duration-200',
-        colorClass,
-        glowClass,
+        colored ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'text-slate-500 group-hover:text-white',
         className
       )}
     />

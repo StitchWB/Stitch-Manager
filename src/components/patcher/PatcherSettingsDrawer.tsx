@@ -34,10 +34,11 @@ import {
   copyDefaultPrompts,
   getSettings,
   updateSettings,
-} from '../../lib/tauri';
+} from '@/lib/tauri';
 import type { KiroPatchConfig } from '../../types/kiro-patch';
 import type { Account } from '../../types';
 import type { SettingsData } from '../../types/generated';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 
 interface PatcherSettingsDrawerProps {
   isOpen: boolean;
@@ -63,6 +64,8 @@ export default function PatcherSettingsDrawer({
   const [showBindDialog, setShowBindDialog] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [customMachineId, setCustomMachineId] = useState<string>('');
+
+  const { copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (isOpen) {
@@ -120,12 +123,13 @@ export default function PatcherSettingsDrawer({
 
   const handleCopyMachineId = async () => {
     if (!config) return;
-    try {
-      await navigator.clipboard.writeText(config.machineId);
-      toast.success(t('kiroPatch.idCopied'));
-    } catch (error) {
-      toast.error(t('common.error'));
-    }
+    await copy(config.machineId, {
+      sensitive: true,
+      requireConfirmation: true,
+      confirmationMessage:
+        'Copy Machine ID to clipboard? This identifier can be sensitive. (Auto-clears in 15s)',
+      successMessage: t('kiroPatch.idCopied'),
+    });
   };
 
   const handleGenerateNewMachineId = async () => {

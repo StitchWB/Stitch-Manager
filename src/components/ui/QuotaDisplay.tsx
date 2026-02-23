@@ -25,8 +25,15 @@ export const QuotaDisplay = React.memo(function QuotaDisplay({
   variant = 'default',
 }: QuotaDisplayProps) {
   const isUnlimited = limit < 0;
+  const isUnknown = !isUnlimited && limit === 0 && used === 0;
   const isOver = !isUnlimited && limit > 0 && used > limit;
-  const percent = isUnlimited ? 100 : limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+  const percent = isUnlimited
+    ? 100
+    : isUnknown
+      ? 0
+      : limit > 0
+        ? Math.min((used / limit) * 100, 100)
+        : 0;
 
   const getStatusColor = () => {
     if (isOver) return 'text-red-400';
@@ -52,10 +59,10 @@ export const QuotaDisplay = React.memo(function QuotaDisplay({
               getStatusColor()
             )}
           >
-            {Math.round(percent)}%
+            {isUnknown ? '—' : `${Math.round(percent)}%`}
           </span>
           <span className="text-[10px] text-slate-500 font-bold tabular-nums">
-            {formatValue(used)} / {formatValue(limit)}
+            {isUnknown ? 'Unknown' : `${formatValue(used)} / ${formatValue(limit)}`}
           </span>
         </div>
         <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
@@ -84,20 +91,20 @@ export const QuotaDisplay = React.memo(function QuotaDisplay({
                 getStatusColor()
               )}
             >
-              {Math.round(percent)}%
+              {isUnknown ? '—' : `${Math.round(percent)}%`}
             </span>
             <span className="text-xs text-slate-400 font-bold tabular-nums uppercase tracking-tight">
-              {t('common.used')}
+              {t('usageBar.used')}
             </span>
           </div>
         </div>
 
         <div className="flex flex-col items-end">
           <div className="text-[11px] font-bold tabular-nums text-slate-300">
-            {formatValue(used, false)}
+            {isUnknown ? 'Unknown' : formatValue(used, false)}
           </div>
           <div className="text-[10px] font-bold tabular-nums text-slate-500 uppercase tracking-tighter">
-            / {isUnlimited ? 'Unlimited' : formatValue(limit, false)}
+            / {isUnlimited ? 'Unlimited' : isUnknown ? 'Unknown' : formatValue(limit, false)}
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, RefreshCw, MoreHorizontal, Play, Square, Globe, Copy } from 'lucide-react';
+import { Trash2, RefreshCw, MoreHorizontal, Play, Square, Globe, Copy, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import type { Account, AccountStatus } from '../types';
@@ -11,21 +11,21 @@ import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Tooltip } from './ui/Tooltip';
 import { ProviderLogo } from './ui/ProviderLogo';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import { getAccountStatusLabel, getAccountStatusVariant } from '../lib/accountStatus';
 
 function truncateEmail(email: string, startChars = 16, endChars = 14): string {
   if (email.length <= startChars + endChars + 3) return email;
   return `${email.slice(0, startChars)}...${email.slice(-endChars)}`;
 }
 
-const getStatusLabel = (status: AccountStatus): string => {
-  const statusMap: Record<AccountStatus, string> = {
-    active: t('status.active'),
-    banned: t('status.banned'),
-    limit_hit: t('status.limitHit'),
-    expired: t('status.expired'),
-    unknown: t('status.unknown'),
-  };
-  return statusMap[status];
+const parseTags = (tagsString: string | null): string[] => {
+  if (!tagsString) return [];
+  try {
+    const parsed = JSON.parse(tagsString);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 interface AccountsTableProps {
@@ -41,6 +41,9 @@ interface AccountsTableProps {
   onCheckStatus: (accountId: number) => Promise<void>;
   isAccountRefreshing: (accountId: number) => boolean;
   onOpenBrowser?: (accountId: number) => Promise<void>;
+  onOpenProfileSession?: (accountId: number) => Promise<void>;
+  onConfirmProfileSession?: (accountId: number) => Promise<void>;
+  onClearProfileSession?: (accountId: number) => Promise<void>;
   selectedProvider?: string | null;
 }
 
@@ -57,6 +60,9 @@ export default function AccountsTable({
   onCheckStatus,
   isAccountRefreshing,
   onOpenBrowser,
+  onOpenProfileSession,
+  onConfirmProfileSession,
+  onClearProfileSession,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [detailsModalAccount, setDetailsModalAccount] = useState<Account | null>(null);
@@ -125,6 +131,11 @@ export default function AccountsTable({
             const isSelected = selectedIds.has(account.id);
             const isRefreshing = isAccountRefreshing(account.id);
             const metadata = account.metadata ? JSON.parse(account.metadata) : {};
+            const tagsList = parseTags(account.tags);
+            const allowProfileAction =
+              account.provider === 'kiro' ||
+              tagsList.includes('profile:manual') ||
+              tagsList.includes('profile:antidetect');
 
             return (
               <motion.div
@@ -192,12 +203,16 @@ export default function AccountsTable({
                     <div
                       className={cn(
                         'flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border',
-                        account.status === 'active'
+                        getAccountStatusVariant(account.status as AccountStatus) === 'success'
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          : getAccountStatusVariant(account.status as AccountStatus) === 'warning'
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : getAccountStatusVariant(account.status as AccountStatus) === 'neutral'
+                              ? 'bg-white/5 text-white/60 border-white/10'
+                              : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                       )}
                     >
-                      {getStatusLabel(account.status as AccountStatus)}
+                      {getAccountStatusLabel(account.status as AccountStatus)}
                     </div>
                   </div>
 
@@ -219,6 +234,7 @@ export default function AccountsTable({
                     <UsageBar
                       used={account.quota?.used || 0}
                       limit={account.quota?.limit || 0}
+                      isError={account.status === 'banned'}
                       className="h-2 rounded-full overflow-hidden bg-black/40 border border-white/5"
                     />
                   </div>
@@ -248,6 +264,21 @@ export default function AccountsTable({
                         <Globe size={15} />
                       </button>
                     </Tooltip>
+
+                    {allowProfileAction && (
+                      <Tooltip content={t('accountsTable.openProfileSession')}>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            onOpenProfileSession?.(account.id);
+                          }}
+                          className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
+                          aria-label={t('accountsTable.openProfileSession')}
+                        >
+                          <User size={15} />
+                        </button>
+                      </Tooltip>
+                    )}
 
                     <Tooltip content={isActive ? t('accounts.deactivate') : t('accounts.activate')}>
                       <button
@@ -286,13 +317,26 @@ export default function AccountsTable({
                           <button
                             onClick={e => {
                               e.stopPropagation();
-                              copy(account.token ?? '');
+                              void copy(account.token ?? '', {
+                                sensitive: true,
+                                requireConfirmation: true,
+                                confirmationMessage:
+                                  'Copy token to clipboard? This token is sensitive and may be readable by other apps. Clipboard will be cleared automatically after 15 seconds.',
+                                autoClear: true,
+                                autoClearAfterMs: 15000,
+                                successMessage: 'Token copied (auto-clears in 15s)',
+                              });
                               setOpenMenuId(null);
                             }}
                             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[11px] text-slate-300 hover:bg-white/5 transition-colors"
                           >
                             <Copy size={13} className="text-indigo-400" />
-                            <span>Copy Token</span>
+                            <span className="flex flex-col items-start leading-tight">
+                              <span>Copy Token</span>
+                              <span className="text-[10px] text-slate-500">
+                                Sensitive • auto-clears in 15s
+                              </span>
+                            </span>
                           </button>
                           <div className="h-px bg-white/5 my-1 mx-2" />
                           <button
@@ -326,6 +370,9 @@ export default function AccountsTable({
         isOpen={!!detailsModalAccount}
         onClose={() => setDetailsModalAccount(null)}
         onDelete={onDelete}
+        onOpenProfileSession={onOpenProfileSession}
+        onConfirmProfileSession={onConfirmProfileSession}
+        onClearProfileSession={onClearProfileSession}
       />
 
       <ConfirmDialog

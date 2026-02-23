@@ -5,11 +5,14 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import AutoReg from './pages/AutoReg';
+import AiProviders from './pages/AiProviders';
 import Patcher from './pages/Patcher';
+import Scheduler from './pages/Scheduler';
 import Server from './pages/Server';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import Chat from './pages/Chat';
+import ApiKeys from './pages/ApiKeys';
 import NotFound from './pages/NotFound';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { useAppStore } from './stores/app';
@@ -91,11 +94,14 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/autoreg" element={<AutoReg />} />
+          <Route path="/ai-providers" element={<AiProviders />} />
           <Route path="/patcher" element={<Patcher />} />
+          <Route path="/scheduler" element={<Scheduler />} />
           <Route path="/server" element={<Server />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/api-keys" element={<ApiKeys />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Layout>

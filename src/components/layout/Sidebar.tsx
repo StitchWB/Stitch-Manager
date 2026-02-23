@@ -12,6 +12,9 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
+  Zap,
+  Clock,
+  Key,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
@@ -132,6 +135,12 @@ export default function Sidebar() {
           collapsed={sidebarCollapsed}
         />
         <NavItem
+          to="/scheduler"
+          icon={<Clock size={20} />}
+          label="Scheduler"
+          collapsed={sidebarCollapsed}
+        />
+        <NavItem
           to="/patcher"
           icon={<Code size={20} />}
           label={t('sidebar.idePatch')}
@@ -141,6 +150,18 @@ export default function Sidebar() {
           to="/server"
           icon={<Server size={20} />}
           label={t('sidebar.apiServer')}
+          collapsed={sidebarCollapsed}
+        />
+        <NavItem
+          to="/ai-providers"
+          icon={<Zap size={20} />}
+          label="AI Providers"
+          collapsed={sidebarCollapsed}
+        />
+        <NavItem
+          to="/api-keys"
+          icon={<Key size={20} />}
+          label="API Keys"
           collapsed={sidebarCollapsed}
         />
         <NavItem

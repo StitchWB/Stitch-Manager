@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Command } from 'cmdk';
 import { useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, Users, RefreshCw, Code, Server, 
-  Settings, FileText, Search 
+import {
+  LayoutDashboard,
+  Users,
+  RefreshCw,
+  Code,
+  Server,
+  Key,
+  Settings,
+  FileText,
+  Search,
 } from 'lucide-react';
 import { useAccountsStore } from '../../stores/accounts';
 import { t } from '../../lib/i18n';
@@ -18,7 +25,7 @@ export function CommandPalette() {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setOpen((o) => !o);
+        setOpen(o => !o);
       }
     };
     document.addEventListener('keydown', down);
@@ -39,17 +46,17 @@ export function CommandPalette() {
     >
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
-      
+
       {/* Dialog */}
       <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg">
-        <div 
+        <div
           className="rounded-xl overflow-hidden shadow-2xl"
           style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)' }}
         >
           {/* Search Input */}
           <div className="flex items-center px-4 border-b border-white/5">
             <Search className="w-4 h-4 text-slate-500 mr-3" />
-            <Command.Input 
+            <Command.Input
               placeholder={t('commandPalette.placeholder')}
               className="w-full h-12 bg-transparent text-sm text-slate-200 placeholder-slate-500 focus:outline-none"
             />
@@ -63,13 +70,22 @@ export function CommandPalette() {
             </Command.Empty>
 
             <Command.Group heading={t('commandPalette.navigation')} className="mb-2">
-              <CommandItem icon={<LayoutDashboard />} onSelect={() => runCommand(() => navigate('/'))}>
+              <CommandItem
+                icon={<LayoutDashboard />}
+                onSelect={() => runCommand(() => navigate('/'))}
+              >
                 {t('sidebar.dashboard')}
               </CommandItem>
-              <CommandItem icon={<Users />} onSelect={() => runCommand(() => navigate('/accounts'))}>
+              <CommandItem
+                icon={<Users />}
+                onSelect={() => runCommand(() => navigate('/accounts'))}
+              >
                 {t('sidebar.accounts')}
               </CommandItem>
-              <CommandItem icon={<RefreshCw />} onSelect={() => runCommand(() => navigate('/autoreg'))}>
+              <CommandItem
+                icon={<RefreshCw />}
+                onSelect={() => runCommand(() => navigate('/autoreg'))}
+              >
                 {t('sidebar.autoReg')}
               </CommandItem>
               <CommandItem icon={<Code />} onSelect={() => runCommand(() => navigate('/patcher'))}>
@@ -78,7 +94,13 @@ export function CommandPalette() {
               <CommandItem icon={<Server />} onSelect={() => runCommand(() => navigate('/server'))}>
                 {t('sidebar.apiServer')}
               </CommandItem>
-              <CommandItem icon={<Settings />} onSelect={() => runCommand(() => navigate('/settings'))}>
+              <CommandItem icon={<Key />} onSelect={() => runCommand(() => navigate('/api-keys'))}>
+                API Keys
+              </CommandItem>
+              <CommandItem
+                icon={<Settings />}
+                onSelect={() => runCommand(() => navigate('/settings'))}
+              >
                 {t('sidebar.settings')}
               </CommandItem>
               <CommandItem icon={<FileText />} onSelect={() => runCommand(() => navigate('/logs'))}>
@@ -87,7 +109,10 @@ export function CommandPalette() {
             </Command.Group>
 
             <Command.Group heading={t('commandPalette.actions')} className="mb-2">
-              <CommandItem icon={<RefreshCw />} onSelect={() => runCommand(() => refreshAllAccounts())}>
+              <CommandItem
+                icon={<RefreshCw />}
+                onSelect={() => runCommand(() => refreshAllAccounts())}
+              >
                 {t('commandPalette.refreshAllAccounts')}
               </CommandItem>
             </Command.Group>
@@ -99,7 +124,15 @@ export function CommandPalette() {
 }
 
 // Helper component for items
-function CommandItem({ children, icon, onSelect }: { children: React.ReactNode; icon: React.ReactNode; onSelect: () => void }) {
+function CommandItem({
+  children,
+  icon,
+  onSelect,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  onSelect: () => void;
+}) {
   return (
     <Command.Item
       onSelect={onSelect}

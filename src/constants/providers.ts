@@ -12,7 +12,7 @@ export interface ProviderConfig {
   gradient: string;        // Gradient classes for cards
   hexColor: string;        // Hex color for charts
   disabled?: boolean;      // Whether registration is disabled
-  category?: 'ide' | 'cloud' | 'git';  // Provider category for unified UI
+  category?: 'ide' | 'cloud' | 'git' | 'ai';  // Provider category for unified UI
 }
 
 export const PROVIDERS: ProviderConfig[] = [
@@ -67,6 +67,16 @@ export const PROVIDERS: ProviderConfig[] = [
     category: 'cloud',
   },
   {
+    id: 'openai',
+    name: 'OpenAI',
+    icon: 'AI',
+    color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    gradient: 'from-emerald-500/20 to-teal-500/20 text-emerald-400',
+    hexColor: '#10b981',
+    disabled: false,
+    category: 'ai',
+  },
+  {
     id: 'copilot',
     name: 'Copilot',
     icon: 'CP',
@@ -74,7 +84,7 @@ export const PROVIDERS: ProviderConfig[] = [
     gradient: 'from-gray-500/20 to-slate-500/20 text-gray-400',
     hexColor: '#6b7280',
     disabled: true,
-    category: 'ide',
+    category: 'ai',
   },
 ] as const;
 

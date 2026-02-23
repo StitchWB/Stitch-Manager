@@ -4,14 +4,31 @@
 
 export type DetectedIDE = { id: string; name: string; type: string; path: string; version: string | null; isRunning: boolean; isPatched: boolean; patchVersion: string | null; patchedAt: string | null; canPatch: boolean; error: string | null; installed: boolean }
 
+/**
+ * Detected IDE information
+ */
 export type DetectedIde = { id: string; name: string; ideType: string; path: string | null; version: string | null; isPatched: boolean; patchVersion: string | null; patchedAt: string | null; canPatch: boolean; error: string | null; installed: boolean }
 
+export type AiProxyDetectedIde = { name: string; displayName: string; path: string; configPath: string; installed: boolean; configured: boolean }
+
+/**
+ * Patch operation result
+ */
 export type PatchResult = { success: boolean; message: string; backupPath: string | null }
 
+/**
+ * Backup information
+ */
 export type BackupInfo = { path: string; originalPath: string; sha256Hash: string; createdAt: string; fileSize: number }
 
+/**
+ * Patch status enumeration
+ */
 export type PatchStatus = "applied" | "not_applied" | "partially_applied" | "unknown"
 
+/**
+ * Patch status result
+ */
 export type PatchStatusResult = { ideType: string; status: PatchStatus; extensionValid: boolean; extensionPath: string | null; backupExists: boolean; backupValid: boolean; backupPath: string | null; patternsApplied: number; totalPatterns: number; fileHash: string | null; patchVersion: string | null }
 
 export type Account = { id: number; provider: string; email: string; token: string | null; refreshToken: string | null; quota: SimpleQuotaInfo; status: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string; updatedAt: string | null; metadata: string | null; providerType: string | null; providerSubtype: string | null; providerMetadata: string | null; machineId: string | null; patchConfig: string | null; patchAppliedAt: string | null; registrationPassword: string | null; registrationDate: string | null; registrationMethod: string | null; registrationMetadata: string | null; browserProfilePath: string | null; cookies: string | null; sessionData: string | null; useCount: number; lastError: string | null; errorCount: number; successRate: number; notes: string | null; tags: string | null; lastLoginAt: string | null; loginCount: number; accountRegion: string | null }
@@ -71,7 +88,7 @@ export type RegistrationStatus = { isRunning: boolean; success: boolean | null; 
 export type TokenRefreshResult = { success: boolean; accessToken: string | null; refreshToken: string | null; expiresAt: string | null; message: string }
 
 /**
- * Result of a bulk operation
+ * Bulk operation result
  */
 export type BulkOperationResult = { total: number; succeeded: number; failed: number; errors: string[] }
 
@@ -115,18 +132,39 @@ export type OAuthTokenResponse = { accessToken: string; refreshToken?: string | 
 
 export type ProfileCommandError = { message: string }
 
-export type PythonAutoregConfig = { email: string | null; name: string | null; password: string | null; headless: boolean; deviceFlow: boolean; autoGenerate: boolean; imapServer: string; imapPort: number | null; imapUser: string; imapPassword: string; emailStrategy: string | null; proxyUrl: string | null; speedMultiplier: number | null; verificationCodeTimeout: number | null; oauthCallbackTimeout: number | null; allowAccessWait: number | null; pageLoadTimeout: number | null; elementWaitTimeout: number | null; imapPollInterval: number | null; passwordLength: number | null; realisticTyping: boolean | null; humanDelays: boolean | null; screenshotsOnError: boolean | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null }
+/**
+ * Configuration for Python-based Kiro auto-registration
+ */
+export type PythonAutoregConfig = { email: string | null; name: string | null; password: string | null; headless: boolean; deviceFlow: boolean; autoGenerate: boolean; imapServer: string; imapPort: number | null; imapUser: string; imapPassword: string; emailStrategy: string | null; proxyUrl: string | null; speedMultiplier: number | null; verificationCodeTimeout: number | null; oauthCallbackTimeout: number | null; allowAccessWait: number | null; pageLoadTimeout: number | null; elementWaitTimeout: number | null; imapPollInterval: number | null; passwordLength: number | null; realisticTyping: boolean | null; humanDelays: boolean | null; screenshotsOnError: boolean | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null }
 
-export type WindsurfAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; loginOnly: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; emailPattern: string | null; namePattern: string | null; nameCustomFirst: string | null; nameCustomLast: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null }
+/**
+ * Configuration for Windsurf auto-registration
+ */
+export type WindsurfAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; loginOnly: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; emailPattern: string | null; namePattern: string | null; nameCustomFirst: string | null; nameCustomLast: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null }
 
+/**
+ * Result from Windsurf auto-registration
+ */
 export type WindsurfAutoregResult = { success: boolean; email: string | null; password: string | null; name: string | null; apiKey: string | null; installationId: string | null; error: string | null }
 
-export type TraeAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null }
+/**
+ * Configuration for Trae auto-registration
+ */
+export type TraeAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null }
 
+/**
+ * Result from Trae auto-registration
+ */
 export type TraeAutoregResult = { success: boolean; email: string | null; password: string | null; name: string | null; error: string | null }
 
+/**
+ * Configuration for GitHub auto-registration
+ */
 export type GithubAutoregConfig = { email: string | null; password: string; username: string | null; verificationCode: string | null; headless: boolean; imapServer: string | null; imapUser: string | null; imapPassword: string | null }
 
+/**
+ * Result from GitHub auto-registration
+ */
 export type GithubAutoregResult = { success: boolean; email: string | null; username: string | null; password: string | null; error: string | null; requiresVerification: boolean | null; verificationUrl: string | null }
 
 /**
@@ -147,7 +185,7 @@ export type RouteResult = { modelId: string; provider: string | null; fallback: 
 /**
  * Settings data structure
  */
-export type SettingsData = { theme?: string; provider?: string; registrationMode?: string; emailStrategy?: string; mailStrategy?: string; imapServer?: string; imapPort?: number; imapEmail?: string; imapUser?: string; imapPassword?: string; addyioEnabled?: boolean; addyioApiToken?: string; addyioAliasFormat?: string; addyioAutoDelete?: boolean; addyioDomain?: string; addyioDefaultRecipientId?: string; addyioDescriptionTemplate?: string; addyioFromName?: string; thirtyThreeMailEnabled?: boolean; thirtyThreeMailUsername?: string; thirtyThreeMailDomain?: string; gmailBase?: string; gmailAlias?: string; gmailAppPassword?: string; proxyEnabled?: boolean; proxyUrl?: string; proxyUsername?: string; proxyPassword?: string; emailPattern?: string; emailCustomPrefix?: string; namePattern?: string; nameCustomFirst?: string; nameCustomLast?: string; count?: number; headless?: boolean; logVerbosity?: string; customIdePaths?: { [key in string]: string }; patcherStrategy?: string; autoRotateEnabled?: boolean; spoofMachineIdEnabled?: boolean; tokenRefreshEnabled?: boolean; tokenRefreshCheckInterval?: number; tokenRefreshBuffer?: number; uiScale?: number; autoReplenishEnabled?: boolean; minActiveKiro?: number; minActiveWindsurf?: number; minActiveTrae?: number; kiroRegStrategy?: string; windsurfRegStrategy?: string; traeRegStrategy?: string; checkCreditsIntervalSeconds?: number }
+export type SettingsData = { theme?: string; provider?: string; registrationMode?: string; emailStrategy?: string; mailStrategy?: string; imapServer?: string; imapPort?: number; imapEmail?: string; imapUser?: string; imapPassword?: string; addyioEnabled?: boolean; addyioApiToken?: string; addyioAliasFormat?: string; addyioAutoDelete?: boolean; addyioDomain?: string; addyioDefaultRecipientId?: string; addyioDescriptionTemplate?: string; addyioFromName?: string; thirtyThreeMailEnabled?: boolean; thirtyThreeMailUsername?: string; thirtyThreeMailDomain?: string; mailtmEnabled?: boolean; gmailBase?: string; gmailAlias?: string; gmailAppPassword?: string; proxyEnabled?: boolean; proxyUrl?: string; proxyUsername?: string; proxyPassword?: string; proxyType?: string; proxyList?: string; proxyRotationEnabled?: boolean; emailPattern?: string; emailCustomPrefix?: string; namePattern?: string; nameCustomFirst?: string; nameCustomLast?: string; count?: number; headless?: boolean; logVerbosity?: string; customIdePaths?: { [key in string]: string }; patcherStrategy?: string; autoRotateEnabled?: boolean; spoofMachineIdEnabled?: boolean; tokenRefreshEnabled?: boolean; tokenRefreshCheckInterval?: number; tokenRefreshBuffer?: number; uiScale?: number; autoReplenishEnabled?: boolean; minActiveKiro?: number; minActiveWindsurf?: number; minActiveTrae?: number; kiroRegStrategy?: string; windsurfRegStrategy?: string; traeRegStrategy?: string; checkCreditsIntervalSeconds?: number }
 
 export type AddyIoTokenDetails = { name: string; createdAt: string; expiresAt: string | null }
 
@@ -416,6 +454,21 @@ export type LLMServerConfig = { apiPort: number; apiHost: string; logLevel: stri
  */
 export type AutoregConfig = { browser: BrowserConfig; timeouts: TimeoutConfig; email: EmailConfig; imap: ImapConfig; debug: DebugConfig }
 
+/**
+ * Proxy configuration
+ */
+export type ProxyConfig = { enabled: boolean; proxyType: ProxyType; proxies: ProxyItem[] }
+
+/**
+ * Individual proxy item
+ */
+export type ProxyItem = { host: string; port: number; username?: string | null; password?: string | null; enabled: boolean }
+
+/**
+ * Proxy type
+ */
+export type ProxyType = "http" | "socks5"
+
 export type LogLevel = "minimal" | "normal" | "verbose" | "debug"
 
 export type LogStatus = "info" | "success" | "error" | "warning" | "progress"
@@ -427,3 +480,121 @@ export type StageProgress = { accountId: string; stage: string; current: number;
 export type LogGroup = { id: string; stage: string; accountId: string; entries: StructuredLogEntry[]; startTime: string; endTime: string | null; status: LogStatus; entryCount: number; duration: number | null }
 
 export type LogFilterConfig = { minLevel: LogLevel; showDebug: boolean; showProgress: boolean; autoCollapseSuccess: boolean; groupByStage: boolean }
+
+/**
+ * Proxy status
+ */
+export type ProxyStatus = { running: boolean; port: number; uptimeSeconds: number | null; mode: string }
+
+/**
+ * Proxy settings
+ */
+export type ProxySettings = { appMode: string; proxyPort: number; autoStart: boolean; routingStrategy: string; managementKey: string }
+
+/**
+ * AI Proxy account
+ */
+export type AiProxyAccount = { id: number | null; provider: string; name: string; oauthToken: string | null; apiKey: string | null; sessionToken: string | null; enabled: boolean; accountType: string | null; requestsToday: number; requestsTotal: number; tokensUsed: number; lastUsedAt: number | null; softQuotaTokensDaily?: number | null; softQuotaRequestsDaily?: number | null; createdAt: number; updatedAt: number; oauthRefreshToken?: string | null; oauthExpiresAt?: number | null; oauthScopes?: string | null; oauthTokenType?: string | null }
+
+/**
+ * Request log entry
+ */
+export type RequestLog = { id: number | null; accountId: number | null; model: string; tokensIn: number | null; tokensOut: number | null; durationMs: number | null; status: number; errorMessage: string | null; createdAt: number }
+
+/**
+ * OAuth URL response
+ */
+export type OAuthUrlResponse = { url: string; state: string }
+
+/**
+ * OAuth status response
+ */
+export type OAuthStatusResponse = { status: string; error: string | null }
+
+/**
+ * Usage statistics
+ */
+export type UsageStats = { totalRequests: number; totalTokens: number; requestsByModel: ModelUsage[] }
+
+/**
+ * Model usage statistics
+ */
+export type ModelUsage = { model: string; requests: number; tokens: number }
+
+/**
+ * Model information
+ */
+export type ModelInfo = { id: string; provider: string; ownedBy: string }
+
+/**
+ * Discovered authentication file
+ */
+export type AuthFile = { provider: string; path: string; token: string; expiresAt: number | null }
+
+/**
+ * Quota information for a provider
+ */
+export type AiProxyQuotaInfo = { provider: string; totalQuota: number; usedQuota: number; remainingQuota: number; resetAt: number | null }
+
+/**
+ * Per-account daily usage derived from proxy request logs
+ */
+export type AiProxyAccountDailyUsage = { accountId: number; requests: number; successful: number; failed: number; tokens: number }
+
+/**
+ * Daily statistics
+ */
+export type DailyStats = { totalRequests: number; successfulRequests: number; failedRequests: number; totalTokens: number; avgDurationMs: number }
+
+/**
+ * Daily statistics point for charting
+ */
+export type DailyStatsPoint = { date: string; requests: number; successful: number; failed: number }
+
+export type GeminiApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
+
+export type OpenAIApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
+
+export type AntigravityApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
+
+export type ScheduledTask = { id: number; name: string; taskType: TaskType; enabled: boolean; schedule: Schedule; config: string; lastRun: number | null; nextRun: number; runCount: number; successCount: number; errorCount: number; lastError: string | null; createdAt: number; updatedAt: number }
+
+export type TaskType = 
+/**
+ * Register new account for provider
+ */
+{ registerProvider: { provider: string } } | 
+/**
+ * Login to existing account (keep it active)
+ */
+{ loginAccount: { account_id: number } } | 
+/**
+ * Refresh token for account
+ */
+{ refreshToken: { account_id: number } } | 
+/**
+ * Run custom Python script
+ */
+{ customScript: { script_path: string } }
+
+export type Schedule = 
+/**
+ * Run once at specific time
+ */
+{ once: { timestamp: number } } | 
+/**
+ * Run every N seconds/minutes/hours
+ */
+{ interval: { seconds: number } } | 
+/**
+ * Cron-like schedule (simplified)
+ */
+{ daily: { hour: number; minute: number } } | 
+/**
+ * After another task completes
+ */
+{ afterTask: { task_id: number; delay_seconds: number } }
+
+export type TaskExecution = { id: number; taskId: number; startedAt: number; completedAt: number | null; status: ExecutionStatus; result: string | null; error: string | null }
+
+export type ExecutionStatus = "running" | "success" | "failed" | "cancelled"

@@ -23,6 +23,8 @@ interface EngineTabProps {
   onDelayBetweenAccountsChange: (value: number) => void;
   logVerbosity: LogVerbosity;
   onLogVerbosityChange: (level: LogVerbosity) => void;
+  showDebugLogsInConsole: boolean;
+  onShowDebugLogsInConsoleChange: (enabled: boolean) => void;
   verificationCodeTimeout: number;
   onVerificationCodeTimeoutChange: (value: number) => void;
   oauthCallbackTimeout: number;
@@ -58,6 +60,8 @@ export function EngineTab({
   onDelayBetweenAccountsChange,
   logVerbosity,
   onLogVerbosityChange,
+  showDebugLogsInConsole,
+  onShowDebugLogsInConsoleChange,
   verificationCodeTimeout,
   onVerificationCodeTimeoutChange,
   oauthCallbackTimeout,
@@ -143,8 +147,13 @@ export function EngineTab({
           label={t('autoReg.headless')}
           checked={headless}
           onChange={onHeadlessChange}
-          disabled={false}
+          disabled={disabled}
         />
+        {provider === 'openai' && headless && (
+          <div className="mt-2 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-md px-2 py-1">
+            OpenAI flow may require CAPTCHA/payment checks — visible browser is recommended.
+          </div>
+        )}
       </div>
 
       {/* Log Verbosity */}
@@ -167,14 +176,23 @@ export function EngineTab({
         <Tooltip content={t('autoReg.logVerbosityTooltip')}>
           <Select
             value={logVerbosity}
-            onChange={(e) => onLogVerbosityChange(e.target.value as LogVerbosity)}
+            onChange={e => onLogVerbosityChange(e.target.value as LogVerbosity)}
             options={LOG_VERBOSITY_OPTIONS.map(opt => ({
               value: opt.value,
               label: opt.label,
             }))}
-            disabled={false}
+            disabled={disabled}
           />
         </Tooltip>
+        <div className="mt-2">
+          <Toggle
+            label="Debug entries in console"
+            checked={showDebugLogsInConsole}
+            onChange={onShowDebugLogsInConsoleChange}
+            disabled={disabled}
+            tooltip="Only affects console filtering; does not change backend log verbosity"
+          />
+        </div>
       </div>
 
       {/* Speed & Delay Row */}
@@ -189,7 +207,7 @@ export function EngineTab({
             max={2}
             step={0.1}
             unit="x"
-            valueFormatter={(v) => v.toFixed(1)}
+            valueFormatter={v => v.toFixed(1)}
             showMinMax
             minLabel={t('autoReg.slow')}
             maxLabel={t('autoReg.fast')}
@@ -226,7 +244,7 @@ export function EngineTab({
             min={60}
             max={180}
             step={10}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.verification')}
           />
           <NumberInput
@@ -236,7 +254,7 @@ export function EngineTab({
             min={30}
             max={180}
             step={10}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.oauth')}
           />
           <NumberInput
@@ -246,7 +264,7 @@ export function EngineTab({
             min={60}
             max={300}
             step={10}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.allowAccess')}
           />
           <NumberInput
@@ -256,7 +274,7 @@ export function EngineTab({
             min={2}
             max={15}
             step={1}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.pageLoad')}
           />
           <NumberInput
@@ -266,7 +284,7 @@ export function EngineTab({
             min={1}
             max={10}
             step={1}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.elementWait')}
           />
           <NumberInput
@@ -276,7 +294,7 @@ export function EngineTab({
             min={0.5}
             max={5}
             step={0.5}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.imapPoll')}
           />
         </div>
@@ -307,21 +325,21 @@ export function EngineTab({
             label={t('autoReg.realisticTyping')}
             checked={realisticTyping}
             onChange={onRealisticTypingChange}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.realisticTyping')}
           />
           <Toggle
             label={t('autoReg.humanDelays')}
             checked={humanDelays}
             onChange={onHumanDelaysChange}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.humanDelays')}
           />
           <Toggle
             label={t('autoReg.screenshots')}
             checked={screenshotsOnError}
             onChange={onScreenshotsOnErrorChange}
-            disabled={false}
+            disabled={disabled}
             tooltip={t('autoReg.tooltips.screenshots')}
           />
         </div>

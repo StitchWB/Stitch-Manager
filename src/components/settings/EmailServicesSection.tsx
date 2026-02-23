@@ -1,4 +1,4 @@
-import { Shield, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Shield, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle, Save } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { Button } from '../ui/Button';
 import { LoadingSpinner, Input } from '../ui';
@@ -11,6 +11,12 @@ interface EmailServicesSectionProps {
   onAddyioEnabledChange: (enabled: boolean) => void;
   addyioApiToken: string;
   onAddyioApiTokenChange: (token: string) => void;
+  /** Explicit save for secret token field (no auto-save while typing). */
+  onSaveAddyioApiToken: () => void | Promise<void>;
+  /** Whether the token input differs from the saved token. */
+  isAddyioApiTokenDirty: boolean;
+  /** Loading state for token save button. */
+  isSavingAddyioApiToken?: boolean;
   addyioAliasFormat: string;
   onAddyioAliasFormatChange: (format: string) => void;
   addyioDomain: string;
@@ -40,6 +46,10 @@ interface EmailServicesSectionProps {
   onThirtyThreeMailUsernameChange: (username: string) => void;
   thirtyThreeMailDomain: string;
   onThirtyThreeMailDomainChange: (domain: string) => void;
+
+  // Mail.tm props
+  mailtmEnabled: boolean;
+  onMailtmEnabledChange: (enabled: boolean) => void;
 }
 
 export function EmailServicesSection({
@@ -47,6 +57,9 @@ export function EmailServicesSection({
   onAddyioEnabledChange,
   addyioApiToken,
   onAddyioApiTokenChange,
+  onSaveAddyioApiToken,
+  isAddyioApiTokenDirty,
+  isSavingAddyioApiToken = false,
   addyioAliasFormat,
   onAddyioAliasFormatChange,
   addyioDomain,
@@ -74,6 +87,8 @@ export function EmailServicesSection({
   onThirtyThreeMailUsernameChange,
   thirtyThreeMailDomain,
   onThirtyThreeMailDomainChange,
+  mailtmEnabled,
+  onMailtmEnabledChange,
 }: EmailServicesSectionProps) {
   return (
     <SectionHeader
@@ -120,24 +135,49 @@ export function EmailServicesSection({
                 }
               />
 
+              <div className="-mt-2 text-[10px] text-slate-500">
+                Token is sensitive and is not saved until you click{' '}
+                <span className="text-slate-300">Save Token</span>.
+              </div>
+
+              {isAddyioApiTokenDirty && (
+                <div className="text-[10px] text-amber-300">Not saved yet.</div>
+              )}
+
               {/* Test Connection Button */}
               <div className="flex flex-col gap-2">
-                <Button
-                  onClick={onTestConnection}
-                  disabled={isTestingConnection || !addyioApiToken}
-                  variant="secondary"
-                  size="sm"
-                  className="self-start"
-                  leftIcon={
-                    isTestingConnection ? (
-                      <LoadingSpinner size="xs" />
-                    ) : (
-                      <RefreshCw className="w-3 h-3" />
-                    )
-                  }
-                >
-                  {isTestingConnection ? 'Testing...' : 'Test Connection'}
-                </Button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    onClick={onSaveAddyioApiToken}
+                    disabled={isSavingAddyioApiToken || !addyioApiToken || !isAddyioApiTokenDirty}
+                    variant="primary"
+                    size="sm"
+                    leftIcon={
+                      isSavingAddyioApiToken ? (
+                        <LoadingSpinner size="xs" />
+                      ) : (
+                        <Save className="w-3 h-3" />
+                      )
+                    }
+                  >
+                    {isSavingAddyioApiToken ? 'Saving...' : 'Save Token'}
+                  </Button>
+                  <Button
+                    onClick={onTestConnection}
+                    disabled={isTestingConnection || !addyioApiToken}
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={
+                      isTestingConnection ? (
+                        <LoadingSpinner size="xs" />
+                      ) : (
+                        <RefreshCw className="w-3 h-3" />
+                      )
+                    }
+                  >
+                    {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                  </Button>
+                </div>
 
                 {connectionStatus !== 'idle' && (
                   <div
@@ -277,7 +317,10 @@ export function EmailServicesSection({
               checked={thirtyThreeMailEnabled}
               onChange={e => {
                 onThirtyThreeMailEnabledChange(e.target.checked);
-                if (e.target.checked) onAddyioEnabledChange(false);
+                if (e.target.checked) {
+                  onAddyioEnabledChange(false);
+                  onMailtmEnabledChange(false);
+                }
               }}
               className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-500 focus:ring-0 transition-colors"
             />
@@ -301,6 +344,37 @@ export function EmailServicesSection({
                   placeholder="33mail.com"
                 />
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mail.tm */}
+        <div
+          className={`glass-card rounded-lg p-4 border border-white/10 space-y-4 transition-opacity duration-200 ${
+            !mailtmEnabled ? 'opacity-60 hover:opacity-100' : ''
+          }`}
+        >
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={mailtmEnabled}
+              onChange={e => {
+                onMailtmEnabledChange(e.target.checked);
+                if (e.target.checked) {
+                  onAddyioEnabledChange(false);
+                  onThirtyThreeMailEnabledChange(false);
+                }
+              }}
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-0 transition-colors"
+            />
+            <span className="text-slate-300 text-sm">Enable Mail.tm (Temporary Email)</span>
+          </label>
+          {mailtmEnabled && (
+            <div className="pl-7 animate-in fade-in zoom-in-95 duration-200">
+              <p className="text-xs text-slate-400">
+                Mail.tm provides free temporary email addresses. No configuration required - emails
+                are automatically generated and deleted after use.
+              </p>
             </div>
           )}
         </div>

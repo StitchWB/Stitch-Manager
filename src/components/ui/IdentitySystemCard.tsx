@@ -39,6 +39,7 @@ export interface IdentityConfig {
   thirtyThreeMailEnabled?: boolean;
   thirtyThreeMailUsername?: string;
   thirtyThreeMailDomain?: string;
+  mailtmEnabled?: boolean;
 }
 
 export type TestConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
@@ -144,7 +145,7 @@ const ImapForm = memo(
 
 ImapForm.displayName = 'ImapForm';
 
-type GenerationMode = 'custom' | 'gmail' | 'addyio' | '33mail';
+type GenerationMode = 'custom' | 'gmail' | 'addyio' | '33mail' | 'mailtm';
 
 export function IdentitySystemCard({
   config,
@@ -176,15 +177,18 @@ export function IdentitySystemCard({
     ? 'addyio'
     : config.thirtyThreeMailEnabled
       ? '33mail'
-      : config.strategy === 'gmail'
-        ? 'gmail'
-        : 'custom';
+      : config.mailtmEnabled
+        ? 'mailtm'
+        : config.strategy === 'gmail'
+          ? 'gmail'
+          : 'custom';
 
   const handleModeChange = (mode: GenerationMode) => {
     const updates: Partial<IdentityConfig> = {
       strategy: mode === 'gmail' ? 'gmail' : 'custom',
       addyioEnabled: mode === 'addyio',
       thirtyThreeMailEnabled: mode === '33mail',
+      mailtmEnabled: mode === 'mailtm',
     };
     onChange(updates);
   };
@@ -225,7 +229,9 @@ export function IdentitySystemCard({
         ? !!(config.addyioApiToken && config.server && config.email)
         : activeMode === '33mail'
           ? !!(config.thirtyThreeMailUsername && config.server && config.email)
-          : !!(config.server && config.email && (config.password || passwordSet));
+          : activeMode === 'mailtm'
+            ? true
+            : !!(config.server && config.email && (config.password || passwordSet));
 
   const generatePreview = useCallback(() => {
     if (activeMode === 'gmail') {
@@ -253,6 +259,9 @@ export function IdentitySystemCard({
     } else if (activeMode === 'addyio') {
       const domain = config.addyioDomain || 'anonaddy.me';
       setPreview(`uuid@${domain}`);
+    } else if (activeMode === 'mailtm') {
+      const randomStr = Math.random().toString(36).substring(2, 10);
+      setPreview(`${randomStr}@tmpmail.net`);
     }
   }, [activeMode, config]);
 
@@ -292,6 +301,7 @@ export function IdentitySystemCard({
           { id: 'gmail', label: t('autoReg.gmailAlias'), icon: Mail, color: 'text-red-400' },
           { id: '33mail', label: '33mail', icon: AtSign, color: 'text-purple-400' },
           { id: 'addyio', label: 'Addy.io', icon: Shield, color: 'text-indigo-400' },
+          { id: 'mailtm', label: 'Mail.tm', icon: Mail, color: 'text-cyan-400' },
         ].map(mode => (
           <button
             key={mode.id}
@@ -578,6 +588,38 @@ export function IdentitySystemCard({
               showPassword={showPassword}
               setShowPassword={setShowPassword}
             />
+          </div>
+        )}
+
+        {activeMode === 'mailtm' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                  <Mail className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <p className="text-cyan-300 text-xs font-bold uppercase tracking-widest">
+                    Temporary Email Service
+                  </p>
+                  <p className="text-slate-300 text-xs leading-relaxed">
+                    Mail.tm provides free temporary email addresses. No configuration required - emails are automatically generated and deleted after use.
+                  </p>
+                  <div className="flex items-center gap-2 text-[10px] text-cyan-400 font-medium">
+                    <CheckCircle size={12} />
+                    <span>Auto-generated addresses</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-cyan-400 font-medium">
+                    <CheckCircle size={12} />
+                    <span>No IMAP configuration needed</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-cyan-400 font-medium">
+                    <CheckCircle size={12} />
+                    <span>Perfect for one-time registrations</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

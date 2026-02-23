@@ -34,6 +34,8 @@ interface CompactLogFeedProps {
   className?: string;
   activeProvider?: string;
   onProviderChange?: (provider: string) => void;
+  showDebug?: boolean;
+  onShowDebugChange?: (show: boolean) => void;
 }
 
 // Get icon based on log content
@@ -304,18 +306,28 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
   );
 }
 
-export function CompactLogFeed({ logs, onClear, className, activeProvider = 'all', onProviderChange }: CompactLogFeedProps) {
+export function CompactLogFeed({
+  logs,
+  onClear,
+  className,
+  activeProvider = 'all',
+  onProviderChange,
+  showDebug = false,
+  onShowDebugChange,
+}: CompactLogFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
+  const [internalShowDebug, setInternalShowDebug] = useState(false);
+  const effectiveShowDebug = onShowDebugChange ? showDebug : internalShowDebug;
+  const setShowDebugState = onShowDebugChange ?? setInternalShowDebug;
   const { copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs, autoScroll, showDebug]);
+  }, [logs, autoScroll, effectiveShowDebug]);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -337,7 +349,7 @@ export function CompactLogFeed({ logs, onClear, className, activeProvider = 'all
     if (log.level === 'success' && log.message.includes('Account created')) return false;
 
     // Hide debug logs unless toggled
-    if (log.level === 'debug' && !showDebug) return false;
+    if (log.level === 'debug' && !effectiveShowDebug) return false;
 
     // Filter by provider if not "all"
     if (activeProvider !== 'all') {
@@ -363,34 +375,50 @@ export function CompactLogFeed({ logs, onClear, className, activeProvider = 'all
           {onProviderChange && (
             <select
               value={activeProvider}
-              onChange={(e) => onProviderChange(e.target.value)}
+              onChange={e => onProviderChange(e.target.value)}
               className="text-[10px] px-2 py-1 bg-black/40 border border-white/10 rounded text-slate-300 focus:outline-none focus:border-indigo-500/50"
               style={{
                 backgroundImage: 'none',
                 colorScheme: 'dark',
               }}
             >
-              <option value="all" className="bg-slate-900 text-slate-300">All Providers</option>
-              <option value="kiro" className="bg-slate-900 text-slate-300">Kiro</option>
-              <option value="windsurf" className="bg-slate-900 text-slate-300">Windsurf</option>
-              <option value="github" className="bg-slate-900 text-slate-300">GitHub</option>
-              <option value="trae" className="bg-slate-900 text-slate-300">Trae</option>
+              <option value="all" className="bg-slate-900 text-slate-300">
+                All Providers
+              </option>
+              <option value="kiro" className="bg-slate-900 text-slate-300">
+                Kiro
+              </option>
+              <option value="windsurf" className="bg-slate-900 text-slate-300">
+                Windsurf
+              </option>
+              <option value="github" className="bg-slate-900 text-slate-300">
+                GitHub
+              </option>
+              <option value="trae" className="bg-slate-900 text-slate-300">
+                Trae
+              </option>
+              <option value="aws" className="bg-slate-900 text-slate-300">
+                AWS
+              </option>
+              <option value="openai" className="bg-slate-900 text-slate-300">
+                OpenAI
+              </option>
             </select>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Tooltip content={showDebug ? 'Hide Debug Logs' : 'Show Debug Logs'}>
+          <Tooltip content={effectiveShowDebug ? 'Hide debug entries' : 'Show debug entries'}>
             <button
-              onClick={() => setShowDebug(!showDebug)}
+              onClick={() => setShowDebugState(!effectiveShowDebug)}
               className={cn(
                 'p-1.5 rounded transition-colors flex items-center gap-1.5',
-                showDebug
+                effectiveShowDebug
                   ? 'text-indigo-400 bg-indigo-500/10'
                   : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
               )}
             >
-              <Shield className={cn('w-3.5 h-3.5', showDebug && 'animate-pulse')} />
-              <span className="text-[9px] font-bold uppercase tracking-tight">Debug</span>
+              <Shield className={cn('w-3.5 h-3.5', effectiveShowDebug && 'animate-pulse')} />
+              <span className="text-[9px] font-bold uppercase tracking-tight">Debug view</span>
             </button>
           </Tooltip>
           {onClear && (
@@ -428,8 +456,8 @@ export function CompactLogFeed({ logs, onClear, className, activeProvider = 'all
           }}
         />
         {filteredLogs.length === 0 ? (
-          <EmptyState 
-            icon={Activity} 
+          <EmptyState
+            icon={Activity}
             title={t('logFeed.waitingForActivity')}
             className="text-[10px]"
           />

@@ -22,9 +22,7 @@ export function UsageBar({ used, limit, className, isError = false }: UsageBarPr
   if (limit < 0) {
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] text-slate-400 font-medium tabular-nums">
-          {used} / ∞
-        </span>
+        <span className="text-[10px] text-slate-400 font-medium tabular-nums">{used} / ∞</span>
         <div className="h-1 bg-emerald-500/20 rounded-full overflow-hidden">
           <div className="h-full w-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
         </div>
@@ -34,7 +32,7 @@ export function UsageBar({ used, limit, className, isError = false }: UsageBarPr
 
   // Empty quota
   if (limit === 0 && used === 0) {
-    return <span className="text-xs text-slate-600 font-medium">—</span>;
+    return <span className="text-xs text-slate-600 font-medium">Unknown</span>;
   }
 
   const usedPercent = Math.min((used / limit) * 100, 100);
