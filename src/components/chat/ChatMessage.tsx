@@ -24,13 +24,13 @@ function parseMarkdown(text: string): React.ReactNode[] {
   const processInlineText = (text: string): React.ReactNode[] => {
     const inlineElements: React.ReactNode[] = [];
     let inlineKey = 0;
-    
+
     // Process inline elements: bold, inline code
     const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-    
+
     for (const part of parts) {
       if (!part) continue;
-      
+
       // Bold text
       if (part.startsWith('**') && part.endsWith('**')) {
         inlineElements.push(
@@ -42,8 +42,8 @@ function parseMarkdown(text: string): React.ReactNode[] {
       // Inline code
       else if (part.startsWith('`') && part.endsWith('`')) {
         inlineElements.push(
-          <code 
-            key={`code-${inlineKey++}`} 
+          <code
+            key={`code-${inlineKey++}`}
             className="px-1.5 py-0.5 bg-vsc-input rounded text-vsc-green font-mono text-xs"
           >
             {part.slice(1, -1)}
@@ -55,7 +55,7 @@ function parseMarkdown(text: string): React.ReactNode[] {
         const lines = part.split('\n');
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
-          
+
           // Bullet list
           if (line.match(/^[\s]*[-*]\s/)) {
             inlineElements.push(
@@ -87,7 +87,7 @@ function parseMarkdown(text: string): React.ReactNode[] {
         }
       }
     }
-    
+
     return inlineElements;
   };
 
@@ -95,16 +95,19 @@ function parseMarkdown(text: string): React.ReactNode[] {
     // Add text before code block
     if (match.index > lastIndex) {
       const beforeText = text.slice(lastIndex, match.index);
-      elements.push(...processInlineText(beforeText).map((el, i) => 
-        <span key={`pre-${key}-${i}`}>{el}</span>
-      ));
+      elements.push(
+        ...processInlineText(beforeText).map((el, i) => <span key={`pre-${key}-${i}`}>{el}</span>)
+      );
     }
 
     // Add code block
     const language = match[1] || 'text';
     const code = match[2].trim();
     elements.push(
-      <div key={`codeblock-${key++}`} className="my-2 rounded-lg overflow-hidden border border-vsc-border">
+      <div
+        key={`codeblock-${key++}`}
+        className="my-2 rounded-lg overflow-hidden border border-vsc-border"
+      >
         <div className="px-3 py-1.5 bg-vsc-panel text-2xs text-vsc-text-muted font-mono">
           {language}
         </div>
@@ -120,9 +123,9 @@ function parseMarkdown(text: string): React.ReactNode[] {
   // Add remaining text after last code block
   if (lastIndex < text.length) {
     const remainingText = text.slice(lastIndex);
-    elements.push(...processInlineText(remainingText).map((el, i) => 
-      <span key={`post-${key}-${i}`}>{el}</span>
-    ));
+    elements.push(
+      ...processInlineText(remainingText).map((el, i) => <span key={`post-${key}-${i}`}>{el}</span>)
+    );
   }
 
   return elements.length > 0 ? elements : [text];
@@ -135,26 +138,18 @@ function parseMarkdown(text: string): React.ReactNode[] {
  */
 export const ChatMessage = memo(function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
-  
+
   const renderedContent = useMemo(() => {
     if (!message.content) return null;
     return parseMarkdown(message.content);
   }, [message.content]);
-  
+
   return (
-    <div
-      className={`flex gap-3 p-4 ${
-        isUser 
-          ? 'bg-transparent' 
-          : 'bg-white/[0.02]'
-      }`}
-    >
+    <div className={`flex gap-3 p-4 ${isUser ? 'bg-transparent' : 'bg-white/[0.02]'}`}>
       {/* Avatar */}
       <div
         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-          isUser
-            ? 'bg-vsc-blue/20 text-vsc-blue'
-            : 'bg-vsc-green/20 text-vsc-green'
+          isUser ? 'bg-vsc-blue/20 text-vsc-blue' : 'bg-vsc-green/20 text-vsc-green'
         }`}
       >
         {isUser ? <User size={16} /> : <Bot size={16} />}
@@ -164,9 +159,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
       <div className="flex-1 min-w-0">
         {/* Role label */}
         <div className="flex items-center gap-2 mb-1">
-          <span className={`text-xs font-medium ${
-            isUser ? 'text-vsc-blue' : 'text-vsc-green'
-          }`}>
+          <span className={`text-xs font-medium ${isUser ? 'text-vsc-blue' : 'text-vsc-green'}`}>
             {isUser ? t('chat.you') : t('chat.assistant')}
           </span>
           <span className="text-2xs text-vsc-text-muted">
@@ -175,8 +168,26 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
               minute: '2-digit',
             })}
           </span>
-          {message.isStreaming && (
-            <LoadingSpinner size="xs" color="primary" />
+          {message.isStreaming && <LoadingSpinner size="xs" color="primary" />}
+          {!isUser && message.routedProvider && (
+            <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-input text-vsc-text-muted border border-vsc-border capitalize">
+              routed: {message.routedProvider}
+            </span>
+          )}
+          {!isUser && message.routedModel && (
+            <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-input text-vsc-text-muted border border-vsc-border">
+              {message.routedModel}
+            </span>
+          )}
+          {!isUser && message.debug?.durationMs != null && (
+            <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-input text-vsc-text-muted border border-vsc-border">
+              {message.debug.durationMs} ms
+            </span>
+          )}
+          {!isUser && message.debug?.forceProvider && (
+            <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-yellow/10 text-vsc-yellow border border-vsc-yellow/40 capitalize">
+              forced: {message.debug.forceProvider}
+            </span>
           )}
         </div>
 

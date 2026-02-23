@@ -21,6 +21,9 @@ export function LaunchPad({
   onStart,
   onStop,
 }: LaunchPadProps) {
+  const isPythonBlocked = pythonAvailable === false;
+  const startBlocked = !canStart || isPythonBlocked;
+
   return (
     <div className="shrink-0 p-4 border-t border-white/5">
       <div
@@ -49,11 +52,11 @@ export function LaunchPad({
         {!isRunning ? (
           <button
             onClick={onStart}
-            disabled={!canStart || pythonAvailable === false}
+            disabled={startBlocked}
             className={cn(
               'flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2',
               'text-white transition-all',
-              canStart
+              !startBlocked
                 ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500'
                 : 'bg-slate-700/50 cursor-not-allowed'
             )}
@@ -73,17 +76,28 @@ export function LaunchPad({
       </div>
 
       {/* Status indicator */}
-      <div className="flex items-center justify-end gap-1.5 mt-2 text-[10px] text-slate-500">
-        {canStart ? (
-          <>
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px] shadow-emerald-500/50" />{' '}
-            {t('autoReg.readyToStart')}
-          </>
-        ) : (
-          <>
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />{' '}
-            {t('autoReg.configureMailFirst')}
-          </>
+      <div className="flex flex-col items-end gap-1 mt-2 text-[10px] text-slate-500">
+        <div className="flex items-center gap-1.5">
+          {isPythonBlocked ? (
+            <>
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              <span>Python auto-reg unavailable</span>
+            </>
+          ) : canStart ? (
+            <>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px] shadow-emerald-500/50" />
+              <span>{t('autoReg.readyToStart')}</span>
+            </>
+          ) : (
+            <>
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span>{t('autoReg.configureMailFirst')}</span>
+            </>
+          )}
+        </div>
+
+        {isPythonBlocked && (
+          <div className="text-[10px] text-slate-600">Install Python + DrissionPage</div>
         )}
       </div>
     </div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { GlassCard } from '../ui/GlassCard';
 import { Toggle } from '../ui/Toggle';
 import { NumberInput } from '../ui/NumberInput';
-import { getSettings, updateSettings, getRegistrationStatus } from '../../lib/tauri';
+import { getSettings, updateSettings, getRegistrationStatus } from '@/lib/tauri';
 import { useRegistrationStore } from '../../stores/registration';
 import { useAccountsStore } from '../../stores/accounts';
 import { Select } from '../ui/Select';

@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Settings as SettingsIcon, Globe, Repeat, CheckCircle, AlertCircle } from 'lucide-react';
+import {
+  Settings as SettingsIcon,
+  Globe,
+  Repeat,
+  CheckCircle,
+  AlertCircle,
+  Zap,
+} from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
 import { useRegistrationStore } from '../stores/registration';
@@ -13,27 +20,28 @@ import {
   getAddyioRecipients,
   getEmailCounter,
   setEmailCounter,
-} from '../lib/tauri';
+} from '@/lib/tauri';
 import { SettingsData } from '../types/generated';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
-import { validatePort, validateHostname, validateEmail, validateUrl } from '../lib/validation';
+import { validatePort, validateHostname, validateEmail } from '../lib/validation';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import {
   ThemeLanguageSection,
   UIScaleSection,
   IDEPathsSection,
   DatabaseSection,
-  ProxySettingsSection,
   IMAPSettingsSection,
   EmailCounterSection,
   EmailServicesSection,
 } from '../components/settings';
+import { ProxySettingsSectionV2 } from '../components/settings/ProxySettingsSectionV2';
+import { AiProxySettings } from '../components/settings/AiProxySettings';
 import { AutomationTab } from '../components/registration/AutomationTab';
 import { TabButton } from '../components/ui/TabButton';
 import { LoadingSpinner } from '../components/ui';
 
-type SettingsCategory = 'general' | 'connectivity' | 'automation';
+type SettingsCategory = 'general' | 'connectivity' | 'automation' | 'ai-proxy';
 
 interface CategoryConfig {
   id: SettingsCategory;
@@ -56,6 +64,11 @@ const categories: CategoryConfig[] = [
     id: 'automation',
     labelKey: 'settings.categories.automation',
     icon: <Repeat className="w-4 h-4" />,
+  },
+  {
+    id: 'ai-proxy',
+    labelKey: 'settings.categories.aiProxy',
+    icon: <Zap className="w-4 h-4" />,
   },
 ];
 
@@ -84,6 +97,7 @@ export default function Settings() {
   // Addy.io settings
   const [addyioEnabled, setAddyioEnabled] = useState(false);
   const [addyioApiToken, setAddyioApiToken] = useState('');
+  const [addyioApiTokenDraft, setAddyioApiTokenDraft] = useState('');
   const [addyioAliasFormat, setAddyioAliasFormat] = useState('uuid');
   const [addyioDomain, setAddyioDomain] = useState('');
   const [addyioAutoDelete, setAddyioAutoDelete] = useState(false);
@@ -96,6 +110,9 @@ export default function Settings() {
   const [thirtyThreeMailUsername, setThirtyThreeMailUsername] = useState('');
   const [thirtyThreeMailDomain, setThirtyThreeMailDomain] = useState('33mail.com');
 
+  // Mail.tm settings
+  const [mailtmEnabled, setMailtmEnabled] = useState(false);
+
   // Addy.io dynamic data
   const [addyioDomains, setAddyioDomains] = useState<string[]>([]);
   const [addyioRecipients, setAddyioRecipients] = useState<
@@ -106,8 +123,6 @@ export default function Settings() {
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [connectionMessage, setConnectionMessage] = useState('');
 
-  const [proxyEnabled, setProxyEnabled] = useState(false);
-  const [proxyUrl, setProxyUrl] = useState('');
   const [customIdePaths, setCustomIdePaths] = useState<Record<string, string>>({});
 
   // Email counter state
@@ -161,6 +176,7 @@ export default function Settings() {
       // Load addy.io settings
       setAddyioEnabled(data.addyioEnabled || false);
       setAddyioApiToken(data.addyioApiToken || '');
+      setAddyioApiTokenDraft(data.addyioApiToken || '');
       setAddyioAliasFormat(data.addyioAliasFormat || 'uuid');
       setAddyioDomain(data.addyioDomain || '');
       setAddyioAutoDelete(data.addyioAutoDelete || false);
@@ -173,8 +189,9 @@ export default function Settings() {
       setThirtyThreeMailUsername(data.thirtyThreeMailUsername || '');
       setThirtyThreeMailDomain(data.thirtyThreeMailDomain || '33mail.com');
 
-      setProxyEnabled(data.proxyEnabled || false);
-      setProxyUrl(data.proxyUrl || '');
+      // Load Mail.tm settings
+      setMailtmEnabled(data.mailtmEnabled || false);
+
       setCustomIdePaths(data.customIdePaths || {});
 
       if (data.theme && ['light', 'dark', 'system'].includes(data.theme)) {
@@ -283,11 +300,6 @@ export default function Settings() {
           error = validateEmail(value);
         }
         break;
-      case 'proxyUrl':
-        if (proxyEnabled && value.trim()) {
-          error = validateUrl(value);
-        }
-        break;
     }
 
     setValidationErrors(prev => {
@@ -303,7 +315,8 @@ export default function Settings() {
 
   // Test addy.io connection
   const handleTestAddyioConnection = useCallback(async () => {
-    if (!addyioApiToken) {
+    const tokenToTest = addyioApiTokenDraft || addyioApiToken;
+    if (!tokenToTest) {
       setConnectionStatus('error');
       setConnectionMessage('Please enter an API token');
       return;
@@ -314,11 +327,11 @@ export default function Settings() {
     setConnectionMessage('');
 
     try {
-      const tokenDetails = await testAddyioConnection(addyioApiToken);
+      const tokenDetails = await testAddyioConnection(tokenToTest);
       const [account, domains, recipients] = await Promise.all([
-        getAddyioAccount(addyioApiToken),
-        getAddyioDomains(addyioApiToken),
-        getAddyioRecipients(addyioApiToken),
+        getAddyioAccount(tokenToTest),
+        getAddyioDomains(tokenToTest),
+        getAddyioRecipients(tokenToTest),
       ]);
 
       setAddyioAccountInfo(account);
@@ -352,7 +365,30 @@ export default function Settings() {
     } finally {
       setIsTestingConnection(false);
     }
-  }, [addyioApiToken, addyioDomain, addyioDefaultRecipientId, addLog]);
+  }, [addyioApiTokenDraft, addyioApiToken, addyioDomain, addyioDefaultRecipientId, addLog]);
+
+  const handleSaveAddyioApiToken = useCallback(async () => {
+    try {
+      setIsSaving(true);
+      setSaveStatus('idle');
+      setErrorMessage('');
+
+      await updateSettings({ addyioApiToken: addyioApiTokenDraft } as any);
+      setAddyioApiToken(addyioApiTokenDraft);
+      setSaveStatus('success');
+    } catch (error) {
+      console.error('[Settings] Save Addy.io token failed:', error);
+      setSaveStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : t('settings.failedToSave'));
+      addLog({
+        level: 'error',
+        message: `Failed to save Addy.io token: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        source: 'settings',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [addyioApiTokenDraft, addLog, t]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -366,10 +402,9 @@ export default function Settings() {
         imapPort: parseInt(imapPort, 10) || 993,
         imapEmail: imapEmail,
         imapUser: imapEmail,
-        proxyEnabled: proxyEnabled,
-        proxyUrl: proxyUrl,
         imapPassword: imapPassword !== '********' ? imapPassword : '',
         addyioEnabled: addyioEnabled,
+        // Do NOT auto-save Addy.io token while typing. Use explicit save.
         addyioApiToken: addyioApiToken,
         addyioAliasFormat: addyioAliasFormat,
         addyioDomain: addyioDomain,
@@ -380,6 +415,7 @@ export default function Settings() {
         thirtyThreeMailEnabled: thirtyThreeMailEnabled,
         thirtyThreeMailUsername: thirtyThreeMailUsername,
         thirtyThreeMailDomain: thirtyThreeMailDomain,
+        mailtmEnabled: mailtmEnabled,
         customIdePaths: customIdePaths,
         // Removed automation settings (managed in PatcherSettingsDrawer)
       };
@@ -407,6 +443,7 @@ export default function Settings() {
     imapPassword,
     addyioEnabled,
     addyioApiToken,
+    addyioApiTokenDraft,
     addyioAliasFormat,
     addyioDomain,
     addyioAutoDelete,
@@ -416,8 +453,7 @@ export default function Settings() {
     thirtyThreeMailEnabled,
     thirtyThreeMailUsername,
     thirtyThreeMailDomain,
-    proxyEnabled,
-    proxyUrl,
+    mailtmEnabled,
     customIdePaths,
     addLog,
     t,
@@ -509,20 +545,7 @@ export default function Settings() {
 
   const renderConnectivitySettings = () => (
     <div className="space-y-8" style={getAnimationStyle(0)}>
-      <ProxySettingsSection
-        proxyEnabled={proxyEnabled}
-        onProxyEnabledChange={enabled => {
-          setProxyEnabled(enabled);
-          debouncedAutoSave();
-        }}
-        proxyUrl={proxyUrl}
-        onProxyUrlChange={url => {
-          setProxyUrl(url);
-          debouncedAutoSave();
-        }}
-        validationError={validationErrors.proxyUrl}
-        onValidate={value => validateField('proxyUrl', value)}
-      />
+      <ProxySettingsSectionV2 />
 
       <IMAPSettingsSection
         imapServer={imapServer}
@@ -564,12 +587,14 @@ export default function Settings() {
           if (enabled) setThirtyThreeMailEnabled(false);
           debouncedAutoSave();
         }}
-        addyioApiToken={addyioApiToken}
+        addyioApiToken={addyioApiTokenDraft}
         onAddyioApiTokenChange={token => {
-          setAddyioApiToken(token);
+          setAddyioApiTokenDraft(token);
           setConnectionStatus('idle');
-          debouncedAutoSave();
         }}
+        onSaveAddyioApiToken={handleSaveAddyioApiToken}
+        isAddyioApiTokenDirty={addyioApiTokenDraft !== addyioApiToken}
+        isSavingAddyioApiToken={isSaving}
         addyioAliasFormat={addyioAliasFormat}
         onAddyioAliasFormatChange={format => {
           setAddyioAliasFormat(format);
@@ -625,6 +650,15 @@ export default function Settings() {
           setThirtyThreeMailDomain(domain);
           debouncedAutoSave();
         }}
+        mailtmEnabled={mailtmEnabled}
+        onMailtmEnabledChange={enabled => {
+          setMailtmEnabled(enabled);
+          if (enabled) {
+            setAddyioEnabled(false);
+            setThirtyThreeMailEnabled(false);
+          }
+          debouncedAutoSave();
+        }}
       />
     </div>
   );
@@ -637,6 +671,12 @@ export default function Settings() {
         return renderConnectivitySettings();
       case 'automation':
         return <AutomationTab />;
+      case 'ai-proxy':
+        return (
+          <div style={getAnimationStyle(0)}>
+            <AiProxySettings />
+          </div>
+        );
       default:
         return null;
     }

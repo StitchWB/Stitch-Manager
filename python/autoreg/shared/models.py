@@ -19,6 +19,7 @@ class EmailStrategy(str, Enum):
     ADDYIO = "addyio"  # Generate addy.io aliases
     ADDYIO_COUNTER = "addyio_counter"  # Combine addy.io with counter
     THIRTY_THREE_MAIL = "33mail"  # Use 33mail.com wildcard
+    MAILTM = "mailtm"  # Use Mail.tm temporary emails
 
 
 class ImapConfig(BaseModel):
@@ -141,6 +142,13 @@ class PythonAutoregConfig(BaseModel):
     realistic_typing: bool | None = Field(None, description="Use realistic typing simulation")
     human_delays: bool | None = Field(None, description="Add human-like delays")
     screenshots_on_error: bool | None = Field(None, description="Take screenshots on errors")
+
+    # Proxy configuration
+    proxy_enabled: bool = Field(False, description="Enable proxy for browser")
+    proxy_type: str = Field('http', description="Proxy type: http or socks5")
+    proxy_url: str | None = Field(None, description="Proxy URL (host:port)")
+    proxy_username: str | None = Field(None, description="Proxy username")
+    proxy_password: str | None = Field(None, description="Proxy password")
 
     @field_validator("email")
     @classmethod

@@ -14,7 +14,7 @@ import {
   PatcherSettingsDrawer,
 } from '../components/patcher';
 import { Button } from '../components/ui/Button';
-import { getKiroPatchConfig, saveKiroPatchConfig } from '../lib/tauri';
+import { getKiroPatchConfig, saveKiroPatchConfig } from '@/lib/tauri';
 import type { KiroPatchConfig } from '../types/generated';
 
 export default function PatcherV2() {

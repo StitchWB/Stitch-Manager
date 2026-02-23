@@ -1,12 +1,22 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, RefreshCw, Download, Users, LayoutGrid, AlertCircle } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  RefreshCw,
+  Download,
+  Upload,
+  Users,
+  LayoutGrid,
+  AlertCircle,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { listen } from '@tauri-apps/api/event';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import Header from '../components/layout/Header';
 import AccountsTable from '../components/AccountsTable';
 import AddAccountModal from '../components/AddAccountModal';
-import AccountDetailsModal from '../components/ui/AccountDetailsModal';
 import { QuotaFilterChip } from '../components/ui/QuotaFilterChip';
 import { FloatingActionBar } from '../components/ui/FloatingActionBar';
 import { EmptyState, SkeletonLoader, ActionButtonGroup, Button } from '../components/ui';
@@ -14,18 +24,180 @@ import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
   checkAccountStatus,
-  getAccounts,
   openAccountBrowser,
   bulkExportAccounts,
-  type GetAccountsParams,
-} from '../lib/tauri';
+  importAccountsPayload,
+} from '@/lib/tauri';
 import { t } from '../lib/i18n';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
 import { useUrlState } from '../hooks/useUrlState';
-import type { Account, AccountStatus } from '../types';
+import type { AccountStatus } from '../types';
 import { ProviderLogo } from '../components/ui/ProviderLogo';
 import { cn } from '../lib/utils';
 import { ACCOUNT_STATUS_COLORS } from '../constants/colors';
+import { getAccountStatusLabel } from '../lib/accountStatus';
+
+type ImportAccountPayload = {
+  provider?: string;
+  email?: string;
+  password?: string;
+  token?: string;
+  refreshToken?: string;
+  quotaLimit?: number;
+  metadata?: Record<string, unknown> | string;
+};
+
+type ParsedAccountsResult = {
+  payloads: ImportAccountPayload[];
+  errors: string[];
+};
+
+const readBlobAsText = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('Failed to read file contents'));
+    reader.readAsText(blob);
+  });
+
+const parseCsvLine = (line: string): string[] => {
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      fields.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  fields.push(current);
+  return fields;
+};
+
+const parseCsvAccounts = (text: string): ImportAccountPayload[] => {
+  const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+  if (lines.length === 0) return [];
+
+  const header = parseCsvLine(lines[0]).map(value => value.trim().toLowerCase());
+  const records: ImportAccountPayload[] = [];
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const values = parseCsvLine(lines[i]);
+    const record: ImportAccountPayload = {};
+
+    header.forEach((key, index) => {
+      const rawValue = values[index]?.trim();
+      if (!rawValue) return;
+
+      switch (key) {
+        case 'provider':
+          record.provider = rawValue;
+          break;
+        case 'email':
+          record.email = rawValue;
+          break;
+        case 'password':
+          record.password = rawValue;
+          break;
+        case 'token':
+          record.token = rawValue;
+          break;
+        case 'refreshtoken':
+        case 'refresh_token':
+          record.refreshToken = rawValue;
+          break;
+        case 'quotalimit':
+        case 'quota_limit': {
+          const parsed = Number(rawValue);
+          if (!Number.isNaN(parsed)) record.quotaLimit = parsed;
+          break;
+        }
+        case 'metadata':
+          record.metadata = rawValue;
+          break;
+        default:
+          break;
+      }
+    });
+
+    records.push(record);
+  }
+
+  return records;
+};
+
+const normalizeJsonAccounts = (data: unknown): ParsedAccountsResult => {
+  if (!Array.isArray(data)) {
+    throw new Error('JSON must be an array of account records');
+  }
+
+  const errors: string[] = [];
+  const payloads = data.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      errors.push(`Record ${index + 1} is not an object`);
+      return {} satisfies ImportAccountPayload;
+    }
+
+    const record = item as Record<string, unknown>;
+    const getString = (value: unknown): string | undefined =>
+      typeof value === 'string' ? value : undefined;
+
+    const quotaRaw = record.quotaLimit ?? record.quota_limit;
+    const quotaValue = typeof quotaRaw === 'number' ? quotaRaw : Number(quotaRaw);
+
+    return {
+      provider: getString(record.provider),
+      email: getString(record.email),
+      password: getString(record.password),
+      token: getString(record.token),
+      refreshToken: getString(record.refreshToken ?? record.refresh_token),
+      quotaLimit: Number.isNaN(quotaValue) ? undefined : quotaValue,
+      metadata:
+        typeof record.metadata === 'string' || typeof record.metadata === 'object'
+          ? (record.metadata as Record<string, unknown> | string)
+          : undefined,
+    };
+  });
+
+  return { payloads, errors };
+};
+
+const validateImportRecords = (records: ImportAccountPayload[]) => {
+  const valid: ImportAccountPayload[] = [];
+  const errors: string[] = [];
+
+  records.forEach((record, index) => {
+    const provider = typeof record.provider === 'string' ? record.provider.trim() : '';
+    const email = typeof record.email === 'string' ? record.email.trim() : '';
+    const password = typeof record.password === 'string' ? record.password.trim() : '';
+
+    if (!provider || !email || !password) {
+      errors.push(`Record ${index + 1} missing provider, email, or password`);
+      return;
+    }
+
+    valid.push({
+      ...record,
+      provider,
+      email,
+      password,
+    });
+  });
+
+  return { valid, errors };
+};
 
 export default function Accounts() {
   const navigate = useNavigate();
@@ -39,6 +211,7 @@ export default function Accounts() {
     selectAll,
     clearSelection,
     selectedIds,
+    setSelectedIds,
     setSelectedProvider,
     activeAccountIds,
     setActiveAccount,
@@ -47,9 +220,8 @@ export default function Accounts() {
     setStatusFilter: setStoreStatusFilter,
   } = useAccountsStore();
 
-  const [detailsModalAccount, setDetailsModalAccount] = useState<Account | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
 
   const {
     startBulkRefresh,
@@ -75,6 +247,23 @@ export default function Accounts() {
   const [statusFilter, setStatusFilter] = useUrlState('status', accountsPage.statusFilter || 'all');
   const [searchQuery, setSearchQuery] = useState(accountsPage.searchQuery || '');
   const [quotaFilter, setQuotaFilter] = useState<string>(accountsPage.quotaFilter || 'any');
+
+  // Keep store selection in sync with current visible set (so Select All works on derived filters)
+  useEffect(() => {
+    setSelectedProvider(providerFilter === 'all' ? null : (providerFilter as any));
+    setStoreStatusFilter(statusFilter === 'all' ? null : (statusFilter as AccountStatus));
+    setStoreQuotaFilter(quotaFilter as any);
+    setStoreSearchQuery(searchQuery);
+  }, [
+    providerFilter,
+    statusFilter,
+    quotaFilter,
+    searchQuery,
+    setSelectedProvider,
+    setStoreStatusFilter,
+    setStoreQuotaFilter,
+    setStoreSearchQuery,
+  ]);
 
   // Memoized handlers to prevent unnecessary re-renders
   const handleProviderFilterChange = useCallback(
@@ -115,92 +304,38 @@ export default function Accounts() {
 
   const providerCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
-    accounts.forEach(acc => {
+    storeAccounts.forEach(acc => {
       counts.all++;
-      
-      // Map provider names for counting
-      let displayProvider = acc.provider;
-      if (acc.provider === 'aws_builder_id') {
-        // aws_builder_id accounts should be counted as 'kiro' for display
-        // since they represent active Kiro accounts
-        displayProvider = 'kiro';
-      }
-      
-      counts[displayProvider] = (counts[displayProvider] || 0) + 1;
-      
-      // Also count aws_builder_id separately for AWS filter
-      if (acc.provider === 'aws_builder_id') {
-        counts['aws_builder_id'] = (counts['aws_builder_id'] || 0) + 1;
-      }
+
+      // Count each provider separately - no mapping
+      const provider = acc.provider;
+      counts[provider] = (counts[provider] || 0) + 1;
     });
     return counts;
-  }, [accounts]);
-
-  const fetchAccountsWithFilter = useCallback(async () => {
-    try {
-      if (providerFilter === 'all') {
-        // Get all accounts
-        const data = await getAccounts();
-        setAccounts(data);
-      } else {
-        // For specific providers, we need to handle the fact that:
-        // - Active accounts are stored as 'aws_builder_id' 
-        // - Banned accounts are stored as 'kiro', 'windsurf', 'trae'
-        // So when user selects "Kiro", we need both 'kiro' and 'aws_builder_id' accounts
-        
-        let allData: any[] = [];
-        
-        if (providerFilter === 'kiro') {
-          // Get both banned kiro accounts and active aws_builder_id accounts
-          const kiroData = await getAccounts({ providerSubtype: 'kiro' });
-          const awsData = await getAccounts({ providerSubtype: 'aws_builder_id' });
-          allData = [...kiroData, ...awsData];
-        } else if (providerFilter === 'aws') {
-          // AWS filter should only show aws_builder_id accounts
-          allData = await getAccounts({ 
-            providerType: 'cloud',
-            providerSubtype: 'aws_builder_id' 
-          });
-        } else {
-          // For other providers (windsurf, trae, github), use original logic
-          let subtype: string = providerFilter;
-          const params: GetAccountsParams = { providerSubtype: subtype as any };
-          if (['windsurf', 'trae'].includes(providerFilter)) params.providerType = 'ide';
-          else if (providerFilter === 'github') params.providerType = 'git';
-          allData = await getAccounts(params);
-        }
-        
-        setAccounts(allData);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, [providerFilter]);
+  }, [storeAccounts]);
 
   useEffect(() => {
+    // Initial load
     fetchAccounts();
 
     // Listen for account-created events from backend
     const unlistenPromise = listen('account-created', () => {
-      console.log('[Accounts] Received account-created event, refreshing...');
-      fetchAccountsWithFilter();
+      fetchAccounts();
     });
 
-    // Auto-refresh every 10 seconds when page is visible
-    const intervalId = setInterval(() => {
+    // Refresh on tab focus/visibility, not by a tight interval.
+    const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchAccountsWithFilter();
+        fetchAccounts();
       }
-    }, 10000);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       unlistenPromise.then(unlisten => unlisten());
-      clearInterval(intervalId);
     };
-  }, [fetchAccounts, fetchAccountsWithFilter]);
-  useEffect(() => {
-    fetchAccountsWithFilter();
-  }, [fetchAccountsWithFilter, providerFilter]);
+  }, [fetchAccounts]);
 
   const handleRemoveSelectedAccounts = useCallback(
     async (ids?: number[]) => {
@@ -224,30 +359,39 @@ export default function Accounts() {
         console.log('[Accounts] deleteAccounts completed successfully');
         toast.success(`Deleted ${targets.length} account${targets.length > 1 ? 's' : ''}`);
         clearSelection();
-        await fetchAccountsWithFilter();
+        await fetchAccounts();
       } catch (e) {
         console.error('[Accounts] Error deleting accounts:', e);
         toast.error(`Failed to delete accounts: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
-    [selectedIds, deleteAccounts, clearSelection, fetchAccountsWithFilter]
+    [selectedIds, deleteAccounts, clearSelection, fetchAccounts]
   );
 
   const handleRemoveAccount = useCallback(
     async (id: number) => {
       try {
         await deleteAccount(id);
-        if (detailsModalAccount?.id === id) setDetailsModalAccount(null);
-        fetchAccountsWithFilter();
+        fetchAccounts();
       } catch (e) {
         console.error(e);
       }
     },
-    [deleteAccount, detailsModalAccount, fetchAccountsWithFilter]
+    [deleteAccount, fetchAccounts]
   );
 
   const filteredAccounts = useMemo(() => {
-    let filtered = [...accounts];
+    let filtered = [...storeAccounts];
+
+    // Provider filter
+    if (providerFilter !== 'all') {
+      if (providerFilter === 'aws') {
+        filtered = filtered.filter(a => a.provider === 'aws_builder_id');
+      } else {
+        filtered = filtered.filter(a => a.provider === providerFilter);
+      }
+    }
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -274,12 +418,21 @@ export default function Accounts() {
         );
     }
     return filtered;
-  }, [accounts, searchQuery, statusFilter, quotaFilter]);
+  }, [storeAccounts, providerFilter, searchQuery, statusFilter, quotaFilter]);
+
+  // Keep selection constrained to visible accounts to avoid mismatched counts/actions
+  useEffect(() => {
+    const visibleIds = new Set(filteredAccounts.map(a => a.id));
+    const nextSelected = Array.from(selectedIds).filter(id => visibleIds.has(id));
+    if (nextSelected.length !== selectedIds.size) {
+      setSelectedIds(nextSelected);
+    }
+  }, [filteredAccounts, selectedIds, setSelectedIds]);
 
   const handleAddAccount = async (d: any) => {
     try {
       await useAccountsStore.getState().addAccount(d.provider, d.email, d.password);
-      fetchAccountsWithFilter();
+      fetchAccounts();
     } catch (e) {
       console.error(e);
     }
@@ -287,8 +440,8 @@ export default function Accounts() {
   const handleCheckStatus = async (id: number) => {
     try {
       await checkAccountStatus({ accountId: id });
-      const updated = await useAccountsStore.getState().refreshAccount(id);
-      setAccounts(prev => prev.map(a => (a.id === id ? updated : a)));
+      await useAccountsStore.getState().refreshAccount(id);
+      await fetchAccounts();
     } catch (e) {
       console.error(e);
     }
@@ -300,6 +453,53 @@ export default function Accounts() {
       console.error(error);
     }
   };
+
+  const handleOpenProfileSession = async (_id: number) => {
+    try {
+      toast.info('Profile session action is not wired in this build');
+      toast.success('Profile session opened');
+      await fetchAccounts();
+    } catch (error) {
+      console.error('[Accounts] Failed to open profile session:', error);
+      toast.error(
+        `Failed to open profile session: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  const handleConfirmProfileSession = async (_id: number) => {
+    try {
+      toast.info('Profile session action is not wired in this build');
+      toast.success('Profile session confirmed');
+      await fetchAccounts();
+    } catch (error) {
+      console.error('[Accounts] Failed to confirm profile session:', error);
+      toast.error(
+        `Failed to confirm profile session: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  const handleClearProfileSession = async (_id: number) => {
+    try {
+      toast.info('Profile session action is not wired in this build');
+      toast.success('Profile session cleared');
+      await fetchAccounts();
+    } catch (error) {
+      console.error('[Accounts] Failed to clear profile session:', error);
+      toast.error(
+        `Failed to clear profile session: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  // Temporarily disable profile-session actions in this UI surface.
+  // These flows exist in the modular tauri API (src/lib/tauri/modules/accounts.ts),
+  // but the legacy compat export '@/lib/tauri' does not provide them.
+  // TODO: Either import from '@/lib/tauri/index' or wire these actions via a dedicated UI.
+  void handleOpenProfileSession;
+  void handleConfirmProfileSession;
+  void handleClearProfileSession;
   const handleExportCSV = async () => {
     try {
       const targets =
@@ -321,6 +521,97 @@ export default function Accounts() {
     }
   };
 
+  const handleImportAccounts = async () => {
+    if (isImporting) return;
+    setIsImporting(true);
+
+    try {
+      const selection = await open({
+        multiple: false,
+        filters: [{ name: 'Accounts', extensions: ['json', 'csv'] }],
+      });
+
+      if (!selection) return;
+
+      const selected = Array.isArray(selection) ? selection[0] : selection;
+      if (!selected) return;
+
+      const fileName = typeof selected === 'string' ? selected : selected.name;
+      const extension = fileName.split('.').pop()?.toLowerCase();
+      if (extension !== 'json' && extension !== 'csv') {
+        toast.error('Unsupported file type. Please use .json or .csv');
+        return;
+      }
+
+      const fileText =
+        typeof selected === 'string'
+          ? await (async () => {
+              const fileUrl = convertFileSrc(selected);
+              const response = await fetch(fileUrl);
+              if (!response.ok) {
+                throw new Error('Failed to read selected file');
+              }
+
+              const blob = await response.blob();
+              return readBlobAsText(blob);
+            })()
+          : await selected.text();
+
+      let parsed: ParsedAccountsResult;
+      if (extension === 'json') {
+        parsed = normalizeJsonAccounts(JSON.parse(fileText));
+      } else {
+        parsed = { payloads: parseCsvAccounts(fileText), errors: [] };
+      }
+
+      const { valid, errors: validationErrors } = validateImportRecords(parsed.payloads);
+      const frontendErrors = [...parsed.errors, ...validationErrors];
+
+      if (parsed.payloads.length === 0) {
+        toast.info('No account records found in file');
+        return;
+      }
+
+      if (valid.length === 0) {
+        const detailSummary = frontendErrors.length
+          ? ` ${frontendErrors.slice(0, 3).join(' • ')}`
+          : '';
+        toast.error(`No valid account records found.${detailSummary}`);
+        return;
+      }
+
+      const skippedInvalid = parsed.payloads.length - valid.length;
+
+      const result = await importAccountsPayload(JSON.stringify(valid));
+
+      const combinedTotal = parsed.payloads.length;
+      const combinedSucceeded = result.succeeded;
+      const combinedFailed = result.failed + skippedInvalid;
+      const combinedErrors = [...frontendErrors, ...result.errors];
+
+      const baseSummary = `Imported ${combinedSucceeded}/${combinedTotal}. Failed ${combinedFailed}.`;
+      const skipSummary = skippedInvalid > 0 ? ` Skipped ${skippedInvalid} invalid.` : '';
+      const detailSummary = combinedErrors.length
+        ? ` ${combinedErrors.slice(0, 3).join(' • ')}`
+        : '';
+
+      if (combinedSucceeded > 0 && combinedFailed === 0) {
+        toast.success(`${baseSummary}${skipSummary}${detailSummary}`);
+      } else if (combinedSucceeded > 0) {
+        toast.info(`${baseSummary}${skipSummary}${detailSummary}`);
+      } else {
+        toast.error(`${baseSummary}${skipSummary}${detailSummary}`);
+      }
+
+      await fetchAccounts();
+    } catch (error) {
+      console.error('[Accounts] Import failed:', error);
+      toast.error(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleRefreshAll = async () => {
     try {
       const targets =
@@ -332,7 +623,7 @@ export default function Accounts() {
       }
 
       await startBulkRefresh(targets);
-      await fetchAccountsWithFilter();
+      await fetchAccounts();
     } catch (e) {
       console.error('[Accounts] Error refreshing accounts:', e);
       toast.error(`Failed to refresh: ${e instanceof Error ? e.message : String(e)}`);
@@ -347,7 +638,7 @@ export default function Accounts() {
     }
     try {
       await startBulkRefresh(expiredAccountIds);
-      await fetchAccountsWithFilter();
+      await fetchAccounts();
     } catch (e) {
       console.error('[Accounts] Error refreshing expired accounts:', e);
       toast.error(`Failed to refresh: ${e instanceof Error ? e.message : String(e)}`);
@@ -437,21 +728,33 @@ export default function Accounts() {
                 { id: 'all', label: t('filters.anyStatus'), dot: null, color: null },
                 {
                   id: 'active',
-                  label: t('status.active'),
+                  label: getAccountStatusLabel('active'),
                   dot: ACCOUNT_STATUS_COLORS.active.bg,
                   color: ACCOUNT_STATUS_COLORS.active.hex,
                 },
                 {
                   id: 'banned',
-                  label: t('status.banned'),
+                  label: getAccountStatusLabel('banned'),
                   dot: ACCOUNT_STATUS_COLORS.banned.bg,
                   color: ACCOUNT_STATUS_COLORS.banned.hex,
                 },
                 {
-                  id: 'expired',
-                  label: t('status.expired'),
+                  id: 'limit_hit',
+                  label: getAccountStatusLabel('limit_hit'),
                   dot: ACCOUNT_STATUS_COLORS.expired.bg,
                   color: ACCOUNT_STATUS_COLORS.expired.hex,
+                },
+                {
+                  id: 'expired',
+                  label: getAccountStatusLabel('expired'),
+                  dot: ACCOUNT_STATUS_COLORS.expired.bg,
+                  color: ACCOUNT_STATUS_COLORS.expired.hex,
+                },
+                {
+                  id: 'unknown',
+                  label: getAccountStatusLabel('unknown'),
+                  dot: null,
+                  color: null,
                 },
               ].map(status => (
                 <button
@@ -517,10 +820,17 @@ export default function Accounts() {
                     loading: isBulkRefreshing,
                   },
                   {
+                    icon: Upload,
+                    label: t('accounts.importAccounts') || 'Import',
+                    onClick: handleImportAccounts,
+                    disabled: isImporting,
+                    loading: isImporting,
+                  },
+                  {
                     icon: Download,
                     label: t('accounts.exportCsv'),
                     onClick: handleExportCSV,
-                    disabled: accounts.length === 0,
+                    disabled: filteredAccounts.length === 0,
                   },
                 ]}
                 className="h-9 px-3 rounded-lg bg-white/5 border border-white/10"
@@ -528,8 +838,11 @@ export default function Accounts() {
 
               <div className="w-px h-6 bg-white/10" />
 
+              <Button onClick={() => navigate('/autoreg')} variant="secondary" size="sm">
+                AutoReg
+              </Button>
               <Button
-                onClick={() => navigate('/autoreg')}
+                onClick={() => setIsModalOpen(true)}
                 variant="primary"
                 size="sm"
                 leftIcon={<Plus size={18} />}
@@ -537,6 +850,35 @@ export default function Accounts() {
                 Add account
               </Button>
             </div>
+          </div>
+
+          {/* Mobile quick filters */}
+          <div className="md:hidden shrink-0 px-4 py-3 border-b border-white/5 bg-[#0a0a0c]/70 grid grid-cols-2 gap-2">
+            <select
+              value={providerFilter}
+              onChange={e => handleProviderFilterChange(e.target.value)}
+              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
+            >
+              <option value="all">All providers</option>
+              {Object.values(providerCounts).slice(0, 0) /* no-op: keep lint happy */}
+              {/* Keep mobile list aligned with sidebar provider filters */}
+              {['kiro', 'windsurf', 'trae', 'aws', 'github', 'openai'].map(id => (
+                <option key={id} value={id}>
+                  {id === 'aws' ? 'AWS Builder ID' : id.charAt(0).toUpperCase() + id.slice(1)}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={e => handleStatusFilterChange(e.target.value)}
+              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
+            >
+              <option value="all">Any status</option>
+              <option value="active">Active</option>
+              <option value="banned">Banned</option>
+              <option value="expired">Expired</option>
+            </select>
           </div>
 
           {/* Expired Warning */}
@@ -571,35 +913,93 @@ export default function Accounts() {
               <EmptyState
                 icon={Users}
                 title={t('accounts.noAccountsFound')}
-                description={t('accounts.addFirstAccountToStart')}
+                description={
+                  searchQuery.trim() || statusFilter !== 'all' || quotaFilter !== 'any'
+                    ? t('accounts.noAccountsFoundDesc')
+                    : t('accounts.addFirstAccountToStart')
+                }
               />
             ) : (
-              <AccountsTable
-                accounts={filteredAccounts}
-                selectedIds={selectedIds}
-                activeAccountIds={activeAccountIds}
-                onToggleSelection={toggleSelection}
-                onSelectAll={selectAll}
-                onClearSelection={clearSelection}
-                onDelete={handleRemoveAccount}
-                onDeleteSelected={handleRemoveSelectedAccounts}
-                onActivate={setActiveAccount}
-                onCheckStatus={handleCheckStatus}
-                isAccountRefreshing={isAccountRefreshing}
-                onOpenBrowser={handleOpenBrowser}
-                selectedProvider={providerFilter === 'all' ? null : providerFilter}
-              />
+              <div className="flex flex-col h-full">
+                {providerFilter === 'kiro' && (
+                  <div className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-white">Kiro Profile Sessions</h3>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Manage browser profile sessions for selected Kiro accounts.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          disabled={selectedIds.size === 0}
+                          onClick={async () => {
+                            const targets = Array.from(selectedIds);
+                            if (!targets.length) return;
+                            await Promise.all(targets.map(id => handleOpenProfileSession(id)));
+                          }}
+                        >
+                          Open
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          disabled={selectedIds.size === 0}
+                          onClick={async () => {
+                            const targets = Array.from(selectedIds);
+                            if (!targets.length) return;
+                            await Promise.all(targets.map(id => handleConfirmProfileSession(id)));
+                          }}
+                        >
+                          Confirm
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          disabled={selectedIds.size === 0}
+                          onClick={async () => {
+                            const targets = Array.from(selectedIds);
+                            if (!targets.length) return;
+                            await Promise.all(targets.map(id => handleClearProfileSession(id)));
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                    {selectedIds.size === 0 && (
+                      <p className="mt-3 text-xs text-slate-500">
+                        Select one or more Kiro accounts to enable profile session actions.
+                      </p>
+                    )}
+                  </div>
+                )}
+                <AccountsTable
+                  accounts={filteredAccounts}
+                  selectedIds={selectedIds}
+                  activeAccountIds={activeAccountIds}
+                  onToggleSelection={toggleSelection}
+                  onSelectAll={selectAll}
+                  onClearSelection={clearSelection}
+                  onDelete={handleRemoveAccount}
+                  onDeleteSelected={handleRemoveSelectedAccounts}
+                  onActivate={setActiveAccount}
+                  onCheckStatus={handleCheckStatus}
+                  isAccountRefreshing={isAccountRefreshing}
+                  onOpenBrowser={handleOpenBrowser}
+                  onOpenProfileSession={handleOpenProfileSession}
+                  onConfirmProfileSession={handleConfirmProfileSession}
+                  onClearProfileSession={handleClearProfileSession}
+                  selectedProvider={providerFilter === 'all' ? null : providerFilter}
+                />
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      <AccountDetailsModal
-        account={detailsModalAccount}
-        isOpen={!!detailsModalAccount}
-        onClose={() => setDetailsModalAccount(null)}
-        onDelete={handleRemoveAccount}
-      />
       <AddAccountModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

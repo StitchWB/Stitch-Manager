@@ -1,6 +1,9 @@
 import { IdentitySystemCard, type IdentityConfig } from '../ui/IdentitySystemCard';
 import type { ProviderName } from '../../types';
 import type { SaveStatus } from '../../stores/registration';
+import { AlertTriangle, EyeOff } from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { PROVIDER_REQUIREMENT_HINTS } from './providerRequirements';
 
 interface IdentityTabProps {
   provider: ProviderName;
@@ -60,6 +63,32 @@ export function IdentityTab({
   // IDE/Git Mode - Show IMAP Card
   return (
     <div className="space-y-4">
+      {provider === 'openai' && PROVIDER_REQUIREMENT_HINTS.openai && (
+        <div className={cn('rounded-lg p-3 border', 'bg-amber-500/5 border-amber-500/20')}>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-white">
+                {PROVIDER_REQUIREMENT_HINTS.openai.title}
+              </div>
+              <ul className="mt-1 text-[11px] text-slate-300 space-y-0.5">
+                <li>• {PROVIDER_REQUIREMENT_HINTS.openai.points[0]}</li>
+                <li>
+                  • {PROVIDER_REQUIREMENT_HINTS.openai.points[1]} —{' '}
+                  <span className="text-amber-300 font-semibold inline-flex items-center gap-1">
+                    <EyeOff className="w-3 h-3" /> headless OFF
+                  </span>{' '}
+                  recommended
+                </li>
+                <li>• {PROVIDER_REQUIREMENT_HINTS.openai.points[2]}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       <IdentitySystemCard
         config={identityConfig}
         onChange={updates => {

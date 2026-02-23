@@ -4,6 +4,7 @@ export { UIScaleSection } from './UIScaleSection';
 export { IDEPathsSection } from './IDEPathsSection';
 export { DatabaseSection } from './DatabaseSection';
 export { ProxySettingsSection } from './ProxySettingsSection';
+export { ProxyListManager } from './ProxyListManager';
 export { IMAPSettingsSection } from './IMAPSettingsSection';
 export { EmailCounterSection } from './EmailCounterSection';
 export { EmailServicesSection } from './EmailServicesSection';

@@ -59,3 +59,9 @@ export type { StageProgressProps } from './StageProgress';
 
 export { LogGroup } from './LogGroup';
 export type { LogGroupProps } from './LogGroup';
+
+export { GlassCard } from './GlassCard';
+
+export { StatusBadge } from './StatusBadge';
+
+export { ProviderLogo } from './ProviderLogo';
