@@ -43,7 +43,7 @@ describe('AiProviders page', () => {
     ] as any);
 
     jest
-      .spyOn(aiProxyModule, 'getAvailableModels')
+      .spyOn(aiProxyModule, 'getAvailableModelsSafe')
       .mockResolvedValue([{ id: 'gpt-4-turbo', provider: 'openai', ownedBy: 'openai' } as any]);
 
     jest.spyOn(aiProxyModule, 'getProviderCapabilities').mockResolvedValue([

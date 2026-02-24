@@ -25,7 +25,7 @@ import {
   deleteAiProxyAccount,
   updateAiProxyAccount,
   debugRunAiProxyMigration,
-  getAvailableModels,
+  getAvailableModelsSafe,
   getProviderCapabilities,
   getProviderModelMappings,
   setProviderModelMappings,
@@ -112,11 +112,10 @@ export default function AiProviders() {
   }, [setAccounts, setLoading]);
 
   const fetchCapabilitiesAndModels = useCallback(async () => {
-    // In desktop mode, we can always attempt model list (the command already handles 404 / offline cases).
-    // In web mode, allow the page to render with empty models without spamming.
-
+    // Models are fetched via sidecar Management API. Use safe wrapper to avoid noisy errors
+    // when proxy isn't running or not ready.
     const [modelsResult, capabilitiesResult, mappingsResult] = await Promise.allSettled([
-      getAvailableModels(),
+      getAvailableModelsSafe(),
       getProviderCapabilities(),
       getProviderModelMappings(),
     ]);
@@ -126,6 +125,7 @@ export default function AiProviders() {
         modelsResult.value.map(m => ({ id: m.id, provider: m.provider || m.ownedBy || 'unknown' }))
       );
     } else {
+      // Should be rare since we use the safe wrapper above.
       console.error('[AiProviders] Failed loading models:', modelsResult.reason);
       setAvailableModels([]);
     }
@@ -153,7 +153,12 @@ export default function AiProviders() {
     ].filter(Boolean);
 
     if (failedParts.length > 0) {
-      toast.error(`Failed to load AI Proxy data: ${failedParts.join(', ')}`);
+      // Avoid spamming users for models if proxy is stopped; the safe wrapper should already
+      // suppress common management API failures.
+      const toastParts = failedParts.filter(p => p !== 'models');
+      if (toastParts.length > 0) {
+        toast.error(`Failed to load AI Proxy data: ${toastParts.join(', ')}`);
+      }
     }
   }, []);
 
@@ -635,7 +640,7 @@ export default function AiProviders() {
               </div>
             </div>
 
-            <div className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-lg bg-black/30 border border-white/10">
+            <div className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-lg bg-black/30 border border-white/10 whitespace-nowrap">
               <div
                 className={cn(
                   'w-2 h-2 rounded-full',
@@ -649,63 +654,65 @@ export default function AiProviders() {
               </span>
             </div>
 
-            <Button
-              onClick={handleAddNew}
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus size={18} />}
-            >
-              Add Account
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                onClick={handleAddNew}
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus size={18} />}
+              >
+                Add Account
+              </Button>
 
-            <Button
-              onClick={() => {
-                setTransferMode('import');
-                setIsTransferModalOpen(true);
-              }}
-              variant="secondary"
-              size="sm"
-              leftIcon={<ArrowDownToLine size={16} />}
-            >
-              Import
-            </Button>
+              <Button
+                onClick={() => {
+                  setTransferMode('import');
+                  setIsTransferModalOpen(true);
+                }}
+                variant="secondary"
+                size="sm"
+                leftIcon={<ArrowDownToLine size={16} />}
+              >
+                Import
+              </Button>
 
-            <Button
-              onClick={() => {
-                setTransferMode('export');
-                setIsTransferModalOpen(true);
-              }}
-              variant="secondary"
-              size="sm"
-              leftIcon={<ArrowUpFromLine size={16} />}
-            >
-              Export
-            </Button>
+              <Button
+                onClick={() => {
+                  setTransferMode('export');
+                  setIsTransferModalOpen(true);
+                }}
+                variant="secondary"
+                size="sm"
+                leftIcon={<ArrowUpFromLine size={16} />}
+              >
+                Export
+              </Button>
 
-            <Button
-              onClick={handleDebugMigration}
-              variant="secondary"
-              size="sm"
-              leftIcon={<Bug size={18} />}
-            >
-              Debug: Run Migration
-            </Button>
+              <Button
+                onClick={handleDebugMigration}
+                variant="secondary"
+                size="sm"
+                leftIcon={<Bug size={18} />}
+              >
+                Debug: Run Migration
+              </Button>
 
-            <Button variant="secondary" size="sm" onClick={() => navigate('/api-keys')}>
-              API Keys
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => navigate('/chat')}>
-              Chat
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => navigate('/ai-analytics')}>
-              Analytics
-            </Button>
+              <Button variant="secondary" size="sm" onClick={() => navigate('/api-keys')}>
+                API Keys
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => navigate('/chat')}>
+                Chat
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => navigate('/ai-analytics')}>
+                Analytics
+              </Button>
+            </div>
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-auto p-6">
             {/* Proxy Controls */}
-            <div className="mb-4 bg-[#111116]/80 border border-white/10 rounded-xl p-4">
+            <div className="mb-4 bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -736,7 +743,9 @@ export default function AiProviders() {
                         <div className="text-[10px] uppercase tracking-wider text-slate-500">
                           Base URL
                         </div>
-                        <div className="text-xs font-mono text-slate-200 truncate">{baseUrl}</div>
+                        <div className="text-xs font-mono text-slate-200 truncate max-w-[240px]">
+                          {baseUrl}
+                        </div>
                       </div>
                       <Button
                         variant="secondary"
@@ -753,7 +762,7 @@ export default function AiProviders() {
                         <div className="text-[10px] uppercase tracking-wider text-slate-500">
                           Client API key
                         </div>
-                        <div className="text-xs font-mono text-slate-200 truncate">
+                        <div className="text-xs font-mono text-slate-200 truncate max-w-[240px]">
                           {CLIENT_API_KEY}
                         </div>
                       </div>
@@ -776,9 +785,9 @@ export default function AiProviders() {
                       </span>
                     </span>
                     <span className="text-slate-600">•</span>
-                    <span>
+                    <span className="min-w-0">
                       Management key:{' '}
-                      <span className="font-mono text-slate-200">
+                      <span className="font-mono text-slate-200 truncate max-w-[180px] inline-block align-middle">
                         {proxySettings?.managementKey ? maskKey(proxySettings.managementKey) : '—'}
                       </span>
                     </span>
@@ -800,7 +809,7 @@ export default function AiProviders() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <Button variant="secondary" size="sm" onClick={() => setIsIdeWizardOpen(true)}>
                     Configure IDE/CLI
                   </Button>
@@ -827,12 +836,12 @@ export default function AiProviders() {
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
-              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4">
+              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-white">Available Models</h3>
                   <span className="text-xs text-slate-400">{availableModels.length}</span>
                 </div>
-                <div className="space-y-1 max-h-40 overflow-auto pr-1">
+                <div className="space-y-1 max-h-40 overflow-auto pr-1 min-h-[120px]">
                   {availableModels.slice(0, 20).map(m => (
                     <div
                       key={m.id}
@@ -848,8 +857,8 @@ export default function AiProviders() {
                 </div>
               </div>
 
-              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
+              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
+                <div className="flex items-center justify-between gap-3 mb-4">
                   <h3 className="text-sm font-semibold text-white">Provider Capabilities</h3>
                   <Button
                     variant="secondary"
@@ -859,14 +868,14 @@ export default function AiProviders() {
                     Edit mappings
                   </Button>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 min-h-[120px]">
                   {providerCapabilities.map(c => (
                     <div
                       key={c.provider}
-                      className="text-xs text-slate-300 flex items-center justify-between"
+                      className="text-xs text-slate-300 flex items-center justify-between gap-3"
                     >
                       <span className="capitalize">{c.provider}</span>
-                      <span className="text-slate-400">
+                      <span className="text-slate-400 font-mono tabular-nums whitespace-nowrap">
                         {c.enabledAccounts} active / {c.totalAccounts} acc / {c.totalApiKeys} keys
                       </span>
                     </div>
@@ -874,14 +883,14 @@ export default function AiProviders() {
                 </div>
               </div>
 
-              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
+              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
+                <div className="flex items-center justify-between gap-3 mb-4">
                   <h3 className="text-sm font-semibold text-white">Recent Request History</h3>
                   <Button variant="secondary" size="xs" onClick={() => navigate('/ai-analytics')}>
                     Open
                   </Button>
                 </div>
-                <div className="space-y-2 text-xs">
+                <div className="space-y-3 text-xs min-h-[120px]">
                   <div className="flex items-center justify-between text-slate-300">
                     <span>Last 20 requests</span>
                     <span className="text-white font-medium">{historySummary.total}</span>

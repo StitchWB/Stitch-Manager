@@ -15,6 +15,7 @@ import {
   Zap,
   Clock,
   Key,
+  Orbit,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
@@ -156,6 +157,12 @@ export default function Sidebar() {
           to="/ai-providers"
           icon={<Zap size={20} />}
           label="AI Providers"
+          collapsed={sidebarCollapsed}
+        />
+        <NavItem
+          to="/antigravity"
+          icon={<Orbit size={20} />}
+          label="Antigravity"
           collapsed={sidebarCollapsed}
         />
         <NavItem
