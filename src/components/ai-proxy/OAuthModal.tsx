@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Modal, Button } from '../ui';
-import { startOAuthFlow, pollOAuthStatus, openUrlInBrowser } from '../../lib/tauri/modules/aiProxy';
+import {
+  startOAuthFlowSafe,
+  pollOAuthStatusSafe,
+  openUrlInBrowser,
+} from '../../lib/tauri/modules/aiProxy';
 import { ExternalLink, Loader2, Copy, Check } from 'lucide-react';
 
 interface OAuthModalProps {
@@ -42,7 +46,12 @@ export default function OAuthModal({
   const initOAuth = async () => {
     try {
       setLoading(true);
-      const response = await startOAuthFlow(provider);
+      const response = await startOAuthFlowSafe(provider);
+      if (!response) {
+        toast.error('AI Proxy is not ready. Start the proxy and try again.');
+        onClose();
+        return;
+      }
       setOauthUrl(response.url);
       setOauthState(response.state);
     } catch (e) {
@@ -98,7 +107,11 @@ export default function OAuthModal({
       }
 
       try {
-        const status = await pollOAuthStatus(provider, oauthState);
+        const status = await pollOAuthStatusSafe(provider, oauthState);
+        if (!status) {
+          // Proxy not available; keep waiting silently.
+          return;
+        }
 
         if (status.status === 'ok') {
           clearInterval(interval);
