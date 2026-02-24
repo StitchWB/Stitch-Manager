@@ -948,10 +948,25 @@ export default function AiProviders() {
                     {/* MVP status chips (graceful fallback) */}
                     <div className="px-1 flex flex-wrap gap-1.5">
                       <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-black/30 text-slate-300">
-                        Refresh: <span className="text-slate-400">Unknown</span>
+                        Refresh:{' '}
+                        <span className="text-slate-400">
+                          {(account as any).oauthRefreshError
+                            ? 'Error'
+                            : (account as any).oauthRefreshToken
+                              ? 'Configured'
+                              : 'N/A'}
+                        </span>
                       </span>
                       <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-black/30 text-slate-300">
-                        Cooldown: <span className="text-slate-400">Unknown</span>
+                        Cooldown:{' '}
+                        <span className="text-slate-400">
+                          {(account as any).cooldownUntil
+                            ? new Date(((account as any).cooldownUntil as number) * 1000) >
+                              new Date()
+                              ? `Until ${new Date(((account as any).cooldownUntil as number) * 1000).toLocaleTimeString()}`
+                              : 'None'
+                            : 'None'}
+                        </span>
                       </span>
                       <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-black/30 text-slate-300">
                         Quota: <span className="text-slate-400">Unknown</span>
@@ -1025,6 +1040,70 @@ export default function AiProviders() {
                   disabled={importLoading || !importValidation.isValid}
                 >
                   {importLoading ? 'Importing…' : 'Import JSON'}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={async () => {
+                    if (!authScan || authScan.length === 0) {
+                      toast.error('No scan results to import');
+                      return;
+                    }
+
+                    const payload = JSON.stringify(
+                      {
+                        version: 1,
+                        exportedAt: new Date().toISOString(),
+                        includeSecrets: true,
+                        accounts: authScan.map(f => {
+                          const fileTail = f.path.split(/[\\/]/).pop() || 'auth';
+                          return {
+                            provider: f.provider,
+                            name: `${f.provider} (${fileTail})`,
+                            enabled: true,
+                            accountType: null,
+                            oauthToken: f.token,
+                            apiKey: null,
+                            sessionToken: null,
+                          };
+                        }),
+                      },
+                      null,
+                      2
+                    );
+
+                    if (!hasTauriBridge()) {
+                      toast.error('This action is only available in the desktop app');
+                      return;
+                    }
+
+                    const ok = window.confirm(
+                      `Import ${authScan.length} scanned credential(s)? Duplicates are skipped.`
+                    );
+                    if (!ok) return;
+
+                    setImportLoading(true);
+                    try {
+                      const imported = await importAiProxyAccountsPayload(payload);
+                      const skipped = Math.max(authScan.length - imported, 0);
+                      toast.success(
+                        `Imported ${imported} account(s)${
+                          skipped > 0 ? `, skipped ${skipped} duplicate(s)` : ''
+                        }`
+                      );
+                      setImportPayload('');
+                      setAuthScan(null);
+                      await fetchAccounts();
+                    } catch (e) {
+                      console.error('[AiProviders] Import failed:', e);
+                      toast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+                    } finally {
+                      setImportLoading(false);
+                    }
+                  }}
+                  disabled={importLoading || authScanLoading || !authScan || authScan.length === 0}
+                >
+                  {importLoading ? 'Importing…' : 'Import all from scan'}
                 </Button>
               </div>
             </div>

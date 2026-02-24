@@ -27,6 +27,10 @@ import {
   openAccountBrowser,
   bulkExportAccounts,
   importAccountsPayload,
+  updateAccountNotesTags,
+  openAccountProfileSession,
+  confirmAccountProfileSession,
+  clearAccountProfileSession,
 } from '@/lib/tauri';
 import { t } from '../lib/i18n';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
@@ -36,6 +40,13 @@ import { ProviderLogo } from '../components/ui/ProviderLogo';
 import { cn } from '../lib/utils';
 import { ACCOUNT_STATUS_COLORS } from '../constants/colors';
 import { getAccountStatusLabel } from '../lib/accountStatus';
+import { FilterDropdown, type FilterOption } from '../components/ui/FilterDropdown';
+import {
+  extractRelationHints,
+  hasAnyRelations,
+  hasExplicitRelationLinks,
+  isOAuthCapableIdentity,
+} from '../lib/accounts/relations';
 
 type ImportAccountPayload = {
   provider?: string;
@@ -237,6 +248,8 @@ export default function Accounts() {
     setAccountsStatusFilter,
     setAccountsQuotaFilter,
     setAccountsSearchQuery,
+    setAccountsTagFilter,
+    setAccountsRelationFilter,
   } = useUIPreferencesStore();
 
   // Initialize state from preferences (use preferences as source of truth)
@@ -247,6 +260,11 @@ export default function Accounts() {
   const [statusFilter, setStatusFilter] = useUrlState('status', accountsPage.statusFilter || 'all');
   const [searchQuery, setSearchQuery] = useState(accountsPage.searchQuery || '');
   const [quotaFilter, setQuotaFilter] = useState<string>(accountsPage.quotaFilter || 'any');
+  const [tagFilter, setTagFilter] = useUrlState('tag', accountsPage.tagFilter || 'all');
+  const [relationFilter, setRelationFilter] = useUrlState(
+    'relation',
+    accountsPage.relationFilter || 'all'
+  );
 
   // Keep store selection in sync with current visible set (so Select All works on derived filters)
   useEffect(() => {
@@ -264,6 +282,49 @@ export default function Accounts() {
     setStoreQuotaFilter,
     setStoreSearchQuery,
   ]);
+
+  const parseTags = (tagsString: string | null): string[] => {
+    if (!tagsString) return [];
+    try {
+      const parsed = JSON.parse(tagsString);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const tagOptions = useMemo((): FilterOption<string>[] => {
+    const counts = new Map<string, number>();
+    storeAccounts.forEach(acc => {
+      parseTags(acc.tags).forEach(tag => {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      });
+    });
+
+    const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+
+    const profileMetaOrder = [
+      'profile:ready',
+      'profile:pending',
+      'profile:disabled',
+      'profile:manual',
+      'profile:antidetect',
+    ];
+    const profileMeta = profileMetaOrder
+      .filter(tag => counts.has(tag))
+      .map(tag => ({
+        value: tag,
+        label: tag,
+        count: counts.get(tag),
+      }));
+
+    const other = entries
+      .filter(([tag]) => !profileMetaOrder.includes(tag))
+      .slice(0, 12)
+      .map(([tag, count]) => ({ value: tag, label: tag, count }));
+
+    return [{ value: 'all', label: t('filters.any') }, ...profileMeta, ...other];
+  }, [storeAccounts]);
 
   // Memoized handlers to prevent unnecessary re-renders
   const handleProviderFilterChange = useCallback(
@@ -291,6 +352,43 @@ export default function Accounts() {
       setStoreQuotaFilter(value as any);
     },
     [setAccountsQuotaFilter, setStoreQuotaFilter]
+  );
+
+  const handleTagFilterChange = useCallback(
+    (value: string) => {
+      setTagFilter(value);
+      setAccountsTagFilter(value);
+    },
+    [setTagFilter, setAccountsTagFilter]
+  );
+
+  const relationOptions = useMemo((): FilterOption<string>[] => {
+    const hasAnyCount = storeAccounts.filter(acc => hasAnyRelations(acc)).length;
+    const explicitCount = storeAccounts.filter(acc => hasExplicitRelationLinks(acc)).length;
+    const oauthCapableCount = storeAccounts.filter(acc => isOAuthCapableIdentity(acc)).length;
+
+    return [
+      { value: 'all', label: t('accounts.relationFilterAll') },
+      { value: 'has_any', label: t('accounts.relationFilterHasAny'), count: hasAnyCount },
+      {
+        value: 'linked_only',
+        label: t('accounts.relationFilterLinkedOnly'),
+        count: explicitCount,
+      },
+      {
+        value: 'oauth_capable',
+        label: t('accounts.relationFilterOauthCapable'),
+        count: oauthCapableCount,
+      },
+    ];
+  }, [storeAccounts]);
+
+  const handleRelationFilterChange = useCallback(
+    (value: string) => {
+      setRelationFilter(value);
+      setAccountsRelationFilter(value);
+    },
+    [setRelationFilter, setAccountsRelationFilter]
   );
 
   const handleSearchQueryChange = useCallback(
@@ -400,6 +498,21 @@ export default function Accounts() {
     }
     if (statusFilter !== 'all') filtered = filtered.filter(a => a.status === statusFilter);
 
+    // Tag filter
+    if (tagFilter && tagFilter !== 'all') {
+      filtered = filtered.filter(a => parseTags(a.tags).includes(tagFilter));
+    }
+
+    if (relationFilter !== 'all') {
+      if (relationFilter === 'has_any') {
+        filtered = filtered.filter(a => hasAnyRelations(a));
+      } else if (relationFilter === 'linked_only') {
+        filtered = filtered.filter(a => hasExplicitRelationLinks(a));
+      } else if (relationFilter === 'oauth_capable') {
+        filtered = filtered.filter(a => isOAuthCapableIdentity(a));
+      }
+    }
+
     // Apply quota filter (skip if 'any' or 'all')
     if (quotaFilter && quotaFilter !== 'any' && quotaFilter !== 'all') {
       if (quotaFilter === 'low_quota')
@@ -418,7 +531,15 @@ export default function Accounts() {
         );
     }
     return filtered;
-  }, [storeAccounts, providerFilter, searchQuery, statusFilter, quotaFilter]);
+  }, [
+    storeAccounts,
+    providerFilter,
+    searchQuery,
+    statusFilter,
+    quotaFilter,
+    tagFilter,
+    relationFilter,
+  ]);
 
   // Keep selection constrained to visible accounts to avoid mismatched counts/actions
   useEffect(() => {
@@ -456,8 +577,8 @@ export default function Accounts() {
 
   const handleOpenProfileSession = async (_id: number) => {
     try {
-      toast.info('Profile session action is not wired in this build');
-      toast.success('Profile session opened');
+      await openAccountProfileSession({ accountId: _id });
+      toast.success(t('accounts.profileSessionOpen'));
       await fetchAccounts();
     } catch (error) {
       console.error('[Accounts] Failed to open profile session:', error);
@@ -469,8 +590,8 @@ export default function Accounts() {
 
   const handleConfirmProfileSession = async (_id: number) => {
     try {
-      toast.info('Profile session action is not wired in this build');
-      toast.success('Profile session confirmed');
+      await confirmAccountProfileSession({ accountId: _id });
+      toast.success(t('accounts.profileSessionConfirm'));
       await fetchAccounts();
     } catch (error) {
       console.error('[Accounts] Failed to confirm profile session:', error);
@@ -482,8 +603,8 @@ export default function Accounts() {
 
   const handleClearProfileSession = async (_id: number) => {
     try {
-      toast.info('Profile session action is not wired in this build');
-      toast.success('Profile session cleared');
+      await clearAccountProfileSession({ accountId: _id });
+      toast.success(t('accounts.profileSessionClear'));
       await fetchAccounts();
     } catch (error) {
       console.error('[Accounts] Failed to clear profile session:', error);
@@ -493,13 +614,17 @@ export default function Accounts() {
     }
   };
 
-  // Temporarily disable profile-session actions in this UI surface.
-  // These flows exist in the modular tauri API (src/lib/tauri/modules/accounts.ts),
-  // but the legacy compat export '@/lib/tauri' does not provide them.
-  // TODO: Either import from '@/lib/tauri/index' or wire these actions via a dedicated UI.
-  void handleOpenProfileSession;
-  void handleConfirmProfileSession;
-  void handleClearProfileSession;
+  const handleUpdateAccount = useCallback(
+    async (accountId: number, updates: { notes?: string; tags?: string }) => {
+      await updateAccountNotesTags({
+        accountId,
+        notes: updates.notes,
+        tags: updates.tags,
+      });
+      await fetchAccounts();
+    },
+    [fetchAccounts]
+  );
   const handleExportCSV = async () => {
     try {
       const targets =
@@ -646,6 +771,48 @@ export default function Accounts() {
   };
 
   const expiredCount = storeAccounts.filter(a => a.status === 'expired').length;
+
+  const handleBatchProfileAction = useCallback(
+    async (action: 'open' | 'confirm' | 'clear') => {
+      const targets = Array.from(selectedIds);
+      if (!targets.length) return;
+
+      const runner =
+        action === 'open'
+          ? handleOpenProfileSession
+          : action === 'confirm'
+            ? handleConfirmProfileSession
+            : handleClearProfileSession;
+
+      const settled = await Promise.allSettled(targets.map(id => runner(id)));
+      const success = settled.filter(r => r.status === 'fulfilled').length;
+      const failed = settled.length - success;
+
+      if (failed === 0) {
+        toast.success(t('accounts.batchResultSummary', { success: String(success), failed: '0' }));
+        return;
+      }
+
+      const errors = settled
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .slice(0, 2)
+        .map(r => (r.reason instanceof Error ? r.reason.message : String(r.reason)))
+        .join(' • ');
+
+      const summary = t('accounts.batchResultSummary', {
+        success: String(success),
+        failed: String(failed),
+      });
+
+      toast.warning(
+        t('accounts.batchResultWithErrors', {
+          summary,
+          errors,
+        })
+      );
+    },
+    [selectedIds]
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
@@ -807,6 +974,24 @@ export default function Accounts() {
               </div>
 
               <QuotaFilterChip value={quotaFilter as any} onChange={handleQuotaFilterChange} />
+
+              <FilterDropdown
+                value={tagFilter}
+                onChange={handleTagFilterChange}
+                options={tagOptions}
+                placeholder={t('accounts.tags')}
+                showActiveState={true}
+                className="shrink-0"
+              />
+
+              <FilterDropdown
+                value={relationFilter}
+                onChange={handleRelationFilterChange}
+                options={relationOptions}
+                placeholder={t('accounts.relationFilterLabel')}
+                showActiveState={true}
+                className="shrink-0"
+              />
             </div>
 
             <div className="flex items-center gap-3">
@@ -879,6 +1064,33 @@ export default function Accounts() {
               <option value="banned">Banned</option>
               <option value="expired">Expired</option>
             </select>
+
+            <select
+              value={tagFilter}
+              onChange={e => handleTagFilterChange(e.target.value)}
+              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200 col-span-2"
+            >
+              <option value="all">{t('accounts.mobileTagFilterLabel')}</option>
+              {tagOptions
+                .filter(option => option.value !== 'all')
+                .map(option => (
+                  <option key={String(option.value)} value={String(option.value)}>
+                    {option.label}
+                  </option>
+                ))}
+            </select>
+
+            <select
+              value={relationFilter}
+              onChange={e => handleRelationFilterChange(e.target.value)}
+              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200 col-span-2"
+            >
+              {relationOptions.map(option => (
+                <option key={String(option.value)} value={String(option.value)}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Expired Warning */}
@@ -914,20 +1126,26 @@ export default function Accounts() {
                 icon={Users}
                 title={t('accounts.noAccountsFound')}
                 description={
-                  searchQuery.trim() || statusFilter !== 'all' || quotaFilter !== 'any'
+                  searchQuery.trim() ||
+                  statusFilter !== 'all' ||
+                  quotaFilter !== 'any' ||
+                  tagFilter !== 'all' ||
+                  relationFilter !== 'all'
                     ? t('accounts.noAccountsFoundDesc')
                     : t('accounts.addFirstAccountToStart')
                 }
               />
             ) : (
               <div className="flex flex-col h-full">
-                {providerFilter === 'kiro' && (
+                {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
                   <div className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-semibold text-white">Kiro Profile Sessions</h3>
+                        <h3 className="text-sm font-semibold text-white">
+                          {t('accounts.profileSessionsTitle')}
+                        </h3>
                         <p className="text-xs text-slate-400 mt-1">
-                          Manage browser profile sessions for selected Kiro accounts.
+                          {t('accounts.profileSessionsSubtitle')}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -935,49 +1153,40 @@ export default function Accounts() {
                           size="xs"
                           variant="secondary"
                           disabled={selectedIds.size === 0}
-                          onClick={async () => {
-                            const targets = Array.from(selectedIds);
-                            if (!targets.length) return;
-                            await Promise.all(targets.map(id => handleOpenProfileSession(id)));
-                          }}
+                          onClick={() => handleBatchProfileAction('open')}
                         >
-                          Open
+                          {t('accounts.profileSessionOpen')}
                         </Button>
                         <Button
                           size="xs"
                           variant="secondary"
                           disabled={selectedIds.size === 0}
-                          onClick={async () => {
-                            const targets = Array.from(selectedIds);
-                            if (!targets.length) return;
-                            await Promise.all(targets.map(id => handleConfirmProfileSession(id)));
-                          }}
+                          onClick={() => handleBatchProfileAction('confirm')}
                         >
-                          Confirm
+                          {t('accounts.profileSessionConfirm')}
                         </Button>
                         <Button
                           size="xs"
                           variant="secondary"
                           disabled={selectedIds.size === 0}
-                          onClick={async () => {
-                            const targets = Array.from(selectedIds);
-                            if (!targets.length) return;
-                            await Promise.all(targets.map(id => handleClearProfileSession(id)));
-                          }}
+                          onClick={() => handleBatchProfileAction('clear')}
                         >
-                          Clear
+                          {t('accounts.profileSessionClear')}
                         </Button>
                       </div>
                     </div>
                     {selectedIds.size === 0 && (
                       <p className="mt-3 text-xs text-slate-500">
-                        Select one or more Kiro accounts to enable profile session actions.
+                        {t('accounts.profileSessionsSelectionHint')}
                       </p>
                     )}
                   </div>
                 )}
                 <AccountsTable
                   accounts={filteredAccounts}
+                  relationHintsById={Object.fromEntries(
+                    filteredAccounts.map(acc => [acc.id, extractRelationHints(acc)])
+                  )}
                   selectedIds={selectedIds}
                   activeAccountIds={activeAccountIds}
                   onToggleSelection={toggleSelection}
@@ -992,6 +1201,7 @@ export default function Accounts() {
                   onOpenProfileSession={handleOpenProfileSession}
                   onConfirmProfileSession={handleConfirmProfileSession}
                   onClearProfileSession={handleClearProfileSession}
+                  onUpdate={handleUpdateAccount}
                   selectedProvider={providerFilter === 'all' ? null : providerFilter}
                 />
               </div>

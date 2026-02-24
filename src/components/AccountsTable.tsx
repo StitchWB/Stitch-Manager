@@ -1,5 +1,16 @@
 import { useState } from 'react';
-import { Trash2, RefreshCw, MoreHorizontal, Play, Square, Globe, Copy, User } from 'lucide-react';
+import {
+  Trash2,
+  RefreshCw,
+  MoreHorizontal,
+  Play,
+  Square,
+  Globe,
+  Copy,
+  User,
+  Check,
+  X,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import type { Account, AccountStatus } from '../types';
@@ -10,6 +21,7 @@ import AccountDetailsModal from './ui/AccountDetailsModal';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Tooltip } from './ui/Tooltip';
 import { ProviderLogo } from './ui/ProviderLogo';
+import { StatusBadge } from './ui/StatusBadge';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { getAccountStatusLabel, getAccountStatusVariant } from '../lib/accountStatus';
 
@@ -28,8 +40,46 @@ const parseTags = (tagsString: string | null): string[] => {
   }
 };
 
+type ProfileSessionStatus = 'ready' | 'pending' | 'disabled';
+
+const getProfileSessionStatus = (tags: string[]): ProfileSessionStatus => {
+  if (tags.includes('profile:disabled')) return 'disabled';
+  if (tags.includes('profile:pending')) return 'pending';
+  if (
+    tags.includes('profile:ready') ||
+    tags.includes('profile:manual') ||
+    tags.includes('profile:antidetect')
+  ) {
+    return 'ready';
+  }
+  return 'disabled';
+};
+
+const getProfileStatusVariant = (
+  status: ProfileSessionStatus
+): 'success' | 'warning' | 'neutral' => {
+  if (status === 'ready') return 'success';
+  if (status === 'pending') return 'warning';
+  return 'neutral';
+};
+
+const getProfileStatusLabel = (status: ProfileSessionStatus): string => {
+  if (status === 'ready') return t('accounts.profileSessionReady');
+  if (status === 'pending') return t('accounts.profileSessionPending');
+  return t('accounts.profileSessionDisabled');
+};
+
+const getTagPillClassName = (tag: string): string => {
+  if (tag === 'profile:ready') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+  if (tag === 'profile:pending') return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
+  if (tag === 'profile:disabled') return 'bg-white/5 text-white/50 border-white/10';
+  if (tag.startsWith('profile:')) return 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
+  return 'bg-white/5 text-slate-300 border-white/10';
+};
+
 interface AccountsTableProps {
   accounts: Account[];
+  relationHintsById?: Record<number, string[]>;
   selectedIds: Set<number>;
   activeAccountIds: Record<string, number | null>;
   onToggleSelection: (accountId: number) => void;
@@ -44,11 +94,13 @@ interface AccountsTableProps {
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
+  onUpdate?: (accountId: number, updates: { notes?: string; tags?: string }) => Promise<void>;
   selectedProvider?: string | null;
 }
 
 export default function AccountsTable({
   accounts,
+  relationHintsById,
   selectedIds,
   activeAccountIds,
   onToggleSelection,
@@ -63,6 +115,7 @@ export default function AccountsTable({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  onUpdate,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [detailsModalAccount, setDetailsModalAccount] = useState<Account | null>(null);
@@ -136,6 +189,12 @@ export default function AccountsTable({
               account.provider === 'kiro' ||
               tagsList.includes('profile:manual') ||
               tagsList.includes('profile:antidetect');
+            const profileStatus = getProfileSessionStatus(tagsList);
+            const canConfirmProfileSession = profileStatus === 'pending';
+            const canClearProfileSession = tagsList.some(tag => tag.startsWith('profile:'));
+            const visibleTags = tagsList.slice(0, 3);
+            const hiddenTagsCount = Math.max(0, tagsList.length - visibleTags.length);
+            const relationHints = relationHintsById?.[account.id] ?? [];
 
             return (
               <motion.div
@@ -195,24 +254,87 @@ export default function AccountsTable({
                           {metadata.name}
                         </span>
                       )}
+                      {tagsList.length > 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 min-w-0">
+                          <Tooltip
+                            content={
+                              <div className="flex flex-wrap gap-1 max-w-[320px]">
+                                {tagsList.map(tag => (
+                                  <span
+                                    key={tag}
+                                    className={cn(
+                                      'px-1.5 py-0.5 text-[10px] rounded border',
+                                      getTagPillClassName(tag)
+                                    )}
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            }
+                            side="top"
+                          >
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {visibleTags.map(tag => (
+                                <span
+                                  key={tag}
+                                  className={cn(
+                                    'px-1.5 py-0.5 text-[10px] rounded border max-w-[140px] truncate',
+                                    getTagPillClassName(tag)
+                                  )}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                              {hiddenTagsCount > 0 && (
+                                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-white/5 text-slate-400 border-white/10">
+                                  +{hiddenTagsCount}
+                                </span>
+                              )}
+                            </div>
+                          </Tooltip>
+                        </div>
+                      )}
+
+                      {relationHints.length > 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 min-w-0">
+                          <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                            {t('accounts.relationLabel')}
+                          </span>
+                          {relationHints.slice(0, 2).map(hint => (
+                            <span
+                              key={hint}
+                              className="px-1.5 py-0.5 text-[10px] rounded border bg-cyan-500/10 text-cyan-300 border-cyan-500/20"
+                            >
+                              {hint}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Status Badge (Compact) */}
                   <div className="flex lg:justify-center">
-                    <div
-                      className={cn(
-                        'flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border',
-                        getAccountStatusVariant(account.status as AccountStatus) === 'success'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : getAccountStatusVariant(account.status as AccountStatus) === 'warning'
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                            : getAccountStatusVariant(account.status as AccountStatus) === 'neutral'
-                              ? 'bg-white/5 text-white/60 border-white/10'
-                              : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                      )}
-                    >
-                      {getAccountStatusLabel(account.status as AccountStatus)}
+                    <div className="flex flex-col items-start lg:items-center gap-1">
+                      <div
+                        className={cn(
+                          'flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border',
+                          getAccountStatusVariant(account.status as AccountStatus) === 'success'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : getAccountStatusVariant(account.status as AccountStatus) === 'warning'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              : getAccountStatusVariant(account.status as AccountStatus) ===
+                                  'neutral'
+                                ? 'bg-white/5 text-white/60 border-white/10'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        )}
+                      >
+                        {getAccountStatusLabel(account.status as AccountStatus)}
+                      </div>
+                      <StatusBadge variant={getProfileStatusVariant(profileStatus)} size="sm">
+                        {getProfileStatusLabel(profileStatus)}
+                      </StatusBadge>
                     </div>
                   </div>
 
@@ -276,6 +398,36 @@ export default function AccountsTable({
                           aria-label={t('accountsTable.openProfileSession')}
                         >
                           <User size={15} />
+                        </button>
+                      </Tooltip>
+                    )}
+
+                    {canConfirmProfileSession && (
+                      <Tooltip content={t('accounts.profileSessionConfirm')}>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            onConfirmProfileSession?.(account.id);
+                          }}
+                          className="p-2 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+                          aria-label={t('accounts.profileSessionConfirm')}
+                        >
+                          <Check size={15} />
+                        </button>
+                      </Tooltip>
+                    )}
+
+                    {canClearProfileSession && (
+                      <Tooltip content={t('accounts.profileSessionClear')}>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            onClearProfileSession?.(account.id);
+                          }}
+                          className="p-2 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all"
+                          aria-label={t('accounts.profileSessionClear')}
+                        >
+                          <X size={15} />
                         </button>
                       </Tooltip>
                     )}
@@ -369,6 +521,7 @@ export default function AccountsTable({
         account={detailsModalAccount}
         isOpen={!!detailsModalAccount}
         onClose={() => setDetailsModalAccount(null)}
+        onUpdate={onUpdate}
         onDelete={onDelete}
         onOpenProfileSession={onOpenProfileSession}
         onConfirmProfileSession={onConfirmProfileSession}
