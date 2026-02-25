@@ -1,5 +1,5 @@
 import { t } from '../../lib/i18n';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner, StatusBadge } from '../ui';
 
 interface PatchStatusBadgeProps {
   isPatched: boolean;
@@ -30,16 +30,16 @@ export default function PatchStatusBadge({
 
   if (isPatched) {
     return (
-      <div className="flex items-center gap-2">
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+      <div className="flex items-center gap-2 text-sm">
+        <StatusBadge status="success" withDot size="md" />
         <span className="text-sm font-medium text-emerald-400">{t('status.patched')}</span>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+    <div className="flex items-center gap-2 text-sm">
+      <StatusBadge status="inactive" withDot size="md" />
       <span className="text-sm font-medium text-slate-400">{t('status.notPatched')}</span>
     </div>
   );

@@ -7,12 +7,13 @@ export interface SegmentedOption {
   icon?: React.ReactNode;
 }
 
-interface SegmentedControlProps {
+export interface SegmentedControlProps {
   options: SegmentedOption[];
   value: string;
-  onChange: (value: string | any) => void;
+  onChange: (value: string) => void;
   className?: string;
   size?: 'sm' | 'md';
+  stretch?: boolean;
 }
 
 export function SegmentedControl({
@@ -21,6 +22,7 @@ export function SegmentedControl({
   onChange,
   className,
   size = 'md',
+  stretch = true,
 }: SegmentedControlProps) {
   return (
     <div
@@ -38,7 +40,8 @@ export function SegmentedControl({
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              'relative flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium transition-colors duration-300 z-10 select-none',
+              'relative flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium transition-colors duration-300 z-10 select-none',
+              stretch && 'flex-1',
               isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300',
               size === 'sm' ? 'py-1 text-[10px]' : 'py-1.5'
             )}

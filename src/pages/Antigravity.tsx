@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Header from '../components/layout/Header';
 import { Button, EmptyState, Modal } from '../components/ui';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/observability/toast';
 import { Zap } from 'lucide-react';
 
 import {
@@ -38,7 +38,10 @@ export default function Antigravity() {
       const files = await scanAuthFiles();
       setAuthFiles(files);
     } catch (e) {
-      toast.error(`Failed to scan auth files: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        `Failed to scan auth files: ${e instanceof Error ? e.message : String(e)}`,
+        'antigravity.scan'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +62,10 @@ export default function Antigravity() {
         // ok: user can open manually
       }
     } catch (e) {
-      toast.error(`Failed to start login: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        `Failed to start login: ${e instanceof Error ? e.message : String(e)}`,
+        'antigravity.oauth.start'
+      );
     }
   }, []);
 
@@ -71,7 +77,10 @@ export default function Antigravity() {
     try {
       return await pollOAuthStatus(oauthSession.provider, oauthSession.state);
     } catch (e) {
-      toast.error(`OAuth poll failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        `OAuth poll failed: ${e instanceof Error ? e.message : String(e)}`,
+        'antigravity.oauth.poll'
+      );
       return null;
     }
   }, [oauthSession]);
@@ -89,17 +98,17 @@ export default function Antigravity() {
           continue;
         }
         if (res.status === 'ok' || res.status === 'completed') {
-          toast.success('Login completed. Refreshing auth files...');
+          appToast.success('Login completed. Refreshing auth files...', 'antigravity.oauth.poll');
           await refreshAuthFiles();
           return;
         }
         if (res.status === 'error' || res.status === 'failed') {
-          toast.error(res.error || 'OAuth failed');
+          appToast.error(res.error || 'OAuth failed', 'antigravity.oauth.poll');
           return;
         }
         await new Promise(r => setTimeout(r, 1000));
       }
-      toast.error('OAuth timed out');
+      appToast.error('OAuth timed out', 'antigravity.oauth.poll');
     } finally {
       setIsPolling(false);
     }

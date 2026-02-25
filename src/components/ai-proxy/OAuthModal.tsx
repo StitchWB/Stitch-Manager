@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Modal, Button } from '../ui';
+import { Modal, Button, IconButton } from '../ui';
 import {
   startOAuthFlowSafe,
   pollOAuthStatusSafe,
@@ -199,17 +199,19 @@ export default function OAuthModal({
               <span className="flex-1 text-xs text-slate-300 font-mono truncate">
                 {truncateUrl(oauthUrl)}
               </span>
-              <button
-                className="flex-shrink-0 p-1.5 rounded hover:bg-white/10 transition-colors"
+              <IconButton
+                variant="ghost"
+                size="sm"
                 onClick={handleCopy}
                 title="Copy URL"
+                className="flex-shrink-0"
               >
                 {copied ? (
                   <Check className="w-4 h-4 text-green-500" />
                 ) : (
                   <Copy className="w-4 h-4 text-slate-400" />
                 )}
-              </button>
+              </IconButton>
             </div>
           </div>
         )}

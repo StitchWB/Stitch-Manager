@@ -1,10 +1,12 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { type IdentityConfig } from '../components/ui/IdentitySystemCard';
 import { type NetworkConfig } from '../components/ui/NetworkCard';
 import { type ConfigTab } from '../components/registration';
 import { type ProviderName } from '../types';
 import { type LogVerbosity } from '../constants/logging';
+import { t } from '../lib/i18n';
 
 import { useRegistrationStore } from '../stores/registration';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
@@ -14,8 +16,12 @@ import { useRegistrationFlow } from './AutoReg/hooks/useRegistrationFlow';
 import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
+import { useAccountsStore } from '../stores/accounts';
+import { GlassCard, Button } from '../components/ui';
+import { Select } from '../components/ui/Select';
 
 export default function AutoRegNext() {
+  const location = useLocation();
   const autoRegSupportedProviders = useMemo<ProviderName[]>(
     () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai'],
     []
@@ -32,6 +38,7 @@ export default function AutoRegNext() {
     activeProvider,
     logVerbosity,
     setIMAPConfig,
+    addLog,
     clearLogs,
     setActiveProvider,
   } = useRegistrationStore();
@@ -64,6 +71,20 @@ export default function AutoRegNext() {
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [launchContext, setLaunchContext] = useState<{
+    source?: 'profile';
+    profileAlias?: string;
+    targetProvider?: string;
+    awsBootstrapAccountId?: number;
+    launchMode?: string;
+  } | null>(null);
+  const [kiroBootstrapMode, setKiroBootstrapMode] = useState<'new_aws' | 'existing_aws_session'>(
+    'existing_aws_session'
+  );
+  const [selectedAwsBootstrapAccountId, setSelectedAwsBootstrapAccountId] = useState<number | null>(
+    null
+  );
+  const { accounts: allAccounts, fetchAccounts: fetchAccountsForPicker } = useAccountsStore();
 
   // Use persisted preferences instead of local state
   const activeTab = autoRegPage.activeTab;
@@ -116,6 +137,36 @@ export default function AutoRegNext() {
   // AWS doesn't require IMAP configuration (can work without email verification in some cases)
   const canStart = config.provider === 'aws' ? true : isMailReady;
 
+  const isProfileLaunchForKiro =
+    launchContext?.source === 'profile' &&
+    (launchContext.targetProvider || config.provider) === 'kiro';
+
+  const effectiveCanStart = useMemo(() => {
+    if (!isProfileLaunchForKiro) return canStart;
+    if (kiroBootstrapMode === 'existing_aws_session') {
+      return selectedAwsBootstrapAccountId !== null;
+    }
+    return canStart;
+  }, [isProfileLaunchForKiro, kiroBootstrapMode, selectedAwsBootstrapAccountId, canStart]);
+
+  const awsBootstrapCandidates = useMemo(
+    () => allAccounts.filter(a => a.provider === 'aws_builder_id' || a.provider === 'aws'),
+    [allAccounts]
+  );
+
+  const selectedAwsBootstrapAccount = useMemo(
+    () =>
+      selectedAwsBootstrapAccountId != null
+        ? awsBootstrapCandidates.find(a => a.id === selectedAwsBootstrapAccountId) || null
+        : null,
+    [selectedAwsBootstrapAccountId, awsBootstrapCandidates]
+  );
+
+  const hasSelectedAwsSessionPath = useMemo(
+    () => !!selectedAwsBootstrapAccount?.browserProfilePath,
+    [selectedAwsBootstrapAccount]
+  );
+
   // Use custom hooks
   const { activeThreads, isStopping, handleStart, handleTestImap, handleStop } =
     useRegistrationFlow({
@@ -123,10 +174,11 @@ export default function AutoRegNext() {
       emailDomain,
       useRegistrationV2,
       canStart,
+      launchContext: launchContext || undefined,
       onThreadsChange: handleSetActiveThreads,
     });
 
-  useEventListeners({ onThreadsChange: handleSetActiveThreads });
+  useEventListeners({ onThreadsChange: handleSetActiveThreads, launchContext });
 
   const {
     addyioDomains,
@@ -191,6 +243,71 @@ export default function AutoRegNext() {
     };
   }, []);
 
+  useEffect(() => {
+    if (
+      launchContext?.source === 'profile' &&
+      (config.provider === 'kiro' || launchContext.targetProvider === 'kiro')
+    ) {
+      void fetchAccountsForPicker();
+    }
+  }, [
+    launchContext?.source,
+    launchContext?.targetProvider,
+    config.provider,
+    fetchAccountsForPicker,
+  ]);
+
+  useEffect(() => {
+    if (!launchContext?.profileAlias || selectedAwsBootstrapAccountId !== null) return;
+    const profileAlias = launchContext.profileAlias.toLowerCase();
+    const candidate = awsBootstrapCandidates.find(
+      acc =>
+        (acc.provider === 'aws_builder_id' || acc.provider === 'aws') &&
+        acc.email.toLowerCase() === profileAlias
+    );
+    if (candidate) {
+      setSelectedAwsBootstrapAccountId(candidate.id);
+      setLaunchContext(prev => (prev ? { ...prev, awsBootstrapAccountId: candidate.id } : prev));
+    }
+  }, [launchContext?.profileAlias, selectedAwsBootstrapAccountId, awsBootstrapCandidates]);
+
+  // Launch context: start from profile
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const source = params.get('source');
+    const profile = params.get('profile');
+    const target = params.get('target');
+    const preset = params.get('preset');
+    const awsBootstrap = params.get('awsBootstrapAccountId');
+    const parsedAwsBootstrap = awsBootstrap ? Number(awsBootstrap) : undefined;
+
+    if (source === 'profile' && profile) {
+      addLog({ level: 'info', message: `[Launch] AutoReg started from profile: ${profile}` });
+      setLaunchContext({
+        source: 'profile',
+        profileAlias: profile,
+        targetProvider: target || 'kiro',
+        awsBootstrapAccountId: Number.isFinite(parsedAwsBootstrap as number)
+          ? parsedAwsBootstrap
+          : undefined,
+        launchMode:
+          preset === 'kiro_via_aws_session' ? 'kiro_oauth_only_existing_session' : undefined,
+      });
+      if (Number.isFinite(parsedAwsBootstrap as number)) {
+        setSelectedAwsBootstrapAccountId(parsedAwsBootstrap as number);
+      }
+      setKiroBootstrapMode(
+        preset === 'kiro_via_aws_session' || Number.isFinite(parsedAwsBootstrap as number)
+          ? 'existing_aws_session'
+          : 'new_aws'
+      );
+
+      if ((target || 'kiro') !== config.provider) {
+        stableSetProvider((target || 'kiro') as ProviderName);
+      }
+    }
+  }, [location.search, config.provider, stableSetProvider]);
+
   // Identity config adapter for IdentitySystemCard
   const identityConfig: IdentityConfig = {
     strategy: config.imap.strategy,
@@ -226,6 +343,103 @@ export default function AutoRegNext() {
 
   return (
     <div className="h-full flex flex-col md:flex-row" style={{ background: '#050508' }}>
+      {launchContext?.source === 'profile' && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-[min(960px,calc(100%-24px))]">
+          <GlassCard className="p-3 border-cyan-500/20 bg-cyan-500/5">
+            <div className="flex flex-wrap items-end gap-3 justify-between">
+              <div className="min-w-[240px]">
+                <div className="text-[10px] uppercase tracking-widest text-cyan-300/80">
+                  Launch Context
+                </div>
+                <div className="text-sm text-white font-semibold mt-1 truncate">
+                  Profile: {launchContext.profileAlias}
+                </div>
+                <div className="text-xs text-slate-300 mt-1">
+                  Target: {launchContext.targetProvider || config.provider}
+                </div>
+              </div>
+
+              {config.provider === 'kiro' && (
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">
+                      AWS Bootstrap
+                    </div>
+                    <Select
+                      value={kiroBootstrapMode}
+                      onChange={e => {
+                        const mode = e.target.value as 'new_aws' | 'existing_aws_session';
+                        setKiroBootstrapMode(mode);
+                        setLaunchContext(prev =>
+                          prev
+                            ? {
+                                ...prev,
+                                launchMode:
+                                  mode === 'existing_aws_session'
+                                    ? 'kiro_oauth_only_existing_session'
+                                    : 'kiro_full_register',
+                              }
+                            : prev
+                        );
+                      }}
+                      className="h-9 py-1 text-xs min-w-[220px]"
+                    >
+                      <option value="existing_aws_session">Use existing AWS session</option>
+                      <option value="new_aws">Create new AWS account (legacy flow)</option>
+                    </Select>
+                  </div>
+
+                  {kiroBootstrapMode === 'existing_aws_session' && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">
+                        AWS Account
+                      </div>
+                      <Select
+                        value={selectedAwsBootstrapAccountId?.toString() ?? ''}
+                        onChange={e => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          setSelectedAwsBootstrapAccountId(val);
+                          setLaunchContext(prev =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  awsBootstrapAccountId: val ?? undefined,
+                                }
+                              : prev
+                          );
+                        }}
+                        className="h-9 py-1 text-xs min-w-[260px]"
+                      >
+                        <option value="">Select AWS account</option>
+                        {awsBootstrapCandidates.map(acc => (
+                          <option key={acc.id} value={acc.id}>
+                            #{acc.id} · {acc.email}
+                          </option>
+                        ))}
+                      </Select>
+                      {selectedAwsBootstrapAccountId === null && (
+                        <div className="text-[10px] text-amber-300/90 mt-1">
+                          {t('accounts.launchContextHintSelectAws')}
+                        </div>
+                      )}
+                      {selectedAwsBootstrapAccountId !== null && !hasSelectedAwsSessionPath && (
+                        <div className="text-[10px] text-amber-300/90 mt-1">
+                          {t('accounts.launchContextHintNoAwsSessionPath')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <Button size="xs" variant="ghost" onClick={() => setLaunchContext(null)}>
+                Clear Launch Context
+              </Button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
       {/* Left Panel - Command Center */}
       <CommandCenter
         activeProvider={config.provider as ProviderName}
@@ -293,7 +507,7 @@ export default function AutoRegNext() {
         count={config.count}
         onCountChange={stableSetCount}
         isRunning={activeThreads > 0 || isStopping}
-        canStart={canStart && !isStopping}
+        canStart={effectiveCanStart && !isStopping}
         pythonAvailable={pythonAvailable}
         onStart={handleStart}
         onStop={handleStop}

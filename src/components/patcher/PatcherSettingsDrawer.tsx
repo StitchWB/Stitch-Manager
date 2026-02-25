@@ -40,6 +40,10 @@ import type { Account } from '../../types';
 import type { SettingsData } from '../../types/generated';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 
+const isKiroLogLevel = (value: string): value is KiroPatchConfig['logLevel'] => {
+  return value === 'debug' || value === 'info' || value === 'warn' || value === 'error';
+};
+
 interface PatcherSettingsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -337,9 +341,10 @@ export default function PatcherSettingsDrawer({
                           { label: 'ERROR', value: 'error' },
                         ]}
                         value={config.logLevel}
-                        onChange={level =>
-                          setConfig(prev => (prev ? { ...prev, logLevel: level } : null))
-                        }
+                        onChange={level => {
+                          if (!isKiroLogLevel(level)) return;
+                          setConfig(prev => (prev ? { ...prev, logLevel: level } : null));
+                        }}
                       />
                     </div>
 

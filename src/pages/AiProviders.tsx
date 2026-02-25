@@ -18,7 +18,7 @@ import AccountCard from '../components/ai-proxy/AccountCard';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { QuotaDashboard } from '../components/ai-proxy/QuotaDashboard';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
-import { EmptyState, SkeletonLoader, Button, Modal, Input } from '../components/ui';
+import { EmptyState, SkeletonLoader, Button, Modal, Input, Select, Toggle } from '../components/ui';
 import { useAiProxyStore } from '../stores/aiProxy';
 import {
   getAiProxyAccounts,
@@ -35,6 +35,7 @@ import {
   stopAiProxy,
   getProxyStatus,
   getProxySettings,
+  updateProxySettings,
   exportAiProxyAccountsPayload,
   importAiProxyAccountsPayload,
   scanAuthFiles as scanAuthFilesCmd,
@@ -77,7 +78,9 @@ export default function AiProviders() {
   const [isMappingsModalOpen, setIsMappingsModalOpen] = useState(false);
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus | null>(null);
   const [proxySettings, setProxySettings] = useState<ProxySettings | null>(null);
+  const [proxyDraft, setProxyDraft] = useState<ProxySettings | null>(null);
   const [proxyBusy, setProxyBusy] = useState(false);
+  const [proxySaving, setProxySaving] = useState(false);
   const [proxyError, setProxyError] = useState<string | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferMode, setTransferMode] = useState<'import' | 'export'>('import');
@@ -179,6 +182,7 @@ export default function AiProviders() {
     if (!hasTauriBridge()) {
       setProxyStatus(null);
       setProxySettings(null);
+      setProxyDraft(null);
       setProxyError(null);
       return;
     }
@@ -188,11 +192,66 @@ export default function AiProviders() {
       const [status, settings] = await Promise.all([getProxyStatus(), getProxySettings()]);
       setProxyStatus(status);
       setProxySettings(settings);
+      setProxyDraft(settings);
     } catch (e) {
       console.error('[AiProviders] Failed loading proxy status/settings:', e);
       setProxyError(e instanceof Error ? e.message : String(e));
     }
   }, []);
+
+  const handleSaveProxySettings = useCallback(async () => {
+    if (!proxyDraft) {
+      toast.error('Proxy settings are not loaded yet');
+      return;
+    }
+
+    if (
+      !Number.isInteger(proxyDraft.proxyPort) ||
+      proxyDraft.proxyPort < 1024 ||
+      proxyDraft.proxyPort > 65535
+    ) {
+      toast.error('Port must be an integer between 1024 and 65535');
+      return;
+    }
+
+    if (!proxyDraft.managementKey.trim()) {
+      toast.error('Management key cannot be empty');
+      return;
+    }
+
+    setProxySaving(true);
+    setProxyError(null);
+    try {
+      await updateProxySettings(proxyDraft);
+      setProxySettings(proxyDraft);
+      await refreshProxyInfo();
+      toast.success('Proxy settings saved');
+    } catch (e) {
+      console.error('[AiProviders] Failed saving proxy settings:', e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setProxyError(msg);
+      toast.error(`Failed to save proxy settings: ${msg}`);
+    } finally {
+      setProxySaving(false);
+    }
+  }, [proxyDraft, refreshProxyInfo]);
+
+  const isProxyDraftDirty = useMemo(() => {
+    if (!proxyDraft || !proxySettings) return false;
+    return (
+      proxyDraft.proxyPort !== proxySettings.proxyPort ||
+      proxyDraft.appMode !== proxySettings.appMode ||
+      proxyDraft.routingStrategy !== proxySettings.routingStrategy ||
+      proxyDraft.managementKey !== proxySettings.managementKey ||
+      proxyDraft.autoStart !== proxySettings.autoStart
+    );
+  }, [proxyDraft, proxySettings]);
+
+  const handleResetProxyDraft = useCallback(() => {
+    if (!proxySettings) return;
+    setProxyDraft(proxySettings);
+    setProxyError(null);
+  }, [proxySettings]);
 
   const baseUrl = useMemo(() => {
     const port = proxySettings?.proxyPort || proxyStatus?.port;
@@ -626,7 +685,7 @@ export default function AiProviders() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Bar */}
-          <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl">
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="relative group flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-400 transition-colors" />
@@ -654,7 +713,7 @@ export default function AiProviders() {
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 w-full xl:w-auto">
               <Button
                 onClick={handleAddNew}
                 variant="primary"
@@ -777,27 +836,115 @@ export default function AiProviders() {
                     </div>
                   </div>
 
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2 items-end">
+                    <Input
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      step={1}
+                      inputMode="numeric"
+                      value={proxyDraft?.proxyPort ?? ''}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        if (!raw.trim()) return;
+                        const nextPort = Number(raw);
+                        if (!Number.isInteger(nextPort)) return;
+                        setProxyDraft(prev =>
+                          prev
+                            ? {
+                                ...prev,
+                                proxyPort: nextPort,
+                              }
+                            : prev
+                        );
+                      }}
+                      label="Port"
+                      placeholder="8317"
+                    />
+
+                    <Select
+                      label="Mode"
+                      value={proxyDraft?.appMode ?? 'full'}
+                      onChange={e =>
+                        setProxyDraft(prev => (prev ? { ...prev, appMode: e.target.value } : prev))
+                      }
+                      options={[
+                        { value: 'full', label: 'Full mode' },
+                        { value: 'quota-only', label: 'Quota-only' },
+                      ]}
+                    />
+
+                    <Select
+                      label="Routing"
+                      value={proxyDraft?.routingStrategy ?? 'round-robin'}
+                      onChange={e =>
+                        setProxyDraft(prev =>
+                          prev
+                            ? {
+                                ...prev,
+                                routingStrategy: e.target.value,
+                              }
+                            : prev
+                        )
+                      }
+                      options={[
+                        { value: 'round-robin', label: 'Round robin' },
+                        { value: 'fill-first', label: 'Fill first' },
+                      ]}
+                    />
+
+                    <Input
+                      type="password"
+                      value={proxyDraft?.managementKey ?? ''}
+                      onChange={e =>
+                        setProxyDraft(prev =>
+                          prev
+                            ? {
+                                ...prev,
+                                managementKey: e.target.value,
+                              }
+                            : prev
+                        )
+                      }
+                      label="Management key"
+                      placeholder="Management key"
+                    />
+
+                    <div className="flex items-center h-9 px-3 rounded-lg bg-black/30 border border-white/10">
+                      <Toggle
+                        label="Auto start"
+                        checked={proxyDraft?.autoStart ?? false}
+                        onChange={checked =>
+                          setProxyDraft(prev =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  autoStart: checked,
+                                }
+                              : prev
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
                     <span className="tabular-nums">
-                      Port:{' '}
-                      <span className="text-slate-200">
-                        {proxySettings?.proxyPort ?? proxyStatus?.port ?? '—'}
-                      </span>
+                      Active port:{' '}
+                      <span className="text-slate-200">{proxyStatus?.port ?? '—'}</span>
                     </span>
                     <span className="text-slate-600">•</span>
                     <span className="min-w-0">
-                      Management key:{' '}
+                      Key preview:{' '}
                       <span className="font-mono text-slate-200 truncate max-w-[180px] inline-block align-middle">
-                        {proxySettings?.managementKey ? maskKey(proxySettings.managementKey) : '—'}
+                        {proxyDraft?.managementKey ? maskKey(proxyDraft.managementKey) : '—'}
                       </span>
                     </span>
-                    {proxySettings?.managementKey && (
+                    {proxyDraft?.managementKey && (
                       <Button
                         variant="secondary"
                         size="xs"
-                        onClick={() =>
-                          handleCopy('Management key', proxySettings.managementKey, true)
-                        }
+                        onClick={() => handleCopy('Management key', proxyDraft.managementKey, true)}
                         leftIcon={<Copy size={14} />}
                       >
                         Copy
@@ -807,17 +954,38 @@ export default function AiProviders() {
                   {proxyError && (
                     <div className="mt-2 text-xs text-red-400">Proxy error: {proxyError}</div>
                   )}
+                  {isProxyDraftDirty && !proxyError && (
+                    <div className="mt-2 text-xs text-amber-300">
+                      You have unsaved proxy changes
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   <Button variant="secondary" size="sm" onClick={() => setIsIdeWizardOpen(true)}>
                     Configure IDE/CLI
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResetProxyDraft}
+                    disabled={!isProxyDraftDirty || proxySaving || proxyBusy}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveProxySettings}
+                    disabled={proxySaving || !proxyDraft || !isProxyDraftDirty || proxyBusy}
+                  >
+                    {proxySaving ? 'Saving...' : 'Save settings'}
                   </Button>
                   <Button
                     variant={proxyStatus?.running ? 'danger' : 'primary'}
                     size="sm"
                     onClick={handleStartStopProxy}
-                    disabled={proxyBusy}
+                    disabled={proxyBusy || proxySaving}
                     leftIcon={<Power size={16} />}
                   >
                     {proxyBusy ? 'Working...' : proxyStatus?.running ? 'Stop Proxy' : 'Start Proxy'}
@@ -826,7 +994,7 @@ export default function AiProviders() {
                     variant="secondary"
                     size="sm"
                     onClick={refreshProxyInfo}
-                    disabled={proxyBusy}
+                    disabled={proxyBusy || proxySaving}
                     leftIcon={<RefreshCw size={16} />}
                   >
                     Refresh

@@ -206,3 +206,14 @@ export const isOAuthCapableIdentity = (account: { provider: string }): boolean =
   const sourceProvider = normalizeProviderLabel(account.provider);
   return sourceProvider === 'Github' || sourceProvider === 'AWS Builder ID';
 };
+
+export const providerLabelToKey = (providerLabel: string): string | null => {
+  const normalized = providerLabel.toLowerCase();
+  if (normalized === 'aws builder id' || normalized === 'aws') return 'aws';
+  if (normalized === 'github') return 'github';
+  if (normalized === 'kiro') return 'kiro';
+  if (normalized === 'windsurf') return 'windsurf';
+  if (normalized === 'trae') return 'trae';
+  if (normalized === 'openai') return 'openai';
+  return null;
+};

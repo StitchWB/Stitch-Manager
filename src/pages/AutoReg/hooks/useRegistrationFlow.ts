@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useRegistrationStore } from '../../../stores/registration';
 import { useAppStore } from '../../../stores/app';
 import { testImapConnection, stopRegistration } from '../../../lib/tauri';
-import { runRegistration } from '../services';
+import { runRegistration, cancelActiveRegistrationJob } from '../services';
 import type { ProviderName } from '../../../types';
 
 interface UseRegistrationFlowProps {
@@ -10,6 +10,13 @@ interface UseRegistrationFlowProps {
   emailDomain: string;
   useRegistrationV2: boolean;
   canStart: boolean;
+  launchContext?: {
+    source?: 'profile';
+    profileAlias?: string;
+    targetProvider?: string;
+    awsBootstrapAccountId?: number;
+    launchMode?: string;
+  };
   onThreadsChange: (threads: number) => void;
 }
 
@@ -18,6 +25,7 @@ export const useRegistrationFlow = ({
   emailDomain,
   useRegistrationV2,
   canStart,
+  launchContext,
   onThreadsChange,
 }: UseRegistrationFlowProps) => {
   const { addNotification } = useAppStore();
@@ -107,6 +115,7 @@ export const useRegistrationFlow = ({
         config,
         emailDomain,
         useRegistrationV2,
+        launchContext,
         onLog: (level, message) => addLog({ level, message }),
         onHistoryEntry: addHistoryEntry,
         onCancelled: () => cancelledRef.current,
@@ -135,6 +144,7 @@ export const useRegistrationFlow = ({
     addNotification,
     addHistoryEntry,
     handleSetActiveThreads,
+    launchContext,
   ]);
 
   const handleTestImap = useCallback(async (): Promise<boolean> => {
@@ -178,6 +188,7 @@ export const useRegistrationFlow = ({
     cancelledRef.current = true;
 
     try {
+      await cancelActiveRegistrationJob();
       await stopRegistration();
       addLog({ level: 'info', message: 'All registration processes terminated' });
       addNotification({ type: 'info', title: 'Stopped', message: 'Registration process stopped' });

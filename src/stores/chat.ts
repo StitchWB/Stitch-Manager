@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ContentBlock } from '../types/generated';
+
+export type ChatMessageContent = string | ContentBlock[];
 
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  content: ChatMessageContent;
   timestamp: number;
   isStreaming?: boolean;
   routedProvider?: string;
@@ -54,7 +57,7 @@ interface ChatState {
 
   // Actions
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
-  updateMessage: (id: string, content: string) => void;
+  updateMessage: (id: string, content: ChatMessageContent) => void;
   appendToMessage: (id: string, text: string) => void;
   setMessageStreaming: (id: string, streaming: boolean) => void;
   setMessageRouting: (
@@ -125,7 +128,15 @@ export const useChatStore = create<ChatState>()(
       appendToMessage: (id, text) => {
         set(state => ({
           messages: state.messages.map(msg =>
-            msg.id === id ? { ...msg, content: msg.content + text } : msg
+            msg.id === id
+              ? {
+                  ...msg,
+                  content:
+                    typeof msg.content === 'string'
+                      ? msg.content + text
+                      : [...msg.content, { type: 'text', text }],
+                }
+              : msg
           ),
         }));
       },
