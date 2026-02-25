@@ -14,6 +14,7 @@ export {
 
 export {
   runRegistration,
+  cancelActiveRegistrationJob,
   type RegistrationOptions,
   type RegistrationSummary,
   type LogLevel,

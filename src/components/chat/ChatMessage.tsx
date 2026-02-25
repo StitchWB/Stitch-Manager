@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import { User, Bot } from 'lucide-react';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
+import type { ContentBlock } from '../../types/generated';
 import { t } from '../../lib/i18n';
 import { LoadingSpinner } from '../ui';
 
@@ -139,10 +140,30 @@ function parseMarkdown(text: string): React.ReactNode[] {
 export const ChatMessage = memo(function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
-  const renderedContent = useMemo(() => {
-    if (!message.content) return null;
-    return parseMarkdown(message.content);
+  const normalizedBlocks = useMemo(() => {
+    if (typeof message.content === 'string') {
+      return {
+        text: message.content,
+        images: [] as Array<Extract<ContentBlock, { type: 'image' }>>,
+      };
+    }
+
+    const text = message.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('\n');
+
+    const images = message.content.filter(
+      (block): block is Extract<ContentBlock, { type: 'image' }> => block.type === 'image'
+    );
+
+    return { text, images };
   }, [message.content]);
+
+  const renderedContent = useMemo(() => {
+    if (!normalizedBlocks.text) return null;
+    return parseMarkdown(normalizedBlocks.text);
+  }, [normalizedBlocks.text]);
 
   return (
     <div className={`flex gap-3 p-4 ${isUser ? 'bg-transparent' : 'bg-white/[0.02]'}`}>
@@ -193,13 +214,38 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
 
         {/* Message content */}
         <div className="text-sm text-vsc-text break-words">
-          {renderedContent || (
-            <span className="text-vsc-text-muted italic flex items-center gap-2">
-              <LoadingSpinner size="xs" />
-              {t('chat.thinking')}
-            </span>
+          {normalizedBlocks.images.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {normalizedBlocks.images.map((block, index) => {
+                const mediaType = block.source.mediaType || 'image/png';
+                const data = block.source.data || '';
+                const src = `data:${mediaType};base64,${data}`;
+                return (
+                  <a
+                    key={`${message.id}-img-${index}`}
+                    href={src}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block border border-vsc-border rounded-lg overflow-hidden hover:border-vsc-blue/50 transition-colors"
+                  >
+                    <img
+                      src={src}
+                      alt={`attachment-${index + 1}`}
+                      className="w-28 h-28 object-cover bg-vsc-input"
+                    />
+                  </a>
+                );
+              })}
+            </div>
           )}
-          {message.isStreaming && message.content && (
+          {renderedContent ||
+            (message.isStreaming && (
+              <span className="text-vsc-text-muted italic flex items-center gap-2">
+                <LoadingSpinner size="xs" />
+                {t('chat.thinking')}
+              </span>
+            ))}
+          {message.isStreaming && normalizedBlocks.text && (
             <span className="inline-block w-2 h-4 ml-0.5 bg-vsc-blue animate-pulse" />
           )}
         </div>

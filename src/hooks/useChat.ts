@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useChatStore, type ChatMessage } from '../stores/chat';
+import type { ContentBlock } from '../types/generated';
 
 interface UseChatOptions {
   apiUrl?: string;
@@ -13,7 +14,7 @@ interface UseChatReturn {
   messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: ContentBlock[]) => Promise<void>;
   clearMessages: () => void;
   stopGeneration: () => void;
 }
@@ -53,16 +54,24 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim() || isLoading) return;
+    async (content: string, attachments: ContentBlock[] = []) => {
+      if ((!content.trim() && attachments.length === 0) || isLoading) return;
 
       setError(null);
       setLoading(true);
 
+      const trimmedContent = content.trim();
+      const userBlocks: ContentBlock[] = [
+        ...(trimmedContent ? [{ type: 'text' as const, text: trimmedContent }] : []),
+        ...attachments,
+      ];
+      const userContent: string | ContentBlock[] =
+        attachments.length > 0 ? userBlocks : trimmedContent;
+
       // Add user message
       addMessage({
         role: 'user',
-        content: content.trim(),
+        content: userContent,
       });
 
       // Create assistant message placeholder for streaming
@@ -78,12 +87,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       try {
         // Build messages array for API
         const currentMessages = useChatStore.getState().messages;
-        const apiMessages: Array<{ role: string; content: string }> = currentMessages
-          .filter(msg => msg.id !== assistantMessageId)
-          .map(msg => ({
-            role: msg.role,
-            content: msg.content,
-          }));
+        const apiMessages: Array<{ role: string; content: string | ContentBlock[] }> =
+          currentMessages
+            .filter(msg => msg.id !== assistantMessageId)
+            .map(msg => ({
+              role: msg.role,
+              content: msg.content,
+            }));
 
         const storeState = useChatStore.getState();
         const activeProfile =
@@ -126,6 +136,15 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           temperature: activeProfile?.temperature ?? temperature,
           stream: true,
         };
+
+        const hasImageContent = apiMessages.some(message =>
+          Array.isArray(message.content)
+            ? message.content.some(block => block.type === 'image')
+            : false
+        );
+        if (hasImageContent) {
+          requestBody.modalities = ['text', 'image'];
+        }
 
         useChatStore.getState().setMessageDebug(assistantMessageId, {
           apiUrl,

@@ -15,6 +15,9 @@ export { RangeSlider } from './RangeSlider';
 export { Select } from './Select';
 export type { SelectProps } from './Select';
 
+export { SegmentedControl } from './SegmentedControl';
+export type { SegmentedControlProps, SegmentedOption } from './SegmentedControl';
+
 export { StatCard } from './StatCard';
 
 export { TabButton } from './TabButton';
@@ -48,6 +51,9 @@ export type { SkeletonLoaderProps } from './SkeletonLoader';
 export { LoadingOverlay } from './LoadingOverlay';
 export type { LoadingOverlayProps } from './LoadingOverlay';
 
+export { Tooltip } from './Tooltip';
+export type { TooltipProps } from './Tooltip';
+
 export { FilterDropdown } from './FilterDropdown';
 export type { FilterDropdownProps, FilterOption } from './FilterDropdown';
 
@@ -63,5 +69,9 @@ export type { LogGroupProps } from './LogGroup';
 export { GlassCard } from './GlassCard';
 
 export { StatusBadge } from './StatusBadge';
+
+export { Checkbox } from './Checkbox';
+
+export { Radio } from './Radio';
 
 export { ProviderLogo } from './ProviderLogo';

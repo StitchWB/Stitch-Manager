@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
@@ -16,6 +16,7 @@ import { ChatHistory, ChatInput } from '../components/chat';
 import { useChat } from '../hooks/useChat';
 import { useChatStore } from '../stores/chat';
 import { useAppStore } from '../stores/app';
+import type { ContentBlock } from '../types/generated';
 import { t } from '../lib/i18n';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui';
@@ -245,6 +246,19 @@ export default function Chat() {
   );
 
   const selectedModel = modelList.find(m => m.id === model);
+  const selectedModelSupportsVision = useMemo(() => {
+    if (!selectedModel) return false;
+    const id = selectedModel.id.toLowerCase();
+    return (
+      id.includes('vision') ||
+      id.includes('gpt-4o') ||
+      id.includes('omni') ||
+      id.includes('gemini') ||
+      id.includes('claude-3') ||
+      id.includes('claude-sonnet-4') ||
+      id.includes('claude-opus-4')
+    );
+  }, [selectedModel]);
   const activeProfile = profiles.find(profile => profile.id === activeProfileId) || profiles[0];
   const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
   const lastRoutedProvider = lastAssistantMessage?.routedProvider;
@@ -509,7 +523,23 @@ export default function Chat() {
               <p className="text-xs text-vsc-red/80 truncate">{error}</p>
             </div>
             <Button
-              onClick={() => sendMessage(messages[messages.length - 2]?.content || '')}
+              onClick={() => {
+                const previousContent = messages[messages.length - 2]?.content;
+                const retryText =
+                  typeof previousContent === 'string'
+                    ? previousContent
+                    : previousContent
+                        ?.filter(block => block.type === 'text')
+                        .map(block => block.text)
+                        .join('\n') || '';
+                const retryAttachments =
+                  typeof previousContent === 'string'
+                    ? []
+                    : (previousContent?.filter(
+                        (block): block is ContentBlock & { type: 'image' } => block.type === 'image'
+                      ) ?? []);
+                void sendMessage(retryText, retryAttachments);
+              }}
               variant="danger"
               size="xs"
               leftIcon={<RefreshCw size={12} />}
@@ -706,6 +736,7 @@ export default function Chat() {
           onStop={stopGeneration}
           isLoading={isLoading}
           disabled={!!setupBlockReason || !selectedModel}
+          allowImageAttachments={selectedModelSupportsVision}
           placeholder={t('chat.placeholder') || 'Type a message...'}
         />
       </div>

@@ -3,14 +3,23 @@ import { X, Check, AlertCircle, Copy, RefreshCw } from 'lucide-react';
 import { Button } from '../ui';
 import {
   detectAiProxyIdes,
-  configureAiProxyIde,
-  getAiProxyIdeConfigPreview,
+  configureAiProxyIdeForProvider,
+  getAiProxyIdeConfigPreviewForProvider,
   restoreAiProxyIdeConfig,
   getProxyStatus,
   getAvailableModels,
   startAiProxy,
   getProxySettings,
+  autoImportAiProxyAuthFiles,
+  type AuthImportResult,
 } from '../../lib/tauri/modules/aiProxy';
+import {
+  DEFAULT_IDE_PROVIDER_KEY,
+  IDE_PROVIDER_OPTIONS,
+  type IdeProviderKey,
+  buildManualEnvPayload,
+  getIdeProviderOption,
+} from '../../lib/ai-proxy/providerIntegration';
 
 // Type definition for AI Proxy detected IDE
 interface AiProxyDetectedIde {
@@ -49,8 +58,6 @@ interface SmokeCheckResult {
 
 const isOpenCodeIde = (ide: AiProxyDetectedIde): boolean => ide.name === 'opencode';
 
-const MANUAL_SETUP_API_KEY = 'proxypal-local';
-
 export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   const [step, setStep] = useState<WizardStep>('detect');
   const [ides, setIdes] = useState<AiProxyDetectedIde[]>([]);
@@ -62,7 +69,10 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   const [proxyRunning, setProxyRunning] = useState<boolean | null>(null);
   const [autoCheckInProgress, setAutoCheckInProgress] = useState(false);
   const [manualEndpoint, setManualEndpoint] = useState('http://127.0.0.1:8317/v1');
+  const [providerKey, setProviderKey] = useState<IdeProviderKey>(DEFAULT_IDE_PROVIDER_KEY);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [autoImportInProgress, setAutoImportInProgress] = useState(false);
+  const [autoImportResult, setAutoImportResult] = useState<AuthImportResult | null>(null);
 
   useEffect(() => {
     if (isOpen && step === 'detect') {
@@ -170,7 +180,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
     try {
       // Get preview for first selected IDE
       const firstIde = Array.from(selectedIdes)[0];
-      const preview = await getAiProxyIdeConfigPreview(firstIde);
+      const preview = await getAiProxyIdeConfigPreviewForProvider(firstIde, providerKey);
       setConfigPreview(preview);
       setStep('preview');
     } catch (err) {
@@ -192,7 +202,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
       if (!ide) continue;
 
       try {
-        await configureAiProxyIde(ideName, ide.configPath);
+        await configureAiProxyIdeForProvider(ideName, ide.configPath, providerKey);
         configResults.push({ ideName, success: true, action: 'configured' });
       } catch (err) {
         configResults.push({
@@ -354,13 +364,30 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
 
   const copyManualSetup = async () => {
     try {
-      const payload = `OPENAI_BASE_URL=${manualEndpoint}\nOPENAI_API_KEY=${MANUAL_SETUP_API_KEY}`;
+      const provider = getIdeProviderOption(providerKey);
+      const payload = buildManualEnvPayload(manualEndpoint, provider.key);
       await navigator.clipboard.writeText(payload);
       setCopyStatus('Copied manual setup values');
       setTimeout(() => setCopyStatus(null), 2000);
     } catch (err) {
       setCopyStatus(err instanceof Error ? err.message : 'Failed to copy manual setup values');
       setTimeout(() => setCopyStatus(null), 3000);
+    }
+  };
+
+  const runAutoImport = async (dryRun: boolean) => {
+    setAutoImportInProgress(true);
+    setError(null);
+    try {
+      const result = await autoImportAiProxyAuthFiles(dryRun);
+      setAutoImportResult(result);
+      if (!dryRun && result.imported > 0) {
+        await refreshIdeStates();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-import auth files');
+    } finally {
+      setAutoImportInProgress(false);
     }
   };
 
@@ -412,6 +439,24 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                   Proxy later before testing requests.
                 </div>
               )}
+
+              <div className="mb-4 p-3 bg-vsc-sidebar/50 border border-vsc-border rounded-lg">
+                <label className="block text-xs text-vsc-text-muted mb-2">Provider profile</label>
+                <select
+                  value={providerKey}
+                  onChange={e => setProviderKey(e.target.value as IdeProviderKey)}
+                  className="w-full px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-xs text-vsc-text"
+                >
+                  {IDE_PROVIDER_OPTIONS.map(option => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-2xs text-vsc-text-muted mt-1">
+                  {getIdeProviderOption(providerKey).description}
+                </p>
+              </div>
 
               {installedIdes.length === 0 ? (
                 <div className="text-center py-8">
@@ -619,9 +664,70 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                 </p>
                 <div className="text-xs font-mono text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 space-y-1">
                   <div>OPENAI_BASE_URL={manualEndpoint}</div>
-                  <div>OPENAI_API_KEY={MANUAL_SETUP_API_KEY}</div>
+                  <div>OPENAI_API_KEY={getIdeProviderOption(providerKey).defaultApiKey}</div>
                 </div>
                 {copyStatus && <p className="text-2xs text-vsc-text-muted mt-2">{copyStatus}</p>}
+              </div>
+
+              <div className="mt-3 p-4 bg-vsc-sidebar/50 border border-vsc-border rounded-lg">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <p className="text-sm text-vsc-text">
+                    <strong>Auto-import accounts from local IDE auth files</strong>
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => runAutoImport(true)}
+                      disabled={autoImportInProgress || isLoading || autoCheckInProgress}
+                    >
+                      Dry run
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => runAutoImport(false)}
+                      disabled={autoImportInProgress || isLoading || autoCheckInProgress}
+                    >
+                      {autoImportInProgress ? 'Importing...' : 'Import now'}
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-vsc-text-muted mb-2">
+                  Opt-in only. Imports discovered local tokens into AI Proxy accounts with duplicate
+                  protection.
+                </p>
+                {autoImportResult && (
+                  <div className="text-xs text-vsc-text-muted space-y-1">
+                    <div>
+                      Mode:{' '}
+                      <span className="text-vsc-text">
+                        {autoImportResult.dryRun ? 'Dry run' : 'Write'}
+                      </span>
+                    </div>
+                    <div>
+                      Scanned: <span className="text-vsc-text">{autoImportResult.scanned}</span> •
+                      Imported: <span className="text-vsc-green">{autoImportResult.imported}</span>{' '}
+                      • Skipped: <span className="text-vsc-yellow">{autoImportResult.skipped}</span>
+                    </div>
+                    <div className="max-h-28 overflow-auto bg-vsc-input border border-vsc-border rounded p-2">
+                      {autoImportResult.entries.length === 0 ? (
+                        <div>No discovered auth files</div>
+                      ) : (
+                        autoImportResult.entries.slice(0, 20).map((entry, idx) => (
+                          <div
+                            key={`${entry.provider}-${entry.accountName}-${idx}`}
+                            className="mb-1 last:mb-0"
+                          >
+                            <span className="capitalize text-vsc-text">{entry.provider}</span> /{' '}
+                            {entry.accountName} →{' '}
+                            <span className="text-vsc-blue">{entry.action}</span> ({entry.message})
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

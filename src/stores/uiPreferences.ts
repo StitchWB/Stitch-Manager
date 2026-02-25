@@ -12,6 +12,7 @@ interface AccountsPagePreferences {
   searchQuery: string;
   tagFilter: string;
   relationFilter: string;
+  entityFilter: string;
   sortField?: string;
   sortDirection?: 'asc' | 'desc';
 }
@@ -56,6 +57,7 @@ interface UIPreferencesState {
   setAccountsSearchQuery: (query: string) => void;
   setAccountsTagFilter: (tag: string) => void;
   setAccountsRelationFilter: (relation: string) => void;
+  setAccountsEntityFilter: (entity: string) => void;
   setAccountsSorting: (field: string, direction: 'asc' | 'desc') => void;
   resetAccountsFilters: () => void;
 
@@ -94,6 +96,7 @@ const defaultAccountsPreferences: AccountsPagePreferences = {
   searchQuery: '',
   tagFilter: 'all',
   relationFilter: 'all',
+  entityFilter: 'accounts',
   sortField: 'email',
   sortDirection: 'asc',
 };
@@ -165,6 +168,12 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       setAccountsRelationFilter: relation => {
         set(state => ({
           accountsPage: { ...state.accountsPage, relationFilter: relation },
+        }));
+      },
+
+      setAccountsEntityFilter: entity => {
+        set(state => ({
+          accountsPage: { ...state.accountsPage, entityFilter: entity },
         }));
       },
 

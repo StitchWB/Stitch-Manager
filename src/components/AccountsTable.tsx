@@ -24,6 +24,8 @@ import { ProviderLogo } from './ui/ProviderLogo';
 import { StatusBadge } from './ui/StatusBadge';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { getAccountStatusLabel, getAccountStatusVariant } from '../lib/accountStatus';
+import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
+import { providerLabelToKey } from '../lib/accounts/relations';
 
 function truncateEmail(email: string, startChars = 16, endChars = 14): string {
   if (email.length <= startChars + endChars + 3) return email;
@@ -80,6 +82,7 @@ const getTagPillClassName = (tag: string): string => {
 interface AccountsTableProps {
   accounts: Account[];
   relationHintsById?: Record<number, string[]>;
+  relationEdgesById?: Record<number, AccountRelationEdge[]>;
   selectedIds: Set<number>;
   activeAccountIds: Record<string, number | null>;
   onToggleSelection: (accountId: number) => void;
@@ -95,12 +98,14 @@ interface AccountsTableProps {
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
   onUpdate?: (accountId: number, updates: { notes?: string; tags?: string }) => Promise<void>;
+  onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
   selectedProvider?: string | null;
 }
 
 export default function AccountsTable({
   accounts,
   relationHintsById,
+  relationEdgesById,
   selectedIds,
   activeAccountIds,
   onToggleSelection,
@@ -116,6 +121,7 @@ export default function AccountsTable({
   onConfirmProfileSession,
   onClearProfileSession,
   onUpdate,
+  onRelationEdgeClick,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [detailsModalAccount, setDetailsModalAccount] = useState<Account | null>(null);
@@ -195,6 +201,20 @@ export default function AccountsTable({
             const visibleTags = tagsList.slice(0, 3);
             const hiddenTagsCount = Math.max(0, tagsList.length - visibleTags.length);
             const relationHints = relationHintsById?.[account.id] ?? [];
+            const relationEdges = relationEdgesById?.[account.id] ?? [];
+            const relationProviderEntries = Array.from(
+              relationEdges.reduce((map, edge) => {
+                const providerKey = providerLabelToKey(edge.targetProvider);
+                if (!providerKey) return map;
+
+                const existing = map.get(providerKey);
+                if (!existing || (!existing.explicit && edge.explicit)) {
+                  map.set(providerKey, edge);
+                }
+
+                return map;
+              }, new Map<string, AccountRelationEdge>())
+            );
 
             return (
               <motion.div
@@ -301,6 +321,28 @@ export default function AccountsTable({
                           <span className="text-[10px] uppercase tracking-wide text-slate-500">
                             {t('accounts.relationLabel')}
                           </span>
+                          <div className="flex items-center gap-1">
+                            {relationProviderEntries.slice(0, 4).map(([providerKey, edge]) => {
+                              const icon = (
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    onRelationEdgeClick?.(edge.type, edge.targetProvider);
+                                  }}
+                                  className="p-1 rounded border border-cyan-500/20 bg-cyan-500/5 hover:bg-cyan-500/15 transition-colors"
+                                >
+                                  <ProviderLogo provider={providerKey as any} size={12} />
+                                </button>
+                              );
+
+                              return (
+                                <Tooltip key={`${providerKey}-${edge.type}`} content={edge.label}>
+                                  {icon}
+                                </Tooltip>
+                              );
+                            })}
+                          </div>
                           {relationHints.slice(0, 2).map(hint => (
                             <span
                               key={hint}

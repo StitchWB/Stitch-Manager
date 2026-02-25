@@ -1,3 +1,5 @@
+import { SegmentedControl } from '../ui';
+
 interface PatchVersion {
   id: string;
   label: string;
@@ -21,28 +23,21 @@ export default function PatchVersionSelector({
     return null;
   }
 
+  const resolvedValue = selectedVersion || currentPatchVersion || versions[0]?.id || '';
+
+  const options = versions.map(version => ({
+    value: version.id,
+    label: version.label,
+  }));
+
   return (
-    <div className="flex items-center gap-2 bg-black/20 p-1 rounded-lg">
-      {versions.map(version => {
-        const isSelected =
-          selectedVersion === version.id || (!selectedVersion && currentPatchVersion === version.id);
-        return (
-          <button
-            key={version.id}
-            onClick={() => onSelectVersion(version.id)}
-            className={`
-              px-3 py-1.5 rounded-md text-xs font-medium transition-all
-              ${
-                isSelected
-                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-              }
-            `}
-          >
-            {version.label}
-          </button>
-        );
-      })}
-    </div>
+    <SegmentedControl
+      options={options}
+      value={resolvedValue}
+      onChange={onSelectVersion}
+      stretch={false}
+      size="sm"
+      className="inline-flex"
+    />
   );
 }

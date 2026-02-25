@@ -1,12 +1,19 @@
 import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useRegistrationStore } from '../../../stores/registration';
+import { listAccounts, updateAccountNotesTags } from '../../../lib/tauri';
+import type { ObsEvent } from '@/lib/observability/types';
 
 interface UseEventListenersProps {
   onThreadsChange: (threads: number) => void;
+  launchContext?: {
+    source?: 'profile';
+    profileAlias?: string;
+    targetProvider?: string;
+  } | null;
 }
 
-export const useEventListeners = ({ onThreadsChange }: UseEventListenersProps) => {
+export const useEventListeners = ({ onThreadsChange, launchContext }: UseEventListenersProps) => {
   const onThreadsChangeRef = useRef(onThreadsChange);
 
   useEffect(() => {
@@ -16,26 +23,34 @@ export const useEventListeners = ({ onThreadsChange }: UseEventListenersProps) =
   useEffect(() => {
     const { addLog, addResult, loadSettings } = useRegistrationStore.getState();
 
-    const unlistenLog = listen<{ level: string; message: string }>('REGISTRATION_LOG', event => {
-      let level = event.payload.level;
-      let message = event.payload.message;
+    const unlistenObs = listen<ObsEvent>('obs:event', event => {
+      const payload = event.payload;
+      if (payload?.source !== 'python' && payload?.subsystem !== 'jobs') {
+        return;
+      }
 
-      // Try parsing nested JSON log
-      if (typeof message === 'string' && message.trim().startsWith('{')) {
-        try {
-          const parsed = JSON.parse(message);
-          if (parsed.type === 'log' && parsed.message) {
-            message = parsed.message;
-            if (parsed.level) level = parsed.level;
-          }
-        } catch (e) {
-          // Not valid JSON, keep original message
-        }
+      if (!payload?.message) return;
+
+      const obsLevel =
+        payload.level === 'error'
+          ? 'error'
+          : payload.level === 'warn'
+            ? 'warn'
+            : payload.level === 'debug'
+              ? 'debug'
+              : 'info';
+
+      const message = payload.message;
+      if (
+        message.includes('Python job') &&
+        (message.includes('started') || message.includes('succeeded'))
+      ) {
+        return;
       }
 
       addLog({
-        level: level as 'info' | 'error' | 'success' | 'warn' | 'debug',
-        message: message,
+        level: obsLevel,
+        message,
       });
     });
 
@@ -84,17 +99,59 @@ export const useEventListeners = ({ onThreadsChange }: UseEventListenersProps) =
         status: 'success',
         token: has_token ? 'present' : undefined,
       });
+
+      // Minimal relation auto-tagging for profile-launched OAuth/account creation
+      if (launchContext?.source === 'profile' && launchContext.profileAlias) {
+        void (async () => {
+          try {
+            const accounts = await listAccounts();
+            const created = accounts.find(
+              a => a.email.toLowerCase() === email.toLowerCase() && a.provider === provider
+            );
+            if (!created) return;
+
+            const parsedTags = (() => {
+              if (!created.tags) return [] as string[];
+              try {
+                const parsed = JSON.parse(created.tags);
+                return Array.isArray(parsed) ? parsed : [];
+              } catch {
+                return [] as string[];
+              }
+            })();
+
+            const additions = new Set<string>();
+            additions.add(`launch-profile:${launchContext.profileAlias}`);
+            if (launchContext.targetProvider) {
+              additions.add(`registered-for:${launchContext.targetProvider}`);
+            }
+            if (provider === 'kiro') {
+              additions.add('rel:via:aws');
+            }
+
+            const nextTags = Array.from(new Set([...parsedTags, ...Array.from(additions)]));
+            if (nextTags.length !== parsedTags.length) {
+              await updateAccountNotesTags({
+                accountId: created.id,
+                tags: JSON.stringify(nextTags),
+              });
+            }
+          } catch {
+            // Non-blocking enhancement only
+          }
+        })();
+      }
     });
 
     return () => {
-      unlistenLog.then(fn => fn());
+      unlistenObs.then(fn => fn());
       unlistenComplete.then(fn => fn());
       unlistenError.then(fn => fn());
       unlistenProgress.then(fn => fn());
       unlistenSettings.then(fn => fn());
       unlistenAccountAdded.then(fn => fn());
     };
-  }, []);
+  }, [launchContext]);
 
   // Listen for stage tracking events
   useEffect(() => {
