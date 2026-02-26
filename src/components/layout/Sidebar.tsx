@@ -12,10 +12,10 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
-  Zap,
   Clock,
   Key,
   Orbit,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
@@ -154,9 +154,9 @@ export default function Sidebar() {
           collapsed={sidebarCollapsed}
         />
         <NavItem
-          to="/ai-providers"
-          icon={<Zap size={20} />}
-          label="AI Providers"
+          to="/ai"
+          icon={<ShieldCheck size={20} />}
+          label="AI Hub"
           collapsed={sidebarCollapsed}
         />
         <NavItem

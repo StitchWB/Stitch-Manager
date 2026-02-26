@@ -52,5 +52,8 @@ numpy>=1.24.0
 # Patchright (stealth Playwright fork - bypasses Cloudflare Turnstile)
 patchright>=1.0.0
 
+# Camoufox (Playwright-compatible async Firefox layer)
+camoufox>=0.4.0
+
 # Optional: Regular Playwright (fallback if Patchright not available)
 # playwright>=1.40.0
