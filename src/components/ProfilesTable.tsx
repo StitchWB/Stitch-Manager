@@ -51,7 +51,7 @@ export default function ProfilesTable({
 
   return (
     <div className="flex flex-col h-full overflow-hidden px-2 sm:px-4">
-      <div className="hidden lg:grid grid-cols-[minmax(280px,1fr)_160px_140px] gap-4 py-3 px-4 border-b border-white/5 sticky top-0 bg-[#050508]/95 backdrop-blur-md z-40">
+      <div className="hidden lg:grid grid-cols-[minmax(320px,1fr)_180px_auto] gap-4 py-3 px-4 border-b border-white/5 sticky top-0 bg-[#050508]/95 backdrop-blur-md z-40">
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           {t('accounts.profileAlias')}
         </span>
@@ -63,9 +63,9 @@ export default function ProfilesTable({
         </span>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 px-4 py-3 border-b border-white/5 bg-[#0b0d12]/60">
+      <div className="flex flex-wrap items-end gap-2 px-4 py-3 border-b border-white/5 bg-[#0b0d12]/60">
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-widest text-slate-500">
+          <span className="text-[10px] leading-4 uppercase tracking-widest text-slate-500">
             {t('accounts.profilesFilterLabel')}
           </span>
           <Select
@@ -83,7 +83,7 @@ export default function ProfilesTable({
         </div>
 
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-widest text-slate-500">
+          <span className="text-[10px] leading-4 uppercase tracking-widest text-slate-500">
             {t('accounts.profileDestinationLabel')}
           </span>
           <Select
@@ -101,7 +101,9 @@ export default function ProfilesTable({
 
         {openTarget === 'custom' && (
           <div className="flex flex-col gap-1 min-w-[260px] flex-1">
-            <span className="text-[10px] uppercase tracking-widest text-slate-500">URL</span>
+            <span className="text-[10px] leading-4 uppercase tracking-widest text-slate-500">
+              URL
+            </span>
             <Input
               type="text"
               value={customUrl}
@@ -122,9 +124,11 @@ export default function ProfilesTable({
               key={profile.alias}
               className="relative rounded-xl border bg-[#0f1115]/60 border-white/[0.03] hover:border-white/[0.08] hover:bg-[#161920] transition-all duration-200 overflow-hidden"
             >
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_160px_140px] gap-4 items-center p-3 lg:p-3.5">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,1fr)_180px_auto] gap-4 items-center px-4 py-3.5">
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold text-slate-100 truncate">{profile.alias}</span>
+                  <span className="text-sm leading-5 font-bold text-slate-100 truncate">
+                    {profile.alias}
+                  </span>
                   {profile.linkedAccountEmail && (
                     <span className="text-[11px] text-slate-400 truncate">
                       {profile.linkedAccountEmail}
@@ -160,7 +164,7 @@ export default function ProfilesTable({
 
                     {profile.healthStatus && (
                       <span
-                        className={`px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide border ${
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border ${
                           profile.healthStatus === 'ready'
                             ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
                             : profile.healthStatus === 'needs_aws_link'
@@ -178,10 +182,10 @@ export default function ProfilesTable({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-1 px-1 border-t lg:border-t-0 border-white/5 pt-2 lg:pt-0">
+                <div className="flex items-center justify-end gap-2 border-t lg:border-t-0 border-white/5 pt-2 lg:pt-0 min-w-0">
                   <Button
                     size="xs"
-                    variant="purple"
+                    variant="secondary"
                     leftIcon={<PlayCircle size={12} />}
                     onClick={() => {
                       const targetProvider = openTarget === 'custom' ? 'kiro' : openTarget;
@@ -193,6 +197,7 @@ export default function ProfilesTable({
                   <Button
                     size="xs"
                     variant="secondary"
+                    className="pl-3"
                     onClick={() => {
                       onStartAutoreg(
                         profile.alias,

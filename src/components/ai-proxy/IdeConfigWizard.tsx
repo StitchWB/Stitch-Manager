@@ -14,12 +14,12 @@ import {
   type AuthImportResult,
 } from '../../lib/tauri/modules/aiProxy';
 import {
-  DEFAULT_IDE_PROVIDER_KEY,
-  IDE_PROVIDER_OPTIONS,
-  type IdeProviderKey,
+  DEFAULT_PROVIDER_PROFILE_KEY,
+  PROVIDER_PROFILES,
+  type ProviderKey,
   buildManualEnvPayload,
-  getIdeProviderOption,
-} from '../../lib/ai-proxy/providerIntegration';
+  getProviderProfile,
+} from '../../lib/providering';
 
 // Type definition for AI Proxy detected IDE
 interface AiProxyDetectedIde {
@@ -69,7 +69,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   const [proxyRunning, setProxyRunning] = useState<boolean | null>(null);
   const [autoCheckInProgress, setAutoCheckInProgress] = useState(false);
   const [manualEndpoint, setManualEndpoint] = useState('http://127.0.0.1:8317/v1');
-  const [providerKey, setProviderKey] = useState<IdeProviderKey>(DEFAULT_IDE_PROVIDER_KEY);
+  const [providerKey, setProviderKey] = useState<ProviderKey>(DEFAULT_PROVIDER_PROFILE_KEY);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [autoImportInProgress, setAutoImportInProgress] = useState(false);
   const [autoImportResult, setAutoImportResult] = useState<AuthImportResult | null>(null);
@@ -364,7 +364,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
 
   const copyManualSetup = async () => {
     try {
-      const provider = getIdeProviderOption(providerKey);
+      const provider = getProviderProfile(providerKey);
       const payload = buildManualEnvPayload(manualEndpoint, provider.key);
       await navigator.clipboard.writeText(payload);
       setCopyStatus('Copied manual setup values');
@@ -444,17 +444,17 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                 <label className="block text-xs text-vsc-text-muted mb-2">Provider profile</label>
                 <select
                   value={providerKey}
-                  onChange={e => setProviderKey(e.target.value as IdeProviderKey)}
+                  onChange={e => setProviderKey(e.target.value as ProviderKey)}
                   className="w-full px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-xs text-vsc-text"
                 >
-                  {IDE_PROVIDER_OPTIONS.map(option => (
+                  {PROVIDER_PROFILES.map(option => (
                     <option key={option.key} value={option.key}>
                       {option.label}
                     </option>
                   ))}
                 </select>
                 <p className="text-2xs text-vsc-text-muted mt-1">
-                  {getIdeProviderOption(providerKey).description}
+                  {getProviderProfile(providerKey).description}
                 </p>
               </div>
 
@@ -664,7 +664,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                 </p>
                 <div className="text-xs font-mono text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 space-y-1">
                   <div>OPENAI_BASE_URL={manualEndpoint}</div>
-                  <div>OPENAI_API_KEY={getIdeProviderOption(providerKey).defaultApiKey}</div>
+                  <div>OPENAI_API_KEY={getProviderProfile(providerKey).defaultApiKey}</div>
                 </div>
                 {copyStatus && <p className="text-2xs text-vsc-text-muted mt-2">{copyStatus}</p>}
               </div>

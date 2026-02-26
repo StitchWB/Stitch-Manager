@@ -48,6 +48,10 @@ import { cn } from '../lib/utils';
 import { ACCOUNT_STATUS_COLORS } from '../constants/colors';
 import { getAccountStatusLabel } from '../lib/accountStatus';
 import { FilterDropdown, type FilterOption } from '../components/ui/FilterDropdown';
+import { AccountsEntityTabs } from '../components/accounts/AccountsEntityTabs';
+import { AccountsTabContent } from '../components/accounts/AccountsTabContent';
+import { ServiceAccountsPanel } from '../components/accounts/ServiceAccountsPanel';
+import { DolphinProfilesPanel } from '../components/accounts/DolphinProfilesPanel';
 import {
   extractRelationHints,
   extractRelationEdges,
@@ -471,6 +475,11 @@ export default function Accounts() {
     },
     [setEntityFilter, setAccountsEntityFilter, clearSelection]
   );
+
+  const normalizedEntityFilter = useMemo(() => {
+    if (entityFilter === 'profiles') return 'profiles';
+    return 'accounts';
+  }, [entityFilter]);
 
   const providerCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
@@ -1240,9 +1249,18 @@ export default function Accounts() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Bar */}
-          <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="relative group flex-1 max-w-md">
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl">
+            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+              <AccountsEntityTabs
+                value={normalizedEntityFilter}
+                onChange={value => handleEntityFilterChange(value)}
+                accountsCount={storeAccounts.length}
+                profilesCount={profileAliases.length}
+              />
+
+              <div className="w-px h-6 bg-white/10" />
+
+              <div className="relative group flex-1 min-w-[240px] max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-400 transition-colors" />
                 <input
                   type="text"
@@ -1273,17 +1291,10 @@ export default function Accounts() {
                 className="shrink-0"
               />
 
-              <FilterDropdown
-                value={entityFilter}
-                onChange={handleEntityFilterChange}
-                options={entityOptions}
-                placeholder={t('accounts.entityFilterLabel')}
-                showActiveState={true}
-                className="shrink-0"
-              />
+              {/* Entity selection moved to top tabs for clarity */}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <ActionButtonGroup
                 actions={[
                   {
@@ -1310,7 +1321,7 @@ export default function Accounts() {
                 className="h-9 px-3 rounded-lg bg-white/5 border border-white/10"
               />
 
-              <div className="w-px h-6 bg-white/10" />
+              <div className="w-px h-6 bg-white/10 hidden md:block" />
 
               <Button onClick={() => navigate('/autoreg')} variant="secondary" size="sm">
                 AutoReg
@@ -1426,306 +1437,316 @@ export default function Accounts() {
 
           {/* Table */}
           <div className="flex-1 overflow-hidden">
-            {(entityFilter === 'accounts' || entityFilter === 'all') &&
-            loading &&
-            filteredAccounts.length === 0 ? (
-              <div className="p-6">
-                <SkeletonLoader variant="table-row" count={6} />
-              </div>
-            ) : (entityFilter === 'accounts' || entityFilter === 'all') &&
-              filteredAccounts.length === 0 ? (
-              <EmptyState
-                icon={Users}
-                title={t('accounts.noAccountsFound')}
-                description={
-                  searchQuery.trim() ||
-                  statusFilter !== 'all' ||
-                  quotaFilter !== 'any' ||
-                  tagFilter !== 'all' ||
-                  relationFilter !== 'all'
-                    ? t('accounts.noAccountsFoundDesc')
-                    : t('accounts.addFirstAccountToStart')
-                }
-              />
-            ) : entityFilter === 'profiles' ? (
-              profilesLoading ? (
-                <div className="p-6">
-                  <SkeletonLoader variant="table-row" count={6} />
-                </div>
-              ) : (
-                <ProfilesTable
-                  profiles={visibleProfileItems}
-                  onOpen={handleOpenStandaloneProfile}
-                  onStartAutoreg={(alias, targetProvider, preset, awsBootstrapAccountId) => {
-                    const query = new URLSearchParams({
-                      source: 'profile',
-                      profile: alias,
-                      target: targetProvider,
-                    });
-                    if (preset) query.set('preset', preset);
-                    if (typeof awsBootstrapAccountId === 'number') {
-                      query.set('awsBootstrapAccountId', String(awsBootstrapAccountId));
-                    }
-                    navigate(`/autoreg?${query.toString()}`);
-                  }}
-                  onDelete={handleDeleteProfile}
-                  profileFilter={profileListFilter}
-                  onProfileFilterChange={setProfileListFilter}
+            <AccountsTabContent>
+              {entityFilter === 'profiles' ? (
+                <DolphinProfilesPanel
+                  body={
+                    profilesLoading ? (
+                      <div className="p-6">
+                        <SkeletonLoader variant="table-row" count={6} />
+                      </div>
+                    ) : (
+                      <ProfilesTable
+                        profiles={visibleProfileItems}
+                        onOpen={handleOpenStandaloneProfile}
+                        onStartAutoreg={(alias, targetProvider, preset, awsBootstrapAccountId) => {
+                          const query = new URLSearchParams({
+                            source: 'profile',
+                            profile: alias,
+                            target: targetProvider,
+                          });
+                          if (preset) query.set('preset', preset);
+                          if (typeof awsBootstrapAccountId === 'number') {
+                            query.set('awsBootstrapAccountId', String(awsBootstrapAccountId));
+                          }
+                          navigate(`/autoreg?${query.toString()}`);
+                        }}
+                        onDelete={handleDeleteProfile}
+                        profileFilter={profileListFilter}
+                        onProfileFilterChange={setProfileListFilter}
+                      />
+                    )
+                  }
                 />
-              )
-            ) : entityFilter === 'all' ? (
-              <div className="flex flex-col h-full overflow-auto">
-                <div className="px-6 pt-4 pb-2 text-xs uppercase tracking-widest text-slate-500">
-                  {t('accounts.entityAccounts')}
-                </div>
-                <div className="flex flex-col h-[55%] min-h-[260px]">
-                  {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
-                    <div className="mx-6 mt-2 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-sm font-semibold text-white">
-                            {t('accounts.profileSessionsTitle')}
-                          </h3>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {t('accounts.profileSessionsSubtitle')}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="xs"
-                            variant="secondary"
-                            disabled={selectedIds.size === 0}
-                            onClick={async () => {
-                              const selectedAccounts = filteredAccounts.filter(acc =>
-                                selectedIds.has(acc.id)
-                              );
-                              if (!selectedAccounts.length) return;
-                              const settled = await Promise.allSettled(
-                                selectedAccounts.map(async acc => {
-                                  const profile = await getOrCreateFingerprintProfile({
-                                    email: acc.email,
-                                  });
-                                  await saveFingerprintProfile({ email: acc.email, profile });
-                                })
-                              );
-                              const success = settled.filter(s => s.status === 'fulfilled').length;
-                              const failed = settled.length - success;
-                              if (failed === 0) toast.success(t('accounts.profileCreateSuccess'));
-                              else if (success > 0)
-                                toast.warning(
-                                  `${t('accounts.profileCreateSuccess')} (${success}), ${t('accounts.profileCreateFailed')} (${failed})`
+              ) : entityFilter === 'all' ? (
+                <div className="flex flex-col h-full overflow-auto">
+                  <div className="px-6 pt-4 pb-2 text-xs uppercase tracking-widest text-slate-500">
+                    {t('accounts.entityAccounts')}
+                  </div>
+                  <div className="flex flex-col h-[55%] min-h-[260px]">
+                    {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
+                      <div className="mx-6 mt-2 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-white">
+                              {t('accounts.profileSessionsTitle')}
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {t('accounts.profileSessionsSubtitle')}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              disabled={selectedIds.size === 0}
+                              onClick={async () => {
+                                const selectedAccounts = filteredAccounts.filter(acc =>
+                                  selectedIds.has(acc.id)
                                 );
-                              else toast.error(t('accounts.profileCreateFailed'));
-                              await loadProfiles();
-                            }}
-                          >
-                            {t('accounts.profilesCreateButton')}
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="secondary"
-                            disabled={selectedIds.size === 0}
-                            onClick={() => handleBatchProfileAction('open')}
-                          >
-                            {t('accounts.profileSessionOpen')}
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="secondary"
-                            disabled={selectedIds.size === 0}
-                            onClick={() => handleBatchProfileAction('confirm')}
-                          >
-                            {t('accounts.profileSessionConfirm')}
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="secondary"
-                            disabled={selectedIds.size === 0}
-                            onClick={() => handleBatchProfileAction('clear')}
-                          >
-                            {t('accounts.profileSessionClear')}
-                          </Button>
+                                if (!selectedAccounts.length) return;
+                                const settled = await Promise.allSettled(
+                                  selectedAccounts.map(async acc => {
+                                    const profile = await getOrCreateFingerprintProfile({
+                                      email: acc.email,
+                                    });
+                                    await saveFingerprintProfile({ email: acc.email, profile });
+                                  })
+                                );
+                                const success = settled.filter(
+                                  s => s.status === 'fulfilled'
+                                ).length;
+                                const failed = settled.length - success;
+                                if (failed === 0) toast.success(t('accounts.profileCreateSuccess'));
+                                else if (success > 0)
+                                  toast.warning(
+                                    `${t('accounts.profileCreateSuccess')} (${success}), ${t('accounts.profileCreateFailed')} (${failed})`
+                                  );
+                                else toast.error(t('accounts.profileCreateFailed'));
+                                await loadProfiles();
+                              }}
+                            >
+                              {t('accounts.profilesCreateButton')}
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              disabled={selectedIds.size === 0}
+                              onClick={() => handleBatchProfileAction('open')}
+                            >
+                              {t('accounts.profileSessionOpen')}
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              disabled={selectedIds.size === 0}
+                              onClick={() => handleBatchProfileAction('confirm')}
+                            >
+                              {t('accounts.profileSessionConfirm')}
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              disabled={selectedIds.size === 0}
+                              onClick={() => handleBatchProfileAction('clear')}
+                            >
+                              {t('accounts.profileSessionClear')}
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  <AccountsTable
-                    accounts={filteredAccounts}
-                    relationEdgesById={Object.fromEntries(
-                      filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
                     )}
-                    relationHintsById={Object.fromEntries(
-                      filteredAccounts.map(acc => [acc.id, extractRelationHints(acc)])
-                    )}
-                    onRelationEdgeClick={(edgeType, targetProvider) => {
-                      handleRelationFilterChange(`edge:${edgeType}:${targetProvider}`);
-                      handleEntityFilterChange('accounts');
-                    }}
-                    selectedIds={selectedIds}
-                    activeAccountIds={activeAccountIds}
-                    onToggleSelection={toggleSelection}
-                    onSelectAll={selectAll}
-                    onClearSelection={clearSelection}
-                    onDelete={handleRemoveAccount}
-                    onDeleteSelected={handleRemoveSelectedAccounts}
-                    onActivate={setActiveAccount}
-                    onCheckStatus={handleCheckStatus}
-                    isAccountRefreshing={isAccountRefreshing}
-                    onOpenBrowser={handleOpenBrowser}
-                    onOpenProfileSession={handleOpenProfileSession}
-                    onConfirmProfileSession={handleConfirmProfileSession}
-                    onClearProfileSession={handleClearProfileSession}
-                    onUpdate={handleUpdateAccount}
-                    selectedProvider={providerFilter === 'all' ? null : providerFilter}
-                  />
-                </div>
-
-                <div className="px-6 pt-4 pb-2 text-xs uppercase tracking-widest text-slate-500 border-t border-white/5">
-                  {t('accounts.entityProfiles')}
-                </div>
-                <div className="flex flex-col h-[45%] min-h-[220px] pb-4">
-                  {profilesLoading ? (
-                    <div className="p-6">
-                      <SkeletonLoader variant="table-row" count={4} />
-                    </div>
-                  ) : (
-                    <ProfilesTable
-                      profiles={visibleProfileItems}
-                      onOpen={handleOpenStandaloneProfile}
-                      onStartAutoreg={(alias, targetProvider, preset, awsBootstrapAccountId) => {
-                        const query = new URLSearchParams({
-                          source: 'profile',
-                          profile: alias,
-                          target: targetProvider,
-                        });
-                        if (preset) query.set('preset', preset);
-                        if (typeof awsBootstrapAccountId === 'number') {
-                          query.set('awsBootstrapAccountId', String(awsBootstrapAccountId));
-                        }
-                        navigate(`/autoreg?${query.toString()}`);
+                    <AccountsTable
+                      accounts={filteredAccounts}
+                      relationEdgesById={Object.fromEntries(
+                        filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
+                      )}
+                      relationHintsById={Object.fromEntries(
+                        filteredAccounts.map(acc => [acc.id, extractRelationHints(acc)])
+                      )}
+                      onRelationEdgeClick={(edgeType, targetProvider) => {
+                        handleRelationFilterChange(`edge:${edgeType}:${targetProvider}`);
+                        handleEntityFilterChange('accounts');
                       }}
-                      onDelete={handleDeleteProfile}
-                      profileFilter={profileListFilter}
-                      onProfileFilterChange={setProfileListFilter}
+                      selectedIds={selectedIds}
+                      activeAccountIds={activeAccountIds}
+                      onToggleSelection={toggleSelection}
+                      onSelectAll={selectAll}
+                      onClearSelection={clearSelection}
+                      onDelete={handleRemoveAccount}
+                      onDeleteSelected={handleRemoveSelectedAccounts}
+                      onActivate={setActiveAccount}
+                      onCheckStatus={handleCheckStatus}
+                      isAccountRefreshing={isAccountRefreshing}
+                      onOpenBrowser={handleOpenBrowser}
+                      onOpenProfileSession={handleOpenProfileSession}
+                      onConfirmProfileSession={handleConfirmProfileSession}
+                      onClearProfileSession={handleClearProfileSession}
+                      onUpdate={handleUpdateAccount}
+                      selectedProvider={providerFilter === 'all' ? null : providerFilter}
                     />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col h-full">
-                {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
-                  <div className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-sm font-semibold text-white">
-                          {t('accounts.profileSessionsTitle')}
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-1">
-                          {t('accounts.profileSessionsSubtitle')}
-                        </p>
+                  </div>
+
+                  <div className="px-6 pt-4 pb-2 text-xs uppercase tracking-widest text-slate-500 border-t border-white/5">
+                    {t('accounts.entityProfiles')}
+                  </div>
+                  <div className="flex flex-col h-[45%] min-h-[220px] pb-4">
+                    {profilesLoading ? (
+                      <div className="p-6">
+                        <SkeletonLoader variant="table-row" count={4} />
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          disabled={selectedIds.size === 0}
-                          onClick={async () => {
-                            const selectedAccounts = filteredAccounts.filter(acc =>
-                              selectedIds.has(acc.id)
-                            );
-                            if (!selectedAccounts.length) return;
-
-                            const settled = await Promise.allSettled(
-                              selectedAccounts.map(async acc => {
-                                const profile = await getOrCreateFingerprintProfile({
-                                  email: acc.email,
-                                });
-                                await saveFingerprintProfile({
-                                  email: acc.email,
-                                  profile,
-                                });
-                              })
-                            );
-
-                            const success = settled.filter(s => s.status === 'fulfilled').length;
-                            const failed = settled.length - success;
-
-                            if (failed === 0) {
-                              toast.success(t('accounts.profileCreateSuccess'));
-                            } else if (success > 0) {
-                              toast.warning(
-                                `${t('accounts.profileCreateSuccess')} (${success}), ${t('accounts.profileCreateFailed')} (${failed})`
-                              );
-                            } else {
-                              toast.error(t('accounts.profileCreateFailed'));
-                            }
-                          }}
-                        >
-                          {t('accounts.profilesCreateButton')}
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          disabled={selectedIds.size === 0}
-                          onClick={() => handleBatchProfileAction('open')}
-                        >
-                          {t('accounts.profileSessionOpen')}
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          disabled={selectedIds.size === 0}
-                          onClick={() => handleBatchProfileAction('confirm')}
-                        >
-                          {t('accounts.profileSessionConfirm')}
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          disabled={selectedIds.size === 0}
-                          onClick={() => handleBatchProfileAction('clear')}
-                        >
-                          {t('accounts.profileSessionClear')}
-                        </Button>
-                      </div>
-                    </div>
-                    {selectedIds.size === 0 && (
-                      <p className="mt-3 text-xs text-slate-500">
-                        {t('accounts.profileSessionsSelectionHint')}
-                      </p>
+                    ) : (
+                      <ProfilesTable
+                        profiles={visibleProfileItems}
+                        onOpen={handleOpenStandaloneProfile}
+                        onStartAutoreg={(alias, targetProvider, preset, awsBootstrapAccountId) => {
+                          const query = new URLSearchParams({
+                            source: 'profile',
+                            profile: alias,
+                            target: targetProvider,
+                          });
+                          if (preset) query.set('preset', preset);
+                          if (typeof awsBootstrapAccountId === 'number') {
+                            query.set('awsBootstrapAccountId', String(awsBootstrapAccountId));
+                          }
+                          navigate(`/autoreg?${query.toString()}`);
+                        }}
+                        onDelete={handleDeleteProfile}
+                        profileFilter={profileListFilter}
+                        onProfileFilterChange={setProfileListFilter}
+                      />
                     )}
                   </div>
-                )}
-                <AccountsTable
-                  accounts={filteredAccounts}
-                  relationEdgesById={Object.fromEntries(
-                    filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
-                  )}
-                  relationHintsById={Object.fromEntries(
-                    filteredAccounts.map(acc => [acc.id, extractRelationHints(acc)])
-                  )}
-                  onRelationEdgeClick={(edgeType, targetProvider) => {
-                    handleRelationFilterChange(`edge:${edgeType}:${targetProvider}`);
-                  }}
-                  selectedIds={selectedIds}
-                  activeAccountIds={activeAccountIds}
-                  onToggleSelection={toggleSelection}
-                  onSelectAll={selectAll}
-                  onClearSelection={clearSelection}
-                  onDelete={handleRemoveAccount}
-                  onDeleteSelected={handleRemoveSelectedAccounts}
-                  onActivate={setActiveAccount}
-                  onCheckStatus={handleCheckStatus}
-                  isAccountRefreshing={isAccountRefreshing}
-                  onOpenBrowser={handleOpenBrowser}
-                  onOpenProfileSession={handleOpenProfileSession}
-                  onConfirmProfileSession={handleConfirmProfileSession}
-                  onClearProfileSession={handleClearProfileSession}
-                  onUpdate={handleUpdateAccount}
-                  selectedProvider={providerFilter === 'all' ? null : providerFilter}
+                </div>
+              ) : (
+                <ServiceAccountsPanel
+                  body={
+                    (entityFilter === 'accounts' || entityFilter === 'all') &&
+                    loading &&
+                    filteredAccounts.length === 0 ? (
+                      <div className="p-6">
+                        <SkeletonLoader variant="table-row" count={6} />
+                      </div>
+                    ) : (entityFilter === 'accounts' || entityFilter === 'all') &&
+                      filteredAccounts.length === 0 ? (
+                      <EmptyState
+                        icon={Users}
+                        title={t('accounts.noAccountsFound')}
+                        description={
+                          searchQuery.trim() ||
+                          statusFilter !== 'all' ||
+                          quotaFilter !== 'any' ||
+                          tagFilter !== 'all' ||
+                          relationFilter !== 'all'
+                            ? t('accounts.noAccountsFoundDesc')
+                            : t('accounts.addFirstAccountToStart')
+                        }
+                      />
+                    ) : (
+                      <div className="flex flex-col h-full">
+                        {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
+                          <div className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <h3 className="text-sm font-semibold text-white">
+                                  {t('accounts.profileSessionsTitle')}
+                                </h3>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  {t('accounts.profileSessionsSubtitle')}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="xs"
+                                  variant="secondary"
+                                  disabled={selectedIds.size === 0}
+                                  onClick={async () => {
+                                    const selectedAccounts = filteredAccounts.filter(acc =>
+                                      selectedIds.has(acc.id)
+                                    );
+                                    if (!selectedAccounts.length) return;
+                                    const settled = await Promise.allSettled(
+                                      selectedAccounts.map(async acc => {
+                                        const profile = await getOrCreateFingerprintProfile({
+                                          email: acc.email,
+                                        });
+                                        await saveFingerprintProfile({ email: acc.email, profile });
+                                      })
+                                    );
+                                    const success = settled.filter(
+                                      s => s.status === 'fulfilled'
+                                    ).length;
+                                    const failed = settled.length - success;
+                                    if (failed === 0)
+                                      toast.success(t('accounts.profileCreateSuccess'));
+                                    else if (success > 0)
+                                      toast.warning(
+                                        `${t('accounts.profileCreateSuccess')} (${success}), ${t('accounts.profileCreateFailed')} (${failed})`
+                                      );
+                                    else toast.error(t('accounts.profileCreateFailed'));
+                                    await loadProfiles();
+                                  }}
+                                >
+                                  {t('accounts.profilesCreateButton')}
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="secondary"
+                                  disabled={selectedIds.size === 0}
+                                  onClick={() => handleBatchProfileAction('open')}
+                                >
+                                  {t('accounts.profileSessionOpen')}
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="secondary"
+                                  disabled={selectedIds.size === 0}
+                                  onClick={() => handleBatchProfileAction('confirm')}
+                                >
+                                  {t('accounts.profileSessionConfirm')}
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="secondary"
+                                  disabled={selectedIds.size === 0}
+                                  onClick={() => handleBatchProfileAction('clear')}
+                                >
+                                  {t('accounts.profileSessionClear')}
+                                </Button>
+                              </div>
+                            </div>
+                            {selectedIds.size === 0 && (
+                              <p className="mt-3 text-xs text-slate-500">
+                                {t('accounts.profileSessionsSelectionHint')}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        <AccountsTable
+                          accounts={filteredAccounts}
+                          relationEdgesById={Object.fromEntries(
+                            filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
+                          )}
+                          relationHintsById={Object.fromEntries(
+                            filteredAccounts.map(acc => [acc.id, extractRelationHints(acc)])
+                          )}
+                          onRelationEdgeClick={(edgeType, targetProvider) => {
+                            handleRelationFilterChange(`edge:${edgeType}:${targetProvider}`);
+                          }}
+                          selectedIds={selectedIds}
+                          activeAccountIds={activeAccountIds}
+                          onToggleSelection={toggleSelection}
+                          onSelectAll={selectAll}
+                          onClearSelection={clearSelection}
+                          onDelete={handleRemoveAccount}
+                          onDeleteSelected={handleRemoveSelectedAccounts}
+                          onActivate={setActiveAccount}
+                          onCheckStatus={handleCheckStatus}
+                          isAccountRefreshing={isAccountRefreshing}
+                          onOpenBrowser={handleOpenBrowser}
+                          onOpenProfileSession={handleOpenProfileSession}
+                          onConfirmProfileSession={handleConfirmProfileSession}
+                          onClearProfileSession={handleClearProfileSession}
+                          onUpdate={handleUpdateAccount}
+                          selectedProvider={providerFilter === 'all' ? null : providerFilter}
+                        />
+                      </div>
+                    )
+                  }
                 />
-              </div>
-            )}
+              )}
+            </AccountsTabContent>
           </div>
         </div>
       </div>

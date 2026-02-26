@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { Toaster } from 'sonner';
 import Layout from './components/layout/Layout';
@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import AutoReg from './pages/AutoReg';
 import AiProviders from './pages/AiProviders';
+import AiOverview from './pages/AiOverview';
 import Antigravity from './pages/Antigravity';
 import Patcher from './pages/Patcher';
 import Scheduler from './pages/Scheduler';
@@ -95,7 +96,9 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/autoreg" element={<AutoReg />} />
-          <Route path="/ai-providers" element={<AiProviders />} />
+          <Route path="/ai" element={<AiOverview />} />
+          <Route path="/ai/:section" element={<AiProviders />} />
+          <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
           <Route path="/antigravity" element={<Antigravity />} />
           <Route path="/patcher" element={<Patcher />} />
           <Route path="/scheduler" element={<Scheduler />} />

@@ -28,6 +28,7 @@ import type {
   GithubAutoregResult,
 } from '../../../types/generated';
 import type { OpenAIAutoregResult } from '../../../types';
+import { validateAliasConfiguration, type PythonAliasStrategy } from './aliasValidation';
 
 // Timeout for each registration attempt (5 minutes)
 const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -136,6 +137,15 @@ export async function runRegistration(options: RegistrationOptions): Promise<Reg
 
         const { email, strategy, shouldGenerateInPython } = emailResult;
 
+        if (shouldGenerateInPython) {
+          const aliasValidationError = validateAliasConfiguration(strategy, config);
+          if (aliasValidationError) {
+            failCount++;
+            onLog('error', `[${i + 1}/${totalCount}] ${aliasValidationError}`);
+            continue;
+          }
+        }
+
         const profileLaunchMode = options.launchContext?.source === 'profile';
 
         if (profileLaunchMode) {
@@ -177,6 +187,7 @@ export async function runRegistration(options: RegistrationOptions): Promise<Reg
         const result = await runProviderRegistration({
           provider: config.provider,
           email,
+          aliasStrategy: shouldGenerateInPython ? strategy : null,
           config,
           imapServer,
           imapUser,
@@ -313,6 +324,7 @@ async function runRegistrationV2(
 async function runProviderRegistration(params: {
   provider: ProviderName;
   email: string | null;
+  aliasStrategy: PythonAliasStrategy | null;
   config: RegistrationConfig;
   imapServer: string;
   imapUser: string;
@@ -330,6 +342,7 @@ async function runProviderRegistration(params: {
   const {
     provider,
     email,
+    aliasStrategy,
     config,
     imapServer,
     imapUser,
@@ -514,7 +527,14 @@ async function runProviderRegistration(params: {
     imapPort: config.imap.port || DEFAULT_IMAP_PORT,
     imapUser,
     imapPassword,
-    emailStrategy: null,
+    emailStrategy:
+      aliasStrategy === 'mailtm'
+        ? 'mailtm'
+        : aliasStrategy === 'addyio'
+          ? 'addyio'
+          : aliasStrategy === '33mail'
+            ? '33mail'
+            : null,
     proxyUrl: config.proxy.enabled ? config.proxy.url : null,
     speedMultiplier: config.advanced.speedMultiplier,
     verificationCodeTimeout: config.advanced.verificationCodeTimeout,

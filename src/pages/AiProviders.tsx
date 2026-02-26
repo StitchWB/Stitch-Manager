@@ -1,263 +1,93 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import {
-  Plus,
-  Search,
-  Zap,
-  LayoutGrid,
-  Bug,
-  Power,
-  Copy,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  RefreshCw,
-} from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { Zap, Copy, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import Header from '../components/layout/Header';
-import AccountCard from '../components/ai-proxy/AccountCard';
 import AccountModal from '../components/ai-proxy/AccountModal';
-import { QuotaDashboard } from '../components/ai-proxy/QuotaDashboard';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
-import { EmptyState, SkeletonLoader, Button, Modal, Input, Select, Toggle } from '../components/ui';
-import { useAiProxyStore } from '../stores/aiProxy';
-import {
-  getAiProxyAccounts,
-  deleteAiProxyAccount,
-  updateAiProxyAccount,
-  debugRunAiProxyMigration,
-  getAvailableModelsSafe,
-  getProviderCapabilities,
-  getProviderModelMappings,
-  setProviderModelMappings,
-  testProviderConnection,
-  getRequestHistory,
-  startAiProxy,
-  stopAiProxy,
-  getProxyStatus,
-  getProxySettings,
-  updateProxySettings,
-  exportAiProxyAccountsPayload,
-  importAiProxyAccountsPayload,
-  scanAuthFiles as scanAuthFilesCmd,
-  type ProviderCapability,
-  type ProviderModelMapping,
-} from '@/lib/tauri/modules/aiProxy';
-import type { AiProxyAccount, AuthFile, ProxySettings, ProxyStatus } from '../types/generated';
-import { cn } from '../lib/utils';
+import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
+import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
+import { AiSectionHeaderBar } from '../components/ai-proxy/sections/AiSectionHeaderBar';
+import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
+import { AiSummaryCards } from '../components/ai-proxy/sections/AiSummaryCards';
+import { AiProvidersGrid } from '../components/ai-proxy/sections/AiProvidersGrid';
+import { AiIntegrationsSection } from '../components/ai-proxy/sections/AiIntegrationsSection';
+import { AiUsageSection } from '../components/ai-proxy/sections/AiUsageSection';
+import { AiDiagnosticsSection } from '../components/ai-proxy/sections/AiDiagnosticsSection';
+import { Button, Modal, Input } from '../components/ui';
+import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
+import type { ProxySettings } from '../types/generated';
 import { AI_PROXY_PROVIDER_FILTERS } from '../components/ai-proxy/providerMeta';
 
-const CLIENT_API_KEY = 'proxypal-local';
-
-const hasTauriBridge = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const w = window as typeof window & {
-    __TAURI__?: unknown;
-    __TAURI_INTERNALS__?: { invoke?: unknown };
-  };
-  return Boolean(w.__TAURI__ || w.__TAURI_INTERNALS__?.invoke);
-};
-
-const maskKey = (key: string, visibleTail: number = 4): string => {
-  if (!key) return '';
-  if (key.length <= visibleTail) return '•'.repeat(Math.max(0, key.length));
-  return `${'•'.repeat(Math.max(0, key.length - visibleTail))}${key.slice(-visibleTail)}`;
-};
+const CLIENT_API_KEY = 'proxystitch-local';
 
 export default function AiProviders() {
   const navigate = useNavigate();
-  const { accounts, setAccounts, loading, setLoading } = useAiProxyStore();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [providerFilter, setProviderFilter] = useState('all');
+  const { section: sectionParam } = useParams<{ section?: string }>();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<AiProxyAccount | null>(null);
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; provider: string }>>(
-    []
-  );
-  const [providerCapabilities, setProviderCapabilities] = useState<ProviderCapability[]>([]);
-  const [modelMappings, setModelMappings] = useState<ProviderModelMapping[]>([]);
+  const [editingAccount, setEditingAccount] = useState<any | null>(null);
   const [isMappingsModalOpen, setIsMappingsModalOpen] = useState(false);
-  const [proxyStatus, setProxyStatus] = useState<ProxyStatus | null>(null);
-  const [proxySettings, setProxySettings] = useState<ProxySettings | null>(null);
-  const [proxyDraft, setProxyDraft] = useState<ProxySettings | null>(null);
-  const [proxyBusy, setProxyBusy] = useState(false);
-  const [proxySaving, setProxySaving] = useState(false);
-  const [proxyError, setProxyError] = useState<string | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferMode, setTransferMode] = useState<'import' | 'export'>('import');
-  const [authScan, setAuthScan] = useState<AuthFile[] | null>(null);
-  const [authScanLoading, setAuthScanLoading] = useState(false);
   const [isIdeWizardOpen, setIsIdeWizardOpen] = useState(false);
-  const [connectionState, setConnectionState] = useState<
-    Record<
-      number,
-      {
-        status: 'idle' | 'loading' | 'ok' | 'error';
-        message?: string;
-      }
-    >
-  >({});
-  const [historySummary, setHistorySummary] = useState({
-    total: 0,
-    errors: 0,
-  });
+  const controller = useAiProvidersController();
 
-  const fetchAccounts = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getAiProxyAccounts();
-      setAccounts(data);
-    } catch (e) {
-      console.error('[AiProviders] Error fetching accounts:', e);
-      toast.error(`Failed to load accounts: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [setAccounts, setLoading]);
-
-  const fetchCapabilitiesAndModels = useCallback(async () => {
-    // Models are fetched via sidecar Management API. Use safe wrapper to avoid noisy errors
-    // when proxy isn't running or not ready.
-    const [modelsResult, capabilitiesResult, mappingsResult] = await Promise.allSettled([
-      getAvailableModelsSafe(),
-      getProviderCapabilities(),
-      getProviderModelMappings(),
-    ]);
-
-    if (modelsResult.status === 'fulfilled') {
-      setAvailableModels(
-        modelsResult.value.map(m => ({ id: m.id, provider: m.provider || m.ownedBy || 'unknown' }))
-      );
-    } else {
-      // Should be rare since we use the safe wrapper above.
-      console.error('[AiProviders] Failed loading models:', modelsResult.reason);
-      setAvailableModels([]);
-    }
-
-    // Note: model list may legitimately be empty if proxy isn't running.
-
-    if (capabilitiesResult.status === 'fulfilled') {
-      setProviderCapabilities(capabilitiesResult.value);
-    } else {
-      console.error('[AiProviders] Failed loading capabilities:', capabilitiesResult.reason);
-      setProviderCapabilities([]);
-    }
-
-    if (mappingsResult.status === 'fulfilled') {
-      setModelMappings(mappingsResult.value);
-    } else {
-      console.error('[AiProviders] Failed loading mappings:', mappingsResult.reason);
-      setModelMappings([]);
-    }
-
-    const failedParts = [
-      modelsResult.status === 'rejected' ? 'models' : null,
-      capabilitiesResult.status === 'rejected' ? 'capabilities' : null,
-      mappingsResult.status === 'rejected' ? 'mappings' : null,
-    ].filter(Boolean);
-
-    if (failedParts.length > 0) {
-      // Avoid spamming users for models if proxy is stopped; the safe wrapper should already
-      // suppress common management API failures.
-      const toastParts = failedParts.filter(p => p !== 'models');
-      if (toastParts.length > 0) {
-        toast.error(`Failed to load AI Proxy data: ${toastParts.join(', ')}`);
-      }
-    }
-  }, []);
-
-  const fetchHistorySummary = useCallback(async () => {
-    try {
-      const rows = await getRequestHistory(20, 0);
-      setHistorySummary({
-        total: rows.length,
-        errors: rows.filter(r => r.status >= 400).length,
-      });
-    } catch (e) {
-      console.error('[AiProviders] Failed loading request history summary:', e);
-    }
-  }, []);
-
-  const refreshProxyInfo = useCallback(async () => {
-    // Avoid hard failing in tests / non-tauri environments.
-    if (!hasTauriBridge()) {
-      setProxyStatus(null);
-      setProxySettings(null);
-      setProxyDraft(null);
-      setProxyError(null);
-      return;
-    }
-
-    try {
-      setProxyError(null);
-      const [status, settings] = await Promise.all([getProxyStatus(), getProxySettings()]);
-      setProxyStatus(status);
-      setProxySettings(settings);
-      setProxyDraft(settings);
-    } catch (e) {
-      console.error('[AiProviders] Failed loading proxy status/settings:', e);
-      setProxyError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  const handleSaveProxySettings = useCallback(async () => {
-    if (!proxyDraft) {
-      toast.error('Proxy settings are not loaded yet');
-      return;
-    }
-
-    if (
-      !Number.isInteger(proxyDraft.proxyPort) ||
-      proxyDraft.proxyPort < 1024 ||
-      proxyDraft.proxyPort > 65535
-    ) {
-      toast.error('Port must be an integer between 1024 and 65535');
-      return;
-    }
-
-    if (!proxyDraft.managementKey.trim()) {
-      toast.error('Management key cannot be empty');
-      return;
-    }
-
-    setProxySaving(true);
-    setProxyError(null);
-    try {
-      await updateProxySettings(proxyDraft);
-      setProxySettings(proxyDraft);
-      await refreshProxyInfo();
-      toast.success('Proxy settings saved');
-    } catch (e) {
-      console.error('[AiProviders] Failed saving proxy settings:', e);
-      const msg = e instanceof Error ? e.message : String(e);
-      setProxyError(msg);
-      toast.error(`Failed to save proxy settings: ${msg}`);
-    } finally {
-      setProxySaving(false);
-    }
-  }, [proxyDraft, refreshProxyInfo]);
-
-  const isProxyDraftDirty = useMemo(() => {
-    if (!proxyDraft || !proxySettings) return false;
-    return (
-      proxyDraft.proxyPort !== proxySettings.proxyPort ||
-      proxyDraft.appMode !== proxySettings.appMode ||
-      proxyDraft.routingStrategy !== proxySettings.routingStrategy ||
-      proxyDraft.managementKey !== proxySettings.managementKey ||
-      proxyDraft.autoStart !== proxySettings.autoStart
-    );
-  }, [proxyDraft, proxySettings]);
-
-  const handleResetProxyDraft = useCallback(() => {
-    if (!proxySettings) return;
-    setProxyDraft(proxySettings);
-    setProxyError(null);
-  }, [proxySettings]);
-
-  const baseUrl = useMemo(() => {
-    const port = proxySettings?.proxyPort || proxyStatus?.port;
-    if (!port) return 'http://127.0.0.1:—/v1';
-    return `http://127.0.0.1:${port}/v1`;
-  }, [proxySettings?.proxyPort, proxyStatus?.port]);
+  const {
+    loading,
+    searchQuery,
+    setSearchQuery,
+    providerFilter,
+    setProviderFilter,
+    availableModels,
+    providerCapabilities,
+    modelMappings,
+    proxyStatus,
+    proxySettings,
+    proxyDraft,
+    setProxyDraft,
+    proxyBusy,
+    proxySaving,
+    proxyError,
+    authScan,
+    authScanLoading,
+    connectionState,
+    historySummary,
+    exportFormat,
+    setExportFormat,
+    exportIncludeSecrets,
+    setExportIncludeSecrets,
+    exportPayload,
+    exportLoading,
+    importPayload,
+    setImportPayload,
+    importLoading,
+    importValidation,
+    filteredAccounts,
+    providerCounts,
+    baseUrl,
+    isProxyDraftDirty,
+    effectiveExportIncludeSecrets,
+    fetchAccounts,
+    refreshProxyInfo,
+    handleSaveProxySettings,
+    handleResetProxyDraft,
+    handleStartStopProxy,
+    scanAuthFiles,
+    handleDelete,
+    handleToggleEnabled,
+    handleDebugMigration,
+    handleTestConnection,
+    upsertMapping,
+    addMapping,
+    removeMapping,
+    handleSaveMappings,
+    downloadText,
+    buildExportFileName,
+    handleGenerateExport,
+    handleImportPayload,
+    handlePrepareImportFromScan,
+    handleImportAllFromScan,
+  } = controller;
 
   const handleCopy = useCallback(async (label: string, value: string, requireConfirm = false) => {
     if (!value) {
@@ -281,277 +111,7 @@ export default function AiProviders() {
     }
   }, []);
 
-  const handleStartStopProxy = useCallback(async () => {
-    if (proxyBusy) return;
-    if (!hasTauriBridge()) {
-      toast.error('Proxy controls are unavailable outside Tauri');
-      return;
-    }
-
-    setProxyBusy(true);
-    setProxyError(null);
-    try {
-      const next = proxyStatus?.running ? await stopAiProxy() : await startAiProxy();
-      setProxyStatus(next);
-      // Port can change if occupied; always re-read settings.
-      await refreshProxyInfo();
-      toast.success(proxyStatus?.running ? 'Proxy stopped' : 'Proxy started');
-    } catch (e) {
-      console.error('[AiProviders] Proxy start/stop failed:', e);
-      const msg = e instanceof Error ? e.message : String(e);
-      setProxyError(msg);
-      toast.error(msg);
-    } finally {
-      setProxyBusy(false);
-    }
-  }, [proxyBusy, proxyStatus?.running, refreshProxyInfo]);
-
-  const scanAuthFiles = useCallback(async () => {
-    if (authScanLoading) return;
-    if (!hasTauriBridge()) {
-      toast.error('This action is only available in the desktop app');
-      return;
-    }
-
-    setAuthScanLoading(true);
-    try {
-      const files = await scanAuthFilesCmd();
-      setAuthScan(files);
-      toast.success(`Found ${files.length} auth file${files.length === 1 ? '' : 's'}`);
-    } catch (e) {
-      console.error('[AiProviders] Failed scanning auth files:', e);
-      toast.error(`Scan failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setAuthScanLoading(false);
-    }
-  }, [authScanLoading]);
-
-  const downloadText = useCallback((fileName: string, text: string, mime: string) => {
-    try {
-      const blob = new Blob([text], { type: mime });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = fileName;
-      link.click();
-      toast.success('Download started');
-    } catch (e) {
-      console.error('[AiProviders] Download failed:', e);
-      toast.error('Failed to download');
-    }
-  }, []);
-
-  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
-  const [exportIncludeSecrets, setExportIncludeSecrets] = useState(false);
-  const [exportPayload, setExportPayload] = useState<string>('');
-  const [exportLoading, setExportLoading] = useState(false);
-  const effectiveExportIncludeSecrets = exportFormat === 'csv' ? false : exportIncludeSecrets;
-
-  useEffect(() => {
-    if (exportFormat === 'csv' && exportIncludeSecrets) {
-      setExportIncludeSecrets(false);
-    }
-  }, [exportFormat, exportIncludeSecrets]);
-
-  const buildExportFileName = useCallback((format: 'json' | 'csv', includeSecrets: boolean) => {
-    const day = new Date().toISOString().split('T')[0];
-    const suffix = format === 'csv' ? 'redacted' : includeSecrets ? 'with_secrets' : 'redacted';
-    return `ai_proxy_accounts_${suffix}_${day}.${format}`;
-  }, []);
-
-  const handleGenerateExport = useCallback(async () => {
-    if (!hasTauriBridge()) {
-      toast.error('This action is only available in the desktop app');
-      return;
-    }
-    setExportLoading(true);
-    try {
-      const payload = await exportAiProxyAccountsPayload(
-        exportFormat,
-        exportFormat === 'csv' ? false : exportIncludeSecrets
-      );
-      setExportPayload(payload);
-      toast.success('Export generated');
-    } catch (e) {
-      console.error('[AiProviders] Export failed:', e);
-      toast.error(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setExportLoading(false);
-    }
-  }, [exportFormat, exportIncludeSecrets]);
-
-  const [importPayload, setImportPayload] = useState('');
-  const [importLoading, setImportLoading] = useState(false);
-  const importValidation = useMemo(() => {
-    const trimmed = importPayload.trim();
-    if (!trimmed) {
-      return { isValid: false, error: null as string | null, includeSecrets: false };
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
-      const parsedObject =
-        typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
-      const version = parsedObject?.version;
-      const accounts = parsedObject?.accounts;
-      const includeSecrets = parsedObject?.includeSecrets === true;
-
-      let error: string | null = null;
-      if (!parsedObject) {
-        error = 'Payload must be a JSON object.';
-      } else if (typeof version !== 'number' || !Number.isFinite(version)) {
-        error = 'Payload must include a numeric version.';
-      } else if (!Array.isArray(accounts)) {
-        error = 'Payload must include an accounts array.';
-      }
-
-      return { isValid: !error, error, includeSecrets };
-    } catch {
-      return {
-        isValid: false,
-        error: 'Invalid JSON. Check for syntax errors.',
-        includeSecrets: false,
-      };
-    }
-  }, [importPayload]);
-
-  const handleImportPayload = useCallback(async () => {
-    if (!hasTauriBridge()) {
-      toast.error('This action is only available in the desktop app');
-      return;
-    }
-    if (!importPayload.trim()) {
-      toast.error('Paste JSON payload first');
-      return;
-    }
-    if (!importValidation.isValid) {
-      toast.error(importValidation.error ?? 'Invalid import payload');
-      return;
-    }
-
-    const ok = window.confirm(
-      'Import accounts from payload? This may create duplicates. Continue?'
-    );
-    if (!ok) return;
-
-    setImportLoading(true);
-    try {
-      const imported = await importAiProxyAccountsPayload(importPayload);
-      toast.success(`Imported ${imported} account(s)`);
-      setImportPayload('');
-      setAuthScan(null);
-      await fetchAccounts();
-    } catch (e) {
-      console.error('[AiProviders] Import failed:', e);
-      toast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setImportLoading(false);
-    }
-  }, [fetchAccounts, importPayload, importValidation.error, importValidation.isValid]);
-
-  const handlePrepareImportFromScan = useCallback(() => {
-    if (!authScan || authScan.length === 0) {
-      toast.error('No scan results to import');
-      return;
-    }
-
-    const ok = window.confirm(
-      `Prepare import payload from ${authScan.length} scanned credential(s)? You'll be able to review before importing.`
-    );
-    if (!ok) return;
-
-    const payload = JSON.stringify(
-      {
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        includeSecrets: true,
-        accounts: authScan.map(f => {
-          const fileTail = f.path.split(/[\\/]/).pop() || 'auth';
-          return {
-            provider: f.provider,
-            name: `${f.provider} (${fileTail})`,
-            enabled: true,
-            accountType: null,
-            oauthToken: f.token,
-            apiKey: null,
-            sessionToken: null,
-          };
-        }),
-      },
-      null,
-      2
-    );
-
-    setImportPayload(payload);
-    toast.success('Prepared import JSON from scan (review then import)');
-  }, [authScan]);
-
-  useEffect(() => {
-    fetchAccounts();
-    fetchCapabilitiesAndModels();
-    fetchHistorySummary();
-    refreshProxyInfo();
-  }, [fetchAccounts, fetchCapabilitiesAndModels, fetchHistorySummary, refreshProxyInfo]);
-
-  const providerCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: 0 };
-    accounts.forEach(acc => {
-      counts.all++;
-      counts[acc.provider] = (counts[acc.provider] || 0) + 1;
-    });
-    return counts;
-  }, [accounts]);
-
-  const filteredAccounts = useMemo(() => {
-    let filtered = [...accounts];
-
-    if (providerFilter !== 'all') {
-      filtered = filtered.filter(a => a.provider === providerFilter);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        a => a.name.toLowerCase().includes(q) || a.provider.toLowerCase().includes(q)
-      );
-    }
-
-    return filtered;
-  }, [accounts, providerFilter, searchQuery]);
-
-  const handleDelete = useCallback(
-    async (id: number) => {
-      if (!window.confirm('Are you sure you want to delete this account?')) {
-        return;
-      }
-
-      try {
-        await deleteAiProxyAccount(id);
-        toast.success('Account deleted successfully');
-        await fetchAccounts();
-      } catch (e) {
-        console.error('[AiProviders] Error deleting account:', e);
-        toast.error(`Failed to delete account: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    },
-    [fetchAccounts]
-  );
-
-  const handleToggleEnabled = useCallback(
-    async (account: AiProxyAccount) => {
-      try {
-        const updated = { ...account, enabled: !account.enabled };
-        await updateAiProxyAccount(updated);
-        toast.success(`Account ${updated.enabled ? 'enabled' : 'disabled'}`);
-        await fetchAccounts();
-      } catch (e) {
-        console.error('[AiProviders] Error toggling account:', e);
-        toast.error(`Failed to update account: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    },
-    [fetchAccounts]
-  );
-
-  const handleEdit = useCallback((account: AiProxyAccount) => {
+  const handleEdit = useCallback((account: any) => {
     setEditingAccount(account);
     setIsModalOpen(true);
   }, []);
@@ -571,589 +131,162 @@ export default function AiProviders() {
     handleModalClose();
   }, [fetchAccounts, handleModalClose]);
 
-  const handleDebugMigration = useCallback(async () => {
-    try {
-      toast.info('Running migration...');
-      const result = await debugRunAiProxyMigration();
-      console.log('[Debug Migration]', result);
-      toast.success('Migration completed! Check console for details.');
-      await fetchAccounts();
-    } catch (e) {
-      console.error('[Debug Migration] Error:', e);
-      toast.error(`Migration failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }, [fetchAccounts]);
+  const aiSection = useMemo(() => {
+    if (sectionParam === 'integrations') return 'integrations';
+    if (sectionParam === 'usage') return 'usage';
+    if (sectionParam === 'diagnostics') return 'diagnostics';
+    return 'providers';
+  }, [sectionParam]);
 
-  const handleTestConnection = useCallback(async (account: AiProxyAccount) => {
-    if (!account.id) return;
+  const sectionTitle =
+    aiSection === 'integrations'
+      ? 'AI Integrations'
+      : aiSection === 'usage'
+        ? 'AI Usage & Quotas'
+        : aiSection === 'diagnostics'
+          ? 'AI Diagnostics'
+          : 'AI Providers';
 
-    setConnectionState(prev => ({
-      ...prev,
-      [account.id as number]: { status: 'loading' },
-    }));
+  const isProvidersSection = aiSection === 'providers';
+  const isIntegrationsSection = aiSection === 'integrations';
+  const isUsageSection = aiSection === 'usage';
+  const isDiagnosticsSection = aiSection === 'diagnostics';
 
-    try {
-      const result = await testProviderConnection(account.provider);
-      setConnectionState(prev => ({
-        ...prev,
-        [account.id as number]: {
-          status: result.success ? 'ok' : 'error',
-          message: result.message,
-        },
-      }));
-      if (result.success) {
-        toast.success(`${account.provider} connection OK`);
-      } else {
-        toast.error(result.message);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setConnectionState(prev => ({
-        ...prev,
-        [account.id as number]: { status: 'error', message: msg },
-      }));
-      toast.error(`Connection test failed: ${msg}`);
-    }
-  }, []);
-
-  const upsertMapping = useCallback((index: number, patch: Partial<ProviderModelMapping>) => {
-    setModelMappings(prev => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
-  }, []);
-
-  const addMapping = useCallback(() => {
-    setModelMappings(prev => [...prev, { modelPattern: '', provider: 'openai', modelId: null }]);
-  }, []);
-
-  const removeMapping = useCallback((index: number) => {
-    setModelMappings(prev => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleSaveMappings = useCallback(async () => {
-    try {
-      await setProviderModelMappings(modelMappings);
-      toast.success('Provider model mappings saved');
-      setIsMappingsModalOpen(false);
-    } catch (e) {
-      toast.error(`Failed to save mappings: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }, [modelMappings]);
+  const setProxyDraftWithUpdater = useCallback(
+    (updater: (prev: ProxySettings | null) => ProxySettings | null) => {
+      setProxyDraft(prev => updater(prev));
+    },
+    []
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
-      <Header title="AI Providers" icon={<Zap size={18} />} />
+      <Header title={sectionTitle} icon={<Zap size={18} />} />
+      <AiTopTabs />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar Filter Panel */}
-        <aside className="w-[200px] lg:w-[220px] shrink-0 bg-[#111116]/50 backdrop-blur-md border-r border-white/5 flex flex-col overflow-hidden hidden md:flex">
-          <div className="p-3 flex-1 overflow-y-auto">
-            <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
-              Providers
-            </h3>
-            <div className="space-y-0.5 mb-6">
-              {AI_PROXY_PROVIDER_FILTERS.map(provider => (
-                <button
-                  key={provider.id}
-                  onClick={() => setProviderFilter(provider.id)}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',
-                    providerFilter === provider.id
-                      ? 'bg-indigo-500/15 text-white'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
-                  )}
-                >
-                  {providerFilter === provider.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-indigo-500 rounded-r shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-                  )}
-                  <LayoutGrid size={16} className="shrink-0 ml-2" />
-                  <span className="flex-1 text-left">{provider.label}</span>
-                  {providerCounts[provider.id] > 0 && (
-                    <span className="text-xs text-slate-400 font-medium tabular-nums">
-                      {providerCounts[provider.id]}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Quota Dashboard */}
-            <div className="mt-auto pt-4 border-t border-white/5">
-              <QuotaDashboard />
-            </div>
-          </div>
-        </aside>
+        {isProvidersSection && (
+          <AiProvidersSidebar
+            providerFilter={providerFilter}
+            providerCounts={providerCounts}
+            onSelectProvider={setProviderFilter}
+          />
+        )}
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header Bar */}
-          <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="relative group flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-400 transition-colors" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full h-9 bg-black/40 rounded-lg pl-10 pr-4 text-sm text-white border border-white/10 focus:border-indigo-500/50 focus:bg-black/60 outline-none transition-colors placeholder-slate-400"
-                  placeholder="Search accounts..."
-                />
-              </div>
-            </div>
-
-            <div className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-lg bg-black/30 border border-white/10 whitespace-nowrap">
-              <div
-                className={cn(
-                  'w-2 h-2 rounded-full',
-                  proxyStatus?.running ? 'bg-emerald-400' : 'bg-slate-500'
-                )}
-              />
-              <span className="text-xs text-slate-300">Proxy</span>
-              <span className="text-xs text-slate-500">•</span>
-              <span className="text-xs text-slate-400 tabular-nums">
-                {proxyStatus?.running ? `Running :${proxyStatus.port}` : 'Stopped'}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 w-full xl:w-auto">
-              <Button
-                onClick={handleAddNew}
-                variant="primary"
-                size="sm"
-                leftIcon={<Plus size={18} />}
-              >
-                Add Account
-              </Button>
-
-              <Button
-                onClick={() => {
-                  setTransferMode('import');
-                  setIsTransferModalOpen(true);
-                }}
-                variant="secondary"
-                size="sm"
-                leftIcon={<ArrowDownToLine size={16} />}
-              >
-                Import
-              </Button>
-
-              <Button
-                onClick={() => {
-                  setTransferMode('export');
-                  setIsTransferModalOpen(true);
-                }}
-                variant="secondary"
-                size="sm"
-                leftIcon={<ArrowUpFromLine size={16} />}
-              >
-                Export
-              </Button>
-
-              <Button
-                onClick={handleDebugMigration}
-                variant="secondary"
-                size="sm"
-                leftIcon={<Bug size={18} />}
-              >
-                Debug: Run Migration
-              </Button>
-
-              <Button variant="secondary" size="sm" onClick={() => navigate('/api-keys')}>
-                API Keys
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => navigate('/chat')}>
-                Chat
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => navigate('/ai-analytics')}>
-                Analytics
-              </Button>
-            </div>
-          </div>
+          <AiSectionHeaderBar
+            isProvidersSection={isProvidersSection}
+            isIntegrationsSection={isIntegrationsSection}
+            isUsageSection={isUsageSection}
+            isDiagnosticsSection={isDiagnosticsSection}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            proxyStatus={proxyStatus}
+            onAddAccount={handleAddNew}
+            onOpenApiKeys={() => navigate('/api-keys')}
+            onOpenIntegrationWizard={() => setIsIdeWizardOpen(true)}
+            onOpenImport={() => {
+              setTransferMode('import');
+              setIsTransferModalOpen(true);
+            }}
+            onOpenExport={() => {
+              setTransferMode('export');
+              setIsTransferModalOpen(true);
+            }}
+            onOpenDebugChat={() => navigate('/chat')}
+            onRunMigration={handleDebugMigration}
+            onOpenProviders={() => navigate('/ai/providers')}
+          />
 
           {/* Content */}
           <div className="flex-1 overflow-auto p-6">
-            {/* Proxy Controls */}
-            <div className="mb-4 bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Power
-                      size={16}
-                      className={proxyStatus?.running ? 'text-emerald-400' : 'text-slate-500'}
-                    />
-                    <h3 className="text-sm font-semibold text-white">IDE Proxy</h3>
-                    <span
-                      className={cn(
-                        'text-2xs px-2 py-0.5 rounded border',
-                        proxyStatus?.running
-                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                          : 'bg-white/5 border-white/10 text-slate-400'
-                      )}
-                    >
-                      {proxyStatus?.running ? 'Running' : 'Stopped'}
-                    </span>
-                    {proxySettings?.appMode && (
-                      <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-white/5 text-slate-300">
-                        Mode: {proxySettings.appMode}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div className="flex items-center justify-between gap-2 bg-black/30 border border-white/10 rounded-lg px-3 py-2">
-                      <div className="min-w-0">
-                        <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                          Base URL
-                        </div>
-                        <div className="text-xs font-mono text-slate-200 truncate max-w-[240px]">
-                          {baseUrl}
-                        </div>
-                      </div>
-                      <Button
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => handleCopy('Base URL', baseUrl)}
-                        leftIcon={<Copy size={14} />}
-                      >
-                        Copy
-                      </Button>
-                    </div>
+            <AiProxyControlsSection
+              visible={isProvidersSection || isIntegrationsSection || isDiagnosticsSection}
+              proxyStatus={proxyStatus}
+              proxySettings={proxySettings}
+              proxyDraft={proxyDraft}
+              proxyBusy={proxyBusy}
+              proxySaving={proxySaving}
+              proxyError={proxyError}
+              baseUrl={baseUrl}
+              clientApiKey={CLIENT_API_KEY}
+              isProxyDraftDirty={isProxyDraftDirty}
+              maskKey={maskKey}
+              onSetProxyDraft={setProxyDraftWithUpdater}
+              onCopy={(label, value, requireConfirm) => {
+                void handleCopy(label, value, requireConfirm);
+              }}
+              onOpenIdeWizard={() => setIsIdeWizardOpen(true)}
+              onResetDraft={handleResetProxyDraft}
+              onSaveSettings={() => {
+                void handleSaveProxySettings();
+              }}
+              onStartStopProxy={() => {
+                void handleStartStopProxy();
+              }}
+              onRefreshProxyInfo={() => {
+                void refreshProxyInfo();
+              }}
+            />
 
-                    <div className="flex items-center justify-between gap-2 bg-black/30 border border-white/10 rounded-lg px-3 py-2">
-                      <div className="min-w-0">
-                        <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                          Client API key
-                        </div>
-                        <div className="text-xs font-mono text-slate-200 truncate max-w-[240px]">
-                          {CLIENT_API_KEY}
-                        </div>
-                      </div>
-                      <Button
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => handleCopy('Client API key', CLIENT_API_KEY)}
-                        leftIcon={<Copy size={14} />}
-                      >
-                        Copy
-                      </Button>
-                    </div>
-                  </div>
+            <AiSummaryCards
+              visible={isProvidersSection || isUsageSection}
+              availableModels={availableModels}
+              providerCapabilities={providerCapabilities}
+              historySummary={historySummary}
+              onOpenMappings={() => setIsMappingsModalOpen(true)}
+              onOpenAnalytics={() => navigate('/ai-analytics')}
+            />
 
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2 items-end">
-                    <Input
-                      type="number"
-                      min={1024}
-                      max={65535}
-                      step={1}
-                      inputMode="numeric"
-                      value={proxyDraft?.proxyPort ?? ''}
-                      onChange={e => {
-                        const raw = e.target.value;
-                        if (!raw.trim()) return;
-                        const nextPort = Number(raw);
-                        if (!Number.isInteger(nextPort)) return;
-                        setProxyDraft(prev =>
-                          prev
-                            ? {
-                                ...prev,
-                                proxyPort: nextPort,
-                              }
-                            : prev
-                        );
-                      }}
-                      label="Port"
-                      placeholder="8317"
-                    />
+            <AiProvidersGrid
+              visible={isProvidersSection}
+              loading={loading}
+              filteredAccounts={filteredAccounts}
+              searchQuery={searchQuery}
+              providerFilter={providerFilter}
+              connectionState={connectionState}
+              onEdit={handleEdit}
+              onDelete={id => {
+                void handleDelete(id);
+              }}
+              onToggleEnabled={account => {
+                void handleToggleEnabled(account);
+              }}
+              onTestConnection={account => {
+                void handleTestConnection(account);
+              }}
+            />
 
-                    <Select
-                      label="Mode"
-                      value={proxyDraft?.appMode ?? 'full'}
-                      onChange={e =>
-                        setProxyDraft(prev => (prev ? { ...prev, appMode: e.target.value } : prev))
-                      }
-                      options={[
-                        { value: 'full', label: 'Full mode' },
-                        { value: 'quota-only', label: 'Quota-only' },
-                      ]}
-                    />
+            <AiIntegrationsSection
+              visible={isIntegrationsSection}
+              providerCapabilities={providerCapabilities}
+              onOpenWizard={() => setIsIdeWizardOpen(true)}
+              onOpenImport={() => {
+                setTransferMode('import');
+                setIsTransferModalOpen(true);
+              }}
+              onOpenExport={() => {
+                setTransferMode('export');
+                setIsTransferModalOpen(true);
+              }}
+              onOpenMappings={() => setIsMappingsModalOpen(true)}
+            />
 
-                    <Select
-                      label="Routing"
-                      value={proxyDraft?.routingStrategy ?? 'round-robin'}
-                      onChange={e =>
-                        setProxyDraft(prev =>
-                          prev
-                            ? {
-                                ...prev,
-                                routingStrategy: e.target.value,
-                              }
-                            : prev
-                        )
-                      }
-                      options={[
-                        { value: 'round-robin', label: 'Round robin' },
-                        { value: 'fill-first', label: 'Fill first' },
-                      ]}
-                    />
+            <AiUsageSection
+              visible={isUsageSection}
+              historySummary={historySummary}
+              onOpenAnalytics={() => navigate('/ai-analytics')}
+            />
 
-                    <Input
-                      type="password"
-                      value={proxyDraft?.managementKey ?? ''}
-                      onChange={e =>
-                        setProxyDraft(prev =>
-                          prev
-                            ? {
-                                ...prev,
-                                managementKey: e.target.value,
-                              }
-                            : prev
-                        )
-                      }
-                      label="Management key"
-                      placeholder="Management key"
-                    />
-
-                    <div className="flex items-center h-9 px-3 rounded-lg bg-black/30 border border-white/10">
-                      <Toggle
-                        label="Auto start"
-                        checked={proxyDraft?.autoStart ?? false}
-                        onChange={checked =>
-                          setProxyDraft(prev =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  autoStart: checked,
-                                }
-                              : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    <span className="tabular-nums">
-                      Active port:{' '}
-                      <span className="text-slate-200">{proxyStatus?.port ?? '—'}</span>
-                    </span>
-                    <span className="text-slate-600">•</span>
-                    <span className="min-w-0">
-                      Key preview:{' '}
-                      <span className="font-mono text-slate-200 truncate max-w-[180px] inline-block align-middle">
-                        {proxyDraft?.managementKey ? maskKey(proxyDraft.managementKey) : '—'}
-                      </span>
-                    </span>
-                    {proxyDraft?.managementKey && (
-                      <Button
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => handleCopy('Management key', proxyDraft.managementKey, true)}
-                        leftIcon={<Copy size={14} />}
-                      >
-                        Copy
-                      </Button>
-                    )}
-                  </div>
-                  {proxyError && (
-                    <div className="mt-2 text-xs text-red-400">Proxy error: {proxyError}</div>
-                  )}
-                  {isProxyDraftDirty && !proxyError && (
-                    <div className="mt-2 text-xs text-amber-300">
-                      You have unsaved proxy changes
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  <Button variant="secondary" size="sm" onClick={() => setIsIdeWizardOpen(true)}>
-                    Configure IDE/CLI
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleResetProxyDraft}
-                    disabled={!isProxyDraftDirty || proxySaving || proxyBusy}
-                  >
-                    Reset
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveProxySettings}
-                    disabled={proxySaving || !proxyDraft || !isProxyDraftDirty || proxyBusy}
-                  >
-                    {proxySaving ? 'Saving...' : 'Save settings'}
-                  </Button>
-                  <Button
-                    variant={proxyStatus?.running ? 'danger' : 'primary'}
-                    size="sm"
-                    onClick={handleStartStopProxy}
-                    disabled={proxyBusy || proxySaving}
-                    leftIcon={<Power size={16} />}
-                  >
-                    {proxyBusy ? 'Working...' : proxyStatus?.running ? 'Stop Proxy' : 'Start Proxy'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={refreshProxyInfo}
-                    disabled={proxyBusy || proxySaving}
-                    leftIcon={<RefreshCw size={16} />}
-                  >
-                    Refresh
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
-              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-white">Available Models</h3>
-                  <span className="text-xs text-slate-400">{availableModels.length}</span>
-                </div>
-                <div className="space-y-1 max-h-40 overflow-auto pr-1 min-h-[120px]">
-                  {availableModels.slice(0, 20).map(m => (
-                    <div
-                      key={m.id}
-                      className="text-xs text-slate-300 flex items-center justify-between gap-2"
-                    >
-                      <span className="truncate">{m.id}</span>
-                      <span className="text-slate-500 capitalize shrink-0">{m.provider}</span>
-                    </div>
-                  ))}
-                  {availableModels.length === 0 && (
-                    <div className="text-xs text-slate-500">No models available</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <h3 className="text-sm font-semibold text-white">Provider Capabilities</h3>
-                  <Button
-                    variant="secondary"
-                    size="xs"
-                    onClick={() => setIsMappingsModalOpen(true)}
-                  >
-                    Edit mappings
-                  </Button>
-                </div>
-                <div className="space-y-2 min-h-[120px]">
-                  {providerCapabilities.map(c => (
-                    <div
-                      key={c.provider}
-                      className="text-xs text-slate-300 flex items-center justify-between gap-3"
-                    >
-                      <span className="capitalize">{c.provider}</span>
-                      <span className="text-slate-400 font-mono tabular-nums whitespace-nowrap">
-                        {c.enabledAccounts} active / {c.totalAccounts} acc / {c.totalApiKeys} keys
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <h3 className="text-sm font-semibold text-white">Recent Request History</h3>
-                  <Button variant="secondary" size="xs" onClick={() => navigate('/ai-analytics')}>
-                    Open
-                  </Button>
-                </div>
-                <div className="space-y-3 text-xs min-h-[120px]">
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span>Last 20 requests</span>
-                    <span className="text-white font-medium">{historySummary.total}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span>Errors</span>
-                    <span
-                      className={cn(
-                        'font-medium',
-                        historySummary.errors > 0 ? 'text-red-400' : 'text-emerald-400'
-                      )}
-                    >
-                      {historySummary.errors}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {loading && filteredAccounts.length === 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <SkeletonLoader variant="card" count={6} />
-              </div>
-            ) : filteredAccounts.length === 0 ? (
-              <EmptyState
-                icon={Zap}
-                title="No AI provider accounts found"
-                description={
-                  searchQuery || providerFilter !== 'all'
-                    ? 'Try adjusting your filters'
-                    : 'Add your first AI provider account to get started'
-                }
-              />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredAccounts.map(account => (
-                  <div
-                    key={account.id ?? `${account.provider}:${account.name}`}
-                    className="space-y-2"
-                  >
-                    <AccountCard
-                      account={account}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                      onToggleEnabled={handleToggleEnabled}
-                      onTestConnection={handleTestConnection}
-                      connectionTestStatus={
-                        account.id ? connectionState[account.id]?.status || 'idle' : 'idle'
-                      }
-                      connectionTestMessage={
-                        account.id ? connectionState[account.id]?.message : undefined
-                      }
-                    />
-
-                    {/* MVP status chips (graceful fallback) */}
-                    <div className="px-1 flex flex-wrap gap-1.5">
-                      <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-black/30 text-slate-300">
-                        Refresh:{' '}
-                        <span className="text-slate-400">
-                          {(account as any).oauthRefreshError
-                            ? 'Error'
-                            : (account as any).oauthRefreshToken
-                              ? 'Configured'
-                              : 'N/A'}
-                        </span>
-                      </span>
-                      <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-black/30 text-slate-300">
-                        Cooldown:{' '}
-                        <span className="text-slate-400">
-                          {(account as any).cooldownUntil
-                            ? new Date(((account as any).cooldownUntil as number) * 1000) >
-                              new Date()
-                              ? `Until ${new Date(((account as any).cooldownUntil as number) * 1000).toLocaleTimeString()}`
-                              : 'None'
-                            : 'None'}
-                        </span>
-                      </span>
-                      <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-black/30 text-slate-300">
-                        Quota: <span className="text-slate-400">Unknown</span>
-                      </span>
-                      {(account as any).oauthExpiresAt ? (
-                        <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-black/30 text-slate-300">
-                          OAuth exp:{' '}
-                          <span className="text-slate-400">
-                            {new Date(
-                              ((account as any).oauthExpiresAt as number) * 1000
-                            ).toLocaleString()}
-                          </span>
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <AiDiagnosticsSection
+              visible={isDiagnosticsSection}
+              proxyStatus={proxyStatus}
+              proxySettings={proxySettings}
+              onOpenDebugChat={() => navigate('/chat')}
+              onOpenAnalytics={() => navigate('/ai-analytics')}
+            />
           </div>
         </div>
       </div>
@@ -1212,63 +345,7 @@ export default function AiProviders() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={async () => {
-                    if (!authScan || authScan.length === 0) {
-                      toast.error('No scan results to import');
-                      return;
-                    }
-
-                    const payload = JSON.stringify(
-                      {
-                        version: 1,
-                        exportedAt: new Date().toISOString(),
-                        includeSecrets: true,
-                        accounts: authScan.map(f => {
-                          const fileTail = f.path.split(/[\\/]/).pop() || 'auth';
-                          return {
-                            provider: f.provider,
-                            name: `${f.provider} (${fileTail})`,
-                            enabled: true,
-                            accountType: null,
-                            oauthToken: f.token,
-                            apiKey: null,
-                            sessionToken: null,
-                          };
-                        }),
-                      },
-                      null,
-                      2
-                    );
-
-                    if (!hasTauriBridge()) {
-                      toast.error('This action is only available in the desktop app');
-                      return;
-                    }
-
-                    const ok = window.confirm(
-                      `Import ${authScan.length} scanned credential(s)? Duplicates are skipped.`
-                    );
-                    if (!ok) return;
-
-                    setImportLoading(true);
-                    try {
-                      const imported = await importAiProxyAccountsPayload(payload);
-                      const skipped = Math.max(authScan.length - imported, 0);
-                      toast.success(
-                        `Imported ${imported} account(s)${
-                          skipped > 0 ? `, skipped ${skipped} duplicate(s)` : ''
-                        }`
-                      );
-                      setImportPayload('');
-                      setAuthScan(null);
-                      await fetchAccounts();
-                    } catch (e) {
-                      console.error('[AiProviders] Import failed:', e);
-                      toast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
-                    } finally {
-                      setImportLoading(false);
-                    }
-                  }}
+                  onClick={handleImportAllFromScan}
                   disabled={importLoading || authScanLoading || !authScan || authScan.length === 0}
                 >
                   {importLoading ? 'Importing…' : 'Import all from scan'}
@@ -1444,7 +521,13 @@ export default function AiProviders() {
               <Button variant="secondary" onClick={() => setIsMappingsModalOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleSaveMappings}>
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  const ok = await handleSaveMappings();
+                  if (ok) setIsMappingsModalOpen(false);
+                }}
+              >
                 Save
               </Button>
             </div>
