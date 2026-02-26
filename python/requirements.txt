@@ -12,6 +12,9 @@ requests>=2.31.0
 httpx>=0.25.0
 aiohttp>=3.9.0
 
+# File lock for persistent browser profiles
+filelock>=3.13.0
+
 # AWS SDK (for SSO OIDC OAuth flow)
 boto3>=1.34.0
 

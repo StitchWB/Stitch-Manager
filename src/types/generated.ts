@@ -37,15 +37,13 @@ export type SimpleQuotaInfo = { used: number; limit: number; resetAt?: string | 
 
 export type QuotaInfoResponse = { accountId: number; provider: string; email: string; quotaUsed: number; quotaLimit: number; quotaRemaining: number; percentageUsed: number }
 
-export type ServerStatus = { isRunning: boolean; port: number; host: string; uptime: number | null; requestCount: number; activeConnections: number }
-
 export type PoolRefreshResult = { success: boolean; message: string; refreshedCount: number; failedCount: number; errors: string[] }
 
 export type PoolReloadResult = { success: boolean; message: string; loadedCount: number; previousCount: number }
 
 export type HealthResponse = { status: string; appName: string; version: string }
 
-export type AppConfig = { general: GeneralConfigSettings; registration: RegistrationConfigSettings; imap: ImapConfig; llmServer: LLMServerConfig; proxy: ProxyConfigSettings; idePaths: IDEPathsConfigSettings }
+export type AppConfig = { general: GeneralConfigSettings; registration: RegistrationConfigSettings; imap: ImapConfig; proxy: ProxyConfigSettings; idePaths: IDEPathsConfigSettings }
 
 export type GeneralConfigSettings = { theme: string; language: string; autoSave: boolean }
 
@@ -209,11 +207,6 @@ export type CountMessageTokensRequest = { messages: Message[] }
  * Response for token counting
  */
 export type TokenCountResponse = { tokens: number }
-
-/**
- * Extended server status with logs
- */
-export type ExtendedServerStatus = { isRunning: boolean; port: number; host: string; uptime?: number | null; requestCount: number; activeConnections: number; pid?: number | null; startedAt?: string | null; logs: string[]; error?: string | null }
 
 /**
  * Dashboard statistics
@@ -439,12 +432,6 @@ pauseOnError: boolean;
  * Log API responses
  */
 logApiResponses: boolean }
-
-/**
- * LLM Server Configuration
- * Mirrors the Python Settings class from llm_api_server/config.py
- */
-export type LLMServerConfig = { apiPort: number; apiHost: string; logLevel: string; kiroAuthUrl: string; kiroWebportalUrl: string; bedrockRegion: string; anthropicApiKey: string | null; openaiApiKey: string | null; quotaStorage: string; redisUrl: string | null; quotaDailyLimit: number; quotaRequestLimit: number; useMockProvider: boolean; devAuthMode: boolean }
 
 /**
  * Unified application configuration
