@@ -1,18 +1,78 @@
-import { useEffect, useState } from 'react';
-import { Button, Select, Toggle } from '../ui';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, LoadingSpinner, Select, Toggle } from '../ui';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { safeInvoke } from '../../lib/tauri/core/invoke';
+import { getEnabledModels, setEnabledModels } from '../../lib/tauri/modules/aiProxy';
 import type { ProxyStatus, ProxySettings } from '../../types/generated';
 import { IdeConfigWizard } from '../ai-proxy/IdeConfigWizard';
+
+const OPENCODE_DEFAULT_MODEL_IDS = [
+  'gpt-5',
+  'gpt-5-codex',
+  'gpt-5-codex-mini',
+  'gpt-5.1',
+  'gpt-5.1-codex',
+  'gpt-5.1-codex-mini',
+  'gpt-5.1-codex-max',
+  'gpt-5.2',
+  'gpt-5.2-codex',
+  'gpt-5.3-codex',
+  'gpt-5.3-codex-spark',
+];
+
+const opencodeModelLabel = (id: string) => {
+  switch (id) {
+    case 'gpt-5':
+      return 'GPT-5';
+    case 'gpt-5-codex':
+      return 'GPT-5 Codex';
+    case 'gpt-5-codex-mini':
+      return 'GPT-5 Codex Mini';
+    case 'gpt-5.1':
+      return 'GPT-5.1';
+    case 'gpt-5.1-codex':
+      return 'GPT-5.1 Codex';
+    case 'gpt-5.1-codex-mini':
+      return 'GPT-5.1 Codex Mini';
+    case 'gpt-5.1-codex-max':
+      return 'GPT-5.1 Codex Max';
+    case 'gpt-5.2':
+      return 'GPT-5.2';
+    case 'gpt-5.2-codex':
+      return 'GPT-5.2 Codex';
+    case 'gpt-5.3-codex':
+      return 'GPT-5.3 Codex';
+    case 'gpt-5.3-codex-spark':
+      return 'GPT-5.3 Codex Spark';
+    default:
+      return id;
+  }
+};
+
+const normalizeModelIds = (models: string[]) => models.map(model => model.trim()).filter(Boolean);
 
 export function AiProxySettings() {
   const { status, settings, setStatus, setSettings, setLoading, setError } = useAiProxyStore();
   const [localSettings, setLocalSettings] = useState(settings);
   const [showIdeWizard, setShowIdeWizard] = useState(false);
+  const [enabledModels, setEnabledModelsState] = useState<string[]>([]);
+  const [modelToggles, setModelToggles] = useState<Record<string, boolean>>({});
+  const [modelCatalog, setModelCatalog] = useState<string[]>(OPENCODE_DEFAULT_MODEL_IDS);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsSaving, setModelsSaving] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelsSaveStatus, setModelsSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   useEffect(() => {
     loadData();
+    loadModels();
   }, []);
+
+  useEffect(() => {
+    if (modelsSaveStatus !== 'success') return;
+    const timer = setTimeout(() => setModelsSaveStatus('idle'), 2400);
+    return () => clearTimeout(timer);
+  }, [modelsSaveStatus]);
 
   const loadData = async () => {
     try {
@@ -28,6 +88,29 @@ export function AiProxySettings() {
       setError(error instanceof Error ? error.message : 'Failed to load AI Proxy data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadModels = async () => {
+    try {
+      setModelsLoading(true);
+      setModelsError(null);
+      const data = await getEnabledModels();
+      const normalized = normalizeModelIds(data);
+      const seed = normalized.length > 0 ? normalized : OPENCODE_DEFAULT_MODEL_IDS;
+      const catalog = Array.from(new Set([...OPENCODE_DEFAULT_MODEL_IDS, ...seed]));
+      setEnabledModelsState(seed);
+      setModelCatalog(catalog);
+      setModelToggles(
+        catalog.reduce<Record<string, boolean>>((acc, id) => {
+          acc[id] = seed.includes(id);
+          return acc;
+        }, {})
+      );
+    } catch (error) {
+      setModelsError(error instanceof Error ? error.message : 'Failed to load enabled models');
+    } finally {
+      setModelsLoading(false);
     }
   };
 
@@ -69,6 +152,76 @@ export function AiProxySettings() {
       setError(error instanceof Error ? error.message : 'Failed to save settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const modelsDirty = useMemo(() => {
+    const selected = Object.keys(modelToggles).filter(id => modelToggles[id]);
+    const base = enabledModels;
+    if (selected.length !== base.length) return true;
+    const baseSet = new Set(base);
+    return selected.some(id => !baseSet.has(id));
+  }, [enabledModels, modelToggles]);
+
+  const selectedModelIds = useMemo(
+    () => Object.keys(modelToggles).filter(id => modelToggles[id]),
+    [modelToggles]
+  );
+
+  const handleToggleModel = (id: string) => {
+    setModelsSaveStatus('idle');
+    setModelToggles(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleSelectAllModels = () => {
+    setModelsSaveStatus('idle');
+    setModelToggles(
+      modelCatalog.reduce<Record<string, boolean>>((acc, id) => {
+        acc[id] = true;
+        return acc;
+      }, {})
+    );
+  };
+
+  const handleClearModels = () => {
+    setModelsSaveStatus('idle');
+    setModelToggles(
+      modelCatalog.reduce<Record<string, boolean>>((acc, id) => {
+        acc[id] = false;
+        return acc;
+      }, {})
+    );
+  };
+
+  const handleSaveModels = async () => {
+    if (modelsSaving) return;
+    const selected = selectedModelIds;
+    if (selected.length === 0) {
+      setModelsSaveStatus('error');
+      setModelsError('Select at least one model to keep OpenCode available.');
+      return;
+    }
+
+    try {
+      setModelsSaving(true);
+      setModelsError(null);
+      const saved = await setEnabledModels(selected);
+      const normalized = normalizeModelIds(saved);
+      setEnabledModelsState(normalized);
+      const catalog = Array.from(new Set([...OPENCODE_DEFAULT_MODEL_IDS, ...normalized]));
+      setModelCatalog(catalog);
+      setModelToggles(
+        catalog.reduce<Record<string, boolean>>((acc, id) => {
+          acc[id] = normalized.includes(id);
+          return acc;
+        }, {})
+      );
+      setModelsSaveStatus('success');
+    } catch (error) {
+      setModelsSaveStatus('error');
+      setModelsError(error instanceof Error ? error.message : 'Failed to save enabled models');
+    } finally {
+      setModelsSaving(false);
     }
   };
 
@@ -190,6 +343,84 @@ export function AiProxySettings() {
           <option value="round-robin">Round Robin</option>
           <option value="fill-first">Fill First</option>
         </Select>
+      </div>
+
+      {/* OpenCode Models */}
+      <div className="space-y-3 rounded-lg border border-vsc-border bg-vsc-sidebar/60 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-vsc-text">OpenCode Model Access</div>
+            <div className="text-xs text-vsc-text-muted mt-1">
+              Toggle which model IDs are exposed in the OpenCode provider config.
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearModels}
+              disabled={modelsLoading || modelsSaving}
+            >
+              Clear
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSelectAllModels}
+              disabled={modelsLoading || modelsSaving}
+            >
+              Select all
+            </Button>
+          </div>
+        </div>
+
+        {modelsLoading ? (
+          <div className="flex items-center gap-2 text-xs text-vsc-text-muted">
+            <LoadingSpinner size="sm" color="muted" />
+            Loading model toggles...
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {modelCatalog.map(id => (
+              <div
+                key={id}
+                className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10 bg-black/20"
+              >
+                <div>
+                  <div className="text-xs font-semibold text-vsc-text">
+                    {opencodeModelLabel(id)}
+                  </div>
+                  <div className="text-[11px] text-vsc-text-muted font-mono">{id}</div>
+                </div>
+                <Toggle
+                  label=""
+                  checked={Boolean(modelToggles[id])}
+                  onChange={() => handleToggleModel(id)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="text-xs text-vsc-text-muted">
+            {selectedModelIds.length} enabled • Changes apply to OpenCode config previews
+          </div>
+          <div className="flex items-center gap-2">
+            {modelsSaveStatus === 'success' && !modelsSaving && (
+              <span className="text-xs text-emerald-400">Saved</span>
+            )}
+            {modelsError && <span className="text-xs text-red-400">{modelsError}</span>}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveModels}
+              disabled={modelsLoading || modelsSaving || !modelsDirty}
+            >
+              {modelsSaving ? 'Saving...' : 'Save models'}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Save Button */}

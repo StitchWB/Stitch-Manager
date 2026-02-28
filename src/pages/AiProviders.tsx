@@ -10,7 +10,8 @@ import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersS
 import { AiSectionHeaderBar } from '../components/ai-proxy/sections/AiSectionHeaderBar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
 import { AiSummaryCards } from '../components/ai-proxy/sections/AiSummaryCards';
-import { AiProvidersGrid } from '../components/ai-proxy/sections/AiProvidersGrid';
+import { AiProxyAccountsTable } from '../components/ai-proxy/AiProxyAccountsTable';
+import { AiProxyAccountDrawer } from '../components/ai-proxy/AiProxyAccountDrawer';
 import { AiIntegrationsSection } from '../components/ai-proxy/sections/AiIntegrationsSection';
 import { AiUsageSection } from '../components/ai-proxy/sections/AiUsageSection';
 import { AiDiagnosticsSection } from '../components/ai-proxy/sections/AiDiagnosticsSection';
@@ -26,6 +27,7 @@ export default function AiProviders() {
   const { section: sectionParam } = useParams<{ section?: string }>();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any | null>(null);
+  const [drawerAccount, setDrawerAccount] = useState<any | null>(null);
   const [isMappingsModalOpen, setIsMappingsModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferMode, setTransferMode] = useState<'import' | 'export'>('import');
@@ -74,7 +76,6 @@ export default function AiProviders() {
     handleStartStopProxy,
     scanAuthFiles,
     handleDelete,
-    handleToggleEnabled,
     handleDebugMigration,
     handleTestConnection,
     upsertMapping,
@@ -116,6 +117,10 @@ export default function AiProviders() {
     setIsModalOpen(true);
   }, []);
 
+  const handleOpenDrawer = useCallback((account: any) => {
+    setDrawerAccount(account);
+  }, []);
+
   const handleAddNew = useCallback(() => {
     setEditingAccount(null);
     setIsModalOpen(true);
@@ -124,6 +129,10 @@ export default function AiProviders() {
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
     setEditingAccount(null);
+  }, []);
+
+  const handleDrawerClose = useCallback(() => {
+    setDrawerAccount(null);
   }, []);
 
   const handleModalSubmit = useCallback(async () => {
@@ -183,6 +192,13 @@ export default function AiProviders() {
             isDiagnosticsSection={isDiagnosticsSection}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            providerFilter={providerFilter}
+            onProviderFilterChange={setProviderFilter}
+            providerOptions={AI_PROXY_PROVIDER_FILTERS.map(p => ({
+              id: p.id,
+              label: p.label,
+              count: providerCounts[p.id] ?? 0,
+            }))}
             proxyStatus={proxyStatus}
             onAddAccount={handleAddNew}
             onOpenApiKeys={() => navigate('/api-keys')}
@@ -201,7 +217,7 @@ export default function AiProviders() {
           />
 
           {/* Content */}
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-auto p-4 md:p-6">
             <AiProxyControlsSection
               visible={isProvidersSection || isIntegrationsSection || isDiagnosticsSection}
               proxyStatus={proxyStatus}
@@ -240,24 +256,23 @@ export default function AiProviders() {
               onOpenAnalytics={() => navigate('/ai-analytics')}
             />
 
-            <AiProvidersGrid
-              visible={isProvidersSection}
-              loading={loading}
-              filteredAccounts={filteredAccounts}
-              searchQuery={searchQuery}
-              providerFilter={providerFilter}
-              connectionState={connectionState}
-              onEdit={handleEdit}
-              onDelete={id => {
-                void handleDelete(id);
-              }}
-              onToggleEnabled={account => {
-                void handleToggleEnabled(account);
-              }}
-              onTestConnection={account => {
-                void handleTestConnection(account);
-              }}
-            />
+            {isProvidersSection && (
+              <div className="mt-4">
+                <AiProxyAccountsTable
+                  accounts={filteredAccounts}
+                  loading={loading}
+                  connectionState={connectionState}
+                  onRowClick={handleOpenDrawer}
+                  onEdit={handleEdit}
+                  onDelete={id => {
+                    void handleDelete(id);
+                  }}
+                  onTestConnection={account => {
+                    void handleTestConnection(account);
+                  }}
+                />
+              </div>
+            )}
 
             <AiIntegrationsSection
               visible={isIntegrationsSection}
@@ -586,6 +601,20 @@ export default function AiProviders() {
         account={editingAccount}
         onClose={handleModalClose}
         onSubmit={handleModalSubmit}
+      />
+
+      <AiProxyAccountDrawer
+        isOpen={Boolean(drawerAccount)}
+        account={drawerAccount}
+        onClose={handleDrawerClose}
+        onEdit={handleEdit}
+        onDelete={id => {
+          void handleDelete(id);
+        }}
+        onTestConnection={account => {
+          void handleTestConnection(account);
+        }}
+        connection={drawerAccount?.id ? connectionState[drawerAccount.id] : undefined}
       />
 
       <IdeConfigWizard isOpen={isIdeWizardOpen} onClose={() => setIsIdeWizardOpen(false)} />

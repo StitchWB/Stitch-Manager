@@ -27,28 +27,32 @@ const LOG_SOURCES = [
   'settings',
   'server',
   'system',
+  'ai_proxy.sidecar',
+  'ai_proxy.process',
 ] as const;
+
+const LOG_CHANNELS = ['all', 'app', 'frontend', 'backend', 'proxy', 'sidecar', 'toast'] as const;
 
 // ============================================
 // Helper Functions
 // ============================================
 
 const STAGE_EMOJIS: Record<string, string> = {
-  'Email': '📧',
-  'IMAP': '📬',
-  'Password': '🔐',
-  'OAuth': '🔑',
-  'Browser': '🌐',
-  'AWS': '☁️',
-  'Kiro': '🚀',
-  'Verification': '✅',
-  'System': '⚙️',
-  'Name': '👤',
-  'registration': '📝',
-  'patcher': '🔧',
-  'settings': '⚙️',
-  'server': '🖥️',
-  'accounts': '👤',
+  Email: '📧',
+  IMAP: '📬',
+  Password: '🔐',
+  OAuth: '🔑',
+  Browser: '🌐',
+  AWS: '☁️',
+  Kiro: '🚀',
+  Verification: '✅',
+  System: '⚙️',
+  Name: '👤',
+  registration: '📝',
+  patcher: '🔧',
+  settings: '⚙️',
+  server: '🖥️',
+  accounts: '👤',
 };
 
 function getStageEmoji(stage: string): string {
@@ -75,17 +79,17 @@ function detectStageFromLog(log: LogEntry): string {
   // Try to extract stage from message using regex
   // Pattern: [stage] or [account_id] [stage]
   const stageMatches = log.message.match(/\[([^\]]+)\]/g);
-  
+
   if (stageMatches && stageMatches.length > 0) {
     // Get last bracket content (usually the stage)
     const lastMatch = stageMatches[stageMatches.length - 1];
     const stage = lastMatch.slice(1, -1); // Remove brackets
-    
+
     // Filter out account IDs (contain /)
     if (!stage.includes('/') && stage.length > 0) {
       return stage;
     }
-    
+
     // If last was account ID, try second-to-last
     if (stageMatches.length > 1) {
       const secondLast = stageMatches[stageMatches.length - 2];
@@ -95,14 +99,14 @@ function detectStageFromLog(log: LogEntry): string {
       }
     }
   }
-  
+
   // Fallback to source
   return log.source || 'system';
 }
 
 function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
   const groups = new Map<string, LogEntry[]>();
-  
+
   // Group logs by detected stage
   for (const log of logs) {
     const stage = detectStageFromLog(log);
@@ -111,7 +115,7 @@ function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
     }
     groups.get(stage)!.push(log);
   }
-  
+
   // Convert to LogGroupData array
   const result: LogGroupData[] = [];
   for (const [stage, entries] of groups.entries()) {
@@ -119,8 +123,10 @@ function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
     const hasError = entries.some(e => e.level === 'error');
     const hasWarning = entries.some(e => e.level === 'warn');
     const hasSuccess = entries.some(e => e.level === 'success');
-    const hasProgress = entries.some(e => e.message.includes('⏳') || e.message.includes('Attempt'));
-    
+    const hasProgress = entries.some(
+      e => e.message.includes('⏳') || e.message.includes('Attempt')
+    );
+
     let status: 'success' | 'error' | 'progress' | 'info';
     if (hasError) {
       status = 'error';
@@ -133,13 +139,13 @@ function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
     } else {
       status = 'info';
     }
-    
+
     // Calculate duration
     const timestamps = entries.map(e => new Date(e.timestamp).getTime());
     const firstTimestamp = Math.min(...timestamps);
     const lastTimestamp = Math.max(...timestamps);
     const duration = lastTimestamp - firstTimestamp;
-    
+
     result.push({
       stage,
       entries,
@@ -149,7 +155,7 @@ function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
       lastTimestamp,
     });
   }
-  
+
   // Sort by first timestamp (most recent first)
   return result.sort((a, b) => b.firstTimestamp - a.firstTimestamp);
 }
@@ -194,6 +200,7 @@ export default function Logs() {
     resetLogsFilters,
   } = useUIPreferencesStore();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [channelFilter, setChannelFilter] = useState<string>('all');
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const { copy } = useCopyToClipboard();
@@ -235,12 +242,15 @@ export default function Logs() {
     if (searchQuery) {
       setFilter({ search: searchQuery });
     }
+    if (channelFilter && channelFilter !== 'all') {
+      setFilter({ channels: [channelFilter] });
+    }
   }, []); // Only on mount
-  
+
   // ============================================
   // Memoized Values
   // ============================================
-  
+
   const groupedLogs = useMemo(() => {
     if (!groupingEnabled) return null;
     return groupLogsByStage(logs);
@@ -266,6 +276,14 @@ export default function Logs() {
       setFilter({ sources: source && source !== 'all' ? [source] : [] });
     },
     [setFilter, setLogsSourceFilter]
+  );
+
+  const handleChannelChange = useCallback(
+    (channel: string) => {
+      setChannelFilter(channel);
+      setFilter({ channels: channel && channel !== 'all' ? [channel] : [] });
+    },
+    [setFilter]
   );
 
   const handleRefresh = useCallback(() => {
@@ -297,6 +315,7 @@ export default function Logs() {
   }, [exportLogs]);
 
   const handleResetFilters = useCallback(() => {
+    setChannelFilter('all');
     resetLogsFilters();
     resetFilter();
   }, [resetFilter, resetLogsFilters]);
@@ -337,11 +356,9 @@ export default function Logs() {
             {/* Verbosity Badge */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
               <span className="text-xs text-slate-500">Verbosity:</span>
-              <span className="text-xs font-semibold text-vsc-blue uppercase">
-                {logVerbosity}
-              </span>
+              <span className="text-xs font-semibold text-vsc-blue uppercase">{logVerbosity}</span>
             </div>
-            
+
             <ActionButtonGroup
               actions={[
                 {
@@ -402,37 +419,41 @@ export default function Logs() {
             ]}
           />
 
+          <Select
+            value={channelFilter}
+            onChange={e => handleChannelChange(e.target.value)}
+            className="w-36"
+            options={LOG_CHANNELS.map(channel => ({
+              value: channel,
+              label: channel,
+            }))}
+          />
+
           {/* Search Input */}
           <Input
             type="text"
             value={searchQuery}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLogsSearchQuery(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setLogsSearchQuery(e.target.value)
+            }
             placeholder={t('logs.searchPlaceholder')}
             leftIcon={<Search className="w-4 h-4" />}
             containerClassName="flex-1 max-w-md"
           />
 
           {/* Reset Filters */}
-          {(levelFilter || sourceFilter || searchQuery) && (
-            <Button
-              onClick={handleResetFilters}
-              variant="ghost"
-              size="xs"
-            >
+          {(levelFilter || sourceFilter || searchQuery || channelFilter !== 'all') && (
+            <Button onClick={handleResetFilters} variant="ghost" size="xs">
               {t('logs.resetFilters')}
             </Button>
           )}
         </div>
-        
+
         {/* Grouping Controls */}
         <div className="flex items-center gap-4 mb-4 flex-wrap">
           {/* Grouping Toggle */}
-          <Toggle
-            checked={groupingEnabled}
-            onChange={setGroupingEnabled}
-            label="Group by stage"
-          />
-          
+          <Toggle checked={groupingEnabled} onChange={setGroupingEnabled} label="Group by stage" />
+
           {/* Auto-collapse Toggle */}
           {groupingEnabled && (
             <Toggle
@@ -442,7 +463,7 @@ export default function Logs() {
               tooltip="Automatically collapse successful log groups"
             />
           )}
-          
+
           {/* Expand/Collapse All */}
           {groupingEnabled && (
             <div className="flex gap-2">
@@ -534,8 +555,8 @@ export default function Logs() {
                       </span>
 
                       {/* Source - Purple */}
-                      <span className="text-purple-400 shrink-0 w-24 truncate">
-                        [{log.source || 'system'}]
+                      <span className="text-purple-400 shrink-0 w-28 truncate">
+                        [{log.channel || 'app'}:{log.source || 'system'}]
                       </span>
 
                       {/* Message - White, expandable */}
