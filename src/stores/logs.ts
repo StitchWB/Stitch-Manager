@@ -13,14 +13,19 @@ export interface LogEntry {
   id: string;
   timestamp: string;
   level: LogLevel;
+  channel?: string;
   message: string;
   source: string;
   details?: Record<string, unknown>;
+  correlationId?: string;
+  sessionId?: string;
+  context?: Record<string, unknown>;
 }
 
 export interface LogFilter {
   levels?: LogLevel[];
   sources?: string[];
+  channels?: string[];
   search?: string;
   fromTime?: string;
   toTime?: string;
@@ -38,6 +43,7 @@ export interface LogStats {
   totalLogs: number;
   byLevel: Record<LogLevel, number>;
   bySource: Record<string, number>;
+  byChannel?: Record<string, number>;
   oldestLog?: string;
   newestLog?: string;
 }
@@ -55,6 +61,7 @@ function normalizeErrorMessage(error: unknown): string {
 const DEFAULT_FILTER: LogFilter = {
   levels: [],
   sources: [],
+  channels: [],
   search: undefined,
   fromTime: undefined,
   toTime: undefined,
@@ -219,6 +226,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
           totalLogs: stats.total,
           byLevel: stats.byLevel as Record<LogLevel, number>,
           bySource: stats.bySource,
+          byChannel: stats.byChannel,
         },
       });
     } catch (error) {
@@ -286,6 +294,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
       const matchesFilter =
         (filter.levels?.length === 0 || filter.levels?.includes(newLog.level)) &&
         (filter.sources?.length === 0 || filter.sources?.includes(newLog.source)) &&
+        (filter.channels?.length === 0 || filter.channels?.includes(newLog.channel ?? 'app')) &&
         (!filter.search || newLog.message.toLowerCase().includes(filter.search.toLowerCase()));
 
       if (matchesFilter) {

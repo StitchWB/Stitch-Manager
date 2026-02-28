@@ -111,7 +111,7 @@ export function AiProxyControlsSection({
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2 items-end">
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-2 items-end">
             <Input
               type="number"
               min={1024}

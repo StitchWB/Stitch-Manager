@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/observability/toast';
 import {
   getAiProxyAccounts,
   deleteAiProxyAccount,
@@ -18,12 +18,15 @@ import {
   updateProxySettings,
   exportAiProxyAccountsPayload,
   importAiProxyAccountsPayload,
+  fetchAllQuotasSafe,
+  fetchOpenAiAccountQuotasSafe,
   scanAuthFiles as scanAuthFilesCmd,
   type ProviderCapability,
   type ProviderModelMapping,
 } from '@/lib/tauri/modules/aiProxy';
 import type { AiProxyAccount, AuthFile, ProxySettings, ProxyStatus } from '../../types/generated';
 import type { ConnectionStateMap, HistorySummary } from '../../components/ai-proxy/sections/types';
+import { useAiProxyStore } from '../../stores/aiProxy';
 
 const hasTauriBridge = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -41,6 +44,8 @@ export function maskKey(key: string, visibleTail: number = 4): string {
 }
 
 export function useAiProvidersController() {
+  const setProviderQuotas = useAiProxyStore(state => state.setProviderQuotas);
+  const setOpenAiAccountQuotas = useAiProxyStore(state => state.setOpenAiAccountQuotas);
   const [accounts, setAccounts] = useState<AiProxyAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,7 +78,7 @@ export function useAiProvidersController() {
       const data = await getAiProxyAccounts();
       setAccounts(data);
     } catch (e) {
-      toast.error(`Failed to load accounts: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(`Failed to load accounts: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -119,6 +124,24 @@ export function useAiProvidersController() {
     }
   }, []);
 
+  const fetchProviderQuotas = useCallback(async () => {
+    try {
+      const [providerQuotasResult, openAiQuotasResult] = await Promise.allSettled([
+        fetchAllQuotasSafe(),
+        fetchOpenAiAccountQuotasSafe(),
+      ]);
+
+      if (providerQuotasResult.status === 'fulfilled') {
+        setProviderQuotas(providerQuotasResult.value);
+      }
+      if (openAiQuotasResult.status === 'fulfilled') {
+        setOpenAiAccountQuotas(openAiQuotasResult.value);
+      }
+    } catch {
+      // non-blocking
+    }
+  }, [setProviderQuotas, setOpenAiAccountQuotas]);
+
   const refreshProxyInfo = useCallback(async () => {
     if (!hasTauriBridge()) {
       setProxyStatus(null);
@@ -141,7 +164,7 @@ export function useAiProvidersController() {
 
   const handleSaveProxySettings = useCallback(async () => {
     if (!proxyDraft) {
-      toast.error('Proxy settings are not loaded yet');
+      appToast.error('Proxy settings are not loaded yet');
       return;
     }
     if (
@@ -149,11 +172,11 @@ export function useAiProvidersController() {
       proxyDraft.proxyPort < 1024 ||
       proxyDraft.proxyPort > 65535
     ) {
-      toast.error('Port must be an integer between 1024 and 65535');
+      appToast.error('Port must be an integer between 1024 and 65535');
       return;
     }
     if (!proxyDraft.managementKey.trim()) {
-      toast.error('Management key cannot be empty');
+      appToast.error('Management key cannot be empty');
       return;
     }
 
@@ -163,11 +186,11 @@ export function useAiProvidersController() {
       await updateProxySettings(proxyDraft);
       setProxySettings(proxyDraft);
       await refreshProxyInfo();
-      toast.success('Proxy settings saved');
+      appToast.success('Proxy settings saved');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setProxyError(msg);
-      toast.error(`Failed to save proxy settings: ${msg}`);
+      appToast.error(`Failed to save proxy settings: ${msg}`);
     } finally {
       setProxySaving(false);
     }
@@ -182,7 +205,7 @@ export function useAiProvidersController() {
   const handleStartStopProxy = useCallback(async () => {
     if (proxyBusy) return;
     if (!hasTauriBridge()) {
-      toast.error('Proxy controls are unavailable outside Tauri');
+      appToast.error('Proxy controls are unavailable outside Tauri');
       return;
     }
 
@@ -192,11 +215,11 @@ export function useAiProvidersController() {
       const next = proxyStatus?.running ? await stopAiProxy() : await startAiProxy();
       setProxyStatus(next);
       await refreshProxyInfo();
-      toast.success(proxyStatus?.running ? 'Proxy stopped' : 'Proxy started');
+      appToast.success(proxyStatus?.running ? 'Proxy stopped' : 'Proxy started');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setProxyError(msg);
-      toast.error(msg);
+      appToast.error(msg);
     } finally {
       setProxyBusy(false);
     }
@@ -205,7 +228,7 @@ export function useAiProvidersController() {
   const scanAuthFiles = useCallback(async () => {
     if (authScanLoading) return;
     if (!hasTauriBridge()) {
-      toast.error('This action is only available in the desktop app');
+      appToast.error('This action is only available in the desktop app');
       return;
     }
     setAuthScanLoading(true);
@@ -218,9 +241,9 @@ export function useAiProvidersController() {
       );
 
       setAuthScan(normalized);
-      toast.success(`Found ${normalized.length} auth file${normalized.length === 1 ? '' : 's'}`);
+      appToast.success(`Found ${normalized.length} auth file${normalized.length === 1 ? '' : 's'}`);
     } catch (e) {
-      toast.error(`Scan failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(`Scan failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setAuthScanLoading(false);
     }
@@ -302,10 +325,10 @@ export function useAiProvidersController() {
       if (!window.confirm('Are you sure you want to delete this account?')) return;
       try {
         await deleteAiProxyAccount(id);
-        toast.success('Account deleted successfully');
+        appToast.success('Account deleted successfully');
         await fetchAccounts();
       } catch (e) {
-        toast.error(`Failed to delete account: ${e instanceof Error ? e.message : String(e)}`);
+        appToast.error(`Failed to delete account: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
     [fetchAccounts]
@@ -316,10 +339,10 @@ export function useAiProvidersController() {
       try {
         const updated = { ...account, enabled: !account.enabled };
         await updateAiProxyAccount(updated);
-        toast.success(`Account ${updated.enabled ? 'enabled' : 'disabled'}`);
+        appToast.success(`Account ${updated.enabled ? 'enabled' : 'disabled'}`);
         await fetchAccounts();
       } catch (e) {
-        toast.error(`Failed to update account: ${e instanceof Error ? e.message : String(e)}`);
+        appToast.error(`Failed to update account: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
     [fetchAccounts]
@@ -327,12 +350,12 @@ export function useAiProvidersController() {
 
   const handleDebugMigration = useCallback(async () => {
     try {
-      toast.info('Running migration...');
+      appToast.info('Running migration...');
       await debugRunAiProxyMigration();
-      toast.success('Migration completed! Check console for details.');
+      appToast.success('Migration completed! Check console for details.');
       await fetchAccounts();
     } catch (e) {
-      toast.error(`Migration failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(`Migration failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [fetchAccounts]);
 
@@ -348,15 +371,15 @@ export function useAiProvidersController() {
           message: result.message,
         },
       }));
-      if (result.success) toast.success(`${account.provider} connection OK`);
-      else toast.error(result.message);
+      if (result.success) appToast.success(`${account.provider} connection OK`);
+      else appToast.error(result.message);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setConnectionState(prev => ({
         ...prev,
         [account.id as number]: { status: 'error', message: msg },
       }));
-      toast.error(`Connection test failed: ${msg}`);
+      appToast.error(`Connection test failed: ${msg}`);
     }
   }, []);
 
@@ -375,10 +398,10 @@ export function useAiProvidersController() {
   const handleSaveMappings = useCallback(async () => {
     try {
       await setProviderModelMappings(modelMappings);
-      toast.success('Provider model mappings saved');
+      appToast.success('Provider model mappings saved');
       return true;
     } catch (e) {
-      toast.error(`Failed to save mappings: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(`Failed to save mappings: ${e instanceof Error ? e.message : String(e)}`);
       return false;
     }
   }, [modelMappings]);
@@ -390,9 +413,9 @@ export function useAiProvidersController() {
       link.href = URL.createObjectURL(blob);
       link.download = fileName;
       link.click();
-      toast.success('Download started');
+      appToast.success('Download started');
     } catch {
-      toast.error('Failed to download');
+      appToast.error('Failed to download');
     }
   }, []);
 
@@ -404,7 +427,7 @@ export function useAiProvidersController() {
 
   const handleGenerateExport = useCallback(async () => {
     if (!hasTauriBridge()) {
-      toast.error('This action is only available in the desktop app');
+      appToast.error('This action is only available in the desktop app');
       return;
     }
     setExportLoading(true);
@@ -414,9 +437,9 @@ export function useAiProvidersController() {
         exportFormat === 'csv' ? false : exportIncludeSecrets
       );
       setExportPayload(payload);
-      toast.success('Export generated');
+      appToast.success('Export generated');
     } catch (e) {
-      toast.error(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setExportLoading(false);
     }
@@ -424,15 +447,15 @@ export function useAiProvidersController() {
 
   const handleImportPayload = useCallback(async () => {
     if (!hasTauriBridge()) {
-      toast.error('This action is only available in the desktop app');
+      appToast.error('This action is only available in the desktop app');
       return;
     }
     if (!importPayload.trim()) {
-      toast.error('Paste JSON payload first');
+      appToast.error('Paste JSON payload first');
       return;
     }
     if (!importValidation.isValid) {
-      toast.error(importValidation.error ?? 'Invalid import payload');
+      appToast.error(importValidation.error ?? 'Invalid import payload');
       return;
     }
     const ok = window.confirm(
@@ -442,12 +465,12 @@ export function useAiProvidersController() {
     setImportLoading(true);
     try {
       const imported = await importAiProxyAccountsPayload(importPayload);
-      toast.success(`Imported ${imported} account(s)`);
+      appToast.success(`Imported ${imported} account(s)`);
       setImportPayload('');
       setAuthScan(null);
       await fetchAccounts();
     } catch (e) {
-      toast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setImportLoading(false);
     }
@@ -455,7 +478,7 @@ export function useAiProvidersController() {
 
   const handlePrepareImportFromScan = useCallback(() => {
     if (!authScan || authScan.length === 0) {
-      toast.error('No scan results to import');
+      appToast.error('No scan results to import');
       return;
     }
     const ok = window.confirm(
@@ -484,16 +507,16 @@ export function useAiProvidersController() {
       2
     );
     setImportPayload(payload);
-    toast.success('Prepared import JSON from scan (review then import)');
+    appToast.success('Prepared import JSON from scan (review then import)');
   }, [authScan]);
 
   const handleImportAllFromScan = useCallback(async () => {
     if (!authScan || authScan.length === 0) {
-      toast.error('No scan results to import');
+      appToast.error('No scan results to import');
       return;
     }
     if (!hasTauriBridge()) {
-      toast.error('This action is only available in the desktop app');
+      appToast.error('This action is only available in the desktop app');
       return;
     }
 
@@ -528,14 +551,14 @@ export function useAiProvidersController() {
     try {
       const imported = await importAiProxyAccountsPayload(payload);
       const skipped = Math.max(authScan.length - imported, 0);
-      toast.success(
+      appToast.success(
         `Imported ${imported} account(s)${skipped > 0 ? `, skipped ${skipped} duplicate(s)` : ''}`
       );
       setImportPayload('');
       setAuthScan(null);
       await fetchAccounts();
     } catch (e) {
-      toast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setImportLoading(false);
     }
@@ -544,9 +567,16 @@ export function useAiProvidersController() {
   useEffect(() => {
     void fetchAccounts();
     void fetchCapabilitiesAndModels();
+    void fetchProviderQuotas();
     void fetchHistorySummary();
     void refreshProxyInfo();
-  }, [fetchAccounts, fetchCapabilitiesAndModels, fetchHistorySummary, refreshProxyInfo]);
+  }, [
+    fetchAccounts,
+    fetchCapabilitiesAndModels,
+    fetchProviderQuotas,
+    fetchHistorySummary,
+    refreshProxyInfo,
+  ]);
 
   return {
     accounts,
