@@ -7,7 +7,7 @@ import {
   getProfileSettings,
   saveProfileSettings,
   type ProfileSettingsV1,
-} from '@/lib/tauri';
+} from '@/lib/tauri/modules/profiles';
 import { parseProxyString } from '../../lib/proxyUtils';
 
 type ProfileSettingsTab = 'network' | 'hardware' | 'geo' | 'storage';
@@ -48,11 +48,6 @@ interface ProfileSettingsModalProps {
   onClose: () => void;
   onSaved?: () => void;
 }
-
-const proxyTypeOptions = [
-  { value: 'http', label: 'HTTP' },
-  { value: 'socks5', label: 'SOCKS5' },
-];
 
 const localeOptions = [
   { value: '', label: t('common.select') },
