@@ -19,6 +19,7 @@ import AccountsTable from '../components/AccountsTable';
 import ProfilesTable from '../components/ProfilesTable';
 import type { ProfileItem } from '../components/ProfilesTable';
 import AddAccountModal from '../components/AddAccountModal';
+import { ProfileSettingsModal } from '../components/profiles/ProfileSettingsModal';
 import { QuotaFilterChip } from '../components/ui/QuotaFilterChip';
 import { FloatingActionBar } from '../components/ui/FloatingActionBar';
 import { EmptyState, SkeletonLoader, ActionButtonGroup, Button } from '../components/ui';
@@ -283,6 +284,7 @@ export default function Accounts() {
     accountsPage.entityFilter || 'accounts'
   );
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
+  const [profileSettingsAlias, setProfileSettingsAlias] = useState<string | null>(null);
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileListFilter, setProfileListFilter] = useState<
     'all' | 'standalone' | 'linked' | 'used_kiro'
@@ -1448,6 +1450,7 @@ export default function Accounts() {
                     ) : (
                       <ProfilesTable
                         profiles={visibleProfileItems}
+                        onEdit={alias => setProfileSettingsAlias(alias)}
                         onOpen={handleOpenStandaloneProfile}
                         onStartAutoreg={(alias, targetProvider, preset, awsBootstrapAccountId) => {
                           const query = new URLSearchParams({
@@ -1588,6 +1591,7 @@ export default function Accounts() {
                     ) : (
                       <ProfilesTable
                         profiles={visibleProfileItems}
+                        onEdit={alias => setProfileSettingsAlias(alias)}
                         onOpen={handleOpenStandaloneProfile}
                         onStartAutoreg={(alias, targetProvider, preset, awsBootstrapAccountId) => {
                           const query = new URLSearchParams({
@@ -1756,6 +1760,16 @@ export default function Accounts() {
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleAddAccount}
       />
+
+      <ProfileSettingsModal
+        alias={profileSettingsAlias}
+        isOpen={Boolean(profileSettingsAlias)}
+        onClose={() => setProfileSettingsAlias(null)}
+        onSaved={() => {
+          void loadProfiles();
+        }}
+      />
+
       {selectedIds.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-50 px-6 pb-6 pointer-events-none">
           <div className="max-w-2xl mx-auto pointer-events-auto">

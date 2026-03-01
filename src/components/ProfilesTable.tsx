@@ -1,8 +1,10 @@
-import { Globe, PlayCircle, Trash2 } from 'lucide-react';
+import { Globe, PlayCircle, Trash2, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { t } from '../lib/i18n';
 import { Button, EmptyState, Input, Select } from './ui';
 import { LayoutGrid } from 'lucide-react';
+import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
+import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
 
 export interface ProfileItem {
   alias: string;
@@ -17,6 +19,7 @@ export interface ProfileItem {
 interface ProfilesTableProps {
   profiles: ProfileItem[];
   onOpen: (alias: string, target: string, customUrl?: string) => Promise<void>;
+  onEdit: (alias: string) => void;
   onStartAutoreg: (
     alias: string,
     targetProvider: string,
@@ -31,6 +34,7 @@ interface ProfilesTableProps {
 export default function ProfilesTable({
   profiles,
   onOpen,
+  onEdit,
   onStartAutoreg,
   onDelete,
   profileFilter,
@@ -38,6 +42,9 @@ export default function ProfilesTable({
 }: ProfilesTableProps) {
   const [openTarget, setOpenTarget] = useState<string>('kiro');
   const [customUrl, setCustomUrl] = useState('');
+  const [recordAlias, setRecordAlias] = useState<string | null>(null);
+  const [replayAlias, setReplayAlias] = useState<string | null>(null);
+  const canEdit = typeof onEdit === 'function';
 
   if (profiles.length === 0) {
     return (
@@ -183,6 +190,16 @@ export default function ProfilesTable({
                 </div>
 
                 <div className="flex items-center justify-end gap-2 border-t lg:border-t-0 border-white/5 pt-2 lg:pt-0 min-w-0">
+                  {canEdit ? (
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      leftIcon={<Settings size={12} />}
+                      onClick={() => onEdit(profile.alias)}
+                    >
+                      {t('common.settings')}
+                    </Button>
+                  ) : null}
                   <Button
                     size="xs"
                     variant="secondary"
@@ -224,6 +241,20 @@ export default function ProfilesTable({
                   </Button>
                   <Button
                     size="xs"
+                    variant="secondary"
+                    onClick={() => setRecordAlias(profile.alias)}
+                  >
+                    {t('common.record') || 'Record'}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => setReplayAlias(profile.alias)}
+                  >
+                    {t('common.replay') || 'Replay'}
+                  </Button>
+                  <Button
+                    size="xs"
                     variant="danger"
                     leftIcon={<Trash2 size={12} />}
                     onClick={() => {
@@ -238,6 +269,20 @@ export default function ProfilesTable({
           );
         })}
       </div>
+
+      <ScenarioRecordModal
+        alias={recordAlias}
+        isOpen={Boolean(recordAlias)}
+        onClose={() => setRecordAlias(null)}
+        defaultUrl={openTarget === 'custom' ? customUrl : undefined}
+      />
+
+      <ScenarioReplayModal
+        alias={replayAlias}
+        isOpen={Boolean(replayAlias)}
+        onClose={() => setReplayAlias(null)}
+        defaultUrl={openTarget === 'custom' ? customUrl : undefined}
+      />
     </div>
   );
 }

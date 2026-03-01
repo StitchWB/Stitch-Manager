@@ -48,6 +48,8 @@ export interface Translations {
     clear: string;
     copy: string;
     preview: string;
+    record: string;
+    replay: string;
   };
 
   status: {
@@ -257,6 +259,26 @@ export interface Translations {
     profileHealthReady: string;
     profileHealthNeedsAws: string;
     profileHealthNoSession: string;
+    profileSettingsTitle: string;
+    profileSettingsGenerateFingerprint: string;
+    profileSettingsHardwareTab: string;
+    profileSettingsGeoTab: string;
+    profileSettingsPlatformLabel: string;
+    profileSettingsHardwareConcurrency: string;
+    profileSettingsHardwareMemory: string;
+    profileSettingsScreenWidth: string;
+    profileSettingsScreenHeight: string;
+    profileSettingsLocaleLabel: string;
+    profileSettingsTimezoneLabel: string;
+    profileSettingsLatitudeLabel: string;
+    profileSettingsLongitudeLabel: string;
+    profileSettingsNotesLabel: string;
+    profileSettingsNotesPlaceholder: string;
+    profileSettingsCookiesLabel: string;
+    profileSettingsCookiesPlaceholder: string;
+    profileSettingsSummaryTitle: string;
+    profileSettingsUnsaved: string;
+    profileSettingsSaved: string;
     notes: string;
     tags: string;
     lastLoginAt: string;
