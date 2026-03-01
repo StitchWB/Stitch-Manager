@@ -100,6 +100,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--continue-on-error", action="store_true", help="Continue after step errors")
     p.add_argument("--headless", action="store_true", help="Run browser in headless mode")
     p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Do not launch a browser; only validate scenario + manual pause control flow",
+    )
+    p.add_argument(
         "--out", default="", help="Output directory (defaults to ~/.stitch-manager/scenarios)"
     )
     return p.parse_args()
@@ -205,6 +210,15 @@ def _looks_like_captcha(step: dict[str, Any]) -> bool:
 def _step_kind(step: dict[str, Any]) -> str:
     kind = step.get("kind")
     return str(kind).strip().lower() if isinstance(kind, str) else "unknown"
+
+
+def _timeout_ms(step: dict[str, Any], default_ms: int) -> int:
+    raw = step.get("timeoutMs")
+    if isinstance(raw, int) and raw > 0:
+        return raw
+    if isinstance(raw, float) and raw > 0:
+        return int(raw)
+    return default_ms
 
 
 def _best_selector(step: dict[str, Any]) -> str | None:
@@ -390,11 +404,20 @@ async def _run_step(page: Any, step: dict[str, Any], timeout_ms: int = 15_000) -
         await page.locator(selector).first.fill(value or "", timeout=timeout_ms)
         return
 
-    if kind in ("submit",):
-        if selector:
-            await page.locator(selector).first.press("Enter", timeout=timeout_ms)
+    if kind in ("submit", "press"):
+        key = value if (value and value.strip()) else "Enter"
+        # Playwright expects key names like "Enter", "Tab", "ArrowDown".
+        # In case recorder saved lowercase, normalize a bit.
+        if len(key) == 1:
+            # single character keys are fine
+            pass
         else:
-            await page.keyboard.press("Enter")
+            key = key[:1].upper() + key[1:]
+
+        if selector:
+            await page.locator(selector).first.press(key, timeout=timeout_ms)
+        else:
+            await page.keyboard.press(key)
         return
 
     if kind in ("manual.pause", "manual", "manual.captcha", "captcha"):
@@ -503,6 +526,158 @@ async def main_async() -> int:
     failed_steps: list[dict[str, Any]] = []
     trace_saved = False
 
+    if args.dry_run:
+        _log("warn", "Dry-run mode: browser will NOT be launched", step="init")
+        try:
+            deadline = time.time() + float(max(1, args.timeout_s))
+            for idx, step in enumerate(steps, start=1):
+                if time.time() > deadline:
+                    raise TimeoutError("Replay timeout reached")
+
+                kind = _step_kind(step)
+                selector = _best_selector(step)
+                url = step.get("url") if isinstance(step.get("url"), str) else None
+
+                _event(
+                    "scenario.replay.step.start",
+                    {
+                        "runId": run_id,
+                        "index": idx,
+                        "total": total_steps,
+                        "kind": kind,
+                        "selector": selector,
+                        "url": url,
+                    },
+                )
+
+                if kind in (
+                    "manual.pause",
+                    "manual",
+                    "manual.captcha",
+                    "captcha",
+                ) or _looks_like_captcha(step):
+                    reason = "captcha" if _looks_like_captcha(step) else kind
+                    await _manual_pause(
+                        reason=reason,
+                        step_index=idx,
+                        total_steps=total_steps,
+                        command_tail=cmd_tail,
+                        command_file_path=str(command_file),
+                        timeout_s=max(1, args.pause_timeout_s),
+                    )
+
+                passed += 1
+                _event(
+                    "scenario.replay.step.done",
+                    {
+                        "runId": run_id,
+                        "index": idx,
+                        "total": total_steps,
+                        "kind": kind,
+                    },
+                )
+
+        except ReplayAbort as e:
+            report = {
+                "version": 1,
+                "runId": run_id,
+                "status": "aborted",
+                "startedAt": started_at,
+                "finishedAt": _now_iso(),
+                "scenarioPath": str(scenario_path),
+                "stepsTotal": total_steps,
+                "stepsPassed": passed,
+                "stepsFailed": failed,
+                "failedSteps": failed_steps,
+                "artifactsDir": str(artifacts_dir),
+                "tracePath": None,
+                "commandFilePath": str(command_file),
+                "error": str(e),
+                "dryRun": True,
+            }
+            report_path.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "aborted"})
+            _result(
+                False,
+                data={"reportPath": str(report_path), "runId": run_id},
+                error={"code": "aborted", "message": str(e)},
+            )
+            return 2
+        except Exception as e:
+            report = {
+                "version": 1,
+                "runId": run_id,
+                "status": "failed",
+                "startedAt": started_at,
+                "finishedAt": _now_iso(),
+                "scenarioPath": str(scenario_path),
+                "stepsTotal": total_steps,
+                "stepsPassed": passed,
+                "stepsFailed": failed,
+                "failedSteps": failed_steps,
+                "artifactsDir": str(artifacts_dir),
+                "tracePath": None,
+                "commandFilePath": str(command_file),
+                "error": str(e),
+                "dryRun": True,
+            }
+            report_path.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "failed"})
+            _result(
+                False,
+                data={"reportPath": str(report_path), "runId": run_id},
+                error={"code": "replay_failed", "message": str(e)},
+            )
+            return 1
+
+        report = {
+            "version": 1,
+            "runId": run_id,
+            "status": "succeeded",
+            "startedAt": started_at,
+            "finishedAt": _now_iso(),
+            "scenarioPath": str(scenario_path),
+            "stepsTotal": total_steps,
+            "stepsPassed": passed,
+            "stepsFailed": failed,
+            "failedSteps": failed_steps,
+            "artifactsDir": str(artifacts_dir),
+            "tracePath": None,
+            "commandFilePath": str(command_file),
+            "dryRun": True,
+        }
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        _event(
+            "scenario.replay.finished",
+            {
+                "runId": run_id,
+                "stepsTotal": total_steps,
+                "stepsPassed": passed,
+                "stepsFailed": failed,
+                "reportPath": str(report_path),
+                "tracePath": None,
+            },
+        )
+        _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "succeeded"})
+        _result(
+            True,
+            data={
+                "runId": run_id,
+                "stepsTotal": total_steps,
+                "stepsPassed": passed,
+                "stepsFailed": failed,
+                "reportPath": str(report_path),
+                "tracePath": None,
+                "artifactsDir": str(artifacts_dir),
+                "commandFilePath": str(command_file),
+            },
+        )
+        return 0
+
     try:
         async with ProfileLauncher(
             profile_id=args.alias,
@@ -559,7 +734,7 @@ async def main_async() -> int:
                                 timeout_s=max(1, args.pause_timeout_s),
                             )
 
-                        await _run_step(page, step)
+                        await _run_step(page, step, timeout_ms=_timeout_ms(step, 15_000))
                         passed += 1
                         _event(
                             "scenario.replay.step.done",
