@@ -21,11 +21,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+# Ensure project imports work regardless of cwd.
+# NOTE: Our python package root is the "python/" directory.
+PYTHON_ROOT = Path(__file__).resolve().parent
+if str(PYTHON_ROOT) not in sys.path:
+    sys.path.insert(0, str(PYTHON_ROOT))
 
 
 def _now_iso() -> str:
@@ -90,6 +97,12 @@ RECORDER_INIT_SCRIPT = r"""
 (() => {
   if (window.__stitchRecorderInstalled) return;
   window.__stitchRecorderInstalled = true;
+  if (typeof window.__stitchRecorderStepCount !== 'number') {
+    window.__stitchRecorderStepCount = 0;
+  }
+  if (typeof window.__stitchRecorderPaused !== 'boolean') {
+    window.__stitchRecorderPaused = false;
+  }
 
   const safe = (fn) => {
     try { return fn(); } catch { return null; }
@@ -111,9 +124,14 @@ RECORDER_INIT_SCRIPT = r"""
   };
 
   const send = (payload) => {
+    if (window.__stitchRecorderPaused) return;
     // Runner will expose __stitchRecordEvent
     if (typeof window.__stitchRecordEvent === 'function') {
       window.__stitchRecordEvent(payload);
+      window.__stitchRecorderStepCount = (window.__stitchRecorderStepCount || 0) + 1;
+      if (typeof window.__stitchRecorderOverlaySetCount === 'function') {
+        window.__stitchRecorderOverlaySetCount(window.__stitchRecorderStepCount);
+      }
     }
   };
 
@@ -190,6 +208,165 @@ RECORDER_INIT_SCRIPT = r"""
 """
 
 
+RECORDER_OVERLAY_SCRIPT = r"""
+(() => {
+  if (window.__stitchRecorderOverlayInstalled) return;
+  window.__stitchRecorderOverlayInstalled = true;
+
+  const box = document.createElement('div');
+  box.style.position = 'fixed';
+  box.style.right = '16px';
+  box.style.bottom = '16px';
+  box.style.zIndex = '2147483647';
+  box.style.background = 'rgba(11,13,18,0.92)';
+  box.style.color = '#e2e8f0';
+  box.style.border = '1px solid rgba(148,163,184,0.25)';
+  box.style.borderRadius = '10px';
+  box.style.padding = '10px';
+  box.style.fontFamily = 'Inter, Segoe UI, Arial, sans-serif';
+  box.style.fontSize = '12px';
+  box.style.minWidth = '220px';
+  box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.4)';
+
+  const title = document.createElement('div');
+  title.textContent = 'Stitch Recorder';
+  title.style.fontWeight = '700';
+  title.style.marginBottom = '6px';
+
+  const status = document.createElement('div');
+  status.textContent = 'Status: Recording';
+  status.style.opacity = '0.9';
+  status.style.marginBottom = '8px';
+
+  const count = document.createElement('div');
+  count.textContent = 'Steps: 0';
+  count.style.opacity = '0.85';
+  count.style.marginBottom = '8px';
+
+  const reason = document.createElement('div');
+  reason.textContent = 'Reason: -';
+  reason.style.opacity = '0.8';
+  reason.style.marginBottom = '6px';
+
+  const pausedFor = document.createElement('div');
+  pausedFor.textContent = 'Paused: -';
+  pausedFor.style.opacity = '0.8';
+  pausedFor.style.marginBottom = '8px';
+  pausedFor.style.display = 'none';
+
+  let pausedSince = null;
+
+  const row = document.createElement('div');
+  row.style.display = 'flex';
+  row.style.gap = '6px';
+
+  const mkBtn = (label, bg) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.padding = '6px 10px';
+    b.style.borderRadius = '7px';
+    b.style.border = '1px solid rgba(148,163,184,0.25)';
+    b.style.background = bg;
+    b.style.color = '#fff';
+    b.style.cursor = 'pointer';
+    b.style.fontSize = '12px';
+    return b;
+  };
+
+  const pauseBtn = mkBtn('Pause', '#334155');
+  const stopBtn = mkBtn('Finish & Save', '#7f1d1d');
+  let paused = false;
+
+  const sendControl = (cmd) => {
+    if (typeof window.__stitchRecordControl === 'function') {
+      window.__stitchRecordControl(cmd);
+    }
+  };
+
+  pauseBtn.onclick = () => {
+    paused = !paused;
+    window.__stitchRecorderPaused = paused;
+    if (paused) {
+      pauseBtn.textContent = 'Resume';
+      status.textContent = 'Status: Paused';
+      reason.textContent = 'Reason: Operator pause';
+      if (!pausedSince) pausedSince = Date.now();
+      pausedFor.style.display = 'block';
+      sendControl('pause');
+    } else {
+      pauseBtn.textContent = 'Pause';
+      status.textContent = 'Status: Recording';
+      reason.textContent = 'Reason: -';
+      pausedSince = null;
+      pausedFor.style.display = 'none';
+      pausedFor.textContent = 'Paused: -';
+      sendControl('resume');
+    }
+  };
+
+  stopBtn.onclick = () => {
+    status.textContent = 'Status: Stopping...';
+    window.__stitchRecorderPaused = true;
+    pausedSince = null;
+    sendControl('stop');
+  };
+
+  row.appendChild(pauseBtn);
+  row.appendChild(stopBtn);
+  box.appendChild(title);
+  box.appendChild(status);
+  box.appendChild(count);
+  box.appendChild(reason);
+  box.appendChild(pausedFor);
+  box.appendChild(row);
+  document.documentElement.appendChild(box);
+
+  window.__stitchRecorderOverlaySetStatus = (text) => {
+    status.textContent = `Status: ${text}`;
+  };
+
+  window.__stitchRecorderOverlaySetReason = (text) => {
+    const v = (text || '').toString().trim();
+    reason.textContent = `Reason: ${v || '-'}`;
+  };
+
+  window.__stitchRecorderOverlaySetPaused = (flag) => {
+    if (flag) {
+      if (!pausedSince) pausedSince = Date.now();
+      pausedFor.style.display = 'block';
+    } else {
+      pausedSince = null;
+      pausedFor.style.display = 'none';
+      pausedFor.textContent = 'Paused: -';
+    }
+  };
+
+  window.__stitchRecorderOverlaySetSaved = (path) => {
+    status.textContent = 'Status: Saved';
+    reason.textContent = `Reason: ${path ? `Saved to ${path}` : 'Saved'}`;
+    pausedSince = null;
+    pausedFor.style.display = 'none';
+    pausedFor.textContent = 'Paused: -';
+  };
+
+  window.__stitchRecorderOverlaySetCount = (value) => {
+    const n = Number(value || 0);
+    count.textContent = `Steps: ${Number.isFinite(n) ? n : 0}`;
+  };
+
+  // Restore current count on reinjection/navigation.
+  window.__stitchRecorderOverlaySetCount(window.__stitchRecorderStepCount || 0);
+
+  setInterval(() => {
+    if (!pausedSince) return;
+    const sec = Math.max(0, Math.floor((Date.now() - pausedSince) / 1000));
+    pausedFor.textContent = `Paused: ${sec}s`;
+  }, 1000);
+})();
+"""
+
+
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Record a scenario in Camoufox persistent profile")
     p.add_argument("--alias", required=True, help="Profile alias (maps to persistent profile id)")
@@ -221,10 +398,19 @@ async def main_async() -> int:
         return 1
 
     run_id = f"rec_{int(time.time())}"
+    paths = get_paths()
+
+    # Pin Playwright browsers cache to Stitch-managed directory so first-run downloads
+    # go to a predictable location (used by install_browser_runtime.py).
+    try:
+        pw_cache = paths.cache_dir / "playwright-browsers"
+        pw_cache.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(pw_cache))
+    except Exception:
+        pass
+
     out_dir = (
-        Path(args.out).expanduser().resolve()
-        if args.out
-        else (get_paths().user_data_dir / "scenarios")
+        Path(args.out).expanduser().resolve() if args.out else (paths.user_data_dir / "scenarios")
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     session_dir = out_dir / f"{args.scenario_name}_{run_id}"
@@ -241,6 +427,8 @@ async def main_async() -> int:
     )
 
     steps: list[RecordedStep] = []
+    stop_event = asyncio.Event()
+    paused = False
 
     config: dict[str, Any] = {"timezone_id": "Auto", "geolocation": "Auto"}
     if args.config_json and args.config_json.strip():
@@ -252,6 +440,9 @@ async def main_async() -> int:
             _log("warn", "Invalid --config-json, ignoring", step="init")
 
     def on_record(payload: dict[str, Any]) -> None:
+        nonlocal paused
+        if paused:
+            return
         # payload is the browser-side event
         try:
             step = RecordedStep(
@@ -271,12 +462,66 @@ async def main_async() -> int:
             # don't break recording
             return
 
+    def on_control(command: str) -> None:
+        nonlocal paused
+        cmd = str(command or "").strip().lower()
+        if cmd == "pause":
+            paused = True
+            _event("scenario.record.control.pause", {"runId": run_id})
+            return
+        if cmd == "resume":
+            paused = False
+            _event("scenario.record.control.resume", {"runId": run_id})
+            return
+        if cmd in ("stop", "abort", "cancel"):
+            _event("scenario.record.control.stop", {"runId": run_id})
+            stop_event.set()
+            return
+
+    async def update_overlay(
+        page: Any,
+        *,
+        status: str | None = None,
+        reason: str | None = None,
+        paused_flag: bool | None = None,
+        saved_path: str | None = None,
+    ) -> None:
+        try:
+            if status is not None:
+                await page.evaluate(
+                    "(arg) => window.__stitchRecorderOverlaySetStatus && window.__stitchRecorderOverlaySetStatus(arg.status)",
+                    {"status": status},
+                )
+            if reason is not None:
+                await page.evaluate(
+                    "(arg) => window.__stitchRecorderOverlaySetReason && window.__stitchRecorderOverlaySetReason(arg.reason)",
+                    {"reason": reason},
+                )
+            if paused_flag is not None:
+                await page.evaluate(
+                    "(arg) => window.__stitchRecorderOverlaySetPaused && window.__stitchRecorderOverlaySetPaused(Boolean(arg.paused))",
+                    {"paused": paused_flag},
+                )
+            if saved_path is not None:
+                await page.evaluate(
+                    "(arg) => window.__stitchRecorderOverlaySetSaved && window.__stitchRecorderOverlaySetSaved(arg.path)",
+                    {"path": saved_path},
+                )
+        except Exception:
+            pass
+
     last_len = 0
     last_save_ts = 0.0
 
     async def install_recorder(page: Page) -> None:
         await page.expose_function("__stitchRecordEvent", on_record)
+        await page.expose_function("__stitchRecordControl", on_control)
         await page.add_init_script(RECORDER_INIT_SCRIPT)
+        await page.add_init_script(RECORDER_OVERLAY_SCRIPT)
+        # add_init_script only applies to future navigations; also install recorder
+        # into the currently loaded document so recording works immediately.
+        await page.evaluate(RECORDER_INIT_SCRIPT)
+        await page.evaluate(RECORDER_OVERLAY_SCRIPT)
 
     def export_snapshot() -> None:
         # Best-effort autosave snapshot (safe on kill/cancel)
@@ -324,6 +569,7 @@ async def main_async() -> int:
         ) as launcher:
             page = await launcher.open(args.url, wait_until="domcontentloaded")
             await install_recorder(page)
+            await update_overlay(page, status="Recording", reason="", paused_flag=False)
 
             export_snapshot()
 
@@ -337,15 +583,34 @@ async def main_async() -> int:
             while time.time() < deadline:
                 await asyncio.sleep(0.5)
                 export_snapshot()
+                if paused:
+                    await update_overlay(
+                        page, status="Paused", reason="Operator pause", paused_flag=True
+                    )
+                else:
+                    await update_overlay(page, status="Recording", reason="", paused_flag=False)
+                if stop_event.is_set():
+                    _log("info", "Stop requested from browser overlay", step="record")
+                    break
                 if page.is_closed():
                     _log("info", "Page closed - stopping record", step="record")
                     break
+
+            if not page.is_closed():
+                await update_overlay(page, status="Saving", reason="", paused_flag=False)
 
     except Exception as e:
         _result(False, error={"code": "record_failed", "message": str(e)})
         return 1
 
     export_snapshot()
+
+    try:
+        # best-effort: show final state before context exits
+        if "page" in locals() and page is not None and not page.is_closed():
+            await update_overlay(page, saved_path=str(scenario_path))
+    except Exception:
+        pass
 
     _event("scenario.record.saved", {"path": str(scenario_path), "steps": len(steps)})
     _result(True, data={"scenarioPath": str(scenario_path), "steps": len(steps), "runId": run_id})

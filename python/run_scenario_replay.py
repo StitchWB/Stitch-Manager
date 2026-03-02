@@ -20,16 +20,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
 # Ensure project imports work regardless of cwd.
-CURRENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CURRENT_DIR.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# NOTE: Our python package root is the "python/" directory.
+PYTHON_ROOT = Path(__file__).resolve().parent
+if str(PYTHON_ROOT) not in sys.path:
+    sys.path.insert(0, str(PYTHON_ROOT))
 
 
 def _now_iso() -> str:
@@ -82,6 +83,163 @@ def _result(
 
 class ReplayAbort(Exception):
     pass
+
+
+REPLAY_OVERLAY_SCRIPT = r"""
+(() => {
+  if (window.__stitchReplayOverlayInstalled) return;
+  window.__stitchReplayOverlayInstalled = true;
+
+  const box = document.createElement('div');
+  box.style.position = 'fixed';
+  box.style.right = '16px';
+  box.style.bottom = '16px';
+  box.style.zIndex = '2147483647';
+  box.style.background = 'rgba(11,13,18,0.92)';
+  box.style.color = '#e2e8f0';
+  box.style.border = '1px solid rgba(148,163,184,0.25)';
+  box.style.borderRadius = '10px';
+  box.style.padding = '10px';
+  box.style.fontFamily = 'Inter, Segoe UI, Arial, sans-serif';
+  box.style.fontSize = '12px';
+  box.style.minWidth = '220px';
+  box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.4)';
+
+  const title = document.createElement('div');
+  title.textContent = 'Stitch Replay';
+  title.style.fontWeight = '700';
+  title.style.marginBottom = '6px';
+
+  const status = document.createElement('div');
+  status.textContent = 'Status: Running';
+  status.style.opacity = '0.9';
+  status.style.marginBottom = '8px';
+
+  const step = document.createElement('div');
+  step.textContent = 'Step: -/-';
+  step.style.opacity = '0.85';
+  step.style.marginBottom = '8px';
+
+  const reason = document.createElement('div');
+  reason.textContent = 'Reason: -';
+  reason.style.opacity = '0.8';
+  reason.style.marginBottom = '6px';
+
+  const pausedFor = document.createElement('div');
+  pausedFor.textContent = 'Paused: -';
+  pausedFor.style.opacity = '0.8';
+  pausedFor.style.marginBottom = '8px';
+  pausedFor.style.display = 'none';
+
+  let pausedSince = null;
+
+  const row = document.createElement('div');
+  row.style.display = 'flex';
+  row.style.gap = '6px';
+
+  const mkBtn = (label, bg) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.padding = '6px 10px';
+    b.style.borderRadius = '7px';
+    b.style.border = '1px solid rgba(148,163,184,0.25)';
+    b.style.background = bg;
+    b.style.color = '#fff';
+    b.style.cursor = 'pointer';
+    b.style.fontSize = '12px';
+    return b;
+  };
+
+  const pauseBtn = mkBtn('Pause', '#334155');
+  const stopBtn = mkBtn('Stop', '#7f1d1d');
+  let paused = false;
+
+  const sendControl = (cmd) => {
+    if (typeof window.__stitchReplayControl === 'function') {
+      window.__stitchReplayControl(cmd);
+    }
+  };
+
+  pauseBtn.onclick = () => {
+    paused = !paused;
+    if (paused) {
+      pauseBtn.textContent = 'Resume';
+      status.textContent = 'Status: Paused';
+      reason.textContent = 'Reason: Operator pause';
+      if (!pausedSince) pausedSince = Date.now();
+      pausedFor.style.display = 'block';
+      sendControl('pause');
+    } else {
+      pauseBtn.textContent = 'Pause';
+      status.textContent = 'Status: Running';
+      reason.textContent = 'Reason: -';
+      pausedSince = null;
+      pausedFor.style.display = 'none';
+      pausedFor.textContent = 'Paused: -';
+      sendControl('resume');
+    }
+  };
+
+  stopBtn.onclick = () => {
+    status.textContent = 'Status: Stopping...';
+    pausedSince = null;
+    sendControl('stop');
+  };
+
+  row.appendChild(pauseBtn);
+  row.appendChild(stopBtn);
+  box.appendChild(title);
+  box.appendChild(status);
+  box.appendChild(step);
+  box.appendChild(reason);
+  box.appendChild(pausedFor);
+  box.appendChild(row);
+  document.documentElement.appendChild(box);
+
+  window.__stitchReplayOverlaySetStatus = (text) => {
+    status.textContent = `Status: ${text}`;
+  };
+
+  window.__stitchReplayOverlaySetStep = (current, total) => {
+    if (!current || !total) {
+      step.textContent = 'Step: -/-';
+      return;
+    }
+    step.textContent = `Step: ${current}/${total}`;
+  };
+
+  window.__stitchReplayOverlaySetReason = (text) => {
+    const v = (text || '').toString().trim();
+    reason.textContent = `Reason: ${v || '-'}`;
+  };
+
+  window.__stitchReplayOverlaySetPaused = (flag) => {
+    if (flag) {
+      if (!pausedSince) pausedSince = Date.now();
+      pausedFor.style.display = 'block';
+    } else {
+      pausedSince = null;
+      pausedFor.style.display = 'none';
+      pausedFor.textContent = 'Paused: -';
+    }
+  };
+
+  window.__stitchReplayOverlaySetSaved = (path) => {
+    status.textContent = 'Status: Saved';
+    reason.textContent = `Reason: ${path ? `Saved report ${path}` : 'Saved'}`;
+    pausedSince = null;
+    pausedFor.style.display = 'none';
+    pausedFor.textContent = 'Paused: -';
+  };
+
+  setInterval(() => {
+    if (!pausedSince) return;
+    const sec = Math.max(0, Math.floor((Date.now() - pausedSince) / 1000));
+    pausedFor.textContent = `Paused: ${sec}s`;
+  }, 1000);
+})();
+"""
 
 
 def _parse_args() -> argparse.Namespace:
@@ -293,6 +451,7 @@ class CommandTail:
 
 async def _manual_pause(
     *,
+    page: Any | None,
     reason: str,
     step_index: int,
     total_steps: int,
@@ -300,6 +459,14 @@ async def _manual_pause(
     command_file_path: str,
     timeout_s: int,
 ) -> None:
+    if page is not None:
+        try:
+            await page.evaluate(
+                "window.__stitchReplayOverlaySetStatus && window.__stitchReplayOverlaySetStatus('Manual pause')"
+            )
+        except Exception:
+            pass
+
     _event(
         "scenario.replay.manual.pause",
         {
@@ -316,6 +483,13 @@ async def _manual_pause(
         commands = command_tail.read_new_commands()
         for cmd, payload in commands:
             if cmd in ("resume", "continue"):
+                if page is not None:
+                    try:
+                        await page.evaluate(
+                            "window.__stitchReplayOverlaySetStatus && window.__stitchReplayOverlaySetStatus('Running')"
+                        )
+                    except Exception:
+                        pass
                 _event(
                     "scenario.replay.manual.resume",
                     {
@@ -327,6 +501,13 @@ async def _manual_pause(
                 )
                 return
             if cmd in ("abort", "cancel", "stop"):
+                if page is not None:
+                    try:
+                        await page.evaluate(
+                            "window.__stitchReplayOverlaySetStatus && window.__stitchReplayOverlaySetStatus('Stopping')"
+                        )
+                    except Exception:
+                        pass
                 _event(
                     "scenario.replay.manual.abort",
                     {
@@ -438,6 +619,17 @@ async def main_async() -> int:
         _result(False, error={"code": "import_error", "message": str(e)})
         return 1
 
+    paths = get_paths()
+
+    # Pin Playwright browsers cache to Stitch-managed directory so first-run downloads
+    # go to a predictable location (used by install_browser_runtime.py).
+    try:
+        pw_cache = paths.cache_dir / "playwright-browsers"
+        pw_cache.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(pw_cache))
+    except Exception:
+        pass
+
     scenario_path = Path(args.scenario_path).expanduser().resolve()
     if not scenario_path.exists():
         _result(
@@ -455,9 +647,7 @@ async def main_async() -> int:
 
     run_id = f"replay_{int(time.time())}"
     out_dir = (
-        Path(args.out).expanduser().resolve()
-        if args.out
-        else (get_paths().user_data_dir / "scenarios")
+        Path(args.out).expanduser().resolve() if args.out else (paths.user_data_dir / "scenarios")
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     session_dir = out_dir / run_id
@@ -525,6 +715,24 @@ async def main_async() -> int:
     started_at = _now_iso()
     failed_steps: list[dict[str, Any]] = []
     trace_saved = False
+    paused_by_overlay = False
+    abort_requested = False
+
+    def on_overlay_control(command: str) -> None:
+        nonlocal paused_by_overlay, abort_requested
+        cmd = str(command or "").strip().lower()
+        if cmd == "pause":
+            paused_by_overlay = True
+            _event("scenario.replay.control.pause", {"runId": run_id})
+            return
+        if cmd == "resume":
+            paused_by_overlay = False
+            _event("scenario.replay.control.resume", {"runId": run_id})
+            return
+        if cmd in ("stop", "abort", "cancel"):
+            abort_requested = True
+            _event("scenario.replay.control.stop", {"runId": run_id})
+            return
 
     if args.dry_run:
         _log("warn", "Dry-run mode: browser will NOT be launched", step="init")
@@ -558,6 +766,7 @@ async def main_async() -> int:
                 ) or _looks_like_captcha(step):
                     reason = "captcha" if _looks_like_captcha(step) else kind
                     await _manual_pause(
+                        page=None,
                         reason=reason,
                         step_index=idx,
                         total_steps=total_steps,
@@ -686,6 +895,21 @@ async def main_async() -> int:
             config=config,
         ) as launcher:
             page = await launcher.open(start_url, wait_until="domcontentloaded")
+            await page.expose_function("__stitchReplayControl", on_overlay_control)
+            await page.add_init_script(REPLAY_OVERLAY_SCRIPT)
+            await page.evaluate(REPLAY_OVERLAY_SCRIPT)
+            try:
+                await page.evaluate(
+                    "window.__stitchReplayOverlaySetStep && window.__stitchReplayOverlaySetStep(0, 0)"
+                )
+                await page.evaluate(
+                    "window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason('')"
+                )
+                await page.evaluate(
+                    "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(false)"
+                )
+            except Exception:
+                pass
 
             tracing_started = False
             try:
@@ -697,6 +921,28 @@ async def main_async() -> int:
             try:
                 deadline = time.time() + float(max(1, args.timeout_s))
                 for idx, step in enumerate(steps, start=1):
+                    if abort_requested:
+                        raise ReplayAbort("Stop requested from browser overlay")
+
+                    while paused_by_overlay and not abort_requested:
+                        try:
+                            await page.evaluate(
+                                "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(true)"
+                            )
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.25)
+
+                    try:
+                        await page.evaluate(
+                            "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(false)"
+                        )
+                    except Exception:
+                        pass
+
+                    if abort_requested:
+                        raise ReplayAbort("Stop requested from browser overlay")
+
                     if time.time() > deadline:
                         raise TimeoutError("Replay timeout reached")
 
@@ -717,6 +963,14 @@ async def main_async() -> int:
                     )
 
                     try:
+                        await page.evaluate(
+                            "(arg) => window.__stitchReplayOverlaySetStep && window.__stitchReplayOverlaySetStep(arg.current, arg.total)",
+                            {"current": idx, "total": total_steps},
+                        )
+                    except Exception:
+                        pass
+
+                    try:
                         # explicit manual steps OR heuristic captcha detection
                         if kind in (
                             "manual.pause",
@@ -725,7 +979,21 @@ async def main_async() -> int:
                             "captcha",
                         ) or _looks_like_captcha(step):
                             reason = "captcha" if _looks_like_captcha(step) else kind
+                            try:
+                                await page.evaluate(
+                                    "window.__stitchReplayOverlaySetStatus && window.__stitchReplayOverlaySetStatus('Manual pause')"
+                                )
+                                await page.evaluate(
+                                    "(arg) => window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason(arg.reason)",
+                                    {"reason": reason},
+                                )
+                                await page.evaluate(
+                                    "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(true)"
+                                )
+                            except Exception:
+                                pass
                             await _manual_pause(
+                                page=page,
                                 reason=reason,
                                 step_index=idx,
                                 total_steps=total_steps,
@@ -733,6 +1001,15 @@ async def main_async() -> int:
                                 command_file_path=str(command_file),
                                 timeout_s=max(1, args.pause_timeout_s),
                             )
+                            try:
+                                await page.evaluate(
+                                    "window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason('')"
+                                )
+                                await page.evaluate(
+                                    "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(false)"
+                                )
+                            except Exception:
+                                pass
 
                         await _run_step(page, step, timeout_ms=_timeout_ms(step, 15_000))
                         passed += 1
@@ -775,6 +1052,14 @@ async def main_async() -> int:
                         trace_saved = trace_path.exists()
                     except Exception:
                         _log("warn", "Failed to save trace", step="trace")
+
+                try:
+                    await page.evaluate(
+                        "(arg) => window.__stitchReplayOverlaySetSaved && window.__stitchReplayOverlaySetSaved(arg.path)",
+                        {"path": str(report_path)},
+                    )
+                except Exception:
+                    pass
 
     except ReplayAbort as e:
         report = {
