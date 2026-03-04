@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { Button, Input, Toggle } from '../../../components/ui';
+import { Button, Input, Toggle, Textarea } from '../../../components/ui';
 import { useSchedulerStore } from '../../../stores/scheduler';
 
 interface EditTaskModalProps {
@@ -53,15 +53,25 @@ export function EditTaskModal({ taskId, onClose }: EditTaskModalProps) {
       <div className="bg-vsc-sidebar border border-vsc-border rounded-lg w-full max-w-2xl">
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
           <h2 className="text-lg font-semibold text-vsc-text">Edit Task</h2>
-          <button onClick={onClose} className="text-vsc-text-muted hover:text-vsc-text">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-vsc-text-muted hover:text-vsc-text"
+          >
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-vsc-text mb-2">Task Name</label>
+            <label
+              htmlFor="edit-task-name"
+              className="block text-sm font-medium text-vsc-text mb-2"
+            >
+              Task Name
+            </label>
             <Input
+              id="edit-task-name"
               value={name}
               onChange={e => setName(e.target.value)}
               required
@@ -69,19 +79,24 @@ export function EditTaskModal({ taskId, onClose }: EditTaskModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-vsc-text mb-2">Enabled</label>
+            <div className="block text-sm font-medium text-vsc-text mb-2">Enabled</div>
             <Toggle label="Task enabled" checked={enabled} onChange={setEnabled} />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-vsc-text mb-2">
+            <label
+              htmlFor="edit-task-config"
+              className="block text-sm font-medium text-vsc-text mb-2"
+            >
               Config (JSON)
             </label>
-            <textarea
-              className="w-full px-3 py-2 bg-vsc-input border border-vsc-border rounded-lg text-vsc-text font-mono text-sm"
+            <Textarea
+              id="edit-task-config"
               rows={6}
               value={config}
               onChange={e => setConfig(e.target.value)}
+              className="bg-vsc-input border-vsc-border text-vsc-text font-mono text-sm"
+              shellClassName="bg-vsc-input border-vsc-border"
             />
           </div>
 

@@ -32,5 +32,29 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'warn',
     'no-console': ['warn', { allow: ['warn', 'error'] }],
   },
+  overrides: [
+    {
+      files: ['src/**/*.tsx'],
+      excludedFiles: ['src/components/ui/**/*.tsx'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector: "JSXOpeningElement[name.name='input']",
+            message:
+              'Use UI-kit primitives instead of raw <input>. Import Input/Checkbox/Radio/Toggle from src/components/ui.',
+          },
+          {
+            selector: "JSXOpeningElement[name.name='select']",
+            message: 'Use UI-kit Select instead of raw <select>.',
+          },
+          {
+            selector: "JSXOpeningElement[name.name='textarea']",
+            message: 'Use UI-kit Textarea instead of raw <textarea>.',
+          },
+        ],
+      },
+    },
+  ],
   ignorePatterns: ['dist', 'node_modules', '*.config.js', '*.config.ts'],
 };

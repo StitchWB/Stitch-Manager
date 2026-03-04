@@ -410,6 +410,54 @@ def _best_selector(step: dict[str, Any]) -> str | None:
     return None
 
 
+def _sanitize_step(step: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """Sanitize one replay step for backward compatibility.
+
+    Returns (sanitized_step_or_none, skip_reason_or_none).
+    """
+    kind = _step_kind(step)
+
+    # Drop malformed navigation steps (legacy recorder bug: nav with null url).
+    if kind in ("nav", "goto", "navigate"):
+        url = step.get("url")
+        if not isinstance(url, str) or not url.strip():
+            return None, "nav step has no url"
+        fixed = dict(step)
+        fixed["kind"] = "goto"
+        fixed["url"] = url.strip()
+        return fixed, None
+
+    # Normalize common aliases.
+    if kind == "change":
+        fixed = dict(step)
+        fixed["kind"] = "fill"
+        return fixed, None
+    if kind == "submit":
+        fixed = dict(step)
+        fixed["kind"] = "press"
+        if not isinstance(fixed.get("value"), str) or not str(fixed.get("value") or "").strip():
+            fixed["value"] = "Enter"
+        return fixed, None
+
+    return step, None
+
+
+def _sanitize_steps(
+    steps: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    sanitized: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+
+    for idx, step in enumerate(steps, start=1):
+        fixed, reason = _sanitize_step(step)
+        if fixed is None:
+            dropped.append({"index": idx, "reason": reason or "invalid step"})
+            continue
+        sanitized.append(fixed)
+
+    return sanitized, dropped
+
+
 class CommandTail:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -573,7 +621,25 @@ async def _run_step(page: Any, step: dict[str, Any], timeout_ms: int = 15_000) -
     if kind in ("click",):
         if not selector:
             raise ValueError("click step has no selector")
-        await page.locator(selector).first.click(timeout=timeout_ms)
+        try:
+            await page.locator(selector).first.click(timeout=timeout_ms)
+        except Exception:
+            # Auto-heal fallback: try text selector from meta.text when available.
+            meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
+            text = meta.get("text") if isinstance(meta, dict) else None
+            if isinstance(text, str) and text.strip():
+                candidate = text.strip()[:80]
+                _event(
+                    "scenario.replay.selector.heal",
+                    {
+                        "kind": "click",
+                        "from": selector,
+                        "to": f"text={candidate}",
+                    },
+                )
+                await page.get_by_text(candidate, exact=False).first.click(timeout=timeout_ms)
+            else:
+                raise
         return
 
     if kind in ("change", "fill", "input"):
@@ -582,7 +648,24 @@ async def _run_step(page: Any, step: dict[str, Any], timeout_ms: int = 15_000) -
         # Password-like values are redacted during record; skip writing them.
         if value == "***":
             return
-        await page.locator(selector).first.fill(value or "", timeout=timeout_ms)
+        try:
+            await page.locator(selector).first.fill(value or "", timeout=timeout_ms)
+        except Exception:
+            meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
+            placeholder = meta.get("placeholder") if isinstance(meta, dict) else None
+            if isinstance(placeholder, str) and placeholder.strip():
+                candidate = placeholder.strip()[:80]
+                _event(
+                    "scenario.replay.selector.heal",
+                    {
+                        "kind": "fill",
+                        "from": selector,
+                        "to": f"placeholder={candidate}",
+                    },
+                )
+                await page.get_by_placeholder(candidate).first.fill(value or "", timeout=timeout_ms)
+            else:
+                raise
         return
 
     if kind in ("submit", "press"):
@@ -685,6 +768,18 @@ async def main_async() -> int:
     steps: list[dict[str, Any]] = (
         [s for s in steps_raw if isinstance(s, dict)] if isinstance(steps_raw, list) else []
     )
+    sanitized_steps, dropped_steps = _sanitize_steps(steps)
+    if dropped_steps:
+        _event(
+            "scenario.replay.sanitize",
+            {
+                "dropped": dropped_steps,
+                "droppedCount": len(dropped_steps),
+                "before": len(steps),
+                "after": len(sanitized_steps),
+            },
+        )
+    steps = sanitized_steps
     total_steps = len(steps)
 
     _event(

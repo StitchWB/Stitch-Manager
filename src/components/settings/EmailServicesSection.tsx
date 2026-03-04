@@ -1,7 +1,7 @@
 import { Shield, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle, Save } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { Button } from '../ui/Button';
-import { LoadingSpinner, Input } from '../ui';
+import { LoadingSpinner, Input, Checkbox } from '../ui';
 import { Select } from '../ui/Select';
 import { t } from '../../lib/i18n';
 
@@ -104,18 +104,15 @@ export function EmailServicesSection({
             !addyioEnabled ? 'opacity-60 hover:opacity-100' : ''
           }`}
         >
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={addyioEnabled}
-              onChange={e => {
-                onAddyioEnabledChange(e.target.checked);
-                if (e.target.checked) onThirtyThreeMailEnabledChange(false);
-              }}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-0 transition-colors"
-            />
-            <span className="text-slate-300 text-sm">{t('autoReg.configureAddyio')}</span>
-          </label>
+          <Checkbox
+            checked={addyioEnabled}
+            onChange={e => {
+              onAddyioEnabledChange(e.target.checked);
+              if (e.target.checked) onThirtyThreeMailEnabledChange(false);
+            }}
+            className="py-0 px-0 hover:bg-transparent"
+            label={<span className="text-slate-300 text-sm">{t('autoReg.configureAddyio')}</span>}
+          />
           {addyioEnabled && (
             <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
               <Input
@@ -222,9 +219,12 @@ export function EmailServicesSection({
               {/* Dynamic Fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="input-label">Domain</label>
+                  <label htmlFor="addyio-domain" className="input-label">
+                    Domain
+                  </label>
                   {addyioDomains.length > 0 ? (
                     <Select
+                      id="addyio-domain"
                       value={addyioDomain}
                       onChange={e => onAddyioDomainChange(e.target.value)}
                       options={[
@@ -234,6 +234,7 @@ export function EmailServicesSection({
                     />
                   ) : (
                     <Input
+                      id="addyio-domain"
                       type="text"
                       value={addyioDomain}
                       onChange={e => onAddyioDomainChange(e.target.value)}
@@ -243,8 +244,11 @@ export function EmailServicesSection({
                 </div>
 
                 <div>
-                  <label className="input-label">Format</label>
+                  <label htmlFor="addyio-format" className="input-label">
+                    Format
+                  </label>
                   <Select
+                    id="addyio-format"
                     value={addyioAliasFormat}
                     onChange={e => onAddyioAliasFormatChange(e.target.value)}
                     options={[
@@ -259,8 +263,11 @@ export function EmailServicesSection({
               {/* Default Recipient */}
               {addyioRecipients.length > 0 && (
                 <div>
-                  <label className="input-label">Default Recipient</label>
+                  <label htmlFor="addyio-recipient" className="input-label">
+                    Default Recipient
+                  </label>
                   <Select
+                    id="addyio-recipient"
                     value={addyioDefaultRecipientId}
                     onChange={e => onAddyioDefaultRecipientIdChange(e.target.value)}
                     options={[
@@ -292,15 +299,12 @@ export function EmailServicesSection({
                 />
               </div>
 
-              <label className="flex items-center gap-3 cursor-pointer mt-2">
-                <input
-                  type="checkbox"
-                  checked={addyioAutoDelete}
-                  onChange={e => onAddyioAutoDeleteChange(e.target.checked)}
-                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-0 transition-colors"
-                />
-                <span className="text-slate-300 text-sm">Auto-delete aliases</span>
-              </label>
+              <Checkbox
+                checked={addyioAutoDelete}
+                onChange={e => onAddyioAutoDeleteChange(e.target.checked)}
+                className="mt-2 py-0 px-0 hover:bg-transparent"
+                label={<span className="text-slate-300 text-sm">Auto-delete aliases</span>}
+              />
             </div>
           )}
         </div>
@@ -311,21 +315,18 @@ export function EmailServicesSection({
             !thirtyThreeMailEnabled ? 'opacity-60 hover:opacity-100' : ''
           }`}
         >
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={thirtyThreeMailEnabled}
-              onChange={e => {
-                onThirtyThreeMailEnabledChange(e.target.checked);
-                if (e.target.checked) {
-                  onAddyioEnabledChange(false);
-                  onMailtmEnabledChange(false);
-                }
-              }}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-500 focus:ring-0 transition-colors"
-            />
-            <span className="text-slate-300 text-sm">{t('autoReg.configure33mail')}</span>
-          </label>
+          <Checkbox
+            checked={thirtyThreeMailEnabled}
+            onChange={e => {
+              onThirtyThreeMailEnabledChange(e.target.checked);
+              if (e.target.checked) {
+                onAddyioEnabledChange(false);
+                onMailtmEnabledChange(false);
+              }
+            }}
+            className="py-0 px-0 hover:bg-transparent"
+            label={<span className="text-slate-300 text-sm">{t('autoReg.configure33mail')}</span>}
+          />
           {thirtyThreeMailEnabled && (
             <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
               <div className="grid grid-cols-2 gap-4">
@@ -354,21 +355,18 @@ export function EmailServicesSection({
             !mailtmEnabled ? 'opacity-60 hover:opacity-100' : ''
           }`}
         >
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={mailtmEnabled}
-              onChange={e => {
-                onMailtmEnabledChange(e.target.checked);
-                if (e.target.checked) {
-                  onAddyioEnabledChange(false);
-                  onThirtyThreeMailEnabledChange(false);
-                }
-              }}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-0 transition-colors"
-            />
-            <span className="text-slate-300 text-sm">Enable Mail.tm (Temporary Email)</span>
-          </label>
+          <Checkbox
+            checked={mailtmEnabled}
+            onChange={e => {
+              onMailtmEnabledChange(e.target.checked);
+              if (e.target.checked) {
+                onAddyioEnabledChange(false);
+                onThirtyThreeMailEnabledChange(false);
+              }
+            }}
+            className="py-0 px-0 hover:bg-transparent"
+            label={<span className="text-slate-300 text-sm">Enable Mail.tm (Temporary Email)</span>}
+          />
           {mailtmEnabled && (
             <div className="pl-7 animate-in fade-in zoom-in-95 duration-200">
               <p className="text-xs text-slate-400">

@@ -119,6 +119,10 @@ export interface AdvancedSettings {
   realisticTyping: boolean;
   humanDelays: boolean;
   screenshotsOnError: boolean;
+
+  // Google Sheets Identity Graph (NO encryption in this phase)
+  googleSheetsSpreadsheetId?: string;
+  googleSheetsServiceAccountJson?: string;
 }
 
 // Registration configuration (simplified)
@@ -220,6 +224,10 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     realisticTyping: true,
     humanDelays: true,
     screenshotsOnError: true,
+
+    // Google Sheets Identity Graph (plaintext; encryption deferred)
+    googleSheetsSpreadsheetId: '',
+    googleSheetsServiceAccountJson: '',
   },
   count: 1,
   timeout: 60000,

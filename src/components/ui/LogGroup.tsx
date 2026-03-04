@@ -19,6 +19,8 @@ export interface LogGroupProps {
   onToggle: () => void;
   duration?: number;
   icon?: string;
+  onSelectLog?: (log: LogEntry) => void;
+  selectedLogId?: string | null;
 }
 
 // ============================================
@@ -78,6 +80,8 @@ export function LogGroup({
   onToggle,
   duration,
   icon,
+  onSelectLog,
+  selectedLogId,
 }: LogGroupProps) {
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -108,6 +112,7 @@ export function LogGroup({
     <div className="border border-white/5 rounded-lg overflow-hidden mb-2 bg-[#0a0a0a]">
       {/* Header */}
       <button
+        type="button"
         onClick={onToggle}
         className={cn(
           'w-full flex items-center gap-3 px-4 py-2 hover:bg-white/[0.02] transition-colors',
@@ -133,11 +138,7 @@ export function LogGroup({
         <span className="shrink-0">{getStatusIcon(status)}</span>
 
         {/* Account ID (if provided) */}
-        {accountId && (
-          <span className="text-xs text-slate-500 shrink-0">
-            {accountId}
-          </span>
-        )}
+        {accountId && <span className="text-xs text-slate-500 shrink-0">{accountId}</span>}
 
         {/* Entry Count */}
         <span className="text-xs text-slate-500 shrink-0">
@@ -158,15 +159,20 @@ export function LogGroup({
       {/* Entries (when expanded) */}
       {!isCollapsed && (
         <div className="font-mono text-xs">
-          {entries.map(log => {
+          {entries.map((log, idx) => {
             const isCopied = copiedId === log.id;
             const isLongMessage = log.message.length > 200;
             const isExpanded = expandedLogs.has(log.id);
+            const isSelected = selectedLogId === log.id;
+            const isActionable = Boolean(onSelectLog) || isLongMessage;
 
             return (
               <div
-                key={log.id}
-                className="flex items-start gap-3 px-4 py-1 hover:bg-white/[0.02] transition-colors border-b border-white/[0.02] group"
+                key={`${log.id}-${log.timestamp}-${idx}`}
+                className={cn(
+                  'flex items-start gap-3 px-4 py-1 hover:bg-white/[0.02] transition-colors border-b border-white/[0.02] group',
+                  isSelected && 'bg-white/[0.04] border-white/[0.08]'
+                )}
               >
                 {/* Timestamp - Gray */}
                 <span className="text-slate-600 tabular-nums shrink-0">
@@ -207,20 +213,29 @@ export function LogGroup({
 
                 {/* Message - White, expandable */}
                 <div className="flex-1 min-w-0">
-                  <div
+                  <button
+                    type="button"
                     className={cn(
-                      'text-slate-300 break-words cursor-pointer',
+                      'text-slate-300 break-words text-left w-full bg-transparent border-0 p-0',
+                      isActionable ? 'cursor-pointer' : 'cursor-default',
                       !isExpanded && isLongMessage && 'line-clamp-1'
                     )}
-                    onClick={() => isLongMessage && toggleLogExpansion(log.id)}
+                    onClick={() => {
+                      onSelectLog?.(log);
+                      if (isLongMessage) {
+                        toggleLogExpansion(log.id);
+                      }
+                    }}
+                    disabled={!isActionable}
                   >
                     {log.message}
-                  </div>
+                  </button>
                 </div>
 
                 {/* Copy button - appears on hover */}
                 <Tooltip content="Copy message">
                   <button
+                    type="button"
                     onClick={() => copyToClipboard(log.message, log.id)}
                     className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
                   >

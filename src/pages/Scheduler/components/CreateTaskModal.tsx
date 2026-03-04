@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Button, Input, Select, Modal } from '../../../components/ui';
+import { Button, Input, Select, Modal, Textarea } from '../../../components/ui';
 import { useSchedulerStore } from '../../../stores/scheduler';
 import type { TaskType, Schedule } from '../../../types/generated';
 
@@ -12,20 +12,22 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
   const { createTask } = useSchedulerStore();
 
   const [name, setName] = useState('');
-  const [taskTypeOption, setTaskTypeOption] = useState<'register' | 'login' | 'refresh' | 'script'>('register');
+  const [taskTypeOption, setTaskTypeOption] = useState<'register' | 'login' | 'refresh' | 'script'>(
+    'register'
+  );
   const [scheduleType, setScheduleType] = useState<'once' | 'interval' | 'daily'>('interval');
-  
+
   // Task type specific fields
   const [provider, setProvider] = useState('');
   const [accountId, setAccountId] = useState('');
   const [scriptPath, setScriptPath] = useState('');
-  
+
   // Schedule specific fields
   const [timestamp, setTimestamp] = useState('');
   const [intervalSeconds, setIntervalSeconds] = useState('3600');
   const [hour, setHour] = useState('9');
   const [minute, setMinute] = useState('0');
-  
+
   const [config, setConfig] = useState('{}');
   const [submitting, setSubmitting] = useState(false);
 
@@ -102,8 +104,11 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-vsc-text mb-2">Task Name</label>
+              <label htmlFor="task-name" className="block text-sm font-medium text-vsc-text mb-2">
+                Task Name
+              </label>
               <Input
+                id="task-name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g., Daily AWS Registration"
@@ -112,8 +117,11 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-vsc-text mb-2">Task Type</label>
+              <label htmlFor="task-type" className="block text-sm font-medium text-vsc-text mb-2">
+                Task Type
+              </label>
               <Select
+                id="task-type"
                 value={taskTypeOption}
                 onChange={e => setTaskTypeOption(e.target.value as any)}
               >
@@ -126,8 +134,18 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
 
             {taskTypeOption === 'register' && (
               <div>
-                <label className="block text-sm font-medium text-vsc-text mb-2">Provider</label>
-                <Select value={provider} onChange={e => setProvider(e.target.value)} required>
+                <label
+                  htmlFor="task-provider"
+                  className="block text-sm font-medium text-vsc-text mb-2"
+                >
+                  Provider
+                </label>
+                <Select
+                  id="task-provider"
+                  value={provider}
+                  onChange={e => setProvider(e.target.value)}
+                  required
+                >
                   <option value="">Select provider...</option>
                   <option value="aws">AWS</option>
                   <option value="github">GitHub</option>
@@ -140,8 +158,14 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
 
             {(taskTypeOption === 'login' || taskTypeOption === 'refresh') && (
               <div>
-                <label className="block text-sm font-medium text-vsc-text mb-2">Account ID</label>
+                <label
+                  htmlFor="task-account-id"
+                  className="block text-sm font-medium text-vsc-text mb-2"
+                >
+                  Account ID
+                </label>
                 <Input
+                  id="task-account-id"
                   type="number"
                   value={accountId}
                   onChange={e => setAccountId(e.target.value)}
@@ -153,8 +177,14 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
 
             {taskTypeOption === 'script' && (
               <div>
-                <label className="block text-sm font-medium text-vsc-text mb-2">Script Path</label>
+                <label
+                  htmlFor="task-script-path"
+                  className="block text-sm font-medium text-vsc-text mb-2"
+                >
+                  Script Path
+                </label>
                 <Input
+                  id="task-script-path"
                   value={scriptPath}
                   onChange={e => setScriptPath(e.target.value)}
                   placeholder="/path/to/script.py"
@@ -172,8 +202,14 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-vsc-text mb-2">Schedule Type</label>
+              <label
+                htmlFor="schedule-type"
+                className="block text-sm font-medium text-vsc-text mb-2"
+              >
+                Schedule Type
+              </label>
               <Select
+                id="schedule-type"
                 value={scheduleType}
                 onChange={e => setScheduleType(e.target.value as any)}
               >
@@ -185,8 +221,14 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
 
             {scheduleType === 'once' && (
               <div>
-                <label className="block text-sm font-medium text-vsc-text mb-2">Date & Time</label>
+                <label
+                  htmlFor="schedule-once"
+                  className="block text-sm font-medium text-vsc-text mb-2"
+                >
+                  Date & Time
+                </label>
                 <Input
+                  id="schedule-once"
                   type="datetime-local"
                   value={timestamp}
                   onChange={e => setTimestamp(e.target.value)}
@@ -197,8 +239,14 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
 
             {scheduleType === 'interval' && (
               <div>
-                <label className="block text-sm font-medium text-vsc-text mb-2">Interval (seconds)</label>
+                <label
+                  htmlFor="schedule-interval"
+                  className="block text-sm font-medium text-vsc-text mb-2"
+                >
+                  Interval (seconds)
+                </label>
                 <Input
+                  id="schedule-interval"
                   type="number"
                   value={intervalSeconds}
                   onChange={e => setIntervalSeconds(e.target.value)}
@@ -214,8 +262,14 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
             {scheduleType === 'daily' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-vsc-text mb-2">Hour (0-23)</label>
+                  <label
+                    htmlFor="schedule-hour"
+                    className="block text-sm font-medium text-vsc-text mb-2"
+                  >
+                    Hour (0-23)
+                  </label>
                   <Input
+                    id="schedule-hour"
                     type="number"
                     min="0"
                     max="23"
@@ -225,8 +279,14 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-vsc-text mb-2">Minute (0-59)</label>
+                  <label
+                    htmlFor="schedule-minute"
+                    className="block text-sm font-medium text-vsc-text mb-2"
+                  >
+                    Minute (0-59)
+                  </label>
                   <Input
+                    id="schedule-minute"
                     type="number"
                     min="0"
                     max="59"
@@ -246,12 +306,13 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
             <p className="text-xs text-vsc-text-muted">Optional JSON configuration</p>
           </div>
           <div>
-            <textarea
-              className="w-full px-3 py-2 bg-vsc-input border border-vsc-border rounded-lg text-vsc-text font-mono text-sm"
+            <Textarea
               rows={4}
               value={config}
               onChange={e => setConfig(e.target.value)}
               placeholder='{"key": "value"}'
+              className="bg-vsc-input border-vsc-border text-vsc-text font-mono text-sm"
+              shellClassName="bg-vsc-input border-vsc-border"
             />
           </div>
         </div>

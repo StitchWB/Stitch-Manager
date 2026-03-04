@@ -48,14 +48,24 @@
 
 ## ✨ Features
 
-| Feature | Kiro | Windsurf | Trae |
-|---------|:----:|:--------:|:----:|
-| Account Management | ✅ | ✅ | 🚧 |
-| Auto-Registration | ✅ | ✅ | 🚧 |
-| Token Injection | ✅ | ✅ | 🚧 |
-| Extension Patcher | ✅ | ✅ | 🚧 |
+| Feature            | Kiro | Windsurf | Trae |
+| ------------------ | :--: | :------: | :--: |
+| Account Management |  ✅  |    ✅    |  🚧  |
+| Auto-Registration  |  ✅  |    ✅    |  🚧  |
+| Token Injection    |  ✅  |    ✅    |  🚧  |
+| Extension Patcher  |  ✅  |    ✅    |  🚧  |
+
+### 🧩 Identity Graph + Google Sheets
+
+Stitch Manager can ingest an **Identity Graph** dataset from a Google Spreadsheet (service account JWT flow) and show:
+
+- Graph view: which service accounts are authorized via which identity (e.g. Gmail → TikTok/Facebook/...)
+- Sheets explorer: browse `SVC_*` sheets in-app
+
+Schema reference: `docs/google-sheets-graph-schema.md`
 
 ### 🔐 Account Management
+
 - Secure local storage with SQLite
 - One-click account activation
 - Real-time quota monitoring
@@ -66,12 +76,14 @@
 - **Registration data preservation**
 
 ### 🤖 Auto-Registration
+
 - Browser automation via DrissionPage
 - IMAP integration for email verification
 - Proxy support
 - Customizable email patterns
 
 ### 🔧 IDE Patcher
+
 - Patch extensions for multi-account support
 - Automatic backup & restore
 - Safe patching with validation
@@ -87,13 +99,16 @@ Machine ID is a unique identifier used by AI IDEs (like Kiro) to identify your i
 ### Key Features
 
 #### 🔄 Automatic Machine ID Switching
+
 - Each account gets its own unique Machine ID
 - Machine ID automatically switches when you activate an account
 - No manual configuration needed
 - No IDE restart required
 
 #### 📊 Usage Statistics
+
 Track account health and usage:
+
 - **Use Count**: How many times the account was activated
 - **Login Count**: Total successful logins
 - **Success Rate**: Percentage of successful operations
@@ -101,18 +116,21 @@ Track account health and usage:
 - **Health Indicators**: Visual indicators (🟢 Good, 🟡 Fair, 🔴 Poor)
 
 #### 💾 Registration Data Preservation
+
 - Saves registration password for AWS accounts
 - Tracks registration method (manual, auto, OAuth)
 - Stores registration date and metadata
 - Preserves AWS account ID and Kiro account ID
 
 #### ⚡ Session Management
+
 - Saves browser session data for faster login
 - Stores cookies and browser profile path
 - Enables session reuse without re-entering credentials
 - Reduces login time significantly
 
 #### 🏷️ Account Organization
+
 - Add custom notes to accounts
 - Tag accounts for easy filtering
 - Filter by registration method, tags, or health status
@@ -133,7 +151,7 @@ Track account health and usage:
 ✅ **Better Monitoring**: Track which accounts are working well and which need attention  
 ✅ **Faster Logins**: Session reuse eliminates repetitive credential entry  
 ✅ **Better Organization**: Notes, tags, and filters help manage large account collections  
-✅ **Data Preservation**: Never lose registration credentials or account metadata  
+✅ **Data Preservation**: Never lose registration credentials or account metadata
 
 ---
 
@@ -143,11 +161,11 @@ Track account health and usage:
 
 Get the latest release for your platform:
 
-| Platform | Download |
-|----------|----------|
-| Windows | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
-| macOS | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal) |
-| Linux | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
+| Platform | Download                                                                                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows  | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest)      |
+| macOS    | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal)                                                                           |
+| Linux    | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
 
 ### Build from Source
 
@@ -167,6 +185,7 @@ npm run build
 ```
 
 **Requirements:**
+
 - Node.js 18+
 - Rust (for Tauri)
 - Python 3.11+ (for auto-registration)
@@ -207,14 +226,15 @@ MIT License — see [LICENSE](LICENSE)
 
 ## ✨ Возможности
 
-| Функция | Kiro | Windsurf | Trae |
-|---------|:----:|:--------:|:----:|
-| Управление аккаунтами | ✅ | ✅ | 🚧 |
-| Авто-регистрация | ✅ | ✅ | 🚧 |
-| Инъекция токенов | ✅ | ✅ | 🚧 |
-| Патчер расширений | ✅ | ✅ | 🚧 |
+| Функция               | Kiro | Windsurf | Trae |
+| --------------------- | :--: | :------: | :--: |
+| Управление аккаунтами |  ✅  |    ✅    |  🚧  |
+| Авто-регистрация      |  ✅  |    ✅    |  🚧  |
+| Инъекция токенов      |  ✅  |    ✅    |  🚧  |
+| Патчер расширений     |  ✅  |    ✅    |  🚧  |
 
 ### 🔐 Управление аккаунтами
+
 - Безопасное локальное хранение в SQLite
 - Активация аккаунта в один клик
 - Мониторинг квот в реальном времени
@@ -225,12 +245,14 @@ MIT License — see [LICENSE](LICENSE)
 - **Сохранение данных регистрации**
 
 ### 🤖 Авто-регистрация
+
 - Браузерная автоматизация через DrissionPage
 - IMAP интеграция для верификации email
 - Поддержка прокси
 - Настраиваемые паттерны email
 
 ### 🔧 Патчер IDE
+
 - Патч расширений для мульти-аккаунтов
 - Автоматический бэкап и восстановление
 - Безопасный патчинг с валидацией
@@ -246,13 +268,16 @@ Machine ID — это уникальный идентификатор, испо�
 ### Ключевые возможности
 
 #### 🔄 Автоматическое переключение Machine ID
+
 - Каждый аккаунт получает свой уникальный Machine ID
 - Machine ID автоматически переключается при активации аккаунта
 - Не требуется ручная настройка
 - Не требуется перезапуск IDE
 
 #### 📊 Статистика использования
+
 Отслеживание здоровья и использования аккаунтов:
+
 - **Счётчик использований**: Сколько раз аккаунт был активирован
 - **Счётчик входов**: Общее количество успешных входов
 - **Процент успеха**: Процент успешных операций
@@ -260,18 +285,21 @@ Machine ID — это уникальный идентификатор, испо�
 - **Индикаторы здоровья**: Визуальные индикаторы (🟢 Хорошо, 🟡 Удовлетворительно, 🔴 Плохо)
 
 #### 💾 Сохранение данных регистрации
+
 - Сохраняет пароль регистрации для AWS аккаунтов
 - Отслеживает метод регистрации (ручной, авто, OAuth)
 - Хранит дату регистрации и метаданные
 - Сохраняет AWS account ID и Kiro account ID
 
 #### ⚡ Управление сессиями
+
 - Сохраняет данные браузерной сессии для быстрого входа
 - Хранит cookies и путь к профилю браузера
 - Позволяет переиспользовать сессию без повторного ввода учётных данных
 - Значительно сокращает время входа
 
 #### 🏷️ Организация аккаунтов
+
 - Добавление пользовательских заметок к аккаунтам
 - Теги для аккаунтов для удобной фильтрации
 - Фильтрация по методу регистрации, тегам или статусу здоровья
@@ -292,7 +320,7 @@ Machine ID — это уникальный идентификатор, испо�
 ✅ **Лучший мониторинг**: Отслеживайте, какие аккаунты работают хорошо, а какие требуют внимания  
 ✅ **Быстрые входы**: Переиспользование сессий устраняет повторный ввод учётных данных  
 ✅ **Лучшая организация**: Заметки, теги и фильтры помогают управлять большими коллекциями аккаунтов  
-✅ **Сохранение данных**: Никогда не теряйте учётные данные регистрации или метаданные аккаунтов  
+✅ **Сохранение данных**: Никогда не теряйте учётные данные регистрации или метаданные аккаунтов
 
 ---
 
@@ -302,11 +330,11 @@ Machine ID — это уникальный идентификатор, испо�
 
 Последний релиз для вашей платформы:
 
-| Платформа | Скачать |
-|-----------|---------|
-| Windows | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
-| macOS | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal) |
-| Linux | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
+| Платформа | Скачать                                                                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows   | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest)      |
+| macOS     | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal)                                                                            |
+| Linux     | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
 
 ### Сборка из исходников
 
@@ -326,6 +354,7 @@ npm run build
 ```
 
 **Требования:**
+
 - Node.js 18+
 - Rust (для Tauri)
 - Python 3.11+ (для авто-регистрации)

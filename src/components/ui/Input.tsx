@@ -1,14 +1,17 @@
 import { forwardRef } from 'react';
 import { cn } from '../../lib/utils';
+import { FieldHint, fieldClasses, getFieldShellClassName, useFieldA11y } from './field';
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  hint?: string;
   leftIcon?: React.ReactNode;
   rightElement?: React.ReactNode;
   prefixText?: string;
   suffixText?: string;
   containerClassName?: string;
+  shellClassName?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -17,29 +20,40 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       className,
       label,
       error,
+      hint,
       leftIcon,
       rightElement,
       prefixText,
       suffixText,
       containerClassName,
+      shellClassName,
+      id,
+      'aria-invalid': ariaInvalid,
+      'aria-describedby': ariaDescribedBy,
       ...props
     },
     ref
   ) => {
+    const a11y = useFieldA11y({
+      id,
+      error,
+      hint,
+      describedBy: ariaDescribedBy,
+      idPrefix: 'input',
+    });
+
     return (
-      <div className={cn('flex flex-col gap-1.5 w-full', containerClassName)}>
+      <div className={cn(fieldClasses.container, containerClassName)}>
         {label && (
-          <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1">
+          <label htmlFor={a11y.fieldId} className={fieldClasses.label}>
             {label}
           </label>
         )}
         <div
           className={cn(
-            'relative group flex items-center h-9 rounded-lg overflow-hidden bg-white/[0.03] border transition-all duration-200',
-            error
-              ? 'border-red-500/50 focus-within:border-red-500'
-              : 'border-white/10 focus-within:border-indigo-500/50',
-            props.disabled && 'opacity-50 grayscale-[0.5]'
+            getFieldShellClassName(error, props.disabled),
+            'flex items-center h-9',
+            shellClassName
           )}
         >
           {leftIcon && (
@@ -56,6 +70,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
           <input
             ref={ref}
+            id={a11y.fieldId}
+            aria-invalid={error ? true : ariaInvalid}
+            aria-describedby={a11y.describedBy}
             className={cn(
               'flex-1 bg-transparent px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-all duration-200 outline-none w-full min-w-0 font-sans',
               props.type === 'password' && 'font-mono tracking-widest',
@@ -74,7 +91,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             <div className="pr-1 flex items-center gap-1 shrink-0">{rightElement}</div>
           )}
         </div>
-        {error && <p className="text-[10px] text-red-400 px-1 mt-0.5">{error}</p>}
+        <FieldHint hint={hint} error={error} hintId={a11y.hintId} errorId={a11y.errorId} />
       </div>
     );
   }

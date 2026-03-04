@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   startPythonJob,
   cancelPythonJob,
+  getPythonJobStatus,
   sendPythonJobControl,
   type PythonJobStartResponse,
 } from '@/lib/tauri/modules/pythonJobs';
@@ -53,6 +54,8 @@ type ReplayState = {
   events: Array<{ ts: string; message: string; data?: unknown }>;
   stepEvents: StepEvent[];
   manualPauseReason: string | null;
+  runtimeMissing: boolean;
+  stderr: Array<{ ts: string; line: string }>;
 };
 
 function newCorrelationId(): string {
@@ -79,6 +82,8 @@ export function useScenarioReplay() {
     events: [],
     stepEvents: [],
     manualPauseReason: null,
+    runtimeMissing: false,
+    stderr: [],
   }));
 
   const optionsRef = useRef<ScenarioReplayOptions | null>(null);
@@ -182,6 +187,48 @@ export function useScenarioReplay() {
     }
   }, [state.jobId]);
 
+  // Polling fallback: ensures UI sees job failure even if obs stream is silent.
+  useEffect(() => {
+    const jobId = state.jobId;
+    if (!jobId) return;
+    if (
+      state.status !== 'starting' &&
+      state.status !== 'running' &&
+      state.status !== 'manual_pause' &&
+      state.status !== 'stopping'
+    ) {
+      return;
+    }
+
+    let stopped = false;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        if (stopped) return;
+        const status = await getPythonJobStatus(jobId);
+        if (!status) return;
+        if (status.state === 'succeeded') {
+          setState(prev => ({ ...prev, status: 'done' }));
+        }
+        if (
+          status.state === 'failed' ||
+          status.state === 'cancelled' ||
+          status.state === 'timedout'
+        ) {
+          setState(prev => ({
+            ...prev,
+            status: 'error',
+            error: status.error ?? `Job ${status.state}`,
+          }));
+        }
+      })();
+    }, 1000);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [state.jobId, state.status]);
+
   const sendControl = useCallback(
     async (command: 'resume' | 'continue' | 'abort' | 'cancel' | 'stop', payload?: unknown) => {
       const commandFilePath = state.commandFilePath;
@@ -224,17 +271,30 @@ export function useScenarioReplay() {
           let status = prev.status;
           let currentStep = prev.currentStep;
           let totalSteps = prev.totalSteps;
-          let lastEvent = msg;
+          const lastEvent = msg;
+          let error = prev.error;
           let reportPath = prev.reportPath;
           let commandFilePath = prev.commandFilePath;
           let artifactsDir = prev.artifactsDir;
           let tracePath = prev.tracePath;
           let manualPauseReason = prev.manualPauseReason;
           let stepEvents = prev.stepEvents;
+          let runtimeMissing = prev.runtimeMissing;
 
           const d = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
 
           if (runnerType === 'event') {
+            if (msg === 'scenario.replay.started' && d) {
+              const steps = typeof d.steps === 'number' ? d.steps : prev.totalSteps;
+              totalSteps = steps;
+            }
+            if (msg === 'scenario.replay.sanitize' && d) {
+              const dropped = typeof d.droppedCount === 'number' ? d.droppedCount : 0;
+              if (dropped > 0) {
+                const suffix = `Dropped ${dropped} invalid step${dropped > 1 ? 's' : ''}`;
+                error = prev.error ? `${prev.error}; ${suffix}` : suffix;
+              }
+            }
             if (msg === 'scenario.replay.location' && d) {
               if (typeof d.reportPath === 'string') reportPath = d.reportPath;
               if (typeof d.commandFilePath === 'string') commandFilePath = d.commandFilePath;
@@ -292,6 +352,9 @@ export function useScenarioReplay() {
                 error: typeof d.error === 'string' ? d.error : null,
               };
               stepEvents = [entry, ...prev.stepEvents].slice(0, 120);
+              if (typeof d.error === 'string' && d.error.trim()) {
+                error = d.error;
+              }
             }
 
             if (msg === 'scenario.replay.manual.pause' && d) {
@@ -313,6 +376,15 @@ export function useScenarioReplay() {
           if (runnerType === 'result') {
             const ok = Boolean((fields as any).ok);
             status = ok ? 'done' : 'error';
+
+            if (!ok) {
+              const err = (fields as any).error as any;
+              const errMsg = String(err?.message ?? payload.message ?? '');
+              error = errMsg || 'Replay failed';
+              if (errMsg.toLowerCase().includes('playwright install')) {
+                runtimeMissing = true;
+              }
+            }
           }
 
           return {
@@ -322,12 +394,14 @@ export function useScenarioReplay() {
             currentStep,
             totalSteps,
             lastEvent,
+            error,
             reportPath,
             commandFilePath,
             artifactsDir,
             tracePath,
             manualPauseReason,
             stepEvents,
+            runtimeMissing,
           };
         });
       });
@@ -343,6 +417,38 @@ export function useScenarioReplay() {
       fn?.();
     };
   }, [state.jobId, state.correlationId]);
+
+  // Also listen to python.stderr for this jobId.
+  useEffect(() => {
+    const jobId = state.jobId;
+    if (!jobId) return;
+
+    let disposed = false;
+    let unlisten: UnlistenFn | null = null;
+
+    const setup = async () => {
+      unlisten = await listen<ObsEvent>('obs:event', event => {
+        if (disposed) return;
+        const payload = event.payload;
+        if (!payload) return;
+        if (payload.source !== 'python') return;
+        if (payload.subsystem !== 'python_runner') return;
+        if (payload.name !== 'python.stderr') return;
+        if (payload.jobId !== jobId) return;
+
+        setState(prev => ({
+          ...prev,
+          stderr: [{ ts: payload.ts, line: payload.message ?? '' }, ...prev.stderr].slice(0, 50),
+        }));
+      });
+    };
+
+    void setup();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [state.jobId]);
 
   const debugConfig = useMemo(() => {
     const opts = optionsRef.current;

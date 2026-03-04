@@ -2,25 +2,20 @@ import React from 'react';
 import { Play, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { t } from '../../lib/i18n';
-import { LoadingSpinner } from '../ui';
 
 interface QuickActionsPanelProps {
   onStartRegistration: () => void;
   onRefreshAllTokens: () => void;
-  onOpenLLMServer: () => void;
+  onOpenAiHub: () => void;
   isRefreshing: boolean;
-  isStartingServer: boolean;
-  serverIsRunning: boolean;
   showProviderWarning: boolean;
 }
 
 export const QuickActionsPanel = React.memo(function QuickActionsPanel({
   onStartRegistration,
   onRefreshAllTokens,
-  onOpenLLMServer,
+  onOpenAiHub,
   isRefreshing,
-  isStartingServer,
-  serverIsRunning,
   showProviderWarning,
 }: QuickActionsPanelProps) {
   return (
@@ -43,15 +38,12 @@ export const QuickActionsPanel = React.memo(function QuickActionsPanel({
         {t('dashboard.refreshAllTokens')}
       </Button>
       <Button
-        onClick={onOpenLLMServer}
-        disabled={isStartingServer}
+        onClick={onOpenAiHub}
         variant="secondary"
         size="md"
-        leftIcon={isStartingServer ? <LoadingSpinner size="sm" /> : <ExternalLink size={16} />}
+        leftIcon={<ExternalLink size={16} />}
       >
-        {serverIsRunning
-          ? t('dashboard.openLlmServer')
-          : t('dashboard.startLlmServer')}
+        AI Hub
       </Button>
       {showProviderWarning && (
         <span className="flex items-center gap-1.5 text-xs text-amber-400 ml-2">

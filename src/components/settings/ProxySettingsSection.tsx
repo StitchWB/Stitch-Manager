@@ -1,6 +1,6 @@
 import { Globe, Info, CheckCircle2, AlertCircle, List } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
-import { Input } from '../ui';
+import { Checkbox, Input, Toggle } from '../ui';
 import { t } from '../../lib/i18n';
 import { validateProxyString, parseProxyString } from '../../lib/proxyUtils';
 import { useState, useEffect } from 'react';
@@ -43,15 +43,15 @@ export function ProxySettingsSection({
   useEffect(() => {
     if (proxyUrl && proxyEnabled && !useProxyList) {
       const parsed = parseProxyString(proxyUrl, proxyType);
-      setParsedProxy(parsed);
+      queueMicrotask(() => setParsedProxy(parsed));
     } else {
-      setParsedProxy(null);
+      queueMicrotask(() => setParsedProxy(null));
     }
   }, [proxyUrl, proxyEnabled, useProxyList, proxyType]);
 
   const handleProxyChange = (value: string) => {
     onProxyUrlChange(value);
-    
+
     const error = validateProxyString(value);
     if (error) {
       onValidate(value);
@@ -60,7 +60,7 @@ export function ProxySettingsSection({
 
   const handleProxyListChange = (proxies: ProxyItem[]) => {
     setProxyList(proxies);
-    
+
     // Save proxies based on count
     if (proxies.length === 0) {
       // Empty list - clear proxy
@@ -71,10 +71,8 @@ export function ProxySettingsSection({
     } else {
       // Multiple proxies - save as multiline with enabled flag
       // Format: enabled|raw_proxy (one per line)
-      const proxyLines = proxies.map(p => 
-        `${p.enabled ? '1' : '0'}|${p.raw}`
-      ).join('\n');
-      
+      const proxyLines = proxies.map(p => `${p.enabled ? '1' : '0'}|${p.raw}`).join('\n');
+
       onProxyUrlChange(proxyLines);
     }
   };
@@ -84,21 +82,21 @@ export function ProxySettingsSection({
     if (useProxyList && proxyUrl) {
       const lines = proxyUrl.split('\n').filter(line => line.trim());
       const loadedProxies: ProxyItem[] = [];
-      
+
       for (const line of lines) {
         // Check if line has format prefix (enabled|proxy)
         const parts = line.split('|');
         let enabledStr = '1';
         let raw = line;
-        
+
         if (parts.length === 2 && (parts[0] === '1' || parts[0] === '0')) {
           enabledStr = parts[0];
           raw = parts[1];
         }
-        
+
         const parsed = parseProxyString(raw, proxyType);
         if (!parsed) continue;
-        
+
         loadedProxies.push({
           id: `${Date.now()}-${Math.random()}`,
           raw,
@@ -111,13 +109,13 @@ export function ProxySettingsSection({
           status: 'untested',
         });
       }
-      
+
       if (loadedProxies.length > 0) {
-        setProxyList(loadedProxies);
+        queueMicrotask(() => setProxyList(loadedProxies));
       }
     } else if (!useProxyList) {
       // Clear list when switching to single mode
-      setProxyList([]);
+      queueMicrotask(() => setProxyList([]));
     }
   }, [useProxyList, proxyUrl, proxyType]);
 
@@ -128,41 +126,44 @@ export function ProxySettingsSection({
       icon={<Globe className="w-4 h-4 text-primary" />}
     >
       <div className="glass-card rounded-lg p-4 border border-white/10 space-y-4">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={proxyEnabled}
-            onChange={e => onProxyEnabledChange(e.target.checked)}
-            className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 transition-colors"
-          />
-          <span className="text-slate-300 text-sm">{t('settings.proxy.enableProxy')}</span>
-        </label>
-        
+        <Checkbox
+          checked={proxyEnabled}
+          onChange={e => onProxyEnabledChange(e.target.checked)}
+          className="py-0 px-0 hover:bg-transparent"
+          label={<span className="text-slate-300 text-sm">{t('settings.proxy.enableProxy')}</span>}
+        />
+
         {proxyEnabled && (
           <>
             {/* Proxy Type Selection */}
             <div className="space-y-2">
-              <label className="text-sm text-slate-400">Тип прокси</label>
+              <div className="text-sm text-slate-400" role="presentation">
+                Тип прокси
+              </div>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => setProxyType('http')}
                   className={`
                     flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all
-                    ${proxyType === 'http'
-                      ? 'bg-primary text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ${
+                      proxyType === 'http'
+                        ? 'bg-primary text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }
                   `}
                 >
                   HTTP
                 </button>
                 <button
+                  type="button"
                   onClick={() => setProxyType('socks5')}
                   className={`
                     flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all
-                    ${proxyType === 'socks5'
-                      ? 'bg-primary text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ${
+                      proxyType === 'socks5'
+                        ? 'bg-primary text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }
                   `}
                 >
@@ -177,11 +178,10 @@ export function ProxySettingsSection({
                 <List className="w-4 h-4 text-slate-400" />
                 <span className="text-sm text-slate-300">Использовать список прокси</span>
               </div>
-              <input
-                type="checkbox"
+              <Toggle
+                label=""
                 checked={useProxyList}
-                onChange={e => setUseProxyList(e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 transition-colors"
+                onChange={checked => setUseProxyList(checked)}
               />
             </div>
 
@@ -229,7 +229,9 @@ export function ProxySettingsSection({
                           </div>
                           <div className="bg-slate-800/50 rounded p-2">
                             <div className="text-slate-400 mb-1">Пароль</div>
-                            <div className="text-slate-200 font-mono">{'•'.repeat(parsedProxy.password?.length || 0)}</div>
+                            <div className="text-slate-200 font-mono">
+                              {'•'.repeat(parsedProxy.password?.length || 0)}
+                            </div>
                           </div>
                         </>
                       )}
@@ -259,10 +261,17 @@ export function ProxySettingsSection({
                   <div className="space-y-1">
                     <p>Поддерживаемые форматы:</p>
                     <ul className="list-disc list-inside space-y-0.5 ml-2">
-                      <li><code className="text-slate-300">ip:port:username:password</code> - С авторизацией</li>
-                      <li><code className="text-slate-300">ip:port</code> - Без авторизации</li>
+                      <li>
+                        <code className="text-slate-300">ip:port:username:password</code> - С
+                        авторизацией
+                      </li>
+                      <li>
+                        <code className="text-slate-300">ip:port</code> - Без авторизации
+                      </li>
                     </ul>
-                    <p className="mt-2">Пример: <code className="text-slate-300">138.249.63.52:63942:user:pass</code></p>
+                    <p className="mt-2">
+                      Пример: <code className="text-slate-300">138.249.63.52:63942:user:pass</code>
+                    </p>
                   </div>
                 </div>
               </>

@@ -59,7 +59,7 @@ export function ProviderSelector({
       'ide') as keyof typeof PROVIDER_CATEGORIES;
 
     if (categoriesWithVisibleProviders.includes(providerCategory)) {
-      setActiveCategory(providerCategory);
+      queueMicrotask(() => setActiveCategory(providerCategory));
     }
   }, [activeProvider, categoriesWithVisibleProviders]);
 
@@ -69,7 +69,7 @@ export function ProviderSelector({
       !categoriesWithVisibleProviders.includes(activeCategory) &&
       categoriesWithVisibleProviders[0]
     ) {
-      setActiveCategory(categoriesWithVisibleProviders[0]);
+      queueMicrotask(() => setActiveCategory(categoriesWithVisibleProviders[0]));
     }
   }, [activeCategory, categoriesWithVisibleProviders]);
 
@@ -86,6 +86,7 @@ export function ProviderSelector({
           return (
             <button
               key={key}
+              type="button"
               onClick={() => setActiveCategory(key as keyof typeof PROVIDER_CATEGORIES)}
               disabled={disabled}
               className={cn(
@@ -113,6 +114,7 @@ export function ProviderSelector({
         {enabledProviders.map(provider => (
           <button
             key={provider.id}
+            type="button"
             onClick={() => onProviderChange(provider.id)}
             disabled={disabled}
             className={cn(

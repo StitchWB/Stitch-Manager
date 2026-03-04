@@ -1,6 +1,7 @@
 import { Globe, Info, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { useState, useEffect } from 'react';
+import { Checkbox } from '../ui';
 import { ProxyListManager } from './ProxyListManager';
 import { useProxyConfig } from '../../hooks/useProxyConfig';
 import type { ProxyItem, ProxyType } from '../../types/generated';
@@ -30,15 +31,18 @@ export function ProxySettingsSectionV2() {
   // Load config into local state (only on initial load)
   useEffect(() => {
     if (config && !isInitialized) {
-      setProxyEnabled(config.enabled);
-      setProxyType(config.proxyType);
-      
+      queueMicrotask(() => {
+        setProxyEnabled(config.enabled);
+        setProxyType(config.proxyType);
+      });
+
       // Convert ProxyItem[] to ProxyItemUI[]
       const uiProxies: ProxyItemUI[] = config.proxies.map(p => ({
         id: `${p.host}:${p.port}`,
-        raw: p.username && p.password 
-          ? `${p.host}:${p.port}:${p.username}:${p.password}`
-          : `${p.host}:${p.port}`,
+        raw:
+          p.username && p.password
+            ? `${p.host}:${p.port}:${p.username}:${p.password}`
+            : `${p.host}:${p.port}`,
         host: p.host,
         port: p.port.toString(),
         username: p.username || undefined,
@@ -47,9 +51,11 @@ export function ProxySettingsSectionV2() {
         enabled: p.enabled,
         status: 'untested',
       }));
-      
-      setProxyList(uiProxies);
-      setIsInitialized(true);
+
+      queueMicrotask(() => {
+        setProxyList(uiProxies);
+        setIsInitialized(true);
+      });
     }
   }, [config, isInitialized]);
 
@@ -75,9 +81,9 @@ export function ProxySettingsSectionV2() {
     };
 
     const success = await save(newConfig);
-    
+
     setSaving(false);
-    
+
     if (success) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -129,50 +135,53 @@ export function ProxySettingsSectionV2() {
     >
       <div className="glass-card rounded-lg p-4 border border-white/10 space-y-4">
         {/* Enable Proxy */}
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={proxyEnabled}
-            onChange={e => {
-              setProxyEnabled(e.target.checked);
-              setTimeout(() => handleSave(), 500);
-            }}
-            className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0 focus:ring-offset-0 transition-colors"
-          />
-          <span className="text-slate-300 text-sm">Включить прокси</span>
-        </label>
+        <Checkbox
+          checked={proxyEnabled}
+          onChange={e => {
+            setProxyEnabled(e.target.checked);
+            setTimeout(() => handleSave(), 500);
+          }}
+          className="py-0 px-0 hover:bg-transparent"
+          label={<span className="text-slate-300 text-sm">Включить прокси</span>}
+        />
 
         {proxyEnabled && (
           <>
             {/* Proxy Type Selection */}
             <div className="space-y-2">
-              <label className="text-sm text-slate-400">Тип прокси</label>
+              <div className="text-sm text-slate-400" role="presentation">
+                Тип прокси
+              </div>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setProxyType('http');
                     setTimeout(() => handleSave(), 500);
                   }}
                   className={`
                     flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all
-                    ${proxyType === 'http'
-                      ? 'bg-primary text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ${
+                      proxyType === 'http'
+                        ? 'bg-primary text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }
                   `}
                 >
                   HTTP
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setProxyType('socks5');
                     setTimeout(() => handleSave(), 500);
                   }}
                   className={`
                     flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all
-                    ${proxyType === 'socks5'
-                      ? 'bg-primary text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ${
+                      proxyType === 'socks5'
+                        ? 'bg-primary text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }
                   `}
                 >
@@ -190,13 +199,16 @@ export function ProxySettingsSectionV2() {
 
             {/* Save Status */}
             {(saving || saveSuccess) && (
-              <div className={`
+              <div
+                className={`
                 flex items-center gap-2 text-sm p-3 rounded-lg border
-                ${saveSuccess 
-                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                  : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                ${
+                  saveSuccess
+                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                    : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
                 }
-              `}>
+              `}
+              >
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -219,10 +231,16 @@ export function ProxySettingsSectionV2() {
           <div className="space-y-1">
             <p>Поддерживаемые форматы:</p>
             <ul className="list-disc list-inside space-y-0.5 ml-2">
-              <li><code className="text-slate-300">ip:port:username:password</code> - С авторизацией</li>
-              <li><code className="text-slate-300">ip:port</code> - Без авторизации</li>
+              <li>
+                <code className="text-slate-300">ip:port:username:password</code> - С авторизацией
+              </li>
+              <li>
+                <code className="text-slate-300">ip:port</code> - Без авторизации
+              </li>
             </ul>
-            <p className="mt-2">Пример: <code className="text-slate-300">138.249.63.52:63942:user:pass</code></p>
+            <p className="mt-2">
+              Пример: <code className="text-slate-300">138.249.63.52:63942:user:pass</code>
+            </p>
           </div>
         </div>
       </div>

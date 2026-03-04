@@ -3,6 +3,8 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   startPythonJob,
   cancelPythonJob,
+  getPythonJobStatus,
+  sendPythonJobControl,
   type PythonJobStartResponse,
 } from '@/lib/tauri/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
@@ -24,8 +26,11 @@ type ScenarioRecorderState = {
   lastEvent: string | null;
   scenarioPath: string | null;
   sessionDir: string | null;
+  commandFilePath: string | null;
   error: string | null;
   events: Array<{ ts: string; message: string; data?: unknown }>;
+  runtimeMissing: boolean;
+  stderr: Array<{ ts: string; line: string }>;
 };
 
 function newCorrelationId(): string {
@@ -45,8 +50,11 @@ export function useScenarioRecorder() {
     lastEvent: null,
     scenarioPath: null,
     sessionDir: null,
+    commandFilePath: null,
     error: null,
     events: [],
+    runtimeMissing: false,
+    stderr: [],
   }));
 
   const optionsRef = useRef<ScenarioRecorderOptions | null>(null);
@@ -62,6 +70,7 @@ export function useScenarioRecorder() {
       lastEvent: null,
       scenarioPath: null,
       sessionDir: null,
+      commandFilePath: null,
       error: null,
       events: [],
     }));
@@ -98,6 +107,7 @@ export function useScenarioRecorder() {
         '--scenario-name',
         opts.scenarioName,
       ];
+
       if (opts.proxy && opts.proxy.trim()) {
         args.push('--proxy', opts.proxy.trim());
       }
@@ -120,7 +130,11 @@ export function useScenarioRecorder() {
       return;
     }
 
-    setState(prev => ({ ...prev, jobId: job.jobId, status: 'recording' }));
+    setState(prev => ({
+      ...prev,
+      jobId: job.jobId,
+      status: 'starting',
+    }));
   }, []);
 
   const stop = useCallback(async () => {
@@ -128,7 +142,14 @@ export function useScenarioRecorder() {
     if (!jobId) return;
     setState(prev => ({ ...prev, status: 'stopping' }));
     try {
-      await cancelPythonJob(jobId);
+      if (state.commandFilePath) {
+        await sendPythonJobControl({
+          commandFilePath: state.commandFilePath,
+          command: 'stop',
+        });
+      } else {
+        await cancelPythonJob(jobId);
+      }
     } catch (e) {
       setState(prev => ({
         ...prev,
@@ -136,7 +157,48 @@ export function useScenarioRecorder() {
         error: e instanceof Error ? e.message : String(e),
       }));
     }
-  }, [state.jobId]);
+  }, [state.commandFilePath, state.jobId]);
+
+  // Polling fallback: ensures UI sees job failure even if obs stream is silent.
+  useEffect(() => {
+    const jobId = state.jobId;
+    if (!jobId) return;
+    if (
+      state.status !== 'starting' &&
+      state.status !== 'recording' &&
+      state.status !== 'stopping'
+    ) {
+      return;
+    }
+
+    let stopped = false;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        if (stopped) return;
+        const status = await getPythonJobStatus(jobId);
+        if (!status) return;
+        if (status.state === 'succeeded') {
+          setState(prev => ({ ...prev, status: 'done' }));
+        }
+        if (
+          status.state === 'failed' ||
+          status.state === 'cancelled' ||
+          status.state === 'timedout'
+        ) {
+          setState(prev => ({
+            ...prev,
+            status: 'error',
+            error: status.error ?? `Job ${status.state}`,
+          }));
+        }
+      })();
+    }, 1000);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [state.jobId, state.status]);
 
   // Subscribe to obs:event and filter to this jobId/correlationId
   useEffect(() => {
@@ -169,23 +231,38 @@ export function useScenarioRecorder() {
           let stepCount = prev.stepCount;
           let scenarioPath = prev.scenarioPath;
           let sessionDir = prev.sessionDir;
+          let commandFilePath = prev.commandFilePath;
           let lastEvent = prev.lastEvent;
           let status: ScenarioRecordStatus = prev.status;
+          let runtimeMissing = prev.runtimeMissing;
+          let error = prev.error;
 
           if (runnerType === 'event') {
             lastEvent = msg;
             if (msg === 'scenario.record.step') {
               stepCount = prev.stepCount + 1;
             }
+            if (msg === 'scenario.record.ready') {
+              status = 'recording';
+            }
+            if (msg === 'scenario.record.started') {
+              status = 'recording';
+            }
             if (msg === 'scenario.record.location' && data && typeof data === 'object') {
               const anyData = data as any;
               if (typeof anyData.scenarioPath === 'string') scenarioPath = anyData.scenarioPath;
               if (typeof anyData.sessionDir === 'string') sessionDir = anyData.sessionDir;
+              if (typeof anyData.commandFilePath === 'string') {
+                commandFilePath = anyData.commandFilePath;
+              }
             }
             if (msg === 'scenario.record.saved' && data && typeof data === 'object') {
               const anyData = data as any;
               if (typeof anyData.path === 'string') scenarioPath = anyData.path;
               status = 'done';
+            }
+            if (msg === 'scenario.record.control.stop') {
+              status = 'stopping';
             }
           }
 
@@ -193,6 +270,17 @@ export function useScenarioRecorder() {
             // A result line means the job finished by itself.
             const ok = Boolean((fields as any).ok);
             status = ok ? 'done' : 'error';
+
+            // Heuristic: if browser runtime is missing, Playwright usually errors with
+            // messages suggesting to run "playwright install".
+            if (!ok) {
+              const err = (fields as any).error as any;
+              const errMsg = String(err?.message ?? payload.message ?? '');
+              error = errMsg || 'Recording failed';
+              if (errMsg.toLowerCase().includes('playwright install')) {
+                runtimeMissing = true;
+              }
+            }
           }
 
           return {
@@ -201,8 +289,11 @@ export function useScenarioRecorder() {
             stepCount,
             scenarioPath,
             sessionDir,
+            commandFilePath,
             lastEvent,
             status,
+            error,
+            runtimeMissing,
           };
         });
       });
@@ -219,6 +310,38 @@ export function useScenarioRecorder() {
     };
   }, [state.jobId, state.correlationId]);
 
+  // Also listen to python.stderr for this jobId.
+  useEffect(() => {
+    const jobId = state.jobId;
+    if (!jobId) return;
+
+    let disposed = false;
+    let unlisten: UnlistenFn | null = null;
+
+    const setup = async () => {
+      unlisten = await listen<ObsEvent>('obs:event', event => {
+        if (disposed) return;
+        const payload = event.payload;
+        if (!payload) return;
+        if (payload.source !== 'python') return;
+        if (payload.subsystem !== 'python_runner') return;
+        if (payload.name !== 'python.stderr') return;
+        if (payload.jobId !== jobId) return;
+
+        setState(prev => ({
+          ...prev,
+          stderr: [{ ts: payload.ts, line: payload.message ?? '' }, ...prev.stderr].slice(0, 50),
+        }));
+      });
+    };
+
+    void setup();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [state.jobId]);
+
   const debugConfig = useMemo(() => {
     const opts = optionsRef.current;
     return {
@@ -229,8 +352,9 @@ export function useScenarioRecorder() {
       scenarioName: opts?.scenarioName,
       proxy: opts?.proxy,
       configJson: opts?.configJson,
+      commandFilePath: state.commandFilePath,
     };
-  }, [state.jobId, state.correlationId]);
+  }, [state.jobId, state.correlationId, state.commandFilePath]);
 
   return {
     state,

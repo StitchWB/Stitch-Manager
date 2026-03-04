@@ -17,6 +17,7 @@ import { t } from '../../lib/i18n';
 import { DEFAULT_IMAP_PORT, EMAIL_SHORTCODES, RANDOM_NAMES } from '../../constants/registration';
 import { Button } from './Button';
 import { Input } from './Input';
+import { Select } from './Select';
 import { Tooltip } from './Tooltip';
 
 export type MailStrategy = 'custom' | 'gmail';
@@ -265,8 +266,9 @@ export function IdentitySystemCard({
     }
   }, [activeMode, config]);
 
+  // Avoid setState directly inside an effect body (react-hooks/set-state-in-effect)
   useEffect(() => {
-    generatePreview();
+    queueMicrotask(() => generatePreview());
   }, [generatePreview]);
 
   const insertShortcode = (code: string) => {
@@ -534,21 +536,17 @@ export function IdentitySystemCard({
                   Domain
                 </label>
                 {addyioDomains.length > 0 ? (
-                  <select
+                  <Select
+                    containerClassName="w-full"
+                    className="h-9 py-2 text-sm"
                     value={config.addyioDomain || ''}
-                    onChange={e => onChange({ addyioDomain: e.target.value })}
+                    onValueChange={value => onChange({ addyioDomain: value })}
                     disabled={disabled}
-                    className="w-full h-9 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
-                  >
-                    <option value="" className="bg-[#0f1115]">
-                      Default
-                    </option>
-                    {addyioDomains.map(d => (
-                      <option key={d} value={d} className="bg-[#0f1115]">
-                        {d}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: '', label: 'Default' },
+                      ...addyioDomains.map(d => ({ value: d, label: d })),
+                    ]}
+                  />
                 ) : (
                   <Input
                     value={config.addyioDomain || ''}
@@ -562,22 +560,18 @@ export function IdentitySystemCard({
                 <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1">
                   Format
                 </label>
-                <select
+                <Select
+                  containerClassName="w-full"
+                  className="h-9 py-2 text-sm"
                   value={config.addyioAliasFormat || 'uuid'}
-                  onChange={e => onChange({ addyioAliasFormat: e.target.value })}
+                  onValueChange={value => onChange({ addyioAliasFormat: value })}
                   disabled={disabled}
-                  className="w-full h-9 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
-                >
-                  <option value="uuid" className="bg-[#0f1115]">
-                    UUID
-                  </option>
-                  <option value="random_words" className="bg-[#0f1115]">
-                    Words
-                  </option>
-                  <option value="random_characters" className="bg-[#0f1115]">
-                    Chars
-                  </option>
-                </select>
+                  options={[
+                    { value: 'uuid', label: 'UUID' },
+                    { value: 'random_words', label: 'Words' },
+                    { value: 'random_characters', label: 'Chars' },
+                  ]}
+                />
               </div>
             </div>
             <ImapForm
@@ -603,7 +597,8 @@ export function IdentitySystemCard({
                     Temporary Email Service
                   </p>
                   <p className="text-slate-300 text-xs leading-relaxed">
-                    Mail.tm provides free temporary email addresses. No configuration required - emails are automatically generated and deleted after use.
+                    Mail.tm provides free temporary email addresses. No configuration required -
+                    emails are automatically generated and deleted after use.
                   </p>
                   <div className="flex items-center gap-2 text-[10px] text-cyan-400 font-medium">
                     <CheckCircle size={12} />

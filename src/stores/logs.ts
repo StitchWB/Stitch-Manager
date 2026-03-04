@@ -286,9 +286,54 @@ export const useLogsStore = create<LogsState>((set, get) => ({
     const { unsubscribe: existingUnsub } = get();
     if (existingUnsub) return; // Already subscribed
 
+    const dedupWindowMs = 1500;
+    const recentBySignature = new Map<string, number>();
+
+    const makeSignature = (log: LogEntry): string => {
+      const bucket = Math.floor(new Date(log.timestamp).getTime() / 1000);
+      return `${log.level}|${log.source}|${log.channel ?? 'app'}|${log.message}|${bucket}`;
+    };
+
+    const isDuplicate = (incoming: LogEntry, existing: LogEntry[]): boolean => {
+      if (existing.some(l => l.id === incoming.id)) return true;
+
+      const sig = makeSignature(incoming);
+      const now = Date.now();
+      const seenTs = recentBySignature.get(sig);
+      if (typeof seenTs === 'number' && now - seenTs < dedupWindowMs) {
+        return true;
+      }
+
+      // Additional guard against same-content duplicates with different IDs.
+      const incomingTs = new Date(incoming.timestamp).getTime();
+      const near = existing.some(l => {
+        if (l.level !== incoming.level) return false;
+        if ((l.channel ?? 'app') !== (incoming.channel ?? 'app')) return false;
+        if (l.source !== incoming.source) return false;
+        if (l.message !== incoming.message) return false;
+        const dt = Math.abs(new Date(l.timestamp).getTime() - incomingTs);
+        return dt < dedupWindowMs;
+      });
+      if (near) return true;
+
+      recentBySignature.set(sig, now);
+      // lightweight cleanup
+      if (recentBySignature.size > 500) {
+        const cutoff = now - 10_000;
+        for (const [key, ts] of recentBySignature.entries()) {
+          if (ts < cutoff) recentBySignature.delete(key);
+        }
+      }
+      return false;
+    };
+
     const unsub = await listen<LogEntry>('logs:new', event => {
       const { logs, filter, groupingEnabled, autoCollapseSuccess, collapsedGroups } = get();
       const newLog = event.payload;
+
+      if (isDuplicate(newLog, logs)) {
+        return;
+      }
 
       // Check if log matches current filter
       const matchesFilter =

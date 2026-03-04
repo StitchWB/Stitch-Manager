@@ -19,7 +19,7 @@ import { useAppStore } from '../stores/app';
 import type { ContentBlock } from '../types/generated';
 import { t } from '../lib/i18n';
 import { Button } from '../components/ui/Button';
-import { LoadingSpinner } from '../components/ui';
+import { LoadingSpinner, Select, Textarea, Input, Checkbox } from '../components/ui';
 import { Tooltip } from '../components/Tooltip';
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
@@ -324,19 +324,23 @@ export default function Chat() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-2xs text-vsc-text-muted mb-1">Profile</label>
+                  <label htmlFor="chat-profile" className="block text-2xs text-vsc-text-muted mb-1">
+                    Profile
+                  </label>
                   <div className="flex gap-2">
-                    <select
+                    <Select
+                      id="chat-profile"
                       value={activeProfileId}
                       onChange={e => setActiveProfile(e.target.value)}
                       className="flex-1 px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-xs text-vsc-text"
+                      shellClassName="bg-vsc-input border-vsc-border"
                     >
                       {profiles.map(profile => (
                         <option key={profile.id} value={profile.id}>
                           {profile.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     <Button
                       variant="secondary"
                       size="xs"
@@ -355,79 +359,101 @@ export default function Chat() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-2xs text-vsc-text-muted mb-1">Temperature</label>
-                  <input
+                  <label
+                    htmlFor="chat-temperature"
+                    className="block text-2xs text-vsc-text-muted mb-1"
+                  >
+                    Temperature
+                  </label>
+                  <Input
+                    id="chat-temperature"
                     type="number"
                     step="0.1"
-                    min="0"
-                    max="2"
-                    value={activeProfile?.temperature ?? 1}
+                    min={0}
+                    max={2}
+                    value={String(activeProfile?.temperature ?? 1)}
                     onChange={e =>
                       updateProfile(activeProfileId, {
                         temperature: Number(e.target.value),
                       })
                     }
-                    className="w-full px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-xs text-vsc-text"
+                    className="bg-vsc-input border-vsc-border text-xs text-vsc-text"
+                    shellClassName="bg-vsc-input border-vsc-border"
                   />
                 </div>
                 <div>
-                  <label className="block text-2xs text-vsc-text-muted mb-1">Max Tokens</label>
-                  <input
+                  <label
+                    htmlFor="chat-max-tokens"
+                    className="block text-2xs text-vsc-text-muted mb-1"
+                  >
+                    Max Tokens
+                  </label>
+                  <Input
+                    id="chat-max-tokens"
                     type="number"
-                    min="128"
-                    max="32768"
-                    value={activeProfile?.maxTokens ?? 4096}
+                    min={128}
+                    max={32768}
+                    value={String(activeProfile?.maxTokens ?? 4096)}
                     onChange={e =>
                       updateProfile(activeProfileId, {
                         maxTokens: Number(e.target.value),
                       })
                     }
-                    className="w-full px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-xs text-vsc-text"
+                    className="bg-vsc-input border-vsc-border text-xs text-vsc-text"
+                    shellClassName="bg-vsc-input border-vsc-border"
                   />
                 </div>
               </div>
               <div className="mt-2">
-                <label className="block text-2xs text-vsc-text-muted mb-1">System Prompt</label>
-                <textarea
+                <label
+                  htmlFor="chat-system-prompt"
+                  className="block text-2xs text-vsc-text-muted mb-1"
+                >
+                  System Prompt
+                </label>
+                <Textarea
+                  id="chat-system-prompt"
                   value={activeProfile?.systemPrompt ?? ''}
                   onChange={e => updateProfile(activeProfileId, { systemPrompt: e.target.value })}
                   rows={2}
-                  className="w-full px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-xs text-vsc-text"
+                  className="bg-vsc-input border-vsc-border text-xs text-vsc-text"
+                  shellClassName="bg-vsc-input border-vsc-border"
                   placeholder="Optional debug system prompt"
                 />
               </div>
               <div className="mt-3 border-t border-vsc-border pt-3 grid grid-cols-1 md:grid-cols-4 gap-2">
-                <label className="flex items-center gap-2 text-2xs text-vsc-text-muted">
-                  <input
-                    type="checkbox"
-                    checked={forceOverride.enabled}
-                    onChange={e => setForceOverride({ enabled: e.target.checked })}
-                  />
-                  Force routing
-                </label>
-                <input
+                <Checkbox
+                  checked={forceOverride.enabled}
+                  onChange={e => setForceOverride({ enabled: e.target.checked })}
+                  label="Force routing"
+                  className="px-0 py-0 hover:bg-transparent"
+                />
+                <Input
                   value={forceOverride.provider}
                   onChange={e => setForceOverride({ provider: e.target.value })}
                   placeholder="provider"
                   disabled={!forceOverride.enabled}
-                  className="px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-2xs text-vsc-text disabled:opacity-50"
+                  className="bg-vsc-input border-vsc-border text-2xs text-vsc-text"
+                  shellClassName="bg-vsc-input border-vsc-border"
                 />
-                <input
+                <Input
                   value={forceOverride.modelId}
                   onChange={e => setForceOverride({ modelId: e.target.value })}
                   placeholder="model id"
                   disabled={!forceOverride.enabled}
-                  className="px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-2xs text-vsc-text disabled:opacity-50"
+                  className="bg-vsc-input border-vsc-border text-2xs text-vsc-text"
+                  shellClassName="bg-vsc-input border-vsc-border"
                 />
                 <div className="flex gap-2">
-                  <input
+                  <Input
                     value={forceOverride.accountId}
                     onChange={e => setForceOverride({ accountId: e.target.value })}
                     placeholder="account id"
                     disabled={!forceOverride.enabled}
-                    className="flex-1 px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-2xs text-vsc-text disabled:opacity-50"
+                    className="bg-vsc-input border-vsc-border text-2xs text-vsc-text"
+                    shellClassName="bg-vsc-input border-vsc-border"
                   />
-                  <Button variant="ghost" size="xs" onClick={resetForceOverride}>
+                  <Button variant="ghost" size="xs" onClick={resetForceOverride} type="button">
                     Reset
                   </Button>
                 </div>
@@ -435,9 +461,9 @@ export default function Chat() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-vsc-text-muted mb-1.5">
+                <div className="block text-xs font-medium text-vsc-text-muted mb-1.5">
                   {t('chat.apiUrl') || 'AI Proxy Endpoint (Debug)'}
-                </label>
+                </div>
                 <div
                   className="w-full px-3 py-2 bg-vsc-input border border-vsc-border rounded-lg 
                                text-sm text-vsc-text font-mono"
@@ -449,9 +475,9 @@ export default function Chat() {
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-vsc-text-muted mb-1.5">
+                <div className="block text-xs font-medium text-vsc-text-muted mb-1.5">
                   {t('chat.availableModels') || 'AI Proxy Models'}
-                </label>
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-vsc-text">{modelList.length} models</span>
                   <Button
@@ -560,10 +586,11 @@ export default function Chat() {
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="text-xs font-medium text-vsc-text">Request / Response Inspector</div>
               <div className="flex items-center gap-2">
-                <select
+                <Select
                   value={inspectorMessageId || ''}
                   onChange={e => setInspectorMessageId(e.target.value || null)}
                   className="px-2 py-1 bg-vsc-input border border-vsc-border rounded text-2xs text-vsc-text"
+                  shellClassName="bg-vsc-input border-vsc-border"
                 >
                   <option value="">Latest</option>
                   {[...messages]
@@ -576,7 +603,7 @@ export default function Chat() {
                         {m.routedProvider || 'unknown'}
                       </option>
                     ))}
-                </select>
+                </Select>
                 <Button
                   variant="ghost"
                   size="xs"
@@ -652,11 +679,12 @@ export default function Chat() {
             <span className="text-xs text-vsc-text-muted">{t('chat.model') || 'Model'}:</span>
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setShowModelDropdown(!showModelDropdown)}
                 disabled={setupLoading || modelList.length === 0}
                 className="flex items-center gap-2 px-3 py-1.5 bg-vsc-input border border-vsc-border 
-                           rounded-lg text-sm text-vsc-text hover:border-vsc-blue/50 transition-colors
-                           disabled:opacity-50 min-w-[200px] justify-between"
+                             rounded-lg text-sm text-vsc-text hover:border-vsc-blue/50 transition-colors
+                             disabled:opacity-50 min-w-[200px] justify-between"
               >
                 <span className="truncate">
                   {setupLoading ? (
@@ -689,6 +717,7 @@ export default function Chat() {
                       </div>
                       {providerModels.map(m => (
                         <button
+                          type="button"
                           key={m.id}
                           onClick={() => {
                             setModel(m.id);

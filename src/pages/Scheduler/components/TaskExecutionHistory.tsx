@@ -16,15 +16,14 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadExecutions();
-  }, [taskId]);
-
-  const loadExecutions = async () => {
-    setLoading(true);
-    const data = await getExecutions(taskId, 50);
-    setExecutions(data);
-    setLoading(false);
-  };
+    const loadExecutions = async () => {
+      setLoading(true);
+      const data = await getExecutions(taskId, 50);
+      setExecutions(data);
+      setLoading(false);
+    };
+    void loadExecutions();
+  }, [getExecutions, taskId]);
 
   const getStatusIcon = (status: string) => {
     if (status === 'Success') return <CheckCircle size={16} className="text-vsc-green" />;
@@ -50,7 +49,11 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
       <div className="bg-vsc-sidebar border border-vsc-border rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
           <h2 className="text-lg font-semibold text-vsc-text">Execution History</h2>
-          <button onClick={onClose} className="text-vsc-text-muted hover:text-vsc-text">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-vsc-text-muted hover:text-vsc-text"
+          >
             <X size={20} />
           </button>
         </div>
@@ -81,7 +84,9 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
                       </span>
                     </div>
                     <div className="text-sm text-vsc-text-muted">
-                      {formatDistanceToNow(new Date(execution.startedAt * 1000), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(execution.startedAt * 1000), {
+                        addSuffix: true,
+                      })}
                     </div>
                   </div>
 

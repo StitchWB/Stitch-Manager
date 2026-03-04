@@ -7,6 +7,9 @@ export type { IconButtonProps } from './IconButton';
 export { Input } from './Input';
 export type { InputProps } from './Input';
 
+export { Textarea } from './Textarea';
+export type { TextareaProps } from './Textarea';
+
 export { NumberInput } from './NumberInput';
 export type { NumberInputProps } from './NumberInput';
 
@@ -56,6 +59,15 @@ export type { TooltipProps } from './Tooltip';
 
 export { FilterDropdown } from './FilterDropdown';
 export type { FilterDropdownProps, FilterOption } from './FilterDropdown';
+
+export { DropdownMenu } from './DropdownMenu';
+export type { DropdownMenuProps, DropdownMenuOption } from './DropdownMenu';
+
+export { Badge } from './Badge';
+export type { BadgeProps } from './Badge';
+
+export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './Table';
+export type { TableProps } from './Table';
 
 export { ActionButtonGroup } from './ActionButtonGroup';
 export type { ActionButtonGroupProps, ActionButton } from './ActionButtonGroup';

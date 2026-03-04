@@ -34,6 +34,7 @@ export interface Translations {
     start: string;
     stop: string;
     restart: string;
+    saved: string;
     browse: string;
     select: string;
     all: string;
@@ -50,6 +51,9 @@ export interface Translations {
     preview: string;
     record: string;
     replay: string;
+    more: string;
+    installRuntime: string;
+    install: string;
   };
 
   status: {
@@ -88,7 +92,9 @@ export interface Translations {
     dashboard: string;
     accounts: string;
     autoReg: string;
+    scheduler: string;
     idePatch: string;
+    aiHub: string;
     apiServer: string;
     chat: string;
     system: string;
@@ -104,6 +110,24 @@ export interface Translations {
     refreshAll: string;
     importAccounts: string;
     exportCsv: string;
+    viewList: string;
+    viewGraph: string;
+    viewSheets: string;
+    allProviders: string;
+    proxyLabel: string;
+    selectedCountLabel: string;
+    tokenCopiedAutoClear: string;
+    tokenCopyFailed: string;
+    copyTokenSensitiveConfirm: string;
+    sheetsIntegration: string;
+    sheetsSpreadsheetId: string;
+    sheetsServiceAccountJson: string;
+    sheetsExplorerTitle: string;
+    loadAccountsErrorPrefix: string;
+    expiredCountLabel: string;
+    selectAccountAria: string;
+    actionsMenuAria: string;
+    profileIdLabel: string;
     noAccounts: string;
     noAccountsSubtitle: string;
     account: string;
@@ -226,6 +250,7 @@ export interface Translations {
     entityFilterLabel: string;
     entityAccounts: string;
     entityProfiles: string;
+    entityBrowserProfiles: string;
     entityAll: string;
     noProfilesFound: string;
     noProfilesFoundDesc: string;
@@ -258,8 +283,12 @@ export interface Translations {
     launchContextHintNoAwsSessionPath: string;
     profileHealthReady: string;
     profileHealthNeedsAws: string;
+    profileHealthNeedsLink: string;
     profileHealthNoSession: string;
     profileSettingsTitle: string;
+    profileSummaryTitle: string;
+    profileHardwareTab: string;
+    profileGeoTab: string;
     profileSettingsGenerateFingerprint: string;
     profileSettingsHardwareTab: string;
     profileSettingsGeoTab: string;
@@ -601,6 +630,485 @@ export interface Translations {
     stopFailed: string;
     restartFailed: string;
     saveConfigFailed: string;
+  };
+  aiHub: {
+    tabs: {
+      overview: string;
+      providers: string;
+      integrations: string;
+      usage: string;
+      diagnostics: string;
+      antigravity: string;
+      apiKeys: string;
+    };
+    sections: {
+      overview: {
+        title: string;
+        subtitle: string;
+      };
+      providers: {
+        title: string;
+        subtitle: string;
+      };
+      integrations: {
+        title: string;
+        subtitle: string;
+      };
+      usage: {
+        title: string;
+        subtitle: string;
+      };
+      diagnostics: {
+        title: string;
+        subtitle: string;
+      };
+      antigravity: {
+        title: string;
+        subtitle: string;
+      };
+      apiKeys: {
+        title: string;
+        subtitle: string;
+      };
+    };
+    analytics: {
+      title: string;
+      subtitle: string;
+      loading: string;
+      emptyTitle: string;
+      emptyDescription: string;
+      totalRequests: string;
+      tokensUsed: string;
+      avgDuration: string;
+      estCost: string;
+      weeklyActivity: string;
+      modelUsage: string;
+      requestsCount: string;
+      tokensCount: string;
+      durationMs: string;
+      costValue: string;
+    };
+    desktopOnly: {
+      actionUnavailable: string;
+      proxyControlsUnavailable: string;
+    };
+    authScan: {
+      found: string;
+      failed: string;
+    };
+    quota: {
+      title: string;
+      retry: string;
+      empty: string;
+      unavailableTauri: string;
+      usageUnavailable: string;
+      refreshUsage: string;
+      refreshQuotas: string;
+      detected: string;
+      exactLimitsUnavailable: string;
+      used: string;
+      left: string;
+      usageTitle: string;
+      totalRequests: string;
+      totalTokens: string;
+      topModel: string;
+      noModelBreakdown: string;
+      loadUsageHint: string;
+      refreshing: string;
+    };
+    search: {
+      placeholder: string;
+    };
+    proxy: {
+      title: string;
+      statusLabel: string;
+      running: string;
+      runningWithPort: string;
+      stopped: string;
+      summary: string;
+      modeLabel: string;
+      modeFull: string;
+      modeQuota: string;
+      routingLabel: string;
+      routingRoundRobin: string;
+      routingFillFirst: string;
+      portLabel: string;
+      portPlaceholder: string;
+      managementKey: string;
+      managementKeyPlaceholder: string;
+      autoStart: string;
+      baseUrl: string;
+      clientApiKey: string;
+      activePortLabel: string;
+      keyPreviewLabel: string;
+      error: string;
+      unsavedChanges: string;
+      errors: {
+        notLoaded: string;
+        invalidPort: string;
+        emptyManagementKey: string;
+      };
+      toasts: {
+        saved: string;
+        saveFailed: string;
+        started: string;
+        stopped: string;
+      };
+    };
+    actions: {
+      addAccount: string;
+      apiKeys: string;
+      configureIde: string;
+      import: string;
+      export: string;
+      openDebugChat: string;
+      runMigration: string;
+      openProviders: string;
+      openIntegrations: string;
+      openUsage: string;
+      openDiagnostics: string;
+      openAntigravity: string;
+      openApiKeys: string;
+      openAnalytics: string;
+      openDetailedAnalytics: string;
+      openWizard: string;
+      openImport: string;
+      openExport: string;
+      reset: string;
+      saveSettings: string;
+      saving: string;
+      startProxy: string;
+      stopProxy: string;
+      working: string;
+      refresh: string;
+      scanAuthFiles: string;
+      scanningAuthFiles: string;
+      prepareFromScan: string;
+      importJson: string;
+      importing: string;
+      importAllFromScan: string;
+      generate: string;
+      generating: string;
+      download: string;
+      copy: string;
+      addMapping: string;
+      cancel: string;
+      save: string;
+      close: string;
+      open: string;
+      editMappings: string;
+    };
+
+    antigravity: {
+      actions: {
+        loginOAuth: string;
+        refresh: string;
+        openUrl: string;
+        checkStatus: string;
+        checking: string;
+      };
+      empty: {
+        noCredentialsTitle: string;
+        noCredentialsDescription: string;
+      };
+      list: {
+        detectedTitle: string;
+        expiresLabel: string;
+        unknownExpiry: string;
+      };
+      modal: {
+        oauthTitle: string;
+        oauthInstructions: string;
+        authUrlLabel: string;
+      };
+      toasts: {
+        loginCompletedRefreshing: string;
+        oauthFailedGeneric: string;
+        oauthTimedOut: string;
+      };
+      errors: {
+        scanAuthFilesFailed: string;
+        startLoginFailed: string;
+        oauthPollFailed: string;
+      };
+    };
+
+    apiKeys: {
+      loading: string;
+      providers: {
+        geminiDescription: string;
+        openaiDescription: string;
+        antigravityDescription: string;
+      };
+      empty: {
+        title: string;
+        description: string;
+      };
+      summary: {
+        noneConfigured: string;
+        configuredCount: string;
+      };
+      actions: {
+        addKey: string;
+        reveal: string;
+        hide: string;
+        createAccount: string;
+        delete: string;
+        cancel: string;
+        saveKey: string;
+      };
+      modals: {
+        addTitle: string;
+        deleteTitle: string;
+        deleteMessage: string;
+        deleteMessageFallback: string;
+        fields: {
+          apiKeyLabel: string;
+          baseUrlLabel: string;
+          modelPrefixLabel: string;
+          apiKeyPlaceholder: string;
+          baseUrlPlaceholder: string;
+          modelPrefixPlaceholder: string;
+        };
+      };
+      toasts: {
+        keyAdded: string;
+        keyDeleted: string;
+        accountAlreadyExists: string;
+        accountCreated: string;
+        cannotDeleteLinkedAccount: string;
+      };
+      errors: {
+        loadFailed: string;
+        apiKeyRequired: string;
+        addFailed: string;
+        deleteFailed: string;
+        createAccountFailed: string;
+      };
+    };
+    cards: {
+      accountCoverageTitle: string;
+      accountCoverageHint: string;
+      modelInventoryTitle: string;
+      modelInventoryHint: string;
+      requestHistoryTitle: string;
+      requestHistoryHint: string;
+      providerCounts: string;
+      last20Requests: string;
+      errors: string;
+    };
+    readiness: {
+      enabled: string;
+      ready: string;
+      cooldown: string;
+      weeklyLimit: string;
+    };
+    empty: {
+      modelsProxyStopped: string;
+      modelsNoAccounts: string;
+      modelsUnavailable: string;
+      capabilities: string;
+      noMappings: string;
+      noAccountsFound: string;
+      noAccountsHint: string;
+      noAuthFiles: string;
+      noExportPayload: string;
+    };
+    table: {
+      provider: string;
+      account: string;
+      status: string;
+      quota: string;
+      today: string;
+      lastUsed: string;
+      actions: string;
+      requestsLine: string;
+      never: string;
+      testConnection: string;
+      edit: string;
+      delete: string;
+      badges: {
+        cooldown: string;
+        refreshError: string;
+        connectionError: string;
+        quotaError: string;
+      };
+      quotaPrimary: string;
+      quotaWeekly: string;
+      emptyValue: string;
+    };
+    modals: {
+      transferImportTitle: string;
+      transferExportTitle: string;
+      transferFooter: string;
+      importTitle: string;
+      importDescription: string;
+      importPayloadLabel: string;
+      importPayloadPlaceholder: string;
+      importWarningTitle: string;
+      importWarningDescription: string;
+      scanResultsTitle: string;
+      scanReportLabel: string;
+      noExpiry: string;
+      expiresShort: string;
+      exportTitle: string;
+      exportDescription: string;
+      includeSecrets: string;
+      csvNoSecrets: string;
+      exportFormatJson: string;
+      exportFormatCsv: string;
+      exportPayloadLabel: string;
+      mappingsTitle: string;
+      mappingPatternPlaceholder: string;
+      mappingTargetPlaceholder: string;
+    };
+    warnings: {
+      includeSecretsConfirm: string;
+      copySensitiveConfirm: string;
+    };
+    copy: {
+      empty: string;
+      success: string;
+      fail: string;
+    };
+    diagnostics: {
+      toolsTitle: string;
+      toolsDescription: string;
+      healthTitle: string;
+      healthHint: string;
+      latestReason: string;
+      latestReasonHint: string;
+      noRecentReasons: string;
+    };
+    wizard: {
+      title: string;
+      detecting: string;
+      selectDescription: string;
+      proxyStoppedHint: string;
+      providerProfile: string;
+      noIdesTitle: string;
+      noIdesHint: string;
+      alreadyConfigured: string;
+      previewTitle: string;
+      previewHint: string;
+      applying: string;
+      runningAutoSmoke: string;
+      errors: {
+        detectFailed: string;
+        previewFailed: string;
+        configurationFailed: string;
+        autoSmokeFailed: string;
+        restoreFailed: string;
+        smokeFailed: string;
+        startProxyFailed: string;
+        autoImportFailed: string;
+      };
+      smoke: {
+        passed: string;
+        notConfigured: string;
+        proxyNotRunning: string;
+        noModels: string;
+      };
+      results: {
+        configuredVerified: string;
+        configuredPending: string;
+        restoredVerified: string;
+        restored: string;
+        smokeOk: string;
+        smokeAttention: string;
+      };
+      actions: {
+        runSmoke: string;
+        restoreBackup: string;
+        next: string;
+        back: string;
+        applyConfiguration: string;
+        done: string;
+      };
+      nextSteps: {
+        title: string;
+        restartIde: string;
+        ensureProxy: string;
+        runSmoke: string;
+        testRequest: string;
+      };
+      manual: {
+        title: string;
+        copyButton: string;
+        hint: string;
+        copied: string;
+        copyFailed: string;
+      };
+      autoImport: {
+        title: string;
+        dryRun: string;
+        importNow: string;
+        hint: string;
+        modeLabel: string;
+        modeDryRun: string;
+        modeWrite: string;
+        scanned: string;
+        imported: string;
+        skipped: string;
+        noDiscovered: string;
+      };
+    };
+    integrations: {
+      title: string;
+      description: string;
+      mappingsTitle: string;
+      mappingsHint: string;
+    };
+    usage: {
+      summaryTitle: string;
+      summaryHint: string;
+    };
+    labels: {
+      providers: string;
+      providersHint: string;
+    };
+    controller: {
+      importValidation: {
+        payloadMustBeObject: string;
+        payloadVersionRequired: string;
+        payloadAccountsRequired: string;
+        invalidJson: string;
+      };
+      confirm: {
+        deleteAccount: string;
+        importPayload: string;
+        prepareFromScan: string;
+        importAllFromScan: string;
+      };
+      toasts: {
+        accountDeleted: string;
+        accountEnabled: string;
+        accountDisabled: string;
+        migrationRunning: string;
+        migrationCompleted: string;
+        connectionOk: string;
+        mappingsSaved: string;
+        downloadStarted: string;
+        exportGenerated: string;
+        importedAccounts: string;
+        importedAccountsWithSkipped: string;
+        preparedImportFromScan: string;
+      };
+      errors: {
+        loadAccountsFailed: string;
+        deleteAccountFailed: string;
+        updateAccountFailed: string;
+        migrationFailed: string;
+        connectionTestFailed: string;
+        saveMappingsFailed: string;
+        downloadFailed: string;
+        exportFailed: string;
+        importPayloadRequired: string;
+        invalidImportPayload: string;
+        importFailed: string;
+        noScanResultsToImport: string;
+      };
+    };
   };
   patcher: {
     title: string;
@@ -1189,6 +1697,15 @@ export interface Translations {
     minSpareAccounts: string;
     replenishment: string;
     providerConfig: string;
+  };
+
+  recorder: {
+    started: string;
+    stopping: string;
+    saved: string;
+    runtimeMissing: string;
+    failed: string;
+    noSavedScenarioPath: string;
   };
 }
 

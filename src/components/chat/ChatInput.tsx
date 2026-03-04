@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, Square, Paperclip, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner, Textarea } from '../ui';
 import type { ContentBlock } from '../../types/generated';
 
 interface PendingAttachment {
@@ -35,16 +35,19 @@ export function ChatInput({
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea based on content
-  useEffect(() => {
+  const updateTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
-  }, [value]);
+  }, []);
+
+  useEffect(() => {
+    updateTextareaHeight();
+  });
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
@@ -79,53 +82,61 @@ export function ChatInput({
     }
   }, [onStop]);
 
-  const handlePickFiles = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
+  const handleFilesSelected = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
 
-  const handleFilesSelected = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+      const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+      if (!allowImageAttachments) {
+        return;
+      }
 
-    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-    if (!allowImageAttachments) {
-      return;
-    }
+      const readAsDataUrl = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+          reader.readAsDataURL(file);
+        });
 
-    const readAsDataUrl = (file: File): Promise<string> =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
-        reader.readAsDataURL(file);
-      });
-
-    const nextAttachments: PendingAttachment[] = [];
-    for (const file of imageFiles) {
-      const dataUrl = await readAsDataUrl(file);
-      const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-      nextAttachments.push({
-        id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        name: file.name,
-        previewDataUrl: dataUrl,
-        block: {
-          type: 'image',
-          source: {
-            sourceType: 'base64',
-            mediaType: file.type || null,
-            data: base64Data,
+      const nextAttachments: PendingAttachment[] = [];
+      for (const file of imageFiles) {
+        const dataUrl = await readAsDataUrl(file);
+        const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+        nextAttachments.push({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          name: file.name,
+          previewDataUrl: dataUrl,
+          block: {
+            type: 'image',
+            source: {
+              sourceType: 'base64',
+              mediaType: file.type || null,
+              data: base64Data,
+            },
           },
-        },
-      });
-    }
+        });
+      }
 
-    if (nextAttachments.length > 0) {
-      setAttachments(prev => [...prev, ...nextAttachments]);
-    }
+      if (nextAttachments.length > 0) {
+        setAttachments(prev => [...prev, ...nextAttachments]);
+      }
+    },
+    [allowImageAttachments]
+  );
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }, []);
+  const handlePickFiles = useCallback(() => {
+    if (!allowImageAttachments || disabled || isLoading) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = () => {
+      void handleFilesSelected(input.files);
+      input.remove();
+    };
+    input.click();
+  }, [allowImageAttachments, disabled, isLoading, handleFilesSelected]);
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments(prev => prev.filter(item => item.id !== id));
@@ -133,16 +144,6 @@ export function ChatInput({
 
   return (
     <div className="border-t border-vsc-border bg-vsc-sidebar/50 p-4">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={e => {
-          void handleFilesSelected(e.target.files);
-        }}
-      />
       {attachments.length > 0 && (
         <div className="max-w-4xl mx-auto mb-3 flex flex-wrap gap-2">
           {attachments.map(item => (
@@ -166,7 +167,7 @@ export function ChatInput({
       <div className="flex items-end gap-3 max-w-4xl mx-auto">
         {/* Input area */}
         <div className="flex-1 relative">
-          <textarea
+          <Textarea
             ref={textareaRef}
             value={value}
             onChange={e => setValue(e.target.value)}
@@ -174,11 +175,8 @@ export function ChatInput({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="w-full px-4 py-3 bg-vsc-input border border-vsc-border rounded-lg 
-                       text-sm text-vsc-text placeholder-vsc-text-muted
-                       focus:outline-none focus:border-vsc-blue/50 focus:ring-1 focus:ring-vsc-blue/30
-                       disabled:opacity-50 disabled:cursor-not-allowed
-                       resize-none overflow-hidden transition-colors"
+            className="px-4 py-3 bg-vsc-input border border-vsc-border text-sm text-vsc-text placeholder-vsc-text-muted focus:border-vsc-blue/50 focus:ring-1 focus:ring-vsc-blue/30 resize-none overflow-hidden transition-colors"
+            shellClassName="bg-vsc-input border-vsc-border"
             style={{ minHeight: '44px', maxHeight: '200px' }}
           />
           <div className="absolute bottom-1.5 right-2 text-2xs text-vsc-text-muted">
@@ -191,6 +189,7 @@ export function ChatInput({
         {allowImageAttachments ? (
           <Tooltip content="Attach images">
             <button
+              type="button"
               onClick={handlePickFiles}
               disabled={disabled || isLoading}
               className="p-3 bg-vsc-input border border-vsc-border hover:border-vsc-blue/50 text-vsc-text-muted
@@ -206,6 +205,7 @@ export function ChatInput({
         {isLoading ? (
           <Tooltip content="Stop generation">
             <button
+              type="button"
               onClick={handleStop}
               className="p-3 bg-vsc-red/20 hover:bg-vsc-red/30 text-vsc-red 
                          rounded-lg transition-colors flex items-center justify-center"
@@ -216,6 +216,7 @@ export function ChatInput({
         ) : (
           <Tooltip content="Send message">
             <button
+              type="button"
               onClick={handleSend}
               disabled={(!value.trim() && attachments.length === 0) || disabled}
               className="p-3 bg-vsc-blue/20 hover:bg-vsc-blue/30 text-vsc-blue 

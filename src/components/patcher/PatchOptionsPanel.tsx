@@ -1,6 +1,7 @@
 import { HelpCircle } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { Tooltip } from '../Tooltip';
+import { Checkbox } from '../ui';
 
 interface PatchOption {
   id: string;
@@ -34,12 +35,14 @@ export default function PatchOptionsPanel({
         </h4>
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => onToggleAll(true)}
             className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
           >
             All
           </button>
           <button
+            type="button"
             onClick={() => onToggleAll(false)}
             className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
           >
@@ -49,32 +52,27 @@ export default function PatchOptionsPanel({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         {options.map(option => (
-          <label
+          <div
             key={option.id}
-            className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10 cursor-pointer transition-all duration-200 group"
+            className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-200 group"
           >
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={selectedOptions[option.id] ?? option.defaultEnabled}
-                onChange={() => onToggleOption(option.id)}
-                className="
-                  appearance-none w-4 h-4 rounded border border-white/20 bg-white/5 
-                  checked:bg-primary checked:border-primary checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')]
-                  focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer shrink-0
-                "
-              />
-              <span className="text-sm text-slate-300 group-hover:text-white transition-colors">
-                {t(option.labelKey)}
-              </span>
-            </div>
+            <Checkbox
+              checked={selectedOptions[option.id] ?? option.defaultEnabled}
+              onChange={() => onToggleOption(option.id)}
+              label={
+                <span className="text-sm text-slate-300 group-hover:text-white transition-colors">
+                  {t(option.labelKey)}
+                </span>
+              }
+              className="p-0 hover:bg-transparent"
+            />
             <Tooltip content={t(option.descKey)}>
               <HelpCircle
                 size={14}
                 className="text-slate-600 hover:text-slate-400 transition-colors"
               />
             </Tooltip>
-          </label>
+          </div>
         ))}
       </div>
     </div>

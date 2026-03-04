@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Button, LoadingSpinner, Select, Toggle } from '../ui';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button, Input, LoadingSpinner, Select, Toggle } from '../ui';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { safeInvoke } from '../../lib/tauri/core/invoke';
 import { getEnabledModels, setEnabledModels } from '../../lib/tauri/modules/aiProxy';
@@ -64,17 +64,12 @@ export function AiProxySettings() {
   const [modelsSaveStatus, setModelsSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   useEffect(() => {
-    loadData();
-    loadModels();
-  }, []);
-
-  useEffect(() => {
     if (modelsSaveStatus !== 'success') return;
     const timer = setTimeout(() => setModelsSaveStatus('idle'), 2400);
     return () => clearTimeout(timer);
   }, [modelsSaveStatus]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [statusData, settingsData] = await Promise.all([
@@ -89,9 +84,9 @@ export function AiProxySettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setError, setLoading, setSettings, setStatus]);
 
-  const loadModels = async () => {
+  const loadModels = useCallback(async () => {
     try {
       setModelsLoading(true);
       setModelsError(null);
@@ -112,7 +107,12 @@ export function AiProxySettings() {
     } finally {
       setModelsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+    void loadModels();
+  }, [loadData, loadModels]);
 
   const handleStart = async () => {
     try {
@@ -269,8 +269,11 @@ export function AiProxySettings() {
 
       {/* Mode Selection */}
       <div className="space-y-3">
-        <label className="block text-sm font-medium text-vsc-text">Mode</label>
+        <label htmlFor="ai-proxy-mode" className="block text-sm font-medium text-vsc-text">
+          Mode
+        </label>
         <Select
+          id="ai-proxy-mode"
           value={localSettings.appMode}
           onChange={async e => {
             const newMode = e.target.value;
@@ -302,16 +305,20 @@ export function AiProxySettings() {
 
       {/* Port */}
       <div className="space-y-3">
-        <label className="block text-sm font-medium text-vsc-text">AI Proxy Port</label>
-        <input
+        <label htmlFor="ai-proxy-port" className="block text-sm font-medium text-vsc-text">
+          AI Proxy Port
+        </label>
+        <Input
+          id="ai-proxy-port"
           type="number"
-          value={localSettings.proxyPort}
+          value={localSettings.proxyPort.toString()}
           onChange={e =>
             setLocalSettings({ ...localSettings, proxyPort: parseInt(e.target.value) })
           }
-          className="w-full px-3 py-2 bg-vsc-input text-vsc-text border border-vsc-border rounded-lg"
-          min="1024"
-          max="65535"
+          min={1024}
+          max={65535}
+          className="bg-vsc-input text-vsc-text border-vsc-border"
+          shellClassName="bg-vsc-input border-vsc-border"
         />
         <p className="text-xs text-vsc-text-muted">
           IDE/CLI clients connect to this port through the AI Proxy endpoint.
@@ -335,8 +342,11 @@ export function AiProxySettings() {
 
       {/* Routing Strategy */}
       <div className="space-y-3">
-        <label className="block text-sm font-medium text-vsc-text">Routing Strategy</label>
+        <label htmlFor="ai-proxy-routing" className="block text-sm font-medium text-vsc-text">
+          Routing Strategy
+        </label>
         <Select
+          id="ai-proxy-routing"
           value={localSettings.routingStrategy}
           onChange={e => setLocalSettings({ ...localSettings, routingStrategy: e.target.value })}
         >

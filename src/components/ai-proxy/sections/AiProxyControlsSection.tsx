@@ -2,6 +2,7 @@ import { Copy, Power, RefreshCw } from 'lucide-react';
 import { Button, Input, Select, Toggle } from '../../ui';
 import { cn } from '../../../lib/utils';
 import type { ProxySettings, ProxyStatus } from '../../../types/generated';
+import { t } from '../../../lib/i18n';
 
 interface AiProxyControlsSectionProps {
   visible: boolean;
@@ -22,6 +23,10 @@ interface AiProxyControlsSectionProps {
   onSaveSettings: () => void;
   onStartStopProxy: () => void;
   onRefreshProxyInfo: () => void;
+  showIdeWizardAction?: boolean;
+  showProxyActions?: boolean;
+  showConfigActions?: boolean;
+  showRuntimeActions?: boolean;
 }
 
 export function AiProxyControlsSection({
@@ -43,6 +48,10 @@ export function AiProxyControlsSection({
   onSaveSettings,
   onStartStopProxy,
   onRefreshProxyInfo,
+  showIdeWizardAction = true,
+  showProxyActions = true,
+  showConfigActions = true,
+  showRuntimeActions = true,
 }: AiProxyControlsSectionProps) {
   if (!visible) return null;
 
@@ -55,7 +64,7 @@ export function AiProxyControlsSection({
               size={16}
               className={proxyStatus?.running ? 'text-emerald-400' : 'text-slate-500'}
             />
-            <h3 className="text-sm font-semibold text-white">IDE Proxy</h3>
+            <h3 className="text-sm font-semibold text-white">{t('aiHub.proxy.title')}</h3>
             <span
               className={cn(
                 'text-2xs px-2 py-0.5 rounded border',
@@ -64,19 +73,23 @@ export function AiProxyControlsSection({
                   : 'bg-white/5 border-white/10 text-slate-400'
               )}
             >
-              {proxyStatus?.running ? 'Running' : 'Stopped'}
+              {proxyStatus?.running ? t('aiHub.proxy.running') : t('aiHub.proxy.stopped')}
             </span>
             {proxySettings?.appMode && (
               <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-white/5 text-slate-300">
-                Mode: {proxySettings.appMode}
+                {t('aiHub.proxy.modeLabel')}: {proxySettings.appMode}
               </span>
             )}
           </div>
 
-          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="mt-2 text-xs text-slate-400">{t('aiHub.proxy.summary')}</div>
+
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
             <div className="flex items-center justify-between gap-2 bg-black/30 border border-white/10 rounded-lg px-3 py-2">
               <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500">Base URL</div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                  {t('aiHub.proxy.baseUrl')}
+                </div>
                 <div className="text-xs font-mono text-slate-200 truncate max-w-[240px]">
                   {baseUrl}
                 </div>
@@ -84,17 +97,17 @@ export function AiProxyControlsSection({
               <Button
                 variant="secondary"
                 size="xs"
-                onClick={() => onCopy('Base URL', baseUrl)}
+                onClick={() => onCopy(t('aiHub.proxy.baseUrl'), baseUrl)}
                 leftIcon={<Copy size={14} />}
               >
-                Copy
+                {t('aiHub.actions.copy')}
               </Button>
             </div>
 
             <div className="flex items-center justify-between gap-2 bg-black/30 border border-white/10 rounded-lg px-3 py-2">
               <div className="min-w-0">
                 <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                  Client API key
+                  {t('aiHub.proxy.clientApiKey')}
                 </div>
                 <div className="text-xs font-mono text-slate-200 truncate max-w-[240px]">
                   {clientApiKey}
@@ -103,146 +116,178 @@ export function AiProxyControlsSection({
               <Button
                 variant="secondary"
                 size="xs"
-                onClick={() => onCopy('Client API key', clientApiKey)}
+                onClick={() => onCopy(t('aiHub.proxy.clientApiKey'), clientApiKey)}
                 leftIcon={<Copy size={14} />}
               >
-                Copy
+                {t('aiHub.actions.copy')}
               </Button>
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-2 items-end">
-            <Input
-              type="number"
-              min={1024}
-              max={65535}
-              step={1}
-              inputMode="numeric"
-              value={proxyDraft?.proxyPort ?? ''}
-              onChange={e => {
-                const raw = e.target.value;
-                if (!raw.trim()) return;
-                const nextPort = Number(raw);
-                if (!Number.isInteger(nextPort)) return;
-                onSetProxyDraft(prev => (prev ? { ...prev, proxyPort: nextPort } : prev));
-              }}
-              label="Port"
-              placeholder="8317"
-            />
-
-            <Select
-              label="Mode"
-              value={proxyDraft?.appMode ?? 'full'}
-              onChange={e =>
-                onSetProxyDraft(prev => (prev ? { ...prev, appMode: e.target.value } : prev))
-              }
-              options={[
-                { value: 'full', label: 'Full mode' },
-                { value: 'quota-only', label: 'Quota-only' },
-              ]}
-            />
-
-            <Select
-              label="Routing"
-              value={proxyDraft?.routingStrategy ?? 'round-robin'}
-              onChange={e =>
-                onSetProxyDraft(prev =>
-                  prev ? { ...prev, routingStrategy: e.target.value } : prev
-                )
-              }
-              options={[
-                { value: 'round-robin', label: 'Round robin' },
-                { value: 'fill-first', label: 'Fill first' },
-              ]}
-            />
-
-            <Input
-              type="password"
-              value={proxyDraft?.managementKey ?? ''}
-              onChange={e =>
-                onSetProxyDraft(prev => (prev ? { ...prev, managementKey: e.target.value } : prev))
-              }
-              label="Management key"
-              placeholder="Management key"
-            />
-
-            <div className="flex items-center h-9 px-3 rounded-lg bg-black/30 border border-white/10">
-              <Toggle
-                label="Auto start"
-                checked={proxyDraft?.autoStart ?? false}
-                onChange={checked =>
-                  onSetProxyDraft(prev => (prev ? { ...prev, autoStart: checked } : prev))
-                }
+          {showProxyActions && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-2 items-end">
+              <Input
+                type="number"
+                min={1024}
+                max={65535}
+                step={1}
+                inputMode="numeric"
+                value={proxyDraft?.proxyPort ?? ''}
+                onChange={e => {
+                  const raw = e.target.value;
+                  if (!raw.trim()) return;
+                  const nextPort = Number(raw);
+                  if (!Number.isInteger(nextPort)) return;
+                  onSetProxyDraft(prev => (prev ? { ...prev, proxyPort: nextPort } : prev));
+                }}
+                label={t('aiHub.proxy.portLabel')}
+                placeholder={t('aiHub.proxy.portPlaceholder')}
               />
-            </div>
-          </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+              <Select
+                label={t('aiHub.proxy.modeLabel')}
+                value={proxyDraft?.appMode ?? 'full'}
+                onValueChange={value =>
+                  onSetProxyDraft(prev => (prev ? { ...prev, appMode: value } : prev))
+                }
+                options={[
+                  { value: 'full', label: t('aiHub.proxy.modeFull') },
+                  { value: 'quota-only', label: t('aiHub.proxy.modeQuota') },
+                ]}
+              />
+
+              <Select
+                label={t('aiHub.proxy.routingLabel')}
+                value={proxyDraft?.routingStrategy ?? 'round-robin'}
+                onValueChange={value =>
+                  onSetProxyDraft(prev => (prev ? { ...prev, routingStrategy: value } : prev))
+                }
+                options={[
+                  { value: 'round-robin', label: t('aiHub.proxy.routingRoundRobin') },
+                  { value: 'fill-first', label: t('aiHub.proxy.routingFillFirst') },
+                ]}
+              />
+
+              <Input
+                type="password"
+                value={proxyDraft?.managementKey ?? ''}
+                onChange={e =>
+                  onSetProxyDraft(prev =>
+                    prev ? { ...prev, managementKey: e.target.value } : prev
+                  )
+                }
+                label={t('aiHub.proxy.managementKey')}
+                placeholder={t('aiHub.proxy.managementKeyPlaceholder')}
+              />
+
+              <div className="flex items-center h-9 px-3 rounded-lg bg-black/30 border border-white/10">
+                <Toggle
+                  label={t('aiHub.proxy.autoStart')}
+                  checked={proxyDraft?.autoStart ?? false}
+                  onChange={checked =>
+                    onSetProxyDraft(prev => (prev ? { ...prev, autoStart: checked } : prev))
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
             <span className="tabular-nums">
-              Active port: <span className="text-slate-200">{proxyStatus?.port ?? '—'}</span>
+              {t('aiHub.proxy.activePortLabel')}{' '}
+              <span className="text-slate-200">
+                {proxyStatus?.port ?? t('aiHub.table.emptyValue')}
+              </span>
             </span>
             <span className="text-slate-600">•</span>
             <span className="min-w-0">
-              Key preview:{' '}
+              {t('aiHub.proxy.keyPreviewLabel')}:{' '}
               <span className="font-mono text-slate-200 truncate max-w-[180px] inline-block align-middle">
-                {proxyDraft?.managementKey ? maskKey(proxyDraft.managementKey) : '—'}
+                {proxyDraft?.managementKey
+                  ? maskKey(proxyDraft.managementKey)
+                  : t('aiHub.table.emptyValue')}
               </span>
             </span>
             {proxyDraft?.managementKey && (
               <Button
                 variant="secondary"
                 size="xs"
-                onClick={() => onCopy('Management key', proxyDraft.managementKey, true)}
+                onClick={() =>
+                  onCopy(t('aiHub.proxy.managementKey'), proxyDraft.managementKey, true)
+                }
                 leftIcon={<Copy size={14} />}
               >
-                Copy
+                {t('aiHub.actions.copy')}
               </Button>
             )}
           </div>
-          {proxyError && <div className="mt-2 text-xs text-red-400">Proxy error: {proxyError}</div>}
+          {proxyError && (
+            <div className="mt-2 text-xs text-red-400">
+              {t('aiHub.proxy.error')}: {proxyError}
+            </div>
+          )}
           {isProxyDraftDirty && !proxyError && (
-            <div className="mt-2 text-xs text-amber-300">You have unsaved proxy changes</div>
+            <div className="mt-2 text-xs text-amber-300">{t('aiHub.proxy.unsavedChanges')}</div>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <Button variant="secondary" size="sm" onClick={onOpenIdeWizard}>
-            Configure IDE/CLI
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onResetDraft}
-            disabled={!isProxyDraftDirty || proxySaving || proxyBusy}
-          >
-            Reset
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onSaveSettings}
-            disabled={proxySaving || !proxyDraft || !isProxyDraftDirty || proxyBusy}
-          >
-            {proxySaving ? 'Saving...' : 'Save settings'}
-          </Button>
-          <Button
-            variant={proxyStatus?.running ? 'danger' : 'primary'}
-            size="sm"
-            onClick={onStartStopProxy}
-            disabled={proxyBusy || proxySaving}
-            leftIcon={<Power size={16} />}
-          >
-            {proxyBusy ? 'Working...' : proxyStatus?.running ? 'Stop Proxy' : 'Start Proxy'}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onRefreshProxyInfo}
-            disabled={proxyBusy || proxySaving}
-            leftIcon={<RefreshCw size={16} />}
-          >
-            Refresh
-          </Button>
+          {showIdeWizardAction && (
+            <Button variant="secondary" size="sm" onClick={onOpenIdeWizard}>
+              {t('aiHub.actions.configureIde')}
+            </Button>
+          )}
+          {showProxyActions && (
+            <>
+              {showConfigActions && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onResetDraft}
+                    disabled={!isProxyDraftDirty || proxySaving || proxyBusy}
+                  >
+                    {t('aiHub.actions.reset')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={onSaveSettings}
+                    disabled={proxySaving || !proxyDraft || !isProxyDraftDirty || proxyBusy}
+                  >
+                    {proxySaving ? t('aiHub.actions.saving') : t('aiHub.actions.saveSettings')}
+                  </Button>
+                </>
+              )}
+
+              {showRuntimeActions && (
+                <>
+                  <Button
+                    variant={proxyStatus?.running ? 'danger' : 'primary'}
+                    size="sm"
+                    onClick={onStartStopProxy}
+                    disabled={proxyBusy || proxySaving}
+                    leftIcon={<Power size={16} />}
+                  >
+                    {proxyBusy
+                      ? t('aiHub.actions.working')
+                      : proxyStatus?.running
+                        ? t('aiHub.actions.stopProxy')
+                        : t('aiHub.actions.startProxy')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onRefreshProxyInfo}
+                    disabled={proxyBusy || proxySaving}
+                    leftIcon={<RefreshCw size={16} />}
+                  >
+                    {t('aiHub.actions.refresh')}
+                  </Button>
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

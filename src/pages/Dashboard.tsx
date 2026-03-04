@@ -6,15 +6,9 @@ import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
 import { useLogsStore } from '../stores/logs';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
-import {
-  getServerStatus,
-  getRegistrationJobs,
-  clearRegistrationJobs,
-  startLLMServer,
-  getDashboardStats,
-} from '../lib/tauri';
+import { getRegistrationJobs, clearRegistrationJobs, getDashboardStats } from '../lib/tauri';
 import { t } from '../lib/i18n';
-import type { RegistrationJob, LLMServerStatus, DashboardStats } from '../types';
+import type { RegistrationJob, DashboardStats } from '../types';
 import {
   StatsGrid,
   QuickActionsPanel,
@@ -22,6 +16,17 @@ import {
   ProviderBreakdownChart,
   ProviderSelectionGrid,
 } from '../components/dashboard';
+
+function formatActivityTimestamp(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return t('time.justNow');
+  if (diffMins < 60) return t('time.minutesAgo', { count: diffMins });
+  if (diffMins < 1440) return t('time.hoursAgo', { count: Math.floor(diffMins / 60) });
+  return date.toLocaleDateString();
+}
 
 // ============================================
 // Main Dashboard Component
@@ -33,9 +38,7 @@ export default function Dashboard() {
   const { addLog } = useLogsStore();
   const navigate = useNavigate();
 
-  const [serverStatus, setServerStatus] = useState<LLMServerStatus | null>(null);
   const [registrationJobs, setRegistrationJobs] = useState<RegistrationJob[]>([]);
-  const [isStartingServer, setIsStartingServer] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
@@ -47,16 +50,6 @@ export default function Dashboard() {
 
   // Force re-render when language changes
   void language; // Force re-render on language change
-
-  const loadServerStatus = useCallback(async () => {
-    try {
-      const status = await getServerStatus();
-      setServerStatus(status);
-    } catch (error) {
-      console.error('Failed to load server status:', error);
-      // Silent fail for background status check - no notification needed
-    }
-  }, []);
 
   const loadRegistrationJobs = useCallback(async () => {
     try {
@@ -102,10 +95,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchAccounts();
-    loadServerStatus();
     loadRegistrationJobs();
     loadDashboardStats();
-  }, [fetchAccounts, loadServerStatus, loadRegistrationJobs, loadDashboardStats]);
+  }, [fetchAccounts, loadRegistrationJobs, loadDashboardStats]);
 
   const summaryData = useMemo(() => {
     if (dashboardStats) {
@@ -228,7 +220,7 @@ export default function Dashboard() {
           job.status === 'failed'
             ? cleanErrorMessage(job.error, job.provider, job.status)
             : `${job.provider} - ${job.status}`,
-        timestamp: formatTimestamp(job.createdAt),
+        timestamp: formatActivityTimestamp(job.createdAt),
       });
     });
 
@@ -242,17 +234,6 @@ export default function Dashboard() {
     }
     return activities;
   }, [registrationJobs]);
-
-  function formatTimestamp(dateStr: string): string {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return t('time.justNow');
-    if (diffMins < 60) return t('time.minutesAgo', { count: diffMins });
-    if (diffMins < 1440) return t('time.hoursAgo', { count: Math.floor(diffMins / 60) });
-    return date.toLocaleDateString();
-  }
 
   const handleStartRegistration = () => {
     // Navigate to AutoReg page instead of calling removed startRegistration
@@ -294,39 +275,8 @@ export default function Dashboard() {
     }
   };
 
-  const handleOpenLLMServer = async () => {
-    if (serverStatus?.isRunning) {
-      window.open(`http://${serverStatus.host}:${serverStatus.port}`, '_blank');
-      addLog({
-        level: 'info',
-        message: `Opened LLM server at ${serverStatus.host}:${serverStatus.port}`,
-        source: 'server',
-      });
-      return;
-    }
-    setIsStartingServer(true);
-    addLog({
-      level: 'info',
-      message: 'Starting LLM server...',
-      source: 'server',
-    });
-    try {
-      const status = await startLLMServer();
-      setServerStatus(status);
-      addLog({
-        level: 'success',
-        message: `LLM server started on port ${status.port}`,
-        source: 'server',
-      });
-    } catch (error) {
-      addLog({
-        level: 'error',
-        message: `Failed to start LLM server: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        source: 'server',
-      });
-    } finally {
-      setIsStartingServer(false);
-    }
+  const handleOpenAiHub = () => {
+    navigate('/ai');
   };
 
   const handleAccountsNearLimitClick = () => {
@@ -378,10 +328,8 @@ export default function Dashboard() {
           <QuickActionsPanel
             onStartRegistration={handleStartRegistration}
             onRefreshAllTokens={handleRefreshAllTokens}
-            onOpenLLMServer={handleOpenLLMServer}
+            onOpenAiHub={handleOpenAiHub}
             isRefreshing={isBulkRefreshing}
-            isStartingServer={isStartingServer}
-            serverIsRunning={serverStatus?.isRunning || false}
             showProviderWarning={!selectedProvider}
           />
 

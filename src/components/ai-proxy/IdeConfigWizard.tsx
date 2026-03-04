@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Check, AlertCircle, Copy, RefreshCw } from 'lucide-react';
-import { Button } from '../ui';
+import { Button, Select } from '../ui';
 import {
   detectAiProxyIdes,
   configureAiProxyIdeForProvider,
@@ -20,6 +20,7 @@ import {
   buildManualEnvPayload,
   getProviderProfile,
 } from '../../lib/providering';
+import { t } from '../../lib/i18n';
 
 // Type definition for AI Proxy detected IDE
 interface AiProxyDetectedIde {
@@ -74,13 +75,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   const [autoImportInProgress, setAutoImportInProgress] = useState(false);
   const [autoImportResult, setAutoImportResult] = useState<AuthImportResult | null>(null);
 
-  useEffect(() => {
-    if (isOpen && step === 'detect') {
-      detectIDEs();
-    }
-  }, [isOpen, step]);
-
-  const detectIDEs = async () => {
+  const detectIDEs = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -94,11 +89,17 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
       setManualEndpoint(`http://127.0.0.1:${proxySettings.proxyPort}/v1`);
       setStep('select');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to detect IDEs');
+      setError(err instanceof Error ? err.message : t('aiHub.wizard.errors.detectFailed'));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && step === 'detect') {
+      void detectIDEs();
+    }
+  }, [isOpen, step, detectIDEs]);
 
   const refreshIdeStates = async () => {
     const [detected, status] = await Promise.all([detectAiProxyIdes(), getProxyStatus()]);
@@ -124,17 +125,17 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
       const hasModels = models.length > 0;
 
       let smokePassed = true;
-      let smokeMessage = 'Smoke check passed';
+      let smokeMessage = t('aiHub.wizard.smoke.passed');
 
       if (!configured) {
         smokePassed = false;
-        smokeMessage = 'IDE config does not look configured yet';
+        smokeMessage = t('aiHub.wizard.smoke.notConfigured');
       } else if (!running) {
         smokePassed = false;
-        smokeMessage = 'AI Proxy is not running';
+        smokeMessage = t('aiHub.wizard.smoke.proxyNotRunning');
       } else if (!hasModels) {
         smokePassed = false;
-        smokeMessage = 'AI Proxy is running but no models are available';
+        smokeMessage = t('aiHub.wizard.smoke.noModels');
       }
 
       return {
@@ -184,7 +185,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
       setConfigPreview(preview);
       setStep('preview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate preview');
+      setError(err instanceof Error ? err.message : t('aiHub.wizard.errors.previewFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -209,7 +210,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
           ideName,
           success: false,
           action: 'configured',
-          error: err instanceof Error ? err.message : 'Configuration failed',
+          error: err instanceof Error ? err.message : t('aiHub.wizard.errors.configurationFailed'),
         });
       }
     }
@@ -236,7 +237,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
         const smokeResults = await evaluateSmokeChecks(successfulIdeNames);
         applySmokeResults(smokeResults);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Auto smoke check failed');
+        setError(err instanceof Error ? err.message : t('aiHub.wizard.errors.autoSmokeFailed'));
       } finally {
         setAutoCheckInProgress(false);
       }
@@ -280,7 +281,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
           ideName,
           success: false,
           action: 'restored',
-          error: err instanceof Error ? err.message : 'Restore failed',
+          error: err instanceof Error ? err.message : t('aiHub.wizard.errors.restoreFailed'),
         };
 
         if (existingIndex >= 0) {
@@ -311,7 +312,8 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                 ...result,
                 smokeChecked: true,
                 smokePassed: false,
-                smokeMessage: err instanceof Error ? err.message : 'Smoke check failed',
+                smokeMessage:
+                  err instanceof Error ? err.message : t('aiHub.wizard.errors.smokeFailed'),
               }
             : result
         )
@@ -337,7 +339,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
         await refreshIdeStates();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start AI Proxy from wizard');
+      setError(err instanceof Error ? err.message : t('aiHub.wizard.errors.startProxyFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -367,10 +369,10 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
       const provider = getProviderProfile(providerKey);
       const payload = buildManualEnvPayload(manualEndpoint, provider.key);
       await navigator.clipboard.writeText(payload);
-      setCopyStatus('Copied manual setup values');
+      setCopyStatus(t('aiHub.wizard.manual.copied'));
       setTimeout(() => setCopyStatus(null), 2000);
     } catch (err) {
-      setCopyStatus(err instanceof Error ? err.message : 'Failed to copy manual setup values');
+      setCopyStatus(err instanceof Error ? err.message : t('aiHub.wizard.manual.copyFailed'));
       setTimeout(() => setCopyStatus(null), 3000);
     }
   };
@@ -385,7 +387,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
         await refreshIdeStates();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to auto-import auth files');
+      setError(err instanceof Error ? err.message : t('aiHub.wizard.errors.autoImportFailed'));
     } finally {
       setAutoImportInProgress(false);
     }
@@ -401,8 +403,9 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
       <div className="bg-vsc-sidebar border border-vsc-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
-          <h2 className="text-lg font-semibold text-vsc-text">Configure IDEs for AI Proxy</h2>
+          <h2 className="text-lg font-semibold text-vsc-text">{t('aiHub.wizard.title')}</h2>
           <button
+            type="button"
             onClick={handleClose}
             className="text-vsc-text-muted hover:text-vsc-text transition-colors"
           >
@@ -423,7 +426,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
           {step === 'detect' && (
             <div className="text-center py-8">
               <RefreshCw size={48} className="mx-auto mb-4 text-vsc-blue animate-spin" />
-              <p className="text-vsc-text">Detecting installed IDEs...</p>
+              <p className="text-vsc-text">{t('aiHub.wizard.detecting')}</p>
             </div>
           )}
 
@@ -431,28 +434,34 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
           {step === 'select' && (
             <div>
               <p className="text-sm text-vsc-text-muted mb-4">
-                Select the IDEs you want to configure to use AI Proxy:
+                {t('aiHub.wizard.selectDescription')}
               </p>
               {proxyRunning === false && (
                 <div className="mb-4 p-3 bg-vsc-yellow/10 border border-vsc-yellow/30 rounded-lg text-xs text-vsc-yellow">
-                  AI Proxy is currently stopped. You can still configure IDE files now and start AI
-                  Proxy later before testing requests.
+                  {t('aiHub.wizard.proxyStoppedHint')}
                 </div>
               )}
 
               <div className="mb-4 p-3 bg-vsc-sidebar/50 border border-vsc-border rounded-lg">
-                <label className="block text-xs text-vsc-text-muted mb-2">Provider profile</label>
-                <select
+                <label
+                  htmlFor="provider-profile-select"
+                  className="block text-xs text-vsc-text-muted mb-2"
+                >
+                  {t('aiHub.wizard.providerProfile')}
+                </label>
+                <Select
+                  id="provider-profile-select"
                   value={providerKey}
                   onChange={e => setProviderKey(e.target.value as ProviderKey)}
                   className="w-full px-2 py-1.5 bg-vsc-input border border-vsc-border rounded text-xs text-vsc-text"
+                  shellClassName="bg-vsc-input border-vsc-border"
                 >
                   {PROVIDER_PROFILES.map(option => (
                     <option key={option.key} value={option.key}>
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <p className="text-2xs text-vsc-text-muted mt-1">
                   {getProviderProfile(providerKey).description}
                 </p>
@@ -461,18 +470,17 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
               {installedIdes.length === 0 ? (
                 <div className="text-center py-8">
                   <AlertCircle size={48} className="mx-auto mb-4 text-vsc-yellow" />
-                  <p className="text-vsc-text mb-2">No supported IDEs detected</p>
-                  <p className="text-sm text-vsc-text-muted">
-                    Make sure you have Cursor, Windsurf, Continue, Cline, or OpenCode installed.
-                  </p>
+                  <p className="text-vsc-text mb-2">{t('aiHub.wizard.noIdesTitle')}</p>
+                  <p className="text-sm text-vsc-text-muted">{t('aiHub.wizard.noIdesHint')}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {installedIdes.map(ide => (
-                    <div
+                    <button
+                      type="button"
                       key={ide.name}
                       onClick={() => toggleIdeSelection(ide.name)}
-                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                      className={`p-4 border rounded-lg cursor-pointer transition-colors w-full text-left ${
                         selectedIdes.has(ide.name)
                           ? 'border-vsc-blue bg-vsc-blue/10'
                           : 'border-vsc-border hover:border-vsc-border-light'
@@ -505,11 +513,11 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                         </div>
                         {ide.configured && (
                           <span className="text-xs px-2 py-1 bg-vsc-green/10 text-vsc-green rounded">
-                            Already configured
+                            {t('aiHub.wizard.alreadyConfigured')}
                           </span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -520,21 +528,16 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
           {step === 'preview' && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-vsc-text-muted">
-                  Configuration preview for selected IDEs:
-                </p>
+                <p className="text-sm text-vsc-text-muted">{t('aiHub.wizard.previewTitle')}</p>
                 <Button variant="ghost" onClick={copyToClipboard}>
                   <Copy size={16} />
-                  Copy
+                  {t('aiHub.actions.copy')}
                 </Button>
               </div>
               <pre className="bg-vsc-terminal border border-vsc-border rounded-lg p-4 text-xs text-vsc-text overflow-x-auto">
                 {configPreview}
               </pre>
-              <p className="text-xs text-vsc-text-muted mt-4">
-                This configuration will be merged with your existing IDE settings. A backup will be
-                created automatically.
-              </p>
+              <p className="text-xs text-vsc-text-muted mt-4">{t('aiHub.wizard.previewHint')}</p>
             </div>
           )}
 
@@ -542,7 +545,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
           {step === 'apply' && (
             <div className="text-center py-8">
               <RefreshCw size={48} className="mx-auto mb-4 text-vsc-blue animate-spin" />
-              <p className="text-vsc-text">Applying configuration...</p>
+              <p className="text-vsc-text">{t('aiHub.wizard.applying')}</p>
             </div>
           )}
 
@@ -551,7 +554,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
             <div>
               {autoCheckInProgress && (
                 <div className="mb-4 p-3 bg-vsc-blue/10 border border-vsc-blue/30 rounded-lg text-xs text-vsc-blue">
-                  Running automatic smoke checks for configured IDEs...
+                  {t('aiHub.wizard.runningAutoSmoke')}
                 </div>
               )}
               <div className="space-y-2 mb-4">
@@ -585,11 +588,11 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                             <p className="text-sm text-vsc-text-muted mt-1">
                               {result.action === 'configured'
                                 ? result.verifiedConfigured
-                                  ? 'Configured and verified'
-                                  : 'Configured (verification pending)'
+                                  ? t('aiHub.wizard.results.configuredVerified')
+                                  : t('aiHub.wizard.results.configuredPending')
                                 : result.verifiedConfigured === false
-                                  ? 'Restored from backup and verified'
-                                  : 'Restored from backup'}
+                                  ? t('aiHub.wizard.results.restoredVerified')
+                                  : t('aiHub.wizard.results.restored')}
                             </p>
                           ) : (
                             <p className="text-sm text-vsc-red">{result.error}</p>
@@ -600,7 +603,9 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                                 result.smokePassed ? 'text-vsc-green' : 'text-vsc-yellow'
                               }`}
                             >
-                              {result.smokePassed ? 'Smoke check: OK' : 'Smoke check: attention'}
+                              {result.smokePassed
+                                ? t('aiHub.wizard.results.smokeOk')
+                                : t('aiHub.wizard.results.smokeAttention')}
                               {result.smokeMessage ? ` — ${result.smokeMessage}` : ''}
                             </p>
                           )}
@@ -614,7 +619,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                                 onClick={() => runConnectivitySmokeCheck(result.ideName)}
                                 disabled={isLoading || autoCheckInProgress}
                               >
-                                Run smoke check
+                                {t('aiHub.wizard.actions.runSmoke')}
                               </Button>
                               <Button
                                 variant="ghost"
@@ -622,7 +627,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                                 onClick={() => restoreConfiguration(result.ideName)}
                                 disabled={isLoading || autoCheckInProgress}
                               >
-                                Restore backup
+                                {t('aiHub.wizard.actions.restoreBackup')}
                               </Button>
                             </>
                           )}
@@ -635,20 +640,20 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
 
               <div className="p-4 bg-vsc-blue/10 border border-vsc-blue/30 rounded-lg">
                 <p className="text-sm text-vsc-text mb-2">
-                  <strong>Next steps:</strong>
+                  <strong>{t('aiHub.wizard.nextSteps.title')}</strong>
                 </p>
                 <ol className="text-sm text-vsc-text-muted space-y-1 list-decimal list-inside">
-                  <li>Restart your IDE(s) to apply the changes</li>
-                  <li>Make sure AI Proxy is running in Full mode</li>
-                  <li>Run smoke check for each configured IDE</li>
-                  <li>Test the connection by making an AI request</li>
+                  <li>{t('aiHub.wizard.nextSteps.restartIde')}</li>
+                  <li>{t('aiHub.wizard.nextSteps.ensureProxy')}</li>
+                  <li>{t('aiHub.wizard.nextSteps.runSmoke')}</li>
+                  <li>{t('aiHub.wizard.nextSteps.testRequest')}</li>
                 </ol>
               </div>
 
               <div className="mt-3 p-4 bg-vsc-sidebar/50 border border-vsc-border rounded-lg">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <p className="text-sm text-vsc-text">
-                    <strong>Manual setup fallback</strong>
+                    <strong>{t('aiHub.wizard.manual.title')}</strong>
                   </p>
                   <Button
                     variant="ghost"
@@ -656,12 +661,10 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                     onClick={copyManualSetup}
                     disabled={isLoading || autoCheckInProgress}
                   >
-                    Copy endpoint + key
+                    {t('aiHub.wizard.manual.copyButton')}
                   </Button>
                 </div>
-                <p className="text-xs text-vsc-text-muted mb-2">
-                  Use these values if IDE auto-config doesn’t apply cleanly:
-                </p>
+                <p className="text-xs text-vsc-text-muted mb-2">{t('aiHub.wizard.manual.hint')}</p>
                 <div className="text-xs font-mono text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 space-y-1">
                   <div>OPENAI_BASE_URL={manualEndpoint}</div>
                   <div>OPENAI_API_KEY={getProviderProfile(providerKey).defaultApiKey}</div>
@@ -672,7 +675,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
               <div className="mt-3 p-4 bg-vsc-sidebar/50 border border-vsc-border rounded-lg">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <p className="text-sm text-vsc-text">
-                    <strong>Auto-import accounts from local IDE auth files</strong>
+                    <strong>{t('aiHub.wizard.autoImport.title')}</strong>
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
@@ -681,7 +684,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                       onClick={() => runAutoImport(true)}
                       disabled={autoImportInProgress || isLoading || autoCheckInProgress}
                     >
-                      Dry run
+                      {t('aiHub.wizard.autoImport.dryRun')}
                     </Button>
                     <Button
                       variant="secondary"
@@ -689,30 +692,36 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                       onClick={() => runAutoImport(false)}
                       disabled={autoImportInProgress || isLoading || autoCheckInProgress}
                     >
-                      {autoImportInProgress ? 'Importing...' : 'Import now'}
+                      {autoImportInProgress
+                        ? t('aiHub.actions.importing')
+                        : t('aiHub.wizard.autoImport.importNow')}
                     </Button>
                   </div>
                 </div>
                 <p className="text-xs text-vsc-text-muted mb-2">
-                  Opt-in only. Imports discovered local tokens into AI Proxy accounts with duplicate
-                  protection.
+                  {t('aiHub.wizard.autoImport.hint')}
                 </p>
                 {autoImportResult && (
                   <div className="text-xs text-vsc-text-muted space-y-1">
                     <div>
-                      Mode:{' '}
+                      {t('aiHub.wizard.autoImport.modeLabel')}:{' '}
                       <span className="text-vsc-text">
-                        {autoImportResult.dryRun ? 'Dry run' : 'Write'}
+                        {autoImportResult.dryRun
+                          ? t('aiHub.wizard.autoImport.modeDryRun')
+                          : t('aiHub.wizard.autoImport.modeWrite')}
                       </span>
                     </div>
                     <div>
-                      Scanned: <span className="text-vsc-text">{autoImportResult.scanned}</span> •
-                      Imported: <span className="text-vsc-green">{autoImportResult.imported}</span>{' '}
-                      • Skipped: <span className="text-vsc-yellow">{autoImportResult.skipped}</span>
+                      {t('aiHub.wizard.autoImport.scanned')}:{' '}
+                      <span className="text-vsc-text">{autoImportResult.scanned}</span> •{' '}
+                      {t('aiHub.wizard.autoImport.imported')}:{' '}
+                      <span className="text-vsc-green">{autoImportResult.imported}</span> •{' '}
+                      {t('aiHub.wizard.autoImport.skipped')}:{' '}
+                      <span className="text-vsc-yellow">{autoImportResult.skipped}</span>
                     </div>
                     <div className="max-h-28 overflow-auto bg-vsc-input border border-vsc-border rounded p-2">
                       {autoImportResult.entries.length === 0 ? (
-                        <div>No discovered auth files</div>
+                        <div>{t('aiHub.wizard.autoImport.noDiscovered')}</div>
                       ) : (
                         autoImportResult.entries.slice(0, 20).map((entry, idx) => (
                           <div
@@ -744,20 +753,20 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
             {step === 'select' && (
               <>
                 <Button variant="ghost" onClick={handleClose}>
-                  Cancel
+                  {t('aiHub.actions.cancel')}
                 </Button>
                 <Button variant="primary" onClick={showPreview} disabled={!canProceed || isLoading}>
-                  Next
+                  {t('aiHub.wizard.actions.next')}
                 </Button>
               </>
             )}
             {step === 'preview' && (
               <>
                 <Button variant="ghost" onClick={() => setStep('select')}>
-                  Back
+                  {t('aiHub.wizard.actions.back')}
                 </Button>
                 <Button variant="primary" onClick={applyConfiguration} disabled={isLoading}>
-                  Apply Configuration
+                  {t('aiHub.wizard.actions.applyConfiguration')}
                 </Button>
               </>
             )}
@@ -769,11 +778,11 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                     onClick={handleStartProxyFromWizard}
                     disabled={isLoading || autoCheckInProgress}
                   >
-                    Start AI Proxy
+                    {t('aiHub.actions.startProxy')}
                   </Button>
                 )}
                 <Button variant="primary" onClick={handleClose} disabled={autoCheckInProgress}>
-                  Done
+                  {t('aiHub.wizard.actions.done')}
                 </Button>
               </>
             )}

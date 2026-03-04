@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Settings2, Database, Activity, Zap } from 'lucide-react';
+import { ShieldCheck, Settings2, Database, Activity, Zap, Orbit, Key } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { Button } from '../components/ui';
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
+import { t } from '../lib/i18n';
 
 interface HubCard {
   title: string;
@@ -16,45 +16,56 @@ interface HubCard {
 export default function AiOverview() {
   const navigate = useNavigate();
 
-  const cards = useMemo<HubCard[]>(
-    () => [
-      {
-        title: 'Providers',
-        description: 'Manage AI provider accounts, credentials, and connection status.',
-        to: '/ai/providers',
-        icon: <Zap size={18} />,
-        cta: 'Open Providers',
-      },
-      {
-        title: 'Integrations',
-        description: 'Configure IDE/CLI integrations (OpenCode, Cursor, Cline, Continue).',
-        to: '/ai/integrations',
-        icon: <Settings2 size={18} />,
-        cta: 'Open Integrations',
-      },
-      {
-        title: 'Usage & Quotas',
-        description: 'Review quota health and recent usage trends.',
-        to: '/ai/usage',
-        icon: <Database size={18} />,
-        cta: 'Open Usage',
-      },
-      {
-        title: 'Diagnostics',
-        description: 'Sidecar health, debug chat, and troubleshooting tools.',
-        to: '/ai/diagnostics',
-        icon: <Activity size={18} />,
-        cta: 'Open Diagnostics',
-      },
-    ],
-    []
-  );
+  const cards: HubCard[] = [
+    {
+      title: t('aiHub.tabs.providers'),
+      description: t('aiHub.sections.providers.subtitle'),
+      to: '/ai/providers',
+      icon: <Zap size={18} />,
+      cta: t('aiHub.actions.openProviders'),
+    },
+    {
+      title: t('aiHub.tabs.integrations'),
+      description: t('aiHub.sections.integrations.subtitle'),
+      to: '/ai/integrations',
+      icon: <Settings2 size={18} />,
+      cta: t('aiHub.actions.openIntegrations'),
+    },
+    {
+      title: t('aiHub.tabs.usage'),
+      description: t('aiHub.sections.usage.subtitle'),
+      to: '/ai/usage',
+      icon: <Database size={18} />,
+      cta: t('aiHub.actions.openUsage'),
+    },
+    {
+      title: t('aiHub.tabs.diagnostics'),
+      description: t('aiHub.sections.diagnostics.subtitle'),
+      to: '/ai/diagnostics',
+      icon: <Activity size={18} />,
+      cta: t('aiHub.actions.openDiagnostics'),
+    },
+    {
+      title: t('aiHub.tabs.antigravity'),
+      description: t('aiHub.sections.antigravity.subtitle'),
+      to: '/ai/antigravity',
+      icon: <Orbit size={18} />,
+      cta: t('aiHub.actions.openAntigravity'),
+    },
+    {
+      title: t('aiHub.tabs.apiKeys'),
+      description: t('aiHub.sections.apiKeys.subtitle'),
+      to: '/ai/api-keys',
+      icon: <Key size={18} />,
+      cta: t('aiHub.actions.openApiKeys'),
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
       <Header
-        title="AI Hub"
-        subtitle="Unified navigation for providers, integrations, quotas, and diagnostics"
+        title={t('aiHub.sections.overview.title')}
+        subtitle={t('aiHub.sections.overview.subtitle')}
         icon={<ShieldCheck size={18} />}
       />
       <AiTopTabs />
