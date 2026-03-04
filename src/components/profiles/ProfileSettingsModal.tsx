@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Globe, Monitor, MapPin, Shield, Cpu, Fingerprint, BookText } from 'lucide-react';
-import { Button, Input, Modal, Select, TabButton, Toggle } from '../ui';
+import { Button, FilterDropdown, Input, Modal, TabButton, Toggle } from '../ui';
 import { t } from '../../lib/i18n';
 import {
   generateFingerprintProfile,
@@ -54,7 +54,7 @@ const localeOptions = [
   { value: 'ru-RU', label: 'ru-RU' },
   { value: 'en-US', label: 'en-US' },
   { value: 'en-GB', label: 'en-GB' },
-];
+] as const;
 
 const timezoneOptions = [
   { value: '', label: t('common.select') },
@@ -64,14 +64,14 @@ const timezoneOptions = [
   { value: 'America/New_York', label: 'America/New_York' },
   { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
   { value: 'Asia/Singapore', label: 'Asia/Singapore' },
-];
+] as const;
 
 const platformOptions = [
   { value: '', label: t('common.select') },
   { value: 'Win32', label: 'Windows (Win32)' },
   { value: 'MacIntel', label: 'macOS (MacIntel)' },
   { value: 'Linux x86_64', label: 'Linux x86_64' },
-];
+] as const;
 
 export function ProfileSettingsModal({
   alias,
@@ -256,7 +256,9 @@ export function ProfileSettingsModal({
 
   const footer = (
     <div className="flex items-center justify-between gap-3">
-      <div className="text-xs text-slate-500">{dirty ? '● TODO: изменено' : t('common.saved')}</div>
+      <div className="text-xs text-slate-500">
+        {dirty ? `● ${t('accounts.profileSettingsUnsaved')}` : t('accounts.profileSettingsSaved')}
+      </div>
       <div className="flex items-center gap-2">
         <Button variant="secondary" size="md" onClick={onClose} disabled={saving}>
           {t('common.close')}
@@ -278,7 +280,7 @@ export function ProfileSettingsModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={t('accounts.profileSettingsTitle') || 'Настройки профиля'}
+      title={t('accounts.profileSettingsTitle')}
       icon={<Fingerprint size={18} className="text-indigo-400" />}
       size="xl"
       isLoading={loading}
@@ -304,7 +306,7 @@ export function ProfileSettingsModal({
             onClick={handleGenerateFingerprint}
             disabled={saving}
           >
-            {'Сгенерировать новый отпечаток'}
+            {t('accounts.profileSettingsGenerateFingerprint')}
           </Button>
         </div>
 
@@ -327,13 +329,13 @@ export function ProfileSettingsModal({
                 active={activeTab === 'hardware'}
                 onClick={() => setActiveTab('hardware')}
                 icon={<Monitor size={14} />}
-                label={t('accounts.profileHardwareTab') || 'Железо'}
+                label={t('accounts.profileHardwareTab')}
               />
               <TabButton
                 active={activeTab === 'geo'}
                 onClick={() => setActiveTab('geo')}
                 icon={<MapPin size={14} />}
-                label={t('accounts.profileGeoTab') || 'Гео'}
+                label={t('accounts.profileGeoTab')}
               />
               <TabButton
                 active={activeTab === 'storage'}
@@ -372,7 +374,7 @@ export function ProfileSettingsModal({
                     e.preventDefault();
                     handleProxyHostPaste(text.trim());
                   }}
-                  placeholder="host:port или http://user:pass@host:port"
+                  placeholder={t('accounts.profileSettingsProxyUrlPlaceholder')}
                   disabled={!proxyEnabled}
                 />
 
@@ -397,7 +399,7 @@ export function ProfileSettingsModal({
             {activeTab === 'hardware' && (
               <div className="space-y-4">
                 <Input
-                  label="User-Agent"
+                  label={t('accounts.profileSettingsUserAgent')}
                   value={draft.hardware.userAgent ?? ''}
                   onChange={e => {
                     setDraft(prev => ({
@@ -406,28 +408,28 @@ export function ProfileSettingsModal({
                     }));
                     setDirty(true);
                   }}
-                  placeholder="Mozilla/5.0 ..."
+                  placeholder={t('accounts.profileSettingsUserAgentPlaceholder')}
                 />
                 <div className="grid grid-cols-2 gap-4">
-                  <Select
-                    label={t('accounts.profilePlatformLabel') || 'Платформа'}
-                    value={draft.hardware.platform ?? ''}
-                    onChange={e => {
-                      setDraft(prev => ({
-                        ...prev,
-                        hardware: { ...prev.hardware, platform: e.target.value || null },
-                      }));
-                      setDirty(true);
-                    }}
-                  >
-                    {platformOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
+                  <div className="space-y-1.5">
+                    <div className="text-xs uppercase tracking-widest text-slate-500">
+                      {t('accounts.profileSettingsPlatformLabel')}
+                    </div>
+                    <FilterDropdown
+                      value={draft.hardware.platform ?? ''}
+                      onChange={(value: string) => {
+                        setDraft(prev => ({
+                          ...prev,
+                          hardware: { ...prev.hardware, platform: value || null },
+                        }));
+                        setDirty(true);
+                      }}
+                      options={platformOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                      triggerClassName="h-10 w-full"
+                    />
+                  </div>
                   <Input
-                    label={t('accounts.profileHardwareConcurrency') || 'CPU ядра'}
+                    label={t('accounts.profileSettingsHardwareConcurrency')}
                     type="number"
                     value={draft.hardware.hardwareConcurrency ?? ''}
                     onChange={e => {
@@ -442,7 +444,7 @@ export function ProfileSettingsModal({
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input
-                    label={t('accounts.profileHardwareMemory') || 'RAM (GB)'}
+                    label={t('accounts.profileSettingsHardwareMemory')}
                     type="number"
                     value={draft.hardware.deviceMemory ?? ''}
                     onChange={e => {
@@ -456,7 +458,7 @@ export function ProfileSettingsModal({
                   />
                   <div className="grid grid-cols-2 gap-4">
                     <Input
-                      label={t('accounts.profileScreenWidth') || 'Ширина'}
+                      label={t('accounts.profileSettingsScreenWidth')}
                       type="number"
                       value={draft.hardware.screenWidth ?? ''}
                       onChange={e => {
@@ -469,7 +471,7 @@ export function ProfileSettingsModal({
                       }}
                     />
                     <Input
-                      label={t('accounts.profileScreenHeight') || 'Высота'}
+                      label={t('accounts.profileSettingsScreenHeight')}
                       type="number"
                       value={draft.hardware.screenHeight ?? ''}
                       onChange={e => {
@@ -489,44 +491,44 @@ export function ProfileSettingsModal({
             {activeTab === 'geo' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <Select
-                    label={t('accounts.profileLocaleLabel') || 'Locale'}
-                    value={draft.geo.locale ?? ''}
-                    onChange={e => {
-                      setDraft(prev => ({
-                        ...prev,
-                        geo: { ...prev.geo, locale: e.target.value || null },
-                      }));
-                      setDirty(true);
-                    }}
-                  >
-                    {localeOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
-                  <Select
-                    label={t('accounts.profileTimezoneLabel') || 'Timezone'}
-                    value={draft.geo.timezone ?? ''}
-                    onChange={e => {
-                      setDraft(prev => ({
-                        ...prev,
-                        geo: { ...prev.geo, timezone: e.target.value || null },
-                      }));
-                      setDirty(true);
-                    }}
-                  >
-                    {timezoneOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
+                  <div className="space-y-1.5">
+                    <div className="text-xs uppercase tracking-widest text-slate-500">
+                      {t('accounts.profileSettingsLocaleLabel')}
+                    </div>
+                    <FilterDropdown
+                      value={draft.geo.locale ?? ''}
+                      onChange={(value: string) => {
+                        setDraft(prev => ({
+                          ...prev,
+                          geo: { ...prev.geo, locale: value || null },
+                        }));
+                        setDirty(true);
+                      }}
+                      options={localeOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                      triggerClassName="h-10 w-full"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-xs uppercase tracking-widest text-slate-500">
+                      {t('accounts.profileSettingsTimezoneLabel')}
+                    </div>
+                    <FilterDropdown
+                      value={draft.geo.timezone ?? ''}
+                      onChange={(value: string) => {
+                        setDraft(prev => ({
+                          ...prev,
+                          geo: { ...prev.geo, timezone: value || null },
+                        }));
+                        setDirty(true);
+                      }}
+                      options={timezoneOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                      triggerClassName="h-10 w-full"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input
-                    label={t('accounts.profileLatitudeLabel') || 'Широта'}
+                    label={t('accounts.profileSettingsLatitudeLabel')}
                     type="number"
                     value={draft.geo.latitude ?? ''}
                     onChange={e => {
@@ -539,7 +541,7 @@ export function ProfileSettingsModal({
                     }}
                   />
                   <Input
-                    label={t('accounts.profileLongitudeLabel') || 'Долгота'}
+                    label={t('accounts.profileSettingsLongitudeLabel')}
                     type="number"
                     value={draft.geo.longitude ?? ''}
                     onChange={e => {
@@ -558,7 +560,7 @@ export function ProfileSettingsModal({
             {activeTab === 'storage' && (
               <div className="space-y-4">
                 <Input
-                  label={t('accounts.profileNotesLabel') || 'Заметки'}
+                  label={t('accounts.profileSettingsNotesLabel')}
                   value={draft.storage.notes ?? ''}
                   onChange={e => {
                     setDraft(prev => ({
@@ -567,10 +569,10 @@ export function ProfileSettingsModal({
                     }));
                     setDirty(true);
                   }}
-                  placeholder="TODO: заметки"
+                  placeholder={t('accounts.profileSettingsNotesPlaceholder')}
                 />
                 <Input
-                  label={t('accounts.profileCookiesLabel') || 'Cookies'}
+                  label={t('accounts.profileSettingsCookiesLabel')}
                   value={draft.storage.cookies ?? ''}
                   onChange={e => {
                     setDraft(prev => ({
@@ -579,7 +581,7 @@ export function ProfileSettingsModal({
                     }));
                     setDirty(true);
                   }}
-                  placeholder="TODO: cookies"
+                  placeholder={t('accounts.profileSettingsCookiesPlaceholder')}
                 />
               </div>
             )}
@@ -588,27 +590,37 @@ export function ProfileSettingsModal({
           <aside className="shrink-0 rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-500">
               <Fingerprint size={14} className="text-indigo-400" />
-              {t('accounts.profileSummaryTitle') || 'Сводка'}
+              {t('accounts.profileSettingsSummaryTitle')}
             </div>
             <div className="space-y-3 text-xs text-slate-300">
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">Proxy</div>
+                <div className="text-[10px] uppercase tracking-widest text-slate-500">
+                  {t('autoReg.proxy')}
+                </div>
                 <div className="truncate">{summary.proxy}</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">UA</div>
+                <div className="text-[10px] uppercase tracking-widest text-slate-500">
+                  {t('accounts.profileSettingsSummaryUserAgent')}
+                </div>
                 <div className="truncate">{summary.userAgent}</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">Screen</div>
+                <div className="text-[10px] uppercase tracking-widest text-slate-500">
+                  {t('accounts.profileSettingsSummaryScreen') || 'Screen'}
+                </div>
                 <div className="truncate">{summary.screen}</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">Locale</div>
+                <div className="text-[10px] uppercase tracking-widest text-slate-500">
+                  {t('accounts.profileSettingsLocaleLabel')}
+                </div>
                 <div className="truncate">{summary.locale}</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">Timezone</div>
+                <div className="text-[10px] uppercase tracking-widest text-slate-500">
+                  {t('accounts.profileSettingsTimezoneLabel')}
+                </div>
                 <div className="truncate">{summary.timezone}</div>
               </div>
             </div>

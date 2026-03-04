@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { Toaster } from 'sonner';
 import Layout from './components/layout/Layout';
@@ -86,9 +86,9 @@ function App() {
   return (
     <>
       {/* Skip to main content link for keyboard navigation */}
-      <a href="#main-content" className="skip-to-content">
+      <Link to="#main-content" className="skip-to-content">
         Skip to main content
-      </a>
+      </Link>
 
       <Layout>
         <Routes>

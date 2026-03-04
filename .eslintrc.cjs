@@ -53,6 +53,50 @@ module.exports = {
             message: 'Use UI-kit Textarea instead of raw <textarea>.',
           },
         ],
+        'react/forbid-elements': [
+          'warn',
+          {
+            forbid: [
+              {
+                element: 'button',
+                message:
+                  'Prefer UI-kit Button/IconButton/TabButton. Raw <button> is allowed only inside src/components/ui.',
+              },
+              {
+                element: 'table',
+                message:
+                  'Prefer UI-kit Table primitives (Table/TableHeader/TableBody/TableRow/TableHead/TableCell).',
+              },
+              {
+                element: 'thead',
+                message:
+                  'Prefer UI-kit TableHeader instead of raw <thead> outside src/components/ui.',
+              },
+              {
+                element: 'tbody',
+                message:
+                  'Prefer UI-kit TableBody instead of raw <tbody> outside src/components/ui.',
+              },
+              {
+                element: 'tr',
+                message: 'Prefer UI-kit TableRow instead of raw <tr> outside src/components/ui.',
+              },
+              {
+                element: 'th',
+                message: 'Prefer UI-kit TableHead instead of raw <th> outside src/components/ui.',
+              },
+              {
+                element: 'td',
+                message: 'Prefer UI-kit TableCell instead of raw <td> outside src/components/ui.',
+              },
+              {
+                element: 'a',
+                message:
+                  'Prefer router/link primitives (or dedicated UI link component) over raw <a> where possible.',
+              },
+            ],
+          },
+        ],
       },
     },
   ],

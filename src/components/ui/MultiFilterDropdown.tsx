@@ -32,6 +32,8 @@ export interface MultiFilterDropdownProps<T = string> {
   showFooterActions?: boolean;
   footerAllLabel?: string;
   footerClearLabel?: string;
+  /** Treat empty values as semantic "all selected" */
+  emptyMeansAll?: boolean;
 }
 
 export function MultiFilterDropdown<T = string>({
@@ -48,6 +50,7 @@ export function MultiFilterDropdown<T = string>({
   showFooterActions = true,
   footerAllLabel,
   footerClearLabel,
+  emptyMeansAll = false,
 }: MultiFilterDropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -56,7 +59,11 @@ export function MultiFilterDropdown<T = string>({
   const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
   const [menuPlacement, setMenuPlacement] = useState<'top' | 'bottom'>('bottom');
 
-  const isActive = showActiveState && values.length > 0;
+  const isImplicitAll = emptyMeansAll && values.length === 0 && options.length > 0;
+  const isActive =
+    showActiveState &&
+    ((values.length > 0 && values.length < options.length) ||
+      (!emptyMeansAll && values.length > 0));
 
   const closeMenu = useCallback(() => {
     setIsOpen(false);
@@ -74,17 +81,26 @@ export function MultiFilterDropdown<T = string>({
     return `${values.length} selected`;
   }, [placeholder, renderValue, values]);
 
-  const isSelected = useCallback((value: T) => values.some(v => Object.is(v, value)), [values]);
+  const isSelected = useCallback(
+    (value: T) => isImplicitAll || values.some(v => Object.is(v, value)),
+    [isImplicitAll, values]
+  );
 
   const toggleValue = useCallback(
     (value: T) => {
+      if (isImplicitAll) {
+        const next = options.map(o => o.value).filter(v => !Object.is(v, value));
+        onChange(next);
+        return;
+      }
+
       if (isSelected(value)) {
         onChange(values.filter(v => !Object.is(v, value)));
       } else {
         onChange([...values, value]);
       }
     },
-    [isSelected, onChange, values]
+    [isImplicitAll, isSelected, onChange, options, values]
   );
 
   // Close on click outside
@@ -263,7 +279,9 @@ export function MultiFilterDropdown<T = string>({
                   <Button
                     size="xs"
                     variant="ghost"
-                    onClick={() => onChange(options.map(o => o.value))}
+                    onClick={() =>
+                      emptyMeansAll ? onChange([]) : onChange(options.map(o => o.value))
+                    }
                   >
                     {footerAllLabel || 'All'}
                   </Button>

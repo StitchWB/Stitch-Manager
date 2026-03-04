@@ -298,6 +298,9 @@ export interface Translations {
     profileSettingsGenerateFingerprint: string;
     profileSettingsHardwareTab: string;
     profileSettingsGeoTab: string;
+    profileSettingsUserAgent: string;
+    profileSettingsUserAgentPlaceholder: string;
+    profileSettingsProxyUrlPlaceholder: string;
     profileSettingsPlatformLabel: string;
     profileSettingsHardwareConcurrency: string;
     profileSettingsHardwareMemory: string;
@@ -312,6 +315,8 @@ export interface Translations {
     profileSettingsCookiesLabel: string;
     profileSettingsCookiesPlaceholder: string;
     profileSettingsSummaryTitle: string;
+    profileSettingsSummaryUserAgent: string;
+    profileSettingsSummaryScreen: string;
     profileSettingsUnsaved: string;
     profileSettingsSaved: string;
     notes: string;
@@ -1315,6 +1320,10 @@ export interface Translations {
     presetOnlyErrors: string;
     presetPythonRunner: string;
     presetRegistration: string;
+    groupByStage: string;
+    autoCollapseSuccess: string;
+    expandAll: string;
+    collapseAll: string;
     resetFilters: string;
     loadMore: string;
     scrollHint: string;
