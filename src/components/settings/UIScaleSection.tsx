@@ -1,4 +1,5 @@
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';import { ButtonBase } from '../ui';
+
 import { SectionHeader } from '../ui/SectionHeader';
 import { RangeSlider } from '../ui/RangeSlider';
 import { t } from '../../lib/i18n';
@@ -31,12 +32,12 @@ export function UIScaleSection({ uiScale, onUIScaleChange }: UIScaleSectionProps
           className="bg-white/[0.02] border-white/5 rounded-xl p-6"
         />
         <div className="flex justify-center mt-2">
-          <button
+          <ButtonBase
             onClick={() => onUIScaleChange(1.0)}
             className="text-xs text-primary/60 hover:text-primary transition-colors font-medium uppercase tracking-tighter"
           >
             {t('settings.general.scaleReset')}
-          </button>
+          </ButtonBase>
         </div>
       </div>
     </SectionHeader>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, PlugZap, PenSquare, Trash2, RefreshCw, Clock, AlertTriangle } from 'lucide-react';
+import { ButtonBase } from '../ui';
 
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
@@ -170,13 +171,13 @@ export function AiProxyAccountDrawer({
               {account.provider}
             </div>
           </div>
-          <button
+          <ButtonBase
             onClick={onClose}
             className="p-1.5 rounded-sm text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-colors"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
-          </button>
+          </ButtonBase>
         </div>
 
         {/* Body */}
@@ -289,7 +290,7 @@ export function AiProxyAccountDrawer({
           <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold text-white">Recent requests</div>
-              <button
+              <ButtonBase
                 type="button"
                 className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1"
                 onClick={() => {
@@ -306,7 +307,7 @@ export function AiProxyAccountDrawer({
                 }}
               >
                 <RefreshCw size={14} /> refresh
-              </button>
+              </ButtonBase>
             </div>
 
             {requestsLoading ? (
@@ -357,7 +358,7 @@ export function AiProxyAccountDrawer({
 
         {/* Footer */}
         <div className="p-4 border-t border-white/10 flex items-center gap-2">
-          <button
+          <ButtonBase
             type="button"
             className="flex-1 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 text-sm flex items-center justify-center gap-2"
             onClick={() => onTestConnection(account)}
@@ -365,16 +366,16 @@ export function AiProxyAccountDrawer({
           >
             <PlugZap size={16} />
             Test
-          </button>
-          <button
+          </ButtonBase>
+          <ButtonBase
             type="button"
             className="flex-1 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 text-sm flex items-center justify-center gap-2"
             onClick={() => onEdit(account)}
           >
             <PenSquare size={16} />
             Edit
-          </button>
-          <button
+          </ButtonBase>
+          <ButtonBase
             type="button"
             className="h-9 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 flex items-center justify-center"
             onClick={() => account.id && onDelete(account.id)}
@@ -382,7 +383,7 @@ export function AiProxyAccountDrawer({
             aria-label="Delete"
           >
             <Trash2 size={16} />
-          </button>
+          </ButtonBase>
         </div>
       </div>
     </>

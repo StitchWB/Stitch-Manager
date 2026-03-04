@@ -19,7 +19,7 @@ import { useAppStore } from '../stores/app';
 import type { ContentBlock } from '../types/generated';
 import { t } from '../lib/i18n';
 import { Button } from '../components/ui/Button';
-import { LoadingSpinner, Select, Textarea, Input, Checkbox } from '../components/ui';
+import { LoadingSpinner, Select, Textarea, Input, Checkbox, ButtonBase } from '../components/ui';
 import { Tooltip } from '../components/Tooltip';
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
@@ -678,7 +678,7 @@ export default function Chat() {
           <div className="max-w-4xl mx-auto flex items-center gap-2">
             <span className="text-xs text-vsc-text-muted">{t('chat.model') || 'Model'}:</span>
             <div className="relative">
-              <button
+              <ButtonBase
                 type="button"
                 onClick={() => setShowModelDropdown(!showModelDropdown)}
                 disabled={setupLoading || modelList.length === 0}
@@ -702,7 +702,7 @@ export default function Chat() {
                   size={14}
                   className={`transition-transform ${showModelDropdown ? 'rotate-180' : ''}`}
                 />
-              </button>
+              </ButtonBase>
 
               {/* Dropdown */}
               {showModelDropdown && !setupLoading && (
@@ -716,7 +716,7 @@ export default function Chat() {
                         {provider}
                       </div>
                       {providerModels.map(m => (
-                        <button
+                        <ButtonBase
                           type="button"
                           key={m.id}
                           onClick={() => {
@@ -730,7 +730,7 @@ export default function Chat() {
                             <span>{m.name}</span>
                             <span className="text-2xs text-vsc-text-muted">{'AI Proxy'}</span>
                           </span>
-                        </button>
+                        </ButtonBase>
                       ))}
                     </div>
                   ))}

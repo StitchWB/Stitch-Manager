@@ -3,6 +3,7 @@ import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
 import { QuotaDashboard } from '../QuotaDashboard';
 import { cn } from '../../../lib/utils';
 import { t } from '../../../lib/i18n';
+import { ButtonBase } from '../../ui';
 
 interface AiProvidersSidebarProps {
   providerFilter: string;
@@ -26,7 +27,7 @@ export function AiProvidersSidebar({
         </div>
         <div className="space-y-0.5 mb-6">
           {AI_PROXY_PROVIDER_FILTERS.map(provider => (
-            <button
+            <ButtonBase
               key={provider.id}
               type="button"
               onClick={() => onSelectProvider(provider.id)}
@@ -47,7 +48,7 @@ export function AiProvidersSidebar({
                   {providerCounts[provider.id]}
                 </span>
               )}
-            </button>
+            </ButtonBase>
           ))}
         </div>
 

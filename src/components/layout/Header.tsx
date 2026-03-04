@@ -4,7 +4,7 @@ import { useAppStore } from '../../stores/app';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
 import { IconButton } from '../ui/IconButton';
-import { UnstyledButton } from '../ui/UnstyledButton';
+import { ButtonBase } from '../ui/ButtonBase';
 
 const languages = [
   { code: 'en', label: 'English' },
@@ -132,7 +132,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
               aria-label={t('header.selectLanguage')}
             >
               {languages.map(lang => (
-                <UnstyledButton
+                <ButtonBase
                   key={lang.code}
                   onClick={() => {
                     setLanguage(lang.code);
@@ -143,7 +143,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
                   aria-selected={language === lang.code}
                 >
                   {lang.label}
-                </UnstyledButton>
+                </ButtonBase>
               ))}
             </div>
           )}
@@ -180,12 +180,12 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
                 <span className="text-xs font-medium text-white">{t('header.notifications')}</span>
                 {notifications.length > 0 && (
-                  <UnstyledButton
+                  <ButtonBase
                     onClick={clearNotifications}
                     className="text-2xs text-slate-500 hover:text-slate-300 transition-colors"
                   >
                     {t('header.clearAll')}
-                  </UnstyledButton>
+                  </ButtonBase>
                 )}
               </div>
 
@@ -220,12 +220,12 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
                             {formatTime(notif.timestamp)}
                           </p>
                         </div>
-                        <UnstyledButton
+                        <ButtonBase
                           onClick={() => removeNotification(notif.id)}
                           className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-white transition-all"
                         >
                           <X className="w-3.5 h-3.5" />
-                        </UnstyledButton>
+                        </ButtonBase>
                       </div>
                     </div>
                   ))

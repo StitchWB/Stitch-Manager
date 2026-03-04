@@ -3,7 +3,7 @@ import { User, Bot } from 'lucide-react';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 import type { ContentBlock } from '../../types/generated';
 import { t } from '../../lib/i18n';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner, ButtonBase } from '../ui';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -221,11 +221,9 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
                 const data = block.source.data || '';
                 const src = `data:${mediaType};base64,${data}`;
                 return (
-                  <a
+                  <ButtonBase
                     key={`${message.id}-img-${index}`}
-                    href={src}
-                    target="_blank"
-                    rel="noreferrer"
+                    onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
                     className="block border border-vsc-border rounded-lg overflow-hidden hover:border-vsc-blue/50 transition-colors"
                   >
                     <img
@@ -233,7 +231,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
                       alt={`attachment-${index + 1}`}
                       className="w-28 h-28 object-cover bg-vsc-input"
                     />
-                  </a>
+                  </ButtonBase>
                 );
               })}
             </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { reportFrontendError } from '@/lib/observability/client';
+import { ButtonBase } from '../ui';
 
 type Props = {
   children: React.ReactNode;
@@ -41,12 +42,12 @@ export class AppErrorBoundary extends React.Component<Props, State> {
             <p className="text-xs text-slate-400 font-mono break-all">
               {this.state.message ?? 'Unknown render error'}
             </p>
-            <button
+            <ButtonBase
               className="mt-5 px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm"
               onClick={() => window.location.reload()}
             >
               Reload app
-            </button>
+            </ButtonBase>
           </div>
         </div>
       );

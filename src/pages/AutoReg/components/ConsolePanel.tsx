@@ -1,4 +1,5 @@
-import { StatusBar } from '../../../components/ui/KPICard';
+import { StatusBar } from '../../../components/ui/KPICard';import { ButtonBase } from '../../../components/ui';
+
 import { MissionControlHUD } from '../../../components/ui/MissionControlHUD';
 import { t } from '../../../lib/i18n';
 import type { RegistrationLog } from '../../../types';
@@ -43,9 +44,9 @@ export const ConsolePanel = ({
           </div>
           <div className="flex items-center gap-3">
             <StatusBar success={successCount} failed={failedCount} active={activeThreads} />
-            <button onClick={onClear} className="btn-ghost text-xs py-1.5 px-3">
+            <ButtonBase onClick={onClear} className="btn-ghost text-xs py-1.5 px-3">
               {t('common.clear')}
-            </button>
+            </ButtonBase>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Check, AlertCircle, Copy, RefreshCw } from 'lucide-react';
-import { Button, Select } from '../ui';
+import { Button, Select, ButtonBase } from '../ui';
 import {
   detectAiProxyIdes,
   configureAiProxyIdeForProvider,
@@ -404,13 +404,13 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
           <h2 className="text-lg font-semibold text-vsc-text">{t('aiHub.wizard.title')}</h2>
-          <button
+          <ButtonBase
             type="button"
             onClick={handleClose}
             className="text-vsc-text-muted hover:text-vsc-text transition-colors"
           >
             <X size={20} />
-          </button>
+          </ButtonBase>
         </div>
 
         {/* Content */}
@@ -476,7 +476,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
               ) : (
                 <div className="space-y-2">
                   {installedIdes.map(ide => (
-                    <button
+                    <ButtonBase
                       type="button"
                       key={ide.name}
                       onClick={() => toggleIdeSelection(ide.name)}
@@ -517,7 +517,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                           </span>
                         )}
                       </div>
-                    </button>
+                    </ButtonBase>
                   ))}
                 </div>
               )}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { Button, Input, Toggle, Textarea } from '../../../components/ui';
+import { Button, Input, Toggle, Textarea, ButtonBase } from '../../../components/ui';
 import { useSchedulerStore } from '../../../stores/scheduler';
 
 interface EditTaskModalProps {
@@ -53,13 +53,13 @@ export function EditTaskModal({ taskId, onClose }: EditTaskModalProps) {
       <div className="bg-vsc-sidebar border border-vsc-border rounded-lg w-full max-w-2xl">
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
           <h2 className="text-lg font-semibold text-vsc-text">Edit Task</h2>
-          <button
+          <ButtonBase
             type="button"
             onClick={onClose}
             className="text-vsc-text-muted hover:text-vsc-text"
           >
             <X size={20} />
-          </button>
+          </ButtonBase>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">

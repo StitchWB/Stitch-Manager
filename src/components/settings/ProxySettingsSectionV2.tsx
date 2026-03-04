@@ -1,7 +1,7 @@
 import { Globe, Info, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { useState, useEffect } from 'react';
-import { Checkbox } from '../ui';
+import { Checkbox, ButtonBase } from '../ui';
 import { ProxyListManager } from './ProxyListManager';
 import { useProxyConfig } from '../../hooks/useProxyConfig';
 import type { ProxyItem, ProxyType } from '../../types/generated';
@@ -153,7 +153,7 @@ export function ProxySettingsSectionV2() {
                 Тип прокси
               </div>
               <div className="flex gap-2">
-                <button
+                <ButtonBase
                   type="button"
                   onClick={() => {
                     setProxyType('http');
@@ -169,8 +169,8 @@ export function ProxySettingsSectionV2() {
                   `}
                 >
                   HTTP
-                </button>
-                <button
+                </ButtonBase>
+                <ButtonBase
                   type="button"
                   onClick={() => {
                     setProxyType('socks5');
@@ -186,7 +186,7 @@ export function ProxySettingsSectionV2() {
                   `}
                 >
                   SOCKS5
-                </button>
+                </ButtonBase>
               </div>
             </div>
 

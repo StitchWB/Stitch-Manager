@@ -1,4 +1,5 @@
-import { Sun, Moon, Monitor, Globe } from 'lucide-react';
+import { Sun, Moon, Monitor, Globe } from 'lucide-react';import { ButtonBase } from '../ui';
+
 import { SectionHeader } from '../ui/SectionHeader';
 import { t } from '../../lib/i18n';
 import type { Language } from '../../stores/app';
@@ -30,7 +31,7 @@ export function ThemeLanguageSection({
             { value: 'dark', icon: Moon, labelKey: 'settings.general.dark' },
             { value: 'system', icon: Monitor, labelKey: 'settings.general.system' },
           ].map(({ value, icon: Icon, labelKey }) => (
-            <button
+            <ButtonBase
               key={value}
               onClick={() => onThemeChange(value as 'light' | 'dark' | 'system')}
               className={`flex items-center gap-2 px-5 py-3 rounded-lg border text-sm font-medium transition-all active:scale-95 duration-75 ${
@@ -41,7 +42,7 @@ export function ThemeLanguageSection({
             >
               <Icon className="w-4 h-4" />
               {t(labelKey)}
-            </button>
+            </ButtonBase>
           ))}
         </div>
       </SectionHeader>
@@ -57,7 +58,7 @@ export function ThemeLanguageSection({
             { value: 'en', label: 'English', flag: '🇺🇸' },
             { value: 'ru', label: 'Русский', flag: '🇷🇺' },
           ].map(({ value, label, flag }) => (
-            <button
+            <ButtonBase
               key={value}
               onClick={() => onLanguageChange(value as Language)}
               className={`flex items-center gap-2 px-5 py-3 rounded-lg border text-sm font-medium transition-all active:scale-95 duration-75 ${
@@ -68,7 +69,7 @@ export function ThemeLanguageSection({
             >
               <span className="text-base">{flag}</span>
               {label}
-            </button>
+            </ButtonBase>
           ))}
         </div>
       </SectionHeader>

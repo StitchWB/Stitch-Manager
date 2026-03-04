@@ -1,6 +1,6 @@
 import { Server, Eye, EyeOff } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
-import { Input } from '../ui';
+import { Input, ButtonBase } from '../ui';
 import { t } from '../../lib/i18n';
 
 interface IMAPSettingsSectionProps {
@@ -79,13 +79,13 @@ export function IMAPSettingsSection({
           onChange={e => onImapPasswordChange(e.target.value)}
           placeholder="••••••••"
           rightElement={
-            <button
+            <ButtonBase
               type="button"
               onClick={onShowPasswordToggle}
               className="p-1.5 text-slate-400 hover:text-white"
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+            </ButtonBase>
           }
         />
       </div>

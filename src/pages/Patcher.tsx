@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';import { ButtonBase } from '../components/ui';
+
 import { Search, AlertCircle, XCircle, Code, Settings as SettingsIcon, Code2 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
@@ -287,13 +288,13 @@ export default function PatcherV2() {
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-3">
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
               <p className="text-sm text-red-400 flex-1">{error}</p>
-              <button
+              <ButtonBase
                 type="button"
                 onClick={clearError}
                 className="text-red-400 hover:text-red-300"
               >
                 <XCircle size={16} />
-              </button>
+              </ButtonBase>
             </div>
           )}
 

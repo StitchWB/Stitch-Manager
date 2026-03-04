@@ -18,7 +18,7 @@ import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
 import { cn } from '../../lib/utils';
 import { version as appVersion } from '../../../package.json';
-import { UnstyledButton } from '../ui/UnstyledButton';
+import { ButtonBase } from '../ui/ButtonBase';
 
 interface NavItemProps {
   to: string;
@@ -87,12 +87,12 @@ export default function Sidebar() {
       )}
     >
       {/* Collapse Toggle Button */}
-      <UnstyledButton
+      <ButtonBase
         onClick={toggleSidebar}
         className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 transition-colors z-50 border border-indigo-400/50"
       >
         {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-      </UnstyledButton>
+      </ButtonBase>
 
       {/* Logo */}
       <div className="h-20 flex items-center px-5 mb-2">

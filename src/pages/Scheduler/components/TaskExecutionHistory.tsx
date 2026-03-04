@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { Button, EmptyState } from '../../../components/ui';
+import { Button, EmptyState, ButtonBase } from '../../../components/ui';
 import { useSchedulerStore } from '../../../stores/scheduler';
 import type { TaskExecution } from '../../../types/generated';
 import { formatDistanceToNow } from 'date-fns';
@@ -49,13 +49,13 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
       <div className="bg-vsc-sidebar border border-vsc-border rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
           <h2 className="text-lg font-semibold text-vsc-text">Execution History</h2>
-          <button
+          <ButtonBase
             type="button"
             onClick={onClose}
             className="text-vsc-text-muted hover:text-vsc-text"
           >
             <X size={20} />
-          </button>
+          </ButtonBase>
         </div>
 
         <div className="flex-1 overflow-auto p-4">

@@ -7,6 +7,7 @@ import {
   EmptyState,
   FilterDropdown,
   Input,
+  ButtonBase,
   Table as UITable,
   TableBody,
   TableCell,
@@ -162,13 +163,13 @@ export function SheetsExplorerPanel({
               <span>{error}</span>
             </div>
             {onRetry && (
-              <UnstyledButton
+              <ButtonBase
                 type="button"
                 onClick={onRetry}
                 className="text-xs font-semibold text-rose-200 hover:text-white"
               >
                 Retry
-              </UnstyledButton>
+              </ButtonBase>
             )}
           </div>
         ) : null}
@@ -201,12 +202,12 @@ export function SheetsExplorerPanel({
 
             <UITable>
               <TableHeader>
-                <tr>
+                <TableRow>
                   {previewColumns.map(col => (
                     <TableHead key={col.label}>{col.label}</TableHead>
                   ))}
                   <TableHead>Actions</TableHead>
-                </tr>
+                </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredRows.slice(0, 20).map((row, index) => (
@@ -220,7 +221,7 @@ export function SheetsExplorerPanel({
                     ))}
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <UnstyledButton
+                        <ButtonBase
                           type="button"
                           className="text-[10px] px-2 py-1 rounded border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                           onClick={() => {
@@ -238,19 +239,20 @@ export function SheetsExplorerPanel({
                           }}
                         >
                           Show in graph
-                        </UnstyledButton>
+                        </ButtonBase>
                         {dataset?.raw?.spreadsheetId ? (
-                          <a
+                          <ButtonBase
                             className="text-[10px] px-2 py-1 rounded border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
-                            href={`https://docs.google.com/spreadsheets/d/${dataset.raw.spreadsheetId}/edit#gid=${
-                              dataset.raw.services.find(s => s.sheetName === selectedSheet.name)
-                                ?.sheetId ?? 0
-                            }`}
-                            target="_blank"
-                            rel="noreferrer"
+                            onClick={() => {
+                              const url = `https://docs.google.com/spreadsheets/d/${dataset.raw?.spreadsheetId}/edit#gid=${
+                                dataset.raw?.services.find(s => s.sheetName === selectedSheet.name)
+                                  ?.sheetId ?? 0
+                              }`;
+                              window.open(url, '_blank', 'noopener,noreferrer');
+                            }}
                           >
                             Open sheet
-                          </a>
+                          </ButtonBase>
                         ) : null}
                       </div>
                     </TableCell>

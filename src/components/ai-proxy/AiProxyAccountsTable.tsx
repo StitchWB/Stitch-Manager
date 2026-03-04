@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { PlugZap, Trash2, PenSquare, ChevronRight } from 'lucide-react';
+import { ButtonBase } from '../ui';
 
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
@@ -102,40 +103,40 @@ export function AiProxyAccountsTable({
   return (
     <div className="rounded-xl border border-white/10 bg-[#111116]/80 overflow-hidden">
       <div className="hidden lg:grid grid-cols-[34px_minmax(220px,1fr)_140px_220px_140px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 bg-black/20 sticky top-0 z-20">
-        <button
+        <ButtonBase
           type="button"
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left"
           onClick={() => toggleSort('provider')}
         >
           {t('aiHub.table.provider')}
-        </button>
-        <button
+        </ButtonBase>
+        <ButtonBase
           type="button"
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left"
           onClick={() => toggleSort('name')}
         >
           {t('aiHub.table.account')}
-        </button>
+        </ButtonBase>
         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           {t('aiHub.table.status')}
         </div>
         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           {t('aiHub.table.quota')}
         </div>
-        <button
+        <ButtonBase
           type="button"
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
           onClick={() => toggleSort('requestsToday')}
         >
           {t('aiHub.table.today')}
-        </button>
-        <button
+        </ButtonBase>
+        <ButtonBase
           type="button"
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
           onClick={() => toggleSort('lastUsedAt')}
         >
           {t('aiHub.table.lastUsed')}
-        </button>
+        </ButtonBase>
         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">
           {t('aiHub.table.actions')}
         </div>
@@ -196,7 +197,7 @@ export function AiProxyAccountsTable({
                 'hover:bg-white/[0.03]'
               )}
             >
-              <button
+              <ButtonBase
                 type="button"
                 className="absolute inset-0 z-10 focus:outline-none"
                 onClick={() => onRowClick(account)}
@@ -255,7 +256,7 @@ export function AiProxyAccountsTable({
               </div>
 
               <div className="relative z-20 flex items-center justify-end gap-2">
-                <button
+                <ButtonBase
                   type="button"
                   className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white"
                   title={t('aiHub.table.testConnection')}
@@ -266,16 +267,16 @@ export function AiProxyAccountsTable({
                     size={16}
                     className={cn(conn?.status === 'loading' && 'animate-pulse')}
                   />
-                </button>
-                <button
+                </ButtonBase>
+                <ButtonBase
                   type="button"
                   className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white"
                   title={t('aiHub.table.edit')}
                   onClick={() => onEdit(account)}
                 >
                   <PenSquare size={16} />
-                </button>
-                <button
+                </ButtonBase>
+                <ButtonBase
                   type="button"
                   className="p-1 rounded hover:bg-white/5 text-red-400 hover:text-red-300"
                   title={t('aiHub.table.delete')}
@@ -283,7 +284,7 @@ export function AiProxyAccountsTable({
                   disabled={!account.id}
                 >
                   <Trash2 size={16} />
-                </button>
+                </ButtonBase>
                 <ChevronRight size={16} className="text-slate-600" />
               </div>
             </div>
