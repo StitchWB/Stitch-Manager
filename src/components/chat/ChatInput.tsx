@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, Square, Paperclip, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
-import { LoadingSpinner, Textarea } from '../ui';
+import { LoadingSpinner, Textarea, ButtonBase } from '../ui';
 import type { ContentBlock } from '../../types/generated';
 
 interface PendingAttachment {
@@ -152,14 +152,14 @@ export function ChatInput({
               className="relative group border border-vsc-border rounded-lg overflow-hidden bg-vsc-input"
             >
               <img src={item.previewDataUrl} alt={item.name} className="w-16 h-16 object-cover" />
-              <button
+              <ButtonBase
                 type="button"
                 onClick={() => removeAttachment(item.id)}
                 className="absolute -top-1 -right-1 p-1 rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                 aria-label={`Remove ${item.name}`}
               >
                 <X size={12} />
-              </button>
+              </ButtonBase>
             </div>
           ))}
         </div>
@@ -188,7 +188,7 @@ export function ChatInput({
 
         {allowImageAttachments ? (
           <Tooltip content="Attach images">
-            <button
+            <ButtonBase
               type="button"
               onClick={handlePickFiles}
               disabled={disabled || isLoading}
@@ -197,25 +197,25 @@ export function ChatInput({
                          disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Paperclip size={18} />
-            </button>
+            </ButtonBase>
           </Tooltip>
         ) : null}
 
         {/* Send/Stop button */}
         {isLoading ? (
           <Tooltip content="Stop generation">
-            <button
+            <ButtonBase
               type="button"
               onClick={handleStop}
               className="p-3 bg-vsc-red/20 hover:bg-vsc-red/30 text-vsc-red 
                          rounded-lg transition-colors flex items-center justify-center"
             >
               <Square size={18} fill="currentColor" />
-            </button>
+            </ButtonBase>
           </Tooltip>
         ) : (
           <Tooltip content="Send message">
-            <button
+            <ButtonBase
               type="button"
               onClick={handleSend}
               disabled={(!value.trim() && attachments.length === 0) || disabled}
@@ -224,7 +224,7 @@ export function ChatInput({
                          disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-vsc-blue/20"
             >
               {disabled ? <LoadingSpinner size="sm" color="primary" /> : <Send size={18} />}
-            </button>
+            </ButtonBase>
           </Tooltip>
         )}
       </div>

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';import { ButtonBase } from '../ui';
+
 import { cn } from '../../lib/utils';
 import { PROVIDERS } from '../../constants/registration';
 import type { ProviderName } from '../../types';
@@ -84,7 +85,7 @@ export function ProviderSelector({
           if (!hasProviders) return null;
 
           return (
-            <button
+            <ButtonBase
               key={key}
               type="button"
               onClick={() => setActiveCategory(key as keyof typeof PROVIDER_CATEGORIES)}
@@ -98,7 +99,7 @@ export function ProviderSelector({
               )}
             >
               {cat.label}
-            </button>
+            </ButtonBase>
           );
         })}
       </div>
@@ -112,7 +113,7 @@ export function ProviderSelector({
         }}
       >
         {enabledProviders.map(provider => (
-          <button
+          <ButtonBase
             key={provider.id}
             type="button"
             onClick={() => onProviderChange(provider.id)}
@@ -143,7 +144,7 @@ export function ProviderSelector({
             >
               {provider.name}
             </span>
-          </button>
+          </ButtonBase>
         ))}
       </div>
     </div>

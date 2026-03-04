@@ -1,4 +1,5 @@
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle } from 'lucide-react';import { ButtonBase } from '../ui';
+
 import type { DetectedIDE } from '../../types';
 import { getIDEIcon, getIDEGradient, getIDELabel } from '../../lib/patcher';
 
@@ -12,7 +13,7 @@ export default function IDECard({ ide, isActive, onSelect }: IDECardProps) {
   const gradient = getIDEGradient(ide.type);
 
   return (
-    <button
+    <ButtonBase
       onClick={() => onSelect(ide.id)}
       className={`
         relative group flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-medium
@@ -49,6 +50,6 @@ export default function IDECard({ ide, isActive, onSelect }: IDECardProps) {
           <XCircle className="w-3 h-3" />
         </div>
       )}
-    </button>
+    </ButtonBase>
   );
 }

@@ -1,4 +1,5 @@
-import { Database, Copy } from 'lucide-react';
+import { Database, Copy } from 'lucide-react';import { ButtonBase } from '../ui';
+
 import { SectionHeader } from '../ui/SectionHeader';
 import { Tooltip } from '../Tooltip';
 import { t } from '../../lib/i18n';
@@ -23,12 +24,12 @@ export function DatabaseSection({ dbPath, onCopy }: DatabaseSectionProps) {
               {dbPath || './stitch.db'}
             </span>
             <Tooltip content={t('common.copy')}>
-              <button
+              <ButtonBase
                 onClick={() => onCopy(dbPath || './stitch.db')}
                 className="p-1 hover:bg-white/10 rounded transition-colors text-slate-400 hover:text-white"
               >
                 <Copy className="w-3.5 h-3.5" />
-              </button>
+              </ButtonBase>
             </Tooltip>
           </div>
         </div>

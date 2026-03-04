@@ -91,5 +91,5 @@ export { Radio } from './Radio';
 
 export { ProviderLogo } from './ProviderLogo';
 
-export { UnstyledButton } from './UnstyledButton';
-export type { UnstyledButtonProps } from './UnstyledButton';
+export { ButtonBase } from './ButtonBase';
+export type { ButtonBaseProps } from './ButtonBase';

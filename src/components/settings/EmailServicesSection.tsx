@@ -1,7 +1,7 @@
 import { Shield, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle, Save } from 'lucide-react';
 import { SectionHeader } from '../ui/SectionHeader';
 import { Button } from '../ui/Button';
-import { LoadingSpinner, Input, Checkbox } from '../ui';
+import { LoadingSpinner, Input, Checkbox, ButtonBase } from '../ui';
 import { Select } from '../ui/Select';
 import { t } from '../../lib/i18n';
 
@@ -122,13 +122,13 @@ export function EmailServicesSection({
                 onChange={e => onAddyioApiTokenChange(e.target.value)}
                 placeholder="addy_..."
                 rightElement={
-                  <button
+                  <ButtonBase
                     type="button"
                     onClick={onShowPasswordToggle}
                     className="p-1.5 text-slate-400 hover:text-white"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                  </ButtonBase>
                 }
               />
 

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
-import { LoadingSpinner, Input, UnstyledButton } from '../components/ui';
+import { LoadingSpinner, Input, ButtonBase } from '../components/ui';
 import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel, LogEntry } from '../stores/logs';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
@@ -542,7 +542,7 @@ export default function Logs() {
               selectedLogId === log.id ? 'bg-indigo-500/10' : 'hover:bg-white/[0.02]'
             )}
           >
-            <UnstyledButton
+            <ButtonBase
               className="flex-1 min-w-0 flex items-start gap-3 text-left"
               onClick={() => setLogsSelectedLogId(log.id)}
             >
@@ -583,9 +583,9 @@ export default function Logs() {
               <div className="flex-1 min-w-0 text-slate-300 break-words line-clamp-2">
                 {log.message}
               </div>
-            </UnstyledButton>
+            </ButtonBase>
 
-            <UnstyledButton
+            <ButtonBase
               onClick={() => {
                 void copyMessage(log.message, log.id);
               }}
@@ -596,7 +596,7 @@ export default function Logs() {
               ) : (
                 <Copy className="w-3 h-3" />
               )}
-            </UnstyledButton>
+            </ButtonBase>
           </div>
         );
       })}
@@ -770,13 +770,13 @@ export default function Logs() {
                 <span>
                   {t('logs.level')}: {levelFilter}
                 </span>
-                <UnstyledButton
+                <ButtonBase
                   className="text-sky-200 hover:text-white"
                   onClick={clearLevelFilter}
                   aria-label="Clear level filter"
                 >
                   <X size={12} />
-                </UnstyledButton>
+                </ButtonBase>
               </Badge>
             )}
             {channelFilter !== 'all' && (
@@ -784,13 +784,13 @@ export default function Logs() {
                 <span>
                   {t('logs.channel')}: {channelFilter}
                 </span>
-                <UnstyledButton
+                <ButtonBase
                   className="text-amber-200 hover:text-white"
                   onClick={clearChannelFilter}
                   aria-label="Clear channel filter"
                 >
                   <X size={12} />
-                </UnstyledButton>
+                </ButtonBase>
               </Badge>
             )}
             {effectiveSourceFilters.map(source => (
@@ -798,13 +798,13 @@ export default function Logs() {
                 <span>
                   {t('logs.source')}: {source}
                 </span>
-                <UnstyledButton
+                <ButtonBase
                   className="text-slate-300 hover:text-white"
                   onClick={() => clearSourceFilter(source)}
                   aria-label={`Clear source filter ${source}`}
                 >
                   <X size={12} />
-                </UnstyledButton>
+                </ButtonBase>
               </Badge>
             ))}
             {searchQuery.trim() && (
@@ -812,13 +812,13 @@ export default function Logs() {
                 <span>
                   {t('common.search')}: {searchQuery}
                 </span>
-                <UnstyledButton
+                <ButtonBase
                   className="text-slate-300 hover:text-white"
                   onClick={clearSearchFilter}
                   aria-label="Clear search filter"
                 >
                   <X size={12} />
-                </UnstyledButton>
+                </ButtonBase>
               </Badge>
             )}
             <Badge variant="outline" size="sm" className="ml-auto normal-case">

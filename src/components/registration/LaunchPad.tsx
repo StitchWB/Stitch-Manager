@@ -1,7 +1,7 @@
 import { Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
-import { Input } from '../ui';
+import { Input, ButtonBase } from '../ui';
 
 interface LaunchPadProps {
   count: number;
@@ -53,7 +53,7 @@ export function LaunchPad({
 
         {/* Start/Stop Button */}
         {!isRunning ? (
-          <button
+          <ButtonBase
             type="button"
             onClick={onStart}
             disabled={startBlocked}
@@ -67,16 +67,16 @@ export function LaunchPad({
           >
             <Play className="w-4 h-4" />
             {t('autoReg.start')}
-          </button>
+          </ButtonBase>
         ) : (
-          <button
+          <ButtonBase
             type="button"
             onClick={onStop}
             className="flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white transition-colors"
           >
             <Square className="w-4 h-4" />
             {t('autoReg.stop')}
-          </button>
+          </ButtonBase>
         )}
       </div>
 

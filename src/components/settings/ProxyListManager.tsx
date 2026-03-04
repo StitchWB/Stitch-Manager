@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Wifi } from 'lucide-react';
-import { Button, Input, Checkbox } from '../ui';
+import { Button, Input, Checkbox, ButtonBase } from '../ui';
 import { parseProxyString, validateProxyString } from '../../lib/proxyUtils';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -298,7 +298,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
                   </div>
 
                   {/* Test Button */}
-                  <button
+                  <ButtonBase
                     type="button"
                     onClick={() => handleTestProxy(proxy.id, proxy.raw)}
                     disabled={testingProxy === proxy.id}
@@ -310,16 +310,16 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
                     ) : (
                       <Wifi className="w-4 h-4" />
                     )}
-                  </button>
+                  </ButtonBase>
 
                   {/* Delete Button */}
-                  <button
+                  <ButtonBase
                     type="button"
                     onClick={() => handleRemoveProxy(proxy.id)}
                     className="p-1.5 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </ButtonBase>
                 </div>
               </div>
             ))}

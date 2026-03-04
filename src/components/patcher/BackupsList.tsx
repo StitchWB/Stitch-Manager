@@ -1,7 +1,7 @@
 import { Archive, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { formatDate, formatSize } from '../../lib/patcher';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner, ButtonBase } from '../ui';
 import type { UIBackupInfo } from '../../types';
 import { Tooltip } from '../Tooltip';
 import { Button } from '../ui/Button';
@@ -73,7 +73,7 @@ export default function BackupsList({
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Tooltip content={t('patcher.restore')}>
-                    <button
+                    <ButtonBase
                       onClick={() => onRestore(backup.id)}
                       disabled={isRestoring || !backup.isValid}
                       className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded disabled:opacity-40"
@@ -83,15 +83,15 @@ export default function BackupsList({
                       ) : (
                         <RotateCcw size={14} />
                       )}
-                    </button>
+                    </ButtonBase>
                   </Tooltip>
                   <Tooltip content={t('common.delete')}>
-                    <button
+                    <ButtonBase
                       onClick={() => onDelete(backup.id)}
                       className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded"
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </ButtonBase>
                   </Tooltip>
                 </div>
               </div>

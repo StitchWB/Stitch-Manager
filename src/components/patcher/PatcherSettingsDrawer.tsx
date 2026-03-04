@@ -17,7 +17,7 @@ import {
 import { toast } from 'sonner';
 import { t } from '../../lib/i18n';
 import { Tooltip } from '../ui/Tooltip';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner, ButtonBase } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
@@ -181,7 +181,7 @@ export default function PatcherSettingsDrawer({
 
   return (
     <>
-      <button
+      <ButtonBase
         type="button"
         aria-label={t('common.cancel')}
         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[45]"
@@ -563,7 +563,7 @@ export default function PatcherSettingsDrawer({
                 placeholder={t('kiroPatch.bindModalMachineIdPlaceholder')}
                 className="font-mono text-xs"
               />
-              <button
+              <ButtonBase
                 type="button"
                 onClick={async () => {
                   const newId = await generateNewMachineId();
@@ -572,7 +572,7 @@ export default function PatcherSettingsDrawer({
                 className="text-primary text-[10px] font-bold uppercase tracking-widest hover:text-primary/80 transition-colors px-1"
               >
                 {t('kiroPatch.bindModalGenerate')}
-              </button>
+              </ButtonBase>
             </div>
             <div className="flex items-center justify-end gap-3 mt-8 pt-6 border-t border-white/5">
               <Button

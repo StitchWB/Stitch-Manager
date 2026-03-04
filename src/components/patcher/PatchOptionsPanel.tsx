@@ -1,7 +1,7 @@
 import { HelpCircle } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { Tooltip } from '../Tooltip';
-import { Checkbox } from '../ui';
+import { Checkbox, ButtonBase } from '../ui';
 
 interface PatchOption {
   id: string;
@@ -34,20 +34,20 @@ export default function PatchOptionsPanel({
           {t('patcher.patchOptions')}
         </h4>
         <div className="flex gap-2">
-          <button
+          <ButtonBase
             type="button"
             onClick={() => onToggleAll(true)}
             className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
           >
             All
-          </button>
-          <button
+          </ButtonBase>
+          <ButtonBase
             type="button"
             onClick={() => onToggleAll(false)}
             className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
           >
             None
-          </button>
+          </ButtonBase>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
