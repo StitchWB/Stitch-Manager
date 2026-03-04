@@ -26,14 +26,16 @@ export function Toggle({ label, checked, onChange, disabled, tooltip, className 
       )}
       <div
         className={cn(
-          'w-8 h-4.5 rounded-full transition-all duration-300 relative border border-white/10 shadow-inner',
-          checked ? 'bg-indigo-500/80 border-indigo-400/50' : 'bg-black/40'
+          'relative h-5 w-9 shrink-0 rounded-full border transition-all duration-200',
+          checked
+            ? 'bg-indigo-500/85 border-indigo-400/60 shadow-[0_0_0_1px_rgba(99,102,241,0.25)]'
+            : 'bg-black/40 border-white/15'
         )}
       >
         <div
           className={cn(
-            'absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all duration-300 shadow-sm',
-            checked ? 'translate-x-[16px] scale-110' : 'translate-x-0.5'
+            'absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200',
+            checked ? 'translate-x-4' : 'translate-x-0'
           )}
         />
       </div>
