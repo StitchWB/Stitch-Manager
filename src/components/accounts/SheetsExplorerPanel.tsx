@@ -162,13 +162,13 @@ export function SheetsExplorerPanel({
               <span>{error}</span>
             </div>
             {onRetry && (
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={onRetry}
                 className="text-xs font-semibold text-rose-200 hover:text-white"
               >
                 Retry
-              </button>
+              </UnstyledButton>
             )}
           </div>
         ) : null}
@@ -220,7 +220,7 @@ export function SheetsExplorerPanel({
                     ))}
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <button
+                        <UnstyledButton
                           type="button"
                           className="text-[10px] px-2 py-1 rounded border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                           onClick={() => {
@@ -238,7 +238,7 @@ export function SheetsExplorerPanel({
                           }}
                         >
                           Show in graph
-                        </button>
+                        </UnstyledButton>
                         {dataset?.raw?.spreadsheetId ? (
                           <a
                             className="text-[10px] px-2 py-1 rounded border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"

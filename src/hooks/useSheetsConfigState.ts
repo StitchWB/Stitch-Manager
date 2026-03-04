@@ -79,13 +79,9 @@ export function useSheetsConfigState({
     };
   }, [sheetsSpreadsheetId, sheetsServiceAccountJson]);
 
-  // If user switches to Graph/Sheets without config, open config panel.
-  useEffect(() => {
-    if (resolvedViewMode === 'list') return;
-    if (!sheetsParams) {
-      setShowSheetsConfig(true);
-    }
-  }, [resolvedViewMode, sheetsParams]);
+  // Force config panel to be visible when user is in Graph/Sheets without params.
+  // This avoids setState-in-effect (lint rule) and keeps behavior deterministic.
+  const shouldForceShowConfig = resolvedViewMode !== 'list' && !sheetsParams;
 
   const handleTestSheets = useCallback(async () => {
     setSheetsTouched(true);
@@ -116,8 +112,12 @@ export function useSheetsConfigState({
   }, []);
 
   const handleToggleSheetsConfig = useCallback(() => {
+    if (shouldForceShowConfig) {
+      setShowSheetsConfig(true);
+      return;
+    }
     setShowSheetsConfig(current => !current);
-  }, []);
+  }, [shouldForceShowConfig]);
 
   return useMemo(
     () => ({
@@ -126,7 +126,7 @@ export function useSheetsConfigState({
       sheetsTestStatus,
       sheetsTestMessage,
       sheetsTouched,
-      showSheetsConfig,
+      showSheetsConfig: showSheetsConfig || shouldForceShowConfig,
       sheetsParams,
       handleTestSheets,
       handleRefreshSheets,
@@ -142,6 +142,7 @@ export function useSheetsConfigState({
       sheetsTestMessage,
       sheetsTouched,
       showSheetsConfig,
+      shouldForceShowConfig,
       sheetsParams,
       handleTestSheets,
       handleRefreshSheets,

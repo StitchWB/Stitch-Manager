@@ -29,7 +29,7 @@ import { useRegistrationStore } from '@/stores/registration';
 import { useUIPreferencesStore } from '@/stores/uiPreferences';
 import { buildUnifiedGraph } from '@/lib/graph/unifiedGraph';
 import { useAccountsStore } from '@/stores/accounts';
-import { Button, Checkbox, EmptyState, FilterDropdown, Input, Select } from '../ui';
+import { Button, Checkbox, EmptyState, FilterDropdown, Input, Select, UnstyledButton } from '../ui';
 import type { SheetDescriptor } from '@/types/generated';
 
 type ServiceFilterOption = 'all' | string;
@@ -770,13 +770,13 @@ export function IdentityGraphPanel({
               <span>{error}</span>
             </div>
             {onRetry && (
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={onRetry}
                 className="text-xs font-semibold text-rose-200 hover:text-white"
               >
                 Retry
-              </button>
+              </UnstyledButton>
             )}
           </div>
         ) : null}
@@ -797,7 +797,7 @@ export function IdentityGraphPanel({
                 link => link.fromIdentityId === node.id && link.status !== 'deleted'
               ).length;
               return (
-                <button
+                <UnstyledButton
                   key={node.id}
                   type="button"
                   onClick={() => setActiveIdentityId(node.id)}
@@ -813,7 +813,7 @@ export function IdentityGraphPanel({
                   </div>
                   <div className="text-[10px] text-slate-500 truncate mt-0.5">{node.id}</div>
                   <div className="mt-1 text-[10px] text-slate-400">{linksCount} links</div>
-                </button>
+                </UnstyledButton>
               );
             })}
           </div>
@@ -1047,13 +1047,13 @@ export function IdentityGraphPanel({
                 </div>
                 <div className="text-[11px] text-slate-500">LINKS write-back</div>
               </div>
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={() => setEditorOpen(false)}
                 className="p-1 rounded-md hover:bg-white/10 text-slate-300"
               >
                 <X className="w-4 h-4" />
-              </button>
+              </UnstyledButton>
             </div>
 
             <div className="space-y-3">
