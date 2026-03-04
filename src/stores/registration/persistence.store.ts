@@ -32,7 +32,7 @@ interface PersistenceState {
   setSettingsLoaded: (loaded: boolean) => void;
 }
 
-export const usePersistenceStore = create<PersistenceState>((set) => ({
+export const usePersistenceStore = create<PersistenceState>(set => ({
   settingsLoaded: false,
   saveStatus: 'idle',
   imapPasswordSet: false,
@@ -140,7 +140,19 @@ export const usePersistenceStore = create<PersistenceState>((set) => ({
         uiScale: settings.uiScale || 1.0,
       };
 
-      console.log('[PERSISTENCE_STORE] loadSettings: loaded count from DB:', settings.count, '→ config.count:', config.count);
+      // Google Sheets integration (plaintext; encryption deferred)
+      config.advanced.googleSheetsSpreadsheetId = settings.googleSheetsSpreadsheetId || '';
+      config.advanced.googleSheetsServiceAccountJson =
+        settings.googleSheetsServiceAccountJson === '********'
+          ? ''
+          : settings.googleSheetsServiceAccountJson || '';
+
+      console.log(
+        '[PERSISTENCE_STORE] loadSettings: loaded count from DB:',
+        settings.count,
+        '→ config.count:',
+        config.count
+      );
 
       set({
         settingsLoaded: true,
@@ -212,6 +224,9 @@ export const usePersistenceStore = create<PersistenceState>((set) => ({
         thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain || '33mail.com',
         // Save Mail.tm settings (global)
         mailtmEnabled: config.imap.mailtmEnabled || false,
+
+        // Google Sheets integration (plaintext; encryption deferred)
+        googleSheetsSpreadsheetId: config.advanced.googleSheetsSpreadsheetId || '',
       };
 
       // Only include passwords if they have actual values
@@ -223,6 +238,10 @@ export const usePersistenceStore = create<PersistenceState>((set) => ({
       }
       if (config.proxy.password) {
         updateData.proxyPassword = config.proxy.password;
+      }
+
+      if (config.advanced.googleSheetsServiceAccountJson) {
+        updateData.googleSheetsServiceAccountJson = config.advanced.googleSheetsServiceAccountJson;
       }
 
       console.log(

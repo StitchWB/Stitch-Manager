@@ -19,6 +19,7 @@ export function TabButton({
 }: TabButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       className={cn(

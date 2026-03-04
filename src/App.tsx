@@ -10,7 +10,6 @@ import AiOverview from './pages/AiOverview';
 import Antigravity from './pages/Antigravity';
 import Patcher from './pages/Patcher';
 import Scheduler from './pages/Scheduler';
-import Server from './pages/Server';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import Chat from './pages/Chat';
@@ -97,16 +96,17 @@ function App() {
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/autoreg" element={<AutoReg />} />
           <Route path="/ai" element={<AiOverview />} />
+          <Route path="/ai/antigravity" element={<Antigravity />} />
+          <Route path="/ai/api-keys" element={<ApiKeys />} />
           <Route path="/ai/:section" element={<AiProviders />} />
           <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
-          <Route path="/antigravity" element={<Antigravity />} />
+          <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
           <Route path="/patcher" element={<Patcher />} />
           <Route path="/scheduler" element={<Scheduler />} />
-          <Route path="/server" element={<Server />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/chat" element={<Chat />} />
-          <Route path="/api-keys" element={<ApiKeys />} />
+          <Route path="/api-keys" element={<Navigate to="/ai/api-keys" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Layout>

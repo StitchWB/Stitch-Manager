@@ -2,6 +2,7 @@ import { LayoutGrid } from 'lucide-react';
 import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
 import { QuotaDashboard } from '../QuotaDashboard';
 import { cn } from '../../../lib/utils';
+import { t } from '../../../lib/i18n';
 
 interface AiProvidersSidebarProps {
   providerFilter: string;
@@ -18,12 +19,16 @@ export function AiProvidersSidebar({
     <aside className="w-[200px] lg:w-[220px] shrink-0 bg-[#111116]/50 backdrop-blur-md border-r border-white/5 flex flex-col overflow-hidden hidden md:flex">
       <div className="p-3 flex-1 overflow-y-auto">
         <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
-          Providers
+          {t('aiHub.labels.providers')}
         </h3>
+        <div className="text-[11px] text-slate-500 px-2 mb-3">
+          {t('aiHub.labels.providersHint')}
+        </div>
         <div className="space-y-0.5 mb-6">
           {AI_PROXY_PROVIDER_FILTERS.map(provider => (
             <button
               key={provider.id}
+              type="button"
               onClick={() => onSelectProvider(provider.id)}
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',

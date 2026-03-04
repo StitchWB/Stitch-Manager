@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -9,6 +9,9 @@ import {
   Users,
   LayoutGrid,
   AlertCircle,
+  List,
+  Share2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { listen } from '@tauri-apps/api/event';
@@ -20,9 +23,18 @@ import ProfilesTable from '../components/ProfilesTable';
 import type { ProfileItem } from '../components/ProfilesTable';
 import AddAccountModal from '../components/AddAccountModal';
 import { ProfileSettingsModal } from '../components/profiles/ProfileSettingsModal';
-import { QuotaFilterChip } from '../components/ui/QuotaFilterChip';
 import { FloatingActionBar } from '../components/ui/FloatingActionBar';
-import { EmptyState, SkeletonLoader, ActionButtonGroup, Button } from '../components/ui';
+import {
+  EmptyState,
+  SkeletonLoader,
+  ActionButtonGroup,
+  Button,
+  SegmentedControl,
+  FormField,
+  Input,
+  Select,
+  Tooltip,
+} from '../components/ui';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
@@ -38,7 +50,7 @@ import {
   saveFingerprintProfile,
   listFingerprintProfiles,
   deleteFingerprintProfile,
-  openStandaloneFingerprintProfile,
+  openStandaloneFingerprintProfileAndRememberUrl,
 } from '@/lib/tauri';
 import { t } from '../lib/i18n';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
@@ -53,6 +65,10 @@ import { AccountsEntityTabs } from '../components/accounts/AccountsEntityTabs';
 import { AccountsTabContent } from '../components/accounts/AccountsTabContent';
 import { ServiceAccountsPanel } from '../components/accounts/ServiceAccountsPanel';
 import { DolphinProfilesPanel } from '../components/accounts/DolphinProfilesPanel';
+import { IdentityGraphPanel } from '../components/accounts/IdentityGraphPanel';
+import { SheetsExplorerPanel } from '../components/accounts/SheetsExplorerPanel';
+import { useGoogleSheetsDataset } from '../hooks/useGoogleSheetsDataset';
+import { useRegistrationStore } from '../stores/registration';
 import {
   extractRelationHints,
   extractRelationEdges,
@@ -228,6 +244,7 @@ export default function Accounts() {
   const {
     accounts: storeAccounts,
     loading,
+    error: accountsError,
     fetchAccounts,
     deleteAccount,
     deleteAccounts,
@@ -246,7 +263,6 @@ export default function Accounts() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-
   const {
     startBulkRefresh,
     isRefreshing: isBulkRefreshing,
@@ -283,12 +299,50 @@ export default function Accounts() {
     'entity',
     accountsPage.entityFilter || 'accounts'
   );
+  const [viewMode, setViewMode] = useUrlState<'list' | 'graph' | 'sheets'>('view', 'list');
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
   const [profileSettingsAlias, setProfileSettingsAlias] = useState<string | null>(null);
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileListFilter, setProfileListFilter] = useState<
     'all' | 'standalone' | 'linked' | 'used_kiro'
   >('all');
+  const registrationConfig = useRegistrationStore(state => state.config);
+  const setAdvancedSettings = useRegistrationStore(state => state.setAdvancedSettings);
+  const saveRegistrationSettings = useRegistrationStore(state => state.saveImmediately);
+
+  const [sheetsSpreadsheetId, setSheetsSpreadsheetId] = useState(
+    registrationConfig.advanced.googleSheetsSpreadsheetId || ''
+  );
+  const [sheetsServiceAccountJson, setSheetsServiceAccountJson] = useState(
+    registrationConfig.advanced.googleSheetsServiceAccountJson || ''
+  );
+  const [sheetsTestStatus, setSheetsTestStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle');
+  const [sheetsTestMessage, setSheetsTestMessage] = useState<string | null>(null);
+  const [sheetsTouched, setSheetsTouched] = useState(false);
+  const [showSheetsConfig, setShowSheetsConfig] = useState(false);
+
+  // Persist Google Sheets settings back to DB (plaintext; encryption deferred)
+  useEffect(() => {
+    if (!sheetsTouched) return;
+    const timer = setTimeout(() => {
+      setAdvancedSettings({
+        googleSheetsSpreadsheetId: sheetsSpreadsheetId,
+        googleSheetsServiceAccountJson: sheetsServiceAccountJson,
+      });
+      void saveRegistrationSettings();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    sheetsTouched,
+    sheetsSpreadsheetId,
+    sheetsServiceAccountJson,
+    saveRegistrationSettings,
+    setAdvancedSettings,
+  ]);
+
+  // NOTE: showSheetsConfig auto-open effect is defined after resolvedViewMode/sheetsParams.
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);
@@ -319,7 +373,7 @@ export default function Accounts() {
     setStoreSearchQuery,
   ]);
 
-  const parseTags = (tagsString: string | null): string[] => {
+  const parseTags = useCallback((tagsString: string | null): string[] => {
     if (!tagsString) return [];
     try {
       const parsed = JSON.parse(tagsString);
@@ -327,7 +381,7 @@ export default function Accounts() {
     } catch {
       return [];
     }
-  };
+  }, []);
 
   const tagOptions = useMemo((): FilterOption<string>[] => {
     const counts = new Map<string, number>();
@@ -360,7 +414,7 @@ export default function Accounts() {
       .map(([tag, count]) => ({ value: tag, label: tag, count }));
 
     return [{ value: 'all', label: t('filters.any') }, ...profileMeta, ...other];
-  }, [storeAccounts]);
+  }, [parseTags, storeAccounts]);
 
   // Memoized handlers to prevent unnecessary re-renders
   const handleProviderFilterChange = useCallback(
@@ -478,10 +532,63 @@ export default function Accounts() {
     [setEntityFilter, setAccountsEntityFilter, clearSelection]
   );
 
+  const handleViewModeChange = useCallback(
+    (value: string) => {
+      const normalized = value === 'graph' || value === 'sheets' ? value : 'list';
+      setViewMode(normalized);
+    },
+    [setViewMode]
+  );
+
   const normalizedEntityFilter = useMemo(() => {
     if (entityFilter === 'profiles') return 'profiles';
     return 'accounts';
   }, [entityFilter]);
+
+  const showAccountsModes = true;
+  const resolvedViewMode = viewMode === 'graph' || viewMode === 'sheets' ? viewMode : 'list';
+
+  const sheetsParams = useMemo(() => {
+    if (!sheetsSpreadsheetId.trim() || !sheetsServiceAccountJson.trim()) return null;
+    return {
+      spreadsheetId: sheetsSpreadsheetId.trim(),
+      serviceAccountJson: sheetsServiceAccountJson.trim(),
+    };
+  }, [sheetsSpreadsheetId, sheetsServiceAccountJson]);
+
+  // If user switches to Graph/Sheets without config, open config panel.
+  useEffect(() => {
+    if (resolvedViewMode === 'list') return;
+    if (!sheetsParams) {
+      setShowSheetsConfig(true);
+    }
+  }, [resolvedViewMode, sheetsParams]);
+
+  const {
+    dataset: sheetsDataset,
+    isLoading: sheetsLoading,
+    error: sheetsError,
+    lastUpdatedAt: sheetsUpdatedAt,
+    refresh: refreshSheetsDataset,
+    testConnection: testSheetsConnection,
+  } = useGoogleSheetsDataset({
+    autoFetch: resolvedViewMode === 'graph' || resolvedViewMode === 'sheets',
+    params: sheetsParams,
+  });
+
+  const handleTestSheets = useCallback(async () => {
+    setSheetsTouched(true);
+    setSheetsTestStatus('loading');
+    setSheetsTestMessage(null);
+    const ok = await testSheetsConnection();
+    setSheetsTestStatus(ok ? 'success' : 'error');
+    setSheetsTestMessage(ok ? 'Connection ok' : 'Connection failed');
+  }, [testSheetsConnection]);
+
+  const handleRefreshSheets = useCallback(async () => {
+    setSheetsTouched(true);
+    await refreshSheetsDataset();
+  }, [refreshSheetsDataset]);
 
   const providerCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
@@ -636,6 +743,7 @@ export default function Accounts() {
     quotaFilter,
     tagFilter,
     relationFilter,
+    parseTags,
   ]);
 
   // Keep selection constrained to visible accounts to avoid mismatched counts/actions
@@ -672,44 +780,53 @@ export default function Accounts() {
     }
   };
 
-  const handleOpenProfileSession = async (_id: number) => {
-    try {
-      await openAccountProfileSession({ accountId: _id });
-      toast.success(t('accounts.profileSessionOpen'));
-      await fetchAccounts();
-    } catch (error) {
-      console.error('[Accounts] Failed to open profile session:', error);
-      toast.error(
-        `Failed to open profile session: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
+  const handleOpenProfileSession = useCallback(
+    async (_id: number) => {
+      try {
+        await openAccountProfileSession({ accountId: _id });
+        toast.success(t('accounts.profileSessionOpen'));
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to open profile session:', error);
+        toast.error(
+          `Failed to open profile session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
 
-  const handleConfirmProfileSession = async (_id: number) => {
-    try {
-      await confirmAccountProfileSession({ accountId: _id });
-      toast.success(t('accounts.profileSessionConfirm'));
-      await fetchAccounts();
-    } catch (error) {
-      console.error('[Accounts] Failed to confirm profile session:', error);
-      toast.error(
-        `Failed to confirm profile session: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
+  const handleConfirmProfileSession = useCallback(
+    async (_id: number) => {
+      try {
+        await confirmAccountProfileSession({ accountId: _id });
+        toast.success(t('accounts.profileSessionConfirm'));
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to confirm profile session:', error);
+        toast.error(
+          `Failed to confirm profile session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
 
-  const handleClearProfileSession = async (_id: number) => {
-    try {
-      await clearAccountProfileSession({ accountId: _id });
-      toast.success(t('accounts.profileSessionClear'));
-      await fetchAccounts();
-    } catch (error) {
-      console.error('[Accounts] Failed to clear profile session:', error);
-      toast.error(
-        `Failed to clear profile session: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
+  const handleClearProfileSession = useCallback(
+    async (_id: number) => {
+      try {
+        await clearAccountProfileSession({ accountId: _id });
+        toast.success(t('accounts.profileSessionClear'));
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to clear profile session:', error);
+        toast.error(
+          `Failed to clear profile session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
 
   const handleUpdateAccount = useCallback(
     async (accountId: number, updates: { notes?: string; tags?: string }) => {
@@ -908,7 +1025,7 @@ export default function Accounts() {
         })
       );
     },
-    [selectedIds]
+    [handleClearProfileSession, handleConfirmProfileSession, handleOpenProfileSession, selectedIds]
   );
 
   const handleCreateStandaloneProfile = useCallback(async () => {
@@ -936,14 +1053,11 @@ export default function Accounts() {
 
     return profileAliases.map(alias => {
       const linkedAccount = linkedByAlias.get(alias.toLowerCase()) ?? null;
-      const hasAwsLink = Boolean(
-        linkedAccount &&
-        (linkedAccount.provider === 'aws' || linkedAccount.provider === 'aws_builder_id')
-      );
+      const hasProviderLink = Boolean(linkedAccount && linkedAccount.provider);
       const hasSessionPath = Boolean(linkedAccount?.browserProfilePath);
 
-      const healthStatus: 'ready' | 'needs_aws_link' | 'no_session_path' = !hasAwsLink
-        ? 'needs_aws_link'
+      const healthStatus: 'ready' | 'needs_link' | 'no_session_path' = !hasProviderLink
+        ? 'needs_link'
         : hasSessionPath
           ? 'ready'
           : 'no_session_path';
@@ -1042,7 +1156,7 @@ export default function Accounts() {
       }
 
       try {
-        await openStandaloneFingerprintProfile({ alias, provider, url });
+        await openStandaloneFingerprintProfileAndRememberUrl({ alias, provider, url });
         toast.success(t('accounts.profileOpenSuccess'));
       } catch (error) {
         console.error('[Accounts] Failed to open standalone profile:', error);
@@ -1055,372 +1169,546 @@ export default function Accounts() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+    <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0c] font-sans">
       <Header title={t('accounts.title')} icon={<Users size={18} />} />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar Filter Panel */}
-        <aside className="w-[200px] lg:w-[220px] shrink-0 bg-[#111116]/50 backdrop-blur-md border-r border-white/5 flex flex-col overflow-hidden hidden md:flex">
-          {/* Providers Section */}
-          <div className="p-3">
-            <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
-              {t('accounts.providers')}
-            </h3>
-            <div className="space-y-0.5">
+        <aside className="hidden lg:flex w-16 shrink-0 bg-[#0f1218]/50 border-r border-white/5 backdrop-blur-md flex-col items-center py-3 gap-3">
+          <div className="flex flex-col items-center gap-1.5">
+            <Tooltip content={`${t('accounts.entityAll')} · ${storeAccounts.length}`} side="right">
               <button
+                type="button"
                 onClick={() => handleEntityFilterChange('all')}
                 className={cn(
-                  'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',
+                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
                   entityFilter === 'all'
-                    ? 'bg-cyan-500/15 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'border-cyan-400/30 bg-cyan-500/[0.05] text-cyan-100'
+                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
                 )}
               >
-                {entityFilter === 'all' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-cyan-500 rounded-r shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
-                )}
-                <LayoutGrid size={16} className="shrink-0 ml-2" />
-                <span className="flex-1 text-left">{t('accounts.entityAll')}</span>
+                <span
+                  className={cn(
+                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
+                    entityFilter === 'all' ? 'bg-cyan-400/80' : 'bg-transparent'
+                  )}
+                />
+                <LayoutGrid size={15} />
               </button>
+            </Tooltip>
+
+            <Tooltip
+              content={`${t('accounts.entityAccounts')} · ${storeAccounts.length}`}
+              side="right"
+            >
               <button
+                type="button"
                 onClick={() => handleEntityFilterChange('accounts')}
                 className={cn(
-                  'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',
+                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
                   entityFilter === 'accounts'
-                    ? 'bg-cyan-500/15 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'border-cyan-400/30 bg-cyan-500/[0.05] text-cyan-100'
+                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
                 )}
               >
-                {entityFilter === 'accounts' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-cyan-500 rounded-r shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
-                )}
-                <Users size={16} className="shrink-0 ml-2" />
-                <span className="flex-1 text-left">{t('accounts.entityAccounts')}</span>
+                <span
+                  className={cn(
+                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
+                    entityFilter === 'accounts' ? 'bg-cyan-400/80' : 'bg-transparent'
+                  )}
+                />
+                <Users size={15} />
               </button>
+            </Tooltip>
+
+            <Tooltip
+              content={`${t('accounts.entityBrowserProfiles')} · ${profileAliases.length}`}
+              side="right"
+            >
               <button
+                type="button"
                 onClick={() => handleEntityFilterChange('profiles')}
                 className={cn(
-                  'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',
+                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
                   entityFilter === 'profiles'
-                    ? 'bg-cyan-500/15 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'border-cyan-400/30 bg-cyan-500/[0.05] text-cyan-100'
+                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
                 )}
               >
-                {entityFilter === 'profiles' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-cyan-500 rounded-r shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
-                )}
-                <LayoutGrid size={16} className="shrink-0 ml-2" />
-                <span className="flex-1 text-left">{t('accounts.entityProfiles')}</span>
-                <span className="text-xs text-slate-400 font-medium tabular-nums">
-                  {profileAliases.length}
-                </span>
-              </button>
-
-              <div className="h-px bg-white/5 mx-2 my-2" />
-
-              <button
-                onClick={() => handleProviderFilterChange('all')}
-                className={cn(
-                  'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',
-                  providerFilter === 'all'
-                    ? 'bg-indigo-500/15 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                )}
-              >
-                {providerFilter === 'all' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-indigo-500 rounded-r shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-                )}
-                <LayoutGrid size={16} className="shrink-0 ml-2" />
-                <span className="flex-1 text-left">{t('accounts.allAccounts')}</span>
-                <span className="text-xs text-slate-400 font-medium tabular-nums">
-                  {providerCounts.all}
-                </span>
-              </button>
-
-              {[
-                { id: 'kiro', label: 'Kiro' },
-                { id: 'windsurf', label: 'Windsurf' },
-                { id: 'trae', label: 'Trae' },
-                { id: 'aws', label: 'AWS Builder ID' },
-                { id: 'github', label: 'GitHub' },
-              ].map(provider => (
-                <button
-                  key={provider.id}
-                  onClick={() => handleProviderFilterChange(provider.id)}
+                <span
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',
-                    providerFilter === provider.id
-                      ? 'bg-indigo-500/15 text-white'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
+                    entityFilter === 'profiles' ? 'bg-cyan-400/80' : 'bg-transparent'
                   )}
-                >
-                  {providerFilter === provider.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-indigo-500 rounded-r shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-                  )}
-                  <ProviderLogo
-                    provider={provider.id as any}
-                    size={16}
-                    colored={providerFilter === provider.id}
-                    className="shrink-0 ml-2"
-                  />
-                  <span className="flex-1 text-left">{provider.label}</span>
-                  {providerCounts[provider.id === 'aws' ? 'aws_builder_id' : provider.id] > 0 && (
-                    <span className="text-xs text-slate-400 font-medium tabular-nums">
-                      {providerCounts[provider.id === 'aws' ? 'aws_builder_id' : provider.id]}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+                />
+                <LayoutGrid size={15} />
+                {profileAliases.length > 0 ? (
+                  <span className="absolute -right-1.5 -top-1.5 rounded-full border border-white/10 bg-[#141822] px-1 text-[9px] text-slate-300">
+                    {profileAliases.length}
+                  </span>
+                ) : null}
+              </button>
+            </Tooltip>
           </div>
 
-          <div className="h-px bg-white/5 mx-4" />
+          <div className="h-px w-8 bg-white/10" />
 
-          {/* Status Section */}
-          <div className="p-3">
-            <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
-              {t('accounts.statusHeader')}
-            </h3>
-            <div className="space-y-0.5">
-              {[
-                { id: 'all', label: t('filters.anyStatus'), dot: null, color: null },
-                {
-                  id: 'active',
-                  label: getAccountStatusLabel('active'),
-                  dot: ACCOUNT_STATUS_COLORS.active.bg,
-                  color: ACCOUNT_STATUS_COLORS.active.hex,
-                },
-                {
-                  id: 'banned',
-                  label: getAccountStatusLabel('banned'),
-                  dot: ACCOUNT_STATUS_COLORS.banned.bg,
-                  color: ACCOUNT_STATUS_COLORS.banned.hex,
-                },
-                {
-                  id: 'limit_hit',
-                  label: getAccountStatusLabel('limit_hit'),
-                  dot: ACCOUNT_STATUS_COLORS.expired.bg,
-                  color: ACCOUNT_STATUS_COLORS.expired.hex,
-                },
-                {
-                  id: 'expired',
-                  label: getAccountStatusLabel('expired'),
-                  dot: ACCOUNT_STATUS_COLORS.expired.bg,
-                  color: ACCOUNT_STATUS_COLORS.expired.hex,
-                },
-                {
-                  id: 'unknown',
-                  label: getAccountStatusLabel('unknown'),
-                  dot: null,
-                  color: null,
-                },
-              ].map(status => (
+          <div className="flex flex-col items-center gap-1.5">
+            <Tooltip content={`Все провайдеры · ${providerCounts.all ?? 0}`} side="right">
+              <button
+                type="button"
+                onClick={() => handleProviderFilterChange('all')}
+                className={cn(
+                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
+                  providerFilter === 'all'
+                    ? 'border-indigo-400/35 bg-indigo-500/[0.05] text-indigo-100'
+                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
+                    providerFilter === 'all' ? 'bg-indigo-400/80' : 'bg-transparent'
+                  )}
+                />
+                <LayoutGrid size={15} />
+              </button>
+            </Tooltip>
+
+            {[
+              { id: 'kiro', label: 'Kiro' },
+              { id: 'windsurf', label: 'Windsurf' },
+              { id: 'trae', label: 'Trae' },
+              { id: 'aws', label: 'AWS Builder ID' },
+              { id: 'github', label: 'GitHub' },
+            ].map(provider => {
+              const countKey = provider.id === 'aws' ? 'aws_builder_id' : provider.id;
+              const count = providerCounts[countKey] ?? 0;
+              return (
+                <Tooltip key={provider.id} content={`${provider.label} · ${count}`} side="right">
+                  <button
+                    type="button"
+                    onClick={() => handleProviderFilterChange(provider.id)}
+                    className={cn(
+                      'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
+                      providerFilter === provider.id
+                        ? 'border-indigo-400/35 bg-indigo-500/[0.05] text-indigo-100'
+                        : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
+                        providerFilter === provider.id ? 'bg-indigo-400/80' : 'bg-transparent'
+                      )}
+                    />
+                    <ProviderLogo
+                      provider={provider.id}
+                      size={14}
+                      colored={providerFilter === provider.id}
+                    />
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+
+          <div className="h-px w-8 bg-white/10" />
+
+          <div className="flex flex-col items-center gap-1.5">
+            {[
+              { id: 'all', label: t('filters.anyStatus'), dot: 'bg-slate-500' },
+              {
+                id: 'active',
+                label: getAccountStatusLabel('active'),
+                dot: ACCOUNT_STATUS_COLORS.active.bg,
+              },
+              {
+                id: 'banned',
+                label: getAccountStatusLabel('banned'),
+                dot: ACCOUNT_STATUS_COLORS.banned.bg,
+              },
+              {
+                id: 'limit_hit',
+                label: getAccountStatusLabel('limit_hit'),
+                dot: ACCOUNT_STATUS_COLORS.expired.bg,
+              },
+              {
+                id: 'expired',
+                label: getAccountStatusLabel('expired'),
+                dot: ACCOUNT_STATUS_COLORS.expired.bg,
+              },
+              { id: 'unknown', label: getAccountStatusLabel('unknown'), dot: 'bg-slate-500' },
+            ].map(status => (
+              <Tooltip key={status.id} content={status.label} side="right">
                 <button
-                  key={status.id}
+                  type="button"
                   onClick={() => handleStatusFilterChange(status.id)}
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 relative',
+                    'relative h-9 w-9 rounded-r-lg border border-l-0 transition-colors flex items-center justify-center',
                     statusFilter === status.id
-                      ? 'bg-indigo-500/15 text-white'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      ? 'border-indigo-400/30 bg-indigo-500/[0.08] text-indigo-100'
+                      : 'border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/8'
                   )}
                 >
-                  {statusFilter === status.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-indigo-500 rounded-r shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-                  )}
-                  {status.dot ? (
-                    <div
-                      className={cn('w-2 h-2 rounded-full shrink-0 ml-2', status.dot)}
-                      style={{
-                        boxShadow:
-                          statusFilter === status.id && status.color
-                            ? `0 0 8px ${status.color}99`
-                            : 'none',
-                      }}
-                    />
-                  ) : (
-                    <div className="w-2 h-2 shrink-0 ml-2" />
-                  )}
-                  <span className="flex-1 text-left">{status.label}</span>
+                  <span
+                    className={cn(
+                      'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
+                      statusFilter === status.id ? 'bg-indigo-400/80' : 'bg-transparent'
+                    )}
+                  />
+                  <span className={cn('h-2.5 w-2.5 rounded-full', status.dot)} />
                 </button>
-              ))}
-            </div>
+              </Tooltip>
+            ))}
           </div>
         </aside>
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Bar */}
-          <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl">
-            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-              <AccountsEntityTabs
-                value={normalizedEntityFilter}
-                onChange={value => handleEntityFilterChange(value)}
-                accountsCount={storeAccounts.length}
-                profilesCount={profileAliases.length}
-              />
+          <div className="shrink-0 px-6 py-4 border-b border-white/5 bg-[#0b0b10]/85 backdrop-blur-xl">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-4">
+              <div className="flex flex-col gap-4 min-w-0">
+                <div className="flex flex-wrap items-center gap-3 min-w-0">
+                  <AccountsEntityTabs
+                    value={normalizedEntityFilter}
+                    onChange={value => handleEntityFilterChange(value)}
+                    accountsCount={storeAccounts.length}
+                    profilesCount={profileAliases.length}
+                  />
 
-              <div className="w-px h-6 bg-white/10" />
+                  {showAccountsModes && (
+                    <SegmentedControl
+                      value={resolvedViewMode}
+                      onChange={value => handleViewModeChange(value)}
+                      options={[
+                        { value: 'list', label: t('accounts.viewList'), icon: <List size={14} /> },
+                        {
+                          value: 'graph',
+                          label: t('accounts.viewGraph'),
+                          icon: <Share2 size={14} />,
+                        },
+                        {
+                          value: 'sheets',
+                          label: t('accounts.viewSheets'),
+                          icon: <FileSpreadsheet size={14} />,
+                        },
+                      ]}
+                      size="sm"
+                      className="shrink-0"
+                    />
+                  )}
+                </div>
 
-              <div className="relative group flex-1 min-w-[240px] max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-400 transition-colors" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => handleSearchQueryChange(e.target.value)}
-                  className="w-full h-9 bg-black/40 rounded-lg pl-10 pr-4 text-sm text-white border border-white/10 focus:border-indigo-500/50 focus:bg-black/60 outline-none transition-colors placeholder-slate-400"
-                  placeholder={t('accounts.searchPlaceholder')}
-                />
+                {resolvedViewMode === 'list' ? (
+                  <div className="flex min-w-0 flex-col gap-4">
+                    <div className="flex w-full items-center gap-3">
+                      <Input
+                        value={searchQuery}
+                        onChange={e => handleSearchQueryChange(e.target.value)}
+                        placeholder={t('accounts.searchPlaceholder')}
+                        leftIcon={<Search className="w-4 h-4" />}
+                        className="h-9 text-sm text-white placeholder-slate-400"
+                        shellClassName="bg-black/40 border-white/10 focus-within:border-indigo-500/40 focus-within:bg-black/60"
+                        containerClassName="w-full min-w-[260px] max-w-md"
+                      />
+                    </div>
+
+                    <div className="relative z-20 hidden lg:flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
+                      <FilterDropdown
+                        value={statusFilter}
+                        onChange={handleStatusFilterChange}
+                        options={[
+                          { value: 'all', label: t('filters.anyStatus') },
+                          { value: 'active', label: getAccountStatusLabel('active') },
+                          { value: 'banned', label: getAccountStatusLabel('banned') },
+                          { value: 'limit_hit', label: getAccountStatusLabel('limit_hit') },
+                          { value: 'expired', label: getAccountStatusLabel('expired') },
+                          { value: 'unknown', label: getAccountStatusLabel('unknown') },
+                        ]}
+                        label={t('filters.status')}
+                        triggerClassName="h-9 min-w-[148px]"
+                        menuClassName="min-w-[220px]"
+                        showActiveState={true}
+                      />
+                      <FilterDropdown
+                        value={tagFilter}
+                        onChange={handleTagFilterChange}
+                        options={tagOptions}
+                        label={t('accounts.tags')}
+                        triggerClassName="h-9 min-w-[132px]"
+                        menuClassName="min-w-[220px]"
+                        showActiveState={true}
+                      />
+                      <FilterDropdown
+                        value={relationFilter}
+                        onChange={handleRelationFilterChange}
+                        options={relationOptions}
+                        label={t('accounts.relationFilterLabel')}
+                        triggerClassName="h-9 min-w-[132px]"
+                        menuClassName="min-w-[220px]"
+                        showActiveState={true}
+                      />
+                      <FilterDropdown
+                        value={quotaFilter}
+                        onChange={handleQuotaFilterChange}
+                        options={[
+                          { value: 'any', label: t('filters.any') },
+                          { value: 'has_quota', label: t('filters.hasQuota') },
+                          { value: 'low_quota', label: t('filters.lowQuota') },
+                          { value: 'empty', label: t('filters.empty') },
+                          { value: 'full', label: t('filters.full') },
+                        ]}
+                        label={t('filters.quota')}
+                        triggerClassName="h-9 min-w-[132px]"
+                        menuClassName="min-w-[220px]"
+                        showActiveState={true}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-slate-500">
+                    {t('accounts.sheetsIntegration')}
+                    {sheetsUpdatedAt
+                      ? ` • ${t('logs.lastUpdated')} ${new Date(sheetsUpdatedAt).toLocaleString()}`
+                      : ''}
+                  </div>
+                )}
               </div>
 
-              <QuotaFilterChip value={quotaFilter as any} onChange={handleQuotaFilterChange} />
+              <div className="flex flex-wrap items-center gap-2 justify-start xl:justify-end">
+                {resolvedViewMode === 'list' ? (
+                  <ActionButtonGroup
+                    actions={[
+                      {
+                        icon: RefreshCw,
+                        label: t('accounts.refreshAll'),
+                        onClick: handleRefreshAll,
+                        disabled: isBulkRefreshing,
+                        loading: isBulkRefreshing,
+                      },
+                      {
+                        icon: Upload,
+                        label: t('accounts.importAccounts'),
+                        onClick: handleImportAccounts,
+                        disabled: isImporting,
+                        loading: isImporting,
+                      },
+                      {
+                        icon: Download,
+                        label: t('accounts.exportCsv'),
+                        onClick: handleExportCSV,
+                        disabled: filteredAccounts.length === 0,
+                      },
+                    ]}
+                    spacing="tight"
+                    size="sm"
+                    className="h-9 px-2 rounded-lg bg-transparent"
+                  />
+                ) : (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleTestSheets}
+                      isLoading={sheetsTestStatus === 'loading'}
+                      disabled={!sheetsParams}
+                    >
+                      {t('validation.testConnection')}
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleRefreshSheets}
+                      disabled={!sheetsParams || sheetsLoading}
+                      leftIcon={
+                        <RefreshCw size={14} className={sheetsLoading ? 'animate-spin' : ''} />
+                      }
+                    >
+                      {t('common.refresh')}
+                    </Button>
+                    <Button
+                      variant={showSheetsConfig ? 'secondary' : 'outline'}
+                      size="sm"
+                      onClick={() => setShowSheetsConfig(current => !current)}
+                    >
+                      {t('common.settings')}
+                    </Button>
+                  </>
+                )}
 
-              <FilterDropdown
-                value={tagFilter}
-                onChange={handleTagFilterChange}
-                options={tagOptions}
-                placeholder={t('accounts.tags')}
-                showActiveState={true}
-                className="shrink-0"
-              />
-
-              <FilterDropdown
-                value={relationFilter}
-                onChange={handleRelationFilterChange}
-                options={relationOptions}
-                placeholder={t('accounts.relationFilterLabel')}
-                showActiveState={true}
-                className="shrink-0"
-              />
-
-              {/* Entity selection moved to top tabs for clarity */}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <ActionButtonGroup
-                actions={[
-                  {
-                    icon: RefreshCw,
-                    label: t('accounts.refreshAll'),
-                    onClick: handleRefreshAll,
-                    disabled: isBulkRefreshing,
-                    loading: isBulkRefreshing,
-                  },
-                  {
-                    icon: Upload,
-                    label: t('accounts.importAccounts') || 'Import',
-                    onClick: handleImportAccounts,
-                    disabled: isImporting,
-                    loading: isImporting,
-                  },
-                  {
-                    icon: Download,
-                    label: t('accounts.exportCsv'),
-                    onClick: handleExportCSV,
-                    disabled: filteredAccounts.length === 0,
-                  },
-                ]}
-                className="h-9 px-3 rounded-lg bg-white/5 border border-white/10"
-              />
-
-              <div className="w-px h-6 bg-white/10 hidden md:block" />
-
-              <Button onClick={() => navigate('/autoreg')} variant="secondary" size="sm">
-                AutoReg
-              </Button>
-              <Button
-                onClick={handleCreateStandaloneProfile}
-                variant="secondary"
-                size="sm"
-                leftIcon={<LayoutGrid size={16} />}
-              >
-                {t('accounts.profilesCreateButton')}
-              </Button>
-              <Button
-                onClick={() => setIsModalOpen(true)}
-                variant="primary"
-                size="sm"
-                leftIcon={<Plus size={18} />}
-              >
-                Add account
-              </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => navigate('/autoreg')}
+                    variant="secondary"
+                    size="sm"
+                    className="h-9 rounded-lg"
+                  >
+                    <span className="hidden sm:inline">{t('sidebar.autoReg')}</span>
+                    <span className="sm:hidden">АР</span>
+                  </Button>
+                  <Button
+                    onClick={handleCreateStandaloneProfile}
+                    variant="secondary"
+                    size="sm"
+                    className="h-9 rounded-lg"
+                    leftIcon={<LayoutGrid size={16} />}
+                  >
+                    <span className="hidden sm:inline">{t('accounts.profilesCreateButton')}</span>
+                    <span className="sm:hidden">{t('accounts.entityProfiles')}</span>
+                  </Button>
+                  <Button
+                    onClick={() => setIsModalOpen(true)}
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Plus size={18} />}
+                    className="h-9 rounded-lg shadow-none"
+                  >
+                    <span className="hidden sm:inline">{t('accounts.addAccount')}</span>
+                    <span className="sm:hidden">{t('common.add')}</span>
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
 
+          {resolvedViewMode !== 'list' && showSheetsConfig && (
+            <div className="shrink-0 px-6 pb-4 border-b border-white/5 bg-[#0a0a0c]/65">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,2fr)]">
+                  <FormField
+                    inputProps={{
+                      label: t('accounts.sheetsSpreadsheetId'),
+                      value: sheetsSpreadsheetId,
+                      onChange: (event: ChangeEvent<HTMLInputElement>) => {
+                        setSheetsTouched(true);
+                        setSheetsSpreadsheetId(event.target.value);
+                        setSheetsTestStatus('idle');
+                        setSheetsTestMessage(null);
+                      },
+                      placeholder: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+                    }}
+                  />
+                  <FormField
+                    type="textarea"
+                    textareaProps={{
+                      label: t('accounts.sheetsServiceAccountJson'),
+                      value: sheetsServiceAccountJson,
+                      onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
+                        setSheetsTouched(true);
+                        setSheetsServiceAccountJson(event.target.value);
+                        setSheetsTestStatus('idle');
+                        setSheetsTestMessage(null);
+                      },
+                      placeholder: '{"type":"service_account", ...}',
+                      rows: 4,
+                      className: 'font-mono text-[11px]',
+                    }}
+                  />
+                </div>
+
+                <div className="mt-2 text-[11px] text-slate-500">
+                  {sheetsTestStatus === 'success' && t('validation.connectionSuccess')}
+                  {sheetsTestStatus === 'error' &&
+                    (sheetsTestMessage || t('validation.connectionFailed'))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Mobile quick filters */}
-          <div className="md:hidden shrink-0 px-4 py-3 border-b border-white/5 bg-[#0a0a0c]/70 grid grid-cols-2 gap-2">
-            <select
-              value={providerFilter}
-              onChange={e => handleProviderFilterChange(e.target.value)}
-              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
-            >
-              <option value="all">All providers</option>
-              {Object.values(providerCounts).slice(0, 0) /* no-op: keep lint happy */}
-              {/* Keep mobile list aligned with sidebar provider filters */}
-              {['kiro', 'windsurf', 'trae', 'aws', 'github', 'openai'].map(id => (
-                <option key={id} value={id}>
-                  {id === 'aws' ? 'AWS Builder ID' : id.charAt(0).toUpperCase() + id.slice(1)}
-                </option>
-              ))}
-            </select>
+          {resolvedViewMode === 'list' ? (
+            <div className="lg:hidden shrink-0 px-4 py-3 border-b border-white/5 bg-[#0d1016]/60 grid grid-cols-2 gap-2">
+              <Select
+                value={providerFilter}
+                onChange={e => handleProviderFilterChange(e.target.value)}
+                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
+                shellClassName="bg-black/40 border-white/10"
+                containerClassName="w-full"
+              >
+                <option value="all">{t('accounts.allProviders')}</option>
+                {Object.values(providerCounts).slice(0, 0) /* no-op: keep lint happy */}
+                {/* Keep mobile list aligned with sidebar provider filters */}
+                {['kiro', 'windsurf', 'trae', 'aws', 'github', 'openai'].map(id => (
+                  <option key={id} value={id}>
+                    {id === 'aws' ? 'AWS Builder ID' : id.charAt(0).toUpperCase() + id.slice(1)}
+                  </option>
+                ))}
+              </Select>
 
-            <select
-              value={statusFilter}
-              onChange={e => handleStatusFilterChange(e.target.value)}
-              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
-            >
-              <option value="all">Any status</option>
-              <option value="active">Active</option>
-              <option value="banned">Banned</option>
-              <option value="expired">Expired</option>
-            </select>
+              <Select
+                value={statusFilter}
+                onChange={e => handleStatusFilterChange(e.target.value)}
+                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
+                shellClassName="bg-black/40 border-white/10"
+                containerClassName="w-full"
+              >
+                <option value="all">{t('filters.anyStatus')}</option>
+                <option value="active">{getAccountStatusLabel('active')}</option>
+                <option value="banned">{getAccountStatusLabel('banned')}</option>
+                <option value="expired">{getAccountStatusLabel('expired')}</option>
+              </Select>
 
-            <select
-              value={tagFilter}
-              onChange={e => handleTagFilterChange(e.target.value)}
-              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200 col-span-2"
-            >
-              <option value="all">{t('accounts.mobileTagFilterLabel')}</option>
-              {tagOptions
-                .filter(option => option.value !== 'all')
-                .map(option => (
+              <Select
+                value={tagFilter}
+                onChange={e => handleTagFilterChange(e.target.value)}
+                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
+                shellClassName="bg-black/40 border-white/10"
+                containerClassName="col-span-2"
+              >
+                <option value="all">{t('accounts.mobileTagFilterLabel')}</option>
+                {tagOptions
+                  .filter(option => option.value !== 'all')
+                  .map(option => (
+                    <option key={String(option.value)} value={String(option.value)}>
+                      {option.label}
+                    </option>
+                  ))}
+              </Select>
+
+              <Select
+                value={relationFilter}
+                onChange={e => handleRelationFilterChange(e.target.value)}
+                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
+                shellClassName="bg-black/40 border-white/10"
+                containerClassName="col-span-2"
+              >
+                {relationOptions.map(option => (
                   <option key={String(option.value)} value={String(option.value)}>
                     {option.label}
                   </option>
                 ))}
-            </select>
+              </Select>
 
-            <select
-              value={relationFilter}
-              onChange={e => handleRelationFilterChange(e.target.value)}
-              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200 col-span-2"
-            >
-              {relationOptions.map(option => (
-                <option key={String(option.value)} value={String(option.value)}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <Select
+                value={entityFilter}
+                onChange={e => handleEntityFilterChange(e.target.value)}
+                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
+                shellClassName="bg-black/40 border-white/10"
+                containerClassName="col-span-2"
+              >
+                {entityOptions.map(option => (
+                  <option key={String(option.value)} value={String(option.value)}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
 
-            <select
-              value={entityFilter}
-              onChange={e => handleEntityFilterChange(e.target.value)}
-              className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200 col-span-2"
-            >
-              {entityOptions.map(option => (
-                <option key={String(option.value)} value={String(option.value)}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {resolvedViewMode === 'list' && entityFilter !== 'profiles' && accountsError ? (
+            <div className="shrink-0 mx-6 mt-4 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              {t('accounts.loadAccountsErrorPrefix')}: {accountsError}
+            </div>
+          ) : null}
 
           {/* Expired Warning */}
-          {expiredCount > 0 && (
+          {resolvedViewMode === 'list' && expiredCount > 0 && (
             <div className="shrink-0 mx-6 mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
               <span className="text-sm text-amber-300 flex-1">
-                {expiredCount} {expiredCount === 1 ? 'account has' : 'accounts have'} expired
+                {t('accounts.expiredCountLabel')}: {expiredCount}
               </span>
               <Button
                 onClick={handleRefreshExpired}
@@ -1432,7 +1720,7 @@ export default function Accounts() {
                   <RefreshCw size={12} className={isBulkRefreshing ? 'animate-spin' : ''} />
                 }
               >
-                Refresh expired
+                {t('accounts.refreshAllExpired')}
               </Button>
             </div>
           )}
@@ -1440,7 +1728,64 @@ export default function Accounts() {
           {/* Table */}
           <div className="flex-1 overflow-hidden">
             <AccountsTabContent>
-              {entityFilter === 'profiles' ? (
+              {resolvedViewMode === 'graph' ? (
+                <ServiceAccountsPanel
+                  header={
+                    <div className="px-6 py-3 border-b border-white/5 bg-[#0a0a0c]/60 flex items-center justify-between text-xs text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <Share2 className="w-4 h-4 text-indigo-400" />
+                        <span className="font-semibold text-white">
+                          {t('accounts.relationGraphTitle')}
+                        </span>
+                      </div>
+                      {sheetsUpdatedAt && (
+                        <span className="text-[11px] text-slate-500">
+                          {t('logs.lastUpdated')} {new Date(sheetsUpdatedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  }
+                  body={
+                    <IdentityGraphPanel
+                      dataset={sheetsDataset}
+                      isLoading={sheetsLoading}
+                      error={sheetsError}
+                      onRetry={handleRefreshSheets}
+                      localProfiles={profileAliases}
+                    />
+                  }
+                />
+              ) : resolvedViewMode === 'sheets' ? (
+                <ServiceAccountsPanel
+                  header={
+                    <div className="px-6 py-3 border-b border-white/5 bg-[#0a0a0c]/60 flex items-center justify-between text-xs text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                        <span className="font-semibold text-white">
+                          {t('accounts.sheetsExplorerTitle')}
+                        </span>
+                      </div>
+                      {sheetsUpdatedAt && (
+                        <span className="text-[11px] text-slate-500">
+                          {t('logs.lastUpdated')} {new Date(sheetsUpdatedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  }
+                  body={
+                    <SheetsExplorerPanel
+                      dataset={sheetsDataset}
+                      isLoading={sheetsLoading}
+                      error={sheetsError}
+                      onRetry={handleRefreshSheets}
+                      onNavigateToGraph={target => {
+                        console.log('[Accounts] Navigate to graph target:', target);
+                        handleViewModeChange('graph');
+                      }}
+                    />
+                  }
+                />
+              ) : entityFilter === 'profiles' ? (
                 <DolphinProfilesPanel
                   body={
                     profilesLoading ? (
@@ -1478,7 +1823,7 @@ export default function Accounts() {
                   </div>
                   <div className="flex flex-col h-[55%] min-h-[260px]">
                     {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
-                      <div className="mx-6 mt-2 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
+                      <div className="mx-6 mt-2 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <h3 className="text-sm font-semibold text-white">
@@ -1551,6 +1896,7 @@ export default function Accounts() {
                     )}
                     <AccountsTable
                       accounts={filteredAccounts}
+                      isLoading={loading}
                       relationEdgesById={Object.fromEntries(
                         filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
                       )}
@@ -1639,7 +1985,7 @@ export default function Accounts() {
                     ) : (
                       <div className="flex flex-col h-full">
                         {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
-                          <div className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4 shadow-[0_0_30px_rgba(79,70,229,0.12)]">
+                          <div className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div>
                                 <h3 className="text-sm font-semibold text-white">
@@ -1719,6 +2065,7 @@ export default function Accounts() {
 
                         <AccountsTable
                           accounts={filteredAccounts}
+                          isLoading={loading}
                           relationEdgesById={Object.fromEntries(
                             filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
                           )}

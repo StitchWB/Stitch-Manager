@@ -1,5 +1,6 @@
 import { Users, LayoutGrid } from 'lucide-react';
 import { TabButton } from '../ui/TabButton';
+import { t } from '../../lib/i18n';
 
 export type AccountsEntityTab = 'accounts' | 'profiles';
 
@@ -22,13 +23,13 @@ export function AccountsEntityTabs({
         active={value === 'accounts'}
         onClick={() => onChange('accounts')}
         icon={<Users size={16} />}
-        label={`Accounts (${accountsCount})`}
+        label={`${t('accounts.entityAccounts')} (${accountsCount})`}
       />
       <TabButton
         active={value === 'profiles'}
         onClick={() => onChange('profiles')}
         icon={<LayoutGrid size={16} />}
-        label={`Profiles (${profilesCount})`}
+        label={`${t('accounts.entityBrowserProfiles')} (${profilesCount})`}
       />
     </div>
   );

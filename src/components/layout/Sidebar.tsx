@@ -5,7 +5,6 @@ import {
   Users,
   RefreshCw,
   Code,
-  Server,
   Settings,
   FileText,
   Terminal,
@@ -13,8 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Key,
-  Orbit,
   ShieldCheck,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
@@ -62,7 +59,7 @@ export default function Sidebar() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    queueMicrotask(() => setMounted(true));
 
     // Auto-collapse sidebar on small screens
     const handleResize = () => {
@@ -90,6 +87,7 @@ export default function Sidebar() {
     >
       {/* Collapse Toggle Button */}
       <button
+        type="button"
         onClick={toggleSidebar}
         className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 transition-colors z-50 border border-indigo-400/50"
       >
@@ -138,7 +136,7 @@ export default function Sidebar() {
         <NavItem
           to="/scheduler"
           icon={<Clock size={20} />}
-          label="Scheduler"
+          label={t('sidebar.scheduler')}
           collapsed={sidebarCollapsed}
         />
         <NavItem
@@ -148,27 +146,9 @@ export default function Sidebar() {
           collapsed={sidebarCollapsed}
         />
         <NavItem
-          to="/server"
-          icon={<Server size={20} />}
-          label={t('sidebar.apiServer')}
-          collapsed={sidebarCollapsed}
-        />
-        <NavItem
           to="/ai"
           icon={<ShieldCheck size={20} />}
-          label="AI Hub"
-          collapsed={sidebarCollapsed}
-        />
-        <NavItem
-          to="/antigravity"
-          icon={<Orbit size={20} />}
-          label="Antigravity"
-          collapsed={sidebarCollapsed}
-        />
-        <NavItem
-          to="/api-keys"
-          icon={<Key size={20} />}
-          label="API Keys"
+          label={t('sidebar.aiHub')}
           collapsed={sidebarCollapsed}
         />
         <NavItem

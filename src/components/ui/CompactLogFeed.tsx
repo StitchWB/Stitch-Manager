@@ -20,6 +20,7 @@ import { t } from '../../lib/i18n';
 import { Tooltip } from '../Tooltip';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { EmptyState } from './EmptyState';
+import { Select } from './Select';
 
 interface LogEntry {
   id: string;
@@ -373,37 +374,21 @@ export function CompactLogFeed({
             {t('logFeed.activityLog')}
           </span>
           {onProviderChange && (
-            <select
+            <Select
+              containerClassName="w-auto"
+              className="h-7 py-1 px-2 text-[10px]"
               value={activeProvider}
-              onChange={e => onProviderChange(e.target.value)}
-              className="text-[10px] px-2 py-1 bg-black/40 border border-white/10 rounded text-slate-300 focus:outline-none focus:border-indigo-500/50"
-              style={{
-                backgroundImage: 'none',
-                colorScheme: 'dark',
-              }}
-            >
-              <option value="all" className="bg-slate-900 text-slate-300">
-                All Providers
-              </option>
-              <option value="kiro" className="bg-slate-900 text-slate-300">
-                Kiro
-              </option>
-              <option value="windsurf" className="bg-slate-900 text-slate-300">
-                Windsurf
-              </option>
-              <option value="github" className="bg-slate-900 text-slate-300">
-                GitHub
-              </option>
-              <option value="trae" className="bg-slate-900 text-slate-300">
-                Trae
-              </option>
-              <option value="aws" className="bg-slate-900 text-slate-300">
-                AWS
-              </option>
-              <option value="openai" className="bg-slate-900 text-slate-300">
-                OpenAI
-              </option>
-            </select>
+              onValueChange={onProviderChange}
+              options={[
+                { value: 'all', label: 'All Providers' },
+                { value: 'kiro', label: 'Kiro' },
+                { value: 'windsurf', label: 'Windsurf' },
+                { value: 'github', label: 'GitHub' },
+                { value: 'trae', label: 'Trae' },
+                { value: 'aws', label: 'AWS' },
+                { value: 'openai', label: 'OpenAI' },
+              ]}
+            />
           )}
         </div>
         <div className="flex items-center gap-1">

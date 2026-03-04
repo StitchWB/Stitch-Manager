@@ -6,7 +6,6 @@ import {
   Users,
   RefreshCw,
   Code,
-  Server,
   Key,
   Settings,
   FileText,
@@ -90,9 +89,6 @@ export function CommandPalette() {
               </CommandItem>
               <CommandItem icon={<Code />} onSelect={() => runCommand(() => navigate('/patcher'))}>
                 {t('sidebar.idePatch')}
-              </CommandItem>
-              <CommandItem icon={<Server />} onSelect={() => runCommand(() => navigate('/server'))}>
-                {t('sidebar.apiServer')}
               </CommandItem>
               <CommandItem icon={<Key />} onSelect={() => runCommand(() => navigate('/api-keys'))}>
                 API Keys

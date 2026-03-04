@@ -1,83 +1,24 @@
-import { useState } from 'react';
-import {
-  Trash2,
-  RefreshCw,
-  MoreHorizontal,
-  Play,
-  Square,
-  Globe,
-  Copy,
-  User,
-  Check,
-  X,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-
-import type { Account, AccountStatus } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import { Trash2, Users } from 'lucide-react';
+import type { Account } from '../types';
 import { t } from '../lib/i18n';
-import { cn } from '../lib/utils';
-import { UsageBar } from './ui/UsageBar';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
+import { AccountRow } from './accounts/AccountRow';
 import AccountDetailsModal from './ui/AccountDetailsModal';
 import { ConfirmDialog } from './ui/ConfirmDialog';
-import { Tooltip } from './ui/Tooltip';
-import { ProviderLogo } from './ui/ProviderLogo';
-import { StatusBadge } from './ui/StatusBadge';
-import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
-import { getAccountStatusLabel, getAccountStatusVariant } from '../lib/accountStatus';
-import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
-import { providerLabelToKey } from '../lib/accounts/relations';
-
-function truncateEmail(email: string, startChars = 16, endChars = 14): string {
-  if (email.length <= startChars + endChars + 3) return email;
-  return `${email.slice(0, startChars)}...${email.slice(-endChars)}`;
-}
-
-const parseTags = (tagsString: string | null): string[] => {
-  if (!tagsString) return [];
-  try {
-    const parsed = JSON.parse(tagsString);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-type ProfileSessionStatus = 'ready' | 'pending' | 'disabled';
-
-const getProfileSessionStatus = (tags: string[]): ProfileSessionStatus => {
-  if (tags.includes('profile:disabled')) return 'disabled';
-  if (tags.includes('profile:pending')) return 'pending';
-  if (
-    tags.includes('profile:ready') ||
-    tags.includes('profile:manual') ||
-    tags.includes('profile:antidetect')
-  ) {
-    return 'ready';
-  }
-  return 'disabled';
-};
-
-const getProfileStatusVariant = (
-  status: ProfileSessionStatus
-): 'success' | 'warning' | 'neutral' => {
-  if (status === 'ready') return 'success';
-  if (status === 'pending') return 'warning';
-  return 'neutral';
-};
-
-const getProfileStatusLabel = (status: ProfileSessionStatus): string => {
-  if (status === 'ready') return t('accounts.profileSessionReady');
-  if (status === 'pending') return t('accounts.profileSessionPending');
-  return t('accounts.profileSessionDisabled');
-};
-
-const getTagPillClassName = (tag: string): string => {
-  if (tag === 'profile:ready') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
-  if (tag === 'profile:pending') return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
-  if (tag === 'profile:disabled') return 'bg-white/5 text-white/50 border-white/10';
-  if (tag.startsWith('profile:')) return 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
-  return 'bg-white/5 text-slate-300 border-white/10';
-};
+import {
+  Badge,
+  Button,
+  Checkbox,
+  EmptyState,
+  SkeletonLoader,
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui';
 
 interface AccountsTableProps {
   accounts: Account[];
@@ -85,6 +26,7 @@ interface AccountsTableProps {
   relationEdgesById?: Record<number, AccountRelationEdge[]>;
   selectedIds: Set<number>;
   activeAccountIds: Record<string, number | null>;
+  isLoading?: boolean;
   onToggleSelection: (accountId: number) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
@@ -102,12 +44,18 @@ interface AccountsTableProps {
   selectedProvider?: string | null;
 }
 
+type DeleteDialogState =
+  | { isOpen: false }
+  | { isOpen: true; mode: 'single'; accountId: number }
+  | { isOpen: true; mode: 'bulk'; accountIds: number[] };
+
 export default function AccountsTable({
   accounts,
   relationHintsById,
   relationEdgesById,
   selectedIds,
   activeAccountIds,
+  isLoading = false,
   onToggleSelection,
   onSelectAll,
   onClearSelection,
@@ -125,443 +73,219 @@ export default function AccountsTable({
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [detailsModalAccount, setDetailsModalAccount] = useState<Account | null>(null);
-  const { copy } = useCopyToClipboard();
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ isOpen: false });
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const { copy } = useCopyToClipboard({
+    successMessage: t('accounts.tokenCopiedAutoClear'),
+    errorMessage: t('accounts.tokenCopyFailed'),
+  });
+
+  const allSelected = accounts.length > 0 && selectedIds.size === accounts.length;
+  const selectedCount = selectedIds.size;
+
+  const selectedIdsList = useMemo(() => Array.from(selectedIds), [selectedIds]);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('[data-row-actions-menu="true"]')) return;
+      setOpenMenuId(null);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenuId(null);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openMenuId]);
 
   const isAccountActive = (account: Account) => activeAccountIds[account.provider] === account.id;
 
-  const handleActivate = async (account: Account) => {
-    const isActive = isAccountActive(account);
-    await onActivate(account.provider, isActive ? null : account.id);
+  const handleLaunch = async (account: Account) => {
+    if (onOpenBrowser) {
+      await onOpenBrowser(account.id);
+      return;
+    }
+
+    const active = isAccountActive(account);
+    await onActivate(account.provider, active ? null : account.id);
   };
 
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    type: 'single' | 'bulk';
-    accountId?: number;
-    accountIds?: number[];
-  }>({ isOpen: false, type: 'single' });
-  const [isDeleting, setIsDeleting] = useState(false);
+  const handleToggleActive = async (account: Account) => {
+    const active = isAccountActive(account);
+    await onActivate(account.provider, active ? null : account.id);
+  };
 
   const handleConfirmDelete = async () => {
+    if (!deleteDialog.isOpen) return;
     setIsDeleting(true);
+
     try {
-      if (confirmDialog.type === 'single' && confirmDialog.accountId)
-        await onDelete(confirmDialog.accountId);
-      else if (confirmDialog.type === 'bulk' && confirmDialog.accountIds)
-        await onDeleteSelected(confirmDialog.accountIds);
-      setConfirmDialog({ ...confirmDialog, isOpen: false });
+      if (deleteDialog.mode === 'single') {
+        await onDelete(deleteDialog.accountId);
+      } else {
+        await onDeleteSelected(deleteDialog.accountIds);
+      }
+      setDeleteDialog({ isOpen: false });
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const allSelected = accounts.length > 0 && selectedIds.size >= accounts.length;
+  const openSingleDelete = (accountId: number) => {
+    setDeleteDialog({ isOpen: true, mode: 'single', accountId });
+  };
+
+  const openBulkDelete = () => {
+    if (selectedIdsList.length === 0) return;
+    setDeleteDialog({ isOpen: true, mode: 'bulk', accountIds: selectedIdsList });
+  };
+
+  if (isLoading && accounts.length === 0) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/5 bg-[#0b0b10]/80 p-4">
+          <SkeletonLoader variant="table-row" count={6} />
+        </div>
+      </div>
+    );
+  }
+
+  if (accounts.length === 0) {
+    return (
+      <EmptyState
+        icon={Users}
+        title={t('accounts.noAccountsFound')}
+        description={t('accounts.noAccountsFoundDesc')}
+      />
+    );
+  }
+
+  const handleShowDetails = (account: Account) => {
+    setDetailsModalAccount(account);
+    setOpenMenuId(null);
+  };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden px-2 sm:px-4">
-      {/* Optimized Header Grid */}
-      <div className="hidden lg:grid grid-cols-[40px_minmax(200px,1fr)_90px_240px_160px] gap-4 py-3 px-4 border-b border-white/5 sticky top-0 bg-[#050508]/95 backdrop-blur-md z-40">
-        <div className="flex justify-center">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={() => (allSelected ? onClearSelection() : onSelectAll())}
-            className="w-4 h-4 rounded border-white/10 bg-black/40 text-indigo-500 cursor-pointer"
-          />
+    <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
+      {selectedCount > 0 ? (
+        <div className="mb-3 mt-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" size="sm" className="normal-case tracking-normal">
+              {t('accounts.selectedCountLabel')}: {selectedCount}
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button size="xs" variant="secondary" onClick={onClearSelection}>
+              {t('accounts.clearSelection')}
+            </Button>
+            <Button
+              size="xs"
+              variant="danger"
+              leftIcon={<Trash2 size={12} />}
+              onClick={openBulkDelete}
+            >
+              {t('common.delete')}
+            </Button>
+          </div>
         </div>
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          {t('accountsTable.account')}
-        </span>
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
-          {t('accountsTable.status')}
-        </span>
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
-          {t('accountsTable.usage')}
-        </span>
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right pr-4">
-          {t('common.actions')}
-        </span>
-      </div>
+      ) : null}
 
-      <div className="flex-1 overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10 pb-24 pt-2 space-y-1.5">
-        <AnimatePresence mode="popLayout">
-          {accounts.map(account => {
-            const isActive = isAccountActive(account);
-            const isSelected = selectedIds.has(account.id);
-            const isRefreshing = isAccountRefreshing(account.id);
-            const metadata = account.metadata ? JSON.parse(account.metadata) : {};
-            const tagsList = parseTags(account.tags);
-            const allowProfileAction =
-              account.provider === 'kiro' ||
-              tagsList.includes('profile:manual') ||
-              tagsList.includes('profile:antidetect');
-            const profileStatus = getProfileSessionStatus(tagsList);
-            const canConfirmProfileSession = profileStatus === 'pending';
-            const canClearProfileSession = tagsList.some(tag => tag.startsWith('profile:'));
-            const visibleTags = tagsList.slice(0, 3);
-            const hiddenTagsCount = Math.max(0, tagsList.length - visibleTags.length);
-            const relationHints = relationHintsById?.[account.id] ?? [];
-            const relationEdges = relationEdgesById?.[account.id] ?? [];
-            const relationProviderEntries = Array.from(
-              relationEdges.reduce((map, edge) => {
-                const providerKey = providerLabelToKey(edge.targetProvider);
-                if (!providerKey) return map;
+      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
+        <Table
+          containerClassName="h-full overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
+          className="w-full table-fixed text-[13px]"
+          aria-label={t('accounts.accountsTable')}
+        >
+          <TableHeader className="sticky top-0 z-20 border-b border-white/[0.04] bg-slate-900/60 backdrop-blur-sm">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-[44px] px-3 py-3 text-xs text-slate-400">
+                <Checkbox
+                  checked={allSelected}
+                  onChange={() => {
+                    if (allSelected) onClearSelection();
+                    else onSelectAll();
+                  }}
+                  className="!p-0 hover:bg-transparent"
+                  aria-label={t('accounts.selectAll')}
+                />
+              </TableHead>
+              <TableHead className="px-2 py-3 text-xs text-slate-400">
+                {t('accounts.provider')}
+              </TableHead>
+              <TableHead className="px-2 py-3 text-xs text-slate-400">
+                {t('accounts.account')}
+              </TableHead>
+              <TableHead className="px-2 py-3 text-xs text-slate-400">
+                {t('accounts.statusHeader')}
+              </TableHead>
+              <TableHead className="px-2 py-3 text-xs text-slate-400">
+                {t('accounts.lastLoginAt')}
+              </TableHead>
+              <TableHead className="px-2 py-3 text-xs text-slate-400">
+                {t('accounts.proxyLabel')}
+              </TableHead>
+              <TableHead className="px-2 py-3 text-xs text-slate-400">
+                {t('accounts.tags')}
+              </TableHead>
+              <TableHead className="px-2 py-3 text-right text-xs text-slate-400">
+                {t('common.actions')}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
 
-                const existing = map.get(providerKey);
-                if (!existing || (!existing.explicit && edge.explicit)) {
-                  map.set(providerKey, edge);
-                }
-
-                return map;
-              }, new Map<string, AccountRelationEdge>())
-            );
-
-            return (
-              <motion.div
-                layout
+          <TableBody>
+            {accounts.map(account => (
+              <AccountRow
                 key={account.id}
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                onClick={() => setDetailsModalAccount(account)}
-                className={cn(
-                  'relative group rounded-xl border transition-all duration-200 cursor-pointer overflow-hidden',
-                  isSelected
-                    ? 'bg-indigo-500/[0.08] border-indigo-500/50 shadow-sm'
-                    : isActive
-                      ? 'bg-emerald-500/[0.05] border-emerald-500/30'
-                      : 'bg-[#0f1115]/60 border-white/[0.03] hover:border-white/[0.08] hover:bg-[#161920]'
-                )}
-              >
-                {/* Accent Bar Left (The glowy one) */}
-                {isActive && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 shadow-[0_0_15px_#10b981]" />
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-[40px_minmax(200px,1fr)_90px_240px_160px] gap-4 items-center p-3 lg:p-3.5">
-                  {/* Checkbox (Desktop only) */}
-                  <div
-                    className="hidden lg:flex justify-center"
-                    onClick={e => {
-                      e.stopPropagation();
-                      onToggleSelection(account.id);
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {}}
-                      className="w-4 h-4 rounded border-white/10 bg-black/40 text-indigo-500 pointer-events-none"
-                    />
-                  </div>
-
-                  {/* Identity: Logo + Email + Name */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-1.5 rounded-lg bg-white/5 shrink-0">
-                      <ProviderLogo provider={account.provider as any} size={16} />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-100 truncate group-hover:text-indigo-300 transition-colors">
-                          {truncateEmail(account.email)}
-                        </span>
-                        {isRefreshing && (
-                          <RefreshCw size={12} className="animate-spin text-indigo-400 shrink-0" />
-                        )}
-                      </div>
-                      {metadata.name && (
-                        <span className="text-[10px] text-slate-500 font-medium truncate">
-                          {metadata.name}
-                        </span>
-                      )}
-                      {tagsList.length > 0 && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 min-w-0">
-                          <Tooltip
-                            content={
-                              <div className="flex flex-wrap gap-1 max-w-[320px]">
-                                {tagsList.map(tag => (
-                                  <span
-                                    key={tag}
-                                    className={cn(
-                                      'px-1.5 py-0.5 text-[10px] rounded border',
-                                      getTagPillClassName(tag)
-                                    )}
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            }
-                            side="top"
-                          >
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {visibleTags.map(tag => (
-                                <span
-                                  key={tag}
-                                  className={cn(
-                                    'px-1.5 py-0.5 text-[10px] rounded border max-w-[140px] truncate',
-                                    getTagPillClassName(tag)
-                                  )}
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                              {hiddenTagsCount > 0 && (
-                                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-white/5 text-slate-400 border-white/10">
-                                  +{hiddenTagsCount}
-                                </span>
-                              )}
-                            </div>
-                          </Tooltip>
-                        </div>
-                      )}
-
-                      {relationHints.length > 0 && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 min-w-0">
-                          <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                            {t('accounts.relationLabel')}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            {relationProviderEntries.slice(0, 4).map(([providerKey, edge]) => {
-                              const icon = (
-                                <button
-                                  type="button"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    onRelationEdgeClick?.(edge.type, edge.targetProvider);
-                                  }}
-                                  className="p-1 rounded border border-cyan-500/20 bg-cyan-500/5 hover:bg-cyan-500/15 transition-colors"
-                                >
-                                  <ProviderLogo provider={providerKey as any} size={12} />
-                                </button>
-                              );
-
-                              return (
-                                <Tooltip key={`${providerKey}-${edge.type}`} content={edge.label}>
-                                  {icon}
-                                </Tooltip>
-                              );
-                            })}
-                          </div>
-                          {relationHints.slice(0, 2).map(hint => (
-                            <span
-                              key={hint}
-                              className="px-1.5 py-0.5 text-[10px] rounded border bg-cyan-500/10 text-cyan-300 border-cyan-500/20"
-                            >
-                              {hint}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Status Badge (Compact) */}
-                  <div className="flex lg:justify-center">
-                    <div className="flex flex-col items-start lg:items-center gap-1">
-                      <div
-                        className={cn(
-                          'flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border',
-                          getAccountStatusVariant(account.status as AccountStatus) === 'success'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : getAccountStatusVariant(account.status as AccountStatus) === 'warning'
-                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                              : getAccountStatusVariant(account.status as AccountStatus) ===
-                                  'neutral'
-                                ? 'bg-white/5 text-white/60 border-white/10'
-                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                        )}
-                      >
-                        {getAccountStatusLabel(account.status as AccountStatus)}
-                      </div>
-                      <StatusBadge variant={getProfileStatusVariant(profileStatus)} size="sm">
-                        {getProfileStatusLabel(profileStatus)}
-                      </StatusBadge>
-                    </div>
-                  </div>
-
-                  {/* Quota Section (WIDE) */}
-                  <div className="flex flex-col gap-1.5 px-2">
-                    <div className="flex items-center justify-between text-[9px] font-black tabular-nums tracking-tighter uppercase">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500">Success</span>
-                        <span
-                          className={cn(
-                            account.successRate > 0.8 ? 'text-emerald-400' : 'text-amber-400'
-                          )}
-                        >
-                          {Math.round(account.successRate * 100)}%
-                        </span>
-                      </div>
-                      <span className="text-slate-400">{account.useCount} USES</span>
-                    </div>
-                    <UsageBar
-                      used={account.quota?.used || 0}
-                      limit={account.quota?.limit || 0}
-                      isError={account.status === 'banned'}
-                      className="h-2 rounded-full overflow-hidden bg-black/40 border border-white/5"
-                    />
-                  </div>
-
-                  {/* Action Buttons (Fixed Width) */}
-                  <div className="flex items-center justify-end gap-1 px-1 border-t lg:border-t-0 border-white/5 pt-2 lg:pt-0">
-                    <Tooltip content={t('accountsTable.checkStatus')}>
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          onCheckStatus(account.id);
-                        }}
-                        className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                      >
-                        <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
-                      </button>
-                    </Tooltip>
-
-                    <Tooltip content={t('accountsTable.openBrowser')}>
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          onOpenBrowser?.(account.id);
-                        }}
-                        className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
-                      >
-                        <Globe size={15} />
-                      </button>
-                    </Tooltip>
-
-                    {allowProfileAction && (
-                      <Tooltip content={t('accountsTable.openProfileSession')}>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            onOpenProfileSession?.(account.id);
-                          }}
-                          className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
-                          aria-label={t('accountsTable.openProfileSession')}
-                        >
-                          <User size={15} />
-                        </button>
-                      </Tooltip>
-                    )}
-
-                    {canConfirmProfileSession && (
-                      <Tooltip content={t('accounts.profileSessionConfirm')}>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            onConfirmProfileSession?.(account.id);
-                          }}
-                          className="p-2 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
-                          aria-label={t('accounts.profileSessionConfirm')}
-                        >
-                          <Check size={15} />
-                        </button>
-                      </Tooltip>
-                    )}
-
-                    {canClearProfileSession && (
-                      <Tooltip content={t('accounts.profileSessionClear')}>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            onClearProfileSession?.(account.id);
-                          }}
-                          className="p-2 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all"
-                          aria-label={t('accounts.profileSessionClear')}
-                        >
-                          <X size={15} />
-                        </button>
-                      </Tooltip>
-                    )}
-
-                    <Tooltip content={isActive ? t('accounts.deactivate') : t('accounts.activate')}>
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          handleActivate(account);
-                        }}
-                        className={cn(
-                          'p-2 rounded-lg transition-all border',
-                          isActive
-                            ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20'
-                            : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 shadow-md'
-                        )}
-                      >
-                        {isActive ? (
-                          <Square size={14} fill="currentColor" />
-                        ) : (
-                          <Play size={14} fill="currentColor" />
-                        )}
-                      </button>
-                    </Tooltip>
-
-                    <div className="relative">
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          setOpenMenuId(openMenuId === account.id ? null : account.id);
-                        }}
-                        className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                      >
-                        <MoreHorizontal size={16} />
-                      </button>
-
-                      {openMenuId === account.id && (
-                        <div className="absolute right-0 top-full mt-2 w-44 rounded-xl shadow-2xl z-50 py-1.5 backdrop-blur-3xl border border-white/10 bg-[#0f1115]/95 animate-in fade-in slide-in-from-top-1 duration-200">
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              void copy(account.token ?? '', {
-                                sensitive: true,
-                                requireConfirmation: true,
-                                confirmationMessage:
-                                  'Copy token to clipboard? This token is sensitive and may be readable by other apps. Clipboard will be cleared automatically after 15 seconds.',
-                                autoClear: true,
-                                autoClearAfterMs: 15000,
-                                successMessage: 'Token copied (auto-clears in 15s)',
-                              });
-                              setOpenMenuId(null);
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[11px] text-slate-300 hover:bg-white/5 transition-colors"
-                          >
-                            <Copy size={13} className="text-indigo-400" />
-                            <span className="flex flex-col items-start leading-tight">
-                              <span>Copy Token</span>
-                              <span className="text-[10px] text-slate-500">
-                                Sensitive • auto-clears in 15s
-                              </span>
-                            </span>
-                          </button>
-                          <div className="h-px bg-white/5 my-1 mx-2" />
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              setConfirmDialog({
-                                isOpen: true,
-                                type: 'single',
-                                accountId: account.id,
-                              });
-                              setOpenMenuId(null);
-                            }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[11px] text-rose-400 hover:bg-rose-500/10 transition-colors"
-                          >
-                            <Trash2 size={13} />
-                            <span>Delete Account</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+                account={account}
+                isSelected={selectedIds.has(account.id)}
+                isActive={isAccountActive(account)}
+                isRefreshing={isAccountRefreshing(account.id)}
+                isMenuOpen={openMenuId === account.id}
+                relationHints={relationHintsById?.[account.id]}
+                relationEdges={relationEdgesById?.[account.id]}
+                onToggleSelection={onToggleSelection}
+                onToggleMenu={id => setOpenMenuId(current => (current === id ? null : id))}
+                onCloseMenu={() => setOpenMenuId(null)}
+                onShowDetails={handleShowDetails}
+                onLaunch={handleLaunch}
+                onToggleActive={handleToggleActive}
+                onCheckStatus={onCheckStatus}
+                onOpenBrowser={onOpenBrowser}
+                onCopyToken={token =>
+                  copy(token, {
+                    sensitive: true,
+                    autoClear: true,
+                    autoClearAfterMs: 15000,
+                    requireConfirmation: true,
+                    confirmationMessage: t('accounts.copyTokenSensitiveConfirm'),
+                  })
+                }
+                onDelete={openSingleDelete}
+                onOpenProfileSession={onOpenProfileSession}
+                onConfirmProfileSession={onConfirmProfileSession}
+                onClearProfileSession={onClearProfileSession}
+                onRelationEdgeClick={onRelationEdgeClick}
+              />
+            ))}
+          </TableBody>
+        </Table>
       </div>
 
       <AccountDetailsModal
         account={detailsModalAccount}
-        isOpen={!!detailsModalAccount}
+        isOpen={Boolean(detailsModalAccount)}
         onClose={() => setDetailsModalAccount(null)}
         onUpdate={onUpdate}
         onDelete={onDelete}
@@ -571,15 +295,25 @@ export default function AccountsTable({
       />
 
       <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        title={t('accounts.deleteAccountTitle')}
-        message={t('accounts.deleteAccountMessage')}
-        confirmText={t('common.delete')}
-        cancelText={t('common.cancel')}
+        isOpen={deleteDialog.isOpen}
+        onClose={() => {
+          if (!isDeleting) setDeleteDialog({ isOpen: false });
+        }}
         onConfirm={handleConfirmDelete}
-        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
-        isLoading={isDeleting}
+        title={
+          deleteDialog.isOpen && deleteDialog.mode === 'bulk'
+            ? t('accounts.deleteBulkTitle')
+            : t('accounts.deleteAccountTitle')
+        }
+        message={
+          deleteDialog.isOpen && deleteDialog.mode === 'bulk'
+            ? t('accounts.deleteBulkMessage', { count: deleteDialog.accountIds.length })
+            : t('accounts.deleteAccountMessage')
+        }
+        confirmText={t('accounts.confirmDelete')}
+        cancelText={t('common.cancel')}
         variant="danger"
+        isLoading={isDeleting}
       />
     </div>
   );

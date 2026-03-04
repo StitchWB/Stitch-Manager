@@ -1,8 +1,20 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { FileText, Search, Download, Trash2, RefreshCw, Copy, Check } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  FileText,
+  Search,
+  Download,
+  Trash2,
+  RefreshCw,
+  Copy,
+  Check,
+  List,
+  Layers,
+  AlertTriangle,
+  Terminal,
+} from 'lucide-react';
 import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
-import { LoadingSpinner, ActionButtonGroup, Input } from '../components/ui';
+import { LoadingSpinner, Input } from '../components/ui';
 import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel, LogEntry } from '../stores/logs';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
@@ -12,13 +24,11 @@ import { cn } from '../lib/utils';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
-import { Tooltip } from '../components/Tooltip';
 import { Toggle } from '../components/ui/Toggle';
 import { LogGroup } from '../components/ui/LogGroup';
-
-// ============================================
-// Constants
-// ============================================
+import { TabButton } from '../components/ui/TabButton';
+import { Badge } from '../components/ui/Badge';
+import { copyToClipboard as copyTextToClipboard } from '@/lib/tauri/modules/utils';
 
 const LOG_SOURCES = [
   'accounts',
@@ -29,35 +39,11 @@ const LOG_SOURCES = [
   'system',
   'ai_proxy.sidecar',
   'ai_proxy.process',
+  'python_runner',
 ] as const;
 
 const LOG_CHANNELS = ['all', 'app', 'frontend', 'backend', 'proxy', 'sidecar', 'toast'] as const;
-
-// ============================================
-// Helper Functions
-// ============================================
-
-const STAGE_EMOJIS: Record<string, string> = {
-  Email: '📧',
-  IMAP: '📬',
-  Password: '🔐',
-  OAuth: '🔑',
-  Browser: '🌐',
-  AWS: '☁️',
-  Kiro: '🚀',
-  Verification: '✅',
-  System: '⚙️',
-  Name: '👤',
-  registration: '📝',
-  patcher: '🔧',
-  settings: '⚙️',
-  server: '🖥️',
-  accounts: '👤',
-};
-
-function getStageEmoji(stage: string): string {
-  return STAGE_EMOJIS[stage] || '📋';
-}
+const DEFAULT_DETAILS_PANE_WIDTH = 360;
 
 interface LogGroupData {
   stage: string;
@@ -65,104 +51,52 @@ interface LogGroupData {
   status: 'success' | 'error' | 'progress' | 'info';
   duration?: number;
   firstTimestamp: number;
-  lastTimestamp: number;
 }
 
-/**
- * Extract stage name from log message
- * Examples:
- * - "[Email] Entering..." → "Email"
- * - "[1/3] [IMAP] Waiting..." → "IMAP"
- * - "[] [OAuth] Starting..." → "OAuth"
- */
 function detectStageFromLog(log: LogEntry): string {
-  // Try to extract stage from message using regex
-  // Pattern: [stage] or [account_id] [stage]
   const stageMatches = log.message.match(/\[([^\]]+)\]/g);
-
   if (stageMatches && stageMatches.length > 0) {
-    // Get last bracket content (usually the stage)
     const lastMatch = stageMatches[stageMatches.length - 1];
-    const stage = lastMatch.slice(1, -1); // Remove brackets
-
-    // Filter out account IDs (contain /)
-    if (!stage.includes('/') && stage.length > 0) {
-      return stage;
-    }
-
-    // If last was account ID, try second-to-last
-    if (stageMatches.length > 1) {
-      const secondLast = stageMatches[stageMatches.length - 2];
-      const stage2 = secondLast.slice(1, -1);
-      if (!stage2.includes('/') && stage2.length > 0) {
-        return stage2;
-      }
-    }
+    const stage = lastMatch.slice(1, -1);
+    if (!stage.includes('/') && stage.length > 0) return stage;
   }
-
-  // Fallback to source
   return log.source || 'system';
 }
 
 function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
   const groups = new Map<string, LogEntry[]>();
-
-  // Group logs by detected stage
   for (const log of logs) {
     const stage = detectStageFromLog(log);
-    if (!groups.has(stage)) {
-      groups.set(stage, []);
-    }
+    if (!groups.has(stage)) groups.set(stage, []);
     groups.get(stage)!.push(log);
   }
 
-  // Convert to LogGroupData array
   const result: LogGroupData[] = [];
   for (const [stage, entries] of groups.entries()) {
-    // Determine overall status for the group
     const hasError = entries.some(e => e.level === 'error');
-    const hasWarning = entries.some(e => e.level === 'warn');
     const hasSuccess = entries.some(e => e.level === 'success');
     const hasProgress = entries.some(
       e => e.message.includes('⏳') || e.message.includes('Attempt')
     );
+    let status: 'success' | 'error' | 'progress' | 'info' = 'info';
+    if (hasError) status = 'error';
+    else if (hasSuccess) status = 'success';
+    else if (hasProgress) status = 'progress';
 
-    let status: 'success' | 'error' | 'progress' | 'info';
-    if (hasError) {
-      status = 'error';
-    } else if (hasSuccess) {
-      status = 'success';
-    } else if (hasProgress) {
-      status = 'progress';
-    } else if (hasWarning) {
-      status = 'progress';
-    } else {
-      status = 'info';
-    }
-
-    // Calculate duration
     const timestamps = entries.map(e => new Date(e.timestamp).getTime());
     const firstTimestamp = Math.min(...timestamps);
     const lastTimestamp = Math.max(...timestamps);
-    const duration = lastTimestamp - firstTimestamp;
-
     result.push({
       stage,
       entries,
       status,
-      duration,
+      duration: lastTimestamp - firstTimestamp,
       firstTimestamp,
-      lastTimestamp,
     });
   }
 
-  // Sort by first timestamp (most recent first)
   return result.sort((a, b) => b.firstTimestamp - a.firstTimestamp);
 }
-
-// ============================================
-// Component
-// ============================================
 
 export default function Logs() {
   const { language } = useAppStore();
@@ -191,79 +125,83 @@ export default function Logs() {
     collapseAllGroups,
   } = useLogsStore();
 
-  // UI preferences from store (persisted in localStorage)
   const {
-    logsPage: { levelFilter, sourceFilter, searchQuery },
+    logsPage: {
+      levelFilter,
+      sourceFilter,
+      searchQuery,
+      channelFilter,
+      selectedTab,
+      detailsPaneWidth,
+      selectedLogId,
+    },
     setLogsLevelFilter,
     setLogsSourceFilter,
+    setLogsChannelFilter,
     setLogsSearchQuery,
+    setLogsSelectedTab,
+    setLogsDetailsPaneWidth,
+    setLogsSelectedLogId,
     resetLogsFilters,
   } = useUIPreferencesStore();
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [channelFilter, setChannelFilter] = useState<string>('all');
-  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const { copy } = useCopyToClipboard();
 
-  // Force re-render when language changes
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isResizingPane, setIsResizingPane] = useState(false);
+  const { copy } = useCopyToClipboard();
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
   void language;
 
-  // ============================================
-  // Effects
-  // ============================================
-
-  // On mount: fetch logs and subscribe to real-time updates
   useEffect(() => {
     fetchLogs();
     subscribeToLogs();
-
-    return () => {
-      unsubscribeFromLogs();
-    };
+    return () => unsubscribeFromLogs();
   }, [fetchLogs, subscribeToLogs, unsubscribeFromLogs]);
 
-  // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
       setFilter({ search: searchQuery || undefined });
-    }, 300);
+    }, 250);
     return () => clearTimeout(timer);
   }, [searchQuery, setFilter]);
 
-  // Apply filters on mount from persisted state
-  useEffect(() => {
-    // Only apply non-'all' filters
-    if (levelFilter && levelFilter !== 'all') {
-      setFilter({ levels: [levelFilter as LogLevel] });
-    }
-    if (sourceFilter && sourceFilter !== 'all') {
-      setFilter({ sources: [sourceFilter] });
-    }
-    if (searchQuery) {
-      setFilter({ search: searchQuery });
-    }
-    if (channelFilter && channelFilter !== 'all') {
-      setFilter({ channels: [channelFilter] });
-    }
-  }, []); // Only on mount
+  const groupedLogs = useMemo(() => groupLogsByStage(logs), [logs]);
 
-  // ============================================
-  // Memoized Values
-  // ============================================
+  const pythonLogs = useMemo(
+    () =>
+      logs.filter(log => {
+        const msg = log.message.toLowerCase();
+        return (
+          log.source === 'python_runner' ||
+          msg.includes('scenario.replay') ||
+          msg.includes('scenario.record') ||
+          msg.includes('python.stderr') ||
+          msg.includes('python.protocol')
+        );
+      }),
+    [logs]
+  );
 
-  const groupedLogs = useMemo(() => {
-    if (!groupingEnabled) return null;
-    return groupLogsByStage(logs);
-  }, [logs, groupingEnabled]);
+  const errorLogs = useMemo(
+    () => logs.filter(log => log.level === 'error' || log.level === 'warn'),
+    [logs]
+  );
 
-  // ============================================
-  // Handlers
-  // ============================================
+  const errorLogIds = useMemo(() => errorLogs.map(log => log.id), [errorLogs]);
+  const selectedErrorIndex = useMemo(() => {
+    if (!selectedLogId) return -1;
+    return errorLogIds.indexOf(selectedLogId);
+  }, [errorLogIds, selectedLogId]);
+
+  const selectedLog = useMemo(
+    () => logs.find(l => l.id === selectedLogId) ?? null,
+    [logs, selectedLogId]
+  );
 
   const handleLevelChange = useCallback(
     (level: string) => {
       setLogsLevelFilter(level);
-      // Convert 'all' to empty array (no filter)
       setFilter({ levels: level && level !== 'all' ? [level as LogLevel] : [] });
     },
     [setFilter, setLogsLevelFilter]
@@ -272,7 +210,6 @@ export default function Logs() {
   const handleSourceChange = useCallback(
     (source: string) => {
       setLogsSourceFilter(source);
-      // Convert 'all' to empty array (no filter)
       setFilter({ sources: source && source !== 'all' ? [source] : [] });
     },
     [setFilter, setLogsSourceFilter]
@@ -280,10 +217,10 @@ export default function Logs() {
 
   const handleChannelChange = useCallback(
     (channel: string) => {
-      setChannelFilter(channel);
+      setLogsChannelFilter(channel);
       setFilter({ channels: channel && channel !== 'all' ? [channel] : [] });
     },
-    [setFilter]
+    [setFilter, setLogsChannelFilter]
   );
 
   const handleRefresh = useCallback(() => {
@@ -294,10 +231,11 @@ export default function Logs() {
     try {
       await clearLogs();
       setShowClearConfirm(false);
+      setLogsSelectedLogId(null);
     } catch (err) {
       console.error('Failed to clear logs:', err);
     }
-  }, [clearLogs]);
+  }, [clearLogs, setLogsSelectedLogId]);
 
   const handleExport = useCallback(async () => {
     try {
@@ -315,35 +253,209 @@ export default function Logs() {
   }, [exportLogs]);
 
   const handleResetFilters = useCallback(() => {
-    setChannelFilter('all');
     resetLogsFilters();
     resetFilter();
   }, [resetFilter, resetLogsFilters]);
 
-  const toggleLogExpansion = useCallback((logId: string) => {
-    setExpandedLogs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(logId)) {
-        newSet.delete(logId);
-      } else {
-        newSet.add(logId);
-      }
-      return newSet;
-    });
-  }, []);
+  useEffect(() => {
+    if (channelFilter && channelFilter !== 'all') {
+      setFilter({ channels: [channelFilter] });
+    }
+  }, [channelFilter, setFilter]);
 
-  const copyToClipboard = useCallback(
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = (target?.tagName || '').toLowerCase();
+      const isTyping =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        Boolean(target?.isContentEditable);
+
+      if (!isTyping && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (isTyping) return;
+
+      const tabs: Array<typeof selectedTab> = ['stream', 'grouped', 'errors', 'python'];
+      const idx = tabs.indexOf(selectedTab);
+      if (idx < 0) return;
+
+      if (e.key === '[') {
+        e.preventDefault();
+        const prev = (idx - 1 + tabs.length) % tabs.length;
+        setLogsSelectedTab(tabs[prev]);
+      }
+
+      if (e.key === ']') {
+        e.preventDefault();
+        const next = (idx + 1) % tabs.length;
+        setLogsSelectedTab(tabs[next]);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedTab, setLogsSelectedTab]);
+
+  useEffect(() => {
+    if (!isResizingPane) return;
+    const onMove = (e: MouseEvent) => {
+      const next = Math.round(window.innerWidth - e.clientX);
+      const clamped = Math.min(560, Math.max(300, next));
+      setLogsDetailsPaneWidth(clamped);
+    };
+    const onUp = () => setIsResizingPane(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [isResizingPane, setLogsDetailsPaneWidth]);
+
+  useEffect(() => {
+    if (!selectedLogId) return;
+    if (!logs.some(l => l.id === selectedLogId)) {
+      setLogsSelectedLogId(null);
+    }
+  }, [logs, selectedLogId, setLogsSelectedLogId]);
+
+  const applyPreset = useCallback(
+    (preset: 'errors' | 'python' | 'registration') => {
+      if (preset === 'errors') {
+        setLogsSelectedTab('errors');
+        setLogsSourceFilter('all');
+        setLogsLevelFilter('all');
+        setFilter({
+          sources: [],
+          levels: [],
+          channels: channelFilter === 'all' ? [] : [channelFilter],
+        });
+        return;
+      }
+
+      if (preset === 'python') {
+        setLogsSelectedTab('python');
+        setLogsSourceFilter('python_runner');
+        setFilter({ sources: ['python_runner'] });
+        return;
+      }
+
+      setLogsSelectedTab('stream');
+      setLogsSourceFilter('registration');
+      setFilter({ sources: ['registration'] });
+    },
+    [channelFilter, setFilter, setLogsLevelFilter, setLogsSelectedTab, setLogsSourceFilter]
+  );
+
+  const copyMessage = useCallback(
     async (text: string, logId: string) => {
       await copy(text);
       setCopiedId(logId);
-      setTimeout(() => setCopiedId(null), 2000);
+      setTimeout(() => setCopiedId(null), 1200);
     },
     [copy]
   );
 
-  // ============================================
-  // Render
-  // ============================================
+  const jumpToError = useCallback(
+    (direction: 'prev' | 'next') => {
+      if (!errorLogIds.length) return;
+
+      let nextIndex = 0;
+      if (selectedErrorIndex >= 0) {
+        nextIndex = direction === 'prev' ? selectedErrorIndex - 1 : selectedErrorIndex + 1;
+      } else {
+        nextIndex = direction === 'prev' ? errorLogIds.length - 1 : 0;
+      }
+
+      if (nextIndex < 0) nextIndex = errorLogIds.length - 1;
+      if (nextIndex >= errorLogIds.length) nextIndex = 0;
+
+      setLogsSelectedLogId(errorLogIds[nextIndex]);
+    },
+    [errorLogIds, selectedErrorIndex, setLogsSelectedLogId]
+  );
+
+  const renderFlatLogs = (rows: LogEntry[]) => (
+    <div className="font-mono text-xs">
+      {rows.map(log => {
+        const isCopied = copiedId === log.id;
+        return (
+          <div
+            key={log.id}
+            className={cn(
+              'w-full flex items-start gap-2 px-3 py-1.5 border-b border-white/[0.03] transition-colors',
+              selectedLogId === log.id ? 'bg-indigo-500/10' : 'hover:bg-white/[0.02]'
+            )}
+          >
+            <button
+              type="button"
+              className="flex-1 min-w-0 flex items-start gap-3 text-left"
+              onClick={() => setLogsSelectedLogId(log.id)}
+            >
+              <span className="text-slate-600 tabular-nums shrink-0">
+                {new Date(log.timestamp).toLocaleTimeString('en-US', {
+                  hour12: false,
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </span>
+
+              <span
+                className={cn(
+                  'shrink-0 w-11 text-center font-bold uppercase',
+                  log.level === 'debug' && 'text-slate-500',
+                  log.level === 'info' && 'text-vsc-blue',
+                  log.level === 'success' && 'text-vsc-green',
+                  log.level === 'warn' && 'text-vsc-yellow',
+                  log.level === 'error' && 'text-vsc-red'
+                )}
+              >
+                {log.level === 'debug'
+                  ? 'DBG'
+                  : log.level === 'info'
+                    ? 'INF'
+                    : log.level === 'success'
+                      ? 'OK'
+                      : log.level === 'warn'
+                        ? 'WRN'
+                        : 'ERR'}
+              </span>
+
+              <span className="text-purple-400 shrink-0 w-28 truncate">
+                [{log.source || 'system'}]
+              </span>
+
+              <div className="flex-1 min-w-0 text-slate-300 break-words line-clamp-2">
+                {log.message}
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                void copyMessage(log.message, log.id);
+              }}
+              className="text-slate-500 hover:text-slate-200 transition-colors p-1 rounded hover:bg-white/5 shrink-0"
+            >
+              {isCopied ? (
+                <Check className="w-3 h-3 text-vsc-green" />
+              ) : (
+                <Copy className="w-3 h-3" />
+              )}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -352,49 +464,48 @@ export default function Logs() {
         subtitle={t('logs.subtitle')}
         icon={<FileText size={18} />}
         actions={
-          <div className="flex items-center gap-3">
-            {/* Verbosity Badge */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-              <span className="text-xs text-slate-500">Verbosity:</span>
-              <span className="text-xs font-semibold text-vsc-blue uppercase">{logVerbosity}</span>
-            </div>
-
-            <ActionButtonGroup
-              actions={[
-                {
-                  icon: RefreshCw,
-                  label: t('logs.refresh'),
-                  onClick: handleRefresh,
-                  disabled: isLoading,
-                  loading: isLoading,
-                },
-                {
-                  icon: Download,
-                  label: t('logs.export'),
-                  onClick: handleExport,
-                  disabled: logs.length === 0,
-                },
-                {
-                  icon: Trash2,
-                  label: t('logs.clear'),
-                  onClick: () => setShowClearConfirm(true),
-                  disabled: logs.length === 0,
-                  variant: 'danger',
-                },
-              ]}
-            />
+          <div className="flex items-center gap-2">
+            <Badge variant="info" size="sm">
+              Verbosity: {logVerbosity}
+            </Badge>
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={handleRefresh}
+              isLoading={isLoading}
+              leftIcon={<RefreshCw size={12} />}
+            >
+              {t('logs.refresh')}
+            </Button>
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={handleExport}
+              disabled={logs.length === 0}
+              leftIcon={<Download size={12} />}
+            >
+              {t('logs.export')}
+            </Button>
+            <Button
+              size="xs"
+              variant="danger"
+              onClick={() => setShowClearConfirm(true)}
+              disabled={logs.length === 0}
+              leftIcon={<Trash2 size={12} />}
+            >
+              {t('logs.clear')}
+            </Button>
           </div>
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* Filters */}
-        <div className="flex items-center gap-4 mb-4 flex-wrap">
-          {/* Level Filter */}
+      <div className="px-6 pt-3 pb-2 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl sticky top-0 z-20">
+        <div className="flex flex-wrap items-center gap-2">
           <Select
             value={levelFilter}
             onChange={e => handleLevelChange(e.target.value)}
-            className="w-32"
+            className="h-8 py-1 text-xs"
+            containerClassName="w-[150px]"
             options={[
               { value: 'all', label: t('logs.allLevels') },
               { value: 'debug', label: t('logs.debug') },
@@ -405,32 +516,27 @@ export default function Logs() {
             ]}
           />
 
-          {/* Source Filter */}
           <Select
             value={sourceFilter}
             onChange={e => handleSourceChange(e.target.value)}
-            className="w-36"
+            className="h-8 py-1 text-xs"
+            containerClassName="w-[170px]"
             options={[
               { value: 'all', label: t('logs.allSources') },
-              ...LOG_SOURCES.map(source => ({
-                value: source,
-                label: source,
-              })),
+              ...LOG_SOURCES.map(source => ({ value: source, label: source })),
             ]}
           />
 
           <Select
             value={channelFilter}
             onChange={e => handleChannelChange(e.target.value)}
-            className="w-36"
-            options={LOG_CHANNELS.map(channel => ({
-              value: channel,
-              label: channel,
-            }))}
+            className="h-8 py-1 text-xs"
+            containerClassName="w-[150px]"
+            options={LOG_CHANNELS.map(channel => ({ value: channel, label: channel }))}
           />
 
-          {/* Search Input */}
           <Input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -438,189 +544,281 @@ export default function Logs() {
             }
             placeholder={t('logs.searchPlaceholder')}
             leftIcon={<Search className="w-4 h-4" />}
-            containerClassName="flex-1 max-w-md"
+            containerClassName="w-[280px] max-w-full"
+            className="h-8 py-1 text-xs"
           />
 
-          {/* Reset Filters */}
-          {(levelFilter || sourceFilter || searchQuery || channelFilter !== 'all') && (
-            <Button onClick={handleResetFilters} variant="ghost" size="xs">
-              {t('logs.resetFilters')}
-            </Button>
-          )}
+          <Button size="xs" variant="ghost" onClick={handleResetFilters}>
+            {t('logs.resetFilters')}
+          </Button>
+
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant="default" size="sm">
+              {logs.length}/{total}
+            </Badge>
+          </div>
         </div>
 
-        {/* Grouping Controls */}
-        <div className="flex items-center gap-4 mb-4 flex-wrap">
-          {/* Grouping Toggle */}
-          <Toggle checked={groupingEnabled} onChange={setGroupingEnabled} label="Group by stage" />
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <TabButton
+            active={selectedTab === 'stream'}
+            onClick={() => setLogsSelectedTab('stream')}
+            label={`Stream (${logs.length})`}
+            icon={<List size={14} />}
+            className={selectedTab === 'stream' ? 'text-sky-200' : ''}
+          />
+          <TabButton
+            active={selectedTab === 'grouped'}
+            onClick={() => setLogsSelectedTab('grouped')}
+            label={`Grouped (${groupedLogs.length})`}
+            icon={<Layers size={14} />}
+            className={selectedTab === 'grouped' ? 'text-indigo-200' : ''}
+          />
+          <TabButton
+            active={selectedTab === 'errors'}
+            onClick={() => setLogsSelectedTab('errors')}
+            label={`Errors (${errorLogs.length})`}
+            icon={<AlertTriangle size={14} />}
+            className={selectedTab === 'errors' ? 'text-red-200' : ''}
+          />
+          <TabButton
+            active={selectedTab === 'python'}
+            onClick={() => setLogsSelectedTab('python')}
+            label={`Python jobs (${pythonLogs.length})`}
+            icon={<Terminal size={14} />}
+            className={selectedTab === 'python' ? 'text-emerald-200' : ''}
+          />
+        </div>
 
-          {/* Auto-collapse Toggle */}
-          {groupingEnabled && (
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <Button
+            size="xs"
+            variant={selectedTab === 'errors' ? 'secondary' : 'ghost'}
+            onClick={() => applyPreset('errors')}
+          >
+            Only errors
+          </Button>
+          <Button
+            size="xs"
+            variant={selectedTab === 'python' ? 'secondary' : 'ghost'}
+            onClick={() => applyPreset('python')}
+          >
+            Python runner
+          </Button>
+          <Button
+            size="xs"
+            variant={sourceFilter === 'registration' ? 'secondary' : 'ghost'}
+            onClick={() => applyPreset('registration')}
+          >
+            Registration
+          </Button>
+
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant="outline" size="sm">
+              F: Search
+            </Badge>
+            <Badge variant="outline" size="sm">
+              [ / ]: Tabs
+            </Badge>
+          </div>
+        </div>
+
+        {selectedTab === 'grouped' && (
+          <div className="flex flex-wrap items-center gap-3 mt-2">
+            <Toggle
+              checked={groupingEnabled}
+              onChange={setGroupingEnabled}
+              label="Group by stage"
+            />
             <Toggle
               checked={autoCollapseSuccess}
               onChange={setAutoCollapseSuccess}
               label="Auto-collapse success"
-              tooltip="Automatically collapse successful log groups"
             />
-          )}
-
-          {/* Expand/Collapse All */}
-          {groupingEnabled && (
-            <div className="flex gap-2">
-              <Button onClick={expandAllGroups} variant="ghost" size="xs">
-                Expand all
-              </Button>
-              <Button onClick={collapseAllGroups} variant="ghost" size="xs">
-                Collapse all
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="mb-4 p-3 bg-vsc-red/10 border border-vsc-red/30 rounded text-sm text-vsc-red">
-            {error}
+            <Button onClick={expandAllGroups} variant="ghost" size="xs">
+              Expand all
+            </Button>
+            <Button onClick={collapseAllGroups} variant="ghost" size="xs">
+              Collapse all
+            </Button>
           </div>
         )}
-
-        {/* Logs Table - Terminal Mode */}
-        <div className="card flex-1 overflow-hidden flex flex-col bg-[#0a0a0a]">
-          <div className="overflow-auto flex-1">
-            {logs.length === 0 && !isLoading ? (
-              <EmptyState
-                icon={FileText}
-                title={t('logs.noLogs')}
-                description="No logs to display"
-              />
-            ) : groupingEnabled && groupedLogs ? (
-              /* Grouped View */
-              <div className="p-4 space-y-2">
-                {groupedLogs.map(group => (
-                  <LogGroup
-                    key={group.stage}
-                    stage={group.stage}
-                    entries={group.entries}
-                    status={group.status}
-                    isCollapsed={collapsedGroups.has(group.stage)}
-                    onToggle={() => toggleGroup(group.stage)}
-                    duration={group.duration}
-                    icon={getStageEmoji(group.stage)}
-                  />
-                ))}
-              </div>
-            ) : (
-              /* Flat View */
-              <div className="font-mono text-xs">
-                {logs.map(log => {
-                  const isCopied = copiedId === log.id;
-                  const isLongMessage = log.message.length > 200;
-                  const isExpanded = expandedLogs.has(log.id);
-
-                  return (
-                    <div
-                      key={log.id}
-                      className="flex items-start gap-3 px-4 py-1 hover:bg-white/[0.02] transition-colors border-b border-white/[0.02] group"
-                    >
-                      {/* Timestamp - Gray */}
-                      <span className="text-slate-600 tabular-nums shrink-0">
-                        {new Date(log.timestamp).toLocaleTimeString('en-US', {
-                          hour12: false,
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })}
-                      </span>
-
-                      {/* Level - Color coded, 3 chars */}
-                      <span
-                        className={cn(
-                          'shrink-0 w-12 text-center font-bold uppercase',
-                          log.level === 'debug' && 'text-slate-500',
-                          log.level === 'info' && 'text-vsc-blue',
-                          log.level === 'success' && 'text-vsc-green',
-                          log.level === 'warn' && 'text-vsc-yellow',
-                          log.level === 'error' && 'text-vsc-red'
-                        )}
-                      >
-                        {log.level === 'debug'
-                          ? 'DBG'
-                          : log.level === 'info'
-                            ? 'INF'
-                            : log.level === 'success'
-                              ? 'OK'
-                              : log.level === 'warn'
-                                ? 'WRN'
-                                : 'ERR'}
-                      </span>
-
-                      {/* Source - Purple */}
-                      <span className="text-purple-400 shrink-0 w-28 truncate">
-                        [{log.channel || 'app'}:{log.source || 'system'}]
-                      </span>
-
-                      {/* Message - White, expandable */}
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className={cn(
-                            'text-slate-300 break-words cursor-pointer',
-                            !isExpanded && isLongMessage && 'line-clamp-1'
-                          )}
-                          onClick={() => isLongMessage && toggleLogExpansion(log.id)}
-                        >
-                          {log.message}
-                        </div>
-                      </div>
-
-                      {/* Copy button - appears on hover */}
-                      <Tooltip content="Copy message">
-                        <button
-                          onClick={() => copyToClipboard(log.message, log.id)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
-                        >
-                          {isCopied ? (
-                            <Check className="w-3 h-3 text-vsc-green" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </button>
-                      </Tooltip>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Loading Spinner */}
-            {isLoading && (
-              <div className="flex items-center justify-center py-8">
-                <LoadingSpinner size="md" />
-              </div>
-            )}
-
-            {/* Load More Button */}
-            {hasMore && !isLoading && (
-              <div className="flex justify-center py-4">
-                <Button onClick={loadMore} variant="secondary" size="sm">
-                  {t('logs.loadMore')}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="border-t border-white/5 px-4 py-2 flex items-center justify-between bg-slate-900/50">
-            <span className="text-2xs text-slate-500 font-mono">
-              {t('logs.showing')} <span className="text-slate-300 tabular-nums">{logs.length}</span>{' '}
-              {t('logs.of')} <span className="text-slate-300 tabular-nums">{total}</span>{' '}
-              {t('logs.entries')}
-            </span>
-            {hasMore && <span className="text-2xs text-slate-600">{t('logs.scrollHint')}</span>}
-          </div>
-        </div>
       </div>
 
-      {/* Clear Confirmation Modal */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <div className="flex-1 min-w-0 p-4 overflow-hidden">
+          {error && (
+            <div className="mb-3 p-3 bg-vsc-red/10 border border-vsc-red/30 rounded text-sm text-vsc-red">
+              {error}
+            </div>
+          )}
+
+          <div className="h-full card overflow-hidden flex flex-col bg-[#0a0a0a]">
+            <div className="overflow-auto flex-1">
+              {logs.length === 0 && !isLoading ? (
+                <EmptyState
+                  icon={FileText}
+                  title={t('logs.noLogs')}
+                  description="No logs to display"
+                />
+              ) : selectedTab === 'grouped' ? (
+                <div className="p-3 space-y-2">
+                  {groupedLogs.map(group => (
+                    <LogGroup
+                      key={group.stage}
+                      stage={group.stage}
+                      entries={group.entries}
+                      status={group.status}
+                      isCollapsed={collapsedGroups.has(group.stage)}
+                      onToggle={() => toggleGroup(group.stage)}
+                      duration={group.duration}
+                      icon="📋"
+                    />
+                  ))}
+                </div>
+              ) : selectedTab === 'errors' ? (
+                renderFlatLogs(errorLogs)
+              ) : selectedTab === 'python' ? (
+                renderFlatLogs(pythonLogs)
+              ) : (
+                renderFlatLogs(logs)
+              )}
+
+              {isLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner size="md" />
+                </div>
+              )}
+
+              {hasMore && !isLoading && (
+                <div className="flex justify-center py-4">
+                  <Button onClick={loadMore} variant="secondary" size="sm">
+                    {t('logs.loadMore')}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            'hidden xl:block w-1 cursor-col-resize transition-colors rounded-full mx-0.5',
+            isResizingPane ? 'bg-indigo-400/70' : 'bg-white/5 hover:bg-indigo-400/50'
+          )}
+          onMouseDown={() => setIsResizingPane(true)}
+          onDoubleClick={() => setLogsDetailsPaneWidth(DEFAULT_DETAILS_PANE_WIDTH)}
+          title="Drag to resize • Double-click to reset"
+          aria-hidden="true"
+        />
+        <aside
+          className="hidden xl:flex border-l border-white/5 bg-[#090b10] p-4 flex-col gap-3"
+          style={{ width: `${detailsPaneWidth}px` }}
+        >
+          <div className="text-xs uppercase tracking-wider text-slate-500">Details</div>
+          {!selectedLog ? (
+            <div className="text-sm text-slate-500">Select a log row to inspect details</div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[11px] text-slate-500">Error navigation</div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" size="sm">
+                    {errorLogIds.length === 0
+                      ? 'Error 0/0'
+                      : `Error ${selectedErrorIndex >= 0 ? selectedErrorIndex + 1 : 1}/${errorLogIds.length}`}
+                  </Badge>
+                  <Button size="xs" variant="ghost" onClick={() => jumpToError('prev')}>
+                    Prev error
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => jumpToError('next')}>
+                    Next error
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={
+                    selectedLog.level === 'error'
+                      ? 'danger'
+                      : selectedLog.level === 'warn'
+                        ? 'warning'
+                        : 'info'
+                  }
+                  size="sm"
+                >
+                  {selectedLog.level}
+                </Badge>
+                <span className="text-xs text-slate-400">
+                  {new Date(selectedLog.timestamp).toLocaleString()}
+                </span>
+              </div>
+
+              <div className="text-xs text-slate-400">Source</div>
+              <div className="text-sm text-slate-200">{selectedLog.source}</div>
+
+              <div className="text-xs text-slate-400">Channel</div>
+              <div className="text-sm text-slate-200">{selectedLog.channel || 'app'}</div>
+
+              {selectedLog.correlationId ? (
+                <>
+                  <div className="text-xs text-slate-400">Correlation ID</div>
+                  <div className="text-[11px] font-mono text-slate-300 break-all">
+                    {selectedLog.correlationId}
+                  </div>
+                </>
+              ) : null}
+
+              {selectedLog.sessionId ? (
+                <>
+                  <div className="text-xs text-slate-400">Session ID</div>
+                  <div className="text-[11px] font-mono text-slate-300 break-all">
+                    {selectedLog.sessionId}
+                  </div>
+                </>
+              ) : null}
+
+              <div className="text-xs text-slate-400">Message</div>
+              <div className="text-sm text-slate-200 whitespace-pre-wrap break-words">
+                {selectedLog.message}
+              </div>
+
+              {selectedLog.context ? (
+                <>
+                  <div className="text-xs text-slate-400">Context</div>
+                  <pre className="text-[11px] font-mono text-slate-300 bg-black/30 border border-white/10 rounded-md p-2 overflow-auto max-h-56">
+                    {JSON.stringify(selectedLog.context, null, 2)}
+                  </pre>
+                </>
+              ) : null}
+
+              <div className="flex gap-2 pt-2 border-t border-white/10">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => {
+                    void copyMessage(selectedLog.message, selectedLog.id);
+                  }}
+                >
+                  Copy message
+                </Button>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => {
+                    const payload = JSON.stringify(selectedLog, null, 2);
+                    void copyTextToClipboard({ text: payload });
+                  }}
+                >
+                  Copy JSON
+                </Button>
+              </div>
+            </>
+          )}
+        </aside>
+      </div>
+
       {showClearConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 border border-white/10 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">

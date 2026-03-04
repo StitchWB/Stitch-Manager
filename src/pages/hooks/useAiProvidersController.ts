@@ -27,6 +27,7 @@ import {
 import type { AiProxyAccount, AuthFile, ProxySettings, ProxyStatus } from '../../types/generated';
 import type { ConnectionStateMap, HistorySummary } from '../../components/ai-proxy/sections/types';
 import { useAiProxyStore } from '../../stores/aiProxy';
+import { t } from '../../lib/i18n';
 
 const hasTauriBridge = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -46,6 +47,7 @@ export function maskKey(key: string, visibleTail: number = 4): string {
 export function useAiProvidersController() {
   const setProviderQuotas = useAiProxyStore(state => state.setProviderQuotas);
   const setOpenAiAccountQuotas = useAiProxyStore(state => state.setOpenAiAccountQuotas);
+  const openAiAccountQuotasMap = useAiProxyStore(state => state.openAiAccountQuotas);
   const [accounts, setAccounts] = useState<AiProxyAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,7 +80,11 @@ export function useAiProvidersController() {
       const data = await getAiProxyAccounts();
       setAccounts(data);
     } catch (e) {
-      appToast.error(`Failed to load accounts: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        t('aiHub.controller.errors.loadAccountsFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        })
+      );
     } finally {
       setLoading(false);
     }
@@ -164,7 +170,7 @@ export function useAiProvidersController() {
 
   const handleSaveProxySettings = useCallback(async () => {
     if (!proxyDraft) {
-      appToast.error('Proxy settings are not loaded yet');
+      appToast.error(t('aiHub.proxy.errors.notLoaded'));
       return;
     }
     if (
@@ -172,11 +178,11 @@ export function useAiProvidersController() {
       proxyDraft.proxyPort < 1024 ||
       proxyDraft.proxyPort > 65535
     ) {
-      appToast.error('Port must be an integer between 1024 and 65535');
+      appToast.error(t('aiHub.proxy.errors.invalidPort'));
       return;
     }
     if (!proxyDraft.managementKey.trim()) {
-      appToast.error('Management key cannot be empty');
+      appToast.error(t('aiHub.proxy.errors.emptyManagementKey'));
       return;
     }
 
@@ -186,11 +192,11 @@ export function useAiProvidersController() {
       await updateProxySettings(proxyDraft);
       setProxySettings(proxyDraft);
       await refreshProxyInfo();
-      appToast.success('Proxy settings saved');
+      appToast.success(t('aiHub.proxy.toasts.saved'));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setProxyError(msg);
-      appToast.error(`Failed to save proxy settings: ${msg}`);
+      appToast.error(t('aiHub.proxy.toasts.saveFailed', { msg }));
     } finally {
       setProxySaving(false);
     }
@@ -205,7 +211,7 @@ export function useAiProvidersController() {
   const handleStartStopProxy = useCallback(async () => {
     if (proxyBusy) return;
     if (!hasTauriBridge()) {
-      appToast.error('Proxy controls are unavailable outside Tauri');
+      appToast.error(t('aiHub.desktopOnly.proxyControlsUnavailable'));
       return;
     }
 
@@ -215,7 +221,9 @@ export function useAiProvidersController() {
       const next = proxyStatus?.running ? await stopAiProxy() : await startAiProxy();
       setProxyStatus(next);
       await refreshProxyInfo();
-      appToast.success(proxyStatus?.running ? 'Proxy stopped' : 'Proxy started');
+      appToast.success(
+        proxyStatus?.running ? t('aiHub.proxy.toasts.stopped') : t('aiHub.proxy.toasts.started')
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setProxyError(msg);
@@ -228,7 +236,7 @@ export function useAiProvidersController() {
   const scanAuthFiles = useCallback(async () => {
     if (authScanLoading) return;
     if (!hasTauriBridge()) {
-      appToast.error('This action is only available in the desktop app');
+      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
       return;
     }
     setAuthScanLoading(true);
@@ -241,9 +249,11 @@ export function useAiProvidersController() {
       );
 
       setAuthScan(normalized);
-      appToast.success(`Found ${normalized.length} auth file${normalized.length === 1 ? '' : 's'}`);
+      appToast.success(t('aiHub.authScan.found', { count: normalized.length }));
     } catch (e) {
-      appToast.error(`Scan failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        t('aiHub.authScan.failed', { msg: e instanceof Error ? e.message : String(e) })
+      );
     } finally {
       setAuthScanLoading(false);
     }
@@ -260,17 +270,17 @@ export function useAiProvidersController() {
       const accountsArr = parsedObject?.accounts;
       const includeSecrets = parsedObject?.includeSecrets === true;
       let error: string | null = null;
-      if (!parsedObject) error = 'Payload must be a JSON object.';
+      if (!parsedObject) error = t('aiHub.controller.importValidation.payloadMustBeObject');
       else if (typeof version !== 'number' || !Number.isFinite(version)) {
-        error = 'Payload must include a numeric version.';
+        error = t('aiHub.controller.importValidation.payloadVersionRequired');
       } else if (!Array.isArray(accountsArr)) {
-        error = 'Payload must include an accounts array.';
+        error = t('aiHub.controller.importValidation.payloadAccountsRequired');
       }
       return { isValid: !error, error, includeSecrets };
     } catch {
       return {
         isValid: false,
-        error: 'Invalid JSON. Check for syntax errors.',
+        error: t('aiHub.controller.importValidation.invalidJson'),
         includeSecrets: false,
       };
     }
@@ -297,6 +307,41 @@ export function useAiProvidersController() {
     return counts;
   }, [accounts]);
 
+  const accountReadiness = useMemo(() => {
+    const enabled = accounts.filter(a => a.enabled);
+    const totalEnabled = enabled.length;
+
+    let inCooldown = 0;
+    let weeklyLimitReached = 0;
+    let withQuotaSignal = 0;
+
+    for (const account of enabled) {
+      const name = account.name.toLowerCase().trim();
+      const quota = openAiAccountQuotasMap[name];
+      const meta = account as AiProxyAccount & { cooldownUntil?: number | null };
+
+      if (meta.cooldownUntil && meta.cooldownUntil * 1000 > Date.now()) {
+        inCooldown += 1;
+      }
+
+      if (quota) {
+        withQuotaSignal += 1;
+        if ((quota.secondary?.usedPercent ?? 0) >= 100) {
+          weeklyLimitReached += 1;
+        }
+      }
+    }
+
+    const ready = Math.max(0, totalEnabled - inCooldown - weeklyLimitReached);
+    return {
+      enabled: totalEnabled,
+      ready,
+      inCooldown,
+      weeklyLimitReached,
+      withQuotaSignal,
+    };
+  }, [accounts, openAiAccountQuotasMap]);
+
   const baseUrl = useMemo(() => {
     const port = proxySettings?.proxyPort || proxyStatus?.port;
     if (!port) return 'http://127.0.0.1:—/v1';
@@ -322,13 +367,17 @@ export function useAiProvidersController() {
 
   const handleDelete = useCallback(
     async (id: number) => {
-      if (!window.confirm('Are you sure you want to delete this account?')) return;
+      if (!window.confirm(t('aiHub.controller.confirm.deleteAccount'))) return;
       try {
         await deleteAiProxyAccount(id);
-        appToast.success('Account deleted successfully');
+        appToast.success(t('aiHub.controller.toasts.accountDeleted'));
         await fetchAccounts();
       } catch (e) {
-        appToast.error(`Failed to delete account: ${e instanceof Error ? e.message : String(e)}`);
+        appToast.error(
+          t('aiHub.controller.errors.deleteAccountFailed', {
+            msg: e instanceof Error ? e.message : String(e),
+          })
+        );
       }
     },
     [fetchAccounts]
@@ -339,10 +388,18 @@ export function useAiProvidersController() {
       try {
         const updated = { ...account, enabled: !account.enabled };
         await updateAiProxyAccount(updated);
-        appToast.success(`Account ${updated.enabled ? 'enabled' : 'disabled'}`);
+        appToast.success(
+          updated.enabled
+            ? t('aiHub.controller.toasts.accountEnabled')
+            : t('aiHub.controller.toasts.accountDisabled')
+        );
         await fetchAccounts();
       } catch (e) {
-        appToast.error(`Failed to update account: ${e instanceof Error ? e.message : String(e)}`);
+        appToast.error(
+          t('aiHub.controller.errors.updateAccountFailed', {
+            msg: e instanceof Error ? e.message : String(e),
+          })
+        );
       }
     },
     [fetchAccounts]
@@ -350,12 +407,16 @@ export function useAiProvidersController() {
 
   const handleDebugMigration = useCallback(async () => {
     try {
-      appToast.info('Running migration...');
+      appToast.info(t('aiHub.controller.toasts.migrationRunning'));
       await debugRunAiProxyMigration();
-      appToast.success('Migration completed! Check console for details.');
+      appToast.success(t('aiHub.controller.toasts.migrationCompleted'));
       await fetchAccounts();
     } catch (e) {
-      appToast.error(`Migration failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        t('aiHub.controller.errors.migrationFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        })
+      );
     }
   }, [fetchAccounts]);
 
@@ -371,7 +432,8 @@ export function useAiProvidersController() {
           message: result.message,
         },
       }));
-      if (result.success) appToast.success(`${account.provider} connection OK`);
+      if (result.success)
+        appToast.success(t('aiHub.controller.toasts.connectionOk', { provider: account.provider }));
       else appToast.error(result.message);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -379,7 +441,7 @@ export function useAiProvidersController() {
         ...prev,
         [account.id as number]: { status: 'error', message: msg },
       }));
-      appToast.error(`Connection test failed: ${msg}`);
+      appToast.error(t('aiHub.controller.errors.connectionTestFailed', { msg }));
     }
   }, []);
 
@@ -398,10 +460,14 @@ export function useAiProvidersController() {
   const handleSaveMappings = useCallback(async () => {
     try {
       await setProviderModelMappings(modelMappings);
-      appToast.success('Provider model mappings saved');
+      appToast.success(t('aiHub.controller.toasts.mappingsSaved'));
       return true;
     } catch (e) {
-      appToast.error(`Failed to save mappings: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        t('aiHub.controller.errors.saveMappingsFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        })
+      );
       return false;
     }
   }, [modelMappings]);
@@ -413,9 +479,9 @@ export function useAiProvidersController() {
       link.href = URL.createObjectURL(blob);
       link.download = fileName;
       link.click();
-      appToast.success('Download started');
+      appToast.success(t('aiHub.controller.toasts.downloadStarted'));
     } catch {
-      appToast.error('Failed to download');
+      appToast.error(t('aiHub.controller.errors.downloadFailed'));
     }
   }, []);
 
@@ -427,7 +493,7 @@ export function useAiProvidersController() {
 
   const handleGenerateExport = useCallback(async () => {
     if (!hasTauriBridge()) {
-      appToast.error('This action is only available in the desktop app');
+      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
       return;
     }
     setExportLoading(true);
@@ -437,9 +503,13 @@ export function useAiProvidersController() {
         exportFormat === 'csv' ? false : exportIncludeSecrets
       );
       setExportPayload(payload);
-      appToast.success('Export generated');
+      appToast.success(t('aiHub.controller.toasts.exportGenerated'));
     } catch (e) {
-      appToast.error(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        t('aiHub.controller.errors.exportFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        })
+      );
     } finally {
       setExportLoading(false);
     }
@@ -447,30 +517,32 @@ export function useAiProvidersController() {
 
   const handleImportPayload = useCallback(async () => {
     if (!hasTauriBridge()) {
-      appToast.error('This action is only available in the desktop app');
+      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
       return;
     }
     if (!importPayload.trim()) {
-      appToast.error('Paste JSON payload first');
+      appToast.error(t('aiHub.controller.errors.importPayloadRequired'));
       return;
     }
     if (!importValidation.isValid) {
-      appToast.error(importValidation.error ?? 'Invalid import payload');
+      appToast.error(importValidation.error ?? t('aiHub.controller.errors.invalidImportPayload'));
       return;
     }
-    const ok = window.confirm(
-      'Import accounts from payload? This may create duplicates. Continue?'
-    );
+    const ok = window.confirm(t('aiHub.controller.confirm.importPayload'));
     if (!ok) return;
     setImportLoading(true);
     try {
       const imported = await importAiProxyAccountsPayload(importPayload);
-      appToast.success(`Imported ${imported} account(s)`);
+      appToast.success(t('aiHub.controller.toasts.importedAccounts', { count: imported }));
       setImportPayload('');
       setAuthScan(null);
       await fetchAccounts();
     } catch (e) {
-      appToast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        t('aiHub.controller.errors.importFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        })
+      );
     } finally {
       setImportLoading(false);
     }
@@ -478,11 +550,11 @@ export function useAiProvidersController() {
 
   const handlePrepareImportFromScan = useCallback(() => {
     if (!authScan || authScan.length === 0) {
-      appToast.error('No scan results to import');
+      appToast.error(t('aiHub.controller.errors.noScanResultsToImport'));
       return;
     }
     const ok = window.confirm(
-      `Prepare import payload from ${authScan.length} scanned credential(s)? You'll be able to review before importing.`
+      t('aiHub.controller.confirm.prepareFromScan', { count: authScan.length })
     );
     if (!ok) return;
     const payload = JSON.stringify(
@@ -507,21 +579,21 @@ export function useAiProvidersController() {
       2
     );
     setImportPayload(payload);
-    appToast.success('Prepared import JSON from scan (review then import)');
+    appToast.success(t('aiHub.controller.toasts.preparedImportFromScan'));
   }, [authScan]);
 
   const handleImportAllFromScan = useCallback(async () => {
     if (!authScan || authScan.length === 0) {
-      appToast.error('No scan results to import');
+      appToast.error(t('aiHub.controller.errors.noScanResultsToImport'));
       return;
     }
     if (!hasTauriBridge()) {
-      appToast.error('This action is only available in the desktop app');
+      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
       return;
     }
 
     const ok = window.confirm(
-      `Import ${authScan.length} scanned credential(s)? Duplicates are skipped.`
+      t('aiHub.controller.confirm.importAllFromScan', { count: authScan.length })
     );
     if (!ok) return;
 
@@ -552,13 +624,19 @@ export function useAiProvidersController() {
       const imported = await importAiProxyAccountsPayload(payload);
       const skipped = Math.max(authScan.length - imported, 0);
       appToast.success(
-        `Imported ${imported} account(s)${skipped > 0 ? `, skipped ${skipped} duplicate(s)` : ''}`
+        skipped > 0
+          ? t('aiHub.controller.toasts.importedAccountsWithSkipped', { imported, skipped })
+          : t('aiHub.controller.toasts.importedAccounts', { count: imported })
       );
       setImportPayload('');
       setAuthScan(null);
       await fetchAccounts();
     } catch (e) {
-      appToast.error(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+      appToast.error(
+        t('aiHub.controller.errors.importFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        })
+      );
     } finally {
       setImportLoading(false);
     }
@@ -613,6 +691,7 @@ export function useAiProvidersController() {
     importValidation,
     filteredAccounts,
     providerCounts,
+    accountReadiness,
     baseUrl,
     isProxyDraftDirty,
     effectiveExportIncludeSecrets,

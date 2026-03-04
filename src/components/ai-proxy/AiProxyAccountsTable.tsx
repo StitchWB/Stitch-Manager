@@ -7,6 +7,7 @@ import { ProviderLogo } from '../ui/ProviderLogo';
 import { StatusBadge } from '../ui/StatusBadge';
 import { UsageBar } from '../ui/UsageBar';
 import { useAiProxyStore } from '../../stores/aiProxy';
+import { t } from '../../lib/i18n';
 
 type SortKey = 'provider' | 'name' | 'lastUsedAt' | 'requestsToday';
 
@@ -46,16 +47,16 @@ function buildIssueBadges(
   };
 
   if (meta.cooldownUntil && meta.cooldownUntil * 1000 > Date.now()) {
-    badges.push({ status: 'warning', label: 'Cooldown' });
+    badges.push({ status: 'warning', label: t('aiHub.table.badges.cooldown') });
   }
   if (meta.oauthRefreshToken && meta.oauthRefreshError) {
-    badges.push({ status: 'warning', label: 'Refresh error' });
+    badges.push({ status: 'warning', label: t('aiHub.table.badges.refreshError') });
   }
   if (conn?.status === 'error') {
-    badges.push({ status: 'error', label: 'Conn error' });
+    badges.push({ status: 'error', label: t('aiHub.table.badges.connectionError') });
   }
   if (openAiQuota?.error) {
-    badges.push({ status: 'warning', label: 'Quota error' });
+    badges.push({ status: 'warning', label: t('aiHub.table.badges.quotaError') });
   }
 
   return badges;
@@ -106,33 +107,37 @@ export function AiProxyAccountsTable({
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left"
           onClick={() => toggleSort('provider')}
         >
-          Provider
+          {t('aiHub.table.provider')}
         </button>
         <button
           type="button"
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left"
           onClick={() => toggleSort('name')}
         >
-          Account
+          {t('aiHub.table.account')}
         </button>
-        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Status</div>
-        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Quota</div>
+        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+          {t('aiHub.table.status')}
+        </div>
+        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+          {t('aiHub.table.quota')}
+        </div>
         <button
           type="button"
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
           onClick={() => toggleSort('requestsToday')}
         >
-          Today
+          {t('aiHub.table.today')}
         </button>
         <button
           type="button"
           className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
           onClick={() => toggleSort('lastUsedAt')}
         >
-          Last used
+          {t('aiHub.table.lastUsed')}
         </button>
         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">
-          Actions
+          {t('aiHub.table.actions')}
         </div>
       </div>
 
@@ -164,7 +169,7 @@ export function AiProxyAccountsTable({
             account.provider === 'openai' && openAiQuota && !openAiQuota.error ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Primary</span>
+                  <span>{t('aiHub.table.quotaPrimary')}</span>
                   <span className="tabular-nums text-slate-300">
                     {Math.round(openAiQuota.primary.usedPercent)}%
                   </span>
@@ -172,7 +177,7 @@ export function AiProxyAccountsTable({
                 <UsageBar used={Math.round(openAiQuota.primary.usedPercent)} limit={100} />
                 {openAiQuota.secondary ? (
                   <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span>Weekly</span>
+                    <span>{t('aiHub.table.quotaWeekly')}</span>
                     <span className="tabular-nums text-slate-300">
                       {Math.round(openAiQuota.secondary.usedPercent)}%
                     </span>
@@ -180,37 +185,44 @@ export function AiProxyAccountsTable({
                 ) : null}
               </div>
             ) : (
-              <div className="text-xs text-slate-500">—</div>
+              <div className="text-xs text-slate-500">{t('aiHub.table.emptyValue')}</div>
             );
 
           return (
             <div
               key={account.id ?? `${account.provider}:${account.name}`}
               className={cn(
-                'grid grid-cols-1 lg:grid-cols-[34px_minmax(220px,1fr)_140px_220px_140px_120px_120px] gap-3 px-4 py-3 border-b border-white/5',
-                'hover:bg-white/[0.03] cursor-pointer'
+                'relative grid grid-cols-1 lg:grid-cols-[34px_minmax(220px,1fr)_140px_220px_140px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 text-left',
+                'hover:bg-white/[0.03]'
               )}
-              onClick={() => onRowClick(account)}
             >
-              <div className="flex items-center justify-center">
+              <button
+                type="button"
+                className="absolute inset-0 z-10 focus:outline-none"
+                onClick={() => onRowClick(account)}
+                aria-label={account.name}
+              />
+              <div className="relative z-0 flex items-center justify-center">
                 <ProviderLogo provider={account.provider} size={18} />
               </div>
 
-              <div className="min-w-0">
+              <div className="relative z-0 min-w-0">
                 <div className="text-sm font-semibold text-white truncate">{account.name}</div>
                 <div className="text-[11px] text-slate-500 tabular-nums">
-                  {account.requestsToday.toLocaleString()} req today ·{' '}
-                  {account.tokensUsed.toLocaleString()} tokens
+                  {t('aiHub.table.requestsLine', {
+                    requests: account.requestsToday.toLocaleString(),
+                    tokens: account.tokensUsed.toLocaleString(),
+                  })}
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="relative z-0 flex flex-col gap-1">
                 <StatusBadge status={status} withDot size="sm" />
                 {issues.length ? (
                   <div className="flex flex-wrap gap-1">
-                    {issues.slice(0, 3).map((b, idx) => (
+                    {issues.slice(0, 3).map(b => (
                       <span
-                        key={idx}
+                        key={`${b.status}-${b.label}`}
                         className={cn(
                           'text-[10px] px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-slate-300',
                           b.status === 'error' && 'border-red-500/30 bg-red-500/10 text-red-200',
@@ -230,38 +242,35 @@ export function AiProxyAccountsTable({
                 ) : null}
               </div>
 
-              <div>{quotaNode}</div>
+              <div className="relative z-0">{quotaNode}</div>
 
-              <div className="text-xs text-slate-300 tabular-nums">
+              <div className="relative z-0 text-xs text-slate-300 tabular-nums">
                 {account.requestsToday.toLocaleString()}
               </div>
 
-              <div className="text-xs text-slate-400 tabular-nums">
+              <div className="relative z-0 text-xs text-slate-400 tabular-nums">
                 {account.lastUsedAt
                   ? new Date(account.lastUsedAt * 1000).toLocaleDateString()
-                  : 'Never'}
+                  : t('aiHub.table.never')}
               </div>
 
-              <div
-                className="flex items-center justify-end gap-2"
-                onClick={e => e.stopPropagation()}
-              >
+              <div className="relative z-20 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white"
-                  title="Test connection"
+                  title={t('aiHub.table.testConnection')}
                   onClick={() => onTestConnection(account)}
                   disabled={!account.id}
                 >
                   <PlugZap
                     size={16}
-                    className={conn?.status === 'loading' ? 'animate-pulse' : ''}
+                    className={cn(conn?.status === 'loading' && 'animate-pulse')}
                   />
                 </button>
                 <button
                   type="button"
                   className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white"
-                  title="Edit"
+                  title={t('aiHub.table.edit')}
                   onClick={() => onEdit(account)}
                 >
                   <PenSquare size={16} />
@@ -269,7 +278,7 @@ export function AiProxyAccountsTable({
                 <button
                   type="button"
                   className="p-1 rounded hover:bg-white/5 text-red-400 hover:text-red-300"
-                  title="Delete"
+                  title={t('aiHub.table.delete')}
                   onClick={() => account.id && onDelete(account.id)}
                   disabled={!account.id}
                 >
@@ -282,7 +291,10 @@ export function AiProxyAccountsTable({
         })}
 
         {rows.length === 0 && !loading ? (
-          <div className="p-6 text-sm text-slate-500">No accounts found</div>
+          <div className="p-6 text-sm text-slate-500">
+            <div className="text-white font-medium">{t('aiHub.empty.noAccountsFound')}</div>
+            <div className="text-xs text-slate-500 mt-1">{t('aiHub.empty.noAccountsHint')}</div>
+          </div>
         ) : null}
       </div>
     </div>

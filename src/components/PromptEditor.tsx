@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Save, RotateCcw, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -8,8 +8,7 @@ import {
   resetPromptToDefault,
 } from '../lib/tauri';
 import { Tooltip } from './Tooltip';
-import { Button } from './ui/Button';
-import { LoadingSpinner } from './ui';
+import { Button, LoadingSpinner, Textarea } from './ui';
 
 interface PromptEditorProps {
   promptName: string;
@@ -24,11 +23,7 @@ export default function PromptEditor({ promptName, title, description }: PromptE
   const [isSaving, setIsSaving] = useState(false);
   const [isModified, setIsModified] = useState(false);
 
-  useEffect(() => {
-    loadPrompt();
-  }, [promptName]);
-
-  const loadPrompt = async () => {
+  const loadPrompt = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -51,7 +46,11 @@ export default function PromptEditor({ promptName, title, description }: PromptE
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [promptName]);
+
+  useEffect(() => {
+    loadPrompt();
+  }, [loadPrompt]);
 
   const handleSave = async () => {
     try {
@@ -122,9 +121,7 @@ export default function PromptEditor({ promptName, title, description }: PromptE
             disabled={isSaving}
             variant="primary"
             size="sm"
-            leftIcon={
-              isSaving ? <LoadingSpinner size="sm" /> : <Save className="w-4 h-4" />
-            }
+            leftIcon={isSaving ? <LoadingSpinner size="sm" /> : <Save className="w-4 h-4" />}
           >
             Save
           </Button>
@@ -133,13 +130,13 @@ export default function PromptEditor({ promptName, title, description }: PromptE
 
       {/* Editor */}
       <div className="relative">
-        <textarea
+        <Textarea
           value={content}
           onChange={e => {
             setContent(e.target.value);
             setIsModified(e.target.value !== defaultContent);
           }}
-          className="w-full h-96 input-ds font-mono text-sm resize-none"
+          className="h-96 input-ds font-mono text-sm resize-none"
           placeholder="Enter prompt content..."
           spellCheck={false}
         />

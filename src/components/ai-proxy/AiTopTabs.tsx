@@ -1,7 +1,15 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button } from '../ui';
+import { TabButton } from '../ui';
+import { t } from '../../lib/i18n';
 
-type AiTabId = 'overview' | 'providers' | 'integrations' | 'usage' | 'diagnostics';
+type AiTabId =
+  | 'overview'
+  | 'providers'
+  | 'integrations'
+  | 'usage'
+  | 'diagnostics'
+  | 'antigravity'
+  | 'apiKeys';
 
 interface AiTab {
   id: AiTabId;
@@ -10,11 +18,13 @@ interface AiTab {
 }
 
 const AI_TABS: AiTab[] = [
-  { id: 'overview', label: 'Overview', to: '/ai' },
-  { id: 'providers', label: 'Providers', to: '/ai/providers' },
-  { id: 'integrations', label: 'Integrations', to: '/ai/integrations' },
-  { id: 'usage', label: 'Usage', to: '/ai/usage' },
-  { id: 'diagnostics', label: 'Diagnostics', to: '/ai/diagnostics' },
+  { id: 'overview', label: 'aiHub.tabs.overview', to: '/ai' },
+  { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers' },
+  { id: 'integrations', label: 'aiHub.tabs.integrations', to: '/ai/integrations' },
+  { id: 'usage', label: 'aiHub.tabs.usage', to: '/ai/usage' },
+  { id: 'diagnostics', label: 'aiHub.tabs.diagnostics', to: '/ai/diagnostics' },
+  { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity' },
+  { id: 'apiKeys', label: 'aiHub.tabs.apiKeys', to: '/ai/api-keys' },
 ];
 
 function activeTab(pathname: string): AiTabId {
@@ -23,6 +33,8 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/integrations')) return 'integrations';
   if (pathname.startsWith('/ai/usage')) return 'usage';
   if (pathname.startsWith('/ai/diagnostics')) return 'diagnostics';
+  if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
+  if (pathname.startsWith('/ai/api-keys')) return 'apiKeys';
   return 'overview';
 }
 
@@ -35,14 +47,12 @@ export function AiTopTabs() {
     <div className="px-6 py-3 border-b border-white/5 bg-[#0a0a0c]/70 backdrop-blur-xl sticky top-0 z-20">
       <div className="flex flex-wrap items-center gap-2">
         {AI_TABS.map(tab => (
-          <Button
+          <TabButton
             key={tab.id}
-            variant={current === tab.id ? 'primary' : 'secondary'}
-            size="sm"
             onClick={() => navigate(tab.to)}
-          >
-            {tab.label}
-          </Button>
+            active={current === tab.id}
+            label={t(tab.label)}
+          />
         ))}
       </div>
     </div>

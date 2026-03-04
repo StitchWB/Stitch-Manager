@@ -10,7 +10,7 @@
   :root {
     --color-primary: 99 102 241;
     --color-accent: 6 182 212;
-    --ds-bg: #050508;
+    --ds-bg: #0a0a0c;
   }
 
   html {
@@ -22,7 +22,7 @@
     @apply antialiased;
     background: var(--ds-bg);
     color: #e2e8f0;
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Inter', 'Geist', 'Segoe UI', system-ui, sans-serif;
   }
 
   /* Tabular numbers for data */
@@ -707,7 +707,7 @@ tr:hover .action-btn,
 
 [data-sonner-toast] {
   @apply rounded-lg shadow-xl;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter', 'Geist', 'Segoe UI', system-ui, sans-serif;
 }
 
 /* Close button styling */

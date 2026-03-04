@@ -27,8 +27,8 @@ export function SegmentedControl({
   return (
     <div
       className={cn(
-        'flex p-1 bg-black/40 rounded-xl border border-white/10 overflow-hidden relative',
-        size === 'sm' ? 'rounded-lg' : 'rounded-xl',
+        'flex items-center bg-black/40 border border-white/10 overflow-hidden relative',
+        size === 'sm' ? 'h-9 rounded-lg p-1' : 'h-10 rounded-xl p-1',
         className
       )}
     >
@@ -40,10 +40,10 @@ export function SegmentedControl({
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              'relative flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium transition-colors duration-300 z-10 select-none',
+              'relative flex items-center justify-center gap-2 px-3 text-xs font-medium transition-colors duration-300 z-10 select-none',
               stretch && 'flex-1',
               isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300',
-              size === 'sm' ? 'py-1 text-[10px]' : 'py-1.5'
+              size === 'sm' ? 'h-7 text-xs' : 'h-8'
             )}
           >
             {isActive && (

@@ -32,15 +32,17 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
   useEffect(() => {
     if (!isOpen) return;
     // reset state on open
-    setJobId(null);
-    setStatus('idle');
-    setBrowsersPath(null);
-    setLogs([]);
-    setError(null);
-    setStage('idle');
-    setApproxProgress(null);
-    setElapsedMs(0);
-    setInstalled(null);
+    queueMicrotask(() => {
+      setJobId(null);
+      setStatus('idle');
+      setBrowsersPath(null);
+      setLogs([]);
+      setError(null);
+      setStage('idle');
+      setApproxProgress(null);
+      setElapsedMs(0);
+      setInstalled(null);
+    });
   }, [isOpen]);
 
   // On open: run a quick check job to show whether runtime exists.
@@ -117,7 +119,7 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
       if (!payload) return;
       if (payload.source !== 'python') return;
       if (payload.subsystem !== 'python_runner') return;
-      if (payload.name !== 'python.protocol') return;
+      if (payload.name !== 'python.protocol' && payload.name !== 'python.stderr') return;
       if (payload.jobId !== jobId) return;
 
       const fields = payload.fields ?? {};
@@ -187,6 +189,13 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
         } else {
           setStatus('done');
           setStage('done');
+        }
+      }
+
+      if (payload.name === 'python.stderr') {
+        const line = String(payload.message ?? '').trim();
+        if (line.length > 0) {
+          setLogs(prev => [`[stderr] ${line}`, ...prev].slice(0, 200));
         }
       }
     });

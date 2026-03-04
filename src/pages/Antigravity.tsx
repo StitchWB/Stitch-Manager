@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Header from '../components/layout/Header';
-import { Button, EmptyState, Modal } from '../components/ui';
+import { Button, EmptyState, GlassCard, Modal, SectionHeader } from '../components/ui';
+import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { appToast } from '@/lib/observability/toast';
 import { Zap } from 'lucide-react';
+import { t } from '../lib/i18n';
 
 import {
   startOAuthFlow,
@@ -39,7 +41,9 @@ export default function Antigravity() {
       setAuthFiles(files);
     } catch (e) {
       appToast.error(
-        `Failed to scan auth files: ${e instanceof Error ? e.message : String(e)}`,
+        t('aiHub.antigravity.errors.scanAuthFilesFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        }),
         'antigravity.scan'
       );
     } finally {
@@ -63,7 +67,9 @@ export default function Antigravity() {
       }
     } catch (e) {
       appToast.error(
-        `Failed to start login: ${e instanceof Error ? e.message : String(e)}`,
+        t('aiHub.antigravity.errors.startLoginFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        }),
         'antigravity.oauth.start'
       );
     }
@@ -78,7 +84,9 @@ export default function Antigravity() {
       return await pollOAuthStatus(oauthSession.provider, oauthSession.state);
     } catch (e) {
       appToast.error(
-        `OAuth poll failed: ${e instanceof Error ? e.message : String(e)}`,
+        t('aiHub.antigravity.errors.oauthPollFailed', {
+          msg: e instanceof Error ? e.message : String(e),
+        }),
         'antigravity.oauth.poll'
       );
       return null;
@@ -98,17 +106,23 @@ export default function Antigravity() {
           continue;
         }
         if (res.status === 'ok' || res.status === 'completed') {
-          appToast.success('Login completed. Refreshing auth files...', 'antigravity.oauth.poll');
+          appToast.success(
+            t('aiHub.antigravity.toasts.loginCompletedRefreshing'),
+            'antigravity.oauth.poll'
+          );
           await refreshAuthFiles();
           return;
         }
         if (res.status === 'error' || res.status === 'failed') {
-          appToast.error(res.error || 'OAuth failed', 'antigravity.oauth.poll');
+          appToast.error(
+            res.error || t('aiHub.antigravity.toasts.oauthFailedGeneric'),
+            'antigravity.oauth.poll'
+          );
           return;
         }
         await new Promise(r => setTimeout(r, 1000));
       }
-      appToast.error('OAuth timed out', 'antigravity.oauth.poll');
+      appToast.error(t('aiHub.antigravity.toasts.oauthTimedOut'), 'antigravity.oauth.poll');
     } finally {
       setIsPolling(false);
     }
@@ -116,69 +130,86 @@ export default function Antigravity() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
-      <Header title="Antigravity" icon={<Zap size={18} />} />
+      <Header
+        title={t('aiHub.sections.antigravity.title')}
+        subtitle={t('aiHub.sections.antigravity.subtitle')}
+        icon={<Zap size={18} />}
+      />
+      <AiTopTabs />
 
-      <div className="p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Button onClick={handleStartLogin}>Login (OAuth)</Button>
-          <Button variant="secondary" onClick={refreshAuthFiles} disabled={isLoading}>
-            Refresh
-          </Button>
-        </div>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="max-w-5xl space-y-4">
+          <GlassCard glow="purple" gradient className="p-5">
+            <SectionHeader
+              title={t('aiHub.antigravity.modal.oauthTitle')}
+              description={t('aiHub.sections.antigravity.subtitle')}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={handleStartLogin} variant="primary">
+                  {t('aiHub.antigravity.actions.loginOAuth')}
+                </Button>
+                <Button variant="secondary" onClick={refreshAuthFiles} disabled={isLoading}>
+                  {t('aiHub.antigravity.actions.refresh')}
+                </Button>
+              </div>
+            </SectionHeader>
+          </GlassCard>
 
-        {antigravityFiles.length === 0 ? (
-          <EmptyState
-            icon={Zap}
-            title="No Antigravity credentials found"
-            description="Login via OAuth to generate an auth file, or refresh if you already logged in via sidecar."
-          />
-        ) : (
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-200">
-              Detected Antigravity auth files
-            </h3>
-            <div className="space-y-2">
-              {antigravityFiles.map(file => (
-                <div
-                  key={file.path}
-                  className="p-3 rounded-lg bg-black/30 border border-white/10 flex items-center justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm text-white truncate">{file.path}</div>
-                    <div className="text-xs text-slate-400">
-                      Expires:{' '}
-                      {file.expiresAt
-                        ? new Date(file.expiresAt * 1000).toLocaleString()
-                        : 'Unknown'}
+          <GlassCard gradient className="p-5">
+            {antigravityFiles.length === 0 ? (
+              <EmptyState
+                icon={Zap}
+                title={t('aiHub.antigravity.empty.noCredentialsTitle')}
+                description={t('aiHub.antigravity.empty.noCredentialsDescription')}
+              />
+            ) : (
+              <SectionHeader title={t('aiHub.antigravity.list.detectedTitle')}>
+                <div className="space-y-2">
+                  {antigravityFiles.map(file => (
+                    <div
+                      key={file.path}
+                      className="p-3 rounded-lg bg-black/30 border border-white/10 flex items-center justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm text-white truncate">{file.path}</div>
+                        <div className="text-xs text-slate-400">
+                          {t('aiHub.antigravity.list.expiresLabel')}:{' '}
+                          {file.expiresAt
+                            ? new Date(file.expiresAt * 1000).toLocaleString()
+                            : t('aiHub.antigravity.list.unknownExpiry')}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </SectionHeader>
+            )}
+          </GlassCard>
+        </div>
       </div>
 
       <Modal
         isOpen={isOauthModalOpen}
         onClose={() => setIsOauthModalOpen(false)}
-        title="Antigravity OAuth"
+        title={t('aiHub.antigravity.modal.oauthTitle')}
         size="lg"
       >
         <div className="space-y-3">
-          <p className="text-sm text-slate-300">
-            Complete the login in your browser. Then click “Check status” until it completes.
-          </p>
+          <p className="text-sm text-slate-300">{t('aiHub.antigravity.modal.oauthInstructions')}</p>
           {oauthSession && (
             <div className="p-3 rounded-lg bg-black/30 border border-white/10">
-              <div className="text-xs text-slate-400">Auth URL</div>
+              <div className="text-xs text-slate-400">
+                {t('aiHub.antigravity.modal.authUrlLabel')}
+              </div>
               <div className="text-xs font-mono text-slate-200 break-all">{oauthSession.url}</div>
               <div className="mt-2 flex gap-2">
                 <Button variant="secondary" onClick={() => openUrlInBrowser(oauthSession.url)}>
-                  Open URL
+                  {t('aiHub.antigravity.actions.openUrl')}
                 </Button>
                 <Button onClick={handlePollUntilDone} disabled={isPolling}>
-                  {isPolling ? 'Checking…' : 'Check status'}
+                  {isPolling
+                    ? t('aiHub.antigravity.actions.checking')
+                    : t('aiHub.antigravity.actions.checkStatus')}
                 </Button>
               </div>
             </div>

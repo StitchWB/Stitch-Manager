@@ -5,6 +5,11 @@ import { NumberInput } from '../ui/NumberInput';
 import { getSettings, updateSettings, getRegistrationStatus } from '@/lib/tauri';
 import { useRegistrationStore } from '../../stores/registration';
 import { useAccountsStore } from '../../stores/accounts';
+import {
+  getAiProxyAccounts,
+  getProxySettings,
+  updateProxySettings,
+} from '../../lib/tauri/modules/aiProxy';
 import { Select } from '../ui/Select';
 import {
   RefreshCw,
@@ -18,13 +23,11 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { t } from '../../lib/i18n';
-import { RegistrationStatus } from '../../types/generated';
+import { RegistrationStatus, ProxySettings, AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
-import { useTokenPoolStore } from '../../stores/tokenPool';
 import { StatusBadge } from '../ui/StatusBadge';
 import { ModuleCard, ModuleStatus } from '../ui/ModuleCard';
 import { SectionHeader } from '../ui/SectionHeader';
-import type { PoolConfig } from '../../types';
 
 interface AutomationConfig {
   autoReplenishEnabled: boolean;
@@ -60,28 +63,21 @@ const DEFAULT_CONFIG: AutomationConfig = {
   checkCreditsIntervalSeconds: 60,
 };
 
-const DEFAULT_POOL_CONFIG: PoolConfig = {
-  switchStrategy: 'custom',
-  customThreshold: 10,
-  aggressiveThreshold: 4,
-  balancedThreshold: 8,
-  conservativeThreshold: 15,
-  switchOnError: true,
-  switchOnRateLimit: true,
-  maxErrorsBeforeBan: 5,
-  cooldownMinutes: 5,
-  autoRefreshEnabled: true,
-  refreshBeforeExpiry: 10,
+const DEFAULT_PROXY_SETTINGS: ProxySettings = {
+  appMode: 'full',
+  proxyPort: 8765,
+  autoStart: false,
+  routingStrategy: 'round-robin',
+  managementKey: '',
 };
 
 export function AutomationTab({ disabled }: { disabled?: boolean }) {
   const [regConfig, setRegConfig] = useState<AutomationConfig>(DEFAULT_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
   const { addLog } = useRegistrationStore();
-  const { status: poolStatus, updateConfig: updatePoolConfig, fetchStatus } = useTokenPoolStore();
-  const poolConfig = poolStatus?.config;
   const { accounts, fetchAccounts } = useAccountsStore();
-  const [localPoolConfig, setLocalPoolConfig] = useState<PoolConfig>(DEFAULT_POOL_CONFIG);
+  const [proxySettings, setProxySettings] = useState<ProxySettings>(DEFAULT_PROXY_SETTINGS);
+  const [proxyAccounts, setProxyAccounts] = useState<AiProxyAccount[]>([]);
   const [replenishmentStatus, setReplenishmentStatus] = useState<RegistrationStatus | null>(null);
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
 
@@ -99,6 +95,10 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
   const totalActive = activeCounts.kiro + activeCounts.windsurf + activeCounts.trae;
   const totalTarget =
     regConfig.minActiveKiro + regConfig.minActiveWindsurf + regConfig.minActiveTrae;
+  const enabledAiHubAccounts = useMemo(
+    () => proxyAccounts.filter(acc => acc.enabled).length,
+    [proxyAccounts]
+  );
 
   useEffect(() => {
     let intervalId: any;
@@ -139,6 +139,17 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
         switchOnZeroCredits: true,
         checkCreditsIntervalSeconds: (settings as any).checkCreditsIntervalSeconds || 60,
       });
+
+      try {
+        const [proxyCfg, aiAccounts] = await Promise.all([
+          getProxySettings(),
+          getAiProxyAccounts(),
+        ]);
+        setProxySettings(proxyCfg);
+        setProxyAccounts(aiAccounts);
+      } catch (proxyError) {
+        console.error('Failed to load AI Hub proxy settings:', proxyError);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -148,11 +159,7 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
 
   useEffect(() => {
     loadSettings();
-    fetchStatus();
-  }, [loadSettings, fetchStatus]);
-  useEffect(() => {
-    if (poolConfig) setLocalPoolConfig({ ...poolConfig, switchStrategy: 'custom' });
-  }, [poolConfig]);
+  }, [loadSettings]);
 
   const handleRegUpdate = async (updates: Partial<AutomationConfig>) => {
     const newConfig = { ...regConfig, ...updates };
@@ -165,10 +172,14 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
     }
   };
 
-  const handlePoolUpdate = async (updates: Partial<PoolConfig>) => {
-    const forcedUpdates = { ...updates, switchStrategy: 'custom' as const };
-    setLocalPoolConfig(prev => ({ ...prev, ...forcedUpdates }));
-    await updatePoolConfig(forcedUpdates);
+  const handleProxyUpdate = async (updates: Partial<ProxySettings>) => {
+    const next = { ...proxySettings, ...updates };
+    setProxySettings(next);
+    try {
+      await updateProxySettings(next);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const strategyOptions = [
@@ -278,9 +289,10 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
         <SectionHeader
           title={t('automation.replenishment')}
           className="px-1"
-          children={<></>}
           icon={<RefreshCw className="w-4 h-4 text-cyan-400" />}
-        />
+        >
+          <></>
+        </SectionHeader>
         <div className="flex flex-col gap-2">
           {[
             {
@@ -367,18 +379,23 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
         <SectionHeader
           title={t('automation.rotationRules')}
           className="px-1"
-          children={<></>}
           icon={<Gauge className="w-4 h-4 text-indigo-400" />}
-        />
+        >
+          <></>
+        </SectionHeader>
         <GlassCard className="p-4 border-white/10 flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
             <NumberInput
               label={t('automation.switchThreshold')}
-              value={localPoolConfig.customThreshold}
-              onChange={val => handlePoolUpdate({ customThreshold: val })}
-              min={1}
-              max={500}
-              unit="req"
+              value={proxySettings.proxyPort}
+              onChange={val =>
+                handleProxyUpdate({
+                  proxyPort: Math.max(1024, Math.min(65535, val)),
+                })
+              }
+              min={1024}
+              max={65535}
+              unit="port"
             />
             <NumberInput
               label={t('automation.checkInterval')}
@@ -391,19 +408,22 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
             />
             <NumberInput
               label={t('automation.maxErrors')}
-              value={localPoolConfig.maxErrorsBeforeBan}
-              onChange={val => handlePoolUpdate({ maxErrorsBeforeBan: val })}
-              min={1}
-              max={50}
-              unit="err"
+              value={enabledAiHubAccounts}
+              onChange={() => {
+                /* Read-only metric in MVP migration */
+              }}
+              min={0}
+              max={999}
+              unit="acc"
+              disabled
             />
             <NumberInput
               label={t('automation.cooldown')}
-              value={localPoolConfig.cooldownMinutes}
-              onChange={val => handlePoolUpdate({ cooldownMinutes: val })}
+              value={proxySettings.autoStart ? 1 : 0}
+              onChange={val => handleProxyUpdate({ autoStart: val > 0 })}
               min={0}
-              max={120}
-              unit="min"
+              max={1}
+              unit="bin"
             />
           </div>
           <div className="h-px bg-white/5" />
@@ -423,8 +443,10 @@ export function AutomationTab({ disabled }: { disabled?: boolean }) {
             </div>
             <Toggle
               label=""
-              checked={localPoolConfig.switchOnRateLimit}
-              onChange={val => handlePoolUpdate({ switchOnRateLimit: val })}
+              checked={proxySettings.routingStrategy === 'fill-first'}
+              onChange={val =>
+                handleProxyUpdate({ routingStrategy: val ? 'fill-first' : 'round-robin' })
+              }
               className="scale-100 shrink-0"
             />
           </div>

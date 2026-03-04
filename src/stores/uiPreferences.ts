@@ -20,11 +20,11 @@ interface AccountsPagePreferences {
 interface LogsPagePreferences {
   levelFilter: string;
   sourceFilter: string;
+  channelFilter: string;
   searchQuery: string;
-}
-
-interface ServerPagePreferences {
-  selectedTab?: string;
+  selectedTab: 'stream' | 'grouped' | 'errors' | 'python';
+  detailsPaneWidth: number;
+  selectedLogId: string | null;
 }
 
 interface AutoRegPagePreferences {
@@ -47,7 +47,6 @@ interface UIPreferencesState {
   // Page-specific preferences
   accountsPage: AccountsPagePreferences;
   logsPage: LogsPagePreferences;
-  serverPage: ServerPagePreferences;
   autoRegPage: AutoRegPagePreferences;
 
   // Actions for Accounts page
@@ -64,11 +63,12 @@ interface UIPreferencesState {
   // Actions for Logs page
   setLogsLevelFilter: (level: string) => void;
   setLogsSourceFilter: (source: string) => void;
+  setLogsChannelFilter: (channel: string) => void;
   setLogsSearchQuery: (query: string) => void;
+  setLogsSelectedTab: (tab: 'stream' | 'grouped' | 'errors' | 'python') => void;
+  setLogsDetailsPaneWidth: (width: number) => void;
+  setLogsSelectedLogId: (logId: string | null) => void;
   resetLogsFilters: () => void;
-
-  // Actions for Server page
-  setServerTab: (tab: string) => void;
 
   // Actions for AutoReg page
   setAutoRegTab: (tab: 'identity' | 'engine' | 'network' | 'automation') => void;
@@ -104,11 +104,11 @@ const defaultAccountsPreferences: AccountsPagePreferences = {
 const defaultLogsPreferences: LogsPagePreferences = {
   levelFilter: 'all',
   sourceFilter: 'all',
+  channelFilter: 'all',
   searchQuery: '',
-};
-
-const defaultServerPreferences: ServerPagePreferences = {
-  selectedTab: 'status',
+  selectedTab: 'grouped',
+  detailsPaneWidth: 360,
+  selectedLogId: null,
 };
 
 const defaultAutoRegPreferences: AutoRegPagePreferences = {
@@ -128,7 +128,6 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       // Initial state
       accountsPage: defaultAccountsPreferences,
       logsPage: defaultLogsPreferences,
-      serverPage: defaultServerPreferences,
       autoRegPage: defaultAutoRegPreferences,
 
       // ============================================
@@ -203,23 +202,45 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
         }));
       },
 
+      setLogsChannelFilter: channel => {
+        set(state => ({
+          logsPage: { ...state.logsPage, channelFilter: channel },
+        }));
+      },
+
       setLogsSearchQuery: query => {
         set(state => ({
           logsPage: { ...state.logsPage, searchQuery: query },
         }));
       },
 
-      resetLogsFilters: () => {
-        set({ logsPage: defaultLogsPreferences });
+      setLogsSelectedTab: tab => {
+        set(state => ({
+          logsPage: { ...state.logsPage, selectedTab: tab },
+        }));
       },
 
-      // ============================================
-      // Server Page Actions
-      // ============================================
-
-      setServerTab: tab => {
+      setLogsDetailsPaneWidth: width => {
         set(state => ({
-          serverPage: { ...state.serverPage, selectedTab: tab },
+          logsPage: { ...state.logsPage, detailsPaneWidth: width },
+        }));
+      },
+
+      setLogsSelectedLogId: logId => {
+        set(state => ({
+          logsPage: { ...state.logsPage, selectedLogId: logId },
+        }));
+      },
+
+      resetLogsFilters: () => {
+        set(state => ({
+          logsPage: {
+            ...state.logsPage,
+            levelFilter: defaultLogsPreferences.levelFilter,
+            sourceFilter: defaultLogsPreferences.sourceFilter,
+            channelFilter: defaultLogsPreferences.channelFilter,
+            searchQuery: defaultLogsPreferences.searchQuery,
+          },
         }));
       },
 
@@ -272,7 +293,6 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
         set({
           accountsPage: defaultAccountsPreferences,
           logsPage: defaultLogsPreferences,
-          serverPage: defaultServerPreferences,
           autoRegPage: defaultAutoRegPreferences,
         });
       },

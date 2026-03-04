@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   X,
   Shield,
@@ -21,9 +21,10 @@ import { LoadingSpinner } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
+import { Select } from '../ui/Select';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import PromptEditor from '../PromptEditor';
-import PoolSettingsPanel from '../settings/PoolSettingsPanel';
+import { AiProxySettings } from '../settings/AiProxySettings';
 import {
   getKiroPatchConfig,
   saveKiroPatchConfig,
@@ -71,13 +72,7 @@ export default function PatcherSettingsDrawer({
 
   const { copy } = useCopyToClipboard();
 
-  useEffect(() => {
-    if (isOpen) {
-      loadData();
-    }
-  }, [isOpen]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
       const [kiroCfg, globalCfg, accts] = await Promise.all([
@@ -94,7 +89,13 @@ export default function PatcherSettingsDrawer({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadData();
+    }
+  }, [isOpen, loadData]);
 
   const handleSaveKiro = async () => {
     if (!config) return;
@@ -180,7 +181,12 @@ export default function PatcherSettingsDrawer({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[45]" onClick={onClose} />
+      <button
+        type="button"
+        aria-label={t('common.cancel')}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[45]"
+        onClick={onClose}
+      />
 
       <div className="fixed right-0 top-0 bottom-0 w-[580px] bg-[#0a0a0c] border-l border-white/5 z-[50] flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
         {/* Header */}
@@ -492,7 +498,7 @@ export default function PatcherSettingsDrawer({
                   </div>
 
                   <div className="pt-6 border-t border-white/5">
-                    <PoolSettingsPanel getAnimationStyle={() => ({})} />
+                    <AiProxySettings />
                   </div>
                 </div>
               )}
@@ -529,13 +535,18 @@ export default function PatcherSettingsDrawer({
             </h3>
             <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1">
+                <label
+                  htmlFor="patcher-bind-account"
+                  className="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1"
+                >
                   {t('kiroPatch.bindModalAccountId')}
                 </label>
-                <select
+                <Select
+                  id="patcher-bind-account"
                   value={selectedAccountId}
                   onChange={e => setSelectedAccountId(e.target.value)}
                   className="w-full bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  shellClassName="bg-white/[0.03] border-white/10"
                 >
                   <option value="">{t('kiroPatch.bindModalAccountIdPlaceholder')}</option>
                   {accounts.map(account => (
@@ -543,7 +554,7 @@ export default function PatcherSettingsDrawer({
                       {account.email} ({account.provider})
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <Input
                 label={t('kiroPatch.bindModalMachineId')}
@@ -553,6 +564,7 @@ export default function PatcherSettingsDrawer({
                 className="font-mono text-xs"
               />
               <button
+                type="button"
                 onClick={async () => {
                   const newId = await generateNewMachineId();
                   setCustomMachineId(newId);

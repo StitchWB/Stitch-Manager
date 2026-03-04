@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, Globe, X, Info, CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
+import { useAiProxyStore } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
 import { IconButton } from '../ui/IconButton';
 
@@ -17,20 +18,15 @@ interface HeaderProps {
 }
 
 export default function Header({ title, subtitle, icon, actions }: HeaderProps) {
-  const {
-    serverStatus,
-    language,
-    setLanguage,
-    notifications,
-    removeNotification,
-    clearNotifications,
-  } = useAppStore();
+  const { language, setLanguage, notifications, removeNotification, clearNotifications } =
+    useAppStore();
   const [langOpen, setLangOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const langRef = useRef<HTMLDivElement>(null);
+  const proxyStatus = useAiProxyStore(state => state.status);
 
-  const isOnline = serverStatus?.isRunning;
+  const isOnline = proxyStatus?.running ?? false;
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -60,7 +56,9 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
   };
 
   const formatTime = (timestamp: number) => {
-    const diff = Date.now() - timestamp;
+    const eventTime = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - eventTime.getTime();
     const minutes = Math.floor(diff / 60000);
     if (minutes < 1) return t('time.justNow');
     if (minutes < 60) return t('time.minutesAgo', { count: minutes });

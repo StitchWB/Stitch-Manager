@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Wifi } from 'lucide-react';
-import { Button, Input } from '../ui';
+import { Button, Input, Checkbox } from '../ui';
 import { parseProxyString, validateProxyString } from '../../lib/proxyUtils';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -31,16 +31,12 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
 
   const handleTestProxy = async (proxyId: string, proxyRaw: string) => {
     setTestingProxy(proxyId);
-    
+
     try {
       // Parse proxy
       const parsed = parseProxyString(proxyRaw, proxyType);
       if (!parsed) {
-        onProxiesChange(
-          proxies.map(p => 
-            p.id === proxyId ? { ...p, status: 'error' } : p
-          )
-        );
+        onProxiesChange(proxies.map(p => (p.id === proxyId ? { ...p, status: 'error' } : p)));
         setTestingProxy(null);
         return;
       }
@@ -59,25 +55,21 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
 
       // Update proxy status and location based on result
       onProxiesChange(
-        proxies.map(p => 
-          p.id === proxyId 
-            ? { 
-                ...p, 
+        proxies.map(p =>
+          p.id === proxyId
+            ? {
+                ...p,
                 status: result.success ? 'active' : 'error',
-                location: result.location 
-              } 
+                location: result.location,
+              }
             : p
         )
       );
     } catch (err) {
       console.error('Proxy test failed:', err);
-      
+
       // Update status to error
-      onProxiesChange(
-        proxies.map(p => 
-          p.id === proxyId ? { ...p, status: 'error' } : p
-        )
-      );
+      onProxiesChange(proxies.map(p => (p.id === proxyId ? { ...p, status: 'error' } : p)));
     } finally {
       setTestingProxy(null);
     }
@@ -85,14 +77,14 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
 
   const handleAddProxy = () => {
     const validationError = validateProxyString(newProxy);
-    
+
     if (validationError) {
       setError(validationError);
       return;
     }
 
     const parsed = parseProxyString(newProxy, proxyType);
-    
+
     if (!parsed) {
       setError('Не удалось распарсить прокси');
       return;
@@ -113,7 +105,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
     onProxiesChange([...proxies, proxyItem]);
     setNewProxy('');
     setError(null);
-    
+
     // Show saved indication
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
@@ -124,11 +116,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
   };
 
   const handleToggleProxy = (id: string) => {
-    onProxiesChange(
-      proxies.map(p => 
-        p.id === id ? { ...p, enabled: !p.enabled } : p
-      )
-    );
+    onProxiesChange(proxies.map(p => (p.id === id ? { ...p, enabled: !p.enabled } : p)));
   };
 
   const handleBulkAdd = (text: string) => {
@@ -138,7 +126,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
     for (const line of lines) {
       const trimmed = line.trim();
       const validationError = validateProxyString(trimmed);
-      
+
       if (validationError) continue;
 
       const parsed = parseProxyString(trimmed, proxyType);
@@ -167,7 +155,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      
+
       // Check if multiple lines
       if (text.includes('\n')) {
         handleBulkAdd(text);
@@ -200,11 +188,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
             error={error || undefined}
             className="flex-1"
           />
-          <Button
-            variant="secondary"
-            onClick={handlePaste}
-            className="px-3"
-          >
+          <Button variant="secondary" onClick={handlePaste} className="px-3" type="button">
             Вставить
           </Button>
           <Button
@@ -212,12 +196,13 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
             onClick={handleAddProxy}
             disabled={!newProxy.trim()}
             className="px-4"
+            type="button"
           >
             <Plus className="w-4 h-4 mr-1" />
             Добавить
           </Button>
         </div>
-        
+
         {error && (
           <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2">
             {error}
@@ -241,9 +226,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm text-slate-400">
             <span>Прокси ({proxies.length})</span>
-            <span className="text-xs">
-              Активных: {proxies.filter(p => p.enabled).length}
-            </span>
+            <span className="text-xs">Активных: {proxies.filter(p => p.enabled).length}</span>
           </div>
 
           <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -252,19 +235,20 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
                 key={proxy.id}
                 className={`
                   bg-slate-800/50 border rounded-lg p-3 transition-all
-                  ${proxy.enabled 
-                    ? 'border-slate-700 hover:border-slate-600' 
-                    : 'border-slate-800 opacity-50'
+                  ${
+                    proxy.enabled
+                      ? 'border-slate-700 hover:border-slate-600'
+                      : 'border-slate-800 opacity-50'
                   }
                 `}
               >
                 <div className="flex items-start gap-3">
                   {/* Enable Toggle */}
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={proxy.enabled}
                     onChange={() => handleToggleProxy(proxy.id)}
-                    className="mt-1 w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-0"
+                    className="mt-1 py-0 px-0 hover:bg-transparent"
+                    aria-label="Enable proxy"
                   />
 
                   {/* Proxy Info */}
@@ -300,10 +284,11 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
                       <div className="text-xs text-slate-400">
                         <span className="text-slate-500">Логин:</span> {proxy.username}
                         {' • '}
-                        <span className="text-slate-500">Пароль:</span> {'•'.repeat(proxy.password?.length || 0)}
+                        <span className="text-slate-500">Пароль:</span>{' '}
+                        {'•'.repeat(proxy.password?.length || 0)}
                       </div>
                     )}
-                    
+
                     {proxy.location && (
                       <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
                         <span className="text-slate-500">📍</span>
@@ -314,6 +299,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
 
                   {/* Test Button */}
                   <button
+                    type="button"
                     onClick={() => handleTestProxy(proxy.id, proxy.raw)}
                     disabled={testingProxy === proxy.id}
                     className="p-1.5 rounded hover:bg-blue-500/10 text-slate-400 hover:text-blue-400 transition-colors disabled:opacity-50"
@@ -328,6 +314,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
 
                   {/* Delete Button */}
                   <button
+                    type="button"
                     onClick={() => handleRemoveProxy(proxy.id)}
                     className="p-1.5 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
                   >
@@ -341,9 +328,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
       )}
 
       {proxies.length === 0 && (
-        <div className="text-center py-8 text-slate-400 text-sm">
-          Нет добавленных прокси
-        </div>
+        <div className="text-center py-8 text-slate-400 text-sm">Нет добавленных прокси</div>
       )}
     </div>
   );

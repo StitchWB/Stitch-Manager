@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import type { ProviderName, Theme, Provider, LLMServerStatus } from '../types';
+import type { ProviderName, Theme, Provider } from '../types';
 import { setLocale } from '../lib/i18n';
 
 export type Language = 'en' | 'ru' | 'zh';
@@ -18,11 +18,13 @@ const initializeLocale = (): Language => {
         return parsed.state.language;
       }
     }
-  } catch { /* Ignore localStorage errors */ }
-  
+  } catch {
+    /* Ignore localStorage errors */
+  }
+
   // Fall back to system preference
   const systemLang = navigator.language.split('-')[0];
-  const supportedLang = ['en', 'ru'].includes(systemLang) ? systemLang as Language : 'en';
+  const supportedLang = ['en', 'ru'].includes(systemLang) ? (systemLang as Language) : 'en';
   setLocale(supportedLang);
   return supportedLang;
 };
@@ -46,10 +48,6 @@ interface AppState {
   providers: Provider[];
   setProviders: (providers: Provider[]) => void;
 
-  // Server status
-  serverStatus: LLMServerStatus | null;
-  setServerStatus: (status: LLMServerStatus | null) => void;
-
   // UI State
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
@@ -70,17 +68,38 @@ interface AppNotification {
 }
 
 const DEFAULT_PROVIDERS: Provider[] = [
-  { id: 'kiro', name: 'Kiro', version: 'v2.1', activeCount: 12, status: 'active', color: 'from-purple-500 to-indigo-600' },
-  { id: 'windsurf', name: 'Windsurf', version: 'v1.4', activeCount: 4, status: 'active', color: 'from-cyan-400 to-blue-500' },
-  { id: 'trae', name: 'Trae', version: 'v1.0', activeCount: 8, status: 'active', color: 'from-emerald-400 to-teal-600' },
+  {
+    id: 'kiro',
+    name: 'Kiro',
+    version: 'v2.1',
+    activeCount: 12,
+    status: 'active',
+    color: 'from-purple-500 to-indigo-600',
+  },
+  {
+    id: 'windsurf',
+    name: 'Windsurf',
+    version: 'v1.4',
+    activeCount: 4,
+    status: 'active',
+    color: 'from-cyan-400 to-blue-500',
+  },
+  {
+    id: 'trae',
+    name: 'Trae',
+    version: 'v1.0',
+    activeCount: 8,
+    status: 'active',
+    color: 'from-emerald-400 to-teal-600',
+  },
 ];
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    set => ({
       // Theme
       theme: 'dark',
-      setTheme: (theme) => {
+      setTheme: theme => {
         set({ theme });
         // Apply theme to document
         if (theme === 'dark') {
@@ -92,32 +111,28 @@ export const useAppStore = create<AppState>()(
 
       // Language
       language: initialLanguage,
-      setLanguage: (language) => {
+      setLanguage: language => {
         setLocale(language);
         set({ language });
       },
 
       // Selected Provider
       selectedProvider: null,
-      setSelectedProvider: (provider) => set({ selectedProvider: provider }),
+      setSelectedProvider: provider => set({ selectedProvider: provider }),
 
       // Providers
       providers: DEFAULT_PROVIDERS,
-      setProviders: (providers) => set({ providers }),
-
-      // Server status
-      serverStatus: null,
-      setServerStatus: (status) => set({ serverStatus: status }),
+      setProviders: providers => set({ providers }),
 
       // UI State
       sidebarCollapsed: false,
-      toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      toggleSidebar: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
       // Notifications - using Sonner toasts
       notifications: [],
-      addNotification: (notification) => {
+      addNotification: notification => {
         const { type, title, message } = notification;
-        
+
         if (type === 'success') {
           toast.success(title, { description: message });
         } else if (type === 'error') {
@@ -128,7 +143,7 @@ export const useAppStore = create<AppState>()(
           toast.info(title, { description: message });
         }
       },
-      removeNotification: (_id) => {
+      removeNotification: _id => {
         // Sonner handles its own toast removal
       },
       clearNotifications: () => {
@@ -137,7 +152,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'stitch-app-storage',
-      partialize: (state) => ({
+      partialize: state => ({
         theme: state.theme,
         language: state.language,
         selectedProvider: state.selectedProvider,
