@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
+import { UnstyledButton } from '../ui';
 import { createPortal } from 'react-dom';
 import { Columns3, RotateCcw } from 'lucide-react';
 import { t } from '../../lib/i18n';
@@ -166,7 +167,7 @@ export function AccountsColumnsMenu({
                 />
               </div>
 
-              <button
+              <UnstyledButton
                 type="button"
                 className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-white/10 px-2 py-1.5 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
                 onClick={() => {
@@ -176,7 +177,7 @@ export function AccountsColumnsMenu({
               >
                 <RotateCcw size={12} />
                 {t('accounts.columnsReset')}
-              </button>
+              </UnstyledButton>
             </div>,
             portalRoot
           )

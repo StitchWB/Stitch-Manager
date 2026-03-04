@@ -54,7 +54,9 @@
     "test:unit": "npm run test:ts && pytest python/tests -m unit",
     "test:integration": "pytest python/tests -m integration",
     "lint:ui-kit": "eslint \"src/**/*.tsx\" --rule \"@typescript-eslint/no-unused-vars:off\" --rule \"@typescript-eslint/no-explicit-any:off\" --rule \"no-console:off\" --rule \"react-hooks/exhaustive-deps:off\"",
-    "lint:ui-kit:strict": "eslint \"src/**/*.tsx\" --rule \"@typescript-eslint/no-unused-vars:off\" --rule \"@typescript-eslint/no-explicit-any:off\" --rule \"no-console:off\" --rule \"react-hooks/exhaustive-deps:off\" --rule \"react/forbid-elements:error\""
+    "lint:ui-kit:strict": "eslint \"src/**/*.tsx\" --rule \"@typescript-eslint/no-unused-vars:off\" --rule \"@typescript-eslint/no-explicit-any:off\" --rule \"no-console:off\" --rule \"react-hooks/exhaustive-deps:off\" --rule \"react/forbid-elements:error\"",
+    "codemod:ui-kit:buttons": "node scripts/codemod-ui-kit-buttons.cjs",
+    "codemod:ui-kit:buttons:dry": "node scripts/codemod-ui-kit-buttons.cjs --dry-run"
   },
   "dependencies": {
     "@babel/parser": "^7.28.5",

@@ -11,7 +11,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { Badge, Button, Checkbox, TableCell, TableRow, Tooltip } from '../ui';
+import { Badge, Button, Checkbox, TableCell, TableRow, Tooltip, UnstyledButton } from '../ui';
 import { ProviderLogo } from '../ui/ProviderLogo';
 import { cn } from '../../lib/utils';
 import type { Account, AccountStatus } from '../../types';
@@ -217,7 +217,7 @@ export function AccountRow({
       </TableCell>
 
       <TableCell className="w-[280px] px-2 py-3 align-middle">
-        <button
+        <UnstyledButton
           type="button"
           onClick={() => onShowDetails(account)}
           className="group/account inline-flex max-w-full flex-col items-start text-left"
@@ -240,7 +240,7 @@ export function AccountRow({
               {accountIdentifier}
             </span>
           </Tooltip>
-        </button>
+        </UnstyledButton>
         {(relationProviderEntries.length > 0 || relationHintList.length > 0) && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
             <span className="uppercase tracking-wider text-[9px] text-slate-600">
@@ -249,7 +249,7 @@ export function AccountRow({
             <div className="flex items-center gap-1">
               {relationProviderEntries.slice(0, 4).map(([providerKey, edge]) => (
                 <Tooltip key={`${providerKey}-${edge.type}`} content={edge.label}>
-                  <button
+                  <UnstyledButton
                     type="button"
                     onClick={event => {
                       event.stopPropagation();
@@ -258,7 +258,7 @@ export function AccountRow({
                     className="inline-flex items-center justify-center rounded border border-cyan-500/20 bg-cyan-500/10 p-1 hover:bg-cyan-500/20"
                   >
                     <ProviderLogo provider={providerKey} size={10} />
-                  </button>
+                  </UnstyledButton>
                 </Tooltip>
               ))}
             </div>
@@ -367,14 +367,14 @@ export function AccountRow({
             >
               <Play size={12} />
             </Button>
-            <button
+            <UnstyledButton
               type="button"
               className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
               onClick={() => onToggleMenu(account.id)}
               aria-label={t('accounts.actionsMenuAria')}
             >
               <MoreHorizontal size={14} />
-            </button>
+            </UnstyledButton>
           </div>
 
           {isMenuOpen ? (
@@ -382,7 +382,7 @@ export function AccountRow({
               className="absolute right-0 top-8 z-50 w-56 rounded-lg border border-white/10 bg-[#0f1218] p-1 shadow-xl shadow-black/50"
               data-row-actions-menu="true"
             >
-              <button
+              <UnstyledButton
                 type="button"
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                 onClick={() => {
@@ -392,10 +392,10 @@ export function AccountRow({
               >
                 <RefreshCw size={12} className={cn(isRefreshing && 'animate-spin')} />
                 {t('accountsTable.checkStatus')}
-              </button>
+              </UnstyledButton>
 
               {onOpenBrowser ? (
-                <button
+                <UnstyledButton
                   type="button"
                   className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                   onClick={() => {
@@ -405,10 +405,10 @@ export function AccountRow({
                 >
                   <Globe size={12} />
                   {t('accountsTable.openBrowser')}
-                </button>
+                </UnstyledButton>
               ) : null}
 
-              <button
+              <UnstyledButton
                 type="button"
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                 onClick={() => {
@@ -418,10 +418,10 @@ export function AccountRow({
               >
                 {isActive ? <Square size={12} /> : <Play size={12} />}
                 {isActive ? t('accounts.deactivate') : t('accounts.activate')}
-              </button>
+              </UnstyledButton>
 
               {onOpenProfileSession && allowProfileAction ? (
-                <button
+                <UnstyledButton
                   type="button"
                   className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                   onClick={() => {
@@ -431,11 +431,11 @@ export function AccountRow({
                 >
                   <User size={12} />
                   {t('accounts.profileSessionOpen')}
-                </button>
+                </UnstyledButton>
               ) : null}
 
               {onConfirmProfileSession && profileSessionPending ? (
-                <button
+                <UnstyledButton
                   type="button"
                   className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                   onClick={() => {
@@ -445,11 +445,11 @@ export function AccountRow({
                 >
                   <Check size={12} />
                   {t('accounts.profileSessionConfirm')}
-                </button>
+                </UnstyledButton>
               ) : null}
 
               {onClearProfileSession && profileSessionReady ? (
-                <button
+                <UnstyledButton
                   type="button"
                   className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                   onClick={() => {
@@ -459,11 +459,11 @@ export function AccountRow({
                 >
                   <X size={12} />
                   {t('accounts.profileSessionClear')}
-                </button>
+                </UnstyledButton>
               ) : null}
 
               {account.token ? (
-                <button
+                <UnstyledButton
                   type="button"
                   className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                   onClick={() => {
@@ -473,10 +473,10 @@ export function AccountRow({
                 >
                   <Copy size={12} />
                   {t('accounts.copyToken')}
-                </button>
+                </UnstyledButton>
               ) : null}
 
-              <button
+              <UnstyledButton
                 type="button"
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
                 onClick={() => {
@@ -486,11 +486,11 @@ export function AccountRow({
               >
                 <Info size={12} />
                 {t('common.more')}
-              </button>
+              </UnstyledButton>
 
               <div className="my-1 h-px bg-white/10" />
 
-              <button
+              <UnstyledButton
                 type="button"
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-rose-300 hover:bg-rose-500/10"
                 onClick={() => {
@@ -500,7 +500,7 @@ export function AccountRow({
               >
                 <Trash2 size={12} />
                 {t('accounts.deleteAccountTitle')}
-              </button>
+              </UnstyledButton>
             </div>
           ) : null}
         </div>
