@@ -1,18 +1,6 @@
-import { useEffect, useState, useCallback, useMemo, type ChangeEvent } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Plus,
-  Search,
-  RefreshCw,
-  Download,
-  Upload,
-  Users,
-  LayoutGrid,
-  AlertCircle,
-  List,
-  Share2,
-  FileSpreadsheet,
-} from 'lucide-react';
+import { RefreshCw, Users, AlertCircle, Share2, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -24,17 +12,7 @@ import type { ProfileItem } from '../components/ProfilesTable';
 import AddAccountModal from '../components/AddAccountModal';
 import { ProfileSettingsModal } from '../components/profiles/ProfileSettingsModal';
 import { FloatingActionBar } from '../components/ui/FloatingActionBar';
-import {
-  EmptyState,
-  SkeletonLoader,
-  ActionButtonGroup,
-  Button,
-  SegmentedControl,
-  FormField,
-  Input,
-  Select,
-  Tooltip,
-} from '../components/ui';
+import { EmptyState, SkeletonLoader, Button } from '../components/ui';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
@@ -56,17 +34,17 @@ import { t } from '../lib/i18n';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
 import { useUrlState } from '../hooks/useUrlState';
 import type { AccountStatus } from '../types';
-import { ProviderLogo } from '../components/ui/ProviderLogo';
-import { cn } from '../lib/utils';
-import { ACCOUNT_STATUS_COLORS } from '../constants/colors';
-import { getAccountStatusLabel } from '../lib/accountStatus';
-import { FilterDropdown, type FilterOption } from '../components/ui/FilterDropdown';
-import { AccountsEntityTabs } from '../components/accounts/AccountsEntityTabs';
+import type { FilterOption } from '../components/ui/FilterDropdown';
 import { AccountsTabContent } from '../components/accounts/AccountsTabContent';
 import { ServiceAccountsPanel } from '../components/accounts/ServiceAccountsPanel';
 import { DolphinProfilesPanel } from '../components/accounts/DolphinProfilesPanel';
 import { IdentityGraphPanel } from '../components/accounts/IdentityGraphPanel';
 import { SheetsExplorerPanel } from '../components/accounts/SheetsExplorerPanel';
+import { AccountsToolbar } from '../components/accounts/AccountsToolbar';
+import { AccountsFiltersRail } from '../components/accounts/AccountsFiltersRail';
+import { ProfileSessionsPanel } from '../components/accounts/ProfileSessionsPanel';
+import { SheetsConfigPanel } from '../components/accounts/SheetsConfigPanel';
+import type { AccountsVisibleColumns } from '../components/accounts/AccountsColumnsMenu';
 import { useGoogleSheetsDataset } from '../hooks/useGoogleSheetsDataset';
 import { useRegistrationStore } from '../stores/registration';
 import {
@@ -76,168 +54,13 @@ import {
   hasExplicitRelationLinks,
   isOAuthCapableIdentity,
 } from '../lib/accounts/relations';
-
-type ImportAccountPayload = {
-  provider?: string;
-  email?: string;
-  password?: string;
-  token?: string;
-  refreshToken?: string;
-  quotaLimit?: number;
-  metadata?: Record<string, unknown> | string;
-};
-
-type ParsedAccountsResult = {
-  payloads: ImportAccountPayload[];
-  errors: string[];
-};
-
-const readBlobAsText = (blob: Blob): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(new Error('Failed to read file contents'));
-    reader.readAsText(blob);
-  });
-
-const parseCsvLine = (line: string): string[] => {
-  const fields: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      fields.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  fields.push(current);
-  return fields;
-};
-
-const parseCsvAccounts = (text: string): ImportAccountPayload[] => {
-  const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-  if (lines.length === 0) return [];
-
-  const header = parseCsvLine(lines[0]).map(value => value.trim().toLowerCase());
-  const records: ImportAccountPayload[] = [];
-
-  for (let i = 1; i < lines.length; i += 1) {
-    const values = parseCsvLine(lines[i]);
-    const record: ImportAccountPayload = {};
-
-    header.forEach((key, index) => {
-      const rawValue = values[index]?.trim();
-      if (!rawValue) return;
-
-      switch (key) {
-        case 'provider':
-          record.provider = rawValue;
-          break;
-        case 'email':
-          record.email = rawValue;
-          break;
-        case 'password':
-          record.password = rawValue;
-          break;
-        case 'token':
-          record.token = rawValue;
-          break;
-        case 'refreshtoken':
-        case 'refresh_token':
-          record.refreshToken = rawValue;
-          break;
-        case 'quotalimit':
-        case 'quota_limit': {
-          const parsed = Number(rawValue);
-          if (!Number.isNaN(parsed)) record.quotaLimit = parsed;
-          break;
-        }
-        case 'metadata':
-          record.metadata = rawValue;
-          break;
-        default:
-          break;
-      }
-    });
-
-    records.push(record);
-  }
-
-  return records;
-};
-
-const normalizeJsonAccounts = (data: unknown): ParsedAccountsResult => {
-  if (!Array.isArray(data)) {
-    throw new Error('JSON must be an array of account records');
-  }
-
-  const errors: string[] = [];
-  const payloads = data.map((item, index) => {
-    if (!item || typeof item !== 'object') {
-      errors.push(`Record ${index + 1} is not an object`);
-      return {} satisfies ImportAccountPayload;
-    }
-
-    const record = item as Record<string, unknown>;
-    const getString = (value: unknown): string | undefined =>
-      typeof value === 'string' ? value : undefined;
-
-    const quotaRaw = record.quotaLimit ?? record.quota_limit;
-    const quotaValue = typeof quotaRaw === 'number' ? quotaRaw : Number(quotaRaw);
-
-    return {
-      provider: getString(record.provider),
-      email: getString(record.email),
-      password: getString(record.password),
-      token: getString(record.token),
-      refreshToken: getString(record.refreshToken ?? record.refresh_token),
-      quotaLimit: Number.isNaN(quotaValue) ? undefined : quotaValue,
-      metadata:
-        typeof record.metadata === 'string' || typeof record.metadata === 'object'
-          ? (record.metadata as Record<string, unknown> | string)
-          : undefined,
-    };
-  });
-
-  return { payloads, errors };
-};
-
-const validateImportRecords = (records: ImportAccountPayload[]) => {
-  const valid: ImportAccountPayload[] = [];
-  const errors: string[] = [];
-
-  records.forEach((record, index) => {
-    const provider = typeof record.provider === 'string' ? record.provider.trim() : '';
-    const email = typeof record.email === 'string' ? record.email.trim() : '';
-    const password = typeof record.password === 'string' ? record.password.trim() : '';
-
-    if (!provider || !email || !password) {
-      errors.push(`Record ${index + 1} missing provider, email, or password`);
-      return;
-    }
-
-    valid.push({
-      ...record,
-      provider,
-      email,
-      password,
-    });
-  });
-
-  return { valid, errors };
-};
+import {
+  normalizeJsonAccounts,
+  parseCsvAccounts,
+  type ParsedAccountsResult,
+  readBlobText,
+  validateImportRecords,
+} from '../lib/accounts/importParser';
 
 export default function Accounts() {
   const navigate = useNavigate();
@@ -280,6 +103,7 @@ export default function Accounts() {
     setAccountsTagFilter,
     setAccountsRelationFilter,
     setAccountsEntityFilter,
+    setAccountsVisibleColumns,
   } = useUIPreferencesStore();
 
   // Initialize state from preferences (use preferences as source of truth)
@@ -300,6 +124,13 @@ export default function Accounts() {
     accountsPage.entityFilter || 'accounts'
   );
   const [viewMode, setViewMode] = useUrlState<'list' | 'graph' | 'sheets'>('view', 'list');
+  const [visibleColumns, setVisibleColumns] = useState<AccountsVisibleColumns>(
+    accountsPage.tableVisibleColumns ?? {
+      lastLogin: true,
+      proxy: true,
+      tags: true,
+    }
+  );
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
   const [profileSettingsAlias, setProfileSettingsAlias] = useState<string | null>(null);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -491,18 +322,6 @@ export default function Accounts() {
       ...dynamicOptions,
     ];
   }, [storeAccounts]);
-
-  const entityOptions = useMemo((): FilterOption<string>[] => {
-    return [
-      { value: 'accounts', label: t('accounts.entityAccounts'), count: storeAccounts.length },
-      { value: 'profiles', label: t('accounts.entityProfiles'), count: profileAliases.length },
-      {
-        value: 'all',
-        label: t('accounts.entityAll'),
-        count: storeAccounts.length + profileAliases.length,
-      },
-    ];
-  }, [storeAccounts.length, profileAliases.length]);
 
   const handleRelationFilterChange = useCallback(
     (value: string) => {
@@ -892,7 +711,7 @@ export default function Accounts() {
               }
 
               const blob = await response.blob();
-              return readBlobAsText(blob);
+              return readBlobText(blob);
             })()
           : await selected.text();
 
@@ -1168,534 +987,132 @@ export default function Accounts() {
     []
   );
 
+  const handleCreateProfilesForSelected = useCallback(async () => {
+    const selectedAccounts = filteredAccounts.filter(acc => selectedIds.has(acc.id));
+    if (!selectedAccounts.length) return;
+    const settled = await Promise.allSettled(
+      selectedAccounts.map(async acc => {
+        const profile = await getOrCreateFingerprintProfile({ email: acc.email });
+        await saveFingerprintProfile({ email: acc.email, profile });
+      })
+    );
+    const success = settled.filter(s => s.status === 'fulfilled').length;
+    const failed = settled.length - success;
+    if (failed === 0) toast.success(t('accounts.profileCreateSuccess'));
+    else if (success > 0)
+      toast.warning(
+        `${t('accounts.profileCreateSuccess')} (${success}), ${t('accounts.profileCreateFailed')} (${failed})`
+      );
+    else toast.error(t('accounts.profileCreateFailed'));
+    await loadProfiles();
+  }, [filteredAccounts, selectedIds, loadProfiles]);
+
+  const handleSheetsSpreadsheetIdChange = useCallback((value: string) => {
+    setSheetsTouched(true);
+    setSheetsSpreadsheetId(value);
+    setSheetsTestStatus('idle');
+    setSheetsTestMessage(null);
+  }, []);
+
+  const handleSheetsServiceAccountJsonChange = useCallback((value: string) => {
+    setSheetsTouched(true);
+    setSheetsServiceAccountJson(value);
+    setSheetsTestStatus('idle');
+    setSheetsTestMessage(null);
+  }, []);
+
+  const handleToggleVisibleColumn = useCallback(
+    (column: keyof AccountsVisibleColumns, value: boolean) => {
+      setVisibleColumns(current => {
+        const next = { ...current, [column]: value };
+        setAccountsVisibleColumns(next);
+        return next;
+      });
+    },
+    [setAccountsVisibleColumns]
+  );
+
+  const handleResetVisibleColumns = useCallback(() => {
+    const next: AccountsVisibleColumns = {
+      lastLogin: true,
+      proxy: true,
+      tags: true,
+    };
+    setVisibleColumns(next);
+    setAccountsVisibleColumns(next);
+  }, [setAccountsVisibleColumns]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0c] font-sans">
       <Header title={t('accounts.title')} icon={<Users size={18} />} />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Filter Panel */}
-        <aside className="hidden lg:flex w-16 shrink-0 bg-[#0f1218]/50 border-r border-white/5 backdrop-blur-md flex-col items-center py-3 gap-3">
-          <div className="flex flex-col items-center gap-1.5">
-            <Tooltip content={`${t('accounts.entityAll')} · ${storeAccounts.length}`} side="right">
-              <button
-                type="button"
-                onClick={() => handleEntityFilterChange('all')}
-                className={cn(
-                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
-                  entityFilter === 'all'
-                    ? 'border-cyan-400/30 bg-cyan-500/[0.05] text-cyan-100'
-                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
-                )}
-              >
-                <span
-                  className={cn(
-                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
-                    entityFilter === 'all' ? 'bg-cyan-400/80' : 'bg-transparent'
-                  )}
-                />
-                <LayoutGrid size={15} />
-              </button>
-            </Tooltip>
-
-            <Tooltip
-              content={`${t('accounts.entityAccounts')} · ${storeAccounts.length}`}
-              side="right"
-            >
-              <button
-                type="button"
-                onClick={() => handleEntityFilterChange('accounts')}
-                className={cn(
-                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
-                  entityFilter === 'accounts'
-                    ? 'border-cyan-400/30 bg-cyan-500/[0.05] text-cyan-100'
-                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
-                )}
-              >
-                <span
-                  className={cn(
-                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
-                    entityFilter === 'accounts' ? 'bg-cyan-400/80' : 'bg-transparent'
-                  )}
-                />
-                <Users size={15} />
-              </button>
-            </Tooltip>
-
-            <Tooltip
-              content={`${t('accounts.entityBrowserProfiles')} · ${profileAliases.length}`}
-              side="right"
-            >
-              <button
-                type="button"
-                onClick={() => handleEntityFilterChange('profiles')}
-                className={cn(
-                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
-                  entityFilter === 'profiles'
-                    ? 'border-cyan-400/30 bg-cyan-500/[0.05] text-cyan-100'
-                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
-                )}
-              >
-                <span
-                  className={cn(
-                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
-                    entityFilter === 'profiles' ? 'bg-cyan-400/80' : 'bg-transparent'
-                  )}
-                />
-                <LayoutGrid size={15} />
-                {profileAliases.length > 0 ? (
-                  <span className="absolute -right-1.5 -top-1.5 rounded-full border border-white/10 bg-[#141822] px-1 text-[9px] text-slate-300">
-                    {profileAliases.length}
-                  </span>
-                ) : null}
-              </button>
-            </Tooltip>
-          </div>
-
-          <div className="h-px w-8 bg-white/10" />
-
-          <div className="flex flex-col items-center gap-1.5">
-            <Tooltip content={`Все провайдеры · ${providerCounts.all ?? 0}`} side="right">
-              <button
-                type="button"
-                onClick={() => handleProviderFilterChange('all')}
-                className={cn(
-                  'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
-                  providerFilter === 'all'
-                    ? 'border-indigo-400/35 bg-indigo-500/[0.05] text-indigo-100'
-                    : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
-                )}
-              >
-                <span
-                  className={cn(
-                    'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
-                    providerFilter === 'all' ? 'bg-indigo-400/80' : 'bg-transparent'
-                  )}
-                />
-                <LayoutGrid size={15} />
-              </button>
-            </Tooltip>
-
-            {[
-              { id: 'kiro', label: 'Kiro' },
-              { id: 'windsurf', label: 'Windsurf' },
-              { id: 'trae', label: 'Trae' },
-              { id: 'aws', label: 'AWS Builder ID' },
-              { id: 'github', label: 'GitHub' },
-            ].map(provider => {
-              const countKey = provider.id === 'aws' ? 'aws_builder_id' : provider.id;
-              const count = providerCounts[countKey] ?? 0;
-              return (
-                <Tooltip key={provider.id} content={`${provider.label} · ${count}`} side="right">
-                  <button
-                    type="button"
-                    onClick={() => handleProviderFilterChange(provider.id)}
-                    className={cn(
-                      'relative h-9 w-9 rounded-r-lg rounded-l-none border border-l-0 transition-colors flex items-center justify-center',
-                      providerFilter === provider.id
-                        ? 'border-indigo-400/35 bg-indigo-500/[0.05] text-indigo-100'
-                        : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/8'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
-                        providerFilter === provider.id ? 'bg-indigo-400/80' : 'bg-transparent'
-                      )}
-                    />
-                    <ProviderLogo
-                      provider={provider.id}
-                      size={14}
-                      colored={providerFilter === provider.id}
-                    />
-                  </button>
-                </Tooltip>
-              );
-            })}
-          </div>
-
-          <div className="h-px w-8 bg-white/10" />
-
-          <div className="flex flex-col items-center gap-1.5">
-            {[
-              { id: 'all', label: t('filters.anyStatus'), dot: 'bg-slate-500' },
-              {
-                id: 'active',
-                label: getAccountStatusLabel('active'),
-                dot: ACCOUNT_STATUS_COLORS.active.bg,
-              },
-              {
-                id: 'banned',
-                label: getAccountStatusLabel('banned'),
-                dot: ACCOUNT_STATUS_COLORS.banned.bg,
-              },
-              {
-                id: 'limit_hit',
-                label: getAccountStatusLabel('limit_hit'),
-                dot: ACCOUNT_STATUS_COLORS.expired.bg,
-              },
-              {
-                id: 'expired',
-                label: getAccountStatusLabel('expired'),
-                dot: ACCOUNT_STATUS_COLORS.expired.bg,
-              },
-              { id: 'unknown', label: getAccountStatusLabel('unknown'), dot: 'bg-slate-500' },
-            ].map(status => (
-              <Tooltip key={status.id} content={status.label} side="right">
-                <button
-                  type="button"
-                  onClick={() => handleStatusFilterChange(status.id)}
-                  className={cn(
-                    'relative h-9 w-9 rounded-r-lg border border-l-0 transition-colors flex items-center justify-center',
-                    statusFilter === status.id
-                      ? 'border-indigo-400/30 bg-indigo-500/[0.08] text-indigo-100'
-                      : 'border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/8'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full',
-                      statusFilter === status.id ? 'bg-indigo-400/80' : 'bg-transparent'
-                    )}
-                  />
-                  <span className={cn('h-2.5 w-2.5 rounded-full', status.dot)} />
-                </button>
-              </Tooltip>
-            ))}
-          </div>
-        </aside>
+        <AccountsFiltersRail
+          entityFilter={entityFilter}
+          providerFilter={providerFilter}
+          statusFilter={statusFilter}
+          accountsCount={storeAccounts.length}
+          profilesCount={profileAliases.length}
+          providerCounts={providerCounts}
+          onEntityFilterChange={handleEntityFilterChange}
+          onProviderFilterChange={handleProviderFilterChange}
+          onStatusFilterChange={handleStatusFilterChange}
+        />
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header Bar */}
-          <div className="shrink-0 px-6 py-4 border-b border-white/5 bg-[#0b0b10]/85 backdrop-blur-xl">
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-4">
-              <div className="flex flex-col gap-4 min-w-0">
-                <div className="flex flex-wrap items-center gap-3 min-w-0">
-                  <AccountsEntityTabs
-                    value={normalizedEntityFilter}
-                    onChange={value => handleEntityFilterChange(value)}
-                    accountsCount={storeAccounts.length}
-                    profilesCount={profileAliases.length}
-                  />
-
-                  {showAccountsModes && (
-                    <SegmentedControl
-                      value={resolvedViewMode}
-                      onChange={value => handleViewModeChange(value)}
-                      options={[
-                        { value: 'list', label: t('accounts.viewList'), icon: <List size={14} /> },
-                        {
-                          value: 'graph',
-                          label: t('accounts.viewGraph'),
-                          icon: <Share2 size={14} />,
-                        },
-                        {
-                          value: 'sheets',
-                          label: t('accounts.viewSheets'),
-                          icon: <FileSpreadsheet size={14} />,
-                        },
-                      ]}
-                      size="sm"
-                      className="shrink-0"
-                    />
-                  )}
-                </div>
-
-                {resolvedViewMode === 'list' ? (
-                  <div className="flex min-w-0 flex-col gap-4">
-                    <div className="flex w-full items-center gap-3">
-                      <Input
-                        value={searchQuery}
-                        onChange={e => handleSearchQueryChange(e.target.value)}
-                        placeholder={t('accounts.searchPlaceholder')}
-                        leftIcon={<Search className="w-4 h-4" />}
-                        className="h-9 text-sm text-white placeholder-slate-400"
-                        shellClassName="bg-black/40 border-white/10 focus-within:border-indigo-500/40 focus-within:bg-black/60"
-                        containerClassName="w-full min-w-[260px] max-w-md"
-                      />
-                    </div>
-
-                    <div className="relative z-20 hidden lg:flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
-                      <FilterDropdown
-                        value={statusFilter}
-                        onChange={handleStatusFilterChange}
-                        options={[
-                          { value: 'all', label: t('filters.anyStatus') },
-                          { value: 'active', label: getAccountStatusLabel('active') },
-                          { value: 'banned', label: getAccountStatusLabel('banned') },
-                          { value: 'limit_hit', label: getAccountStatusLabel('limit_hit') },
-                          { value: 'expired', label: getAccountStatusLabel('expired') },
-                          { value: 'unknown', label: getAccountStatusLabel('unknown') },
-                        ]}
-                        label={t('filters.status')}
-                        triggerClassName="h-9 min-w-[148px]"
-                        menuClassName="min-w-[220px]"
-                        showActiveState={true}
-                      />
-                      <FilterDropdown
-                        value={tagFilter}
-                        onChange={handleTagFilterChange}
-                        options={tagOptions}
-                        label={t('accounts.tags')}
-                        triggerClassName="h-9 min-w-[132px]"
-                        menuClassName="min-w-[220px]"
-                        showActiveState={true}
-                      />
-                      <FilterDropdown
-                        value={relationFilter}
-                        onChange={handleRelationFilterChange}
-                        options={relationOptions}
-                        label={t('accounts.relationFilterLabel')}
-                        triggerClassName="h-9 min-w-[132px]"
-                        menuClassName="min-w-[220px]"
-                        showActiveState={true}
-                      />
-                      <FilterDropdown
-                        value={quotaFilter}
-                        onChange={handleQuotaFilterChange}
-                        options={[
-                          { value: 'any', label: t('filters.any') },
-                          { value: 'has_quota', label: t('filters.hasQuota') },
-                          { value: 'low_quota', label: t('filters.lowQuota') },
-                          { value: 'empty', label: t('filters.empty') },
-                          { value: 'full', label: t('filters.full') },
-                        ]}
-                        label={t('filters.quota')}
-                        triggerClassName="h-9 min-w-[132px]"
-                        menuClassName="min-w-[220px]"
-                        showActiveState={true}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-slate-500">
-                    {t('accounts.sheetsIntegration')}
-                    {sheetsUpdatedAt
-                      ? ` • ${t('logs.lastUpdated')} ${new Date(sheetsUpdatedAt).toLocaleString()}`
-                      : ''}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 justify-start xl:justify-end">
-                {resolvedViewMode === 'list' ? (
-                  <ActionButtonGroup
-                    actions={[
-                      {
-                        icon: RefreshCw,
-                        label: t('accounts.refreshAll'),
-                        onClick: handleRefreshAll,
-                        disabled: isBulkRefreshing,
-                        loading: isBulkRefreshing,
-                      },
-                      {
-                        icon: Upload,
-                        label: t('accounts.importAccounts'),
-                        onClick: handleImportAccounts,
-                        disabled: isImporting,
-                        loading: isImporting,
-                      },
-                      {
-                        icon: Download,
-                        label: t('accounts.exportCsv'),
-                        onClick: handleExportCSV,
-                        disabled: filteredAccounts.length === 0,
-                      },
-                    ]}
-                    spacing="tight"
-                    size="sm"
-                    className="h-9 px-2 rounded-lg bg-transparent"
-                  />
-                ) : (
-                  <>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleTestSheets}
-                      isLoading={sheetsTestStatus === 'loading'}
-                      disabled={!sheetsParams}
-                    >
-                      {t('validation.testConnection')}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleRefreshSheets}
-                      disabled={!sheetsParams || sheetsLoading}
-                      leftIcon={
-                        <RefreshCw size={14} className={sheetsLoading ? 'animate-spin' : ''} />
-                      }
-                    >
-                      {t('common.refresh')}
-                    </Button>
-                    <Button
-                      variant={showSheetsConfig ? 'secondary' : 'outline'}
-                      size="sm"
-                      onClick={() => setShowSheetsConfig(current => !current)}
-                    >
-                      {t('common.settings')}
-                    </Button>
-                  </>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={() => navigate('/autoreg')}
-                    variant="secondary"
-                    size="sm"
-                    className="h-9 rounded-lg"
-                  >
-                    <span className="hidden sm:inline">{t('sidebar.autoReg')}</span>
-                    <span className="sm:hidden">АР</span>
-                  </Button>
-                  <Button
-                    onClick={handleCreateStandaloneProfile}
-                    variant="secondary"
-                    size="sm"
-                    className="h-9 rounded-lg"
-                    leftIcon={<LayoutGrid size={16} />}
-                  >
-                    <span className="hidden sm:inline">{t('accounts.profilesCreateButton')}</span>
-                    <span className="sm:hidden">{t('accounts.entityProfiles')}</span>
-                  </Button>
-                  <Button
-                    onClick={() => setIsModalOpen(true)}
-                    variant="primary"
-                    size="sm"
-                    leftIcon={<Plus size={18} />}
-                    className="h-9 rounded-lg shadow-none"
-                  >
-                    <span className="hidden sm:inline">{t('accounts.addAccount')}</span>
-                    <span className="sm:hidden">{t('common.add')}</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AccountsToolbar
+            resolvedViewMode={resolvedViewMode}
+            showAccountsModes={showAccountsModes}
+            normalizedEntityFilter={normalizedEntityFilter}
+            accountsCount={storeAccounts.length}
+            profilesCount={profileAliases.length}
+            searchQuery={searchQuery}
+            statusFilter={statusFilter}
+            tagFilter={tagFilter}
+            relationFilter={relationFilter}
+            quotaFilter={quotaFilter}
+            tagOptions={tagOptions}
+            relationOptions={relationOptions}
+            sheetsUpdatedAt={sheetsUpdatedAt ?? null}
+            isBulkRefreshing={isBulkRefreshing}
+            isImporting={isImporting}
+            filteredAccountsCount={filteredAccounts.length}
+            sheetsTestStatus={sheetsTestStatus}
+            sheetsLoading={sheetsLoading}
+            hasSheetsParams={Boolean(sheetsParams)}
+            showSheetsConfig={showSheetsConfig}
+            visibleColumns={visibleColumns}
+            onEntityFilterChange={value => handleEntityFilterChange(value)}
+            onViewModeChange={handleViewModeChange}
+            onSearchQueryChange={handleSearchQueryChange}
+            onStatusFilterChange={handleStatusFilterChange}
+            onTagFilterChange={handleTagFilterChange}
+            onRelationFilterChange={handleRelationFilterChange}
+            onQuotaFilterChange={handleQuotaFilterChange}
+            onRefreshAll={handleRefreshAll}
+            onImportAccounts={handleImportAccounts}
+            onExportCSV={handleExportCSV}
+            onTestSheets={handleTestSheets}
+            onRefreshSheets={handleRefreshSheets}
+            onToggleSheetsConfig={() => setShowSheetsConfig(current => !current)}
+            onOpenAutoReg={() => navigate('/autoreg')}
+            onCreateStandaloneProfile={handleCreateStandaloneProfile}
+            onAddAccount={() => setIsModalOpen(true)}
+            onToggleVisibleColumn={handleToggleVisibleColumn}
+            onResetVisibleColumns={handleResetVisibleColumns}
+          />
 
           {resolvedViewMode !== 'list' && showSheetsConfig && (
-            <div className="shrink-0 px-6 pb-4 border-b border-white/5 bg-[#0a0a0c]/65">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,2fr)]">
-                  <FormField
-                    inputProps={{
-                      label: t('accounts.sheetsSpreadsheetId'),
-                      value: sheetsSpreadsheetId,
-                      onChange: (event: ChangeEvent<HTMLInputElement>) => {
-                        setSheetsTouched(true);
-                        setSheetsSpreadsheetId(event.target.value);
-                        setSheetsTestStatus('idle');
-                        setSheetsTestMessage(null);
-                      },
-                      placeholder: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-                    }}
-                  />
-                  <FormField
-                    type="textarea"
-                    textareaProps={{
-                      label: t('accounts.sheetsServiceAccountJson'),
-                      value: sheetsServiceAccountJson,
-                      onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
-                        setSheetsTouched(true);
-                        setSheetsServiceAccountJson(event.target.value);
-                        setSheetsTestStatus('idle');
-                        setSheetsTestMessage(null);
-                      },
-                      placeholder: '{"type":"service_account", ...}',
-                      rows: 4,
-                      className: 'font-mono text-[11px]',
-                    }}
-                  />
-                </div>
-
-                <div className="mt-2 text-[11px] text-slate-500">
-                  {sheetsTestStatus === 'success' && t('validation.connectionSuccess')}
-                  {sheetsTestStatus === 'error' &&
-                    (sheetsTestMessage || t('validation.connectionFailed'))}
-                </div>
-              </div>
-            </div>
+            <SheetsConfigPanel
+              spreadsheetId={sheetsSpreadsheetId}
+              serviceAccountJson={sheetsServiceAccountJson}
+              testStatus={sheetsTestStatus}
+              testMessage={sheetsTestMessage}
+              onSpreadsheetIdChange={handleSheetsSpreadsheetIdChange}
+              onServiceAccountJsonChange={handleSheetsServiceAccountJsonChange}
+            />
           )}
-
-          {/* Mobile quick filters */}
-          {resolvedViewMode === 'list' ? (
-            <div className="lg:hidden shrink-0 px-4 py-3 border-b border-white/5 bg-[#0d1016]/60 grid grid-cols-2 gap-2">
-              <Select
-                value={providerFilter}
-                onChange={e => handleProviderFilterChange(e.target.value)}
-                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
-                shellClassName="bg-black/40 border-white/10"
-                containerClassName="w-full"
-              >
-                <option value="all">{t('accounts.allProviders')}</option>
-                {Object.values(providerCounts).slice(0, 0) /* no-op: keep lint happy */}
-                {/* Keep mobile list aligned with sidebar provider filters */}
-                {['kiro', 'windsurf', 'trae', 'aws', 'github', 'openai'].map(id => (
-                  <option key={id} value={id}>
-                    {id === 'aws' ? 'AWS Builder ID' : id.charAt(0).toUpperCase() + id.slice(1)}
-                  </option>
-                ))}
-              </Select>
-
-              <Select
-                value={statusFilter}
-                onChange={e => handleStatusFilterChange(e.target.value)}
-                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
-                shellClassName="bg-black/40 border-white/10"
-                containerClassName="w-full"
-              >
-                <option value="all">{t('filters.anyStatus')}</option>
-                <option value="active">{getAccountStatusLabel('active')}</option>
-                <option value="banned">{getAccountStatusLabel('banned')}</option>
-                <option value="expired">{getAccountStatusLabel('expired')}</option>
-              </Select>
-
-              <Select
-                value={tagFilter}
-                onChange={e => handleTagFilterChange(e.target.value)}
-                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
-                shellClassName="bg-black/40 border-white/10"
-                containerClassName="col-span-2"
-              >
-                <option value="all">{t('accounts.mobileTagFilterLabel')}</option>
-                {tagOptions
-                  .filter(option => option.value !== 'all')
-                  .map(option => (
-                    <option key={String(option.value)} value={String(option.value)}>
-                      {option.label}
-                    </option>
-                  ))}
-              </Select>
-
-              <Select
-                value={relationFilter}
-                onChange={e => handleRelationFilterChange(e.target.value)}
-                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
-                shellClassName="bg-black/40 border-white/10"
-                containerClassName="col-span-2"
-              >
-                {relationOptions.map(option => (
-                  <option key={String(option.value)} value={String(option.value)}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-
-              <Select
-                value={entityFilter}
-                onChange={e => handleEntityFilterChange(e.target.value)}
-                className="h-9 rounded-lg bg-black/40 border border-white/10 px-2 text-xs text-slate-200"
-                shellClassName="bg-black/40 border-white/10"
-                containerClassName="col-span-2"
-              >
-                {entityOptions.map(option => (
-                  <option key={String(option.value)} value={String(option.value)}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : null}
 
           {resolvedViewMode === 'list' && entityFilter !== 'profiles' && accountsError ? (
             <div className="shrink-0 mx-6 mt-4 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
@@ -1823,80 +1240,19 @@ export default function Accounts() {
                   </div>
                   <div className="flex flex-col h-[55%] min-h-[260px]">
                     {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
-                      <div className="mx-6 mt-2 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <h3 className="text-sm font-semibold text-white">
-                              {t('accounts.profileSessionsTitle')}
-                            </h3>
-                            <p className="text-xs text-slate-400 mt-1">
-                              {t('accounts.profileSessionsSubtitle')}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              disabled={selectedIds.size === 0}
-                              onClick={async () => {
-                                const selectedAccounts = filteredAccounts.filter(acc =>
-                                  selectedIds.has(acc.id)
-                                );
-                                if (!selectedAccounts.length) return;
-                                const settled = await Promise.allSettled(
-                                  selectedAccounts.map(async acc => {
-                                    const profile = await getOrCreateFingerprintProfile({
-                                      email: acc.email,
-                                    });
-                                    await saveFingerprintProfile({ email: acc.email, profile });
-                                  })
-                                );
-                                const success = settled.filter(
-                                  s => s.status === 'fulfilled'
-                                ).length;
-                                const failed = settled.length - success;
-                                if (failed === 0) toast.success(t('accounts.profileCreateSuccess'));
-                                else if (success > 0)
-                                  toast.warning(
-                                    `${t('accounts.profileCreateSuccess')} (${success}), ${t('accounts.profileCreateFailed')} (${failed})`
-                                  );
-                                else toast.error(t('accounts.profileCreateFailed'));
-                                await loadProfiles();
-                              }}
-                            >
-                              {t('accounts.profilesCreateButton')}
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              disabled={selectedIds.size === 0}
-                              onClick={() => handleBatchProfileAction('open')}
-                            >
-                              {t('accounts.profileSessionOpen')}
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              disabled={selectedIds.size === 0}
-                              onClick={() => handleBatchProfileAction('confirm')}
-                            >
-                              {t('accounts.profileSessionConfirm')}
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              disabled={selectedIds.size === 0}
-                              onClick={() => handleBatchProfileAction('clear')}
-                            >
-                              {t('accounts.profileSessionClear')}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
+                      <ProfileSessionsPanel
+                        selectedCount={selectedIds.size}
+                        className="mx-6 mt-2 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4"
+                        onCreateProfiles={handleCreateProfilesForSelected}
+                        onOpen={() => handleBatchProfileAction('open')}
+                        onConfirm={() => handleBatchProfileAction('confirm')}
+                        onClear={() => handleBatchProfileAction('clear')}
+                      />
                     )}
                     <AccountsTable
                       accounts={filteredAccounts}
                       isLoading={loading}
+                      visibleColumns={visibleColumns}
                       relationEdgesById={Object.fromEntries(
                         filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
                       )}
@@ -1985,87 +1341,21 @@ export default function Accounts() {
                     ) : (
                       <div className="flex flex-col h-full">
                         {(selectedIds.size > 0 || tagFilter.startsWith('profile:')) && (
-                          <div className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <h3 className="text-sm font-semibold text-white">
-                                  {t('accounts.profileSessionsTitle')}
-                                </h3>
-                                <p className="text-xs text-slate-400 mt-1">
-                                  {t('accounts.profileSessionsSubtitle')}
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  size="xs"
-                                  variant="secondary"
-                                  disabled={selectedIds.size === 0}
-                                  onClick={async () => {
-                                    const selectedAccounts = filteredAccounts.filter(acc =>
-                                      selectedIds.has(acc.id)
-                                    );
-                                    if (!selectedAccounts.length) return;
-                                    const settled = await Promise.allSettled(
-                                      selectedAccounts.map(async acc => {
-                                        const profile = await getOrCreateFingerprintProfile({
-                                          email: acc.email,
-                                        });
-                                        await saveFingerprintProfile({ email: acc.email, profile });
-                                      })
-                                    );
-                                    const success = settled.filter(
-                                      s => s.status === 'fulfilled'
-                                    ).length;
-                                    const failed = settled.length - success;
-                                    if (failed === 0)
-                                      toast.success(t('accounts.profileCreateSuccess'));
-                                    else if (success > 0)
-                                      toast.warning(
-                                        `${t('accounts.profileCreateSuccess')} (${success}), ${t('accounts.profileCreateFailed')} (${failed})`
-                                      );
-                                    else toast.error(t('accounts.profileCreateFailed'));
-                                    await loadProfiles();
-                                  }}
-                                >
-                                  {t('accounts.profilesCreateButton')}
-                                </Button>
-                                <Button
-                                  size="xs"
-                                  variant="secondary"
-                                  disabled={selectedIds.size === 0}
-                                  onClick={() => handleBatchProfileAction('open')}
-                                >
-                                  {t('accounts.profileSessionOpen')}
-                                </Button>
-                                <Button
-                                  size="xs"
-                                  variant="secondary"
-                                  disabled={selectedIds.size === 0}
-                                  onClick={() => handleBatchProfileAction('confirm')}
-                                >
-                                  {t('accounts.profileSessionConfirm')}
-                                </Button>
-                                <Button
-                                  size="xs"
-                                  variant="secondary"
-                                  disabled={selectedIds.size === 0}
-                                  onClick={() => handleBatchProfileAction('clear')}
-                                >
-                                  {t('accounts.profileSessionClear')}
-                                </Button>
-                              </div>
-                            </div>
-                            {selectedIds.size === 0 && (
-                              <p className="mt-3 text-xs text-slate-500">
-                                {t('accounts.profileSessionsSelectionHint')}
-                              </p>
-                            )}
-                          </div>
+                          <ProfileSessionsPanel
+                            selectedCount={selectedIds.size}
+                            showHintWhenEmpty
+                            className="mx-6 mt-4 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4"
+                            onCreateProfiles={handleCreateProfilesForSelected}
+                            onOpen={() => handleBatchProfileAction('open')}
+                            onConfirm={() => handleBatchProfileAction('confirm')}
+                            onClear={() => handleBatchProfileAction('clear')}
+                          />
                         )}
 
                         <AccountsTable
                           accounts={filteredAccounts}
                           isLoading={loading}
+                          visibleColumns={visibleColumns}
                           relationEdgesById={Object.fromEntries(
                             filteredAccounts.map(acc => [acc.id, extractRelationEdges(acc)])
                           )}

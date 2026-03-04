@@ -16,6 +16,7 @@ import { ProviderLogo } from '../ui/ProviderLogo';
 import { cn } from '../../lib/utils';
 import type { Account, AccountStatus } from '../../types';
 import type { AccountRelationEdge, RelationType } from '../../lib/accounts/relations';
+import type { AccountsTableVisibleColumns } from '../../stores/uiPreferences';
 import { providerLabelToKey } from '../../lib/accounts/relations';
 import { getAccountStatusLabel } from '../../lib/accountStatus';
 import { t } from '../../lib/i18n';
@@ -26,6 +27,7 @@ interface AccountRowProps {
   isActive: boolean;
   isRefreshing: boolean;
   isMenuOpen: boolean;
+  visibleColumns?: AccountsTableVisibleColumns;
   relationHints?: string[];
   relationEdges?: AccountRelationEdge[];
   onToggleSelection: (accountId: number) => void;
@@ -138,6 +140,7 @@ export function AccountRow({
   isActive,
   isRefreshing,
   isMenuOpen,
+  visibleColumns = { lastLogin: true, proxy: true, tags: true },
   relationHints,
   relationEdges,
   onToggleSelection,
@@ -206,14 +209,14 @@ export function AccountRow({
         />
       </TableCell>
 
-      <TableCell className="min-w-[148px] px-2 py-3 align-middle">
+      <TableCell className="w-[130px] px-2 py-3 align-middle">
         <div className="flex items-center gap-2.5">
           <ProviderLogo provider={account.provider} size={14} className="shrink-0" />
           <span className="text-xs text-slate-300">{providerLabel}</span>
         </div>
       </TableCell>
 
-      <TableCell className="min-w-[260px] px-2 py-3 align-middle">
+      <TableCell className="w-[280px] px-2 py-3 align-middle">
         <button
           type="button"
           onClick={() => onShowDetails(account)}
@@ -233,7 +236,7 @@ export function AccountRow({
             }
             side="top"
           >
-            <span className="max-w-[280px] truncate font-mono text-xs text-slate-500">
+            <span className="max-w-[240px] truncate font-mono text-xs text-slate-500">
               {accountIdentifier}
             </span>
           </Tooltip>
@@ -281,17 +284,31 @@ export function AccountRow({
         </Badge>
       </TableCell>
 
-      <TableCell className="w-[134px] px-2 py-3 align-middle text-xs text-slate-300 tabular-nums">
+      <TableCell
+        className={cn(
+          visibleColumns.lastLogin
+            ? 'hidden w-[134px] px-2 py-3 align-middle text-xs text-slate-300 tabular-nums md:table-cell'
+            : 'hidden'
+        )}
+      >
         {formatLastLogin(account)}
       </TableCell>
 
-      <TableCell className="min-w-[160px] max-w-[220px] px-2 py-3 align-middle">
+      <TableCell
+        className={cn(
+          visibleColumns.proxy ? 'hidden w-[170px] px-2 py-3 align-middle lg:table-cell' : 'hidden'
+        )}
+      >
         <Tooltip content={proxyValue} side="top">
           <span className="block truncate font-mono text-xs text-slate-200">{proxyValue}</span>
         </Tooltip>
       </TableCell>
 
-      <TableCell className="min-w-[160px] px-2 py-3 align-middle">
+      <TableCell
+        className={cn(
+          visibleColumns.tags ? 'hidden w-[150px] px-2 py-3 align-middle lg:table-cell' : 'hidden'
+        )}
+      >
         <div className="flex items-center gap-1.5">
           {visibleTags.length > 0 ? (
             visibleTags.map(tag => (
@@ -314,7 +331,7 @@ export function AccountRow({
       </TableCell>
 
       <TableCell
-        className="w-[170px] px-2 py-3 align-middle"
+        className="w-[112px] px-2 py-3 align-middle"
         onClick={event => event.stopPropagation()}
       >
         <div className="relative flex justify-end" data-row-actions-menu="true">
@@ -328,7 +345,7 @@ export function AccountRow({
               type="button"
               size="xs"
               variant="outline"
-              className="h-7 border-white/15 bg-transparent px-2.5 text-xs text-slate-300 hover:border-white/30 hover:bg-white/[0.04] hover:text-white"
+              className="hidden h-7 border-white/15 bg-transparent px-2.5 text-xs text-slate-300 hover:border-white/30 hover:bg-white/[0.04] hover:text-white sm:inline-flex"
               leftIcon={<Play size={12} />}
               onClick={() => {
                 void onLaunch(account);
@@ -336,6 +353,19 @@ export function AccountRow({
               }}
             >
               {t('common.start')}
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="inline-flex h-7 w-7 border-white/15 bg-transparent text-slate-300 hover:border-white/30 hover:bg-white/[0.04] hover:text-white sm:hidden"
+              onClick={() => {
+                void onLaunch(account);
+                onCloseMenu();
+              }}
+              aria-label={t('common.start')}
+            >
+              <Play size={12} />
             </Button>
             <button
               type="button"

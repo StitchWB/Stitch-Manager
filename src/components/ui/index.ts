@@ -63,6 +63,9 @@ export type { FilterDropdownProps, FilterOption } from './FilterDropdown';
 export { DropdownMenu } from './DropdownMenu';
 export type { DropdownMenuProps, DropdownMenuOption } from './DropdownMenu';
 
+export { MultiFilterDropdown } from './MultiFilterDropdown';
+export type { MultiFilterDropdownProps } from './MultiFilterDropdown';
+
 export { Badge } from './Badge';
 export type { BadgeProps } from './Badge';
 

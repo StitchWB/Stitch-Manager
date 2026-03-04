@@ -11,6 +11,10 @@ import {
   Layers,
   AlertTriangle,
   Terminal,
+  SlidersHorizontal,
+  Signal,
+  Radio,
+  X,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -23,11 +27,12 @@ import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { Button } from '../components/ui/Button';
-import { Select } from '../components/ui/Select';
 import { Toggle } from '../components/ui/Toggle';
 import { LogGroup } from '../components/ui/LogGroup';
 import { TabButton } from '../components/ui/TabButton';
 import { Badge } from '../components/ui/Badge';
+import { FilterDropdown } from '../components/ui/FilterDropdown';
+import { MultiFilterDropdown } from '../components/ui/MultiFilterDropdown';
 import { copyToClipboard as copyTextToClipboard } from '@/lib/tauri/modules/utils';
 
 const LOG_SOURCES = [
@@ -44,6 +49,25 @@ const LOG_SOURCES = [
 
 const LOG_CHANNELS = ['all', 'app', 'frontend', 'backend', 'proxy', 'sidecar', 'toast'] as const;
 const DEFAULT_DETAILS_PANE_WIDTH = 360;
+
+const LEVEL_DOT_MAP: Record<string, string> = {
+  all: 'border border-slate-600',
+  debug: 'bg-slate-500',
+  info: 'bg-sky-400',
+  success: 'bg-emerald-400',
+  warn: 'bg-amber-400',
+  error: 'bg-red-400',
+};
+
+const CHANNEL_DOT_MAP: Record<string, string> = {
+  all: 'border border-slate-600',
+  app: 'bg-slate-400',
+  frontend: 'bg-sky-400',
+  backend: 'bg-purple-400',
+  proxy: 'bg-emerald-400',
+  sidecar: 'bg-amber-400',
+  toast: 'bg-pink-400',
+};
 
 interface LogGroupData {
   stage: string;
@@ -151,6 +175,42 @@ export default function Logs() {
   const { copy } = useCopyToClipboard();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
+  const rawSourceFilters = useMemo(
+    () =>
+      Array.isArray(sourceFilter)
+        ? sourceFilter
+        : sourceFilter && sourceFilter !== 'all'
+          ? [sourceFilter]
+          : [],
+    [sourceFilter]
+  );
+
+  const availableSources = useMemo(() => {
+    const merged: string[] = [...LOG_SOURCES];
+    const seen = new Set(merged);
+
+    for (const log of logs) {
+      const source = log.source || 'system';
+      if (!seen.has(source)) {
+        seen.add(source);
+        merged.push(source);
+      }
+    }
+
+    return merged;
+  }, [logs]);
+
+  const sourceFilters = useMemo(
+    () => rawSourceFilters.filter(source => availableSources.includes(source)),
+    [availableSources, rawSourceFilters]
+  );
+
+  const effectiveSourceFilters = useMemo(() => {
+    const allSelected =
+      availableSources.length > 0 && sourceFilters.length >= availableSources.length;
+    return allSelected ? [] : sourceFilters;
+  }, [availableSources.length, sourceFilters]);
+
   void language;
 
   useEffect(() => {
@@ -208,11 +268,16 @@ export default function Logs() {
   );
 
   const handleSourceChange = useCallback(
-    (source: string) => {
-      setLogsSourceFilter(source);
-      setFilter({ sources: source && source !== 'all' ? [source] : [] });
+    (sources: string[]) => {
+      const normalized = Array.from(new Set(sources)).filter(Boolean);
+      const allSelected =
+        availableSources.length > 0 && normalized.length >= availableSources.length;
+      const nextSources = allSelected ? [] : normalized;
+
+      setLogsSourceFilter(nextSources);
+      setFilter({ sources: nextSources });
     },
-    [setFilter, setLogsSourceFilter]
+    [availableSources, setFilter, setLogsSourceFilter]
   );
 
   const handleChannelChange = useCallback(
@@ -222,6 +287,54 @@ export default function Logs() {
     },
     [setFilter, setLogsChannelFilter]
   );
+
+  const levelCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: logs.length,
+      debug: 0,
+      info: 0,
+      success: 0,
+      warn: 0,
+      error: 0,
+    };
+
+    for (const log of logs) {
+      counts[log.level] = (counts[log.level] ?? 0) + 1;
+    }
+
+    return counts;
+  }, [logs]);
+
+  const sourceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const source of availableSources) counts[source] = 0;
+    for (const log of logs) {
+      const source = log.source || 'system';
+      counts[source] = (counts[source] ?? 0) + 1;
+    }
+    return counts;
+  }, [availableSources, logs]);
+
+  const channelCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: logs.length };
+    for (const channel of LOG_CHANNELS) {
+      if (channel !== 'all') counts[channel] = 0;
+    }
+    for (const log of logs) {
+      const channel = log.channel ?? 'app';
+      counts[channel] = (counts[channel] ?? 0) + 1;
+    }
+    return counts;
+  }, [logs]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (levelFilter !== 'all') count += 1;
+    if (channelFilter !== 'all') count += 1;
+    count += effectiveSourceFilters.length;
+    if (searchQuery.trim()) count += 1;
+    return count;
+  }, [channelFilter, effectiveSourceFilters.length, levelFilter, searchQuery]);
 
   const handleRefresh = useCallback(() => {
     fetchLogs();
@@ -256,6 +369,41 @@ export default function Logs() {
     resetLogsFilters();
     resetFilter();
   }, [resetFilter, resetLogsFilters]);
+
+  useEffect(() => {
+    if (!rawSourceFilters.length || !availableSources.length) return;
+    const allSelected = sourceFilters.length >= availableSources.length;
+    if (!allSelected) return;
+
+    setLogsSourceFilter([]);
+    setFilter({ sources: [] });
+  }, [
+    availableSources.length,
+    rawSourceFilters.length,
+    setFilter,
+    setLogsSourceFilter,
+    sourceFilters.length,
+  ]);
+
+  const clearLevelFilter = useCallback(() => {
+    handleLevelChange('all');
+  }, [handleLevelChange]);
+
+  const clearChannelFilter = useCallback(() => {
+    handleChannelChange('all');
+  }, [handleChannelChange]);
+
+  const clearSourceFilter = useCallback(
+    (source: string) => {
+      handleSourceChange(effectiveSourceFilters.filter(s => s !== source));
+    },
+    [effectiveSourceFilters, handleSourceChange]
+  );
+
+  const clearSearchFilter = useCallback(() => {
+    setLogsSearchQuery('');
+    setFilter({ search: undefined });
+  }, [setFilter, setLogsSearchQuery]);
 
   useEffect(() => {
     if (channelFilter && channelFilter !== 'all') {
@@ -330,7 +478,7 @@ export default function Logs() {
     (preset: 'errors' | 'python' | 'registration') => {
       if (preset === 'errors') {
         setLogsSelectedTab('errors');
-        setLogsSourceFilter('all');
+        setLogsSourceFilter([]);
         setLogsLevelFilter('all');
         setFilter({
           sources: [],
@@ -342,13 +490,13 @@ export default function Logs() {
 
       if (preset === 'python') {
         setLogsSelectedTab('python');
-        setLogsSourceFilter('python_runner');
+        setLogsSourceFilter(['python_runner']);
         setFilter({ sources: ['python_runner'] });
         return;
       }
 
       setLogsSelectedTab('stream');
-      setLogsSourceFilter('registration');
+      setLogsSourceFilter(['registration']);
       setFilter({ sources: ['registration'] });
     },
     [channelFilter, setFilter, setLogsLevelFilter, setLogsSelectedTab, setLogsSourceFilter]
@@ -501,38 +649,90 @@ export default function Logs() {
 
       <div className="px-6 pt-3 pb-2 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl sticky top-0 z-20">
         <div className="flex flex-wrap items-center gap-2">
-          <Select
+          <FilterDropdown
             value={levelFilter}
-            onChange={e => handleLevelChange(e.target.value)}
-            className="h-8 py-1 text-xs"
-            containerClassName="w-[150px]"
+            onChange={handleLevelChange}
+            icon={<SlidersHorizontal size={14} />}
+            label={t('logs.level')}
+            triggerClassName="h-8 min-w-[152px]"
+            showActiveState
             options={[
-              { value: 'all', label: t('logs.allLevels') },
-              { value: 'debug', label: t('logs.debug') },
-              { value: 'info', label: t('logs.info') },
-              { value: 'success', label: t('logs.success') },
-              { value: 'warn', label: t('logs.warning') },
-              { value: 'error', label: t('logs.error') },
+              {
+                value: 'all',
+                label: t('logs.allLevels'),
+                dot: LEVEL_DOT_MAP.all,
+                count: levelCounts.all,
+              },
+              {
+                value: 'debug',
+                label: t('logs.debug'),
+                dot: LEVEL_DOT_MAP.debug,
+                count: levelCounts.debug,
+              },
+              {
+                value: 'info',
+                label: t('logs.info'),
+                dot: LEVEL_DOT_MAP.info,
+                count: levelCounts.info,
+              },
+              {
+                value: 'success',
+                label: t('logs.success'),
+                dot: LEVEL_DOT_MAP.success,
+                count: levelCounts.success,
+              },
+              {
+                value: 'warn',
+                label: t('logs.warning'),
+                dot: LEVEL_DOT_MAP.warn,
+                count: levelCounts.warn,
+              },
+              {
+                value: 'error',
+                label: t('logs.error'),
+                dot: LEVEL_DOT_MAP.error,
+                count: levelCounts.error,
+              },
             ]}
           />
 
-          <Select
-            value={sourceFilter}
-            onChange={e => handleSourceChange(e.target.value)}
-            className="h-8 py-1 text-xs"
-            containerClassName="w-[170px]"
-            options={[
-              { value: 'all', label: t('logs.allSources') },
-              ...LOG_SOURCES.map(source => ({ value: source, label: source })),
-            ]}
+          <MultiFilterDropdown
+            values={effectiveSourceFilters}
+            onChange={handleSourceChange}
+            icon={<Signal size={14} />}
+            triggerClassName="h-8 min-w-[180px]"
+            menuClassName="min-w-[260px]"
+            placeholder={t('logs.allSources')}
+            footerAllLabel={t('logs.selectAllSources')}
+            footerClearLabel={t('common.clear')}
+            renderValue={values =>
+              values.length === 0
+                ? t('logs.allSources')
+                : values.length === 1
+                  ? values[0]
+                  : t('logs.sourceCountSelected', { count: values.length })
+            }
+            options={availableSources.map(source => ({
+              value: source,
+              label: source,
+              dot: source.startsWith('ai_proxy') ? 'bg-emerald-400' : 'bg-purple-400',
+              count: sourceCounts[source] ?? 0,
+            }))}
           />
 
-          <Select
+          <FilterDropdown
             value={channelFilter}
-            onChange={e => handleChannelChange(e.target.value)}
-            className="h-8 py-1 text-xs"
-            containerClassName="w-[150px]"
-            options={LOG_CHANNELS.map(channel => ({ value: channel, label: channel }))}
+            onChange={handleChannelChange}
+            icon={<Radio size={14} />}
+            label={t('logs.channel')}
+            triggerClassName="h-8 min-w-[148px]"
+            showActiveState
+            options={LOG_CHANNELS.map(channel => ({
+              value: channel,
+              label: channel === 'all' ? t('logs.allChannels') : channel,
+              dot: CHANNEL_DOT_MAP[channel],
+              count: channelCounts[channel] ?? 0,
+            }))}
           />
 
           <Input
@@ -548,7 +748,12 @@ export default function Logs() {
             className="h-8 py-1 text-xs"
           />
 
-          <Button size="xs" variant="ghost" onClick={handleResetFilters}>
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={handleResetFilters}
+            disabled={activeFilterCount === 0}
+          >
             {t('logs.resetFilters')}
           </Button>
 
@@ -558,6 +763,74 @@ export default function Logs() {
             </Badge>
           </div>
         </div>
+
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            {levelFilter !== 'all' && (
+              <Badge variant="info" size="sm" className="normal-case gap-2">
+                <span>
+                  {t('logs.level')}: {levelFilter}
+                </span>
+                <button
+                  type="button"
+                  className="text-sky-200 hover:text-white"
+                  onClick={clearLevelFilter}
+                  aria-label="Clear level filter"
+                >
+                  <X size={12} />
+                </button>
+              </Badge>
+            )}
+            {channelFilter !== 'all' && (
+              <Badge variant="warning" size="sm" className="normal-case gap-2">
+                <span>
+                  {t('logs.channel')}: {channelFilter}
+                </span>
+                <button
+                  type="button"
+                  className="text-amber-200 hover:text-white"
+                  onClick={clearChannelFilter}
+                  aria-label="Clear channel filter"
+                >
+                  <X size={12} />
+                </button>
+              </Badge>
+            )}
+            {effectiveSourceFilters.map(source => (
+              <Badge key={source} variant="default" size="sm" className="normal-case gap-2">
+                <span>
+                  {t('logs.source')}: {source}
+                </span>
+                <button
+                  type="button"
+                  className="text-slate-300 hover:text-white"
+                  onClick={() => clearSourceFilter(source)}
+                  aria-label={`Clear source filter ${source}`}
+                >
+                  <X size={12} />
+                </button>
+              </Badge>
+            ))}
+            {searchQuery.trim() && (
+              <Badge variant="outline" size="sm" className="normal-case gap-2">
+                <span>
+                  {t('common.search')}: {searchQuery}
+                </span>
+                <button
+                  type="button"
+                  className="text-slate-300 hover:text-white"
+                  onClick={clearSearchFilter}
+                  aria-label="Clear search filter"
+                >
+                  <X size={12} />
+                </button>
+              </Badge>
+            )}
+            <Badge variant="outline" size="sm" className="ml-auto normal-case">
+              {t('logs.filtersApplied', { count: activeFilterCount })}
+            </Badge>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 mt-2">
           <TabButton
@@ -596,21 +869,21 @@ export default function Logs() {
             variant={selectedTab === 'errors' ? 'secondary' : 'ghost'}
             onClick={() => applyPreset('errors')}
           >
-            Only errors
+            {t('logs.presetOnlyErrors')}
           </Button>
           <Button
             size="xs"
             variant={selectedTab === 'python' ? 'secondary' : 'ghost'}
             onClick={() => applyPreset('python')}
           >
-            Python runner
+            {t('logs.presetPythonRunner')}
           </Button>
           <Button
             size="xs"
-            variant={sourceFilter === 'registration' ? 'secondary' : 'ghost'}
+            variant={effectiveSourceFilters.includes('registration') ? 'secondary' : 'ghost'}
             onClick={() => applyPreset('registration')}
           >
-            Registration
+            {t('logs.presetRegistration')}
           </Button>
 
           <div className="ml-auto flex items-center gap-2">
