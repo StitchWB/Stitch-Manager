@@ -13,13 +13,20 @@ interface AccountsPagePreferences {
   tagFilter: string;
   relationFilter: string;
   entityFilter: string;
+  tableVisibleColumns: AccountsTableVisibleColumns;
   sortField?: string;
   sortDirection?: 'asc' | 'desc';
 }
 
+export interface AccountsTableVisibleColumns {
+  lastLogin: boolean;
+  proxy: boolean;
+  tags: boolean;
+}
+
 interface LogsPagePreferences {
   levelFilter: string;
-  sourceFilter: string;
+  sourceFilter: string[];
   channelFilter: string;
   searchQuery: string;
   selectedTab: 'stream' | 'grouped' | 'errors' | 'python';
@@ -57,12 +64,13 @@ interface UIPreferencesState {
   setAccountsTagFilter: (tag: string) => void;
   setAccountsRelationFilter: (relation: string) => void;
   setAccountsEntityFilter: (entity: string) => void;
+  setAccountsVisibleColumns: (columns: Partial<AccountsTableVisibleColumns>) => void;
   setAccountsSorting: (field: string, direction: 'asc' | 'desc') => void;
   resetAccountsFilters: () => void;
 
   // Actions for Logs page
   setLogsLevelFilter: (level: string) => void;
-  setLogsSourceFilter: (source: string) => void;
+  setLogsSourceFilter: (source: string[]) => void;
   setLogsChannelFilter: (channel: string) => void;
   setLogsSearchQuery: (query: string) => void;
   setLogsSelectedTab: (tab: 'stream' | 'grouped' | 'errors' | 'python') => void;
@@ -97,13 +105,18 @@ const defaultAccountsPreferences: AccountsPagePreferences = {
   tagFilter: 'all',
   relationFilter: 'all',
   entityFilter: 'accounts',
+  tableVisibleColumns: {
+    lastLogin: true,
+    proxy: true,
+    tags: true,
+  },
   sortField: 'email',
   sortDirection: 'asc',
 };
 
 const defaultLogsPreferences: LogsPagePreferences = {
   levelFilter: 'all',
-  sourceFilter: 'all',
+  sourceFilter: [],
   channelFilter: 'all',
   searchQuery: '',
   selectedTab: 'grouped',
@@ -173,6 +186,19 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       setAccountsEntityFilter: entity => {
         set(state => ({
           accountsPage: { ...state.accountsPage, entityFilter: entity },
+        }));
+      },
+
+      setAccountsVisibleColumns: columns => {
+        set(state => ({
+          accountsPage: {
+            ...state.accountsPage,
+            tableVisibleColumns: {
+              ...(state.accountsPage.tableVisibleColumns ??
+                defaultAccountsPreferences.tableVisibleColumns),
+              ...columns,
+            },
+          },
         }));
       },
 

@@ -128,6 +128,12 @@ export interface Translations {
     selectAccountAria: string;
     actionsMenuAria: string;
     profileIdLabel: string;
+    columnsMenuLabel: string;
+    columnsMenuTitle: string;
+    columnLastLogin: string;
+    columnProxy: string;
+    columnTags: string;
+    columnsReset: string;
     noAccounts: string;
     noAccountsSubtitle: string;
     account: string;
@@ -1293,6 +1299,7 @@ export interface Translations {
     searchPlaceholder: string;
     time: string;
     level: string;
+    channel: string;
     source: string;
     message: string;
     noLogs: string;
@@ -1301,6 +1308,13 @@ export interface Translations {
     entries: string;
     lastUpdated: string;
     allSources: string;
+    allChannels: string;
+    selectAllSources: string;
+    sourceCountSelected: string;
+    filtersApplied: string;
+    presetOnlyErrors: string;
+    presetPythonRunner: string;
+    presetRegistration: string;
     resetFilters: string;
     loadMore: string;
     scrollHint: string;

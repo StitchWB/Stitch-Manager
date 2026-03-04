@@ -4,6 +4,7 @@ import type { Account } from '../types';
 import { t } from '../lib/i18n';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
+import type { AccountsTableVisibleColumns } from '../stores/uiPreferences';
 import { AccountRow } from './accounts/AccountRow';
 import AccountDetailsModal from './ui/AccountDetailsModal';
 import { ConfirmDialog } from './ui/ConfirmDialog';
@@ -20,13 +21,14 @@ import {
   TableRow,
 } from './ui';
 
-interface AccountsTableProps {
+export interface AccountsTableProps {
   accounts: Account[];
   relationHintsById?: Record<number, string[]>;
   relationEdgesById?: Record<number, AccountRelationEdge[]>;
   selectedIds: Set<number>;
   activeAccountIds: Record<string, number | null>;
   isLoading?: boolean;
+  visibleColumns?: AccountsTableVisibleColumns;
   onToggleSelection: (accountId: number) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
@@ -56,6 +58,7 @@ export default function AccountsTable({
   selectedIds,
   activeAccountIds,
   isLoading = false,
+  visibleColumns = { lastLogin: true, proxy: true, tags: true },
   onToggleSelection,
   onSelectAll,
   onClearSelection,
@@ -229,13 +232,31 @@ export default function AccountsTable({
               <TableHead className="px-2 py-3 text-xs text-slate-400">
                 {t('accounts.statusHeader')}
               </TableHead>
-              <TableHead className="px-2 py-3 text-xs text-slate-400">
+              <TableHead
+                className={
+                  visibleColumns.lastLogin
+                    ? 'hidden px-2 py-3 text-xs text-slate-400 md:table-cell'
+                    : 'hidden'
+                }
+              >
                 {t('accounts.lastLoginAt')}
               </TableHead>
-              <TableHead className="px-2 py-3 text-xs text-slate-400">
+              <TableHead
+                className={
+                  visibleColumns.proxy
+                    ? 'hidden px-2 py-3 text-xs text-slate-400 lg:table-cell'
+                    : 'hidden'
+                }
+              >
                 {t('accounts.proxyLabel')}
               </TableHead>
-              <TableHead className="px-2 py-3 text-xs text-slate-400">
+              <TableHead
+                className={
+                  visibleColumns.tags
+                    ? 'hidden px-2 py-3 text-xs text-slate-400 lg:table-cell'
+                    : 'hidden'
+                }
+              >
                 {t('accounts.tags')}
               </TableHead>
               <TableHead className="px-2 py-3 text-right text-xs text-slate-400">
@@ -253,6 +274,7 @@ export default function AccountsTable({
                 isActive={isAccountActive(account)}
                 isRefreshing={isAccountRefreshing(account.id)}
                 isMenuOpen={openMenuId === account.id}
+                visibleColumns={visibleColumns}
                 relationHints={relationHintsById?.[account.id]}
                 relationEdges={relationEdgesById?.[account.id]}
                 onToggleSelection={onToggleSelection}
