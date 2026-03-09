@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { useRegistrationStore } from '../../../stores/registration';
 import { useAppStore } from '../../../stores/app';
-import { testImapConnection, stopRegistration } from '../../../lib/tauri';
+import { stopRegistration } from '../../../lib/tauri';
+import { testInboxConnection } from '../../../lib/tauri/modules/registration';
 import { runRegistration, cancelActiveRegistrationJob } from '../services';
 import type { ProviderName } from '../../../types';
 
@@ -164,13 +165,26 @@ export const useRegistrationFlow = ({
 
       addLog({ level: 'debug', message: `Testing: server=${server}, user=${user}` });
 
-      const result = await testImapConnection({
-        imapServer: server,
-        imapUser: user,
-        imapPassword: password,
-      });
-      addLog({ level: 'success', message: `IMAP: ${result}` });
-      addNotification({ type: 'success', title: 'IMAP OK', message: 'Connection successful' });
+      const useMailTm = Boolean(config.imap.mailtmEnabled);
+      const result = await testInboxConnection(
+        useMailTm
+          ? {
+              provider: 'mail_tm',
+              mailtmAddress: user,
+              mailtmPassword: password,
+            }
+          : {
+              provider: 'imap',
+              imapServer: server,
+              imapPort: config.imap.port,
+              imapUser: user,
+              imapPassword: password,
+              useTls: config.imap.useTLS,
+              mailbox: 'INBOX',
+            }
+      );
+      addLog({ level: 'success', message: `Inbox: ${result}` });
+      addNotification({ type: 'success', title: 'Inbox OK', message: 'Connection successful' });
       return true;
     } catch (e) {
       addLog({ level: 'error', message: `IMAP error: ${e}` });

@@ -9,6 +9,7 @@ import {
   FileText,
   Terminal,
   MessageSquare,
+  FolderKanban,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -35,7 +36,7 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
         cn(
           'flex items-center gap-3 px-3 py-2.5 transition-all duration-200 rounded-xl mx-2 group relative',
           isActive
-            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40 font-bold'
+            ? 'bg-indigo-500/35 text-white shadow-md shadow-indigo-900/20 font-semibold'
             : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
         )
       }
@@ -155,6 +156,12 @@ export default function Sidebar() {
           to="/chat"
           icon={<MessageSquare size={20} />}
           label={t('sidebar.chat')}
+          collapsed={sidebarCollapsed}
+        />
+        <NavItem
+          to="/scenarios"
+          icon={<FolderKanban size={20} />}
+          label={t('sidebar.scenarios')}
           collapsed={sidebarCollapsed}
         />
 

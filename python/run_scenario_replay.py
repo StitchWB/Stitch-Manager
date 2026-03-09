@@ -21,10 +21,12 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 # Ensure project imports work regardless of cwd.
 # NOTE: Our python package root is the "python/" directory.
@@ -90,6 +92,18 @@ REPLAY_OVERLAY_SCRIPT = r"""
   if (window.__stitchReplayOverlayInstalled) return;
   window.__stitchReplayOverlayInstalled = true;
 
+  if (!window.__stitchReplayOverlayState) {
+    window.__stitchReplayOverlayState = {
+      collapsed: false,
+      paused: false,
+      pausedSince: null,
+      stepCurrent: 0,
+      stepTotal: 0,
+      status: 'Running',
+    };
+  }
+  const state = window.__stitchReplayOverlayState;
+
   const box = document.createElement('div');
   box.style.position = 'fixed';
   box.style.right = '16px';
@@ -105,10 +119,47 @@ REPLAY_OVERLAY_SCRIPT = r"""
   box.style.minWidth = '220px';
   box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.4)';
 
+  const mkBtn = (label, bg) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.padding = '6px 10px';
+    b.style.borderRadius = '7px';
+    b.style.border = '1px solid rgba(148,163,184,0.25)';
+    b.style.background = bg;
+    b.style.color = '#fff';
+    b.style.cursor = 'pointer';
+    b.style.fontSize = '12px';
+    return b;
+  };
+
   const title = document.createElement('div');
   title.textContent = 'Stitch Replay';
   title.style.fontWeight = '700';
-  title.style.marginBottom = '6px';
+
+  const topRow = document.createElement('div');
+  topRow.style.display = 'flex';
+  topRow.style.alignItems = 'center';
+  topRow.style.justifyContent = 'space-between';
+  topRow.style.marginBottom = '6px';
+
+  const topActions = document.createElement('div');
+  topActions.style.display = 'flex';
+  topActions.style.gap = '6px';
+
+  const collapseBtn = mkBtn(state.collapsed ? 'Expand' : 'Collapse', '#1e293b');
+  collapseBtn.id = '__stitch-replay-collapse';
+
+  const compact = document.createElement('div');
+  compact.id = '__stitch-replay-compact';
+  compact.style.display = 'none';
+  compact.style.opacity = '0.9';
+  compact.style.fontSize = '11px';
+  compact.style.fontWeight = '600';
+  compact.style.marginTop = '2px';
+
+  const body = document.createElement('div');
+  body.id = '__stitch-replay-body';
 
   const status = document.createElement('div');
   status.textContent = 'Status: Running';
@@ -131,29 +182,15 @@ REPLAY_OVERLAY_SCRIPT = r"""
   pausedFor.style.marginBottom = '8px';
   pausedFor.style.display = 'none';
 
-  let pausedSince = null;
+  let pausedSince = state.pausedSince || null;
 
   const row = document.createElement('div');
   row.style.display = 'flex';
   row.style.gap = '6px';
 
-  const mkBtn = (label, bg) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.style.padding = '6px 10px';
-    b.style.borderRadius = '7px';
-    b.style.border = '1px solid rgba(148,163,184,0.25)';
-    b.style.background = bg;
-    b.style.color = '#fff';
-    b.style.cursor = 'pointer';
-    b.style.fontSize = '12px';
-    return b;
-  };
-
   const pauseBtn = mkBtn('Pause', '#334155');
   const stopBtn = mkBtn('Stop', '#7f1d1d');
-  let paused = false;
+  let paused = Boolean(state.paused);
 
   const sendControl = (cmd) => {
     if (typeof window.__stitchReplayControl === 'function') {
@@ -162,75 +199,127 @@ REPLAY_OVERLAY_SCRIPT = r"""
   };
 
   pauseBtn.onclick = () => {
-    paused = !paused;
-    if (paused) {
-      pauseBtn.textContent = 'Resume';
-      status.textContent = 'Status: Paused';
-      reason.textContent = 'Reason: Operator pause';
-      if (!pausedSince) pausedSince = Date.now();
-      pausedFor.style.display = 'block';
-      sendControl('pause');
-    } else {
-      pauseBtn.textContent = 'Pause';
-      status.textContent = 'Status: Running';
-      reason.textContent = 'Reason: -';
-      pausedSince = null;
-      pausedFor.style.display = 'none';
-      pausedFor.textContent = 'Paused: -';
-      sendControl('resume');
-    }
-  };
+      paused = !paused;
+      state.paused = paused;
+      if (paused) {
+        pauseBtn.textContent = 'Resume';
+        status.textContent = 'Status: Paused';
+        reason.textContent = 'Reason: Operator pause';
+        if (!pausedSince) pausedSince = Date.now();
+        state.pausedSince = pausedSince;
+        pausedFor.style.display = 'block';
+        sendControl('pause');
+      } else {
+        pauseBtn.textContent = 'Pause';
+        status.textContent = 'Status: Running';
+        reason.textContent = 'Reason: -';
+        pausedSince = null;
+        state.pausedSince = null;
+        pausedFor.style.display = 'none';
+        pausedFor.textContent = 'Paused: -';
+        sendControl('resume');
+      }
+      renderOverlay();
+    };
 
   stopBtn.onclick = () => {
-    status.textContent = 'Status: Stopping...';
-    pausedSince = null;
-    sendControl('stop');
+      status.textContent = 'Status: Stopping...';
+      pausedSince = null;
+      state.pausedSince = null;
+      sendControl('stop');
+      renderOverlay();
+    };
+
+  collapseBtn.onclick = () => {
+    state.collapsed = !state.collapsed;
+    renderOverlay();
   };
 
   row.appendChild(pauseBtn);
   row.appendChild(stopBtn);
-  box.appendChild(title);
-  box.appendChild(status);
-  box.appendChild(step);
-  box.appendChild(reason);
-  box.appendChild(pausedFor);
-  box.appendChild(row);
+  topActions.appendChild(collapseBtn);
+  topRow.appendChild(title);
+  topRow.appendChild(topActions);
+
+  body.appendChild(status);
+  body.appendChild(step);
+  body.appendChild(reason);
+  body.appendChild(pausedFor);
+  body.appendChild(row);
+
+  box.appendChild(topRow);
+  box.appendChild(compact);
+  box.appendChild(body);
   document.documentElement.appendChild(box);
 
+  const renderOverlay = () => {
+    if (collapseBtn) {
+      collapseBtn.textContent = state.collapsed ? 'Expand' : 'Collapse';
+    }
+
+    if (compact) {
+      const current = Number(state.stepCurrent || 0);
+      const total = Number(state.stepTotal || 0);
+      const progress = total > 0 ? `${current}/${total}` : '-/-';
+      compact.textContent = `${state.paused ? 'PAUSED' : 'RUN'} • ${progress}`;
+      compact.style.display = state.collapsed ? 'block' : 'none';
+    }
+
+    if (body) {
+      body.style.display = state.collapsed ? 'none' : 'block';
+    }
+
+    box.style.minWidth = state.collapsed ? '140px' : '220px';
+  };
+
   window.__stitchReplayOverlaySetStatus = (text) => {
-    status.textContent = `Status: ${text}`;
+    state.status = (text || 'Running').toString();
+    status.textContent = `Status: ${state.status}`;
+    renderOverlay();
   };
 
   window.__stitchReplayOverlaySetStep = (current, total) => {
+    state.stepCurrent = Number(current || 0);
+    state.stepTotal = Number(total || 0);
     if (!current || !total) {
       step.textContent = 'Step: -/-';
+      renderOverlay();
       return;
     }
     step.textContent = `Step: ${current}/${total}`;
+    renderOverlay();
   };
 
   window.__stitchReplayOverlaySetReason = (text) => {
     const v = (text || '').toString().trim();
     reason.textContent = `Reason: ${v || '-'}`;
+    renderOverlay();
   };
 
   window.__stitchReplayOverlaySetPaused = (flag) => {
+    state.paused = Boolean(flag);
     if (flag) {
       if (!pausedSince) pausedSince = Date.now();
+      state.pausedSince = pausedSince;
       pausedFor.style.display = 'block';
     } else {
       pausedSince = null;
+      state.pausedSince = null;
       pausedFor.style.display = 'none';
       pausedFor.textContent = 'Paused: -';
     }
+    renderOverlay();
   };
 
   window.__stitchReplayOverlaySetSaved = (path) => {
     status.textContent = 'Status: Saved';
     reason.textContent = `Reason: ${path ? `Saved report ${path}` : 'Saved'}`;
     pausedSince = null;
+    state.pausedSince = null;
+    state.paused = false;
     pausedFor.style.display = 'none';
     pausedFor.textContent = 'Paused: -';
+    renderOverlay();
   };
 
   setInterval(() => {
@@ -238,6 +327,8 @@ REPLAY_OVERLAY_SCRIPT = r"""
     const sec = Math.max(0, Math.floor((Date.now() - pausedSince) / 1000));
     pausedFor.textContent = `Paused: ${sec}s`;
   }, 1000);
+
+  renderOverlay();
 })();
 """
 
@@ -410,7 +501,9 @@ def _best_selector(step: dict[str, Any]) -> str | None:
     return None
 
 
-def _sanitize_step(step: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+def _sanitize_step(
+    step: dict[str, Any], runtime_proxy_map: dict[str, str] | None = None
+) -> tuple[dict[str, Any] | None, str | None]:
     """Sanitize one replay step for backward compatibility.
 
     Returns (sanitized_step_or_none, skip_reason_or_none).
@@ -439,23 +532,152 @@ def _sanitize_step(step: dict[str, Any]) -> tuple[dict[str, Any] | None, str | N
             fixed["value"] = "Enter"
         return fixed, None
 
+    if kind in ("proxy.switch",):
+        # Will be validated and normalized with runtime proxy map later.
+        return dict(step), None
+
+    if kind == "proxy.switch":
+        fixed = dict(step)
+        meta = fixed.get("meta") if isinstance(fixed.get("meta"), dict) else {}
+        proxy_id = str(meta.get("proxyLibraryId") or "").strip() if isinstance(meta, dict) else ""
+
+        resolved = None
+        if proxy_id and runtime_proxy_map and proxy_id in runtime_proxy_map:
+            resolved = runtime_proxy_map.get(proxy_id)
+        if not resolved:
+            # Direct per-step fallback: kept for compatibility.
+            resolved = str(fixed.get("value") or "").strip() or None
+
+        runtime_proxy = _parse_runtime_proxy_any(resolved)
+        if not runtime_proxy:
+            return None, "proxy.switch has no resolvable proxy"
+
+        fixed["kind"] = "proxy.switch"
+        fixed["value"] = None
+        fixed_meta = dict(meta) if isinstance(meta, dict) else {}
+        fixed_meta["runtimeProxy"] = runtime_proxy
+        fixed_meta["runtimeProxyMasked"] = _mask_proxy_url(runtime_proxy)
+        fixed["meta"] = fixed_meta
+        return fixed, None
+
     return step, None
 
 
 def _sanitize_steps(
     steps: list[dict[str, Any]],
+    runtime_proxy_map: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     sanitized: list[dict[str, Any]] = []
     dropped: list[dict[str, Any]] = []
 
     for idx, step in enumerate(steps, start=1):
-        fixed, reason = _sanitize_step(step)
+        fixed, reason = _sanitize_step(step, runtime_proxy_map=runtime_proxy_map)
         if fixed is None:
             dropped.append({"index": idx, "reason": reason or "invalid step"})
             continue
         sanitized.append(fixed)
 
     return sanitized, dropped
+
+
+_SENSITIVE_KEY_RE = re.compile(
+    r'("(?:token|refresh_token|password|secret|cookie|authorization|session_data?)"\s*:\s*)"[^"]*"',
+    flags=re.IGNORECASE,
+)
+
+_SENSITIVE_VALUE_RE = re.compile(
+    r"\b(Bearer)\s+([A-Za-z0-9\-._~+/]+=*)",
+    flags=re.IGNORECASE,
+)
+
+
+def _parse_runtime_proxy_any(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+
+    if "://" in raw:
+        try:
+            parsed = urlsplit(raw)
+            if parsed.hostname and parsed.port:
+                scheme = (parsed.scheme or "http").strip().lower()
+                host = parsed.hostname
+                port = int(parsed.port)
+                if parsed.username:
+                    return f"{scheme}://{parsed.username}:{parsed.password or ''}@{host}:{port}"
+                return f"{scheme}://{host}:{port}"
+        except Exception:
+            return None
+
+    scheme = "http"
+    payload = raw
+
+    parts = [p.strip() for p in payload.split(":")]
+    if len(parts) not in (2, 4):
+        return None
+
+    host = parts[0]
+    if not host:
+        return None
+    try:
+        port = int(parts[1])
+    except Exception:
+        return None
+    if port <= 0 or port > 65535:
+        return None
+
+    if len(parts) == 4 and parts[2]:
+        username = parts[2]
+        password = parts[3]
+        return f"{scheme}://{username}:{password}@{host}:{port}"
+    return f"{scheme}://{host}:{port}"
+
+
+def _mask_proxy_url(value: str) -> str:
+    try:
+        if "@" in value and "://" in value:
+            head, tail = value.split("://", 1)
+            auth, host = tail.split("@", 1)
+            if ":" in auth:
+                user, _ = auth.split(":", 1)
+                return f"{head}://{user}:***@{host}"
+        return value
+    except Exception:
+        return "proxy://***"
+
+
+def _redact_text(value: str) -> str:
+    if not value:
+        return value
+    out = _SENSITIVE_KEY_RE.sub(r'\1"***"', value)
+    out = _SENSITIVE_VALUE_RE.sub(r"\\1 ***", out)
+    return out
+
+
+def _sanitize_report(report: dict[str, Any]) -> dict[str, Any]:
+    out = dict(report)
+    if out.get("error"):
+        out["error"] = _redact_text(str(out.get("error") or ""))
+
+    failed_steps = out.get("failedSteps")
+    if isinstance(failed_steps, list):
+        sanitized: list[dict[str, Any]] = []
+        for entry in failed_steps:
+            if not isinstance(entry, dict):
+                continue
+            row = dict(entry)
+            if row.get("error"):
+                row["error"] = _redact_text(str(row.get("error") or ""))
+            sanitized.append(row)
+        out["failedSteps"] = sanitized
+    return out
+
+
+def _write_safe_report(path: Path, report: dict[str, Any]) -> None:
+    safe = _sanitize_report(report)
+    path.write_text(json.dumps(safe, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class CommandTail:
@@ -598,7 +820,7 @@ async def _save_step_artifacts(page: Any, artifacts_dir: Path, step_index: int) 
 
     try:
         content = await page.content()
-        html.write_text(content, encoding="utf-8")
+        html.write_text(_redact_text(content), encoding="utf-8")
         artifacts["html"] = str(html)
     except Exception:
         pass
@@ -688,6 +910,21 @@ async def _run_step(page: Any, step: dict[str, Any], timeout_ms: int = 15_000) -
         # handled by outer loop
         return
 
+    if kind == "proxy.switch":
+        # Applying runtime proxy on an already running Playwright context is not supported.
+        # We surface an explicit event and continue safely.
+        meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
+        _event(
+            "scenario.replay.proxy.switch",
+            {
+                "applied": False,
+                "reason": "runtime_context_proxy_not_switchable",
+                "proxyLibraryId": meta.get("proxyLibraryId") if isinstance(meta, dict) else None,
+                "proxy": meta.get("runtimeProxyMasked") if isinstance(meta, dict) else None,
+            },
+        )
+        return
+
     # unknown step kinds are no-op (do not fail whole run)
     return
 
@@ -754,6 +991,12 @@ async def main_async() -> int:
         except Exception:
             _log("warn", "Invalid --config-json, ignoring", step="init")
 
+    runtime_proxy_map: dict[str, str] = {
+        str(k): str(v)
+        for k, v in dict(config.get("runtime_proxy_map") or {}).items()
+        if isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip()
+    }
+
     start_url = (
         args.start_url.strip()
         if args.start_url.strip()
@@ -768,7 +1011,7 @@ async def main_async() -> int:
     steps: list[dict[str, Any]] = (
         [s for s in steps_raw if isinstance(s, dict)] if isinstance(steps_raw, list) else []
     )
-    sanitized_steps, dropped_steps = _sanitize_steps(steps)
+    sanitized_steps, dropped_steps = _sanitize_steps(steps, runtime_proxy_map=runtime_proxy_map)
     if dropped_steps:
         _event(
             "scenario.replay.sanitize",
@@ -810,8 +1053,16 @@ async def main_async() -> int:
     started_at = _now_iso()
     failed_steps: list[dict[str, Any]] = []
     trace_saved = False
+    trace_saved_paths: list[str] = []
     paused_by_overlay = False
     abort_requested = False
+    active_proxy = args.proxy or None
+
+    launcher: Any | None = None
+    page: Any | None = None
+    tracing_started = False
+    current_trace_path: Path | None = None
+    session_seq = 0
 
     def on_overlay_control(command: str) -> None:
         nonlocal paused_by_overlay, abort_requested
@@ -829,6 +1080,86 @@ async def main_async() -> int:
             _event("scenario.replay.control.stop", {"runId": run_id})
             return
 
+    async def _attach_overlay(target_page: Any) -> None:
+        try:
+            await target_page.expose_function("__stitchReplayControl", on_overlay_control)
+        except Exception:
+            pass
+        try:
+            await target_page.add_init_script(REPLAY_OVERLAY_SCRIPT)
+            await target_page.evaluate(REPLAY_OVERLAY_SCRIPT)
+        except Exception:
+            pass
+        try:
+            await target_page.evaluate(
+                "window.__stitchReplayOverlaySetStep && window.__stitchReplayOverlaySetStep(0, 0)"
+            )
+            await target_page.evaluate(
+                "window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason('')"
+            )
+            await target_page.evaluate(
+                "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(false)"
+            )
+        except Exception:
+            pass
+
+    async def _stop_tracing_if_started() -> None:
+        nonlocal tracing_started, current_trace_path, trace_saved
+        if not tracing_started or page is None:
+            return
+        try:
+            target_path = current_trace_path or trace_path
+            await page.context.tracing.stop(path=str(target_path))
+            if target_path.exists():
+                trace_saved_paths.append(str(target_path))
+                trace_saved = True
+        except Exception:
+            _log("warn", "Failed to save trace", step="trace")
+        finally:
+            tracing_started = False
+            current_trace_path = None
+
+    async def _close_active_session() -> None:
+        nonlocal launcher, page
+        try:
+            await _stop_tracing_if_started()
+        finally:
+            if launcher is not None:
+                try:
+                    await launcher.close()
+                except Exception:
+                    pass
+            launcher = None
+            page = None
+
+    async def _start_session(proxy_url: str | None, open_url: str) -> None:
+        nonlocal launcher, page, tracing_started, current_trace_path, session_seq
+        session_seq += 1
+        launcher = ProfileLauncher(
+            profile_id=args.alias,
+            headless=bool(args.headless),
+            proxy=proxy_url or None,
+            config=config,
+        )
+        page = await launcher.open(open_url, wait_until="domcontentloaded")
+        session_page = page
+        if session_page is None:
+            raise RuntimeError("Failed to open replay page")
+        await _attach_overlay(session_page)
+
+        tracing_started = False
+        current_trace_path = session_dir / f"trace_{session_seq:02d}.zip"
+        try:
+            await session_page.context.tracing.start(screenshots=True, snapshots=True)
+            tracing_started = True
+        except Exception:
+            _log("warn", "Failed to start Playwright tracing", step="trace")
+
+    def _latest_trace_path() -> str | None:
+        if trace_saved_paths:
+            return trace_saved_paths[-1]
+        return None
+
     if args.dry_run:
         _log("warn", "Dry-run mode: browser will NOT be launched", step="init")
         try:
@@ -842,16 +1173,21 @@ async def main_async() -> int:
                 url = step.get("url") if isinstance(step.get("url"), str) else None
 
                 _event(
-                    "scenario.replay.step.start",
-                    {
-                        "runId": run_id,
-                        "index": idx,
-                        "total": total_steps,
-                        "kind": kind,
-                        "selector": selector,
-                        "url": url,
-                    },
-                )
+                "scenario.replay.step.start",
+                {
+                    "runId": run_id,
+                    "index": idx,
+                    "total": total_steps,
+                    "kind": kind,
+                    "selector": selector,
+                    "url": url,
+                    "display": (
+                        (step.get("meta") or {}).get("display")
+                        if isinstance(step.get("meta"), dict)
+                        else None
+                    ),
+                },
+            )
 
                 if kind in (
                     "manual.pause",
@@ -899,9 +1235,7 @@ async def main_async() -> int:
                 "error": str(e),
                 "dryRun": True,
             }
-            report_path.write_text(
-                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            _write_safe_report(report_path, report)
             _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "aborted"})
             _result(
                 False,
@@ -927,9 +1261,7 @@ async def main_async() -> int:
                 "error": str(e),
                 "dryRun": True,
             }
-            report_path.write_text(
-                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            _write_safe_report(report_path, report)
             _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "failed"})
             _result(
                 False,
@@ -954,7 +1286,7 @@ async def main_async() -> int:
             "commandFilePath": str(command_file),
             "dryRun": True,
         }
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_safe_report(report_path, report)
         _event(
             "scenario.replay.finished",
             {
@@ -983,180 +1315,177 @@ async def main_async() -> int:
         return 0
 
     try:
-        async with ProfileLauncher(
-            profile_id=args.alias,
-            headless=bool(args.headless),
-            proxy=args.proxy or None,
-            config=config,
-        ) as launcher:
-            page = await launcher.open(start_url, wait_until="domcontentloaded")
-            await page.expose_function("__stitchReplayControl", on_overlay_control)
-            await page.add_init_script(REPLAY_OVERLAY_SCRIPT)
-            await page.evaluate(REPLAY_OVERLAY_SCRIPT)
+        await _start_session(active_proxy, start_url)
+
+        deadline = time.time() + float(max(1, args.timeout_s))
+        for idx, step in enumerate(steps, start=1):
+            if page is None:
+                raise RuntimeError("Replay session is not active")
+
+            if abort_requested:
+                raise ReplayAbort("Stop requested from browser overlay")
+
+            while paused_by_overlay and not abort_requested:
+                try:
+                    await page.evaluate(
+                        "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(true)"
+                    )
+                except Exception:
+                    pass
+                await asyncio.sleep(0.25)
+
             try:
-                await page.evaluate(
-                    "window.__stitchReplayOverlaySetStep && window.__stitchReplayOverlaySetStep(0, 0)"
-                )
-                await page.evaluate(
-                    "window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason('')"
-                )
                 await page.evaluate(
                     "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(false)"
                 )
             except Exception:
                 pass
 
-            tracing_started = False
+            if abort_requested:
+                raise ReplayAbort("Stop requested from browser overlay")
+
+            if time.time() > deadline:
+                raise TimeoutError("Replay timeout reached")
+
+            kind = _step_kind(step)
+            selector = _best_selector(step)
+            url = step.get("url") if isinstance(step.get("url"), str) else None
+
+            _event(
+                "scenario.replay.step.start",
+                {
+                    "runId": run_id,
+                    "index": idx,
+                    "total": total_steps,
+                    "kind": kind,
+                    "selector": selector,
+                    "url": url,
+                    "display": (
+                        (step.get("meta") or {}).get("display")
+                        if isinstance(step.get("meta"), dict)
+                        else None
+                    ),
+                },
+            )
+
             try:
-                await page.context.tracing.start(screenshots=True, snapshots=True)
-                tracing_started = True
+                await page.evaluate(
+                    "(arg) => window.__stitchReplayOverlaySetStep && window.__stitchReplayOverlaySetStep(arg.current, arg.total)",
+                    {"current": idx, "total": total_steps},
+                )
             except Exception:
-                _log("warn", "Failed to start Playwright tracing", step="trace")
+                pass
 
             try:
-                deadline = time.time() + float(max(1, args.timeout_s))
-                for idx, step in enumerate(steps, start=1):
-                    if abort_requested:
-                        raise ReplayAbort("Stop requested from browser overlay")
-
-                    while paused_by_overlay and not abort_requested:
-                        try:
-                            await page.evaluate(
-                                "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(true)"
-                            )
-                        except Exception:
-                            pass
-                        await asyncio.sleep(0.25)
-
+                if kind in ("manual.pause", "manual", "manual.captcha", "captcha") or _looks_like_captcha(
+                    step
+                ):
+                    reason = "captcha" if _looks_like_captcha(step) else kind
                     try:
+                        await page.evaluate(
+                            "window.__stitchReplayOverlaySetStatus && window.__stitchReplayOverlaySetStatus('Manual pause')"
+                        )
+                        await page.evaluate(
+                            "(arg) => window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason(arg.reason)",
+                            {"reason": reason},
+                        )
+                        await page.evaluate(
+                            "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(true)"
+                        )
+                    except Exception:
+                        pass
+                    await _manual_pause(
+                        page=page,
+                        reason=reason,
+                        step_index=idx,
+                        total_steps=total_steps,
+                        command_tail=cmd_tail,
+                        command_file_path=str(command_file),
+                        timeout_s=max(1, args.pause_timeout_s),
+                    )
+                    try:
+                        await page.evaluate(
+                            "window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason('')"
+                        )
                         await page.evaluate(
                             "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(false)"
                         )
                     except Exception:
                         pass
 
-                    if abort_requested:
-                        raise ReplayAbort("Stop requested from browser overlay")
+                if kind == "proxy.switch":
+                    meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
+                    new_proxy = str(meta.get("runtimeProxy") or "").strip() if isinstance(meta, dict) else ""
+                    if not new_proxy:
+                        raise ValueError("proxy.switch has no resolved runtime proxy")
 
-                    if time.time() > deadline:
-                        raise TimeoutError("Replay timeout reached")
-
-                    kind = _step_kind(step)
-                    selector = _best_selector(step)
-                    url = step.get("url") if isinstance(step.get("url"), str) else None
-
-                    _event(
-                        "scenario.replay.step.start",
-                        {
-                            "runId": run_id,
-                            "index": idx,
-                            "total": total_steps,
-                            "kind": kind,
-                            "selector": selector,
-                            "url": url,
-                        },
-                    )
-
+                    current_url = "about:blank"
                     try:
-                        await page.evaluate(
-                            "(arg) => window.__stitchReplayOverlaySetStep && window.__stitchReplayOverlaySetStep(arg.current, arg.total)",
-                            {"current": idx, "total": total_steps},
-                        )
+                        current_url = str(page.url or "about:blank")
                     except Exception:
                         pass
 
-                    try:
-                        # explicit manual steps OR heuristic captcha detection
-                        if kind in (
-                            "manual.pause",
-                            "manual",
-                            "manual.captcha",
-                            "captcha",
-                        ) or _looks_like_captcha(step):
-                            reason = "captcha" if _looks_like_captcha(step) else kind
-                            try:
-                                await page.evaluate(
-                                    "window.__stitchReplayOverlaySetStatus && window.__stitchReplayOverlaySetStatus('Manual pause')"
-                                )
-                                await page.evaluate(
-                                    "(arg) => window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason(arg.reason)",
-                                    {"reason": reason},
-                                )
-                                await page.evaluate(
-                                    "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(true)"
-                                )
-                            except Exception:
-                                pass
-                            await _manual_pause(
-                                page=page,
-                                reason=reason,
-                                step_index=idx,
-                                total_steps=total_steps,
-                                command_tail=cmd_tail,
-                                command_file_path=str(command_file),
-                                timeout_s=max(1, args.pause_timeout_s),
-                            )
-                            try:
-                                await page.evaluate(
-                                    "window.__stitchReplayOverlaySetReason && window.__stitchReplayOverlaySetReason('')"
-                                )
-                                await page.evaluate(
-                                    "window.__stitchReplayOverlaySetPaused && window.__stitchReplayOverlaySetPaused(false)"
-                                )
-                            except Exception:
-                                pass
+                    await _close_active_session()
+                    active_proxy = new_proxy
+                    await _start_session(active_proxy, current_url)
 
-                        await _run_step(page, step, timeout_ms=_timeout_ms(step, 15_000))
-                        passed += 1
-                        _event(
-                            "scenario.replay.step.done",
-                            {
-                                "runId": run_id,
-                                "index": idx,
-                                "total": total_steps,
-                                "kind": kind,
-                            },
-                        )
-                    except ReplayAbort:
-                        raise
-                    except Exception as e:
-                        failed += 1
-                        artifacts = await _save_step_artifacts(page, artifacts_dir, idx)
-                        failed_entry = {
-                            "index": idx,
-                            "kind": kind,
-                            "selector": selector,
-                            "url": url,
-                            "error": str(e),
-                            "artifacts": artifacts,
-                        }
-                        failed_steps.append(failed_entry)
-                        _event(
-                            "scenario.replay.step.fail",
-                            {
-                                "runId": run_id,
-                                **failed_entry,
-                            },
-                        )
-                        if not args.continue_on_error:
-                            raise
-            finally:
-                if tracing_started:
-                    try:
-                        await page.context.tracing.stop(path=str(trace_path))
-                        trace_saved = trace_path.exists()
-                    except Exception:
-                        _log("warn", "Failed to save trace", step="trace")
-
-                try:
-                    await page.evaluate(
-                        "(arg) => window.__stitchReplayOverlaySetSaved && window.__stitchReplayOverlaySetSaved(arg.path)",
-                        {"path": str(report_path)},
+                    _event(
+                        "scenario.replay.proxy.switch",
+                        {
+                            "applied": True,
+                            "reason": "session_restart_with_new_proxy",
+                            "proxyLibraryId": meta.get("proxyLibraryId") if isinstance(meta, dict) else None,
+                            "proxy": meta.get("runtimeProxyMasked") if isinstance(meta, dict) else None,
+                        },
                     )
-                except Exception:
-                    pass
+                else:
+                    await _run_step(page, step, timeout_ms=_timeout_ms(step, 15_000))
+
+                passed += 1
+                _event(
+                    "scenario.replay.step.done",
+                    {
+                        "runId": run_id,
+                        "index": idx,
+                        "total": total_steps,
+                        "kind": kind,
+                    },
+                )
+            except ReplayAbort:
+                raise
+            except Exception as e:
+                failed += 1
+                artifacts = await _save_step_artifacts(page, artifacts_dir, idx) if page is not None else {}
+                failed_entry = {
+                    "index": idx,
+                    "kind": kind,
+                    "selector": selector,
+                    "url": url,
+                    "error": str(e),
+                    "artifacts": artifacts,
+                }
+                failed_steps.append(failed_entry)
+                _event(
+                    "scenario.replay.step.fail",
+                    {
+                        "runId": run_id,
+                        **failed_entry,
+                    },
+                )
+                if not args.continue_on_error:
+                    raise
+
+        if page is not None:
+            try:
+                await page.evaluate(
+                    "(arg) => window.__stitchReplayOverlaySetSaved && window.__stitchReplayOverlaySetSaved(arg.path)",
+                    {"path": str(report_path)},
+                )
+            except Exception:
+                pass
 
     except ReplayAbort as e:
+        await _close_active_session()
         report = {
             "version": 1,
             "runId": run_id,
@@ -1169,11 +1498,11 @@ async def main_async() -> int:
             "stepsFailed": failed,
             "failedSteps": failed_steps,
             "artifactsDir": str(artifacts_dir),
-            "tracePath": str(trace_path) if trace_saved and trace_path.exists() else None,
+            "tracePath": _latest_trace_path(),
             "commandFilePath": str(command_file),
             "error": str(e),
         }
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_safe_report(report_path, report)
         _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "aborted"})
         _result(
             False,
@@ -1182,6 +1511,7 @@ async def main_async() -> int:
         )
         return 2
     except Exception as e:
+        await _close_active_session()
         report = {
             "version": 1,
             "runId": run_id,
@@ -1194,11 +1524,11 @@ async def main_async() -> int:
             "stepsFailed": failed,
             "failedSteps": failed_steps,
             "artifactsDir": str(artifacts_dir),
-            "tracePath": str(trace_path) if trace_saved and trace_path.exists() else None,
+            "tracePath": _latest_trace_path(),
             "commandFilePath": str(command_file),
             "error": str(e),
         }
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_safe_report(report_path, report)
         _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "failed"})
         _result(
             False,
@@ -1206,6 +1536,8 @@ async def main_async() -> int:
             error={"code": "replay_failed", "message": str(e)},
         )
         return 1
+
+    await _close_active_session()
 
     report = {
         "version": 1,
@@ -1219,10 +1551,10 @@ async def main_async() -> int:
         "stepsFailed": failed,
         "failedSteps": failed_steps,
         "artifactsDir": str(artifacts_dir),
-        "tracePath": str(trace_path) if trace_saved and trace_path.exists() else None,
+        "tracePath": _latest_trace_path(),
         "commandFilePath": str(command_file),
     }
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_safe_report(report_path, report)
 
     _event(
         "scenario.replay.finished",
@@ -1232,7 +1564,7 @@ async def main_async() -> int:
             "stepsPassed": passed,
             "stepsFailed": failed,
             "reportPath": str(report_path),
-            "tracePath": str(trace_path) if trace_saved and trace_path.exists() else None,
+            "tracePath": _latest_trace_path(),
         },
     )
     _event("scenario.replay.saved", {"reportPath": str(report_path), "status": "succeeded"})
@@ -1244,7 +1576,7 @@ async def main_async() -> int:
             "stepsPassed": passed,
             "stepsFailed": failed,
             "reportPath": str(report_path),
-            "tracePath": str(trace_path) if trace_saved and trace_path.exists() else None,
+            "tracePath": _latest_trace_path(),
             "artifactsDir": str(artifacts_dir),
             "commandFilePath": str(command_file),
         },

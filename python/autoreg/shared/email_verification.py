@@ -16,7 +16,145 @@ import imaplib
 import email as email_lib
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
-from typing import Optional, Dict, Callable
+from typing import Optional, Dict, Callable, Any
+
+
+def _extract_verification_code_from_text(text: str) -> Optional[str]:
+    """Extract verification code using common patterns."""
+    patterns = [
+        r'\b(\d{6})\b',
+        r'\b([A-Z0-9]{6})\b',
+        r'\b(\d{4,8})\b',
+        r'code[:\s]+([A-Z0-9]{4,8})',
+        r'verification[:\s]+([A-Z0-9]{4,8})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text or "", re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+def get_verification_code_from_mailtm(
+    mailtm_config: Dict[str, Any],
+    sender_keywords: list[str],
+    max_wait: int = 120,
+    time_window: int = 300,
+    log_callback: Optional[Callable] = None,
+    target_email: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Retrieve verification code from an existing Mail.tm mailbox.
+
+    mailtm_config keys:
+      - address (required)
+      - password (required)
+      - base_url (optional)
+    """
+
+    def log(message: str):
+        prefix = f"[{session_id}]" if session_id else ""
+        full_message = f"{prefix} {message}" if prefix else message
+        if log_callback:
+            log_callback(full_message)
+
+    address = (mailtm_config.get('address') or '').strip()
+    password = (mailtm_config.get('password') or '').strip()
+    base_url = (mailtm_config.get('base_url') or '').strip() or "https://api.mail.tm"
+
+    if not address or not password:
+        log("[Mail.tm] Missing mailbox credentials")
+        return None
+
+    try:
+        from ..services.mailtm import MailTmConfig, MailTmService
+
+        service = MailTmService(MailTmConfig(base_url=base_url))
+        try:
+            service.login(address, password)
+        except Exception as e:
+            log(f"[Mail.tm] Login failed: {e}")
+            service.close()
+            return None
+
+        start_time = time.time()
+        cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=time_window)
+
+        while time.time() - start_time < max_wait:
+            try:
+                messages = service.get_messages(page=1)
+            except Exception as e:
+                log(f"[Mail.tm] Failed to fetch messages: {e}")
+                time.sleep(3)
+                continue
+
+            for msg in messages:
+                try:
+                    created_at_raw = msg.get('createdAt') or msg.get('created_at')
+                    if created_at_raw:
+                        created_dt = parsedate_to_datetime(created_at_raw) if ',' in created_at_raw else datetime.datetime.fromisoformat(created_at_raw.replace('Z', '+00:00'))
+                        if created_dt.tzinfo is None:
+                            created_dt = created_dt.replace(tzinfo=datetime.timezone.utc)
+                        if created_dt < cutoff_time:
+                            continue
+                except Exception:
+                    pass
+
+                sender = msg.get('from') or {}
+                sender_address = (sender.get('address') or '').lower()
+                sender_name = (sender.get('name') or '').lower()
+                if sender_keywords:
+                    matches = any(
+                        keyword.lower() in sender_address or keyword.lower() in sender_name
+                        for keyword in sender_keywords
+                    )
+                    if not matches:
+                        continue
+
+                if target_email:
+                    to_list = msg.get('to') or []
+                    if isinstance(to_list, list) and to_list:
+                        recipient_addresses = [
+                            (entry.get('address') or '').lower()
+                            for entry in to_list
+                            if isinstance(entry, dict)
+                        ]
+                        if recipient_addresses and target_email.lower() not in recipient_addresses:
+                            continue
+
+                message_id = msg.get('id')
+                if not message_id:
+                    continue
+
+                try:
+                    full_msg = service.get_message(message_id)
+                except Exception:
+                    continue
+
+                text = full_msg.get('text') or ''
+                code = _extract_verification_code_from_text(text)
+                if not code:
+                    html = full_msg.get('html') or []
+                    if isinstance(html, list):
+                        html_text = ' '.join(str(x) for x in html)
+                    else:
+                        html_text = str(html)
+                    code = _extract_verification_code_from_text(re.sub(r'<[^>]*>', ' ', html_text))
+
+                if code:
+                    log(f"[Mail.tm] Verification code found: {code}")
+                    service.close()
+                    return code
+
+            time.sleep(3)
+
+        log("[Mail.tm] Verification code not found within timeout")
+        service.close()
+        return None
+    except Exception as e:
+        log(f"[Mail.tm] Unexpected error: {e}")
+        return None
 
 
 def decode_header_value(header_value: str) -> str:
@@ -35,7 +173,7 @@ def decode_header_value(header_value: str) -> str:
         return str(header_value)
 
 
-def extract_body_text(msg: email_lib.message.Message) -> str:
+def extract_body_text(msg: Any) -> str:
     plain = ""
     html = ""
     if msg.is_multipart():
@@ -66,7 +204,7 @@ def extract_body_text(msg: email_lib.message.Message) -> str:
 
 
 def get_verification_code_from_imap(
-    imap_config: Dict[str, any],
+    imap_config: Dict[str, Any],
     sender_keywords: list[str],
     subject_pattern: Optional[str] = None,
     max_wait: int = 120,
@@ -120,94 +258,6 @@ def get_verification_code_from_imap(
         if log_callback:
             log_callback(full_message)
 
-    def decode_header_value(header_value: str) -> str:
-        if not header_value:
-            return ""
-        try:
-            decoded = decode_header(header_value)
-            parts: list[str] = []
-            for part, encoding in decoded:
-                if isinstance(part, bytes):
-                    parts.append(part.decode(encoding or "utf-8", errors="ignore"))
-                else:
-                    parts.append(str(part))
-            return "".join(parts)
-        except Exception:
-            return str(header_value)
-
-    def extract_body_text(msg: email_lib.message.Message) -> str:
-        plain = ""
-        html = ""
-        if msg.is_multipart():
-            for part in msg.walk():
-                ctype = (part.get_content_type() or "").lower()
-                if ctype not in ("text/plain", "text/html"):
-                    continue
-                payload = part.get_payload(decode=True)
-                if not payload:
-                    continue
-                text = payload.decode("utf-8", errors="ignore")
-                if ctype == "text/plain" and not plain:
-                    plain = text
-                elif ctype == "text/html" and not html:
-                    html = text
-        else:
-            payload = msg.get_payload(decode=True)
-            if payload:
-                plain = payload.decode("utf-8", errors="ignore")
-
-        if plain:
-            return plain
-
-        if html:
-            return re.sub(r"<[^>]*>", " ", html)
-
-        return ""
-
-    def decode_header_value(header_value: str) -> str:
-        if not header_value:
-            return ""
-        try:
-            decoded = decode_header(header_value)
-            parts: list[str] = []
-            for part, encoding in decoded:
-                if isinstance(part, bytes):
-                    parts.append(part.decode(encoding or "utf-8", errors="ignore"))
-                else:
-                    parts.append(str(part))
-            return "".join(parts)
-        except Exception:
-            return str(header_value)
-
-    def extract_body_text(msg: email_lib.message.Message) -> str:
-        plain = ""
-        html = ""
-        if msg.is_multipart():
-            for part in msg.walk():
-                ctype = (part.get_content_type() or "").lower()
-                if ctype not in ("text/plain", "text/html"):
-                    continue
-                payload = part.get_payload(decode=True)
-                if not payload:
-                    continue
-                text = payload.decode("utf-8", errors="ignore")
-                if ctype == "text/plain" and not plain:
-                    plain = text
-                elif ctype == "text/html" and not html:
-                    html = text
-        else:
-            payload = msg.get_payload(decode=True)
-            if payload:
-                plain = payload.decode("utf-8", errors="ignore")
-
-        if plain:
-            return plain
-
-        if html:
-            return re.sub(r"<[^>]*>", " ", html)
-
-        return ""
-    
     # Retry logic with exponential backoff
     retry_delays = [1, 2, 4, 8]  # Exponential backoff: 1s, 2s, 4s, 8s
     
@@ -244,7 +294,7 @@ def get_verification_code_from_imap(
 
 
 def _get_verification_code_internal(
-    imap_config: Dict[str, any],
+    imap_config: Dict[str, Any],
     sender_keywords: list[str],
     subject_pattern: Optional[str],
     max_wait: int,
@@ -274,6 +324,14 @@ def _get_verification_code_internal(
     if not all([host, user, password]):
         log("[Email] Incomplete IMAP config")
         return None
+
+    host = str(host)
+    user = str(user)
+    password = str(password)
+    try:
+        port = int(port)
+    except Exception:
+        port = 993
     
     start_time = time.time()
     cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=time_window)
@@ -289,13 +347,13 @@ def _get_verification_code_internal(
 
     while time.time() - start_time < max_wait:
         try:
-            mail = imaplib.IMAP4_SSL(host, port, timeout=10)
+            mail = imaplib.IMAP4_SSL(str(host), int(port), timeout=10)
             try:
                 if getattr(mail, 'sock', None):
                     mail.sock.settimeout(10)
             except Exception:
                 pass
-            mail.login(user, password)
+            mail.login(str(user), str(password))
             mail.select('INBOX')
             
             messages = None
@@ -324,7 +382,16 @@ def _get_verification_code_internal(
                         if not msg_data[0]:
                             continue
                         
-                        msg = email_lib.message_from_bytes(msg_data[0][1])
+                        payload_bytes = None
+                        first_item = msg_data[0]
+                        if isinstance(first_item, tuple) and len(first_item) > 1:
+                            maybe_bytes = first_item[1]
+                            if isinstance(maybe_bytes, (bytes, bytearray)):
+                                payload_bytes = bytes(maybe_bytes)
+                        if not payload_bytes:
+                            continue
+
+                        msg = email_lib.message_from_bytes(payload_bytes)
                         
                         # Get headers
                         date_str = msg.get('Date', '')

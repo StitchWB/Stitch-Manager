@@ -354,6 +354,13 @@ async function runProviderRegistration(params: {
 
   if (provider === 'windsurf') {
     const correlationId = createCorrelationId();
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? imapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? imapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
     const startResponse = await startWindsurfAutoregJob({
       email,
       password: null,
@@ -379,6 +386,7 @@ async function runProviderRegistration(params: {
       thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
       mailtmEnabled: config.imap.mailtmEnabled ?? null,
       correlationId,
+      ...inboxBridgeFields,
     });
     return await waitForJobResult<WindsurfAutoregResult>(
       startResponse.jobId,
@@ -399,6 +407,13 @@ async function runProviderRegistration(params: {
 
   if (provider === 'trae') {
     const correlationId = createCorrelationId();
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? imapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? imapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
     const startResponse = await startTraeAutoregJob({
       email,
       password: null,
@@ -419,6 +434,7 @@ async function runProviderRegistration(params: {
       thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
       mailtmEnabled: config.imap.mailtmEnabled ?? null,
       correlationId,
+      ...inboxBridgeFields,
     });
     return await waitForJobResult<TraeAutoregResult>(
       startResponse.jobId,
@@ -438,6 +454,13 @@ async function runProviderRegistration(params: {
   if (provider === 'github') {
     const correlationId = createCorrelationId();
     const githubPassword = `Gh${Math.random().toString(36).substring(2, 10)}!1`;
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? imapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? imapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
     const startResponse = await startGithubAutoregJob({
       email,
       password: githubPassword,
@@ -448,6 +471,7 @@ async function runProviderRegistration(params: {
       imapUser,
       imapPassword,
       correlationId,
+      ...inboxBridgeFields,
     });
     return await waitForJobResult<GithubAutoregResult>(
       startResponse.jobId,
@@ -471,6 +495,14 @@ async function runProviderRegistration(params: {
     const normalizedImapUser = imapUser?.trim() ? imapUser : null;
     const normalizedImapPassword =
       imapPassword?.trim() && imapPassword !== '********' ? imapPassword : null;
+
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? normalizedImapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? normalizedImapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
 
     const startResponse = await startOpenAIAutoregJob({
       email,
@@ -499,6 +531,7 @@ async function runProviderRegistration(params: {
             ? '33mail'
             : null,
       baseEmail: config.imap.email || imapUser || null,
+      ...inboxBridgeFields,
     });
     return await waitForJobResult<OpenAIAutoregResult>(
       startResponse.jobId,
@@ -563,6 +596,11 @@ async function runProviderRegistration(params: {
     thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername ?? null,
     thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
     mailtmEnabled: config.imap.mailtmEnabled ?? null,
+    inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+    inboxMailbox: 'INBOX',
+    inboxMailtmAddress: config.imap.mailtmEnabled ? imapUser : null,
+    inboxMailtmPassword: config.imap.mailtmEnabled ? imapPassword : null,
+    inboxMailtmBaseUrl: null,
     correlationId: createCorrelationId(),
   } as PythonAutoregConfig & {
     launchProfileAlias?: string | null;

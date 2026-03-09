@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { ProfileItem } from '../components/ProfilesTable';
 import type { Account } from '../types';
+import { formatProfileAlias } from '../lib/profiles/displayName';
 
 export type ProfileListFilter = 'all' | 'standalone' | 'linked' | 'used_kiro';
 
@@ -61,6 +62,7 @@ export function useProfilesViewModel({
 
       return {
         alias,
+        displayName: formatProfileAlias(alias),
         linkedAccountEmail: linkedAccount?.email ?? null,
         linkedProvider: linkedAccount?.provider ?? null,
         linkedAccountId: linkedAccount?.id ?? null,
@@ -93,7 +95,10 @@ export function useProfilesViewModel({
     const q = searchQuery.trim().toLowerCase();
 
     if (q) {
-      items = items.filter(item => item.alias.toLowerCase().includes(q));
+      items = items.filter(
+        item =>
+          item.alias.toLowerCase().includes(q) || (item.displayName ?? '').toLowerCase().includes(q)
+      );
     }
 
     if (profileListFilter === 'standalone') {

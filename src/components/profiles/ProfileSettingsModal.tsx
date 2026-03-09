@@ -1,22 +1,49 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Globe, Monitor, MapPin, Shield, Cpu, Fingerprint, BookText } from 'lucide-react';
-import { Button, FilterDropdown, Input, Modal, TabButton, Toggle } from '../ui';
+import {
+  X,
+  Globe,
+  MapPin,
+  Cookie,
+  Link2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  FolderOpen,
+  Upload,
+} from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { Button, Input, Select, Textarea, Toggle, TabButton } from '../ui';
 import { t } from '../../lib/i18n';
 import {
-  generateFingerprintProfile,
   getProfileSettings,
+  type ProfileSettingsProxy,
   saveProfileSettings,
   type ProfileSettingsV1,
 } from '@/lib/tauri/modules/profiles';
-import { parseProxyString } from '../../lib/proxyUtils';
+import { copyToClipboard, openInFileManager } from '@/lib/tauri/modules/utils';
+import {
+  listProxyLibrary,
+  migrateManualProxyToLibrary,
+  type ProxyLibraryEntry,
+} from '@/lib/tauri/modules/proxyLibrary';
+import { toast } from 'sonner';
+import { formatProfileAlias } from '@/lib/profiles/displayName';
 
-type ProfileSettingsTab = 'network' | 'hardware' | 'geo' | 'storage';
+interface ProfileSettingsModalProps {
+  alias: string | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSaved?: () => void;
+}
+
+type SettingsTab = 'main' | 'proxy' | 'geo' | 'data';
 
 const defaultSettings: ProfileSettingsV1 = {
   version: 1,
   network: {
     proxy: {
       enabled: false,
+      proxyLibraryId: null,
       url: null,
       username: null,
       password: null,
@@ -39,39 +66,42 @@ const defaultSettings: ProfileSettingsV1 = {
   storage: {
     cookies: null,
     notes: null,
+    lastUrl: null,
+    lastScenarioPath: null,
   },
 };
 
-interface ProfileSettingsModalProps {
-  alias: string | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onSaved?: () => void;
+function mergeSettings(record: ProfileSettingsV1): ProfileSettingsV1 {
+  const proxy = {
+    enabled: Boolean(record.network?.proxy?.enabled),
+    proxyLibraryId: record.network?.proxy?.proxyLibraryId ?? null,
+    url: record.network?.proxy?.url ?? null,
+    username: record.network?.proxy?.username ?? null,
+    password: record.network?.proxy?.password ?? null,
+  };
+
+  return {
+    ...defaultSettings,
+    ...record,
+    network: {
+      ...defaultSettings.network,
+      ...(record.network ?? {}),
+      proxy,
+    },
+    geo: {
+      ...defaultSettings.geo,
+      ...(record.geo ?? {}),
+    },
+    hardware: {
+      ...defaultSettings.hardware,
+      ...(record.hardware ?? {}),
+    },
+    storage: {
+      ...defaultSettings.storage,
+      ...(record.storage ?? {}),
+    },
+  };
 }
-
-const localeOptions = [
-  { value: '', label: t('common.select') },
-  { value: 'ru-RU', label: 'ru-RU' },
-  { value: 'en-US', label: 'en-US' },
-  { value: 'en-GB', label: 'en-GB' },
-] as const;
-
-const timezoneOptions = [
-  { value: '', label: t('common.select') },
-  { value: 'Europe/Moscow', label: 'Europe/Moscow' },
-  { value: 'Europe/London', label: 'Europe/London' },
-  { value: 'Europe/Berlin', label: 'Europe/Berlin' },
-  { value: 'America/New_York', label: 'America/New_York' },
-  { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
-  { value: 'Asia/Singapore', label: 'Asia/Singapore' },
-] as const;
-
-const platformOptions = [
-  { value: '', label: t('common.select') },
-  { value: 'Win32', label: 'Windows (Win32)' },
-  { value: 'MacIntel', label: 'macOS (MacIntel)' },
-  { value: 'Linux x86_64', label: 'Linux x86_64' },
-] as const;
 
 export function ProfileSettingsModal({
   alias,
@@ -79,66 +109,106 @@ export function ProfileSettingsModal({
   onClose,
   onSaved,
 }: ProfileSettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<ProfileSettingsTab>('network');
+  const displayAlias = formatProfileAlias(alias);
   const [draft, setDraft] = useState<ProfileSettingsV1>(defaultSettings);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-
-  const profileAlias = alias ?? '';
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('main');
+  const [showCookieEditor, setShowCookieEditor] = useState(false);
+  const [proxyLibrary, setProxyLibrary] = useState<ProxyLibraryEntry[]>([]);
+  const [proxyLibraryLoading, setProxyLibraryLoading] = useState(false);
 
   const proxyEnabled = Boolean(draft.network.proxy?.enabled);
+  const proxyLibraryId = draft.network.proxy?.proxyLibraryId?.trim() || '';
+  const proxyMode: 'none' | 'library' | 'manual' = !proxyEnabled
+    ? 'none'
+    : proxyLibraryId
+      ? 'library'
+      : 'manual';
+  const selectedLibraryProxy = proxyLibrary.find(item => item.id === proxyLibraryId) ?? null;
+  const hasManualGeo =
+    typeof draft.geo.latitude === 'number' && typeof draft.geo.longitude === 'number';
 
   const summary = useMemo(() => {
-    const proxy = draft.network.proxy;
-    const proxyLabel = proxy?.enabled
-      ? proxy?.url || `${proxy?.username ? 'auth' : 'no-auth'} proxy`
-      : t('common.none');
-    const hw = draft.hardware;
-    const geo = draft.geo;
+    const proxyState = proxyEnabled ? 'Enabled' : 'Disabled';
+    const cookiesRaw = draft.storage.cookies?.trim() ?? '';
+    const cookiesHint = cookiesRaw
+      ? cookiesRaw.startsWith('[') || cookiesRaw.startsWith('{')
+        ? 'JSON configured'
+        : 'File path configured'
+      : 'Not configured';
 
     return {
-      proxy: proxyLabel,
-      userAgent: hw.userAgent || t('common.none'),
-      screen:
-        hw.screenWidth && hw.screenHeight
-          ? `${hw.screenWidth}×${hw.screenHeight}`
-          : t('common.none'),
-      locale: geo.locale || t('common.none'),
-      timezone: geo.timezone || t('common.none'),
+      proxyState,
+      locale: draft.geo.locale?.trim() || 'Auto',
+      timezone: draft.geo.timezone?.trim() || 'Auto',
+      cookiesHint,
     };
-  }, [draft]);
+  }, [draft.geo.locale, draft.geo.timezone, draft.storage.cookies, proxyEnabled]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+    const loadProxyLibrary = async () => {
+      setProxyLibraryLoading(true);
+      try {
+        const items = await listProxyLibrary();
+        if (!cancelled) {
+          setProxyLibrary(items.filter(item => item.enabled));
+        }
+      } catch {
+        if (!cancelled) {
+          setProxyLibrary([]);
+        }
+      } finally {
+        if (!cancelled) setProxyLibraryLoading(false);
+      }
+    };
+
+    void loadProxyLibrary();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !saving) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
+  }, [isOpen, onClose, saving]);
 
   useEffect(() => {
     if (!isOpen || !alias) return;
 
-    setActiveTab('network');
-    setDirty(false);
-    setError(null);
     setLoading(true);
+    setError(null);
+    setDirty(false);
+    setActiveTab('main');
+    setShowAdvanced(false);
+    setShowCookieEditor(false);
 
     const load = async () => {
       try {
         const existing = await getProfileSettings({ alias });
         if (existing?.settings) {
-          setDraft({
-            ...defaultSettings,
-            ...existing.settings,
-            network: {
-              ...defaultSettings.network,
-              ...existing.settings.network,
-            },
-            geo: { ...defaultSettings.geo, ...existing.settings.geo },
-            hardware: { ...defaultSettings.hardware, ...existing.settings.hardware },
-            storage: { ...defaultSettings.storage, ...existing.settings.storage },
-          });
+          setDraft(mergeSettings(existing.settings));
         } else {
           setDraft(defaultSettings);
         }
-      } catch (err) {
-        console.error('[ProfileSettingsModal] Failed to load settings:', err);
-        setError(t('common.error'));
+      } catch (e) {
+        console.error('[ProfileSettingsModal] Failed to load settings:', e);
+        setError(t('common.error') || 'Failed to load profile settings');
         setDraft(defaultSettings);
       } finally {
         setLoading(false);
@@ -148,45 +218,69 @@ export function ProfileSettingsModal({
     void load();
   }, [alias, isOpen]);
 
-  const setProxyField = (updates: Partial<ProfileSettingsV1['network']['proxy']>) => {
-    setDraft(prev => ({
-      ...prev,
-      network: {
-        ...prev.network,
-        proxy: {
-          ...(prev.network.proxy ?? {
-            enabled: false,
-            url: null,
-            username: null,
-            password: null,
-          }),
-          ...updates,
-        },
-      },
-    }));
+  const update = (next: ProfileSettingsV1) => {
+    setDraft(next);
     setDirty(true);
   };
 
-  const handleProxyHostPaste = (value: string) => {
-    const parsed = parseProxyString(value, 'http');
-    if (!parsed) {
-      setProxyField({ url: value });
-      return;
-    }
+  const patchProxy = (patch: Partial<ProfileSettingsProxy>) => {
+    const currentProxy = {
+      enabled: Boolean(draft.network.proxy?.enabled),
+      proxyLibraryId: draft.network.proxy?.proxyLibraryId ?? null,
+      url: draft.network.proxy?.url ?? null,
+      username: draft.network.proxy?.username ?? null,
+      password: draft.network.proxy?.password ?? null,
+    };
 
-    const isLegacy = value.trim().startsWith('http') || value.trim().startsWith('socks5');
-    const url = isLegacy ? value.trim() : `${parsed.host}:${parsed.port}`;
-    const nextUrl = parsed.type ? `${parsed.type}://${url.replace(/^\w+:\/\//, '')}` : url;
-
-    setProxyField({
-      url: nextUrl,
-      username: parsed.username ?? null,
-      password: parsed.password ?? null,
+    update({
+      ...draft,
+      network: {
+        ...draft.network,
+        proxy: {
+          ...currentProxy,
+          ...patch,
+        },
+      },
     });
   };
 
-  const handleProxyHostChange = (value: string) => {
-    setProxyField({ url: value });
+  const handleMigrateManualProxyToLibrary = async () => {
+    const manualUrl = draft.network.proxy?.url?.trim();
+    if (!manualUrl) {
+      toast.error('Manual proxy URL is empty');
+      return;
+    }
+
+    try {
+      const result = await migrateManualProxyToLibrary({
+        proxyUrl: manualUrl,
+        username: draft.network.proxy?.username ?? null,
+        password: draft.network.proxy?.password ?? null,
+        label: `${alias ?? 'profile'} proxy`,
+      });
+
+      if (!result.proxyLibraryId) {
+        toast.error('Failed to migrate manual proxy');
+        return;
+      }
+
+      const items = await listProxyLibrary();
+      setProxyLibrary(items.filter(item => item.enabled));
+
+      patchProxy({
+        enabled: true,
+        proxyLibraryId: result.proxyLibraryId,
+        url: null,
+        username: null,
+        password: null,
+      });
+
+      toast.success(
+        result.imported ? 'Proxy imported to library' : 'Linked existing library proxy'
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to migrate manual proxy');
+    }
   };
 
   const handleSave = async () => {
@@ -195,438 +289,492 @@ export function ProfileSettingsModal({
     setError(null);
 
     try {
-      const normalized: ProfileSettingsV1 = {
+      const normalized = mergeSettings({
         ...draft,
         version: 1,
-        network: {
-          ...draft.network,
-          proxy: draft.network.proxy
-            ? {
-                enabled: Boolean(draft.network.proxy.enabled),
-                url: draft.network.proxy.url || null,
-                username: draft.network.proxy.username || null,
-                password: draft.network.proxy.password || null,
-              }
-            : { enabled: false, url: null, username: null, password: null },
-        },
-      };
-
+      });
       await saveProfileSettings({ alias, settings: normalized });
       setDirty(false);
       onSaved?.();
-    } catch (err) {
-      console.error('[ProfileSettingsModal] Failed to save settings:', err);
-      setError(t('common.error'));
+      onClose();
+    } catch (e) {
+      console.error('[ProfileSettingsModal] Failed to save settings:', e);
+      setError(t('common.error') || 'Failed to save profile settings');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleGenerateFingerprint = async () => {
-    if (saving) return;
-    setSaving(true);
+  const handleCopyPath = async (value: string | null | undefined, label: string) => {
+    const text = value?.trim();
+    if (!text) {
+      toast.error(`${label} is empty`);
+      return;
+    }
+
     try {
-      const profile = await generateFingerprintProfile();
-      setDraft(prev => ({
-        ...prev,
-        hardware: {
-          ...prev.hardware,
-          userAgent: profile.userAgent || prev.hardware.userAgent,
-          platform: profile.platform || prev.hardware.platform,
-          hardwareConcurrency:
-            profile.hardwareConcurrency || prev.hardware.hardwareConcurrency || null,
-          deviceMemory: profile.deviceMemory || prev.hardware.deviceMemory || null,
-          screenWidth: profile.screenWidth || prev.hardware.screenWidth || null,
-          screenHeight: profile.screenHeight || prev.hardware.screenHeight || null,
-        },
-        geo: {
-          ...prev.geo,
-          timezone: profile.timezone || prev.geo.timezone,
-          locale: profile.locale || prev.geo.locale,
-        },
-      }));
-      setDirty(true);
-    } catch (err) {
-      console.error('[ProfileSettingsModal] Failed to generate fingerprint:', err);
-      setError(t('common.error'));
-    } finally {
-      setSaving(false);
+      await copyToClipboard({ text });
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error(`Failed to copy ${label.toLowerCase()}`);
     }
   };
 
-  const footer = (
-    <div className="flex items-center justify-between gap-3">
-      <div className="text-xs text-slate-500">
-        {dirty ? `● ${t('accounts.profileSettingsUnsaved')}` : t('accounts.profileSettingsSaved')}
-      </div>
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" size="md" onClick={onClose} disabled={saving}>
-          {t('common.close')}
-        </Button>
-        <Button
-          variant="primary"
-          size="md"
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          isLoading={saving}
-        >
-          {t('common.save')}
-        </Button>
-      </div>
-    </div>
-  );
+  const handleOpenPath = async (value: string | null | undefined, label: string) => {
+    const text = value?.trim();
+    if (!text) {
+      toast.error(`${label} is empty`);
+      return;
+    }
+
+    try {
+      await openInFileManager({ path: text });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : `Failed to open ${label.toLowerCase()}`);
+    }
+  };
+
+  const handlePickCookieFile = async () => {
+    try {
+      const selection = await open({
+        multiple: false,
+        filters: [{ name: 'Cookie files', extensions: ['json', 'txt'] }],
+      });
+
+      if (!selection) return;
+      const selected = Array.isArray(selection) ? selection[0] : selection;
+      if (!selected) return;
+
+      const path = typeof selected === 'string' ? selected : selected.name;
+      if (!path) return;
+
+      update({
+        ...draft,
+        storage: {
+          ...draft.storage,
+          cookies: path,
+        },
+      });
+    } catch {
+      toast.error('Failed to pick cookie file');
+    }
+  };
+
+  if (!isOpen) return null;
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={t('accounts.profileSettingsTitle')}
-      icon={<Fingerprint size={18} className="text-indigo-400" />}
-      size="xl"
-      isLoading={loading}
-      loadingMessage={t('common.loading')}
-      closeOnBackdrop={!saving}
-      closeOnEscape={!saving}
-      showCloseButton={!saving}
-      footer={footer}
-      className="max-h-[90vh]"
-    >
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="text-xs uppercase tracking-widest text-slate-500">
-              {t('accounts.profileAlias')}
+    <div className="fixed inset-0 z-50">
+      <button
+        type="button"
+        aria-label="Close profile settings backdrop"
+        className="absolute inset-0 bg-black/60"
+        onClick={() => !saving && onClose()}
+      />
+
+      <aside className="absolute right-0 top-0 h-full w-full max-w-[560px] border-l border-white/10 bg-[#0f1115] shadow-2xl flex flex-col">
+        <header className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs text-slate-400">{t('accounts.profileAlias') || 'Profile'}</div>
+            <div className="text-base font-semibold text-slate-100 truncate">{displayAlias}</div>
+            {alias && displayAlias !== alias ? (
+              <div className="mt-0.5 text-[11px] text-slate-500 truncate font-mono">{alias}</div>
+            ) : null}
+            <div className="mt-1 text-xs text-slate-500">
+              Proxy: {summary.proxyState} • Locale: {summary.locale} • Timezone: {summary.timezone}
             </div>
-            <div className="text-sm font-semibold text-slate-100 truncate">{profileAlias}</div>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<Cpu size={14} />}
-            onClick={handleGenerateFingerprint}
+          <button
+            type="button"
+            onClick={onClose}
             disabled={saving}
+            className="p-2 rounded-md text-slate-400 hover:text-slate-100 hover:bg-white/10 disabled:opacity-50"
+            aria-label="Close profile settings"
           >
-            {t('accounts.profileSettingsGenerateFingerprint')}
-          </Button>
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="px-5 py-3 border-b border-white/10 flex flex-wrap gap-2">
+          <TabButton
+            active={activeTab === 'main'}
+            onClick={() => setActiveTab('main')}
+            label="Main"
+            className="h-9 px-5"
+          />
+          <TabButton
+            active={activeTab === 'proxy'}
+            onClick={() => setActiveTab('proxy')}
+            label="Proxy"
+            className="h-9 px-5"
+          />
+          <TabButton
+            active={activeTab === 'geo'}
+            onClick={() => setActiveTab('geo')}
+            label="Geo"
+            className="h-9 px-5"
+          />
+          <TabButton
+            active={activeTab === 'data'}
+            onClick={() => setActiveTab('data')}
+            label="Data"
+            className="h-9 px-5"
+          />
         </div>
 
-        {error && (
-          <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-            {error}
-          </div>
-        )}
-
-        <div className="grid grid-cols-[minmax(0,1fr)_280px] gap-6">
-          <div className="min-w-0 space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <TabButton
-                active={activeTab === 'network'}
-                onClick={() => setActiveTab('network')}
-                icon={<Globe size={14} />}
-                label={t('autoReg.proxy')}
-              />
-              <TabButton
-                active={activeTab === 'hardware'}
-                onClick={() => setActiveTab('hardware')}
-                icon={<Monitor size={14} />}
-                label={t('accounts.profileHardwareTab')}
-              />
-              <TabButton
-                active={activeTab === 'geo'}
-                onClick={() => setActiveTab('geo')}
-                icon={<MapPin size={14} />}
-                label={t('accounts.profileGeoTab')}
-              />
-              <TabButton
-                active={activeTab === 'storage'}
-                onClick={() => setActiveTab('storage')}
-                icon={<BookText size={14} />}
-                label={t('accounts.notes')}
-              />
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {loading ? (
+            <div className="text-sm text-slate-400">{t('common.loading') || 'Loading...'}</div>
+          ) : null}
+          {error ? (
+            <div className="text-xs text-red-300 border border-red-500/20 bg-red-500/10 rounded-lg px-3 py-2">
+              {error}
             </div>
+          ) : null}
 
-            {activeTab === 'network' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Toggle
-                    label={t('autoReg.proxyEnabled')}
-                    checked={proxyEnabled}
-                    onChange={checked => {
-                      setProxyField({ enabled: checked });
-                      if (!checked) {
-                        setProxyField({ url: null, username: null, password: null });
+          {!loading && activeTab === 'main' && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-slate-200 text-sm font-semibold">
+                <Link2 size={14} /> Defaults
+              </div>
+
+              <Input
+                label="Last URL"
+                value={draft.storage.lastUrl ?? ''}
+                onChange={e =>
+                  update({
+                    ...draft,
+                    storage: { ...draft.storage, lastUrl: e.target.value || null },
+                  })
+                }
+                placeholder="https://google.com"
+              />
+
+              <Input
+                label="Last scenario path"
+                value={draft.storage.lastScenarioPath ?? ''}
+                onChange={e =>
+                  update({
+                    ...draft,
+                    storage: { ...draft.storage, lastScenarioPath: e.target.value || null },
+                  })
+                }
+                placeholder="C:\\...\\scenario.json"
+                rightElement={
+                  <div className="flex items-center gap-2 pr-1 pl-2 border-l border-white/10">
+                    <button
+                      type="button"
+                      className="p-2 rounded bg-white/[0.04] hover:bg-white/10 text-slate-300"
+                      onClick={() =>
+                        void handleCopyPath(draft.storage.lastScenarioPath, 'Scenario path')
                       }
-                    }}
-                  />
-                  <Shield
-                    size={16}
-                    className={proxyEnabled ? 'text-emerald-400' : 'text-slate-500'}
-                  />
-                </div>
-
-                <Input
-                  label={t('autoReg.proxyUrl')}
-                  value={draft.network.proxy?.url ?? ''}
-                  onChange={e => handleProxyHostChange(e.target.value)}
-                  onPaste={e => {
-                    const text = e.clipboardData.getData('text');
-                    if (!text) return;
-                    e.preventDefault();
-                    handleProxyHostPaste(text.trim());
-                  }}
-                  placeholder={t('accounts.profileSettingsProxyUrlPlaceholder')}
-                  disabled={!proxyEnabled}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label={t('autoReg.username')}
-                    value={draft.network.proxy?.username ?? ''}
-                    onChange={e => setProxyField({ username: e.target.value || null })}
-                    disabled={!proxyEnabled}
-                  />
-                  <Input
-                    label={t('accounts.password')}
-                    type="password"
-                    value={draft.network.proxy?.password ?? ''}
-                    onChange={e => setProxyField({ password: e.target.value || null })}
-                    disabled={!proxyEnabled}
-                  />
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'hardware' && (
-              <div className="space-y-4">
-                <Input
-                  label={t('accounts.profileSettingsUserAgent')}
-                  value={draft.hardware.userAgent ?? ''}
-                  onChange={e => {
-                    setDraft(prev => ({
-                      ...prev,
-                      hardware: { ...prev.hardware, userAgent: e.target.value || null },
-                    }));
-                    setDirty(true);
-                  }}
-                  placeholder={t('accounts.profileSettingsUserAgentPlaceholder')}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <div className="text-xs uppercase tracking-widest text-slate-500">
-                      {t('accounts.profileSettingsPlatformLabel')}
-                    </div>
-                    <FilterDropdown
-                      value={draft.hardware.platform ?? ''}
-                      onChange={(value: string) => {
-                        setDraft(prev => ({
-                          ...prev,
-                          hardware: { ...prev.hardware, platform: value || null },
-                        }));
-                        setDirty(true);
-                      }}
-                      options={platformOptions.map(opt => ({ value: opt.value, label: opt.label }))}
-                      triggerClassName="h-10 w-full"
-                    />
+                      title="Copy path"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="p-2 rounded bg-white/[0.04] hover:bg-white/10 text-slate-300"
+                      onClick={() =>
+                        void handleOpenPath(draft.storage.lastScenarioPath, 'Scenario path')
+                      }
+                      title="Open folder"
+                    >
+                      <FolderOpen size={14} />
+                    </button>
                   </div>
-                  <Input
-                    label={t('accounts.profileSettingsHardwareConcurrency')}
-                    type="number"
-                    value={draft.hardware.hardwareConcurrency ?? ''}
-                    onChange={e => {
-                      const next = e.target.value ? Number(e.target.value) : null;
-                      setDraft(prev => ({
-                        ...prev,
-                        hardware: { ...prev.hardware, hardwareConcurrency: next },
-                      }));
-                      setDirty(true);
-                    }}
-                  />
+                }
+              />
+
+              <Textarea
+                label={t('accounts.notes') || 'Notes'}
+                value={draft.storage.notes ?? ''}
+                onChange={e =>
+                  update({
+                    ...draft,
+                    storage: { ...draft.storage, notes: e.target.value || null },
+                  })
+                }
+                className="h-24 min-h-[96px]"
+              />
+            </section>
+          )}
+
+          {!loading && activeTab === 'proxy' && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-slate-200 text-sm font-semibold">
+                  <Globe size={14} /> {t('autoReg.proxy') || 'Proxy'}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label={t('accounts.profileSettingsHardwareMemory')}
-                    type="number"
-                    value={draft.hardware.deviceMemory ?? ''}
-                    onChange={e => {
-                      const next = e.target.value ? Number(e.target.value) : null;
-                      setDraft(prev => ({
-                        ...prev,
-                        hardware: { ...prev.hardware, deviceMemory: next },
-                      }));
-                      setDirty(true);
+                <Toggle
+                  label={t('profileProxy.enabledToggle')}
+                  checked={proxyEnabled}
+                  onChange={checked => {
+                    if (checked) {
+                      patchProxy({ enabled: true });
+                    } else {
+                      patchProxy({
+                        enabled: false,
+                        proxyLibraryId: null,
+                        url: null,
+                        username: null,
+                        password: null,
+                      });
+                    }
+                  }}
+                />
+              </div>
+
+              {proxyEnabled ? (
+                <div className="space-y-3">
+                  <Select
+                    label={t('profileProxy.source')}
+                    value={proxyMode}
+                    onValueChange={value => {
+                      if (value === 'none') {
+                        patchProxy({
+                          enabled: false,
+                          proxyLibraryId: null,
+                          url: null,
+                          username: null,
+                          password: null,
+                        });
+                        return;
+                      }
+
+                      if (value === 'library') {
+                        const first = proxyLibrary[0];
+                        patchProxy({
+                          enabled: true,
+                          proxyLibraryId: first?.id ?? null,
+                          url: null,
+                          username: null,
+                          password: null,
+                        });
+                        return;
+                      }
+
+                      patchProxy({
+                        enabled: true,
+                        proxyLibraryId: null,
+                      });
                     }}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
+                  >
+                    <option value="none">{t('profileProxy.sourceDisabled')}</option>
+                    <option value="library">{t('profileProxy.sourceLibrary')}</option>
+                    <option value="manual">{t('profileProxy.sourceManual')}</option>
+                  </Select>
+
+                  {proxyMode === 'library' ? (
+                    <>
+                      <Select
+                        label={t('profileProxy.libraryProxy')}
+                        value={proxyLibraryId}
+                        onValueChange={value => patchProxy({ proxyLibraryId: value || null })}
+                        disabled={proxyLibraryLoading || proxyLibrary.length === 0}
+                      >
+                        <option value="">
+                          {proxyLibraryLoading
+                            ? t('profileProxy.loading')
+                            : proxyLibrary.length
+                              ? t('profileProxy.selectProxy')
+                              : t('profileProxy.noEnabledProxies')}
+                        </option>
+                        {proxyLibrary.map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.label} ({item.proxyType}://{item.host}:{item.port})
+                          </option>
+                        ))}
+                      </Select>
+
+                      {selectedLibraryProxy ? (
+                        <div className="text-xs text-slate-400 rounded border border-white/10 bg-white/[0.02] p-2">
+                          {t('profileProxy.using')}: {selectedLibraryProxy.proxyType}://
+                          {selectedLibraryProxy.host}:{selectedLibraryProxy.port}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  {proxyMode === 'manual' ? (
+                    <>
+                      <Input
+                        label={t('autoReg.proxyUrl') || 'Proxy address'}
+                        value={draft.network.proxy?.url ?? ''}
+                        onChange={e => patchProxy({ url: e.target.value || null })}
+                        placeholder="http://host:port"
+                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          label={t('autoReg.username') || 'Username'}
+                          value={draft.network.proxy?.username ?? ''}
+                          onChange={e => patchProxy({ username: e.target.value || null })}
+                        />
+                        <Input
+                          label={t('accounts.password') || 'Password'}
+                          type="password"
+                          value={draft.network.proxy?.password ?? ''}
+                          onChange={e => patchProxy({ password: e.target.value || null })}
+                        />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button
+                          size="xs"
+                          variant="secondary"
+                          onClick={() => void handleMigrateManualProxyToLibrary()}
+                        >
+                          Move manual proxy to library
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500">{t('profileProxy.disabledHint')}</div>
+              )}
+            </section>
+          )}
+
+          {!loading && activeTab === 'geo' && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-slate-200 text-sm font-semibold">
+                <MapPin size={14} /> {t('accounts.profileGeoTab') || 'Geo'}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Select
+                  label={t('accounts.profileSettingsLocaleLabel') || 'Locale'}
+                  value={draft.geo.locale ?? ''}
+                  onValueChange={value =>
+                    update({ ...draft, geo: { ...draft.geo, locale: value || null } })
+                  }
+                >
+                  <option value="">Auto</option>
+                  <option value="en-US">en-US</option>
+                  <option value="en-GB">en-GB</option>
+                  <option value="ru-RU">ru-RU</option>
+                  <option value="de-DE">de-DE</option>
+                </Select>
+
+                <Input
+                  label={t('accounts.profileSettingsTimezoneLabel') || 'Timezone'}
+                  value={draft.geo.timezone ?? ''}
+                  onChange={e =>
+                    update({ ...draft, geo: { ...draft.geo, timezone: e.target.value || null } })
+                  }
+                  placeholder="Auto"
+                />
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-white/[0.02]">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(v => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-slate-200 text-sm font-semibold hover:bg-white/[0.03] transition-colors"
+                >
+                  <span>Manual coordinates</span>
+                  {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+
+                {showAdvanced && (
+                  <div className="px-3 pb-3 grid grid-cols-2 gap-3 pt-2">
                     <Input
-                      label={t('accounts.profileSettingsScreenWidth')}
+                      label={t('accounts.profileSettingsLatitudeLabel') || 'Latitude'}
                       type="number"
-                      value={draft.hardware.screenWidth ?? ''}
+                      value={draft.geo.latitude ?? ''}
                       onChange={e => {
                         const next = e.target.value ? Number(e.target.value) : null;
-                        setDraft(prev => ({
-                          ...prev,
-                          hardware: { ...prev.hardware, screenWidth: next },
-                        }));
-                        setDirty(true);
+                        update({
+                          ...draft,
+                          geo: {
+                            ...draft.geo,
+                            latitude: Number.isFinite(next as number) ? next : null,
+                          },
+                        });
                       }}
+                      placeholder="Auto"
                     />
                     <Input
-                      label={t('accounts.profileSettingsScreenHeight')}
+                      label={t('accounts.profileSettingsLongitudeLabel') || 'Longitude'}
                       type="number"
-                      value={draft.hardware.screenHeight ?? ''}
+                      value={draft.geo.longitude ?? ''}
                       onChange={e => {
                         const next = e.target.value ? Number(e.target.value) : null;
-                        setDraft(prev => ({
-                          ...prev,
-                          hardware: { ...prev.hardware, screenHeight: next },
-                        }));
-                        setDirty(true);
+                        update({
+                          ...draft,
+                          geo: {
+                            ...draft.geo,
+                            longitude: Number.isFinite(next as number) ? next : null,
+                          },
+                        });
                       }}
+                      placeholder="Auto"
                     />
                   </div>
+                )}
+              </div>
+
+              <div className="text-xs text-slate-500">
+                Current mode: {hasManualGeo ? 'Manual coordinates' : 'Auto geolocation'}
+              </div>
+            </section>
+          )}
+
+          {!loading && activeTab === 'data' && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-slate-200 text-sm font-semibold">
+                <Cookie size={14} /> Cookies & storage
+              </div>
+
+              <div className="rounded-lg bg-white/[0.02] px-3 py-2">
+                <div className="text-xs text-slate-400">Cookies</div>
+                <div className="text-sm text-slate-200 mt-1">{summary.cookiesHint}</div>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setShowCookieEditor(v => !v)}
+                  >
+                    {showCookieEditor ? 'Hide editor' : 'Edit cookies'}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => void handlePickCookieFile()}>
+                    <Upload size={14} className="mr-1" /> Import file
+                  </Button>
                 </div>
               </div>
-            )}
 
-            {activeTab === 'geo' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <div className="text-xs uppercase tracking-widest text-slate-500">
-                      {t('accounts.profileSettingsLocaleLabel')}
-                    </div>
-                    <FilterDropdown
-                      value={draft.geo.locale ?? ''}
-                      onChange={(value: string) => {
-                        setDraft(prev => ({
-                          ...prev,
-                          geo: { ...prev.geo, locale: value || null },
-                        }));
-                        setDirty(true);
-                      }}
-                      options={localeOptions.map(opt => ({ value: opt.value, label: opt.label }))}
-                      triggerClassName="h-10 w-full"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="text-xs uppercase tracking-widest text-slate-500">
-                      {t('accounts.profileSettingsTimezoneLabel')}
-                    </div>
-                    <FilterDropdown
-                      value={draft.geo.timezone ?? ''}
-                      onChange={(value: string) => {
-                        setDraft(prev => ({
-                          ...prev,
-                          geo: { ...prev.geo, timezone: value || null },
-                        }));
-                        setDirty(true);
-                      }}
-                      options={timezoneOptions.map(opt => ({ value: opt.value, label: opt.label }))}
-                      triggerClassName="h-10 w-full"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label={t('accounts.profileSettingsLatitudeLabel')}
-                    type="number"
-                    value={draft.geo.latitude ?? ''}
-                    onChange={e => {
-                      const next = e.target.value ? Number(e.target.value) : null;
-                      setDraft(prev => ({
-                        ...prev,
-                        geo: { ...prev.geo, latitude: next },
-                      }));
-                      setDirty(true);
-                    }}
-                  />
-                  <Input
-                    label={t('accounts.profileSettingsLongitudeLabel')}
-                    type="number"
-                    value={draft.geo.longitude ?? ''}
-                    onChange={e => {
-                      const next = e.target.value ? Number(e.target.value) : null;
-                      setDraft(prev => ({
-                        ...prev,
-                        geo: { ...prev.geo, longitude: next },
-                      }));
-                      setDirty(true);
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'storage' && (
-              <div className="space-y-4">
-                <Input
-                  label={t('accounts.profileSettingsNotesLabel')}
-                  value={draft.storage.notes ?? ''}
-                  onChange={e => {
-                    setDraft(prev => ({
-                      ...prev,
-                      storage: { ...prev.storage, notes: e.target.value || null },
-                    }));
-                    setDirty(true);
-                  }}
-                  placeholder={t('accounts.profileSettingsNotesPlaceholder')}
-                />
-                <Input
-                  label={t('accounts.profileSettingsCookiesLabel')}
+              {showCookieEditor && (
+                <Textarea
+                  label={t('accounts.profileSettingsCookiesLabel') || 'Cookies (JSON or file path)'}
                   value={draft.storage.cookies ?? ''}
-                  onChange={e => {
-                    setDraft(prev => ({
-                      ...prev,
-                      storage: { ...prev.storage, cookies: e.target.value || null },
-                    }));
-                    setDirty(true);
-                  }}
-                  placeholder={t('accounts.profileSettingsCookiesPlaceholder')}
+                  onChange={e =>
+                    update({
+                      ...draft,
+                      storage: { ...draft.storage, cookies: e.target.value || null },
+                    })
+                  }
+                  hint="Paste JSON array/object or absolute path to cookies file"
+                  placeholder='[{"name":"sid","value":"..."}] or C:\\cookies.json'
+                  className="h-44 min-h-[176px] font-mono text-xs"
                 />
-              </div>
-            )}
-          </div>
-
-          <aside className="shrink-0 rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-500">
-              <Fingerprint size={14} className="text-indigo-400" />
-              {t('accounts.profileSettingsSummaryTitle')}
-            </div>
-            <div className="space-y-3 text-xs text-slate-300">
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">
-                  {t('autoReg.proxy')}
-                </div>
-                <div className="truncate">{summary.proxy}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">
-                  {t('accounts.profileSettingsSummaryUserAgent')}
-                </div>
-                <div className="truncate">{summary.userAgent}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">
-                  {t('accounts.profileSettingsSummaryScreen') || 'Screen'}
-                </div>
-                <div className="truncate">{summary.screen}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">
-                  {t('accounts.profileSettingsLocaleLabel')}
-                </div>
-                <div className="truncate">{summary.locale}</div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500">
-                  {t('accounts.profileSettingsTimezoneLabel')}
-                </div>
-                <div className="truncate">{summary.timezone}</div>
-              </div>
-            </div>
-          </aside>
+              )}
+            </section>
+          )}
         </div>
-      </div>
-    </Modal>
+
+        <footer className="sticky bottom-0 border-t border-white/10 px-5 py-4 flex items-center justify-between gap-3 bg-[#0f1115]">
+          <div className="text-xs text-slate-400">{dirty ? 'Unsaved changes' : 'No changes'}</div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={onClose} disabled={saving}>
+              {t('common.close') || 'Close'}
+            </Button>
+            <Button variant="primary" onClick={() => void handleSave()} disabled={!dirty || saving}>
+              {saving ? t('common.loading') || 'Saving...' : t('common.save') || 'Save'}
+            </Button>
+          </div>
+        </footer>
+      </aside>
+    </div>
   );
 }

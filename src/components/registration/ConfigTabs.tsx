@@ -1,7 +1,7 @@
-import { User, Settings2, Wifi, Repeat } from 'lucide-react';
+import { User, Settings2, Wifi, Repeat, Inbox } from 'lucide-react';
 import { TabButton } from '../ui/TabButton';
 
-export type ConfigTab = 'identity' | 'engine' | 'network' | 'automation';
+export type ConfigTab = 'identity' | 'engine' | 'network' | 'automation' | 'inbox';
 
 interface ConfigTabsProps {
   activeTab: ConfigTab;
@@ -14,6 +14,7 @@ const tabs: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { id: 'engine', label: 'Engine', icon: <Settings2 className="w-3.5 h-3.5" /> },
   { id: 'network', label: 'Net', icon: <Wifi className="w-3.5 h-3.5" /> },
   { id: 'automation', label: 'Auto', icon: <Repeat className="w-3.5 h-3.5" /> },
+  { id: 'inbox', label: 'Inbox', icon: <Inbox className="w-3.5 h-3.5" /> },
 ];
 
 export function ConfigTabs({ activeTab, onTabChange, disabled }: ConfigTabsProps) {

@@ -20,7 +20,7 @@ export function Toggle({ label, checked, onChange, disabled, tooltip, className 
       )}
     >
       {label && (
-        <span className="text-xs font-medium text-slate-400 group-hover:text-slate-200 transition-colors">
+        <span className="text-sm font-medium text-slate-300 group-hover:text-slate-100 transition-colors">
           {label}
         </span>
       )}

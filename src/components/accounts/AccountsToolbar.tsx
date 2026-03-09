@@ -33,6 +33,9 @@ interface AccountsToolbarProps {
   tagFilter: string;
   relationFilter: string;
   quotaFilter: string;
+  profileListFilter: 'all' | 'standalone' | 'linked' | 'used_kiro';
+  profileOpenTarget: string;
+  profileCustomUrl: string;
   tagOptions: FilterOption<string>[];
   relationOptions: FilterOption<string>[];
   sheetsUpdatedAt: string | null;
@@ -51,6 +54,9 @@ interface AccountsToolbarProps {
   onTagFilterChange: (value: string) => void;
   onRelationFilterChange: (value: string) => void;
   onQuotaFilterChange: (value: string) => void;
+  onProfileFilterChange: (value: 'all' | 'standalone' | 'linked' | 'used_kiro') => void;
+  onProfileOpenTargetChange: (value: string) => void;
+  onProfileCustomUrlChange: (value: string) => void;
   onRefreshAll: () => void;
   onImportAccounts: () => void;
   onExportCSV: () => void;
@@ -75,6 +81,9 @@ export function AccountsToolbar({
   tagFilter,
   relationFilter,
   quotaFilter,
+  profileListFilter,
+  profileOpenTarget,
+  profileCustomUrl,
   tagOptions,
   relationOptions,
   sheetsUpdatedAt,
@@ -93,6 +102,9 @@ export function AccountsToolbar({
   onTagFilterChange,
   onRelationFilterChange,
   onQuotaFilterChange,
+  onProfileFilterChange,
+  onProfileOpenTargetChange,
+  onProfileCustomUrlChange,
   onRefreshAll,
   onImportAccounts,
   onExportCSV,
@@ -148,60 +160,108 @@ export function AccountsToolbar({
                 containerClassName="w-full min-w-[260px] max-w-md"
               />
 
-              <div className="relative z-20 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2 [scrollbar-width:thin] lg:flex-wrap">
-                <FilterDropdown
-                  value={statusFilter}
-                  onChange={onStatusFilterChange}
-                  options={[
-                    { value: 'all', label: t('filters.anyStatus') },
-                    { value: 'active', label: getAccountStatusLabel('active') },
-                    { value: 'banned', label: getAccountStatusLabel('banned') },
-                    { value: 'limit_hit', label: getAccountStatusLabel('limit_hit') },
-                    { value: 'expired', label: getAccountStatusLabel('expired') },
-                    { value: 'unknown', label: getAccountStatusLabel('unknown') },
-                  ]}
-                  label={t('filters.status')}
-                  triggerClassName="h-9 min-w-[148px]"
-                  menuClassName="min-w-[220px]"
-                  showActiveState
-                />
+              {normalizedEntityFilter === 'profiles' ? (
+                <div className="relative z-20 flex flex-wrap items-end gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
+                  <FilterDropdown
+                    value={profileListFilter}
+                    onChange={value =>
+                      onProfileFilterChange(value as 'all' | 'standalone' | 'linked' | 'used_kiro')
+                    }
+                    label={t('accounts.profilesFilterLabel')}
+                    options={[
+                      { value: 'all', label: t('accounts.profilesFilterAll') },
+                      { value: 'standalone', label: t('accounts.profilesFilterStandalone') },
+                      { value: 'linked', label: t('accounts.profilesFilterLinked') },
+                      { value: 'used_kiro', label: t('accounts.profilesFilterUsedForKiro') },
+                    ]}
+                    triggerClassName="h-9 min-w-[180px]"
+                    menuClassName="min-w-[220px]"
+                    showActiveState
+                  />
 
-                <FilterDropdown
-                  value={tagFilter}
-                  onChange={onTagFilterChange}
-                  options={tagOptions}
-                  label={t('accounts.tags')}
-                  triggerClassName="h-9 min-w-[132px]"
-                  menuClassName="min-w-[220px]"
-                  showActiveState
-                />
+                  <FilterDropdown
+                    value={profileOpenTarget}
+                    onChange={value => onProfileOpenTargetChange(String(value))}
+                    label={t('accounts.profileDestinationLabel')}
+                    options={[
+                      { value: 'kiro', label: 'Kiro' },
+                      { value: 'windsurf', label: 'Windsurf' },
+                      { value: 'trae', label: 'Trae' },
+                      { value: 'github', label: 'GitHub' },
+                      { value: 'custom', label: t('accounts.profileDestinationCustom') },
+                    ]}
+                    triggerClassName="h-9 min-w-[180px]"
+                    menuClassName="min-w-[220px]"
+                    showActiveState
+                  />
 
-                <FilterDropdown
-                  value={relationFilter}
-                  onChange={onRelationFilterChange}
-                  options={relationOptions}
-                  label={t('accounts.relationFilterLabel')}
-                  triggerClassName="h-9 min-w-[132px]"
-                  menuClassName="min-w-[220px]"
-                  showActiveState
-                />
+                  {profileOpenTarget === 'custom' && (
+                    <Input
+                      label=""
+                      value={profileCustomUrl}
+                      onChange={event => onProfileCustomUrlChange(event.target.value)}
+                      placeholder={t('accounts.profileOpenUrlPlaceholder')}
+                      containerClassName="w-[360px] shrink-0"
+                      className="h-9"
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="relative z-20 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2 [scrollbar-width:thin] lg:flex-wrap">
+                  <FilterDropdown
+                    value={statusFilter}
+                    onChange={onStatusFilterChange}
+                    options={[
+                      { value: 'all', label: t('filters.anyStatus') },
+                      { value: 'active', label: getAccountStatusLabel('active') },
+                      { value: 'banned', label: getAccountStatusLabel('banned') },
+                      { value: 'limit_hit', label: getAccountStatusLabel('limit_hit') },
+                      { value: 'expired', label: getAccountStatusLabel('expired') },
+                      { value: 'unknown', label: getAccountStatusLabel('unknown') },
+                    ]}
+                    label={t('filters.status')}
+                    triggerClassName="h-9 min-w-[148px]"
+                    menuClassName="min-w-[220px]"
+                    showActiveState
+                  />
 
-                <FilterDropdown
-                  value={quotaFilter}
-                  onChange={onQuotaFilterChange}
-                  options={[
-                    { value: 'any', label: t('filters.any') },
-                    { value: 'has_quota', label: t('filters.hasQuota') },
-                    { value: 'low_quota', label: t('filters.lowQuota') },
-                    { value: 'empty', label: t('filters.empty') },
-                    { value: 'full', label: t('filters.full') },
-                  ]}
-                  label={t('filters.quota')}
-                  triggerClassName="h-9 min-w-[132px]"
-                  menuClassName="min-w-[220px]"
-                  showActiveState
-                />
-              </div>
+                  <FilterDropdown
+                    value={tagFilter}
+                    onChange={onTagFilterChange}
+                    options={tagOptions}
+                    label={t('accounts.tags')}
+                    triggerClassName="h-9 min-w-[132px]"
+                    menuClassName="min-w-[220px]"
+                    showActiveState
+                  />
+
+                  <FilterDropdown
+                    value={relationFilter}
+                    onChange={onRelationFilterChange}
+                    options={relationOptions}
+                    label={t('accounts.relationFilterLabel')}
+                    triggerClassName="h-9 min-w-[132px]"
+                    menuClassName="min-w-[220px]"
+                    showActiveState
+                  />
+
+                  <FilterDropdown
+                    value={quotaFilter}
+                    onChange={onQuotaFilterChange}
+                    options={[
+                      { value: 'any', label: t('filters.any') },
+                      { value: 'has_quota', label: t('filters.hasQuota') },
+                      { value: 'low_quota', label: t('filters.lowQuota') },
+                      { value: 'empty', label: t('filters.empty') },
+                      { value: 'full', label: t('filters.full') },
+                    ]}
+                    label={t('filters.quota')}
+                    triggerClassName="h-9 min-w-[132px]"
+                    menuClassName="min-w-[220px]"
+                    showActiveState
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-[11px] text-slate-500">
@@ -214,7 +274,7 @@ export function AccountsToolbar({
         </div>
 
         <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
-          {resolvedViewMode === 'list' ? (
+          {resolvedViewMode === 'list' && normalizedEntityFilter !== 'profiles' ? (
             <ActionButtonGroup
               actions={[
                 {
@@ -242,7 +302,7 @@ export function AccountsToolbar({
               size="sm"
               className="h-9 rounded-lg bg-transparent px-2"
             />
-          ) : (
+          ) : resolvedViewMode !== 'list' ? (
             <>
               <Button
                 variant="secondary"
@@ -270,9 +330,9 @@ export function AccountsToolbar({
                 {t('common.settings')}
               </Button>
             </>
-          )}
+          ) : null}
 
-          {resolvedViewMode === 'list' ? (
+          {resolvedViewMode === 'list' && normalizedEntityFilter !== 'profiles' ? (
             <AccountsColumnsMenu
               visibleColumns={visibleColumns}
               onToggleColumn={onToggleVisibleColumn}
@@ -281,15 +341,17 @@ export function AccountsToolbar({
           ) : null}
 
           <div className="flex items-center gap-2">
-            <Button
-              onClick={onOpenAutoReg}
-              variant="secondary"
-              size="sm"
-              className="h-9 rounded-lg"
-            >
-              <span className="hidden sm:inline">{t('sidebar.autoReg')}</span>
-              <span className="sm:hidden">АР</span>
-            </Button>
+            {normalizedEntityFilter !== 'profiles' ? (
+              <Button
+                onClick={onOpenAutoReg}
+                variant="secondary"
+                size="sm"
+                className="h-9 rounded-lg"
+              >
+                <span className="hidden sm:inline">{t('sidebar.autoReg')}</span>
+                <span className="sm:hidden">АР</span>
+              </Button>
+            ) : null}
             <Button
               onClick={onCreateStandaloneProfile}
               variant="secondary"

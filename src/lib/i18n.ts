@@ -54,6 +54,9 @@ export interface Translations {
     more: string;
     installRuntime: string;
     install: string;
+    name: string;
+    history: string;
+    rollback: string;
   };
 
   status: {
@@ -97,11 +100,47 @@ export interface Translations {
     aiHub: string;
     apiServer: string;
     chat: string;
+    scenarios: string;
     system: string;
     settings: string;
     logs: string;
     adminUser: string;
     localMode: string;
+  };
+
+  scenarios: {
+    title: string;
+    subtitle: string;
+    selectProfile: string;
+    noProfiles: string;
+    missingProfile: string;
+    profileHint: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    libraryTitle: string;
+    librarySubtitle: string;
+    searchPlaceholder: string;
+    favoritesOnly: string;
+    tagsFilterLabel: string;
+    noScenarios: string;
+    noScenariosHint: string;
+    missingFile: string;
+    stepsCount: string;
+    lastPlayed: string;
+    playCount: string;
+    healthScore: string;
+    lastRun: string;
+    lastStatus: string;
+    lastDuration: string;
+    editScenario: string;
+    duplicateScenario: string;
+    toggleFavorite: string;
+    openFolder: string;
+    copyPath: string;
+    update: string;
+    description: string;
+    tags: string;
+    tagsHint: string;
   };
   accounts: {
     title: string;
@@ -1729,6 +1768,71 @@ export interface Translations {
     runtimeMissing: string;
     failed: string;
     noSavedScenarioPath: string;
+    proxySwitchRestartWarningRecord: string;
+    proxySwitchRestartWarningReplay: string;
+  };
+
+  proxyLibrary: {
+    title: string;
+    description: string;
+    importBulk: string;
+    showPasswords: string;
+    hidePasswords: string;
+    pasteProxies: string;
+    defaultType: string;
+    importedEnabled: string;
+    importing: string;
+    import: string;
+    importedStat: string;
+    skippedStat: string;
+    totalLinesStat: string;
+    andMore: string;
+    label: string;
+    type: string;
+    host: string;
+    port: string;
+    username: string;
+    password: string;
+    notes: string;
+    enabled: string;
+    cancel: string;
+    saving: string;
+    addProxy: string;
+    save: string;
+    entries: string;
+    loading: string;
+    noEntries: string;
+    statusEnabled: string;
+    statusDisabled: string;
+    edit: string;
+    ready: string;
+    loadError: string;
+    createError: string;
+    updateError: string;
+    deleteError: string;
+    importError: string;
+    batchEnable: string;
+    batchDisable: string;
+    batchDelete: string;
+    forceDeleteConfirm: string;
+    forceDeletePrompt: string;
+    referencesProfiles: string;
+    referencesScenarios: string;
+    stepRestartBoundary: string;
+  };
+
+  profileProxy: {
+    source: string;
+    sourceDisabled: string;
+    sourceLibrary: string;
+    sourceManual: string;
+    libraryProxy: string;
+    loading: string;
+    selectProxy: string;
+    noEnabledProxies: string;
+    using: string;
+    disabledHint: string;
+    enabledToggle: string;
   };
 }
 

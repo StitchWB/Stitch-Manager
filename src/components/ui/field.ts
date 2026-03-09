@@ -3,14 +3,14 @@ import { cn } from '../../lib/utils';
 
 export const fieldClasses = {
   container: 'flex flex-col gap-1.5 w-full',
-  label: 'text-[10px] uppercase font-bold text-slate-500 tracking-wider px-1',
+  label: 'text-xs font-semibold text-slate-300 px-0.5 leading-4',
   shellBase:
-    'relative group rounded-lg overflow-hidden bg-white/[0.03] border transition-all duration-200',
-  shellOk: 'border-white/10 focus-within:border-indigo-500/50',
+    'relative group rounded-lg overflow-hidden bg-white/[0.05] border transition-all duration-200',
+  shellOk: 'border-white/15 focus-within:border-indigo-400/70',
   shellError: 'border-red-500/50 focus-within:border-red-500',
   shellDisabled: 'opacity-50 grayscale-[0.5]',
-  hintText: 'text-[10px] text-slate-400 px-1 mt-0.5',
-  errorText: 'text-[10px] text-red-400 px-1 mt-0.5',
+  hintText: 'text-xs text-slate-400 px-0.5 mt-0.5',
+  errorText: 'text-xs text-red-300 px-0.5 mt-0.5',
 };
 
 export const getFieldShellClassName = (error?: string, disabled?: boolean) =>

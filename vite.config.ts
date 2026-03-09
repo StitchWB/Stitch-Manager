@@ -19,12 +19,38 @@ export default defineConfig({
     },
   },
   build: {
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['lucide-react', 'framer-motion', 'sonner'],
-          'vendor-tauri': ['@tauri-apps/api', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-clipboard-manager'],
+        manualChunks(id) {
+          // Third-party vendors only. Keep app code in default chunks
+          // to avoid circular chunk graph warnings.
+          if (id.includes('node_modules')) {
+            if (
+              id.includes('react') ||
+              id.includes('react-dom') ||
+              id.includes('react-router-dom')
+            ) {
+              return 'vendor-react';
+            }
+            if (
+              id.includes('lucide-react') ||
+              id.includes('framer-motion') ||
+              id.includes('sonner')
+            ) {
+              return 'vendor-ui';
+            }
+            if (
+              id.includes('@tauri-apps/api') ||
+              id.includes('@tauri-apps/plugin-dialog') ||
+              id.includes('@tauri-apps/plugin-clipboard-manager')
+            ) {
+              return 'vendor-tauri';
+            }
+            return undefined;
+          }
+
+          return undefined;
         },
       },
     },

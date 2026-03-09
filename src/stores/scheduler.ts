@@ -2,15 +2,25 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import type { ScheduledTask, TaskType, Schedule, TaskExecution } from '../types/generated';
+import type { SchedulerTemplate } from '../lib/tauri/modules/scheduler';
 
 interface SchedulerState {
   tasks: ScheduledTask[];
+  templates: SchedulerTemplate[];
   isRunning: boolean;
   loading: boolean;
+  templatesLoading: boolean;
 
   // Actions
   fetchTasks: () => Promise<void>;
-  createTask: (name: string, taskType: TaskType, schedule: Schedule, config: string) => Promise<void>;
+  fetchTemplates: () => Promise<void>;
+  createTask: (
+    name: string,
+    taskType: TaskType,
+    schedule: Schedule,
+    config: string
+  ) => Promise<void>;
+  createTaskFromTemplate: (templateId: number, nameOverride?: string | null) => Promise<void>;
   updateTask: (task: ScheduledTask) => Promise<void>;
   deleteTask: (taskId: number) => Promise<void>;
   toggleTask: (taskId: number, enabled: boolean) => Promise<void>;
@@ -19,12 +29,24 @@ interface SchedulerState {
   startScheduler: () => Promise<void>;
   stopScheduler: () => Promise<void>;
   getSchedulerStatus: () => Promise<void>;
+
+  createTemplate: (params: {
+    name: string;
+    description?: string | null;
+    taskType: TaskType;
+    schedule: Schedule;
+    config: string;
+  }) => Promise<void>;
+  updateTemplate: (template: SchedulerTemplate) => Promise<void>;
+  deleteTemplate: (templateId: number) => Promise<void>;
 }
 
 export const useSchedulerStore = create<SchedulerState>((set, get) => ({
   tasks: [],
+  templates: [],
   isRunning: false,
   loading: false,
+  templatesLoading: false,
 
   fetchTasks: async () => {
     set({ loading: true });
@@ -35,6 +57,18 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
       console.error('[Scheduler] Failed to fetch tasks:', error);
       toast.error('Failed to load scheduled tasks');
       set({ loading: false });
+    }
+  },
+
+  fetchTemplates: async () => {
+    set({ templatesLoading: true });
+    try {
+      const templates = await invoke<SchedulerTemplate[]>('get_scheduler_templates');
+      set({ templates, templatesLoading: false });
+    } catch (error) {
+      console.error('[Scheduler] Failed to fetch templates:', error);
+      toast.error('Failed to load scheduler templates');
+      set({ templatesLoading: false, templates: [] });
     }
   },
 
@@ -50,7 +84,22 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
     }
   },
 
-  updateTask: async (task) => {
+  createTaskFromTemplate: async (templateId, nameOverride) => {
+    try {
+      await invoke('create_scheduled_task_from_template', {
+        templateId,
+        nameOverride: nameOverride ?? null,
+      });
+      toast.success('Task created successfully');
+      await get().fetchTasks();
+    } catch (error) {
+      console.error('[Scheduler] Failed to create task from template:', error);
+      toast.error('Failed to create task from template');
+      throw error;
+    }
+  },
+
+  updateTask: async task => {
     try {
       await invoke('update_scheduled_task', { task });
       toast.success('Task updated successfully');
@@ -62,7 +111,7 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
     }
   },
 
-  deleteTask: async (taskId) => {
+  deleteTask: async taskId => {
     try {
       await invoke('delete_scheduled_task', { taskId });
       toast.success('Task deleted successfully');
@@ -84,7 +133,7 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
     }
   },
 
-  executeNow: async (taskId) => {
+  executeNow: async taskId => {
     try {
       const result = await invoke<string>('execute_task_now', { taskId });
       toast.success('Task executed successfully');
@@ -134,6 +183,47 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
       set({ isRunning });
     } catch (error) {
       console.error('[Scheduler] Failed to get scheduler status:', error);
+    }
+  },
+
+  createTemplate: async params => {
+    try {
+      await invoke('create_scheduler_template', {
+        name: params.name,
+        description: params.description ?? null,
+        taskType: params.taskType,
+        schedule: params.schedule,
+        config: params.config,
+      });
+      toast.success('Template created successfully');
+      await get().fetchTemplates();
+    } catch (error) {
+      console.error('[Scheduler] Failed to create template:', error);
+      toast.error('Failed to create template');
+      throw error;
+    }
+  },
+
+  updateTemplate: async template => {
+    try {
+      await invoke('update_scheduler_template', { template });
+      toast.success('Template updated successfully');
+      await get().fetchTemplates();
+    } catch (error) {
+      console.error('[Scheduler] Failed to update template:', error);
+      toast.error('Failed to update template');
+      throw error;
+    }
+  },
+
+  deleteTemplate: async templateId => {
+    try {
+      await invoke('delete_scheduler_template', { templateId });
+      toast.success('Template deleted successfully');
+      await get().fetchTemplates();
+    } catch (error) {
+      console.error('[Scheduler] Failed to delete template:', error);
+      toast.error('Failed to delete template');
     }
   },
 }));

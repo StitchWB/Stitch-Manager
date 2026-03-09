@@ -55,6 +55,26 @@
 | Token Injection    |  ✅  |    ✅    |  🚧  |
 | Extension Patcher  |  ✅  |    ✅    |  🚧  |
 
+### 🧭 Proxy Library + Scenario proxy.switch
+
+- **Proxy Library** in Settings with bulk import (`host:port` and `host:port:user:pass`)
+- Link profile default proxy to a **library entry** instead of raw manual URL
+- Recorder overlay supports **proxy.switch** step recording and apply+continue flow
+- Replay handles `proxy.switch` as **session restart boundary** (expected page state reset)
+- Preflight validates missing/disabled proxy targets before replay start
+
+#### Important semantics
+
+- `proxy.switch` does **not** hot-swap network in existing Playwright context.
+- It restarts browser session with a new proxy and continues replay from current URL.
+- In-page transient state/forms can be reset after switch.
+
+#### Safety model
+
+- Proxy credentials are stored using keyring-backed references with fallback migration path.
+- Recorder avoids leaking direct proxy secrets via console fallback channel.
+- Delete/disable of in-use proxy entries is guarded; force mode clears references.
+
 ### 🧩 Identity Graph + Google Sheets
 
 Stitch Manager can ingest an **Identity Graph** dataset from a Google Spreadsheet (service account JWT flow) and show:

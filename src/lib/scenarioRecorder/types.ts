@@ -1,4 +1,4 @@
-export type ScenarioStepKind = 'click' | 'change' | 'submit' | 'nav' | 'unknown';
+export type ScenarioStepKind = 'click' | 'change' | 'submit' | 'nav' | 'proxy.switch' | 'unknown';
 
 export interface ScenarioRecordedStep {
   kind: ScenarioStepKind | string;

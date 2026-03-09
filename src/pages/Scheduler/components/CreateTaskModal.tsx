@@ -1,76 +1,127 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Button, Input, Select, Modal, Textarea } from '../../../components/ui';
+import { Button, Modal } from '../../../components/ui';
 import { useSchedulerStore } from '../../../stores/scheduler';
-import type { TaskType, Schedule } from '../../../types/generated';
+import {
+  SchedulerTaskForm,
+  type SchedulerTaskFormState,
+  validateTaskFormState,
+  buildScheduleFromState,
+  buildTaskTypeFromState,
+  buildEffectiveConfig,
+} from './SchedulerTaskForm';
+import {
+  SchedulerTaskCreationModeSection,
+  type SchedulerTaskCreateMode,
+} from './SchedulerTaskCreationModeSection';
 
 interface CreateTaskModalProps {
   onClose: () => void;
+  initialMode?: 'manual' | 'template';
+  initialTemplateId?: number | null;
 }
 
-export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
-  const { createTask } = useSchedulerStore();
+const defaultFormState = (): SchedulerTaskFormState => ({
+  name: '',
+  taskType: 'scenario',
+  scriptPath: 'python/run_scenario_replay.py',
+  profileAlias: '',
+  scenarioPath: '',
+  composedFlowPath: '',
+  composedFlowId: '',
+  composedFlowJson: '',
+  flowVariablesJson: '{}',
+  emailSourceMode: 'none',
+  emailSourcePolicy: 'fallback_to_pool',
+  emailListRaw: '',
+  emailSheetId: '',
+  emailSheetColumn: '',
+  schedule: {
+    scheduleType: 'interval',
+    intervalSeconds: '3600',
+    hour: '9',
+    minute: '0',
+    onceDateTime: '',
+  },
+  reliability: {
+    retryEnabled: false,
+    retryMaxAttempts: '2',
+    retryBackoffSeconds: '60',
+    retryBackoffMultiplier: '2',
+    retryMaxBackoffSeconds: '3600',
+    quietEnabled: false,
+    quietStartHour: '23',
+    quietStartMinute: '0',
+    quietEndHour: '6',
+    quietEndMinute: '0',
+  },
+  configRaw: '{}',
+});
 
-  const [name, setName] = useState('');
-  const [taskTypeOption, setTaskTypeOption] = useState<'register' | 'login' | 'refresh' | 'script'>(
-    'register'
-  );
-  const [scheduleType, setScheduleType] = useState<'once' | 'interval' | 'daily'>('interval');
+export function CreateTaskModal({
+  onClose,
+  initialMode = 'manual',
+  initialTemplateId = null,
+}: CreateTaskModalProps) {
+  const { createTask, templates, templatesLoading, fetchTemplates, createTaskFromTemplate } =
+    useSchedulerStore();
 
-  // Task type specific fields
-  const [provider, setProvider] = useState('');
-  const [accountId, setAccountId] = useState('');
-  const [scriptPath, setScriptPath] = useState('');
+  const [createMode, setCreateMode] = useState<SchedulerTaskCreateMode>(initialMode);
+  const [templateId, setTemplateId] = useState<number | null>(initialTemplateId);
+  const [templateNameOverride, setTemplateNameOverride] = useState('');
 
-  // Schedule specific fields
-  const [timestamp, setTimestamp] = useState('');
-  const [intervalSeconds, setIntervalSeconds] = useState('3600');
-  const [hour, setHour] = useState('9');
-  const [minute, setMinute] = useState('0');
+  const [formState, setFormState] = useState<SchedulerTaskFormState>(() => defaultFormState());
 
-  const [config, setConfig] = useState('{}');
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (createMode !== 'template') return;
+    if (templates.length > 0 || templatesLoading) return;
+    void fetchTemplates();
+  }, [createMode, fetchTemplates, templates.length, templatesLoading]);
+
+  useEffect(() => {
+    if (createMode !== 'template') return;
+    if (templateId) return;
+    if (initialTemplateId) {
+      setTemplateId(initialTemplateId);
+    }
+  }, [createMode, initialTemplateId, templateId]);
+
+  const formValidationError = useMemo(() => validateTaskFormState(formState), [formState]);
+
+  const canCreateManual = formValidationError === null;
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submitting) return;
     setSubmitting(true);
+    setSubmitError(null);
 
     try {
-      // Build task type
-      let taskType: TaskType;
-      switch (taskTypeOption) {
-        case 'register':
-          taskType = { registerProvider: { provider } };
-          break;
-        case 'login':
-          taskType = { loginAccount: { account_id: parseInt(accountId) } };
-          break;
-        case 'refresh':
-          taskType = { refreshToken: { account_id: parseInt(accountId) } };
-          break;
-        case 'script':
-          taskType = { customScript: { script_path: scriptPath } };
-          break;
+      if (createMode === 'template') {
+        if (!templateId) {
+          throw new Error('Template is required.');
+        }
+        await createTaskFromTemplate(templateId, templateNameOverride.trim() || null);
+        onClose();
+        return;
       }
 
-      // Build schedule
-      let schedule: Schedule;
-      switch (scheduleType) {
-        case 'once':
-          schedule = { once: { timestamp: new Date(timestamp).getTime() / 1000 } };
-          break;
-        case 'interval':
-          schedule = { interval: { seconds: parseInt(intervalSeconds) } };
-          break;
-        case 'daily':
-          schedule = { daily: { hour: parseInt(hour), minute: parseInt(minute) } };
-          break;
+      const validationError = validateTaskFormState(formState);
+      if (validationError) {
+        throw new Error(validationError);
       }
 
-      await createTask(name, taskType, schedule, config);
+      const taskType = buildTaskTypeFromState(formState.taskType, formState.scriptPath);
+      const schedule = buildScheduleFromState(formState.schedule);
+      const finalConfig = JSON.stringify(buildEffectiveConfig(formState), null, 2);
+
+      await createTask(formState.name.trim(), taskType, schedule, finalConfig);
       onClose();
     } catch (error) {
-      console.error('Failed to create task:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Failed to create task');
     } finally {
       setSubmitting(false);
     }
@@ -90,231 +141,47 @@ export function CreateTaskModal({ onClose }: CreateTaskModalProps) {
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
+          <Button
+            variant="primary"
+            disabled={submitting || (createMode === 'template' ? !templateId : !canCreateManual)}
+            onClick={() => {
+              const form = document.getElementById('create-task-form');
+              if (!(form instanceof HTMLFormElement)) return;
+              form.requestSubmit();
+            }}
+          >
             Create Task
           </Button>
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-vsc-text mb-1">Task Details</h3>
-            <p className="text-xs text-vsc-text-muted">Basic information about the task</p>
+      <form id="create-task-form" onSubmit={handleSubmit} className="space-y-6">
+        {submitError ? (
+          <div className="rounded-md border border-vsc-red/30 bg-vsc-red/10 px-3 py-2 text-xs text-vsc-red">
+            {submitError}
           </div>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="task-name" className="block text-sm font-medium text-vsc-text mb-2">
-                Task Name
-              </label>
-              <Input
-                id="task-name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="e.g., Daily AWS Registration"
-                required
-              />
-            </div>
+        ) : null}
 
-            <div>
-              <label htmlFor="task-type" className="block text-sm font-medium text-vsc-text mb-2">
-                Task Type
-              </label>
-              <Select
-                id="task-type"
-                value={taskTypeOption}
-                onChange={e => setTaskTypeOption(e.target.value as any)}
-              >
-                <option value="register">Register Provider</option>
-                <option value="login">Login Account</option>
-                <option value="refresh">Refresh Token</option>
-                <option value="script">Custom Script</option>
-              </Select>
-            </div>
+        <div className="space-y-4">
+          <SchedulerTaskCreationModeSection
+            mode={createMode}
+            onModeChange={next => {
+              setCreateMode(next);
+              if (next === 'template' && !templateId && initialTemplateId) {
+                setTemplateId(initialTemplateId);
+              }
+            }}
+            templateId={templateId}
+            onTemplateIdChange={setTemplateId}
+            templateNameOverride={templateNameOverride}
+            onTemplateNameOverrideChange={setTemplateNameOverride}
+            templates={templates}
+            templatesLoading={templatesLoading}
+          />
 
-            {taskTypeOption === 'register' && (
-              <div>
-                <label
-                  htmlFor="task-provider"
-                  className="block text-sm font-medium text-vsc-text mb-2"
-                >
-                  Provider
-                </label>
-                <Select
-                  id="task-provider"
-                  value={provider}
-                  onChange={e => setProvider(e.target.value)}
-                  required
-                >
-                  <option value="">Select provider...</option>
-                  <option value="aws">AWS</option>
-                  <option value="github">GitHub</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="kiro">Kiro</option>
-                  <option value="windsurf">Windsurf</option>
-                </Select>
-              </div>
-            )}
-
-            {(taskTypeOption === 'login' || taskTypeOption === 'refresh') && (
-              <div>
-                <label
-                  htmlFor="task-account-id"
-                  className="block text-sm font-medium text-vsc-text mb-2"
-                >
-                  Account ID
-                </label>
-                <Input
-                  id="task-account-id"
-                  type="number"
-                  value={accountId}
-                  onChange={e => setAccountId(e.target.value)}
-                  placeholder="Account ID"
-                  required
-                />
-              </div>
-            )}
-
-            {taskTypeOption === 'script' && (
-              <div>
-                <label
-                  htmlFor="task-script-path"
-                  className="block text-sm font-medium text-vsc-text mb-2"
-                >
-                  Script Path
-                </label>
-                <Input
-                  id="task-script-path"
-                  value={scriptPath}
-                  onChange={e => setScriptPath(e.target.value)}
-                  placeholder="/path/to/script.py"
-                  required
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-vsc-text mb-1">Schedule</h3>
-            <p className="text-xs text-vsc-text-muted">When should this task run</p>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label
-                htmlFor="schedule-type"
-                className="block text-sm font-medium text-vsc-text mb-2"
-              >
-                Schedule Type
-              </label>
-              <Select
-                id="schedule-type"
-                value={scheduleType}
-                onChange={e => setScheduleType(e.target.value as any)}
-              >
-                <option value="interval">Interval</option>
-                <option value="daily">Daily</option>
-                <option value="once">Once</option>
-              </Select>
-            </div>
-
-            {scheduleType === 'once' && (
-              <div>
-                <label
-                  htmlFor="schedule-once"
-                  className="block text-sm font-medium text-vsc-text mb-2"
-                >
-                  Date & Time
-                </label>
-                <Input
-                  id="schedule-once"
-                  type="datetime-local"
-                  value={timestamp}
-                  onChange={e => setTimestamp(e.target.value)}
-                  required
-                />
-              </div>
-            )}
-
-            {scheduleType === 'interval' && (
-              <div>
-                <label
-                  htmlFor="schedule-interval"
-                  className="block text-sm font-medium text-vsc-text mb-2"
-                >
-                  Interval (seconds)
-                </label>
-                <Input
-                  id="schedule-interval"
-                  type="number"
-                  value={intervalSeconds}
-                  onChange={e => setIntervalSeconds(e.target.value)}
-                  placeholder="3600"
-                  required
-                />
-                <p className="text-xs text-vsc-text-muted mt-1">
-                  Examples: 3600 = 1 hour, 86400 = 1 day
-                </p>
-              </div>
-            )}
-
-            {scheduleType === 'daily' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor="schedule-hour"
-                    className="block text-sm font-medium text-vsc-text mb-2"
-                  >
-                    Hour (0-23)
-                  </label>
-                  <Input
-                    id="schedule-hour"
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={hour}
-                    onChange={e => setHour(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="schedule-minute"
-                    className="block text-sm font-medium text-vsc-text mb-2"
-                  >
-                    Minute (0-59)
-                  </label>
-                  <Input
-                    id="schedule-minute"
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={minute}
-                    onChange={e => setMinute(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-vsc-text mb-1">Configuration</h3>
-            <p className="text-xs text-vsc-text-muted">Optional JSON configuration</p>
-          </div>
-          <div>
-            <Textarea
-              rows={4}
-              value={config}
-              onChange={e => setConfig(e.target.value)}
-              placeholder='{"key": "value"}'
-              className="bg-vsc-input border-vsc-border text-vsc-text font-mono text-sm"
-              shellClassName="bg-vsc-input border-vsc-border"
-            />
-          </div>
+          {createMode === 'manual' ? (
+            <SchedulerTaskForm state={formState} onChange={setFormState} />
+          ) : null}
         </div>
       </form>
     </Modal>

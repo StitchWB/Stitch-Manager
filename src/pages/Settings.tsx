@@ -36,6 +36,7 @@ import {
   EmailServicesSection,
 } from '../components/settings';
 import { ProxySettingsSectionV2 } from '../components/settings/ProxySettingsSectionV2';
+import { ProxyLibrarySection } from '../components/settings/ProxyLibrarySection';
 import { AiProxySettings } from '../components/settings/AiProxySettings';
 import { AutomationTab } from '../components/registration/AutomationTab';
 import { TabButton } from '../components/ui/TabButton';
@@ -545,6 +546,8 @@ export default function Settings() {
 
   const renderConnectivitySettings = () => (
     <div className="space-y-8" style={getAnimationStyle(0)}>
+      <ProxyLibrarySection />
+
       <ProxySettingsSectionV2 />
 
       <IMAPSettingsSection

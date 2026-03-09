@@ -1,24 +1,58 @@
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import Layout from './components/layout/Layout';
-import Dashboard from './pages/Dashboard';
-import Accounts from './pages/Accounts';
-import AutoReg from './pages/AutoReg';
-import AiProviders from './pages/AiProviders';
-import AiOverview from './pages/AiOverview';
-import Antigravity from './pages/Antigravity';
-import Patcher from './pages/Patcher';
-import Scheduler from './pages/Scheduler';
-import Settings from './pages/Settings';
-import Logs from './pages/Logs';
-import Chat from './pages/Chat';
-import ApiKeys from './pages/ApiKeys';
-import NotFound from './pages/NotFound';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Accounts = lazy(() => import('./pages/Accounts'));
+const AutoReg = lazy(() => import('./pages/AutoReg'));
+const AiProviders = lazy(() => import('./pages/AiProviders'));
+const AiOverview = lazy(() => import('./pages/AiOverview'));
+const Antigravity = lazy(() => import('./pages/Antigravity'));
+const Patcher = lazy(() => import('./pages/Patcher'));
+const Scheduler = lazy(() => import('./pages/Scheduler'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Logs = lazy(() => import('./pages/Logs'));
+const Chat = lazy(() => import('./pages/Chat'));
+const ApiKeys = lazy(() => import('./pages/ApiKeys'));
+const Scenarios = lazy(() => import('./pages/Scenarios'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+// Route prefetchers (idle/low-priority)
+const prefetchAccounts = () => import('./pages/Accounts');
+const prefetchScenarios = () => import('./pages/Scenarios');
+const prefetchScheduler = () => import('./pages/Scheduler');
+const prefetchLogs = () => import('./pages/Logs');
+const prefetchSettings = () => import('./pages/Settings');
+
+type NavigatorConnectionLike = {
+  saveData?: boolean;
+  effectiveType?: string;
+};
+
+type NavigatorWithConnection = Navigator & {
+  connection?: NavigatorConnectionLike;
+};
+
+type WindowWithIdleCallback = Window & {
+  requestIdleCallback?: (
+    callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
+    opts?: { timeout?: number }
+  ) => number;
+  cancelIdleCallback?: (id: number) => void;
+};
+
+function RouteLoadingFallback() {
+  return (
+    <div className="h-full w-full min-h-[200px] flex items-center justify-center text-sm text-vsc-text-muted">
+      Loading page...
+    </div>
+  );
+}
 
 function App() {
   const theme = useAppStore(state => state.theme);
@@ -83,6 +117,59 @@ function App() {
     };
   }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs]);
 
+  // Idle route prefetch to speed up first navigation.
+  useEffect(() => {
+    const nav = navigator as NavigatorWithConnection;
+    const connection = nav.connection;
+
+    const saveData = Boolean(connection?.saveData);
+    const effectiveType = (connection?.effectiveType ?? '').toLowerCase();
+    const constrainedNetwork = saveData || effectiveType.includes('2g');
+
+    if (constrainedNetwork) {
+      return;
+    }
+
+    const tasks = [
+      prefetchAccounts,
+      prefetchScenarios,
+      prefetchScheduler,
+      prefetchLogs,
+      prefetchSettings,
+    ];
+
+    const runPrefetch = () => {
+      let delay = 0;
+      for (const task of tasks) {
+        window.setTimeout(() => {
+          void task().catch(() => {
+            // best-effort prefetch only
+          });
+        }, delay);
+        delay += 400;
+      }
+    };
+
+    const w = window as WindowWithIdleCallback;
+    if (typeof w.requestIdleCallback === 'function') {
+      const idleId = w.requestIdleCallback(
+        () => {
+          runPrefetch();
+        },
+        { timeout: 2500 }
+      );
+
+      return () => {
+        if (typeof w.cancelIdleCallback === 'function') {
+          w.cancelIdleCallback(idleId);
+        }
+      };
+    }
+
+    const fallbackTimer = window.setTimeout(runPrefetch, 1200);
+    return () => window.clearTimeout(fallbackTimer);
+  }, []);
+
   return (
     <>
       {/* Skip to main content link for keyboard navigation */}
@@ -91,24 +178,27 @@ function App() {
       </Link>
 
       <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/accounts" element={<Accounts />} />
-          <Route path="/autoreg" element={<AutoReg />} />
-          <Route path="/ai" element={<AiOverview />} />
-          <Route path="/ai/antigravity" element={<Antigravity />} />
-          <Route path="/ai/api-keys" element={<ApiKeys />} />
-          <Route path="/ai/:section" element={<AiProviders />} />
-          <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
-          <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
-          <Route path="/patcher" element={<Patcher />} />
-          <Route path="/scheduler" element={<Scheduler />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/api-keys" element={<Navigate to="/ai/api-keys" replace />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/accounts" element={<Accounts />} />
+            <Route path="/autoreg" element={<AutoReg />} />
+            <Route path="/ai" element={<AiOverview />} />
+            <Route path="/ai/antigravity" element={<Antigravity />} />
+            <Route path="/ai/api-keys" element={<ApiKeys />} />
+            <Route path="/ai/:section" element={<AiProviders />} />
+            <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
+            <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
+            <Route path="/patcher" element={<Patcher />} />
+            <Route path="/scheduler" element={<Scheduler />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/logs" element={<Logs />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/scenarios" element={<Scenarios />} />
+            <Route path="/api-keys" element={<Navigate to="/ai/api-keys" replace />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </Layout>
       <Toaster
         position="bottom-right"
