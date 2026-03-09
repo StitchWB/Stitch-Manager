@@ -123,6 +123,8 @@ export default function Accounts() {
   const [profileSettingsAlias, setProfileSettingsAlias] = useState<string | null>(null);
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileListFilter, setProfileListFilter] = useState<ProfileListFilter>('all');
+  const [profileOpenTarget, setProfileOpenTarget] = useState<string>('kiro');
+  const [profileCustomUrl, setProfileCustomUrl] = useState('');
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);
     try {
@@ -369,6 +371,14 @@ export default function Accounts() {
     navigate('/autoreg');
   }, [navigate]);
 
+  const handleOpenProfileScenarios = useCallback(
+    (alias: string) => {
+      const trimmed = alias.trim();
+      navigate(trimmed ? `/scenarios?alias=${encodeURIComponent(trimmed)}` : '/scenarios');
+    },
+    [navigate]
+  );
+
   const handleAddAccountOpen = useCallback(() => {
     setIsModalOpen(true);
   }, []);
@@ -383,27 +393,6 @@ export default function Accounts() {
       handleViewModeChange('graph');
     },
     [handleViewModeChange]
-  );
-
-  const handleStartAutoregFromProfile = useCallback(
-    (
-      alias: string,
-      targetProvider: string,
-      preset?: 'kiro_via_aws_session',
-      awsBootstrapAccountId?: number
-    ) => {
-      const query = new URLSearchParams({
-        source: 'profile',
-        profile: alias,
-        target: targetProvider,
-      });
-      if (preset) query.set('preset', preset);
-      if (typeof awsBootstrapAccountId === 'number') {
-        query.set('awsBootstrapAccountId', String(awsBootstrapAccountId));
-      }
-      navigate(`/autoreg?${query.toString()}`);
-    },
-    [navigate]
   );
 
   const handleRelationEdgeClickInAll = useCallback(
@@ -451,6 +440,9 @@ export default function Accounts() {
             tagFilter={tagFilter}
             relationFilter={relationFilter}
             quotaFilter={quotaFilter}
+            profileListFilter={profileListFilter}
+            profileOpenTarget={profileOpenTarget}
+            profileCustomUrl={profileCustomUrl}
             tagOptions={tagOptions}
             relationOptions={relationOptions}
             sheetsUpdatedAt={sheetsUpdatedAt ?? null}
@@ -469,6 +461,9 @@ export default function Accounts() {
             onTagFilterChange={handleTagFilterChange}
             onRelationFilterChange={handleRelationFilterChange}
             onQuotaFilterChange={handleQuotaFilterChange}
+            onProfileFilterChange={setProfileListFilter}
+            onProfileOpenTargetChange={setProfileOpenTarget}
+            onProfileCustomUrlChange={setProfileCustomUrl}
             onRefreshAll={handleRefreshAll}
             onImportAccounts={handleImportAccounts}
             onExportCSV={handleExportCSV}
@@ -521,10 +516,10 @@ export default function Accounts() {
               visibleProfileItems={visibleProfileItems}
               onEditProfile={handleEditProfile}
               onOpenStandaloneProfile={handleOpenStandaloneProfile}
-              onStartAutoregFromProfile={handleStartAutoregFromProfile}
               onDeleteProfile={handleDeleteProfile}
-              profileListFilter={profileListFilter}
-              onProfileFilterChange={setProfileListFilter}
+              onOpenProfileScenarios={handleOpenProfileScenarios}
+              openTarget={profileOpenTarget}
+              customUrl={profileCustomUrl}
               selectedIdsSize={selectedIds.size}
               tagFilter={tagFilter}
               onCreateProfilesForSelected={handleCreateProfilesForSelected}

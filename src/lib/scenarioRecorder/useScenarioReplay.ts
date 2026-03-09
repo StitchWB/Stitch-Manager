@@ -5,6 +5,7 @@ import {
   cancelPythonJob,
   getPythonJobStatus,
   sendPythonJobControl,
+  appendScenarioRun,
   type PythonJobStartResponse,
 } from '@/lib/tauri/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
@@ -56,6 +57,7 @@ type ReplayState = {
   manualPauseReason: string | null;
   runtimeMissing: boolean;
   stderr: Array<{ ts: string; line: string }>;
+  startedAtMs: number | null;
 };
 
 function newCorrelationId(): string {
@@ -84,6 +86,7 @@ export function useScenarioReplay() {
     manualPauseReason: null,
     runtimeMissing: false,
     stderr: [],
+    startedAtMs: null,
   }));
 
   const optionsRef = useRef<ScenarioReplayOptions | null>(null);
@@ -106,6 +109,7 @@ export function useScenarioReplay() {
       events: [],
       stepEvents: [],
       manualPauseReason: null,
+      startedAtMs: null,
     }));
   }, []);
 
@@ -117,6 +121,7 @@ export function useScenarioReplay() {
 
     optionsRef.current = opts;
     const correlationId = newCorrelationId();
+    const startedAtMs = Date.now();
     setState(prev => ({
       ...prev,
       status: 'starting',
@@ -133,6 +138,7 @@ export function useScenarioReplay() {
       events: [],
       stepEvents: [],
       manualPauseReason: null,
+      startedAtMs,
     }));
 
     let job: PythonJobStartResponse;
@@ -159,6 +165,17 @@ export function useScenarioReplay() {
         args,
         correlationId,
         timeoutMs: 3_600_000,
+      });
+
+      void appendScenarioRun({
+        alias: opts.alias,
+        scenarioPath: opts.scenarioPath,
+        startedUrl: opts.startUrl ?? null,
+        status: 'started',
+        dryRun: false,
+        startedAt: Math.floor(startedAtMs / 1000),
+      }).catch(() => {
+        // best effort
       });
     } catch (e) {
       setState(prev => ({
@@ -384,6 +401,32 @@ export function useScenarioReplay() {
               if (errMsg.toLowerCase().includes('playwright install')) {
                 runtimeMissing = true;
               }
+            }
+
+            // Best-effort: persist run summary into scenarios DB.
+            const opts = optionsRef.current;
+            if (opts?.alias && opts.scenarioPath) {
+              const started = prev.startedAtMs ?? Date.now();
+              const finishedMs = Date.now();
+              const startedAtSec = Math.floor(started / 1000);
+              const finishedAtSec = Math.floor(finishedMs / 1000);
+              const durationMs = Math.max(0, finishedMs - started);
+              void appendScenarioRun({
+                alias: opts.alias,
+                scenarioPath: opts.scenarioPath,
+                startedUrl: opts.startUrl ?? null,
+                status: ok ? 'succeeded' : 'failed',
+                dryRun: false,
+                startedAt: startedAtSec,
+                finishedAt: finishedAtSec,
+                durationMs,
+                error: ok ? null : error,
+                reportPath,
+                tracePath,
+                artifactsDir,
+              }).catch(() => {
+                // best effort
+              });
             }
           }
 

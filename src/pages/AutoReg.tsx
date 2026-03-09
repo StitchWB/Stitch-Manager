@@ -458,6 +458,8 @@ export default function AutoRegNext() {
         addyioConnectionMessage={addyioConnectionMessage}
         addyioAccountInfo={addyioAccountInfo}
         addyioDomains={addyioDomains}
+        imapConfig={config.imap}
+        onLog={(level, message) => addLog({ level, message })}
         useRegistrationV2={useRegistrationV2}
         onUseRegistrationV2Change={handleSetUseRegistrationV2}
         headless={config.advanced.headless}

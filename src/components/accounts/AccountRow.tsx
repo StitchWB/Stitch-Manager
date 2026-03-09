@@ -20,6 +20,7 @@ import type { AccountsTableVisibleColumns } from '../../stores/uiPreferences';
 import { providerLabelToKey } from '../../lib/accounts/relations';
 import { getAccountStatusLabel } from '../../lib/accountStatus';
 import { t } from '../../lib/i18n';
+import { formatProfileAlias } from '../../lib/profiles/displayName';
 
 interface AccountRowProps {
   account: Account;
@@ -159,6 +160,7 @@ export function AccountRow({
   onRelationEdgeClick,
 }: AccountRowProps) {
   const alias = getAlias(account);
+  const displayAlias = formatProfileAlias(alias);
   const profileId = getProfileId(account);
   const status = account.status as AccountStatus;
   const tags = parseTags(account.tags);
@@ -223,8 +225,13 @@ export function AccountRow({
           className="group/account inline-flex max-w-full flex-col items-start text-left"
         >
           <span className="max-w-full truncate text-sm font-semibold text-white group-hover/account:text-indigo-200">
-            {alias}
+            {displayAlias}
           </span>
+          {displayAlias !== alias ? (
+            <span className="max-w-full truncate font-mono text-[10px] text-slate-500">
+              {alias}
+            </span>
+          ) : null}
           <Tooltip
             content={
               <div className="space-y-1 text-[11px]">

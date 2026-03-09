@@ -8,11 +8,13 @@ import {
   EngineTab,
   NetworkTab,
   AutomationTab,
+  InboxTab,
   LaunchPad,
 } from '../../../components/registration';
 import { type ProviderName } from '../../../types';
 import { type LogVerbosity } from '../../../constants/logging';
 import { type SaveStatus } from '../../../stores/registration/types';
+import type { IMAPConfig } from '../../../stores/registration/types';
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
@@ -38,6 +40,8 @@ interface CommandCenterProps {
   addyioConnectionMessage: string;
   addyioAccountInfo: any;
   addyioDomains: string[];
+  imapConfig: IMAPConfig;
+  onLog: (level: 'info' | 'warn' | 'error' | 'success' | 'debug', message: string) => void;
 
   // Engine
   useRegistrationV2: boolean;
@@ -108,6 +112,8 @@ export const CommandCenter = ({
   addyioConnectionMessage,
   addyioAccountInfo,
   addyioDomains,
+  imapConfig,
+  onLog,
   useRegistrationV2,
   onUseRegistrationV2Change,
   headless,
@@ -254,6 +260,8 @@ export const CommandCenter = ({
         )}
 
         {activeTab === 'automation' && <AutomationTab disabled={disabled} />}
+
+        {activeTab === 'inbox' && <InboxTab imap={imapConfig} disabled={disabled} onLog={onLog} />}
       </div>
 
       {/* Launch Pad */}

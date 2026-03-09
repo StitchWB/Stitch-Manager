@@ -155,12 +155,12 @@ export type ProfileCommandError = { message: string }
 /**
  * Configuration for Python-based Kiro auto-registration
  */
-export type PythonAutoregConfig = { email: string | null; name: string | null; password: string | null; headless: boolean; deviceFlow: boolean; autoGenerate: boolean; imapServer: string; imapPort: number | null; imapUser: string; imapPassword: string; emailStrategy: string | null; proxyUrl: string | null; speedMultiplier: number | null; verificationCodeTimeout: number | null; oauthCallbackTimeout: number | null; allowAccessWait: number | null; pageLoadTimeout: number | null; elementWaitTimeout: number | null; imapPollInterval: number | null; passwordLength: number | null; realisticTyping: boolean | null; humanDelays: boolean | null; screenshotsOnError: boolean | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; launchProfileAlias: string | null; launchMode: string | null; awsBootstrapAccountId: number | null; correlationId: string | null }
+export type PythonAutoregConfig = { email: string | null; name: string | null; password: string | null; headless: boolean; deviceFlow: boolean; autoGenerate: boolean; imapServer: string; imapPort: number | null; imapUser: string; imapPassword: string; emailStrategy: string | null; proxyUrl: string | null; speedMultiplier: number | null; verificationCodeTimeout: number | null; oauthCallbackTimeout: number | null; allowAccessWait: number | null; pageLoadTimeout: number | null; elementWaitTimeout: number | null; imapPollInterval: number | null; passwordLength: number | null; realisticTyping: boolean | null; humanDelays: boolean | null; screenshotsOnError: boolean | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; inboxProvider: string | null; inboxMailbox: string | null; inboxMailtmAddress: string | null; inboxMailtmPassword: string | null; inboxMailtmBaseUrl: string | null; launchProfileAlias: string | null; launchMode: string | null; awsBootstrapAccountId: number | null; correlationId: string | null }
 
 /**
  * Configuration for Windsurf auto-registration
  */
-export type WindsurfAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; loginOnly: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; emailPattern: string | null; namePattern: string | null; nameCustomFirst: string | null; nameCustomLast: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; correlationId: string | null }
+export type WindsurfAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; loginOnly: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; emailPattern: string | null; namePattern: string | null; nameCustomFirst: string | null; nameCustomLast: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; inboxProvider: string | null; inboxMailbox: string | null; inboxMailtmAddress: string | null; inboxMailtmPassword: string | null; inboxMailtmBaseUrl: string | null; correlationId: string | null }
 
 /**
  * Result from Windsurf auto-registration
@@ -170,7 +170,7 @@ export type WindsurfAutoregResult = { success: boolean; email: string | null; pa
 /**
  * Configuration for Trae auto-registration
  */
-export type TraeAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; correlationId: string | null }
+export type TraeAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; inboxProvider: string | null; inboxMailbox: string | null; inboxMailtmAddress: string | null; inboxMailtmPassword: string | null; inboxMailtmBaseUrl: string | null; correlationId: string | null }
 
 /**
  * Result from Trae auto-registration
@@ -180,7 +180,7 @@ export type TraeAutoregResult = { success: boolean; email: string | null; passwo
 /**
  * Configuration for GitHub auto-registration
  */
-export type GithubAutoregConfig = { email: string | null; password: string; username: string | null; verificationCode: string | null; headless: boolean; imapServer: string | null; imapUser: string | null; imapPassword: string | null; correlationId: string | null }
+export type GithubAutoregConfig = { email: string | null; password: string; username: string | null; verificationCode: string | null; headless: boolean; imapServer: string | null; imapUser: string | null; imapPassword: string | null; inboxProvider: string | null; inboxMailbox: string | null; inboxMailtmAddress: string | null; inboxMailtmPassword: string | null; inboxMailtmBaseUrl: string | null; correlationId: string | null }
 
 /**
  * Result from GitHub auto-registration
@@ -300,6 +300,36 @@ export type ImageSource = { sourceType: string; mediaType: string | null; data: 
  * IMAP connection configuration
  */
 export type ImapConfig = { host: string; port: number; username: string; password: string; useTls?: boolean }
+
+export type EmailProviderType = "imap" | "mail_tm"
+
+export type ImapConnectCredentials = { host: string; port: number; username: string; password: string; useTls?: boolean }
+
+export type MailTmConnectCredentials = { address: string; password: string; baseUrl?: string | null }
+
+export type EmailConnectCredentials = { type: "imap"; value: ImapConnectCredentials } | { type: "mail_tm"; value: MailTmConnectCredentials }
+
+export type EmailConnectOptions = { mailbox?: string | null; readOnly?: boolean }
+
+export type EmailConnectInput = { provider: EmailProviderType; accountId: string; credentials: EmailConnectCredentials; options?: EmailConnectOptions | null }
+
+export type ProviderCapabilities = { canDelete: boolean; canMarkAsRead: boolean; canSearchBody: boolean; canDownloadAttachments: boolean }
+
+export type EmailMailboxSession = { sessionId: string; provider: EmailProviderType; accountId: string; capabilities: ProviderCapabilities; connectedAt: string }
+
+export type EmailAddress = { name?: string | null; email: string }
+
+export type EmailAttachment = { id: string; filename: string; contentType: string; size: number }
+
+export type EmailMessage = { id: string; providerMessageId: string; from: EmailAddress; to: EmailAddress[]; cc?: EmailAddress[]; bcc?: EmailAddress[]; subject: string; text?: string | null; html?: string | null; headers?: { [key in string]: string }; attachments?: EmailAttachment[]; isRead: boolean; receivedAt: string }
+
+export type EmailQuery = { from?: string | null; to?: string | null; subjectContains?: string | null; bodyContains?: string | null; unreadOnly?: boolean | null; since?: string | null; limit?: number | null }
+
+export type WaitForEmailOptions = { timeoutMs?: number | null; pollIntervalMs?: number | null; dedupeKey?: string | null }
+
+export type EmailServiceErrorCode = "AUTH_FAILED" | "PROVIDER_UNAVAILABLE" | "RATE_LIMITED" | "EMAIL_NOT_FOUND_TIMEOUT" | "UNSUPPORTED_CAPABILITY" | "INVALID_QUERY" | "SESSION_NOT_FOUND" | "INTERNAL_ERROR"
+
+export type EmailServiceError = { code: EmailServiceErrorCode; message: string; retryable: boolean }
 
 export type DeviceFlowSession = { client: DeviceFlowClient; deviceCode: string; userCode: string; verificationUri: string; interval: number; expiresAt: number }
 
@@ -477,6 +507,20 @@ export type ProxyItem = { host: string; port: number; username?: string | null; 
  * Proxy type
  */
 export type ProxyType = "http" | "socks5"
+
+export type ProxyLibraryEntry = { id: string; label: string; host: string; port: number; username?: string | null; password?: string | null; proxyType: ProxyType; enabled: boolean; notes?: string | null; createdAt: string; updatedAt: string }
+
+export type ProxyLibraryDraft = { label: string | null; host: string; port: number; username?: string | null; password?: string | null; proxyType: ProxyType; enabled: boolean; notes?: string | null }
+
+export type ProxyLibraryImportIssue = { lineNo: number; linePreview: string; reason: string }
+
+export type ProxyLibraryImportResult = { totalLines: number; imported: number; skipped: number; issues: ProxyLibraryImportIssue[]; items: ProxyLibraryEntry[] }
+
+export type ProxyLibraryMutateOptions = { force?: boolean }
+
+export type ProxyLibraryUpdateRequest = { id: string; draft: ProxyLibraryDraft; options?: ProxyLibraryMutateOptions | null }
+
+export type ProxyLibraryImportRequest = { text: string; defaultType?: ProxyType | null; defaultEnabled?: boolean | null }
 
 export type LogLevel = "minimal" | "normal" | "verbose" | "debug"
 

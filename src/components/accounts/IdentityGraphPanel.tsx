@@ -1,16 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  AlertTriangle,
-  Link2,
-  PenSquare,
-  Plus,
-  Search,
-  Star,
-  Trash2,
-  User,
-  Users,
-  X,
-} from 'lucide-react';
 import { toast } from 'sonner';
 
 import type {
@@ -29,8 +17,20 @@ import { useRegistrationStore } from '@/stores/registration';
 import { useUIPreferencesStore } from '@/stores/uiPreferences';
 import { buildUnifiedGraph } from '@/lib/graph/unifiedGraph';
 import { useAccountsStore } from '@/stores/accounts';
-import { Button, ButtonBase, Checkbox, EmptyState, FilterDropdown, Input, Select } from '../ui';
 import type { SheetDescriptor } from '@/types/generated';
+import {
+  IdentityGraphHeader,
+  IdentityGraphAlerts,
+  IdentityGraphDiagnostics,
+  IdentityGraphSchemaMessage,
+  IdentityGraphStateBlocks,
+  IdentityGraphIdentityList,
+  IdentityGraphActiveIdentityCard,
+  IdentityGraphIdentityCardsList,
+  IdentityGraphLinkEditorDrawer,
+  getServiceBadgeClass,
+  getLinkTypeBadgeClass,
+} from './identity-graph';
 
 type ServiceFilterOption = 'all' | string;
 type StatusFilterOption = 'all' | string;
@@ -162,36 +162,6 @@ const extractServiceAccounts = (dataset: GoogleSheetsDataset) => {
   }
 
   return dataset.identityGraph?.identities.flatMap(node => node.services ?? []) ?? [];
-};
-
-const getServiceBadgeClass = (service: string) => {
-  const key = normalizeValue(service);
-  if (key.includes('aws')) return 'border-amber-500/30 bg-amber-500/10 text-amber-200';
-  if (key.includes('github')) return 'border-slate-500/30 bg-slate-500/10 text-slate-200';
-  if (key.includes('kiro')) return 'border-indigo-500/30 bg-indigo-500/10 text-indigo-200';
-  if (key.includes('windsurf')) return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200';
-  if (key.includes('trae')) return 'border-purple-500/30 bg-purple-500/10 text-purple-200';
-  return 'border-white/10 bg-white/5 text-slate-300';
-};
-
-const getStatusBadgeClass = (status?: string) => {
-  const key = normalizeValue(status);
-  if (key.includes('active')) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
-  if (key.includes('expired') || key.includes('limit'))
-    return 'border-amber-500/30 bg-amber-500/10 text-amber-200';
-  if (key.includes('banned') || key.includes('suspended'))
-    return 'border-rose-500/30 bg-rose-500/10 text-rose-200';
-  if (key.includes('pending')) return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200';
-  return 'border-white/10 bg-white/5 text-slate-300';
-};
-
-const getLinkTypeBadgeClass = (linkType?: string) => {
-  const key = normalizeValue(linkType);
-  if (key.includes('oauth')) return 'border-indigo-500/30 bg-indigo-500/10 text-indigo-200';
-  if (key.includes('password')) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
-  if (key.includes('phone')) return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200';
-  if (key.includes('recovery')) return 'border-amber-500/30 bg-amber-500/10 text-amber-200';
-  return 'border-white/10 bg-white/5 text-slate-300';
 };
 
 const resolveIdentityName = (node: GoogleSheetsIdentityNode) =>
@@ -631,548 +601,96 @@ export function IdentityGraphPanel({
 
   return (
     <div className={cn('flex flex-col h-full overflow-hidden', className)}>
-      <div className="shrink-0 border-b border-white/5 bg-[#0a0a0c]/60 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Users className="w-4 h-4 text-indigo-400" />
-            <span className="font-semibold text-white">Identity Graph</span>
-            <span className="text-slate-500">•</span>
-            <span className="tabular-nums">{totalIdentities} identities</span>
-            <span className="text-slate-500">•</span>
-            <span className="tabular-nums">{services.length} service accounts</span>
-            <span className="text-slate-500">•</span>
-            <span className="tabular-nums">{totalLinks} links</span>
-          </div>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!connectionReady || schemaStatus === 'loading'}
-              onClick={handleInitSchema}
-              leftIcon={<Star size={14} />}
-            >
-              Init schema
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => openCreateEditor(activeIdentity?.id)}
-              leftIcon={<Plus size={14} />}
-              disabled={!connectionReady}
-            >
-              New link
-            </Button>
-            <Input
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search identities, emails, services"
-              leftIcon={<Search className="w-3.5 h-3.5" />}
-              className="text-xs"
-              containerClassName="w-[220px]"
-            />
-            <FilterDropdown
-              value={serviceFilter}
-              onChange={value => setServiceFilter(value)}
-              options={serviceOptions}
-              placeholder="Service"
-              showActiveState={true}
-            />
-            <FilterDropdown
-              value={statusFilter}
-              onChange={value => setStatusFilter(value)}
-              options={statusOptions}
-              placeholder="Status"
-              showActiveState={true}
-            />
-          </div>
-        </div>
-      </div>
+      <IdentityGraphHeader
+        totalIdentities={totalIdentities}
+        totalServices={services.length}
+        totalLinks={totalLinks}
+        connectionReady={connectionReady}
+        schemaStatus={schemaStatus}
+        query={query}
+        serviceFilter={serviceFilter}
+        statusFilter={statusFilter}
+        serviceOptions={serviceOptions}
+        statusOptions={statusOptions}
+        onInitSchema={handleInitSchema}
+        onCreateLink={() => openCreateEditor(activeIdentity?.id)}
+        onQueryChange={setQuery}
+        onServiceFilterChange={value => setServiceFilter(value)}
+        onStatusFilterChange={value => setStatusFilter(value)}
+      />
 
       <div className="flex-1 overflow-auto px-4 py-4 space-y-3">
-        {schemaIssues.length > 0 ? (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-amber-200">
-              Schema issues ({schemaIssues.length})
-            </div>
-            <div className="mt-2 space-y-1">
-              {schemaIssues.slice(0, 6).map((issue, idx) => (
-                <div key={`${issue.sheetName}-${idx}`} className="text-xs text-amber-100/90">
-                  [{issue.level}] {issue.sheetName}: {issue.message}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {invalidRows.length > 0 ? (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-rose-200">
-              Invalid rows ({invalidRows.length})
-            </div>
-            <div className="mt-2 space-y-1">
-              {invalidRows.slice(0, 6).map(row => (
-                <div key={`${row.sheetName}-${row.rowNumber}`} className="text-xs text-rose-100/90">
-                  {row.sheetName} row {row.rowNumber}: {row.reason}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-            Graph diagnostics
-          </div>
-          <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px] text-slate-400">
-            <div>Identities: {unified.diagnostics.identities}</div>
-            <div>Services: {unified.diagnostics.services}</div>
-            <div>Links: {unified.diagnostics.links}</div>
-            <div>Local accounts: {unified.diagnostics.localAccounts}</div>
-            <div>Local profiles: {unified.diagnostics.localProfiles}</div>
-            <div>Svc→Acc matches: {unified.diagnostics.matchedServiceToAccount}</div>
-            <div>Acc→Profile matches: {unified.diagnostics.matchedAccountToProfile}</div>
-          </div>
-          {unified.diagnostics.reasons.length ? (
-            <div className="mt-2 space-y-1">
-              {unified.diagnostics.reasons.slice(0, 4).map(reason => (
-                <div key={reason.code} className="text-[11px] text-amber-200/90">
-                  {reason.message}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {schemaMessage ? (
-          <div
-            className={cn(
-              'rounded-xl border p-3 text-xs',
-              schemaStatus === 'error'
-                ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
-                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-            )}
-          >
-            {schemaMessage}
-          </div>
-        ) : null}
-
-        {isLoading ? (
-          <div className="rounded-xl border border-white/10 bg-[#111116]/70 p-6 text-sm text-slate-400">
-            Loading identity graph...
-          </div>
-        ) : null}
-
-        {!isLoading && error ? (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              <span>{error}</span>
-            </div>
-            {onRetry && (
-              <ButtonBase
-                type="button"
-                onClick={onRetry}
-                className="text-xs font-semibold text-rose-200 hover:text-white"
-              >
-                Retry
-              </ButtonBase>
-            )}
-          </div>
-        ) : null}
-
-        {!isLoading && !error && !hasData ? (
-          <EmptyState
-            icon={User}
-            title="No identities found"
-            description="Try adjusting filters or loading another dataset."
-          />
-        ) : null}
+        <IdentityGraphAlerts schemaIssues={schemaIssues} invalidRows={invalidRows} />
+        <IdentityGraphDiagnostics diagnostics={unified.diagnostics} />
+        <IdentityGraphSchemaMessage schemaMessage={schemaMessage} schemaStatus={schemaStatus} />
+        <IdentityGraphStateBlocks
+          isLoading={isLoading}
+          error={error}
+          hasData={hasData}
+          onRetry={onRetry}
+        />
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,360px)_1fr] gap-4">
-          <div className="rounded-xl border border-white/10 bg-[#111116]/80 p-3 space-y-2 max-h-[680px] overflow-auto">
-            {filteredIdentities.map(node => {
-              const selected = activeIdentity?.id === node.id;
-              const linksCount = parsedLinks.filter(
-                link => link.fromIdentityId === node.id && link.status !== 'deleted'
-              ).length;
-              return (
-                <ButtonBase
-                  key={node.id}
-                  type="button"
-                  onClick={() => setActiveIdentityId(node.id)}
-                  className={cn(
-                    'w-full text-left rounded-lg border px-3 py-2 transition-colors',
-                    selected
-                      ? 'border-indigo-500/40 bg-indigo-500/10'
-                      : 'border-white/5 bg-black/20 hover:border-white/15 hover:bg-white/5'
-                  )}
-                >
-                  <div className="text-xs font-semibold text-white truncate">
-                    {resolveIdentityName(node)}
-                  </div>
-                  <div className="text-[10px] text-slate-500 truncate mt-0.5">{node.id}</div>
-                  <div className="mt-1 text-[10px] text-slate-400">{linksCount} links</div>
-                </ButtonBase>
-              );
-            })}
-          </div>
+          <IdentityGraphIdentityList
+            identities={filteredIdentities}
+            activeIdentityId={activeIdentity?.id ?? null}
+            parsedLinks={parsedLinks}
+            onSelectIdentity={setActiveIdentityId}
+            resolveIdentityName={resolveIdentityName}
+          />
 
           <div className="space-y-3">
-            {activeIdentity ? (
-              <div className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold text-white">
-                      {resolveIdentityName(activeIdentity)}
-                    </div>
-                    <div className="text-[11px] text-slate-500">{activeIdentity.id}</div>
-                  </div>
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    leftIcon={<Plus size={12} />}
-                    onClick={() => openCreateEditor(activeIdentity.id)}
-                    disabled={!connectionReady}
-                  >
-                    Add link
-                  </Button>
-                </div>
-
-                {activeIdentityLinks.length ? (
-                  <div className="space-y-2">
-                    {activeIdentityLinks.map(link => {
-                      const serviceName = normalizeSheetName(link.toServiceSheet || 'service');
-                      const targetService = services.find(s => s.id === link.toServiceAccountId);
-                      return (
-                        <div
-                          key={link.linkId}
-                          className="rounded-lg border border-white/10 bg-black/30 px-3 py-2"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="text-xs font-semibold text-white truncate">
-                                {targetService?.login ||
-                                  link.toServiceAccountId ||
-                                  'Unknown service account'}
-                              </div>
-                              <div className="text-[10px] text-slate-500 truncate">
-                                {serviceName} • {link.linkIdValue || link.linkId}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              {link.isPrimary ? (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-200 uppercase tracking-widest font-semibold">
-                                  Primary
-                                </span>
-                              ) : null}
-                              {link.linkType ? (
-                                <span
-                                  className={cn(
-                                    'text-[10px] px-2 py-0.5 rounded-full border uppercase tracking-widest font-semibold',
-                                    getLinkTypeBadgeClass(link.linkType)
-                                  )}
-                                >
-                                  {link.linkType}
-                                </span>
-                              ) : null}
-                              <Button
-                                size="xs"
-                                variant="ghost"
-                                leftIcon={<PenSquare size={12} />}
-                                onClick={() => openEditEditor(link)}
-                                disabled={!connectionReady}
-                              >
-                                Edit
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-slate-500 flex items-center gap-2">
-                    <Link2 className="w-3.5 h-3.5" />
-                    No links for this identity yet.
-                  </div>
-                )}
-
-                {activeIdentityUnifiedEdges.length ? (
-                  <div className="pt-3 mt-3 border-t border-white/10">
-                    <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-                      Unified edges
-                    </div>
-                    <div className="mt-2 space-y-1">
-                      {activeIdentityUnifiedEdges.slice(0, 8).map(edge => (
-                        <div
-                          key={edge.id}
-                          className="text-[11px] text-slate-400 flex items-center justify-between gap-2"
-                        >
-                          <span className="truncate">
-                            {edge.kind} → {edge.toId}
-                          </span>
-                          {edge.label ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-slate-300">
-                              {edge.label}
-                            </span>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {filteredIdentities.map(node => {
-              const serviceList = ensureServiceList(node, resolvedDataset);
-              return (
-                <div
-                  key={node.id}
-                  className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-3"
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
-                        <User className="w-4 h-4 text-indigo-300" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-white truncate max-w-[240px]">
-                          {resolveIdentityName(node)}
-                        </div>
-                        <div className="text-[11px] text-slate-500 truncate max-w-[240px]">
-                          {node.id}
-                        </div>
-                      </div>
-                    </div>
-
-                    {node.status && (
-                      <span
-                        className={cn(
-                          'text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border',
-                          getStatusBadgeClass(node.status)
-                        )}
-                      >
-                        {node.status}
-                      </span>
-                    )}
-
-                    {node.tags?.length ? (
-                      <div className="flex flex-wrap items-center gap-1">
-                        {node.tags.slice(0, 3).map(tag => (
-                          <span
-                            key={`${node.id}-${tag}`}
-                            className="text-[10px] text-slate-400 bg-white/5 border border-white/10 rounded-full px-2 py-0.5"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {serviceList.length ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-                      {serviceList.map(service => (
-                        <div
-                          key={service.id}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/30 px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-white truncate">
-                              {service.login || service.identityLabel || 'Unknown login'}
-                            </div>
-                            <div className="text-[10px] text-slate-500 truncate">
-                              {service.service}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={cn(
-                                'text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border',
-                                getServiceBadgeClass(service.service)
-                              )}
-                            >
-                              {service.service}
-                            </span>
-                            {service.status && (
-                              <span
-                                className={cn(
-                                  'text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border',
-                                  getStatusBadgeClass(service.status)
-                                )}
-                              >
-                                {service.status}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-slate-500 flex items-center gap-2">
-                      <Link2 className="w-3.5 h-3.5" />
-                      No linked service accounts yet.
-                    </div>
-                  )}
-
-                  {node.linkedIdentities?.length ? (
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                      <span className="text-slate-500">Linked identities:</span>
-                      {node.linkedIdentities.map((identity: string) => (
-                        <span
-                          key={`${node.id}-${identity}`}
-                          className="px-2 py-0.5 rounded-full border border-white/10 bg-white/5"
-                        >
-                          {identity}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
+            <IdentityGraphActiveIdentityCard
+              activeIdentity={activeIdentity}
+              activeIdentityLinks={activeIdentityLinks}
+              activeIdentityUnifiedEdges={activeIdentityUnifiedEdges}
+              services={services}
+              connectionReady={connectionReady}
+              onAddLink={openCreateEditor}
+              onEditLink={openEditEditor}
+              resolveIdentityName={resolveIdentityName}
+              normalizeSheetName={normalizeSheetName}
+              getLinkTypeBadgeClass={getLinkTypeBadgeClass}
+            />
+            <IdentityGraphIdentityCardsList
+              identities={filteredIdentities}
+              resolvedDataset={resolvedDataset}
+              ensureServiceList={ensureServiceList}
+              resolveIdentityName={resolveIdentityName}
+              getServiceBadgeClass={getServiceBadgeClass}
+            />
           </div>
         </div>
       </div>
-
-      {editorOpen ? (
-        <div className="absolute inset-0 z-20 bg-black/50 backdrop-blur-sm flex justify-end">
-          <div className="w-full max-w-md h-full bg-[#0b0d11] border-l border-white/10 p-4 overflow-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="text-sm font-semibold text-white">
-                  {editorMode === 'create' ? 'Create link' : 'Edit link'}
-                </div>
-                <div className="text-[11px] text-slate-500">LINKS write-back</div>
-              </div>
-              <ButtonBase
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                className="p-1 rounded-md hover:bg-white/10 text-slate-300"
-              >
-                <X className="w-4 h-4" />
-              </ButtonBase>
-            </div>
-
-            <div className="space-y-3">
-              <Select
-                label="Identity"
-                value={editorState.fromIdentityId}
-                onValueChange={value =>
-                  setEditorState(prev => ({ ...prev, fromIdentityId: value }))
-                }
-                options={identityOptions.map(option => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-
-              <Select
-                label="Service sheet"
-                value={editorState.toServiceSheet}
-                onValueChange={sheet => {
-                  const firstService = servicesBySheet.get(sheet)?.[0]?.id || '';
-                  setEditorState(prev => ({
-                    ...prev,
-                    toServiceSheet: sheet,
-                    toServiceAccountId: firstService,
-                  }));
-                }}
-                options={serviceSheetOptions.map(option => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-
-              <Select
-                label="Service account"
-                value={editorState.toServiceAccountId}
-                onValueChange={value =>
-                  setEditorState(prev => ({ ...prev, toServiceAccountId: value }))
-                }
-                options={currentSheetServiceOptions.map(option => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-
-              <Select
-                label="Link type"
-                value={editorState.linkType}
-                onValueChange={value => setEditorState(prev => ({ ...prev, linkType: value }))}
-                options={[
-                  { value: 'oauth', label: 'oauth' },
-                  { value: 'password', label: 'password' },
-                  { value: 'recovery', label: 'recovery' },
-                  { value: 'phone', label: 'phone' },
-                  { value: 'unknown', label: 'unknown' },
-                ]}
-              />
-
-              <Select
-                label="Status"
-                value={editorState.status}
-                onValueChange={value => setEditorState(prev => ({ ...prev, status: value }))}
-                options={[
-                  { value: 'ok', label: 'ok' },
-                  { value: 'broken', label: 'broken' },
-                  { value: 'unknown', label: 'unknown' },
-                  { value: 'deleted', label: 'deleted' },
-                ]}
-              />
-
-              <Input
-                label="Note"
-                value={editorState.note}
-                onChange={event => setEditorState(prev => ({ ...prev, note: event.target.value }))}
-                placeholder="Optional note"
-              />
-
-              <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
-                <Checkbox
-                  checked={editorState.isPrimary}
-                  onChange={checked =>
-                    setEditorState(prev => ({ ...prev, isPrimary: Boolean(checked) }))
-                  }
-                  label="Primary link"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center justify-between gap-2">
-              {editorMode === 'edit' ? (
-                <Button
-                  variant="danger"
-                  size="sm"
-                  leftIcon={<Trash2 size={14} />}
-                  onClick={handleDeleteLink}
-                  disabled={deletingLink || savingLink}
-                >
-                  {deletingLink ? 'Deleting…' : 'Delete'}
-                </Button>
-              ) : (
-                <div />
-              )}
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setEditorOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<PenSquare size={14} />}
-                  onClick={handleSaveLink}
-                  disabled={savingLink || deletingLink}
-                >
-                  {savingLink ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <IdentityGraphLinkEditorDrawer
+        open={editorOpen}
+        editorMode={editorMode}
+        editorState={editorState}
+        identityOptions={identityOptions}
+        serviceSheetOptions={serviceSheetOptions}
+        currentSheetServiceOptions={currentSheetServiceOptions}
+        savingLink={savingLink}
+        deletingLink={deletingLink}
+        onClose={() => setEditorOpen(false)}
+        onIdentityChange={value => setEditorState(prev => ({ ...prev, fromIdentityId: value }))}
+        onServiceSheetChange={sheet => {
+          const firstService = servicesBySheet.get(sheet)?.[0]?.id || '';
+          setEditorState(prev => ({
+            ...prev,
+            toServiceSheet: sheet,
+            toServiceAccountId: firstService,
+          }));
+        }}
+        onServiceAccountChange={value =>
+          setEditorState(prev => ({ ...prev, toServiceAccountId: value }))
+        }
+        onLinkTypeChange={value => setEditorState(prev => ({ ...prev, linkType: value }))}
+        onStatusChange={value => setEditorState(prev => ({ ...prev, status: value }))}
+        onNoteChange={value => setEditorState(prev => ({ ...prev, note: value }))}
+        onPrimaryChange={checked => setEditorState(prev => ({ ...prev, isPrimary: checked }))}
+        onDelete={handleDeleteLink}
+        onSave={handleSaveLink}
+      />
     </div>
   );
 }

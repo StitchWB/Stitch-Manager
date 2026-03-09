@@ -4,5 +4,6 @@ export { IdentityTab } from './IdentityTab';
 export { EngineTab } from './EngineTab';
 export { NetworkTab } from './NetworkTab';
 export { AutomationTab } from './AutomationTab';
+export { InboxTab } from './InboxTab';
 export { LaunchPad } from './LaunchPad';
 export { PROVIDER_REQUIREMENT_HINTS } from './providerRequirements';

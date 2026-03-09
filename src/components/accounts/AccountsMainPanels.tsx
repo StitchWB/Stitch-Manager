@@ -46,15 +46,10 @@ interface AccountsMainPanelsProps {
   visibleProfileItems: ProfileItem[];
   onEditProfile: (alias: string) => void;
   onOpenStandaloneProfile: (alias: string, target: string, customUrl?: string) => Promise<void>;
-  onStartAutoregFromProfile: (
-    alias: string,
-    targetProvider: string,
-    preset?: 'kiro_via_aws_session',
-    awsBootstrapAccountId?: number
-  ) => void;
   onDeleteProfile: (alias: string) => Promise<void>;
-  profileListFilter: 'all' | 'standalone' | 'linked' | 'used_kiro';
-  onProfileFilterChange: (value: 'all' | 'standalone' | 'linked' | 'used_kiro') => void;
+  onOpenProfileScenarios?: (alias: string) => void;
+  openTarget: string;
+  customUrl: string;
   selectedIdsSize: number;
   tagFilter: string;
   onCreateProfilesForSelected: () => Promise<void>;
@@ -85,10 +80,10 @@ export function AccountsMainPanels({
   visibleProfileItems,
   onEditProfile,
   onOpenStandaloneProfile,
-  onStartAutoregFromProfile,
   onDeleteProfile,
-  profileListFilter,
-  onProfileFilterChange,
+  onOpenProfileScenarios,
+  openTarget,
+  customUrl,
   selectedIdsSize,
   tagFilter,
   onCreateProfilesForSelected,
@@ -174,10 +169,10 @@ export function AccountsMainPanels({
               profiles={visibleProfileItems}
               onEdit={onEditProfile}
               onOpen={onOpenStandaloneProfile}
-              onStartAutoreg={onStartAutoregFromProfile}
               onDelete={onDeleteProfile}
-              profileFilter={profileListFilter}
-              onProfileFilterChange={onProfileFilterChange}
+              onOpenScenarios={onOpenProfileScenarios}
+              openTarget={openTarget}
+              customUrl={customUrl}
             />
           }
         />
@@ -221,10 +216,10 @@ export function AccountsMainPanels({
             profiles={visibleProfileItems}
             onEdit={onEditProfile}
             onOpen={onOpenStandaloneProfile}
-            onStartAutoreg={onStartAutoregFromProfile}
             onDelete={onDeleteProfile}
-            profileFilter={profileListFilter}
-            onProfileFilterChange={onProfileFilterChange}
+            onOpenScenarios={onOpenProfileScenarios}
+            openTarget={openTarget}
+            customUrl={customUrl}
           />
         </div>
       ) : (
