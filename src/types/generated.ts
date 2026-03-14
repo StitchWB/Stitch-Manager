@@ -2,7 +2,7 @@
 // DO NOT EDIT MANUALLY
 // Run `npm run generate:types` to regenerate
 
-export type DetectedIDE = { id: string; name: string; type: string; path: string; version: string | null; isRunning: boolean; isPatched: boolean; patchVersion: string | null; patchedAt: string | null; canPatch: boolean; error: string | null; installed: boolean }
+export type DetectedIDE = { id: string; name: string; ideType: string; path: string; version: string | null; isRunning: boolean; isPatched: boolean; patchVersion: string | null; patchedAt: string | null; canPatch: boolean; error: string | null; installed: boolean }
 
 /**
  * Detected IDE information
@@ -93,7 +93,7 @@ export type SchemaIssueLevel = "error" | "warning"
 
 export type ServiceSheetDataset = { sheetName: string; sheetId: number; rows: NormalizedRow[] }
 
-export type AccountsGraphDataset = { spreadsheetId: string; title: string | null; identities: NormalizedRow[]; links: NormalizedRow[]; services: ServiceSheetDataset[]; invalidRows: InvalidRow[]; schemaIssues: SchemaIssue[] }
+export type AccountsGraphDataset = { spreadsheetId: string; title: string | null; identities: NormalizedRow[]; links: NormalizedRow[]; accountLinks: NormalizedRow[]; profileLinks: NormalizedRow[]; authMethods: NormalizedRow[]; accountAuthLinks: NormalizedRow[]; services: ServiceSheetDataset[]; invalidRows: InvalidRow[]; schemaIssues: SchemaIssue[] }
 
 export type RegistrationJob = { id: number; provider: string; status: string; step: string | null; progress: number | null; email: string | null; error: string | null; createdAt: string; completedAt: string | null }
 
@@ -508,7 +508,7 @@ export type ProxyItem = { host: string; port: number; username?: string | null; 
  */
 export type ProxyType = "http" | "socks5"
 
-export type ProxyLibraryEntry = { id: string; label: string; host: string; port: number; username?: string | null; password?: string | null; proxyType: ProxyType; enabled: boolean; notes?: string | null; createdAt: string; updatedAt: string }
+export type ProxyLibraryEntry = { id: string; label: string; host: string; port: number; username?: string | null; password?: string | null; proxyType: ProxyType; enabled: boolean; notes?: string | null; lastTestAt?: string | null; lastTestOk?: boolean | null; lastTestLatencyMs?: number | null; lastTestError?: string | null; lastTestIp?: string | null; lastTestLocation?: string | null; createdAt: string; updatedAt: string }
 
 export type ProxyLibraryDraft = { label: string | null; host: string; port: number; username?: string | null; password?: string | null; proxyType: ProxyType; enabled: boolean; notes?: string | null }
 
@@ -537,7 +537,7 @@ export type LogFilterConfig = { minLevel: LogLevel; showDebug: boolean; showProg
 /**
  * Proxy status
  */
-export type ProxyStatus = { running: boolean; port: number; uptimeSeconds: number | null; mode: string }
+export type ProxyStatus = { running: boolean; port: number; uptimeSeconds: number | null; mode: string; managedByApp: boolean; networkReachable: boolean }
 
 /**
  * Proxy settings
@@ -651,3 +651,170 @@ export type Schedule =
 export type TaskExecution = { id: number; taskId: number; startedAt: number; completedAt: number | null; status: ExecutionStatus; result: string | null; error: string | null }
 
 export type ExecutionStatus = "running" | "success" | "failed" | "cancelled"
+
+/**
+ * Browser session data structure
+ */
+export type BrowserSessionData = { profilePath: string; cookies: string; sessionData: string }
+
+export type AuthImportEntry = { provider: string; accountName: string; path: string; action: string; message: string }
+
+export type AuthImportResult = { dryRun: boolean; scanned: number; imported: number; skipped: number; entries: AuthImportEntry[] }
+
+export type McpListRecordedScenariosRequest = { alias: string; limit?: number | null }
+
+export type McpScenarioFileRequest = { scenarioPath: string }
+
+export type McpWriteScenarioFileRequest = { scenarioPath: string }
+
+export type McpListComposedFlowsRequest = { alias: string; limit?: number | null }
+
+export type McpPythonJobStatusRequest = { jobId: string }
+
+export type McpPythonJobCancelRequest = { jobId: string }
+
+export type McpPythonJobWaitRequest = { jobId: string; timeoutMs?: number | null; pollIntervalMs?: number | null }
+
+export type McpAliasSummary = { alias: string; scenarioCount: number; flowCount: number }
+
+export type McpServerInfo = { name: string; version: string; autonomyEnabled: boolean; dryRun: boolean; allowAccountPersist: boolean; killSwitchPath: string; criticalJournalPath: string; scenarioRoots: string[] }
+
+export type ObsTimelineQuery = { correlationId: string | null; jobId: string | null; limit: number | null }
+
+/**
+ * Versioned browser profile settings stored in SQLite.
+ * 
+ * NOTE: This is additive and does not replace file-based SpoofProfile.
+ * 
+ * IMPORTANT: Anti-fingerprinting noise features are intentionally not supported.
+ * If a config includes such fields, they are treated as inert data.
+ */
+export type ProfileSettingsV1 = { version?: number; network?: ProfileSettingsNetwork; geo?: ProfileSettingsGeo; hardware?: ProfileSettingsHardware; storage?: ProfileSettingsStorage }
+
+export type ProfileSettingsNetwork = { proxy?: ProfileSettingsProxy | null }
+
+export type ProfileSettingsProxy = { enabled?: boolean; proxyLibraryId?: string | null }
+
+export type ProfileSettingsGeo = { timezone?: string | null; locale?: string | null; latitude?: number | null; longitude?: number | null }
+
+export type ProfileSettingsHardware = { userAgent?: string | null; platform?: string | null; hardwareConcurrency?: number | null; deviceMemory?: number | null; screenWidth?: number | null; screenHeight?: number | null; browserWindow?: ProfileSettingsBrowserWindow | null }
+
+export type ProfileSettingsBrowserWindow = { mode?: string | null; width?: number | null; height?: number | null; maximizeOnStart?: boolean | null }
+
+export type ProfileSettingsStorage = { cookies?: string | null; notes?: string | null; lastUrl?: string | null; lastScenarioPath?: string | null }
+
+export type ProfileSettingsRecord = { alias: string; settings: ProfileSettingsV1; cookies?: string | null; notes?: string | null; updatedAt?: string | null }
+
+export type ProxyLibraryUsage = { profileAliases: string[]; scenarioPaths: string[] }
+
+export type ProxyLibraryParseRequest = { raw: string; defaultType?: ProxyType | null }
+
+export type ProxyLibraryMutateRequest = { id: string; options?: ProxyLibraryMutateOptions | null }
+
+export type ProxyLibraryMutateResult = { changed: boolean; usage: ProxyLibraryUsage }
+
+export type ProxyLibraryTestRequest = { draft: ProxyLibraryDraft; proxyLibraryId?: string | null; persistResult?: boolean | null }
+
+export type ProxyLibraryTestResult = { success: boolean; responseTimeMs: number | null; ip: string | null; location: string | null; error: string | null; entry?: ProxyLibraryEntry | null }
+
+export type ProxyLibrarySaveUseGuardRequest = { proxyLibraryId: string; maxAgeSeconds?: number | null }
+
+export type ScenarioMetadata = { description?: string | null; tags?: string[]; lastStatus?: string | null; lastDurationMs?: number | null; lastRunAt?: number | null }
+
+export type PythonJobControlRequest = { commandFilePath: string; command: string }
+
+export type ReplayPreflightIssue = { index: number; reason: string }
+
+export type ReplayPreflightResult = { valid: boolean; totalSteps: number; droppedSteps: number; issues: ReplayPreflightIssue[]; healthScore: number; healthNotes: string[] }
+
+export type ScenarioRecordUpsertRequest = { alias: string; name: string; scenarioPath: string; runId?: string | null; startedUrl?: string | null; stepsCount?: number; createdAt?: string | null; metadata?: ScenarioMetadata | null }
+
+export type ScenarioRecordUpdateRequest = { scenarioId: string; name?: string | null; scenarioPath?: string | null; startedUrl?: string | null; stepsCount?: number | null; metadata?: ScenarioMetadata | null; revisionReason?: string | null }
+
+export type ScenarioDuplicateRequest = { scenarioId: string; newName?: string | null }
+
+export type ScenarioRollbackRequest = { scenarioId: string; versionNo: number }
+
+export type ScenarioRevisionItem = { id: number; scenarioId: string; versionNo: number; reason: string | null; snapshotJson: string; createdAt: string }
+
+export type ScenarioRunAppendRequest = { alias: string; scenarioPath: string; startedUrl?: string | null; status: string; dryRun?: boolean; startedAt: number; finishedAt?: number | null; durationMs?: number | null; error?: string | null; reportPath?: string | null; tracePath?: string | null; artifactsDir?: string | null }
+
+export type ScenarioRunItem = { id: number; scenarioId: string | null; alias: string; scenarioPath: string; startedUrl: string | null; status: string; dryRun: boolean; startedAt: number; finishedAt: number | null; durationMs: number | null; error: string | null; reportPath: string | null; tracePath: string | null; artifactsDir: string | null }
+
+export type ScenarioRecordItem = { id: string; alias: string; name: string; scenarioPath: string; runId: string | null; startedUrl: string | null; stepsCount: number; createdAt: string; updatedAt: string; lastPlayedAt: string | null; playCount: number; favorite: boolean; healthScore: number | null; missing: boolean; metadata?: ScenarioMetadata | null; activeVersion: number }
+
+export type ScenarioReindexResult = { scannedFiles: number; indexed: number; skipped: number; roots: string[] }
+
+export type ComposedFlowUpsertRequest = { id?: string | null; alias: string; name: string; flowJson: string }
+
+export type ComposedFlowItem = { id: string; alias: string; name: string; flowJson: string; createdAt: string; updatedAt: string; lastRunAt?: number | null; runCount: number }
+
+export type ComposedFlowRunRequest = { alias: string; planJson: string; correlationId?: string | null; timeoutMs?: number | null; headless?: boolean; persistAccounts?: boolean | null }
+
+/**
+ * Parameters for start_registration_v2_command
+ */
+export type StartRegistrationV2Params = { email: string; name: string; password: string; provider?: string }
+
+export type DeviceAuthResponse = { deviceCode: string; userCode: string; verificationUri: string; verificationUriComplete: string | null; expiresIn: number; interval: number | null }
+
+export type TokenResponse = { accessToken: string; refreshToken: string | null; tokenType: string; expiresIn: number; idToken?: string | null }
+
+/**
+ * Limits configuration for a quota tier
+ */
+export type TierLimits = { dailyTokenLimit: number; dailyRequestLimit: number; requestsPerMinute: number; maxTokensPerRequest: number }
+
+/**
+ * Verification code extracted from email
+ */
+export type VerificationCode = { code: string; from: string; to: string; subject: string; receivedAt: string }
+
+/**
+ * AWS registration configuration
+ */
+export type AwsRegistrationConfig = { email: string; password: string; name: string | null; emailStrategy: EmailStrategy; emailDomain: string | null; aliasTemplate: string | null; catchAllDomain: string | null; headless: boolean; browserTimeout: number; userAgent: string | null; useProxy: boolean; proxyUrl: string | null; proxyUsername: string | null; proxyPassword: string | null; maxRetries: number; retryDelay: number; verificationTimeout: number; skipEmailVerification: boolean }
+
+/**
+ * OAuth-enhanced registration configuration
+ */
+export type OAuthRegistrationConfig = { awsConfig: AwsRegistrationConfig; oauthProvider: OAuthProvider; callbackPort: number; oauthTimeout: number; linkAccounts: boolean; awsFirst: boolean; failOnOauthError: boolean; storeTokens: boolean; sessionId: string | null; customScopes: string[] | null; customRedirectUri: string | null }
+
+/**
+ * Registration result
+ */
+export type RegistrationResult = { success: boolean; registrationId: string; accountId?: number | null; email: string; name?: string | null; awsRegistration: AwsRegistrationResult; oauthRegistration?: OAuthResult | null; accountLinking?: AccountLinkingResult | null; error?: string | null; errorStep?: RegistrationStep | null; startedAt: string; completedAt?: string | null; durationMs?: number | null }
+
+/**
+ * AWS registration result
+ */
+export type AwsRegistrationResult = { success: boolean; awsAccountId?: string | null; verificationCode?: string | null; error?: string | null; startedAt: string; completedAt?: string | null; durationMs?: number | null }
+
+/**
+ * Account linking result
+ */
+export type AccountLinkingResult = { success: boolean; awsAccountId?: string | null; oauthAccountId?: string | null; linkVerified?: boolean | null; error?: string | null; startedAt: string; completedAt?: string | null; durationMs?: number | null }
+
+/**
+ * Registration progress event
+ */
+export type RegistrationProgressEvent = { registrationId: string; status: OAuthRegistrationStatus; step: RegistrationStep; progress: number; message: string; timestamp: string }
+
+/**
+ * Registration session information
+ */
+export type RegistrationSessionInfo = { registrationId: string; status: OAuthRegistrationStatus; currentStep: RegistrationStep; progress: number; config: OAuthRegistrationConfig; createdAt: string; startedAt?: string | null; completedAt?: string | null; errorMessage?: string | null; oauthSessionId?: string | null; awsAccountId?: string | null }
+
+/**
+ * Registration usage statistics
+ */
+export type RegistrationStats = { totalRegistrations: number; activeRegistrations: number; completedRegistrations: number; failedRegistrations: number; successRate: number; awsRegistrations: number; oauthRegistrations: number; linkedAccounts: number; registrationsLast24H: number; registrationsLast7D: number; registrationsLast30D: number; avgCompletionTimeMs: number; medianCompletionTimeMs: number; p95CompletionTimeMs: number; errorRate: number; topErrors: RegistrationErrorStat[]; activeProcesses: number; memoryUsageMb: number }
+
+/**
+ * Registration error statistics
+ */
+export type RegistrationErrorStat = { errorType: string; count: number; percentage: number; lastOccurrence: string }
+
+export type PoolRefreshResult = { success: boolean; message: string; refreshedCount: number; failedCount: number; errors: string[] }
+
+export type PoolReloadResult = { success: boolean; message: string; loadedCount: number; previousCount: number }
