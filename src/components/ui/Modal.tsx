@@ -16,6 +16,7 @@ export interface ModalProps {
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
   showCloseButton?: boolean;
+  stickyFooter?: boolean;
   className?: string;
 }
 
@@ -39,6 +40,7 @@ export function Modal({
   closeOnBackdrop = true,
   closeOnEscape = true,
   showCloseButton = true,
+  stickyFooter = false,
   className = '',
 }: ModalProps) {
   const modalRef = useFocusTrap(isOpen);
@@ -136,13 +138,17 @@ export function Modal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto p-6">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 border-t border-white/10 bg-white/[0.02] shrink-0">
+          <div
+            className={cn(
+              'px-6 py-4 border-t border-white/10 bg-white/[0.02] shrink-0',
+              stickyFooter &&
+                'sticky bottom-0 z-10 backdrop-blur supports-[backdrop-filter]:bg-[#0f1115]/85'
+            )}
+          >
             {footer}
           </div>
         )}

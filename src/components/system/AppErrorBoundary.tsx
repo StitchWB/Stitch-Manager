@@ -1,6 +1,7 @@
 import React from 'react';
 import { reportFrontendError } from '@/lib/observability/client';
-import { ButtonBase } from '../ui';
+import { ButtonBase } from '@/components/ui';
+
 
 type Props = {
   children: React.ReactNode;

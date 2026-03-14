@@ -31,6 +31,17 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/no-explicit-any': 'warn',
     'no-console': ['warn', { allow: ['warn', 'error'] }],
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: ['**/ui/*', '**/components/ui/*'],
+            message: "Import UI primitives from '@/components/ui' only (single entrypoint).",
+          },
+        ],
+      },
+    ],
   },
   overrides: [
     {

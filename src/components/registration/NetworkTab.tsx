@@ -1,4 +1,4 @@
-import { NetworkCard, type NetworkConfig } from '../ui/NetworkCard';
+import { NetworkCard, type NetworkConfig } from '@/components/ui';
 
 interface NetworkTabProps {
   config: NetworkConfig;

@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, PlugZap, PenSquare, Trash2, RefreshCw, Clock, AlertTriangle } from 'lucide-react';
-import { ButtonBase } from '../ui';
+import { ButtonBase, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui';
 
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
-import { ProviderLogo } from '../ui/ProviderLogo';
-import { StatusBadge } from '../ui/StatusBadge';
-import { UsageBar } from '../ui/UsageBar';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { getRequestHistorySafe } from '@/lib/tauri/modules/aiProxy';
 
@@ -141,7 +138,9 @@ export function AiProxyAccountDrawer({
 
   return (
     <>
-      <div
+      <button
+        type="button"
+        aria-label="Close"
         className={cn(
           'fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-150',
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'

@@ -1,4 +1,4 @@
-import { Tooltip as UITooltip, type TooltipProps as UITooltipProps } from './ui/Tooltip';
+import { Tooltip as UITooltip, type TooltipProps as UITooltipProps } from '@/components/ui';
 
 export interface TooltipProps {
   children: React.ReactNode;

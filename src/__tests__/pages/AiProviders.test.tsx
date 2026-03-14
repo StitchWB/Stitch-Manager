@@ -82,9 +82,8 @@ describe('AiProviders page', () => {
     await screen.findByText('AI Providers');
     await screen.findByText('Available Models');
     expect(screen.getByText('gpt-4-turbo')).toBeTruthy();
-    expect(screen.getByText('Provider Capabilities')).toBeTruthy();
 
-    const testButton = screen.getByLabelText('Test connection');
+    const testButton = screen.getByTitle('Test connection');
     await user.click(testButton);
 
     await waitFor(() => {
@@ -104,7 +103,8 @@ describe('AiProviders page', () => {
       </MemoryRouter>
     );
 
-    await screen.findByText('Provider Capabilities');
+    await screen.findByText('AI Providers');
+    await user.click(screen.getByRole('button', { name: 'Integrations' }));
     await user.click(screen.getByRole('button', { name: 'Edit mappings' }));
 
     await screen.findByText('Provider Model Mappings');

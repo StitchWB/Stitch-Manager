@@ -8,7 +8,8 @@ import {
   resetPromptToDefault,
 } from '../lib/tauri';
 import { Tooltip } from './Tooltip';
-import { Button, LoadingSpinner, Textarea } from './ui';
+import { Button, LoadingSpinner, Textarea } from '@/components/ui';
+
 
 interface PromptEditorProps {
   promptName: string;

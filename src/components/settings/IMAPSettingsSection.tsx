@@ -1,7 +1,8 @@
 import { Server, Eye, EyeOff } from 'lucide-react';
-import { SectionHeader } from '../ui/SectionHeader';
-import { Input, ButtonBase } from '../ui';
+
+
 import { t } from '../../lib/i18n';
+import { ButtonBase, Input, SectionHeader } from '@/components/ui';
 
 interface IMAPSettingsSectionProps {
   imapServer: string;

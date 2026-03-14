@@ -2,16 +2,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import type {
+  GoogleSheetsAccountAuthLink,
+  GoogleSheetsAccountLinkEdge,
+  GoogleSheetsAuthMethod,
   GoogleSheetsDataset,
   GoogleSheetsIdentityNode,
+  GoogleSheetsProfileLinkEdge,
   GoogleSheetsServiceAccount,
 } from '@/types/googleSheets';
 import type { NormalizedRow } from '@/types/generated';
+import { Button, Select } from '@/components/ui';
 import {
+  deleteGoogleSheetsAccountLink,
+  deleteGoogleSheetsAccountAuthLink,
+  deleteGoogleSheetsAuthMethod,
   deleteGoogleSheetsLink,
+  deleteGoogleSheetsProfileLink,
   initGoogleSheetsSchema,
+  upsertGoogleSheetsAccountLink,
+  upsertGoogleSheetsAccountAuthLink,
+  upsertGoogleSheetsAuthMethod,
   upsertGoogleSheetsLink,
-} from '@/lib/tauri';
+  upsertGoogleSheetsProfileLink,
+} from '@/lib/tauri/modules/googleSheets';
 import { cn } from '@/lib/utils';
 import { useRegistrationStore } from '@/stores/registration';
 import { useUIPreferencesStore } from '@/stores/uiPreferences';
@@ -62,6 +75,45 @@ interface LinkEditorState {
   note: string;
 }
 
+interface AccountRelationEditorState {
+  accountLinkId: string;
+  fromAccount: string;
+  toAccount: string;
+  linkType: string;
+  status: string;
+  confidence: string;
+}
+
+interface ProfileRelationEditorState {
+  profileLinkId: string;
+  profileAlias: string;
+  account: string;
+  relationType: string;
+  status: string;
+}
+
+interface AuthMethodEditorState {
+  authMethodId: string;
+  authType: string;
+  provider: string;
+  principalAccount: string;
+  secretRef: string;
+  keyFingerprint: string;
+  clientName: string;
+  status: string;
+}
+
+interface AccountAuthLinkEditorState {
+  accountAuthLinkId: string;
+  account: string;
+  authMethodId: string;
+  channel: string;
+  clientName: string;
+  profileAlias: string;
+  status: string;
+  isPrimary: boolean;
+}
+
 interface IdentityGraphPanelProps {
   dataset: GoogleSheetsDataset | null;
   isLoading?: boolean;
@@ -81,6 +133,12 @@ const emptyDataset: GoogleSheetsDataset = {
 };
 
 const normalizeValue = (value: string | undefined) => (value ?? '').toLowerCase().trim();
+
+const normalizeProviderValue = (value: string | undefined) => {
+  const key = normalizeValue(value);
+  if (key === 'aws_builder_id' || key === 'aws builder id') return 'aws';
+  return key;
+};
 
 const normalizeSheetName = (value: string) => {
   const trimmed = value.trim();
@@ -124,6 +182,26 @@ const ensureLinkIdValue = (current?: string) => {
     return crypto.randomUUID();
   }
   return `link_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const ensureRelationIdValue = (prefix: string, current?: string) => {
+  if (current && current.trim()) return current.trim();
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const packAccountRef = (provider: string, login: string) => `${provider}::${login}`;
+
+const unpackAccountRef = (packed: string) => {
+  const [provider = '', login = ''] = packed.split('::');
+  return { provider: normalizeProviderValue(provider), login: normalizeValue(login) };
+};
+
+const accountRefEqual = (aPacked: string, bProvider: string, bLogin: string) => {
+  const a = unpackAccountRef(aPacked);
+  return a.provider === normalizeProviderValue(bProvider) && a.login === normalizeValue(bLogin);
 };
 
 const getServiceOptions = (services: GoogleSheetsServiceAccount[]) => {
@@ -253,6 +331,7 @@ export function IdentityGraphPanel({
   const [query, setQuery] = useState('');
   const [serviceFilter, setServiceFilter] = useState<ServiceFilterOption>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>('all');
+  const [authEdgeFilter, setAuthEdgeFilter] = useState<'all' | 'auth_only' | 'no_auth'>('all');
   const [schemaStatus, setSchemaStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
     'idle'
   );
@@ -273,6 +352,49 @@ export function IdentityGraphPanel({
   const [editingBaseRecord, setEditingBaseRecord] = useState<Record<string, string>>({});
   const [savingLink, setSavingLink] = useState(false);
   const [deletingLink, setDeletingLink] = useState(false);
+  const [accountRelationState, setAccountRelationState] = useState<AccountRelationEditorState>({
+    accountLinkId: '',
+    fromAccount: '',
+    toAccount: '',
+    linkType: 'signup_email',
+    status: 'ok',
+    confidence: 'manual',
+  });
+  const [profileRelationState, setProfileRelationState] = useState<ProfileRelationEditorState>({
+    profileLinkId: '',
+    profileAlias: '',
+    account: '',
+    relationType: 'login',
+    status: 'active',
+  });
+  const [savingAccountRelation, setSavingAccountRelation] = useState(false);
+  const [savingProfileRelation, setSavingProfileRelation] = useState(false);
+  const [deletingAccountRelationId, setDeletingAccountRelationId] = useState<string | null>(null);
+  const [deletingProfileRelationId, setDeletingProfileRelationId] = useState<string | null>(null);
+  const [authMethodState, setAuthMethodState] = useState<AuthMethodEditorState>({
+    authMethodId: '',
+    authType: 'api_key',
+    provider: '',
+    principalAccount: '',
+    secretRef: '',
+    keyFingerprint: '',
+    clientName: 'codex_cli',
+    status: 'active',
+  });
+  const [accountAuthLinkState, setAccountAuthLinkState] = useState<AccountAuthLinkEditorState>({
+    accountAuthLinkId: '',
+    account: '',
+    authMethodId: '',
+    channel: 'api',
+    clientName: 'codex_cli',
+    profileAlias: '',
+    status: 'active',
+    isPrimary: false,
+  });
+  const [savingAuthMethod, setSavingAuthMethod] = useState(false);
+  const [savingAccountAuthLink, setSavingAccountAuthLink] = useState(false);
+  const [deletingAuthMethodId, setDeletingAuthMethodId] = useState<string | null>(null);
+  const [deletingAccountAuthLinkId, setDeletingAccountAuthLinkId] = useState<string | null>(null);
 
   const resolvedDataset = dataset ?? emptyDataset;
   const graph = resolvedDataset.identityGraph ?? emptyDataset.identityGraph;
@@ -288,6 +410,43 @@ export function IdentityGraphPanel({
       state.accountsPage.providerFilter || 'all'
   );
   const localProfiles = localProfilesProp ?? [];
+
+  const accountOptions = useMemo(() => {
+    return localAccounts
+      .map(account => ({
+        value: packAccountRef(
+          normalizeProviderValue(account.provider),
+          normalizeValue(account.email)
+        ),
+        label: `${account.provider}:${account.email}`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [localAccounts]);
+
+  const profileOptions = useMemo(() => {
+    return localProfiles.map(alias => ({ value: alias, label: alias }));
+  }, [localProfiles]);
+
+  const accountLinks = useMemo<GoogleSheetsAccountLinkEdge[]>(
+    () => resolvedDataset.identityGraph?.accountLinks ?? [],
+    [resolvedDataset]
+  );
+
+  const profileLinks = useMemo<GoogleSheetsProfileLinkEdge[]>(
+    () => resolvedDataset.identityGraph?.profileLinks ?? [],
+    [resolvedDataset]
+  );
+  const authMethods = useMemo<GoogleSheetsAuthMethod[]>(
+    () => resolvedDataset.identityGraph?.authMethods ?? [],
+    [resolvedDataset]
+  );
+  const authMethodById = useMemo(() => {
+    return new Map(authMethods.map(method => [method.id, method] as const));
+  }, [authMethods]);
+  const accountAuthLinks = useMemo<GoogleSheetsAccountAuthLink[]>(
+    () => resolvedDataset.identityGraph?.accountAuthLinks ?? [],
+    [resolvedDataset]
+  );
 
   const unified = useMemo(() => {
     const graph = buildUnifiedGraph({ sheets: resolvedDataset, localAccounts, localProfiles });
@@ -319,7 +478,7 @@ export function IdentityGraphPanel({
       }
     });
 
-    return {
+    const providerScoped = {
       ...graph,
       nodes: graph.nodes.filter(n => allowedNodes.has(n.id) || n.kind === 'identity'),
       edges: graph.edges.filter(e => allowedNodes.has(e.fromId) && allowedNodes.has(e.toId)),
@@ -337,7 +496,35 @@ export function IdentityGraphPanel({
               ],
       },
     };
+
+    return providerScoped;
   }, [resolvedDataset, localAccounts, localProfiles, providerFilter]);
+
+  const filteredUnified = useMemo(() => {
+    if (authEdgeFilter === 'all') {
+      return unified;
+    }
+
+    const authKinds = new Set(['account_to_auth_method', 'auth_method_to_profile']);
+    const edges = unified.edges.filter(edge =>
+      authEdgeFilter === 'auth_only' ? authKinds.has(edge.kind) : !authKinds.has(edge.kind)
+    );
+    const allowedNodeIds = new Set<string>();
+    edges.forEach(edge => {
+      allowedNodeIds.add(edge.fromId);
+      allowedNodeIds.add(edge.toId);
+    });
+    const nodes = unified.nodes.filter(
+      node =>
+        allowedNodeIds.has(node.id) || (authEdgeFilter === 'no_auth' && node.kind === 'identity')
+    );
+
+    return {
+      ...unified,
+      nodes,
+      edges,
+    };
+  }, [unified, authEdgeFilter]);
 
   const spreadsheetId = useRegistrationStore(
     state => state.config.advanced.googleSheetsSpreadsheetId || ''
@@ -415,6 +602,17 @@ export function IdentityGraphPanel({
     }
   }, [activeIdentity, activeIdentityId]);
 
+  useEffect(() => {
+    if (accountAuthLinkState.channel === 'browser' && !accountAuthLinkState.profileAlias) {
+      if (profileOptions.length > 0) {
+        setAccountAuthLinkState(prev => ({
+          ...prev,
+          profileAlias: prev.profileAlias || profileOptions[0].value,
+        }));
+      }
+    }
+  }, [accountAuthLinkState.channel, accountAuthLinkState.profileAlias, profileOptions]);
+
   const activeIdentityLinks = useMemo(() => {
     if (!activeIdentity) return [];
     return parsedLinks.filter(
@@ -425,8 +623,8 @@ export function IdentityGraphPanel({
   const activeIdentityUnifiedEdges = useMemo(() => {
     if (!activeIdentity) return [];
     const fromId = `identity:${activeIdentity.id}`;
-    return unified.edges.filter(edge => edge.fromId === fromId);
-  }, [activeIdentity, unified.edges]);
+    return filteredUnified.edges.filter(edge => edge.fromId === fromId);
+  }, [activeIdentity, filteredUnified.edges]);
 
   const openCreateEditor = (identityId?: string) => {
     const fallbackSheet = serviceSheetOptions[0]?.value || '';
@@ -591,6 +789,407 @@ export function IdentityGraphPanel({
     }
   };
 
+  const handleSaveAccountRelation = async () => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    const from = unpackAccountRef(accountRelationState.fromAccount);
+    const to = unpackAccountRef(accountRelationState.toAccount);
+    if (!from.provider || !from.login || !to.provider || !to.login) {
+      toast.error('From account and to account are required.');
+      return;
+    }
+    if (from.provider === to.provider && from.login === to.login) {
+      toast.error('From and to account must be different.');
+      return;
+    }
+
+    const accountLinkId = ensureRelationIdValue('account_link', accountRelationState.accountLinkId);
+
+    try {
+      setSavingAccountRelation(true);
+      await upsertGoogleSheetsAccountLink({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        link: [
+          { key: 'account_link_id', value: accountLinkId },
+          { key: 'from_account_provider', value: from.provider },
+          { key: 'from_account_login', value: from.login },
+          { key: 'to_account_provider', value: to.provider },
+          { key: 'to_account_login', value: to.login },
+          { key: 'link_type', value: accountRelationState.linkType || 'signup_email' },
+          { key: 'status', value: accountRelationState.status || 'ok' },
+          { key: 'confidence', value: accountRelationState.confidence || 'manual' },
+          { key: 'source_system', value: 'identity-graph-ui' },
+        ],
+      });
+
+      setAccountRelationState(prev => ({ ...prev, accountLinkId }));
+      toast.success('Account relation saved');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingAccountRelation(false);
+    }
+  };
+
+  const handleDeleteAccountRelation = async (accountLinkId: string) => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    if (!accountLinkId.trim()) {
+      toast.error('Invalid account_link_id');
+      return;
+    }
+    try {
+      setDeletingAccountRelationId(accountLinkId);
+      await deleteGoogleSheetsAccountLink({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        accountLinkId,
+      });
+      toast.success('Account relation deleted');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeletingAccountRelationId(null);
+    }
+  };
+
+  const handleSaveProfileRelation = async () => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    if (!profileRelationState.profileAlias) {
+      toast.error('Profile alias is required.');
+      return;
+    }
+
+    const account = unpackAccountRef(profileRelationState.account);
+    if (!account.provider || !account.login) {
+      toast.error('Account is required.');
+      return;
+    }
+
+    const profileLinkId = ensureRelationIdValue('profile_link', profileRelationState.profileLinkId);
+
+    try {
+      setSavingProfileRelation(true);
+      await upsertGoogleSheetsProfileLink({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        link: [
+          { key: 'profile_link_id', value: profileLinkId },
+          { key: 'profile_alias', value: profileRelationState.profileAlias },
+          { key: 'account_provider', value: account.provider },
+          { key: 'account_login', value: account.login },
+          { key: 'relation_type', value: profileRelationState.relationType || 'login' },
+          { key: 'status', value: profileRelationState.status || 'active' },
+          { key: 'source_system', value: 'identity-graph-ui' },
+        ],
+      });
+
+      setProfileRelationState(prev => ({ ...prev, profileLinkId }));
+      toast.success('Profile relation saved');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingProfileRelation(false);
+    }
+  };
+
+  const handleDeleteProfileRelation = async (profileLinkId: string) => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    if (!profileLinkId.trim()) {
+      toast.error('Invalid profile_link_id');
+      return;
+    }
+    try {
+      setDeletingProfileRelationId(profileLinkId);
+      await deleteGoogleSheetsProfileLink({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        profileLinkId,
+      });
+      toast.success('Profile relation deleted');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeletingProfileRelationId(null);
+    }
+  };
+
+  const handleSaveAuthMethod = async () => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    if (!authMethodState.authType || !authMethodState.provider) {
+      toast.error('Auth type and provider are required.');
+      return;
+    }
+    if (authMethodState.authType === 'api_key' && !authMethodState.secretRef.trim()) {
+      toast.error('secret_ref is required for api_key auth type.');
+      return;
+    }
+    if (authMethodState.secretRef.trim().length > 0 && !authMethodState.secretRef.includes(':')) {
+      toast.error('secret_ref should look like a vault reference (example: vault:openai/key-1).');
+      return;
+    }
+    const principal = unpackAccountRef(authMethodState.principalAccount);
+    const authMethodId = ensureRelationIdValue('auth_method', authMethodState.authMethodId);
+
+    try {
+      setSavingAuthMethod(true);
+      await upsertGoogleSheetsAuthMethod({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        method: [
+          { key: 'auth_method_id', value: authMethodId },
+          { key: 'auth_type', value: authMethodState.authType },
+          { key: 'provider', value: normalizeProviderValue(authMethodState.provider) },
+          { key: 'principal_provider', value: principal.provider || '' },
+          { key: 'principal_login', value: principal.login || '' },
+          { key: 'secret_ref', value: authMethodState.secretRef || '' },
+          { key: 'key_fingerprint', value: authMethodState.keyFingerprint || '' },
+          { key: 'client_name', value: authMethodState.clientName || '' },
+          { key: 'status', value: authMethodState.status || 'active' },
+          { key: 'source_system', value: 'identity-graph-ui' },
+        ],
+      });
+
+      setAuthMethodState(prev => ({ ...prev, authMethodId }));
+      toast.success('Auth method saved');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingAuthMethod(false);
+    }
+  };
+
+  const handleDeleteAuthMethod = async (authMethodId: string) => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    if (!authMethodId.trim()) {
+      toast.error('Invalid auth_method_id');
+      return;
+    }
+    try {
+      setDeletingAuthMethodId(authMethodId);
+      await deleteGoogleSheetsAuthMethod({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        authMethodId,
+      });
+      toast.success('Auth method deleted');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeletingAuthMethodId(null);
+    }
+  };
+
+  const handleSaveAccountAuthLink = async () => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    const account = unpackAccountRef(accountAuthLinkState.account);
+    if (!account.provider || !account.login || !accountAuthLinkState.authMethodId) {
+      toast.error('Account and auth method are required.');
+      return;
+    }
+
+    if (
+      accountAuthLinkState.channel === 'browser' &&
+      !(accountAuthLinkState.profileAlias || '').trim()
+    ) {
+      toast.error('profile_alias is required when channel=browser.');
+      return;
+    }
+
+    const accountAuthLinkId = ensureRelationIdValue(
+      'account_auth_link',
+      accountAuthLinkState.accountAuthLinkId
+    );
+
+    try {
+      setSavingAccountAuthLink(true);
+
+      const sameAccountLinks = accountAuthLinks.filter(
+        link =>
+          link.id !== accountAuthLinkId &&
+          (link.status || '').toLowerCase() !== 'deleted' &&
+          accountRefEqual(accountAuthLinkState.account, link.accountProvider, link.accountLogin)
+      );
+
+      if (accountAuthLinkState.isPrimary) {
+        const primaryConflicts = sameAccountLinks.filter(link => link.isPrimary);
+        if (primaryConflicts.length > 0) {
+          toast.warning(
+            'Existing primary auth links found for this account. Demoting previous primary links.'
+          );
+        }
+
+        for (const link of primaryConflicts) {
+          await upsertGoogleSheetsAccountAuthLink({
+            spreadsheetId: spreadsheetId.trim(),
+            serviceAccountJson: serviceAccountJson.trim(),
+            link: [
+              { key: 'account_auth_link_id', value: link.id },
+              { key: 'account_provider', value: link.accountProvider },
+              { key: 'account_login', value: link.accountLogin },
+              { key: 'auth_method_id', value: link.authMethodId },
+              { key: 'channel', value: link.channel || 'api' },
+              { key: 'client_name', value: link.clientName || '' },
+              { key: 'profile_alias', value: link.profileAlias || '' },
+              { key: 'is_primary', value: 'FALSE' },
+              { key: 'status', value: link.status || 'active' },
+              { key: 'source_system', value: 'identity-graph-ui' },
+            ],
+          });
+        }
+      }
+
+      await upsertGoogleSheetsAccountAuthLink({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        link: [
+          { key: 'account_auth_link_id', value: accountAuthLinkId },
+          { key: 'account_provider', value: account.provider },
+          { key: 'account_login', value: account.login },
+          { key: 'auth_method_id', value: accountAuthLinkState.authMethodId },
+          { key: 'channel', value: accountAuthLinkState.channel || 'api' },
+          { key: 'client_name', value: accountAuthLinkState.clientName || '' },
+          { key: 'profile_alias', value: accountAuthLinkState.profileAlias || '' },
+          { key: 'is_primary', value: accountAuthLinkState.isPrimary ? 'TRUE' : 'FALSE' },
+          { key: 'status', value: accountAuthLinkState.status || 'active' },
+          { key: 'source_system', value: 'identity-graph-ui' },
+        ],
+      });
+
+      setAccountAuthLinkState(prev => ({ ...prev, accountAuthLinkId }));
+      toast.success('Account auth link saved');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingAccountAuthLink(false);
+    }
+  };
+
+  const handleDeleteAccountAuthLink = async (accountAuthLinkId: string) => {
+    if (!connectionReady) {
+      toast.error('Set Spreadsheet ID and Service Account JSON first.');
+      return;
+    }
+    if (!accountAuthLinkId.trim()) {
+      toast.error('Invalid account_auth_link_id');
+      return;
+    }
+    try {
+      setDeletingAccountAuthLinkId(accountAuthLinkId);
+      await deleteGoogleSheetsAccountAuthLink({
+        spreadsheetId: spreadsheetId.trim(),
+        serviceAccountJson: serviceAccountJson.trim(),
+        accountAuthLinkId,
+      });
+      toast.success('Account auth link deleted');
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeletingAccountAuthLinkId(null);
+    }
+  };
+
+  const applyCodexApiPreset = () => {
+    setAuthMethodState(prev => ({
+      ...prev,
+      authType: 'api_key',
+      clientName: 'codex_cli',
+      status: 'active',
+    }));
+    setAccountAuthLinkState(prev => ({
+      ...prev,
+      channel: 'api',
+      clientName: 'codex_cli',
+      status: 'active',
+      profileAlias: '',
+    }));
+  };
+
+  const applyCodexBrowserPreset = () => {
+    setAuthMethodState(prev => ({
+      ...prev,
+      authType: 'browser_session',
+      clientName: 'codex_cli',
+      status: 'active',
+    }));
+    setAccountAuthLinkState(prev => ({
+      ...prev,
+      channel: 'browser',
+      clientName: 'codex_cli',
+      status: 'active',
+    }));
+  };
+
+  const applyQuickFillFromActiveIdentity = () => {
+    const identityEmail = normalizeValue(
+      activeIdentity?.primaryEmail || activeIdentity?.label || ''
+    );
+    if (!identityEmail) {
+      toast.error('No active identity with email/login to quick-fill from.');
+      return;
+    }
+
+    const match = accountOptions.find(option => option.value.endsWith(`::${identityEmail}`));
+    if (!match) {
+      toast.error(`No local account matched active identity login: ${identityEmail}`);
+      return;
+    }
+
+    setAuthMethodState(prev => ({
+      ...prev,
+      principalAccount: match.value,
+    }));
+    setAccountAuthLinkState(prev => ({
+      ...prev,
+      account: match.value,
+    }));
+    toast.success('Quick-filled account from active identity');
+  };
+
   const currentSheetServiceOptions = useMemo(() => {
     const rows = servicesBySheet.get(editorState.toServiceSheet) ?? [];
     return rows.map(service => ({
@@ -659,6 +1258,453 @@ export function IdentityGraphPanel({
               resolveIdentityName={resolveIdentityName}
               getServiceBadgeClass={getServiceBadgeClass}
             />
+
+            <div className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-3">
+              <div className="text-sm font-semibold text-white">
+                Account Relations (ACCOUNT_LINKS)
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Select
+                  label="From account"
+                  value={accountRelationState.fromAccount}
+                  onValueChange={value =>
+                    setAccountRelationState(prev => ({ ...prev, fromAccount: value }))
+                  }
+                  options={accountOptions}
+                />
+                <Select
+                  label="To account"
+                  value={accountRelationState.toAccount}
+                  onValueChange={value =>
+                    setAccountRelationState(prev => ({ ...prev, toAccount: value }))
+                  }
+                  options={accountOptions}
+                />
+                <Select
+                  label="Type"
+                  value={accountRelationState.linkType}
+                  onValueChange={value =>
+                    setAccountRelationState(prev => ({ ...prev, linkType: value }))
+                  }
+                  options={[
+                    { value: 'signup_email', label: 'signup_email' },
+                    { value: 'oauth_authorizer', label: 'oauth_authorizer' },
+                    { value: 'recovery_email', label: 'recovery_email' },
+                    { value: 'same_owner', label: 'same_owner' },
+                  ]}
+                />
+                <Select
+                  label="Status"
+                  value={accountRelationState.status}
+                  onValueChange={value =>
+                    setAccountRelationState(prev => ({ ...prev, status: value }))
+                  }
+                  options={[
+                    { value: 'ok', label: 'ok' },
+                    { value: 'unknown', label: 'unknown' },
+                    { value: 'broken', label: 'broken' },
+                  ]}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSaveAccountRelation}
+                  disabled={savingAccountRelation || !connectionReady}
+                >
+                  {savingAccountRelation ? 'Saving…' : 'Save account relation'}
+                </Button>
+                <span className="text-[11px] text-slate-500">
+                  Presets: signup_email / oauth_authorizer
+                </span>
+              </div>
+              <div className="space-y-1 max-h-44 overflow-auto pr-1">
+                {accountLinks.length ? (
+                  accountLinks.map(link => (
+                    <div
+                      key={link.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-white/10 px-2 py-1.5"
+                    >
+                      <div className="text-[11px] text-slate-300 truncate">
+                        {link.fromProvider}:{link.fromLogin} → {link.toProvider}:{link.toLogin} (
+                        {link.relation})
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={deletingAccountRelationId === link.id || !connectionReady}
+                        onClick={() => handleDeleteAccountRelation(link.id)}
+                      >
+                        {deletingAccountRelationId === link.id ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-slate-500">No ACCOUNT_LINKS rows yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-3">
+              <div className="text-sm font-semibold text-white">
+                Profile Relations (PROFILE_LINKS)
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Select
+                  label="Profile alias"
+                  value={profileRelationState.profileAlias}
+                  onValueChange={value =>
+                    setProfileRelationState(prev => ({ ...prev, profileAlias: value }))
+                  }
+                  options={profileOptions}
+                />
+                <Select
+                  label="Account"
+                  value={profileRelationState.account}
+                  onValueChange={value =>
+                    setProfileRelationState(prev => ({ ...prev, account: value }))
+                  }
+                  options={accountOptions}
+                />
+                <Select
+                  label="Relation"
+                  value={profileRelationState.relationType}
+                  onValueChange={value =>
+                    setProfileRelationState(prev => ({ ...prev, relationType: value }))
+                  }
+                  options={[
+                    { value: 'login', label: 'login' },
+                    { value: 'signup', label: 'signup' },
+                    { value: 'recovery', label: 'recovery' },
+                  ]}
+                />
+                <Select
+                  label="Status"
+                  value={profileRelationState.status}
+                  onValueChange={value =>
+                    setProfileRelationState(prev => ({ ...prev, status: value }))
+                  }
+                  options={[
+                    { value: 'active', label: 'active' },
+                    { value: 'inactive', label: 'inactive' },
+                    { value: 'deleted', label: 'deleted' },
+                  ]}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSaveProfileRelation}
+                  disabled={savingProfileRelation || !connectionReady}
+                >
+                  {savingProfileRelation ? 'Saving…' : 'Save profile relation'}
+                </Button>
+                <span className="text-[11px] text-slate-500">
+                  Presets: login / signup / recovery
+                </span>
+              </div>
+              <div className="space-y-1 max-h-44 overflow-auto pr-1">
+                {profileLinks.length ? (
+                  profileLinks.map(link => (
+                    <div
+                      key={link.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-white/10 px-2 py-1.5"
+                    >
+                      <div className="text-[11px] text-slate-300 truncate">
+                        {link.profileAlias} → {link.accountProvider}:{link.accountLogin} (
+                        {link.relation})
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={deletingProfileRelationId === link.id || !connectionReady}
+                        onClick={() => handleDeleteProfileRelation(link.id)}
+                      >
+                        {deletingProfileRelationId === link.id ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-slate-500">No PROFILE_LINKS rows yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-3">
+              <div className="text-sm font-semibold text-white">Auth Methods (AUTH_METHODS)</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="xs" variant="secondary" onClick={applyCodexApiPreset}>
+                  Preset: CODEX API
+                </Button>
+                <Button size="xs" variant="secondary" onClick={applyCodexBrowserPreset}>
+                  Preset: CODEX Browser
+                </Button>
+                <Button size="xs" variant="ghost" onClick={applyQuickFillFromActiveIdentity}>
+                  Quick fill from selected identity
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Select
+                  label="Auth type"
+                  value={authMethodState.authType}
+                  onValueChange={value =>
+                    setAuthMethodState(prev => ({ ...prev, authType: value }))
+                  }
+                  options={[
+                    { value: 'api_key', label: 'api_key' },
+                    { value: 'browser_session', label: 'browser_session' },
+                    { value: 'oauth_token', label: 'oauth_token' },
+                    { value: 'device_flow', label: 'device_flow' },
+                  ]}
+                />
+                <Select
+                  label="Provider"
+                  value={authMethodState.provider}
+                  onValueChange={value =>
+                    setAuthMethodState(prev => ({ ...prev, provider: value }))
+                  }
+                  options={[
+                    { value: 'openai', label: 'openai' },
+                    { value: 'github', label: 'github' },
+                    { value: 'aws', label: 'aws' },
+                    { value: 'google', label: 'google' },
+                    { value: 'anthropic', label: 'anthropic' },
+                  ]}
+                />
+                <Select
+                  label="Principal account"
+                  value={authMethodState.principalAccount}
+                  onValueChange={value =>
+                    setAuthMethodState(prev => ({ ...prev, principalAccount: value }))
+                  }
+                  options={accountOptions}
+                />
+                <Select
+                  label="Client"
+                  value={authMethodState.clientName}
+                  onValueChange={value =>
+                    setAuthMethodState(prev => ({ ...prev, clientName: value }))
+                  }
+                  options={[
+                    { value: 'codex_cli', label: 'codex_cli' },
+                    { value: 'browser', label: 'browser' },
+                    { value: 'openai_sdk', label: 'openai_sdk' },
+                  ]}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input
+                  className="h-9 rounded-md border border-white/10 bg-black/30 px-3 text-xs text-white"
+                  value={authMethodState.secretRef}
+                  onChange={event =>
+                    setAuthMethodState(prev => ({ ...prev, secretRef: event.target.value }))
+                  }
+                  placeholder="secret_ref (never raw key)"
+                />
+                <input
+                  className="h-9 rounded-md border border-white/10 bg-black/30 px-3 text-xs text-white"
+                  value={authMethodState.keyFingerprint}
+                  onChange={event =>
+                    setAuthMethodState(prev => ({ ...prev, keyFingerprint: event.target.value }))
+                  }
+                  placeholder="key_fingerprint"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSaveAuthMethod}
+                  disabled={savingAuthMethod || !connectionReady}
+                >
+                  {savingAuthMethod ? 'Saving…' : 'Save auth method'}
+                </Button>
+                <span className="text-[11px] text-slate-500">
+                  Store secret references only, never raw API keys.
+                </span>
+              </div>
+              <div className="space-y-1 max-h-44 overflow-auto pr-1">
+                {authMethods.length ? (
+                  authMethods.map(method => (
+                    <div
+                      key={method.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-white/10 px-2 py-1.5"
+                    >
+                      <div className="text-[11px] text-slate-300 truncate">
+                        {method.authType} • {method.provider} • {method.clientName || 'client'} •{' '}
+                        {method.keyFingerprint || 'no-fingerprint'}
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={deletingAuthMethodId === method.id || !connectionReady}
+                        onClick={() => handleDeleteAuthMethod(method.id)}
+                      >
+                        {deletingAuthMethodId === method.id ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-slate-500">No AUTH_METHODS rows yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-3">
+              <div className="text-sm font-semibold text-white">
+                Account Auth Links (ACCOUNT_AUTH_LINKS)
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Select
+                  label="Account"
+                  value={accountAuthLinkState.account}
+                  onValueChange={value =>
+                    setAccountAuthLinkState(prev => ({ ...prev, account: value }))
+                  }
+                  options={accountOptions}
+                />
+                <Select
+                  label="Auth method"
+                  value={accountAuthLinkState.authMethodId}
+                  onValueChange={value =>
+                    setAccountAuthLinkState(prev => ({ ...prev, authMethodId: value }))
+                  }
+                  options={authMethods.map(method => ({
+                    value: method.id,
+                    label: `${method.authType}:${method.provider}:${method.clientName || 'client'}`,
+                  }))}
+                />
+                <Select
+                  label="Channel"
+                  value={accountAuthLinkState.channel}
+                  onValueChange={value =>
+                    setAccountAuthLinkState(prev => ({ ...prev, channel: value }))
+                  }
+                  options={[
+                    { value: 'api', label: 'api' },
+                    { value: 'browser', label: 'browser' },
+                    { value: 'cli', label: 'cli' },
+                  ]}
+                />
+                <Select
+                  label="Profile"
+                  value={accountAuthLinkState.profileAlias}
+                  onValueChange={value =>
+                    setAccountAuthLinkState(prev => ({ ...prev, profileAlias: value }))
+                  }
+                  options={[{ value: '', label: '(none)' }, ...profileOptions]}
+                />
+                <Select
+                  label="Primary"
+                  value={accountAuthLinkState.isPrimary ? 'yes' : 'no'}
+                  onValueChange={value =>
+                    setAccountAuthLinkState(prev => ({ ...prev, isPrimary: value === 'yes' }))
+                  }
+                  options={[
+                    { value: 'yes', label: 'yes' },
+                    { value: 'no', label: 'no' },
+                  ]}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSaveAccountAuthLink}
+                  disabled={savingAccountAuthLink || !connectionReady}
+                >
+                  {savingAccountAuthLink ? 'Saving…' : 'Save account auth link'}
+                </Button>
+                <span className="text-[11px] text-slate-500">
+                  Use channel=browser for CODEX browser auth.
+                </span>
+              </div>
+              <div className="space-y-1 max-h-44 overflow-auto pr-1">
+                {accountAuthLinks.length ? (
+                  accountAuthLinks.map(link => (
+                    <div
+                      key={link.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-white/10 px-2 py-1.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] text-slate-300 truncate">
+                          {link.accountProvider}:{link.accountLogin} →{' '}
+                          {authMethodById.get(link.authMethodId)?.authType || 'auth'}:
+                          {authMethodById.get(link.authMethodId)?.provider || 'provider'}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={cn(
+                              'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium',
+                              link.channel === 'browser'
+                                ? 'bg-blue-500/20 text-blue-200 border border-blue-500/40'
+                                : link.channel === 'api'
+                                  ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
+                                  : 'bg-slate-500/20 text-slate-200 border border-slate-500/40'
+                            )}
+                          >
+                            {link.channel || 'channel'}
+                          </span>
+                          {link.isPrimary ? (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-500/40">
+                              PRIMARY
+                            </span>
+                          ) : null}
+                          {link.profileAlias ? (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] text-violet-200 bg-violet-500/20 border border-violet-500/40">
+                              profile:{link.profileAlias}
+                            </span>
+                          ) : null}
+                          {link.clientName ? (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] text-slate-300 bg-slate-500/20 border border-slate-500/30">
+                              {link.clientName}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={deletingAccountAuthLinkId === link.id || !connectionReady}
+                        onClick={() => handleDeleteAccountAuthLink(link.id)}
+                      >
+                        {deletingAccountAuthLinkId === link.id ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-slate-500">No ACCOUNT_AUTH_LINKS rows yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-2">
+              <div className="text-xs text-slate-400">
+                Auth-aware edges in graph now include:
+                <span className="ml-2 text-slate-200">account_to_auth_method</span>
+                <span className="ml-2 text-slate-200">auth_method_to_profile</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  label="Graph auth edges"
+                  value={authEdgeFilter}
+                  onValueChange={value =>
+                    setAuthEdgeFilter((value as 'all' | 'auth_only' | 'no_auth') || 'all')
+                  }
+                  options={[
+                    { value: 'all', label: 'all edges' },
+                    { value: 'auth_only', label: 'auth edges only' },
+                    { value: 'no_auth', label: 'without auth edges' },
+                  ]}
+                />
+                <div className="text-[11px] text-slate-500">
+                  Showing {filteredUnified.edges.length} edges / {filteredUnified.nodes.length}{' '}
+                  nodes
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

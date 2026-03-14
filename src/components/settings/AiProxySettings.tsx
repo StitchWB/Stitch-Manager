@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Input, LoadingSpinner, Select, Toggle } from '../ui';
+
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { safeInvoke } from '../../lib/tauri/core/invoke';
 import { getEnabledModels, setEnabledModels } from '../../lib/tauri/modules/aiProxy';
 import type { ProxyStatus, ProxySettings } from '../../types/generated';
 import { IdeConfigWizard } from '../ai-proxy/IdeConfigWizard';
+import { Button, Input, LoadingSpinner, Select, Toggle } from '@/components/ui';
 
 const OPENCODE_DEFAULT_MODEL_IDS = [
   'gpt-5',

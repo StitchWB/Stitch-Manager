@@ -50,11 +50,16 @@ interface AutoRegPagePreferences {
   };
 }
 
+interface ScenariosPagePreferences {
+  viewMode: 'cards' | 'list';
+}
+
 interface UIPreferencesState {
   // Page-specific preferences
   accountsPage: AccountsPagePreferences;
   logsPage: LogsPagePreferences;
   autoRegPage: AutoRegPagePreferences;
+  scenariosPage: ScenariosPagePreferences;
 
   // Actions for Accounts page
   setAccountsProviderFilter: (provider: string) => void;
@@ -88,6 +93,10 @@ interface UIPreferencesState {
     settings: Partial<AutoRegPagePreferences['providerEmailSettings'][string]>
   ) => void;
   resetAutoRegPreferences: () => void;
+
+  // Actions for Scenarios page
+  setScenariosViewMode: (mode: 'cards' | 'list') => void;
+  resetScenariosPreferences: () => void;
 
   // Global reset
   resetAllPreferences: () => void;
@@ -131,6 +140,10 @@ const defaultAutoRegPreferences: AutoRegPagePreferences = {
   providerEmailSettings: {},
 };
 
+const defaultScenariosPreferences: ScenariosPagePreferences = {
+  viewMode: 'cards',
+};
+
 // ============================================
 // Store
 // ============================================
@@ -142,6 +155,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       accountsPage: defaultAccountsPreferences,
       logsPage: defaultLogsPreferences,
       autoRegPage: defaultAutoRegPreferences,
+      scenariosPage: defaultScenariosPreferences,
 
       // ============================================
       // Accounts Page Actions
@@ -312,6 +326,20 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       },
 
       // ============================================
+      // Scenarios Page Actions
+      // ============================================
+
+      setScenariosViewMode: mode => {
+        set(state => ({
+          scenariosPage: { ...state.scenariosPage, viewMode: mode },
+        }));
+      },
+
+      resetScenariosPreferences: () => {
+        set({ scenariosPage: defaultScenariosPreferences });
+      },
+
+      // ============================================
       // Global Actions
       // ============================================
 
@@ -320,12 +348,13 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
           accountsPage: defaultAccountsPreferences,
           logsPage: defaultLogsPreferences,
           autoRegPage: defaultAutoRegPreferences,
+          scenariosPage: defaultScenariosPreferences,
         });
       },
     }),
     {
       name: 'ui-preferences-storage',
-      version: 1,
+      version: 2,
     }
   )
 );

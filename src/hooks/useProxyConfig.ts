@@ -4,8 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { ProxyConfig } from '../types/generated';
 
+const defaultProxyConfig: ProxyConfig = {
+  enabled: false,
+  proxyType: 'http',
+  proxies: [],
+};
+
 export function useProxyConfig() {
-  const [config, setConfig] = useState<ProxyConfig | null>(null);
+  const [config, setConfig] = useState<ProxyConfig | null>(defaultProxyConfig);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,6 +24,9 @@ export function useProxyConfig() {
     } catch (err) {
       console.error('Failed to load proxy config:', err);
       setError(err instanceof Error ? err.message : 'Failed to load proxy config');
+      // Fallback to default to keep settings UI usable even if legacy
+      // proxy config storage is absent or malformed.
+      setConfig(defaultProxyConfig);
     } finally {
       setLoading(false);
     }

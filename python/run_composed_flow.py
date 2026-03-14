@@ -39,7 +39,9 @@ def _event(name: str, payload: dict[str, Any] | None = None) -> None:
     )
 
 
-def _result(ok: bool, data: dict[str, Any] | None = None, error: dict[str, Any] | None = None) -> None:
+def _result(
+    ok: bool, data: dict[str, Any] | None = None, error: dict[str, Any] | None = None
+) -> None:
     _emit(
         {
             "type": "result",
@@ -49,6 +51,30 @@ def _result(ok: bool, data: dict[str, Any] | None = None, error: dict[str, Any] 
             "error": error,
         }
     )
+
+
+def _trace_update(
+    *,
+    mode: str,
+    route_history: list[dict[str, str]],
+    completed: list[dict[str, Any]],
+    current_node_id: str | None,
+) -> None:
+    payload = {
+        "mode": mode,
+        "routeHistory": route_history,
+        "completed": completed,
+        "currentNodeId": current_node_id,
+    }
+    _event("flow.run.trace.update", payload)
+    _result(True, data=payload)
+
+
+def _node_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    v = value.strip()
+    return v or None
 
 
 def _parse_args() -> argparse.Namespace:
@@ -176,7 +202,9 @@ def _replace_tokens(value: Any, tokens: dict[str, str]) -> Any:
     return value
 
 
-def _materialize_segment_scenario(source_path: Path, out_path: Path, tokens: dict[str, str]) -> Path:
+def _materialize_segment_scenario(
+    source_path: Path, out_path: Path, tokens: dict[str, str]
+) -> Path:
     if not source_path.exists():
         raise RuntimeError(f"Scenario file not found: {source_path}")
 
@@ -213,58 +241,312 @@ async def main_async() -> int:
         _result(False, error={"code": "invalid_plan", "message": "segments[] is required"})
         return 1
 
+    flow_id = str(plan.get("flowId") or "")
+    flow_name = str(plan.get("flowName") or "")
+    segment_items = [raw for raw in segments if isinstance(raw, dict)]
+
+    entry_node_id = _node_id(plan.get("entryNodeId"))
+    by_node_id: dict[str, dict[str, Any]] = {}
+    for raw in segment_items:
+        node_id = _node_id(raw.get("nodeId"))
+        if not node_id:
+            continue
+        if node_id in by_node_id:
+            _result(
+                False,
+                error={
+                    "code": "invalid_plan",
+                    "message": f"Duplicate segment nodeId: {node_id}",
+                },
+            )
+            return 1
+        by_node_id[node_id] = raw
+
+    graph_mode = bool(entry_node_id and entry_node_id in by_node_id)
+
     _event(
         "flow.run.started",
         {
-            "flowId": str(plan.get("flowId") or ""),
-            "flowName": str(plan.get("flowName") or ""),
-            "segments": len(segments),
+            "flowId": flow_id,
+            "flowName": flow_name,
+            "segments": len(segment_items),
             "alias": args.alias,
+            "mode": "graph" if graph_mode else "linear",
+            "entryNodeId": entry_node_id,
         },
     )
 
     completed: list[dict[str, Any]] = []
+    route_history: list[dict[str, str]] = []
     started = time.time()
 
-    for raw in segments:
-        if not isinstance(raw, dict):
-            continue
+    if not graph_mode:
+        for raw in segment_items:
+            idx = int(raw.get("index") or 0)
+            total = int(raw.get("total") or len(segment_items))
+            name = str(raw.get("name") or f"segment-{idx}")
+            _event(
+                "flow.run.segment.start",
+                {
+                    "index": idx,
+                    "total": total,
+                    "name": name,
+                    "nodeId": _node_id(raw.get("nodeId")),
+                    "data": raw,
+                },
+            )
+            _trace_update(
+                mode="linear",
+                route_history=route_history,
+                completed=completed,
+                current_node_id=_node_id(raw.get("nodeId")),
+            )
 
-        idx = int(raw.get("index") or 0)
-        total = int(raw.get("total") or len(segments))
+            try:
+                result = await _run_segment(raw, force_headless=bool(args.headless))
+                completed.append(result)
+                _event("flow.run.segment.done", result)
+            except Exception as exc:
+                _event(
+                    "flow.run.segment.fail",
+                    {
+                        "index": idx,
+                        "total": total,
+                        "name": name,
+                        "nodeId": _node_id(raw.get("nodeId")),
+                        "error": str(exc),
+                    },
+                )
+                _result(
+                    False,
+                    data={
+                        "flowId": flow_id,
+                        "mode": "linear",
+                        "completed": completed,
+                        "routeHistory": route_history,
+                        "durationMs": int((time.time() - started) * 1000),
+                    },
+                    error={"code": "segment_failed", "message": str(exc)},
+                )
+                return 1
+
+        _event(
+            "flow.run.finished",
+            {
+                "flowId": flow_id,
+                "mode": "linear",
+                "segments": len(segment_items),
+                "completed": len(completed),
+                "durationMs": int((time.time() - started) * 1000),
+            },
+        )
+        _result(
+            True,
+            data={
+                "flowId": flow_id,
+                "mode": "linear",
+                "completed": completed,
+                "routeHistory": route_history,
+                "durationMs": int((time.time() - started) * 1000),
+            },
+        )
+        return 0
+
+    assert entry_node_id is not None
+    current_node_id: str | None = entry_node_id
+    max_hops = max(len(by_node_id) * 4, 50)
+    run_index = 0
+
+    while current_node_id:
+        run_index += 1
+        if run_index > max_hops:
+            _result(
+                False,
+                data={
+                    "flowId": flow_id,
+                    "mode": "graph",
+                    "completed": completed,
+                    "routeHistory": route_history,
+                    "durationMs": int((time.time() - started) * 1000),
+                },
+                error={
+                    "code": "graph_cycle_guard",
+                    "message": f"Exceeded max transitions ({max_hops}); possible loop",
+                },
+            )
+            return 1
+
+        raw = by_node_id.get(current_node_id)
+        if raw is None:
+            _result(
+                False,
+                data={
+                    "flowId": flow_id,
+                    "mode": "graph",
+                    "completed": completed,
+                    "routeHistory": route_history,
+                    "durationMs": int((time.time() - started) * 1000),
+                },
+                error={
+                    "code": "invalid_plan",
+                    "message": f"Segment for nodeId '{current_node_id}' was not found",
+                },
+            )
+            return 1
+
+        idx = run_index
+        total = len(segment_items)
         name = str(raw.get("name") or f"segment-{idx}")
-        _event("flow.run.segment.start", {"index": idx, "total": total, "name": name, "data": raw})
+        _event(
+            "flow.run.segment.start",
+            {
+                "index": idx,
+                "total": total,
+                "name": name,
+                "nodeId": current_node_id,
+                "data": raw,
+            },
+        )
+        _trace_update(
+            mode="graph",
+            route_history=route_history,
+            completed=completed,
+            current_node_id=current_node_id,
+        )
 
         try:
             result = await _run_segment(raw, force_headless=bool(args.headless))
+            result["nodeId"] = current_node_id
             completed.append(result)
             _event("flow.run.segment.done", result)
+
+            next_success = _node_id(raw.get("nextOnSuccessNodeId"))
+            if next_success:
+                if next_success not in by_node_id:
+                    _result(
+                        False,
+                        data={
+                            "flowId": flow_id,
+                            "mode": "graph",
+                            "completed": completed,
+                            "routeHistory": route_history,
+                            "durationMs": int((time.time() - started) * 1000),
+                        },
+                        error={
+                            "code": "invalid_plan",
+                            "message": f"nextOnSuccessNodeId '{next_success}' not found in plan segments",
+                        },
+                    )
+                    return 1
+                _event(
+                    "flow.run.segment.route",
+                    {
+                        "fromNodeId": current_node_id,
+                        "toNodeId": next_success,
+                        "branch": "success",
+                    },
+                )
+                route_history.append(
+                    {
+                        "fromNodeId": current_node_id,
+                        "toNodeId": next_success,
+                        "branch": "success",
+                    }
+                )
+                _trace_update(
+                    mode="graph",
+                    route_history=route_history,
+                    completed=completed,
+                    current_node_id=next_success,
+                )
+                current_node_id = next_success
+                continue
+
+            current_node_id = None
         except Exception as exc:
+            error_text = str(exc)
+            completed.append(
+                {
+                    "index": idx,
+                    "name": name,
+                    "nodeId": current_node_id,
+                    "ok": False,
+                    "error": error_text,
+                }
+            )
             _event(
                 "flow.run.segment.fail",
                 {
                     "index": idx,
                     "total": total,
                     "name": name,
-                    "error": str(exc),
+                    "nodeId": current_node_id,
+                    "error": error_text,
                 },
             )
+
+            next_error = _node_id(raw.get("nextOnErrorNodeId"))
+            if next_error:
+                if next_error not in by_node_id:
+                    _result(
+                        False,
+                        data={
+                            "flowId": flow_id,
+                            "mode": "graph",
+                            "completed": completed,
+                            "routeHistory": route_history,
+                            "durationMs": int((time.time() - started) * 1000),
+                        },
+                        error={
+                            "code": "invalid_plan",
+                            "message": f"nextOnErrorNodeId '{next_error}' not found in plan segments",
+                        },
+                    )
+                    return 1
+                _event(
+                    "flow.run.segment.route",
+                    {
+                        "fromNodeId": current_node_id,
+                        "toNodeId": next_error,
+                        "branch": "error",
+                    },
+                )
+                route_history.append(
+                    {
+                        "fromNodeId": current_node_id,
+                        "toNodeId": next_error,
+                        "branch": "error",
+                    }
+                )
+                _trace_update(
+                    mode="graph",
+                    route_history=route_history,
+                    completed=completed,
+                    current_node_id=next_error,
+                )
+                current_node_id = next_error
+                continue
+
             _result(
                 False,
                 data={
-                    "flowId": str(plan.get("flowId") or ""),
+                    "flowId": flow_id,
+                    "mode": "graph",
+                    "failedNodeId": current_node_id,
                     "completed": completed,
+                    "routeHistory": route_history,
                     "durationMs": int((time.time() - started) * 1000),
                 },
-                error={"code": "segment_failed", "message": str(exc)},
+                error={"code": "segment_failed", "message": error_text},
             )
             return 1
 
     _event(
         "flow.run.finished",
         {
-            "flowId": str(plan.get("flowId") or ""),
-            "segments": len(segments),
+            "flowId": flow_id,
+            "mode": "graph",
+            "segments": len(segment_items),
             "completed": len(completed),
             "durationMs": int((time.time() - started) * 1000),
         },
@@ -272,8 +554,10 @@ async def main_async() -> int:
     _result(
         True,
         data={
-            "flowId": str(plan.get("flowId") or ""),
+            "flowId": flow_id,
+            "mode": "graph",
             "completed": completed,
+            "routeHistory": route_history,
             "durationMs": int((time.time() - started) * 1000),
         },
     )

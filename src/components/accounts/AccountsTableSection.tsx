@@ -1,11 +1,12 @@
 import type { Account } from '../../types';
 import AccountsTable from '../AccountsTable';
 import type { AccountsTableProps } from '../AccountsTable';
-import { EmptyState, SkeletonLoader } from '../ui';
+
 import { t } from '../../lib/i18n';
 import { Users } from 'lucide-react';
 import { ProfileSessionsPanel } from './ProfileSessionsPanel';
 import type { AccountsVisibleColumns } from './AccountsColumnsMenu';
+import { EmptyState, SkeletonLoader } from '@/components/ui';
 
 interface AccountsTableSectionProps {
   accounts: Account[];

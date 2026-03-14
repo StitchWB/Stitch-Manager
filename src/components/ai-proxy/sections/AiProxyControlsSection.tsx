@@ -1,8 +1,9 @@
 import { Copy, Power, RefreshCw } from 'lucide-react';
-import { Button, Input, Select, Toggle } from '../../ui';
+
 import { cn } from '../../../lib/utils';
 import type { ProxySettings, ProxyStatus } from '../../../types/generated';
 import { t } from '../../../lib/i18n';
+import { Button, Input, Select, Toggle } from '@/components/ui';
 
 interface AiProxyControlsSectionProps {
   visible: boolean;
@@ -54,6 +55,7 @@ export function AiProxyControlsSection({
   showRuntimeActions = true,
 }: AiProxyControlsSectionProps) {
   if (!visible) return null;
+  const isExternallyRunning = Boolean(proxyStatus?.running && !proxyStatus?.managedByApp);
 
   return (
     <div className="mb-4 bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
@@ -73,7 +75,11 @@ export function AiProxyControlsSection({
                   : 'bg-white/5 border-white/10 text-slate-400'
               )}
             >
-              {proxyStatus?.running ? t('aiHub.proxy.running') : t('aiHub.proxy.stopped')}
+              {proxyStatus?.running
+                ? isExternallyRunning
+                  ? `${t('aiHub.proxy.running')} (external)`
+                  : t('aiHub.proxy.running')
+                : t('aiHub.proxy.stopped')}
             </span>
             {proxySettings?.appMode && (
               <span className="text-2xs px-2 py-0.5 rounded border border-white/10 bg-white/5 text-slate-300">
@@ -206,6 +212,15 @@ export function AiProxyControlsSection({
                 {proxyDraft?.managementKey
                   ? maskKey(proxyDraft.managementKey)
                   : t('aiHub.table.emptyValue')}
+              </span>
+            </span>
+            <span className="text-slate-600">•</span>
+            <span>
+              Reachability:{' '}
+              <span
+                className={proxyStatus?.networkReachable ? 'text-emerald-300' : 'text-slate-400'}
+              >
+                {proxyStatus?.networkReachable ? 'reachable' : 'unreachable'}
               </span>
             </span>
             {proxyDraft?.managementKey && (

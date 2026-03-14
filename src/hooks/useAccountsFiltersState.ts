@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Account, AccountStatus } from '../types';
-import type { FilterOption } from '../components/ui/FilterDropdown';
+
 import { useUrlState } from './useUrlState';
 import { t } from '../lib/i18n';
 import {
@@ -9,6 +9,7 @@ import {
   hasExplicitRelationLinks,
   isOAuthCapableIdentity,
 } from '../lib/accounts/relations';
+import { type FilterOption } from '@/components/ui';
 
 type AccountsPagePreferences = {
   providerFilter: string;

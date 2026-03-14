@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  GoogleSheetsAccountAuthLink,
+  GoogleSheetsAccountLinkEdge,
+  GoogleSheetsAuthMethod,
   GoogleSheetsDataset,
   GoogleSheetsIdentityEdge,
   GoogleSheetsIdentityNode,
+  GoogleSheetsProfileLinkEdge,
   GoogleSheetsServiceAccount,
   GoogleSheetsSheet,
 } from '@/types/googleSheets';
@@ -221,6 +225,153 @@ const mapRawDataset = (raw: AccountsGraphDataset): GoogleSheetsDataset => {
     };
   });
 
+  const accountLinkEdges = (raw.accountLinks ?? []).flatMap(linkRow => {
+    const record = cellsToRecord(linkRow.cells);
+    const fromProvider = pickFirst(record, ['from_account_provider', 'from_provider']);
+    const fromLogin = pickFirst(record, ['from_account_login', 'from_login']);
+    const toProvider = pickFirst(record, ['to_account_provider', 'to_provider']);
+    const toLogin = pickFirst(record, ['to_account_login', 'to_login']);
+    const relation = pickFirst(record, ['link_type', 'relation_type', 'relation']) || 'linked';
+
+    if (!fromProvider || !fromLogin || !toProvider || !toLogin) {
+      return [];
+    }
+
+    return [
+      {
+        id: pickFirst(record, ['account_link_id', 'id']) || `account-link:${linkRow.rowNumber}`,
+        fromProvider,
+        fromLogin,
+        toProvider,
+        toLogin,
+        relation,
+        status: pickFirst(record, ['status']) || undefined,
+        confidence: pickFirst(record, ['confidence']) || undefined,
+        metadata: record,
+      } satisfies GoogleSheetsAccountLinkEdge,
+    ];
+  });
+
+  const profileLinkEdges = (raw.profileLinks ?? []).flatMap(linkRow => {
+    const record = cellsToRecord(linkRow.cells);
+    const profileAlias = pickFirst(record, ['profile_alias', 'alias']);
+    const accountProvider = pickFirst(record, ['account_provider', 'provider']);
+    const accountLogin = pickFirst(record, ['account_login', 'login', 'email']);
+    const relation = pickFirst(record, ['relation_type', 'relation']) || 'login';
+
+    if (!profileAlias || !accountProvider || !accountLogin) {
+      return [];
+    }
+
+    return [
+      {
+        id: pickFirst(record, ['profile_link_id', 'id']) || `profile-link:${linkRow.rowNumber}`,
+        profileAlias,
+        profilePath: pickFirst(record, ['profile_path']) || undefined,
+        accountProvider,
+        accountLogin,
+        relation,
+        status: pickFirst(record, ['status']) || undefined,
+        metadata: record,
+      } satisfies GoogleSheetsProfileLinkEdge,
+    ];
+  });
+
+  const authMethods = (raw.authMethods ?? []).flatMap(methodRow => {
+    const record = cellsToRecord(methodRow.cells);
+    const authType = pickFirst(record, ['auth_type']);
+    const provider = pickFirst(record, ['provider']);
+    if (!authType || !provider) {
+      return [];
+    }
+
+    return [
+      {
+        id: pickFirst(record, ['auth_method_id', 'id']) || `auth-method:${methodRow.rowNumber}`,
+        authType,
+        provider,
+        principalProvider: pickFirst(record, ['principal_provider']) || undefined,
+        principalLogin: pickFirst(record, ['principal_login']) || undefined,
+        secretRef: pickFirst(record, ['secret_ref']) || undefined,
+        keyFingerprint: pickFirst(record, ['key_fingerprint']) || undefined,
+        clientName: pickFirst(record, ['client_name']) || undefined,
+        scopes: pickFirst(record, ['scopes']) || undefined,
+        status: pickFirst(record, ['status']) || undefined,
+        expiresAt: pickFirst(record, ['expires_at']) || undefined,
+        metadata: record,
+      } satisfies GoogleSheetsAuthMethod,
+    ];
+  });
+
+  const accountAuthLinks = (raw.accountAuthLinks ?? []).flatMap(linkRow => {
+    const record = cellsToRecord(linkRow.cells);
+    const accountProvider = pickFirst(record, ['account_provider']);
+    const accountLogin = pickFirst(record, ['account_login']);
+    const authMethodId = pickFirst(record, ['auth_method_id']);
+    const channel = pickFirst(record, ['channel']) || 'api';
+
+    if (!accountProvider || !accountLogin || !authMethodId) {
+      return [];
+    }
+
+    return [
+      {
+        id:
+          pickFirst(record, ['account_auth_link_id', 'id']) ||
+          `account-auth-link:${linkRow.rowNumber}`,
+        accountProvider,
+        accountLogin,
+        authMethodId,
+        channel,
+        clientName: pickFirst(record, ['client_name']) || undefined,
+        profileAlias: pickFirst(record, ['profile_alias']) || undefined,
+        isPrimary: ['true', '1', 'yes', 'y'].includes(
+          pickFirst(record, ['is_primary']).toLowerCase()
+        ),
+        status: pickFirst(record, ['status']) || undefined,
+        metadata: record,
+      } satisfies GoogleSheetsAccountAuthLink,
+    ];
+  });
+
+  const auxSheets: GoogleSheetsSheet[] = [];
+  if (raw.accountLinks?.length) {
+    auxSheets.push({
+      id: 'ACCOUNT_LINKS',
+      name: 'ACCOUNT_LINKS',
+      rowCount: raw.accountLinks.length,
+      columns: deriveColumns(raw.accountLinks),
+      rows: normalizeSheetRows(raw.accountLinks),
+    });
+  }
+  if (raw.profileLinks?.length) {
+    auxSheets.push({
+      id: 'PROFILE_LINKS',
+      name: 'PROFILE_LINKS',
+      rowCount: raw.profileLinks.length,
+      columns: deriveColumns(raw.profileLinks),
+      rows: normalizeSheetRows(raw.profileLinks),
+    });
+  }
+  if (raw.authMethods?.length) {
+    auxSheets.push({
+      id: 'AUTH_METHODS',
+      name: 'AUTH_METHODS',
+      rowCount: raw.authMethods.length,
+      columns: deriveColumns(raw.authMethods),
+      rows: normalizeSheetRows(raw.authMethods),
+    });
+  }
+  if (raw.accountAuthLinks?.length) {
+    auxSheets.push({
+      id: 'ACCOUNT_AUTH_LINKS',
+      name: 'ACCOUNT_AUTH_LINKS',
+      rowCount: raw.accountAuthLinks.length,
+      columns: deriveColumns(raw.accountAuthLinks),
+      rows: normalizeSheetRows(raw.accountAuthLinks),
+    });
+  }
+
   return {
     fetchedAt: new Date().toISOString(),
     source: 'google-sheets',
@@ -228,8 +379,12 @@ const mapRawDataset = (raw: AccountsGraphDataset): GoogleSheetsDataset => {
       identities,
       services: serviceAccounts,
       edges: linkEdges,
+      accountLinks: accountLinkEdges,
+      profileLinks: profileLinkEdges,
+      authMethods,
+      accountAuthLinks,
     },
-    sheets,
+    sheets: [...sheets, ...auxSheets],
     invalidRows: raw.invalidRows,
     raw,
     errors: raw.invalidRows.length

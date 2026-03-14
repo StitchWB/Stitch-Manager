@@ -2,10 +2,11 @@ import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useEffect, useRef, lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import Layout from './components/layout/Layout';
-import { CommandPalette } from './components/ui/CommandPalette';
+
 import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
+import { CommandPalette } from '@/components/ui';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Accounts = lazy(() => import('./pages/Accounts'));

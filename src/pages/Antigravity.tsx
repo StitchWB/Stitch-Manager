@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Header from '../components/layout/Header';
-import { Button, EmptyState, GlassCard, Modal, SectionHeader } from '../components/ui';
+
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { appToast } from '@/lib/observability/toast';
 import { Zap } from 'lucide-react';
@@ -14,6 +14,7 @@ import {
 } from '@/lib/tauri/modules/aiProxy';
 
 import type { AuthFile, OAuthUrlResponse } from '../types/generated';
+import { Button, EmptyState, GlassCard, Modal, SectionHeader } from '@/components/ui';
 
 type OAuthSession = {
   provider: string;

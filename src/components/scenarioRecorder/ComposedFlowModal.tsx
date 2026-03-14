@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Button, Input, Select, Textarea, Checkbox } from '@/components/ui';
+import { Modal, Input, Select } from '@/components/ui';
 import { toast } from 'sonner';
+import {
+  type Connection,
+  type Edge,
+  type EdgeMouseHandler,
+  type NodeChange,
+  type Node,
+  type ReactFlowInstance,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
 import {
   type ComposedFlowItem,
   type PythonJobStatus,
@@ -17,13 +26,28 @@ import { useGoogleSheetsDataset } from '@/hooks/useGoogleSheetsDataset';
 import { useRegistrationStore } from '@/stores/registration';
 import { compileComposedFlow } from '@/lib/scenarioFlow/compiler';
 import { createEmptyComposedFlow } from '@/lib/scenarioFlow/fixtures';
+import { validateComposedFlow } from '@/lib/scenarioFlow/validation';
 import { formatProfileAliasOptionLabel } from '@/lib/profiles/displayName';
+import {
+  type FlowCanvasEdgeData,
+  type FlowCanvasNodeData,
+  createNodeDraft,
+  cacheFlowForScheduler,
+  parseFlowItem,
+  FlowValidationBanner,
+  FlowTabHeader,
+  mkNodeId,
+  ComposerFooter,
+  ComposerSetupTab,
+  ComposerRunTab,
+  ComposerFlowTab,
+  ComposerNodeEditor,
+  useComposerRunTrace,
+  useComposerGraphState,
+} from './composer';
 import type {
   ComposedFlow,
   ComposedFlowNode,
-  FlowBinding,
-  FlowContextBindingPath,
-  FlowListPickStrategy,
   FlowRunScenarioNode,
   FlowSwitchContextNode,
 } from '@/lib/scenarioFlow/types';
@@ -41,46 +65,11 @@ type JobRunState = {
   lastJobStatus: PythonJobStatus | null;
 };
 
-const mkNodeId = () => `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-const SCHEDULER_FLOW_CACHE_KEY = 'scheduler:currentComposedFlow';
-
-const cacheFlowForScheduler = (payload: {
-  alias: string;
-  flowId: string;
-  flowJson: string;
-  flowName: string;
-}) => {
-  try {
-    localStorage.setItem(
-      SCHEDULER_FLOW_CACHE_KEY,
-      JSON.stringify({
-        ...payload,
-        updatedAt: new Date().toISOString(),
-      })
-    );
-  } catch {
-    // ignore storage errors
-  }
-};
-
-const parseFlowItem = (item: ComposedFlowItem): ComposedFlow | null => {
-  try {
-    const parsed = JSON.parse(item.flowJson) as ComposedFlow;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (!Array.isArray(parsed.nodes)) return null;
-    return {
-      ...parsed,
-      id: item.id,
-      alias: item.alias,
-      name: item.name,
-    };
-  } catch {
-    return null;
-  }
-};
+// moved to ./composer/* modules
 
 export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalProps) {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'setup' | 'flow' | 'run'>('flow');
   const [scenariosLoading, setScenariosLoading] = useState(false);
   const [scenarios, setScenarios] = useState<
     Array<{ id: string; name: string; scenarioPath: string }>
@@ -120,6 +109,14 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
   });
   const [selectedSheetId, setSelectedSheetId] = useState<string>('');
   const [selectedSheetColumn, setSelectedSheetColumn] = useState<string>('');
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [autoFollowRunningNode, setAutoFollowRunningNode] = useState(false);
+  const flowCanvasRef = useRef<HTMLDivElement | null>(null);
+  const flowInstanceRef = useRef<ReactFlowInstance<
+    Node<FlowCanvasNodeData>,
+    Edge<FlowCanvasEdgeData>
+  > | null>(null);
 
   const refresh = useCallback(async () => {
     if (!alias) return;
@@ -160,6 +157,10 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
       setRunState({ jobId: null, status: 'idle', error: null, lastJobStatus: null });
       setSelectedSheetId('');
       setSelectedSheetColumn('');
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setAutoFollowRunningNode(false);
+      setActiveTab('flow');
       return;
     }
     if (alias && !flow) {
@@ -180,7 +181,36 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
 
     setFlow(parsed);
     setRunState({ jobId: null, status: 'idle', error: null, lastJobStatus: null });
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
   }, [flows, selectedFlowId]);
+
+  useEffect(() => {
+    if (!flow || !selectedNodeId) return;
+    const exists = flow.nodes.some(node => node.id === selectedNodeId);
+    if (!exists) {
+      setSelectedNodeId(null);
+    }
+  }, [flow, selectedNodeId]);
+
+  useEffect(() => {
+    if (!flow || !selectedEdgeId) return;
+    const edgeExists = flow.nodes.some(node => {
+      const successId = `${node.id}::success`;
+      const errorId = `${node.id}::error`;
+      return successId === selectedEdgeId || errorId === selectedEdgeId;
+    });
+    if (!edgeExists) {
+      setSelectedEdgeId(null);
+    }
+  }, [flow, selectedEdgeId]);
+
+  const runTrace = useComposerRunTrace(runState.lastJobStatus);
+
+  const currentNodeName = useMemo(() => {
+    if (!flow || !runTrace.currentNodeId) return null;
+    return flow.nodes.find(node => node.id === runTrace.currentNodeId)?.name ?? null;
+  }, [flow, runTrace.currentNodeId]);
 
   useEffect(() => {
     const jobId = runState.jobId;
@@ -239,6 +269,86 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
     return compileComposedFlow(flow);
   }, [flow]);
 
+  const flowValidation = useMemo(() => (flow ? validateComposedFlow(flow) : null), [flow]);
+
+  const canRunFlow = useMemo(
+    () =>
+      Boolean(
+        flow &&
+        compilePreview &&
+        compilePreview.segments.length > 0 &&
+        flowValidation &&
+        flowValidation.canRun
+      ),
+    [compilePreview, flow, flowValidation]
+  );
+
+  useEffect(() => {
+    if (!flow) {
+      setSelectedNodeId(null);
+      return;
+    }
+    if (flow.nodes.length === 0) {
+      setSelectedNodeId(null);
+      return;
+    }
+    if (!selectedNodeId) return;
+    const exists = flow.nodes.some(node => node.id === selectedNodeId);
+    if (!exists) {
+      setSelectedNodeId(null);
+    }
+  }, [flow, selectedNodeId]);
+
+  const { flowCanvasNodes, flowCanvasEdges, selectedEdgeMeta, edgeTargetOptions } =
+    useComposerGraphState({
+      flow,
+      selectedNodeId,
+      selectedEdgeId,
+      routeHistory: runTrace.routeHistory,
+      completedNodeIds: runTrace.completedNodeIds,
+      currentNodeId: runTrace.currentNodeId,
+      isRunning: runState.status === 'running',
+      activeRouteEdgeId: runTrace.activeRouteEdgeId,
+    });
+
+  const focusValidationIssue = useCallback(
+    (issueIndex: number) => {
+      const issue = flowValidation?.issues[issueIndex];
+      if (!issue) return;
+      setActiveTab('flow');
+
+      if (issue.nodeId) {
+        setSelectedNodeId(issue.nodeId);
+        const node = flowCanvasNodes.find(item => item.id === issue.nodeId);
+        if (node && flowInstanceRef.current) {
+          flowInstanceRef.current.setCenter(node.position.x + 120, node.position.y + 60, {
+            zoom: 1.02,
+            duration: 220,
+          });
+        }
+      }
+
+      if (issue.targetType === 'edge' && issue.edgeId) {
+        setSelectedEdgeId(issue.edgeId);
+      } else {
+        setSelectedEdgeId(null);
+      }
+    },
+    [flowCanvasNodes, flowValidation]
+  );
+
+  useEffect(() => {
+    if (!autoFollowRunningNode) return;
+    if (!runTrace.currentNodeId || runState.status !== 'running') return;
+    if (!flowInstanceRef.current) return;
+    const node = flowCanvasNodes.find(item => item.id === runTrace.currentNodeId);
+    if (!node) return;
+    flowInstanceRef.current.setCenter(node.position.x + 120, node.position.y + 60, {
+      zoom: 1.05,
+      duration: 260,
+    });
+  }, [autoFollowRunningNode, flowCanvasNodes, runState.status, runTrace.currentNodeId]);
+
   const flowOptions = useMemo(
     () => [
       { value: '', label: 'New flow' },
@@ -291,6 +401,8 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
       ...columns.map(col => ({ value: col, label: col })),
     ];
   }, [selectedSheetId, sheetsDataset?.sheets]);
+
+  const inputDefaultEntries = useMemo(() => Object.entries(flow?.inputDefaults ?? {}), [flow]);
 
   const importEmailsFromSheet = useCallback(() => {
     const sheet = (sheetsDataset?.sheets ?? []).find(item => item.id === selectedSheetId);
@@ -362,9 +474,10 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
   );
 
   const addRunNode = useCallback(() => {
+    const nodeId = mkNodeId();
     updateFlow(prev => {
       const node: FlowRunScenarioNode = {
-        id: mkNodeId(),
+        id: nodeId,
         type: 'runScenario',
         name: `Run scenario #${prev.nodes.length + 1}`,
         scenarioPath: '',
@@ -378,12 +491,14 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
         nodes: [...prev.nodes, node],
       };
     });
+    setSelectedNodeId(nodeId);
   }, [updateFlow]);
 
   const addSwitchNode = useCallback(() => {
+    const nodeId = mkNodeId();
     updateFlow(prev => {
       const node: FlowSwitchContextNode = {
-        id: mkNodeId(),
+        id: nodeId,
         type: 'switchContext',
         name: `Switch context #${prev.nodes.length + 1}`,
         context: {},
@@ -393,16 +508,41 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
         nodes: [...prev.nodes, node],
       };
     });
+    setSelectedNodeId(nodeId);
   }, [updateFlow]);
 
   const removeNode = useCallback(
     (nodeId: string) => {
-      updateFlow(prev => ({
-        ...prev,
-        nodes: prev.nodes.filter(node => node.id !== nodeId),
-      }));
+      updateFlow(prev => {
+        const nextNodes = prev.nodes
+          .filter(node => node.id !== nodeId)
+          .map(node => {
+            const patched: ComposedFlowNode = {
+              ...node,
+              nextNodeId: node.nextNodeId === nodeId ? null : node.nextNodeId,
+            };
+
+            if (patched.type === 'runScenario') {
+              patched.errorNextNodeId =
+                patched.errorNextNodeId === nodeId ? null : patched.errorNextNodeId;
+            }
+
+            return patched;
+          });
+
+        return {
+          ...prev,
+          nodes: nextNodes,
+        };
+      });
+      if (selectedNodeId === nodeId) {
+        setSelectedNodeId(null);
+      }
+      if (selectedEdgeId?.startsWith(`${nodeId}::`)) {
+        setSelectedEdgeId(null);
+      }
     },
-    [updateFlow]
+    [selectedEdgeId, selectedNodeId, updateFlow]
   );
 
   const saveFlow = useCallback(async () => {
@@ -438,6 +578,11 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
 
   const runFlow = useCallback(async () => {
     if (!flow || !alias) return;
+    const validation = validateComposedFlow(flow);
+    if (!validation.canRun) {
+      toast.error(validation.errors[0]?.message ?? 'Flow has validation errors');
+      return;
+    }
     const plan = compileComposedFlow(flow);
     if (plan.segments.length === 0) {
       toast.error('Flow has no runnable scenario segments');
@@ -525,468 +670,431 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
     }
   }, [alias, refresh, selectedFlowId]);
 
-  const renderRunNode = (node: FlowRunScenarioNode) => {
-    const bindingEntries = Object.entries(node.bindings ?? {});
-    const contextPathOptions: Array<{ value: FlowContextBindingPath; label: string }> = [
-      { value: 'alias', label: 'Context alias' },
-      { value: 'proxy', label: 'Context proxy' },
-      { value: 'credentials.login', label: 'Credential login' },
-      { value: 'credentials.password', label: 'Credential password' },
-    ];
-    const listStrategyOptions: Array<{ value: FlowListPickStrategy; label: string }> = [
-      { value: 'next', label: 'Next' },
-      { value: 'first', label: 'First' },
-      { value: 'random', label: 'Random' },
-    ];
-    const listSourceOptions = (flow?.dataLists ?? []).map(source => ({
-      value: source.id,
-      label: `${source.id} (${source.values.length})`,
-    }));
+  const selectedNode = useMemo(
+    () => flow?.nodes.find(node => node.id === selectedNodeId) ?? null,
+    [flow, selectedNodeId]
+  );
 
-    const updateBinding = (oldKey: string, newKey: string, binding: FlowBinding) => {
-      const key = newKey.trim();
-      updateNode(node.id, n => {
-        if (n.type !== 'runScenario') return n;
-        const next: Record<string, FlowBinding> = { ...n.bindings };
+  const selectedNodeIndex = useMemo(() => {
+    if (!flow || !selectedNode) return -1;
+    return flow.nodes.findIndex(node => node.id === selectedNode.id);
+  }, [flow, selectedNode]);
+
+  // selectedEdgeMeta + edgeTargetOptions moved to useComposerGraphState
+
+  const moveSelectedNode = useCallback(
+    (direction: 'up' | 'down') => {
+      if (!selectedNodeId) return;
+      updateFlow(prev => {
+        const currentIndex = prev.nodes.findIndex(node => node.id === selectedNodeId);
+        if (currentIndex < 0) return prev;
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        if (targetIndex < 0 || targetIndex >= prev.nodes.length) return prev;
+
+        const nextNodes = [...prev.nodes];
+        const [node] = nextNodes.splice(currentIndex, 1);
+        nextNodes.splice(targetIndex, 0, node);
+        return {
+          ...prev,
+          nodes: nextNodes,
+        };
+      });
+    },
+    [selectedNodeId, updateFlow]
+  );
+
+  const addNodeAfter = useCallback(
+    (afterNodeId: string | null, type: 'runScenario' | 'switchContext') => {
+      let createdNodeId = '';
+      updateFlow(prev => {
+        const nextNodes = [...prev.nodes];
+        const insertIndex =
+          afterNodeId == null
+            ? nextNodes.length
+            : Math.max(0, nextNodes.findIndex(node => node.id === afterNodeId) + 1);
+
+        const newNode = createNodeDraft(type, prev.nodes.length + 1);
+        createdNodeId = newNode.id;
+
+        nextNodes.splice(insertIndex, 0, newNode);
+        return {
+          ...prev,
+          nodes: nextNodes,
+        };
+      });
+      if (createdNodeId) {
+        setSelectedNodeId(createdNodeId);
+      }
+      return createdNodeId;
+    },
+    [updateFlow]
+  );
+
+  const duplicateSelectedNode = useCallback(() => {
+    if (!selectedNode) return;
+    const cloneId = mkNodeId();
+    updateFlow(prev => {
+      const index = prev.nodes.findIndex(node => node.id === selectedNode.id);
+      if (index < 0) return prev;
+      const source = prev.nodes[index];
+      const clone: ComposedFlowNode = {
+        ...source,
+        id: cloneId,
+        name: `${source.name || source.id} copy`,
+      };
+      const nextNodes = [...prev.nodes];
+      nextNodes.splice(index + 1, 0, clone);
+      return {
+        ...prev,
+        nodes: nextNodes,
+      };
+    });
+    setSelectedNodeId(cloneId);
+  }, [selectedNode, updateFlow]);
+
+  const setStartNode = useCallback(
+    (nodeId: string) => {
+      updateFlow(prev => {
+        const index = prev.nodes.findIndex(node => node.id === nodeId);
+        if (index <= 0) return prev;
+        const nextNodes = [...prev.nodes];
+        const [node] = nextNodes.splice(index, 1);
+        nextNodes.unshift(node);
+        return {
+          ...prev,
+          nodes: nextNodes,
+        };
+      });
+    },
+    [updateFlow]
+  );
+
+  const arrangeNodes = useCallback(() => {
+    updateFlow(prev => ({
+      ...prev,
+      nodes: prev.nodes.map((node, index) => ({
+        ...node,
+        layout: {
+          x: 40 + (index % 4) * 320,
+          y: 60 + Math.floor(index / 4) * 180,
+        },
+      })),
+    }));
+    flowInstanceRef.current?.fitView({ padding: 0.22, duration: 280 });
+  }, [updateFlow]);
+
+  const createStarterTemplate = useCallback(() => {
+    updateFlow(prev => {
+      const authId = mkNodeId();
+      const actionId = mkNodeId();
+      const verifyId = mkNodeId();
+      const baseX = 0;
+      return {
+        ...prev,
+        nodes: [
+          {
+            id: authId,
+            type: 'runScenario',
+            name: 'Auth step',
+            scenarioPath: '',
+            startUrl: null,
+            continueOnError: false,
+            nextNodeId: actionId,
+            bindings: {},
+            contextOverride: {},
+            layout: { x: baseX, y: 40 },
+          },
+          {
+            id: actionId,
+            type: 'runScenario',
+            name: 'Action step',
+            scenarioPath: '',
+            startUrl: null,
+            continueOnError: false,
+            nextNodeId: verifyId,
+            bindings: {},
+            contextOverride: {},
+            layout: { x: baseX + 300, y: 40 },
+          },
+          {
+            id: verifyId,
+            type: 'runScenario',
+            name: 'Verify step',
+            scenarioPath: '',
+            startUrl: null,
+            continueOnError: false,
+            bindings: {},
+            contextOverride: {},
+            layout: { x: baseX + 600, y: 40 },
+          },
+        ],
+      };
+    });
+  }, [updateFlow]);
+
+  const addInputDefault = useCallback(() => {
+    updateFlow(prev => {
+      const existingKeys = new Set(Object.keys(prev.inputDefaults ?? {}));
+      let idx = 1;
+      let key = `input_${idx}`;
+      while (existingKeys.has(key)) {
+        idx += 1;
+        key = `input_${idx}`;
+      }
+      return {
+        ...prev,
+        inputDefaults: {
+          ...(prev.inputDefaults ?? {}),
+          [key]: '',
+        },
+      };
+    });
+  }, [updateFlow]);
+
+  const updateInputDefault = useCallback(
+    (oldKey: string, newKey: string, value: string) => {
+      const trimmedKey = newKey.trim();
+      updateFlow(prev => {
+        const next = { ...(prev.inputDefaults ?? {}) };
         delete next[oldKey];
-        if (key) {
-          next[key] = binding;
+        if (trimmedKey) {
+          next[trimmedKey] = value;
         }
         return {
-          ...n,
-          bindings: next,
+          ...prev,
+          inputDefaults: next,
         };
       });
-    };
+    },
+    [updateFlow]
+  );
 
-    const removeBinding = (key: string) => {
-      updateNode(node.id, n => {
-        if (n.type !== 'runScenario') return n;
-        const next = { ...n.bindings };
+  const removeInputDefault = useCallback(
+    (key: string) => {
+      updateFlow(prev => {
+        const next = { ...(prev.inputDefaults ?? {}) };
         delete next[key];
         return {
-          ...n,
-          bindings: next,
+          ...prev,
+          inputDefaults: next,
         };
       });
-    };
+    },
+    [updateFlow]
+  );
 
-    const addBinding = () => {
-      const baseName = 'var';
-      let idx = 1;
-      const existing = new Set(Object.keys(node.bindings ?? {}));
-      while (existing.has(`${baseName}${idx}`)) idx += 1;
-      const key = `${baseName}${idx}`;
-      updateNode(node.id, n => {
-        if (n.type !== 'runScenario') return n;
-        return {
-          ...n,
-          bindings: {
-            ...n.bindings,
-            [key]: { kind: 'constant', value: '' },
+  const onFlowNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const positionChanges = changes.flatMap(change => {
+        if (change.type !== 'position' || !change.position) {
+          return [] as Array<{ id: string; position: { x: number; y: number } }>;
+        }
+        return [
+          {
+            id: change.id,
+            position: {
+              x: change.position.x,
+              y: change.position.y,
+            },
           },
+        ];
+      });
+      if (positionChanges.length === 0) return;
+
+      updateFlow(prev => {
+        const nextNodes = prev.nodes.map(node => {
+          const change = positionChanges.find(item => item.id === node.id);
+          if (!change) {
+            return node;
+          }
+          return {
+            ...node,
+            layout: {
+              x: change.position.x,
+              y: change.position.y,
+            },
+          };
+        });
+
+        return {
+          ...prev,
+          nodes: nextNodes,
         };
       });
-    };
+    },
+    [updateFlow]
+  );
 
-    return (
-      <div className="space-y-2">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Input
-            label="Name"
-            value={node.name}
-            onChange={e => updateNode(node.id, n => ({ ...n, name: e.target.value }))}
-            className="h-9"
-          />
-          <Select
-            label="Scenario"
-            value={node.scenarioPath}
-            options={scenarioOptions}
-            onValueChange={value =>
-              updateNode(node.id, n => {
-                if (n.type !== 'runScenario') return n;
-                return { ...n, scenarioPath: value };
-              })
-            }
-          />
-        </div>
+  const onFlowConnect = useCallback(
+    (connection: Connection) => {
+      const sourceId = connection.source;
+      const targetId = connection.target;
+      const sourceHandle = connection.sourceHandle;
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Input
-            label="Start URL override"
-            value={node.startUrl ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'runScenario') return n;
-                return { ...n, startUrl: e.target.value || null };
-              })
-            }
-            className="h-9"
-          />
-          <Input
-            label="Proxy override"
-            value={node.contextOverride?.proxy ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'runScenario') return n;
-                return {
-                  ...n,
-                  contextOverride: {
-                    ...(n.contextOverride ?? {}),
-                    proxy: e.target.value || null,
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
-        </div>
+      if (!sourceId || !targetId) return;
+      if (sourceId === targetId) {
+        toast.error('Self-loop is not supported');
+        return;
+      }
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Input
-            label="Alias override"
-            value={node.contextOverride?.alias ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'runScenario') return n;
-                return {
-                  ...n,
-                  contextOverride: {
-                    ...(n.contextOverride ?? {}),
-                    alias: e.target.value,
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
+      updateFlow(prev => {
+        const sourceNode = prev.nodes.find(node => node.id === sourceId);
+        if (!sourceNode) return prev;
 
-          <div className="h-9 px-2 rounded-md border border-white/10 bg-black/30 inline-flex items-center">
-            <Checkbox
-              checked={Boolean(node.continueOnError)}
-              onChange={e =>
-                updateNode(node.id, n => {
-                  if (n.type !== 'runScenario') return n;
-                  return {
-                    ...n,
-                    continueOnError: e.target.checked,
-                  };
-                })
-              }
-              label="Continue on error"
-              className="py-0 px-0 hover:bg-transparent"
-            />
-          </div>
-        </div>
+        if (sourceHandle === 'error' && sourceNode.type !== 'runScenario') {
+          return prev;
+        }
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Input
-            label="Login override"
-            value={node.contextOverride?.credentials?.login ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'runScenario') return n;
-                return {
-                  ...n,
-                  contextOverride: {
-                    ...(n.contextOverride ?? {}),
-                    credentials: {
-                      ...(n.contextOverride?.credentials ?? {}),
-                      login: e.target.value || null,
-                    },
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
-          <Input
-            label="Password override"
-            value={node.contextOverride?.credentials?.password ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'runScenario') return n;
-                return {
-                  ...n,
-                  contextOverride: {
-                    ...(n.contextOverride ?? {}),
-                    credentials: {
-                      ...(n.contextOverride?.credentials ?? {}),
-                      password: e.target.value || null,
-                    },
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
-        </div>
+        const nextNodes = prev.nodes.map(node => {
+          if (node.id !== sourceId) return node;
 
-        <div className="rounded-lg border border-white/10 bg-black/20 p-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-slate-400">Bindings</div>
-            <Button size="xs" variant="secondary" onClick={addBinding}>
-              Add binding
-            </Button>
-          </div>
+          if (sourceHandle === 'error' && node.type === 'runScenario') {
+            return {
+              ...node,
+              errorNextNodeId: targetId,
+            };
+          }
 
-          {bindingEntries.length === 0 ? (
-            <div className="text-xs text-slate-500">No bindings</div>
-          ) : (
-            bindingEntries.map(([key, binding]) => (
-              <div
-                key={key}
-                className="rounded-md border border-white/10 bg-black/20 p-2 space-y-2"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                  <Input
-                    label="Variable"
-                    value={key}
-                    onChange={e => updateBinding(key, e.target.value, binding)}
-                    className="h-9"
-                  />
-                  <Select
-                    label="Source"
-                    value={binding.kind}
-                    options={[
-                      { value: 'constant', label: 'Constant' },
-                      { value: 'context', label: 'Context' },
-                      { value: 'input', label: 'Flow input' },
-                      { value: 'list', label: 'Data list' },
-                    ]}
-                    onValueChange={value => {
-                      let nextBinding: FlowBinding = { kind: 'constant', value: '' };
-                      if (value === 'context') {
-                        nextBinding = { kind: 'context', path: 'alias' };
-                      } else if (value === 'input') {
-                        nextBinding = { kind: 'input', key: '' };
-                      } else if (value === 'list') {
-                        nextBinding = {
-                          kind: 'list',
-                          sourceId: listSourceOptions[0]?.value ?? 'emails_pool',
-                          strategy: 'next',
-                        };
-                      }
-                      updateBinding(key, key, nextBinding);
-                    }}
-                  />
+          return {
+            ...node,
+            nextNodeId: targetId,
+          };
+        });
 
-                  {binding.kind === 'constant' ? (
-                    <Input
-                      label="Value"
-                      value={binding.value}
-                      onChange={e =>
-                        updateBinding(key, key, {
-                          kind: 'constant',
-                          value: e.target.value,
-                        })
-                      }
-                      className="h-9"
-                    />
-                  ) : null}
+        return {
+          ...prev,
+          nodes: nextNodes,
+        };
+      });
 
-                  {binding.kind === 'context' ? (
-                    <Select
-                      label="Context path"
-                      value={binding.path}
-                      options={contextPathOptions}
-                      onValueChange={value =>
-                        updateBinding(key, key, {
-                          kind: 'context',
-                          path: value as FlowContextBindingPath,
-                        })
-                      }
-                    />
-                  ) : null}
+      const branch = sourceHandle === 'error' ? 'error' : 'success';
+      setSelectedEdgeId(`${sourceId}::${branch}`);
+    },
+    [updateFlow]
+  );
 
-                  {binding.kind === 'input' ? (
-                    <Input
-                      label="Input key"
-                      value={binding.key}
-                      onChange={e =>
-                        updateBinding(key, key, {
-                          kind: 'input',
-                          key: e.target.value,
-                        })
-                      }
-                      className="h-9"
-                    />
-                  ) : null}
+  const onFlowEdgeClick = useCallback<EdgeMouseHandler>((_event, edge) => {
+    setSelectedEdgeId(edge.id);
+    const sourceId = edge.source;
+    if (sourceId) {
+      setSelectedNodeId(sourceId);
+    }
+  }, []);
 
-                  {binding.kind === 'list' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:col-span-2">
-                      <Select
-                        label="List source"
-                        value={binding.sourceId}
-                        options={
-                          listSourceOptions.length
-                            ? listSourceOptions
-                            : [{ value: 'emails_pool', label: 'emails_pool (0)' }]
-                        }
-                        onValueChange={value =>
-                          updateBinding(key, key, {
-                            kind: 'list',
-                            sourceId: value,
-                            strategy: binding.strategy ?? 'next',
-                          })
-                        }
-                      />
-                      <Select
-                        label="Pick strategy"
-                        value={binding.strategy ?? 'next'}
-                        options={listStrategyOptions}
-                        onValueChange={value =>
-                          updateBinding(key, key, {
-                            kind: 'list',
-                            sourceId: binding.sourceId,
-                            strategy: value as FlowListPickStrategy,
-                          })
-                        }
-                      />
-                    </div>
-                  ) : null}
+  const clearSelectedEdgeBranch = useCallback(() => {
+    if (!selectedEdgeId) return;
+    const [sourceId, branch] = selectedEdgeId.split('::');
+    if (!sourceId || !branch) return;
 
-                  <div className="flex items-end">
-                    <Button size="xs" variant="danger" onClick={() => removeBinding(key)}>
-                      Remove binding
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    );
-  };
+    updateFlow(prev => {
+      const nextNodes = prev.nodes.map(node => {
+        if (node.id !== sourceId) return node;
 
-  const renderSwitchNode = (node: FlowSwitchContextNode) => {
-    return (
-      <div className="space-y-2">
-        <Input
-          label="Name"
-          value={node.name}
-          onChange={e => updateNode(node.id, n => ({ ...n, name: e.target.value }))}
-          className="h-9"
-        />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Input
-            label="Alias"
-            value={node.context.alias ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'switchContext') return n;
-                return {
-                  ...n,
-                  context: {
-                    ...n.context,
-                    alias: e.target.value,
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
-          <Input
-            label="Proxy"
-            value={node.context.proxy ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'switchContext') return n;
-                return {
-                  ...n,
-                  context: {
-                    ...n.context,
-                    proxy: e.target.value || null,
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
-        </div>
+        if (branch === 'error' && node.type === 'runScenario') {
+          return {
+            ...node,
+            errorNextNodeId: null,
+          };
+        }
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Input
-            label="Context login"
-            value={node.context.credentials?.login ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'switchContext') return n;
-                return {
-                  ...n,
-                  context: {
-                    ...n.context,
-                    credentials: {
-                      ...(n.context.credentials ?? {}),
-                      login: e.target.value || null,
-                    },
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
-          <Input
-            label="Context password"
-            value={node.context.credentials?.password ?? ''}
-            onChange={e =>
-              updateNode(node.id, n => {
-                if (n.type !== 'switchContext') return n;
-                return {
-                  ...n,
-                  context: {
-                    ...n.context,
-                    credentials: {
-                      ...(n.context.credentials ?? {}),
-                      password: e.target.value || null,
-                    },
-                  },
-                };
-              })
-            }
-            className="h-9"
-          />
-        </div>
-      </div>
-    );
-  };
+        if (branch === 'success') {
+          return {
+            ...node,
+            nextNodeId: null,
+          };
+        }
+
+        return node;
+      });
+
+      return {
+        ...prev,
+        nodes: nextNodes,
+      };
+    });
+  }, [selectedEdgeId, updateFlow]);
+
+  const updateSelectedEdgeTarget = useCallback(
+    (targetId: string) => {
+      if (!selectedEdgeMeta) return;
+      const { sourceId, branch } = selectedEdgeMeta;
+
+      updateFlow(prev => {
+        const nextNodes = prev.nodes.map(node => {
+          if (node.id !== sourceId) return node;
+          if (branch === 'success') {
+            return {
+              ...node,
+              nextNodeId: targetId || null,
+            };
+          }
+          if (node.type === 'runScenario') {
+            return {
+              ...node,
+              errorNextNodeId: targetId || null,
+            };
+          }
+          return node;
+        });
+        return {
+          ...prev,
+          nodes: nextNodes,
+        };
+      });
+    },
+    [selectedEdgeMeta, updateFlow]
+  );
+
+  const onPaletteDrop = useCallback(
+    (type: 'runScenario' | 'switchContext', event: React.MouseEvent<HTMLButtonElement>) => {
+      const rect = flowCanvasRef.current?.getBoundingClientRect();
+      const center = rect
+        ? {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+          }
+        : { x: 120, y: 120 };
+
+      const projected = flowInstanceRef.current
+        ? flowInstanceRef.current.screenToFlowPosition(center)
+        : center;
+
+      const node = createNodeDraft(type, (flow?.nodes.length ?? 0) + 1, {
+        x: projected.x,
+        y: projected.y,
+      });
+
+      updateFlow(prev => ({
+        ...prev,
+        nodes: [...prev.nodes, node],
+      }));
+      setSelectedNodeId(node.id);
+    },
+    [flow?.nodes.length, updateFlow]
+  );
+
+  // Node editor UI moved to ComposerNodeEditor
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Compose flow"
+      title="Scenario Flow Composer"
       size="xl"
       footer={
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs text-slate-400">
-            {runState.status === 'running'
-              ? `Running job ${runState.jobId}`
-              : runState.status === 'error'
-                ? runState.error
-                : runState.status === 'done'
-                  ? 'Last run finished'
-                  : `Segments: ${compilePreview?.segments.length ?? 0}`}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={onClose}>
-              Close
-            </Button>
-            <Button variant="danger" onClick={() => void removeFlow()} disabled={!selectedFlowId}>
-              Delete
-            </Button>
-            <Button variant="secondary" onClick={() => void saveFlow()} isLoading={saveLoading}>
-              Save
-            </Button>
-            <Button variant="secondary" onClick={createSchedulerTaskFromFlow}>
-              Create Scheduler Task
-            </Button>
-            <Button onClick={() => void runFlow()} disabled={runState.status === 'running'}>
-              Run flow
-            </Button>
-          </div>
-        </div>
+        <ComposerFooter
+          runState={runState}
+          canRunFlow={canRunFlow}
+          segmentCount={compilePreview?.segments.length ?? 0}
+          selectedFlowId={selectedFlowId}
+          saveLoading={saveLoading}
+          onClose={onClose}
+          onDelete={() => void removeFlow()}
+          onSave={() => void saveFlow()}
+          onCreateSchedulerTask={createSchedulerTaskFromFlow}
+          onRun={() => void runFlow()}
+        />
       }
     >
       {!alias ? (
@@ -995,6 +1103,8 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
         <div className="text-sm text-slate-400">Loading...</div>
       ) : (
         <div className="space-y-4">
+          <FlowTabHeader activeTab={activeTab} onChange={setActiveTab} />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Select
               label={flowsLoading ? 'Saved flows (loading...)' : 'Saved flows'}
@@ -1003,9 +1113,7 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
               onValueChange={value => {
                 if (!value) {
                   setSelectedFlowId('');
-                  if (alias) {
-                    setFlow(createEmptyComposedFlow(alias));
-                  }
+                  setFlow(createEmptyComposedFlow(alias));
                   return;
                 }
                 setSelectedFlowId(value);
@@ -1019,209 +1127,94 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <Input
-              label="Default alias"
-              value={flow.defaults.alias}
-              onChange={e =>
-                updateFlow(prev => ({
-                  ...prev,
-                  alias: e.target.value,
-                  defaults: {
-                    ...prev.defaults,
-                    alias: e.target.value,
-                  },
-                }))
-              }
-              className="h-9"
-            />
-            <Input
-              label="Default proxy"
-              value={flow.defaults.proxy ?? ''}
-              onChange={e =>
-                updateFlow(prev => ({
-                  ...prev,
-                  defaults: {
-                    ...prev.defaults,
-                    proxy: e.target.value || null,
-                  },
-                }))
-              }
-              className="h-9"
-            />
-            <Input
-              label="Default config JSON"
-              value={flow.defaults.configJson ?? ''}
-              onChange={e =>
-                updateFlow(prev => ({
-                  ...prev,
-                  defaults: {
-                    ...prev.defaults,
-                    configJson: e.target.value || null,
-                  },
-                }))
-              }
-              className="h-9"
-            />
-          </div>
+          {flowValidation ? (
+            <FlowValidationBanner validation={flowValidation} onIssueClick={focusValidationIssue} />
+          ) : null}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <Input
-              label="Default credential login"
-              value={flow.defaults.credentials?.login ?? ''}
-              onChange={e =>
-                updateFlow(prev => ({
-                  ...prev,
-                  defaults: {
-                    ...prev.defaults,
-                    credentials: {
-                      ...(prev.defaults.credentials ?? {}),
-                      login: e.target.value || null,
-                    },
-                  },
-                }))
-              }
-              className="h-9"
+          {activeTab === 'setup' ? (
+            <ComposerSetupTab
+              flow={flow}
+              inputDefaultEntries={inputDefaultEntries}
+              addInputDefault={addInputDefault}
+              updateInputDefault={updateInputDefault}
+              removeInputDefault={removeInputDefault}
+              updateFlow={updateFlow}
+              sheetsParams={sheetsParams}
+              sheetsError={sheetsError}
+              selectedSheetId={selectedSheetId}
+              selectedSheetColumn={selectedSheetColumn}
+              sheetOptions={sheetOptions}
+              sheetColumnOptions={sheetColumnOptions}
+              setSelectedSheetId={setSelectedSheetId}
+              setSelectedSheetColumn={setSelectedSheetColumn}
+              refreshSheets={refreshSheets}
+              importEmailsFromSheet={importEmailsFromSheet}
             />
-            <Input
-              label="Default credential password"
-              value={flow.defaults.credentials?.password ?? ''}
-              onChange={e =>
-                updateFlow(prev => ({
-                  ...prev,
-                  defaults: {
-                    ...prev.defaults,
-                    credentials: {
-                      ...(prev.defaults.credentials ?? {}),
-                      password: e.target.value || null,
-                    },
-                  },
-                }))
-              }
-              className="h-9"
-            />
-          </div>
+          ) : null}
 
-          <Textarea
-            label="Email list source (emails_pool, one email per line)"
-            value={(flow.dataLists.find(d => d.id === 'emails_pool')?.values ?? []).join('\n')}
-            onChange={e => {
-              const values = e.target.value
-                .split(/\r?\n/g)
-                .map(v => v.trim())
-                .filter(Boolean);
-              updateFlow(prev => {
-                const rest = prev.dataLists.filter(d => d.id !== 'emails_pool');
-                return {
-                  ...prev,
-                  dataLists: [
-                    {
-                      id: 'emails_pool',
-                      values,
-                      strategy: 'next',
-                    },
-                    ...rest,
-                  ],
-                };
-              });
-            }}
-            className="h-24 min-h-[96px]"
-          />
-
-          <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
-            <div className="text-xs text-slate-400">Import emails from Google Sheets</div>
-            {!sheetsParams ? (
-              <div className="text-xs text-amber-300">
-                Configure Google Sheets credentials in AutoReg settings first.
-              </div>
-            ) : (
-              <>
-                {sheetsError ? <div className="text-xs text-amber-300">{sheetsError}</div> : null}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <Select
-                    label="Sheet"
-                    value={selectedSheetId}
-                    options={sheetOptions}
-                    onValueChange={value => {
-                      setSelectedSheetId(value);
-                      setSelectedSheetColumn('');
-                    }}
+          {activeTab === 'flow' ? (
+            <ComposerFlowTab
+              flowNodesCount={flow.nodes.length}
+              scenariosLoading={scenariosLoading}
+              selectedNodeId={selectedNodeId}
+              selectedNodeIndex={selectedNodeIndex}
+              selectedNodeType={selectedNode?.type ?? null}
+              selectedEdgeId={selectedEdgeId}
+              selectedEdgeMeta={selectedEdgeMeta}
+              edgeTargetOptions={edgeTargetOptions}
+              flowCanvasNodes={flowCanvasNodes}
+              flowCanvasEdges={flowCanvasEdges}
+              flowCanvasRef={flowCanvasRef}
+              flowInstanceRef={flowInstanceRef}
+              onPaletteDrop={onPaletteDrop}
+              onAddRunNode={() => addRunNode()}
+              onAddSwitchNode={() => addSwitchNode()}
+              onAddNextRunNode={() => addNodeAfter(selectedNodeId ?? null, 'runScenario')}
+              onAddNextSwitchNode={() => addNodeAfter(selectedNodeId ?? null, 'switchContext')}
+              onDuplicateSelected={duplicateSelectedNode}
+              onArrange={arrangeNodes}
+              onRefreshLists={() => void refresh()}
+              onExportCompiledPlan={exportCompiledPlan}
+              onNodesChange={onFlowNodesChange}
+              onConnect={onFlowConnect}
+              onEdgeClick={onFlowEdgeClick}
+              onPaneClick={() => setSelectedEdgeId(null)}
+              onNodeClick={(_event, node) => {
+                setSelectedNodeId(node.id);
+                setSelectedEdgeId(null);
+              }}
+              onClearSelectedEdgeBranch={clearSelectedEdgeBranch}
+              onUpdateSelectedEdgeTarget={updateSelectedEdgeTarget}
+              onMoveUp={() => moveSelectedNode('up')}
+              onMoveDown={() => moveSelectedNode('down')}
+              onRemoveSelected={() => selectedNode && removeNode(selectedNode.id)}
+              onSetSelectedAsStart={() => selectedNode && setStartNode(selectedNode.id)}
+              renderSelectedNodeEditor={() =>
+                selectedNode ? (
+                  <ComposerNodeEditor
+                    selectedNode={selectedNode}
+                    flow={flow}
+                    scenarioOptions={scenarioOptions}
+                    updateNode={updateNode}
                   />
-                  <Select
-                    label="Column"
-                    value={selectedSheetColumn}
-                    options={sheetColumnOptions}
-                    onValueChange={setSelectedSheetColumn}
-                  />
-                  <div className="flex items-end gap-2">
-                    <Button variant="secondary" onClick={() => void refreshSheets()}>
-                      Refresh sheets
-                    </Button>
-                    <Button variant="secondary" onClick={importEmailsFromSheet}>
-                      Import
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+                ) : null
+              }
+              onCreateStarterTemplate={createStarterTemplate}
+              autoFollowRunningNode={autoFollowRunningNode}
+              onAutoFollowRunningNodeChange={setAutoFollowRunningNode}
+            />
+          ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => addRunNode()} disabled={scenariosLoading}>
-              Add run-scenario node
-            </Button>
-            <Button variant="secondary" onClick={() => addSwitchNode()}>
-              Add switch-context node
-            </Button>
-            <Button variant="secondary" onClick={() => void refresh()}>
-              Refresh lists
-            </Button>
-            <Button variant="secondary" onClick={exportCompiledPlan}>
-              Export compiled plan
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            {flow.nodes.length === 0 ? (
-              <div className="text-xs text-slate-500">
-                No nodes yet. Add at least one run-scenario node.
-              </div>
-            ) : (
-              flow.nodes.map((node, idx) => (
-                <div
-                  key={node.id}
-                  className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-slate-400">
-                      #{idx + 1} • {node.type}
-                    </div>
-                    <Button size="xs" variant="danger" onClick={() => removeNode(node.id)}>
-                      Remove
-                    </Button>
-                  </div>
-
-                  {node.type === 'runScenario'
-                    ? renderRunNode(node as FlowRunScenarioNode)
-                    : renderSwitchNode(node as FlowSwitchContextNode)}
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs">
-            <div className="text-slate-400 mb-1">Compile preview</div>
-            <div className="text-slate-200">Segments: {compilePreview?.segments.length ?? 0}</div>
-            {compilePreview?.diagnostics?.length ? (
-              <div className="text-amber-300 mt-1">
-                {compilePreview.diagnostics.map(item => (
-                  <div key={item}>{item}</div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-slate-500 mt-1">No diagnostics</div>
-            )}
-          </div>
+          {activeTab === 'run' ? (
+            <ComposerRunTab
+              runTrace={{
+                ...runTrace,
+                currentNodeName,
+              }}
+              compilePreview={compilePreview}
+              onGoToFlow={() => setActiveTab('flow')}
+            />
+          ) : null}
         </div>
       )}
     </Modal>

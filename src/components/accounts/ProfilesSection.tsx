@@ -1,5 +1,6 @@
 import ProfilesTable, { type ProfileItem } from '../ProfilesTable';
-import { SkeletonLoader } from '../ui';
+import { SkeletonLoader } from '@/components/ui';
+
 
 interface ProfilesSectionProps {
   profilesLoading: boolean;

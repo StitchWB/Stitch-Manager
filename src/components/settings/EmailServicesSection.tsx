@@ -1,9 +1,10 @@
 import { Shield, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle, Save } from 'lucide-react';
-import { SectionHeader } from '../ui/SectionHeader';
-import { Button } from '../ui/Button';
-import { LoadingSpinner, Input, Checkbox, ButtonBase } from '../ui';
-import { Select } from '../ui/Select';
+
+
+
+
 import { t } from '../../lib/i18n';
+import { Button, ButtonBase, Checkbox, Input, LoadingSpinner, SectionHeader, Select } from '@/components/ui';
 
 interface EmailServicesSectionProps {
   // Addy.io props

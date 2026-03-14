@@ -1,9 +1,10 @@
 import { Code, FolderOpen, X } from 'lucide-react';
-import { SectionHeader } from '../ui/SectionHeader';
-import { Input } from '../ui/Input';
-import { Button } from '../ui/Button';
+
+
+
 import { t } from '../../lib/i18n';
 import { open } from '@tauri-apps/plugin-dialog';
+import { Button, Input, SectionHeader } from '@/components/ui';
 
 interface IDEPathsSectionProps {
   customIdePaths: Record<string, string>;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Modal } from '../../../components/ui';
+
 import { useSchedulerStore } from '../../../stores/scheduler';
 import type { ScheduledTask } from '../../../types/generated';
 import {
@@ -10,6 +10,7 @@ import {
   buildTaskTypeFromState,
   buildEffectiveConfig,
 } from './SchedulerTaskForm';
+import { Button, Modal } from '@/components/ui';
 
 interface EditTaskModalProps {
   taskId: number;

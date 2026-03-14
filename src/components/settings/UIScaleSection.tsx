@@ -1,8 +1,9 @@
-import { RefreshCw } from 'lucide-react';import { ButtonBase } from '../ui';
+import { RefreshCw } from 'lucide-react';
 
-import { SectionHeader } from '../ui/SectionHeader';
-import { RangeSlider } from '../ui/RangeSlider';
+
+
 import { t } from '../../lib/i18n';
+import { ButtonBase, RangeSlider, SectionHeader } from '@/components/ui';
 
 interface UIScaleSectionProps {
   uiScale: number;

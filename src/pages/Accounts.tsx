@@ -6,7 +6,7 @@ import Header from '../components/layout/Header';
 import { useProfilesViewModel, type ProfileListFilter } from '../hooks/useProfilesViewModel';
 import AddAccountModal from '../components/AddAccountModal';
 import { ProfileSettingsModal } from '../components/profiles/ProfileSettingsModal';
-import { FloatingActionBar } from '../components/ui/FloatingActionBar';
+
 import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import {
@@ -32,6 +32,7 @@ import { AccountsErrorBanner } from '../components/accounts/AccountsErrorBanner'
 import { AccountsExpiredBanner } from '../components/accounts/AccountsExpiredBanner';
 import { useGoogleSheetsDataset } from '../hooks/useGoogleSheetsDataset';
 import { useSheetsConfigState } from '../hooks/useSheetsConfigState';
+import { FloatingActionBar } from '@/components/ui';
 
 export default function Accounts() {
   const navigate = useNavigate();

@@ -1,4 +1,4 @@
-import { Input, Select } from '../../../components/ui';
+import { Input, Select } from '@/components/ui';
 
 export type SchedulerTaskCreateMode = 'manual' | 'template';
 

@@ -1,8 +1,9 @@
 import { Download, Trash2 } from 'lucide-react';
 import { t } from '../../lib/i18n';
-import { Button } from '../ui/Button';
+
 import PatchVersionSelector from './PatchVersionSelector';
 import PatchOptionsPanel from './PatchOptionsPanel';
+import { Button } from '@/components/ui';
 
 interface PatchVersion {
   id: string;

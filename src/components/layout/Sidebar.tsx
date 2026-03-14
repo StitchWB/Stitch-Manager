@@ -19,7 +19,8 @@ import { useAppStore } from '../../stores/app';
 import { t } from '../../lib/i18n';
 import { cn } from '../../lib/utils';
 import { version as appVersion } from '../../../package.json';
-import { ButtonBase } from '../ui/ButtonBase';
+import { ButtonBase } from '@/components/ui';
+
 
 interface NavItemProps {
   to: string;

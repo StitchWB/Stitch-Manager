@@ -48,10 +48,65 @@ export interface GoogleSheetsIdentityEdge {
   service?: string;
 }
 
+export interface GoogleSheetsAccountLinkEdge {
+  id: string;
+  fromProvider: string;
+  fromLogin: string;
+  toProvider: string;
+  toLogin: string;
+  relation: string;
+  status?: string;
+  confidence?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GoogleSheetsProfileLinkEdge {
+  id: string;
+  profileAlias: string;
+  profilePath?: string;
+  accountProvider: string;
+  accountLogin: string;
+  relation: string;
+  status?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GoogleSheetsAuthMethod {
+  id: string;
+  authType: string;
+  provider: string;
+  principalProvider?: string;
+  principalLogin?: string;
+  secretRef?: string;
+  keyFingerprint?: string;
+  clientName?: string;
+  scopes?: string;
+  status?: string;
+  expiresAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GoogleSheetsAccountAuthLink {
+  id: string;
+  accountProvider: string;
+  accountLogin: string;
+  authMethodId: string;
+  channel: string;
+  clientName?: string;
+  profileAlias?: string;
+  isPrimary?: boolean;
+  status?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface GoogleSheetsIdentityGraph {
   identities: GoogleSheetsIdentityNode[];
   services?: GoogleSheetsServiceAccount[];
   edges?: GoogleSheetsIdentityEdge[];
+  accountLinks?: GoogleSheetsAccountLinkEdge[];
+  profileLinks?: GoogleSheetsProfileLinkEdge[];
+  authMethods?: GoogleSheetsAuthMethod[];
+  accountAuthLinks?: GoogleSheetsAccountAuthLink[];
 }
 
 export type GoogleSheetsRow = Record<string, unknown> & {

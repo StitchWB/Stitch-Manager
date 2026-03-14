@@ -11,8 +11,16 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { Badge, Button, ButtonBase, Checkbox, TableCell, TableRow, Tooltip } from '../ui';
-import { ProviderLogo } from '../ui/ProviderLogo';
+import {
+  Badge,
+  Button,
+  ButtonBase,
+  Checkbox,
+  TableCell,
+  TableRow,
+  Tooltip,
+  ProviderLogo,
+} from '@/components/ui';
 import { cn } from '../../lib/utils';
 import type { Account, AccountStatus } from '../../types';
 import type { AccountRelationEdge, RelationType } from '../../lib/accounts/relations';

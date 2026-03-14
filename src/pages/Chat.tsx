@@ -18,8 +18,8 @@ import { useChatStore } from '../stores/chat';
 import { useAppStore } from '../stores/app';
 import type { ContentBlock } from '../types/generated';
 import { t } from '../lib/i18n';
-import { Button } from '../components/ui/Button';
-import { LoadingSpinner, Select, Textarea, Input, Checkbox, ButtonBase } from '../components/ui';
+
+
 import { Tooltip } from '../components/Tooltip';
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
@@ -37,6 +37,7 @@ import {
   getGeminiApiKeys,
   getOpenAIApiKeys,
 } from '@/lib/tauri/modules/apiKeys';
+import { Button, ButtonBase, Checkbox, Input, LoadingSpinner, Select, Textarea } from '@/components/ui';
 
 interface ModelInfo {
   id: string;

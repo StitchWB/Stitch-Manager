@@ -1,7 +1,8 @@
 import { RefreshCw } from 'lucide-react';
-import { SectionHeader } from '../ui/SectionHeader';
+
 import { t } from '../../lib/i18n';
-import { LoadingSpinner, Input } from '../ui';
+import { Input, LoadingSpinner, SectionHeader } from '@/components/ui';
+
 
 interface EmailCounterSectionProps {
   emailCounter: number;

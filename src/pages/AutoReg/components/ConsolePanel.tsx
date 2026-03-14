@@ -1,8 +1,9 @@
-import { StatusBar } from '../../../components/ui/KPICard';import { ButtonBase } from '../../../components/ui';
 
-import { MissionControlHUD } from '../../../components/ui/MissionControlHUD';
+
+
 import { t } from '../../../lib/i18n';
 import type { RegistrationLog } from '../../../types';
+import { ButtonBase, MissionControlHUD, StatusBar } from '@/components/ui';
 
 interface ConsolePanelProps {
   logs: RegistrationLog[];

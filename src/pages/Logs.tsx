@@ -17,8 +17,8 @@ import {
   X,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
-import { EmptyState } from '../components/ui/EmptyState';
-import { LoadingSpinner, Input, ButtonBase } from '../components/ui';
+
+
 import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel, LogEntry } from '../stores/logs';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
@@ -26,14 +26,15 @@ import { useRegistrationStore } from '../stores/registration';
 import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
-import { Button } from '../components/ui/Button';
-import { Toggle } from '../components/ui/Toggle';
-import { LogGroup } from '../components/ui/LogGroup';
-import { TabButton } from '../components/ui/TabButton';
-import { Badge } from '../components/ui/Badge';
-import { FilterDropdown } from '../components/ui/FilterDropdown';
-import { MultiFilterDropdown } from '../components/ui/MultiFilterDropdown';
+
+
+
+
+
+
+
 import { copyToClipboard as copyTextToClipboard } from '@/lib/tauri/modules/utils';
+import { Badge, Button, ButtonBase, EmptyState, FilterDropdown, Input, LoadingSpinner, LogGroup, MultiFilterDropdown, TabButton, Toggle } from '@/components/ui';
 
 const LOG_SOURCES = [
   'accounts',

@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { Home, AlertTriangle } from 'lucide-react';
 import { t } from '../lib/i18n';
-import { Button } from '../components/ui/Button';
+import { Button } from '@/components/ui';
+
 
 export default function NotFound() {
   const navigate = useNavigate();

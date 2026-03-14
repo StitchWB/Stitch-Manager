@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FolderKanban, RefreshCw } from 'lucide-react';
 import Header from '../components/layout/Header';
-import { Button, EmptyState, Select } from '../components/ui';
+
 import { t } from '../lib/i18n';
 import { listFingerprintProfiles, getProfileSettings } from '@/lib/tauri/modules/profiles';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
@@ -10,6 +10,7 @@ import { ScenarioRecordModal } from '@/components/scenarioRecorder/ScenarioRecor
 import { ScenarioReplayModal } from '@/components/scenarioRecorder/ScenarioReplayModal';
 import { ProfileScenariosPanel } from '@/components/scenarioRecorder/ProfileScenariosPanel';
 import { ComposedFlowModal } from '@/components/scenarioRecorder/ComposedFlowModal';
+import { Button, EmptyState, Select } from '@/components/ui';
 
 const DEFAULT_START_URL = 'https://google.com';
 
@@ -17,7 +18,6 @@ export default function Scenarios() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
-  const [selectedAlias, setSelectedAlias] = useState<string>('');
   const [activeRecordAlias, setActiveRecordAlias] = useState<string | null>(null);
   const [activeRecordMeta, setActiveRecordMeta] = useState<{
     alias: string;
@@ -30,6 +30,7 @@ export default function Scenarios() {
 
   const queryAlias = useMemo(() => searchParams.get('alias')?.trim() || '', [searchParams]);
   const queryOpenCompose = useMemo(() => searchParams.get('openCompose') === '1', [searchParams]);
+  const selectedAlias = queryAlias;
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);
@@ -48,34 +49,18 @@ export default function Scenarios() {
   }, [loadProfiles]);
 
   useEffect(() => {
-    if (queryAlias === selectedAlias) return;
-    setSelectedAlias(queryAlias);
-  }, [queryAlias, selectedAlias]);
-
-  useEffect(() => {
     if (!queryOpenCompose) return;
-    if (!selectedAlias) return;
+    if (!queryAlias) return;
 
-    setComposedFlowAlias(selectedAlias);
+    setComposedFlowAlias(queryAlias);
 
     const params = new URLSearchParams(searchParams);
     params.delete('openCompose');
     setSearchParams(params, { replace: true });
-  }, [queryOpenCompose, searchParams, selectedAlias, setSearchParams]);
-
-  useEffect(() => {
-    setActiveRecordAlias(null);
-    setActiveRecordMeta(null);
-    setReplayAlias(null);
-    setReplayInitialScenarioPath(null);
-    setComposedFlowAlias(null);
-  }, [selectedAlias]);
+  }, [queryOpenCompose, queryAlias, searchParams, setSearchParams]);
 
   const aliasOptions = useMemo(() => {
-    const toLabel = (alias: string) => {
-      const pretty = formatProfileAlias(alias);
-      return pretty === alias ? pretty : `${pretty} (${alias})`;
-    };
+    const toLabel = (alias: string) => formatProfileAlias(alias);
     const base = profileAliases.map(alias => ({ value: alias, label: toLabel(alias) }));
     const hasSelected = selectedAlias && !profileAliases.includes(selectedAlias);
     const merged = hasSelected
@@ -96,7 +81,7 @@ export default function Scenarios() {
       },
       ...merged,
     ];
-  }, [profileAliases, selectedAlias, t]);
+  }, [profileAliases, selectedAlias]);
 
   const buildScenarioName = useCallback((alias: string) => {
     const now = new Date();
@@ -149,7 +134,6 @@ export default function Scenarios() {
 
   const handleAliasChange = useCallback(
     (nextAlias: string) => {
-      setSelectedAlias(nextAlias);
       const params = new URLSearchParams(searchParams);
       if (nextAlias.trim()) {
         params.set('alias', nextAlias.trim());
@@ -190,18 +174,19 @@ export default function Scenarios() {
         <div className="max-w-[1200px] mx-auto space-y-6">
           <div className="rounded-2xl border border-white/10 bg-[#0f1115]/70 px-5 py-5 shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
             <div className="flex flex-col lg:flex-row lg:items-end gap-4">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <Select
                   label={t('accounts.profileAlias')}
                   value={selectedAlias}
                   onValueChange={handleAliasChange}
                   options={aliasOptions}
-                  containerClassName="min-w-[240px]"
-                  className="h-9"
+                  containerClassName="min-w-0"
+                  shellClassName="h-9"
+                  className="h-9 truncate"
                 />
                 <div className="mt-2 text-xs text-slate-400">{t('scenarios.profileHint')}</div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 justify-start lg:justify-end">
                 <Button
                   size="sm"
                   variant="secondary"
