@@ -1,15 +1,13 @@
 import { Settings2, Eye, EyeOff, Timer, Keyboard, MessageSquare } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';
-import { NumberInput } from '../ui/NumberInput';
-import { Toggle } from '../ui/Toggle';
-import { RangeSlider } from '../ui/RangeSlider';
-import { SectionHeader } from '../ui/SectionHeader';
-import { Select } from '../ui/Select';
+
 import { t } from '../../lib/i18n';
 import type { ProviderName } from '../../types';
 import type { LogVerbosity } from '../../constants/logging';
 import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
+import { RangeSlider, SectionHeader, Select, Toggle } from '@/components/ui';
+import { NumberInput } from '../ui/NumberInput';
 
 interface EngineTabProps {
   provider: ProviderName;

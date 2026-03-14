@@ -3,7 +3,8 @@ import { User, Bot } from 'lucide-react';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 import type { ContentBlock } from '../../types/generated';
 import { t } from '../../lib/i18n';
-import { LoadingSpinner, ButtonBase } from '../ui';
+import { ButtonBase, LoadingSpinner } from '@/components/ui';
+
 
 interface ChatMessageProps {
   message: ChatMessageType;

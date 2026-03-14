@@ -1,4 +1,4 @@
-import { Input, Select } from '../../../components/ui';
+import { Input, Select } from '@/components/ui';
 
 export interface SchedulerScheduleState {
   scheduleType: 'interval' | 'daily' | 'once';

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';import { ButtonBase } from '../ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { cn } from '../../lib/utils';
 import { PROVIDERS } from '../../constants/registration';
 import type { ProviderName } from '../../types';
+import { ButtonBase } from '@/components/ui';
 
 interface ProviderSelectorProps {
   activeProvider: ProviderName;

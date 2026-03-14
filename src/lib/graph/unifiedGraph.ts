@@ -5,7 +5,7 @@ import type {
   GoogleSheetsServiceAccount,
 } from '@/types/googleSheets';
 
-export type UnifiedNodeKind = 'identity' | 'service' | 'account' | 'profile';
+export type UnifiedNodeKind = 'identity' | 'service' | 'account' | 'profile' | 'auth_method';
 
 export type UnifiedGraphNode = {
   id: string;
@@ -17,7 +17,10 @@ export type UnifiedGraphNode = {
 export type UnifiedGraphEdgeKind =
   | 'identity_to_service'
   | 'service_to_account'
-  | 'account_to_profile';
+  | 'account_to_profile'
+  | 'account_to_account'
+  | 'account_to_auth_method'
+  | 'auth_method_to_profile';
 
 export type UnifiedGraphEdge = {
   id: string;
@@ -93,6 +96,12 @@ export function buildUnifiedGraph(params: {
 
   const identities: GoogleSheetsIdentityNode[] = sheets?.identityGraph?.identities ?? [];
   const services: GoogleSheetsServiceAccount[] = sheets?.identityGraph?.services ?? [];
+  const accountLinks = sheets?.identityGraph?.accountLinks ?? [];
+  const profileLinks = sheets?.identityGraph?.profileLinks ?? [];
+  const authMethods = sheets?.identityGraph?.authMethods ?? [];
+  const accountAuthLinks = sheets?.identityGraph?.accountAuthLinks ?? [];
+  const accountNodeIdByProviderLogin = new Map<string, string>();
+  const authMethodNodeIdById = new Map<string, string>();
 
   if (!sheets) {
     diagnostics.reasons.push({
@@ -131,6 +140,12 @@ export function buildUnifiedGraph(params: {
 
   // Nodes: local accounts
   localAccounts.forEach(account => {
+    const providerNorm = normalizeProvider(account.provider);
+    const loginNorm = pickAccountLogin(account);
+    if (providerNorm && loginNorm) {
+      accountNodeIdByProviderLogin.set(`${providerNorm}:${loginNorm}`, nodeId.account(account.id));
+    }
+
     nodes.push({
       id: nodeId.account(account.id),
       kind: 'account',
@@ -150,6 +165,25 @@ export function buildUnifiedGraph(params: {
       kind: 'profile',
       label: alias,
       meta: { alias },
+    });
+  });
+
+  // Nodes: auth methods
+  authMethods.forEach(method => {
+    const authNodeId = `auth_method:${method.id}`;
+    authMethodNodeIdById.set(method.id, authNodeId);
+    nodes.push({
+      id: authNodeId,
+      kind: 'auth_method',
+      label: `${method.authType}:${method.provider}`,
+      meta: {
+        authMethodId: method.id,
+        authType: method.authType,
+        provider: method.provider,
+        clientName: method.clientName,
+        status: method.status,
+        keyFingerprint: method.keyFingerprint,
+      },
     });
   });
 
@@ -210,19 +244,108 @@ export function buildUnifiedGraph(params: {
     });
   });
 
-  // Edge: local account -> profile (existing rule: profile alias matches account email)
-  const profilesByAlias = new Set(localProfiles.map(a => norm(a)));
-  localAccounts.forEach(account => {
-    const alias = account.email;
-    if (!profilesByAlias.has(norm(alias))) return;
-    diagnostics.matchedAccountToProfile += 1;
-    edges.push({
-      id: `edge:account_to_profile:${account.id}:${alias}`,
-      kind: 'account_to_profile',
-      fromId: nodeId.account(account.id),
-      toId: nodeId.profile(alias),
-      label: 'profile alias',
+  // Edge: account -> profile (prefer PROFILE_LINKS sheet, fallback to legacy alias==email heuristic)
+  if (profileLinks.length > 0) {
+    const profileAliases = new Set(localProfiles.map(alias => norm(alias)));
+    profileLinks.forEach(link => {
+      const accountId = accountNodeIdByProviderLogin.get(
+        `${normalizeProvider(link.accountProvider)}:${norm(link.accountLogin)}`
+      );
+      if (!accountId) return;
+
+      const alias = link.profileAlias;
+      if (!profileAliases.has(norm(alias))) return;
+
+      diagnostics.matchedAccountToProfile += 1;
+      edges.push({
+        id: `edge:account_to_profile:${link.id}`,
+        kind: 'account_to_profile',
+        fromId: accountId,
+        toId: nodeId.profile(alias),
+        label: link.relation || 'profile link',
+        meta: {
+          profilePath: link.profilePath,
+          status: link.status,
+          source: 'PROFILE_LINKS',
+        },
+      });
     });
+  } else {
+    const profilesByAlias = new Set(localProfiles.map(a => norm(a)));
+    localAccounts.forEach(account => {
+      const alias = account.email;
+      if (!profilesByAlias.has(norm(alias))) return;
+      diagnostics.matchedAccountToProfile += 1;
+      edges.push({
+        id: `edge:account_to_profile:${account.id}:${alias}`,
+        kind: 'account_to_profile',
+        fromId: nodeId.account(account.id),
+        toId: nodeId.profile(alias),
+        label: 'profile alias',
+      });
+    });
+  }
+
+  // Edge: account -> account from ACCOUNT_LINKS
+  accountLinks.forEach(link => {
+    const fromId = accountNodeIdByProviderLogin.get(
+      `${normalizeProvider(link.fromProvider)}:${norm(link.fromLogin)}`
+    );
+    const toId = accountNodeIdByProviderLogin.get(
+      `${normalizeProvider(link.toProvider)}:${norm(link.toLogin)}`
+    );
+
+    if (!fromId || !toId) return;
+
+    edges.push({
+      id: `edge:account_to_account:${link.id}`,
+      kind: 'account_to_account',
+      fromId,
+      toId,
+      label: link.relation,
+      meta: {
+        status: link.status,
+        confidence: link.confidence,
+        source: 'ACCOUNT_LINKS',
+      },
+    });
+  });
+
+  // Edge: account -> auth method and auth method -> profile
+  accountAuthLinks.forEach(link => {
+    const accountId = accountNodeIdByProviderLogin.get(
+      `${normalizeProvider(link.accountProvider)}:${norm(link.accountLogin)}`
+    );
+    const authNodeId = authMethodNodeIdById.get(link.authMethodId);
+
+    if (!accountId || !authNodeId) return;
+
+    edges.push({
+      id: `edge:account_to_auth_method:${link.id}`,
+      kind: 'account_to_auth_method',
+      fromId: accountId,
+      toId: authNodeId,
+      label: link.channel,
+      meta: {
+        status: link.status,
+        clientName: link.clientName,
+        source: 'ACCOUNT_AUTH_LINKS',
+      },
+    });
+
+    if (link.profileAlias && norm(link.channel) === 'browser') {
+      edges.push({
+        id: `edge:auth_method_to_profile:${link.id}`,
+        kind: 'auth_method_to_profile',
+        fromId: authNodeId,
+        toId: nodeId.profile(link.profileAlias),
+        label: 'browser_session',
+        meta: {
+          status: link.status,
+          source: 'ACCOUNT_AUTH_LINKS',
+        },
+      });
+    }
   });
 
   if (diagnostics.identities === 0) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input, Select, Textarea, Toggle, Button } from '../../../components/ui';
+
 import type { Schedule, TaskType } from '../../../types/generated';
 import { SchedulerScenarioPicker } from './SchedulerScenarioPicker';
 import { listComposedFlows, type ComposedFlowItem } from '../../../lib/tauri/modules/pythonJobs';
@@ -14,6 +14,7 @@ import { SchedulerScheduleSection, type SchedulerScheduleState } from './Schedul
 import { compileComposedFlow } from '../../../lib/scenarioFlow/compiler';
 import type { ComposedFlow } from '../../../lib/scenarioFlow/types';
 import { formatProfileAliasOptionLabel } from '../../../lib/profiles/displayName';
+import { Button, Input, Select, Textarea, Toggle } from '@/components/ui';
 
 const SCHEDULER_FLOW_CACHE_KEY = 'scheduler:currentComposedFlow';
 

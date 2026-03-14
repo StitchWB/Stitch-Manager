@@ -80,6 +80,7 @@ describe('compileComposedFlow', () => {
     expect(compiled.diagnostics).toHaveLength(0);
 
     expect(compiled.segments[0]).toMatchObject({
+      nodeId: 'n1',
       index: 1,
       total: 2,
       alias: 'alias-a',
@@ -93,6 +94,7 @@ describe('compileComposedFlow', () => {
     });
 
     expect(compiled.segments[1]).toMatchObject({
+      nodeId: 'n3',
       index: 2,
       total: 2,
       alias: 'alias-b',
@@ -136,5 +138,51 @@ describe('compileComposedFlow', () => {
     expect(compiled.diagnostics).toEqual(
       expect.arrayContaining(['Node Broken: missing alias', 'Node Broken: missing scenarioPath'])
     );
+  });
+
+  it('follows explicit nextNodeId graph order when links are configured', () => {
+    const flow: ComposedFlow = {
+      id: 'flow-graph',
+      alias: 'alias-graph',
+      name: 'Graph flow',
+      version: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      defaults: {
+        alias: 'alias-graph',
+      },
+      inputDefaults: {},
+      dataLists: [],
+      nodes: [
+        {
+          id: 'a',
+          type: 'runScenario',
+          name: 'A',
+          scenarioPath: 'C:/tmp/a.json',
+          nextNodeId: 'c',
+          bindings: {},
+        },
+        {
+          id: 'b',
+          type: 'runScenario',
+          name: 'B',
+          scenarioPath: 'C:/tmp/b.json',
+          bindings: {},
+        },
+        {
+          id: 'c',
+          type: 'runScenario',
+          name: 'C',
+          scenarioPath: 'C:/tmp/c.json',
+          nextNodeId: 'b',
+          bindings: {},
+        },
+      ],
+    };
+
+    const compiled = compileComposedFlow(flow);
+    expect(compiled.entryNodeId).toBe('a');
+    expect(compiled.segments.map(s => s.nodeId)).toEqual(['a', 'c', 'b']);
+    expect(compiled.diagnostics).toHaveLength(0);
   });
 });

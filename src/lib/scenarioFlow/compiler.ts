@@ -127,6 +127,7 @@ const compileNode = (
   }
 
   return {
+    nodeId: node.id,
     index: 0,
     total: 0,
     name: node.name,
@@ -140,8 +141,74 @@ const compileNode = (
       password: effectiveContext.credentials?.password ?? null,
     },
     continueOnError: Boolean(node.continueOnError),
+    nextOnSuccessNodeId: node.nextNodeId ?? null,
+    nextOnErrorNodeId:
+      node.type === 'runScenario'
+        ? (node.errorNextNodeId ?? (node.continueOnError ? (node.nextNodeId ?? null) : null))
+        : null,
     resolvedVariables,
   };
+};
+
+const resolveNodeOrder = (flow: ComposedFlow, diagnostics: string[]): ComposedFlowNode[] => {
+  const nodes = flow.nodes ?? [];
+  if (nodes.length < 2) return nodes;
+  const hasExplicitLinks = nodes.some(node => Boolean(node.nextNodeId));
+  if (!hasExplicitLinks) {
+    return nodes;
+  }
+
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const incoming = new Set<string>();
+  for (const node of nodes) {
+    if (node.nextNodeId && byId.has(node.nextNodeId)) {
+      incoming.add(node.nextNodeId);
+    }
+  }
+
+  const firstByList = nodes[0]?.id;
+  const graphStart = nodes.find(node => !incoming.has(node.id))?.id;
+  const startId = (firstByList && byId.has(firstByList) ? firstByList : null) ?? graphStart;
+  if (!startId) return nodes;
+
+  const ordered: ComposedFlowNode[] = [];
+  const visited = new Set<string>();
+  let cursor: string | null = startId;
+
+  while (cursor && byId.has(cursor) && !visited.has(cursor)) {
+    const node = byId.get(cursor);
+    if (!node) break;
+    ordered.push(node);
+    visited.add(cursor);
+
+    if (node.nextNodeId && !byId.has(node.nextNodeId)) {
+      diagnostics.push(`Node ${node.name}: nextNodeId '${node.nextNodeId}' not found`);
+      cursor = null;
+      break;
+    }
+
+    const nextId = node.nextNodeId ?? null;
+    if (!nextId) {
+      cursor = null;
+      break;
+    }
+    cursor = nextId;
+  }
+
+  if (cursor && visited.has(cursor)) {
+    diagnostics.push(`Cycle detected near node '${cursor}'. Falling back to list order.`);
+    return nodes;
+  }
+
+  if (ordered.length < nodes.length) {
+    const remaining = nodes.filter(node => !visited.has(node.id));
+    diagnostics.push(
+      `Graph order covered ${ordered.length}/${nodes.length} nodes. Appending ${remaining.length} unlinked node(s) by list order.`
+    );
+    return [...ordered, ...remaining];
+  }
+
+  return ordered;
 };
 
 export const compileComposedFlow = (
@@ -162,8 +229,9 @@ export const compileComposedFlow = (
   const cursors: ListCursorState = {};
   let currentContext = mergeContext(flow.defaults, options.contextOverride);
   const segments: CompiledFlowSegment[] = [];
+  const orderedNodes = resolveNodeOrder(flow, diagnostics);
 
-  for (const node of flow.nodes ?? []) {
+  for (const node of orderedNodes) {
     if (node.type === 'switchContext') {
       currentContext = mergeContext(currentContext, node.context);
       continue;
@@ -187,6 +255,7 @@ export const compileComposedFlow = (
   return {
     flowId: flow.id,
     flowName: flow.name,
+    entryNodeId: orderedNodes[0]?.id ?? null,
     createdAt: new Date().toISOString(),
     segments,
     diagnostics,

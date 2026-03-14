@@ -44,6 +44,11 @@ export type FlowBinding =
 export interface FlowNodeBase {
   id: string;
   name: string;
+  layout?: {
+    x: number;
+    y: number;
+  };
+  nextNodeId?: string | null;
 }
 
 export interface FlowSwitchContextNode extends FlowNodeBase {
@@ -56,6 +61,7 @@ export interface FlowRunScenarioNode extends FlowNodeBase {
   scenarioPath: string;
   startUrl?: string | null;
   continueOnError?: boolean;
+  errorNextNodeId?: string | null;
   contextOverride?: Partial<FlowExecutionContext>;
   bindings: Record<string, FlowBinding>;
 }
@@ -81,6 +87,7 @@ export interface CompileFlowOptions {
 }
 
 export interface CompiledFlowSegment {
+  nodeId: string;
   index: number;
   total: number;
   name: string;
@@ -94,12 +101,15 @@ export interface CompiledFlowSegment {
     password?: string | null;
   };
   continueOnError: boolean;
+  nextOnSuccessNodeId?: string | null;
+  nextOnErrorNodeId?: string | null;
   resolvedVariables: Record<string, string>;
 }
 
 export interface CompiledFlowPlan {
   flowId: string;
   flowName: string;
+  entryNodeId?: string | null;
   createdAt: string;
   segments: CompiledFlowSegment[];
   diagnostics: string[];

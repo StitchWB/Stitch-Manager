@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Check, AlertCircle, Copy, RefreshCw } from 'lucide-react';
-import { Button, Select, ButtonBase } from '../ui';
+
 import {
   detectAiProxyIdes,
   configureAiProxyIdeForProvider,
@@ -21,6 +21,7 @@ import {
   getProviderProfile,
 } from '../../lib/providering';
 import { t } from '../../lib/i18n';
+import { Button, ButtonBase, Select } from '@/components/ui';
 
 // Type definition for AI Proxy detected IDE
 interface AiProxyDetectedIde {

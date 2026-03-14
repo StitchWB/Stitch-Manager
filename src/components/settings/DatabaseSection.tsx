@@ -1,8 +1,9 @@
-import { Database, Copy } from 'lucide-react';import { ButtonBase } from '../ui';
+import { Database, Copy } from 'lucide-react';
 
-import { SectionHeader } from '../ui/SectionHeader';
+
 import { Tooltip } from '../Tooltip';
 import { t } from '../../lib/i18n';
+import { ButtonBase, SectionHeader } from '@/components/ui';
 
 interface DatabaseSectionProps {
   dbPath: string;

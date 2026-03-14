@@ -54,6 +54,7 @@
     "test:unit": "npm run test:ts && pytest python/tests -m unit",
     "test:integration": "pytest python/tests -m integration",
     "lint:ui-kit": "eslint \"src/**/*.tsx\" --rule \"@typescript-eslint/no-unused-vars:off\" --rule \"@typescript-eslint/no-explicit-any:off\" --rule \"no-console:off\" --rule \"react-hooks/exhaustive-deps:off\"",
+    "lint:ui-imports": "eslint \"src/**/*.{ts,tsx}\" --rule \"@typescript-eslint/no-unused-vars:off\" --rule \"@typescript-eslint/no-explicit-any:off\" --rule \"no-console:off\" --rule \"react-hooks/exhaustive-deps:off\" --rule \"react/forbid-elements:off\" --rule \"no-restricted-syntax:off\" --rule \"react-hooks/rules-of-hooks:off\" --rule \"no-useless-escape:off\"",
     "lint:ui-kit:strict": "eslint \"src/**/*.tsx\" --rule \"@typescript-eslint/no-unused-vars:off\" --rule \"@typescript-eslint/no-explicit-any:off\" --rule \"no-console:off\" --rule \"react-hooks/exhaustive-deps:off\" --rule \"react/forbid-elements:error\"",
     "codemod:ui-kit:buttons": "node scripts/codemod-ui-kit-buttons.cjs",
     "codemod:ui-kit:buttons:dry": "node scripts/codemod-ui-kit-buttons.cjs --dry-run"
@@ -73,6 +74,7 @@
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "reactflow": "^11.11.4",
     "react-router-dom": "^6.28.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",

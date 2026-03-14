@@ -16,13 +16,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { t } from '../../lib/i18n';
-import { Tooltip } from '../ui/Tooltip';
-import { LoadingSpinner, ButtonBase } from '../ui';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { Checkbox } from '../ui/Checkbox';
-import { Select } from '../ui/Select';
-import { SegmentedControl } from '../ui/SegmentedControl';
+
+
+
+
+
+
+
 import PromptEditor from '../PromptEditor';
 import { AiProxySettings } from '../settings/AiProxySettings';
 import {
@@ -40,6 +40,7 @@ import type { KiroPatchConfig } from '../../types/kiro-patch';
 import type { Account } from '../../types';
 import type { SettingsData } from '../../types/generated';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
+import { Button, ButtonBase, Checkbox, Input, LoadingSpinner, SegmentedControl, Select, Tooltip } from '@/components/ui';
 
 const isKiroLogLevel = (value: string): value is KiroPatchConfig['logLevel'] => {
   return value === 'debug' || value === 'info' || value === 'warn' || value === 'error';

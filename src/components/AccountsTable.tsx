@@ -6,8 +6,7 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
 import type { AccountsTableVisibleColumns } from '../stores/uiPreferences';
 import { AccountRow } from './accounts/AccountRow';
-import AccountDetailsModal from './ui/AccountDetailsModal';
-import { ConfirmDialog } from './ui/ConfirmDialog';
+import { AccountDetailsModal, ConfirmDialog } from '@/components/ui';
 import {
   Badge,
   Button,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { GlassCard } from '../ui/GlassCard';
-import { Toggle } from '../ui/Toggle';
-import { NumberInput } from '../ui/NumberInput';
+
+
+
 import { getSettings, updateSettings, getRegistrationStatus } from '@/lib/tauri';
 import { useRegistrationStore } from '../../stores/registration';
 import { useAccountsStore } from '../../stores/accounts';
@@ -10,7 +10,7 @@ import {
   getProxySettings,
   updateProxySettings,
 } from '../../lib/tauri/modules/aiProxy';
-import { Select } from '../ui/Select';
+
 import {
   RefreshCw,
   Shield,
@@ -25,9 +25,10 @@ import {
 import { t } from '../../lib/i18n';
 import { RegistrationStatus, ProxySettings, AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
-import { StatusBadge } from '../ui/StatusBadge';
-import { ModuleCard, ModuleStatus } from '../ui/ModuleCard';
-import { SectionHeader } from '../ui/SectionHeader';
+import { GlassCard, ModuleCard, ModuleStatus, NumberInput, SectionHeader, Select, StatusBadge, Toggle } from '@/components/ui';
+
+
+
 
 interface AutomationConfig {
   autoReplenishEnabled: boolean;

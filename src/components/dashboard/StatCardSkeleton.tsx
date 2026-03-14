@@ -1,5 +1,6 @@
 import React from 'react';
-import { SkeletonLoader } from '../ui';
+import { SkeletonLoader } from '@/components/ui';
+
 
 export const StatCardSkeleton = React.memo(function StatCardSkeleton() {
   return (

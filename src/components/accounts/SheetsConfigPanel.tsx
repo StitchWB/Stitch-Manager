@@ -1,5 +1,5 @@
 import { t } from '../../lib/i18n';
-import { FormField } from '../ui/FormField';
+import { FormField } from '@/components/ui';
 
 interface SheetsConfigPanelProps {
   spreadsheetId: string;

@@ -1,7 +1,8 @@
 import { HelpCircle } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { Tooltip } from '../Tooltip';
-import { Checkbox, ButtonBase } from '../ui';
+import { ButtonBase, Checkbox } from '@/components/ui';
+
 
 interface PatchOption {
   id: string;

@@ -1,10 +1,11 @@
 import { Globe, Info, CheckCircle2, AlertCircle, List } from 'lucide-react';
-import { SectionHeader } from '../ui/SectionHeader';
-import { Checkbox, Input, Toggle, ButtonBase } from '../ui';
+
+
 import { t } from '../../lib/i18n';
 import { validateProxyString, parseProxyString } from '../../lib/proxyUtils';
 import { useState, useEffect } from 'react';
 import { ProxyListManager } from './ProxyListManager';
+import { ButtonBase, Checkbox, Input, SectionHeader, Toggle } from '@/components/ui';
 
 interface ProxyItem {
   id: string;

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { X, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { Button, EmptyState, ButtonBase } from '../../../components/ui';
+
 import { useSchedulerStore } from '../../../stores/scheduler';
 import type { TaskExecution } from '../../../types/generated';
 import { formatDistanceToNow } from 'date-fns';
+import { Button, ButtonBase, EmptyState } from '@/components/ui';
 
 interface TaskExecutionHistoryProps {
   taskId: number;

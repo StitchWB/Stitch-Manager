@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Trash2, Upload, Save, AlertCircle, CheckCircle2, Globe, Eye, EyeOff } from 'lucide-react';
 
-import { SectionHeader } from '../ui/SectionHeader';
-import { Button, Input, Select, Textarea, Toggle } from '../ui';
+import { SectionHeader, Button, Input, Select, Textarea, Toggle } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import {
-  createProxyLibraryEntry,
+  createOrGetProxyLibraryEntry,
   deleteProxyLibraryEntry,
   getProxyLibraryUsage,
   importProxyLibraryBulk,
   listProxyLibrary,
+  parseProxyLibraryInput,
+  previewProxyLibraryBulk,
   ProxyLibraryError,
+  testProxyLibraryDraft,
   updateProxyLibraryEntry,
   type ProxyLibraryDraft,
   type ProxyLibraryEntry,
@@ -74,6 +76,11 @@ export function ProxyLibrarySection() {
 
   const [showSecrets, setShowSecrets] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [quickInput, setQuickInput] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testingEntryId, setTestingEntryId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,17 +113,86 @@ export function ProxyLibrarySection() {
     setEditDraft(defaultDraft);
   };
 
-  const handleCreate = async () => {
+  const handleQuickParse = async () => {
+    const raw = quickInput.trim();
+    if (!raw) return;
+    setQuickBusy(true);
+    setError(null);
+    try {
+      const parsed = await parseProxyLibraryInput({ raw, defaultType: createDraft.proxyType });
+      setCreateDraft(prev => ({
+        ...prev,
+        host: parsed.host || prev.host,
+        port: parsed.port || prev.port,
+        proxyType: parsed.proxyType || prev.proxyType,
+        username: parsed.username ?? null,
+        password: parsed.password ?? null,
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('proxyLibrary.parseError'));
+    } finally {
+      setQuickBusy(false);
+    }
+  };
+
+  const handleCreateOrGet = async () => {
     setCreating(true);
     setError(null);
     try {
-      const created = await createProxyLibraryEntry(normalizeDraft(createDraft));
-      setItems(prev => [...prev, created]);
+      const created = await createOrGetProxyLibraryEntry(normalizeDraft(createDraft));
+      setItems(prev => {
+        if (prev.some(it => it.id === created.id)) return prev;
+        return [...prev, created];
+      });
       setCreateDraft(defaultDraft);
+      setQuickInput('');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('proxyLibrary.createError'));
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleTestCreateDraft = async () => {
+    setTestBusy(true);
+    setTestResult(null);
+    setError(null);
+    try {
+      const result = await testProxyLibraryDraft(normalizeDraft(createDraft));
+      if (result.entry) {
+        setItems(prev => prev.map(it => (it.id === result.entry?.id ? result.entry : it)));
+      }
+      if (result.success) {
+        setTestResult(
+          `OK${result.responseTimeMs != null ? ` • ${result.responseTimeMs}ms` : ''}${
+            result.ip ? ` • ${result.ip}` : ''
+          }${result.location ? ` • ${result.location}` : ''}`
+        );
+      } else {
+        setTestResult(`FAIL${result.error ? ` • ${result.error}` : ''}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('proxyLibrary.testError'));
+    } finally {
+      setTestBusy(false);
+    }
+  };
+
+  const handleTestEntry = async (entry: ProxyLibraryEntry) => {
+    setTestingEntryId(entry.id);
+    setError(null);
+    try {
+      const result = await testProxyLibraryDraft(normalizeDraft(toDraft(entry)), {
+        proxyLibraryId: entry.id,
+        persistResult: true,
+      });
+      if (result.entry) {
+        setItems(prev => prev.map(it => (it.id === result.entry?.id ? result.entry : it)));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('proxyLibrary.testError'));
+    } finally {
+      setTestingEntryId(null);
     }
   };
 
@@ -256,6 +332,25 @@ export function ProxyLibrarySection() {
     }
   };
 
+  const handleBulkPreview = async () => {
+    if (!bulkText.trim()) return;
+    setBulkLoading(true);
+    setError(null);
+    setBulkResult(null);
+    try {
+      const result = await previewProxyLibraryBulk({
+        text: bulkText,
+        defaultType: bulkType,
+        defaultEnabled: bulkEnabled,
+      });
+      setBulkResult(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('proxyLibrary.importError'));
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const renderDraftForm = (
     draft: ProxyLibraryDraft,
     setDraft: (value: ProxyLibraryDraft) => void,
@@ -357,6 +452,26 @@ export function ProxyLibrarySection() {
     >
       <div className="space-y-4">
         <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+          <div className="text-sm font-medium text-slate-200 mb-3">
+            {t('proxyLibrary.quickAddTitle')}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 mb-3">
+            <Input
+              label={t('proxyLibrary.quickInputLabel')}
+              value={quickInput}
+              onChange={e => setQuickInput(e.target.value)}
+              placeholder={t('proxyLibrary.quickInputPlaceholder')}
+            />
+            <div className="flex items-end">
+              <Button
+                onClick={() => void handleQuickParse()}
+                disabled={quickBusy || !quickInput.trim()}
+              >
+                {t('proxyLibrary.quickParse')}
+              </Button>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="text-sm font-medium text-slate-200">{t('proxyLibrary.importBulk')}</div>
             <div className="flex items-center gap-2">
@@ -400,13 +515,22 @@ export function ProxyLibrarySection() {
             </div>
 
             <div className="flex items-end justify-end">
-              <Button
-                onClick={() => void handleBulkImport()}
-                disabled={bulkLoading || !bulkText.trim()}
-              >
-                <Upload className="w-4 h-4 mr-1" />
-                {bulkLoading ? t('proxyLibrary.importing') : t('proxyLibrary.import')}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleBulkPreview()}
+                  disabled={bulkLoading || !bulkText.trim()}
+                >
+                  {t('proxyLibrary.bulkPreview')}
+                </Button>
+                <Button
+                  onClick={() => void handleBulkImport()}
+                  disabled={bulkLoading || !bulkText.trim()}
+                >
+                  <Upload className="w-4 h-4 mr-1" />
+                  {bulkLoading ? t('proxyLibrary.importing') : t('proxyLibrary.import')}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -436,10 +560,21 @@ export function ProxyLibrarySection() {
         {renderDraftForm(
           createDraft,
           setCreateDraft,
-          t('proxyLibrary.addProxy'),
-          () => void handleCreate(),
+          t('proxyLibrary.addOrLinkProxy'),
+          () => void handleCreateOrGet(),
           creating
         )}
+        <div className="flex items-center gap-2">
+          <Button
+            size="xs"
+            variant="secondary"
+            onClick={() => void handleTestCreateDraft()}
+            disabled={testBusy}
+          >
+            {testBusy ? t('proxyLibrary.testingDraft') : t('proxyLibrary.testDraft')}
+          </Button>
+          {testResult ? <div className="text-xs text-slate-300">{testResult}</div> : null}
+        </div>
 
         <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
           <div className="text-sm font-medium text-slate-200 mb-3">{t('proxyLibrary.entries')}</div>
@@ -504,6 +639,17 @@ export function ProxyLibrarySection() {
                             {entry.username ? `:${showSecrets ? entry.username : '***'}` : ''}
                             {entry.password ? `:${showSecrets ? entry.password : '***'}` : ''}
                           </div>
+                          <div className="text-[11px] text-slate-500 mt-1">
+                            {entry.lastTestOk === true
+                              ? `${t('proxyLibrary.testStatusOk')}${entry.lastTestLatencyMs != null ? ` • ${entry.lastTestLatencyMs}ms` : ''}${
+                                  entry.lastTestAt ? ` • ${entry.lastTestAt}` : ''
+                                }`
+                              : entry.lastTestOk === false
+                                ? `${t('proxyLibrary.testStatusFail')}${entry.lastTestError ? ` • ${entry.lastTestError}` : ''}${
+                                    entry.lastTestAt ? ` • ${entry.lastTestAt}` : ''
+                                  }`
+                                : t('proxyLibrary.testStatusNone')}
+                          </div>
                           {entry.notes ? (
                             <div className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">
                               {entry.notes}
@@ -523,6 +669,16 @@ export function ProxyLibrarySection() {
                               ? t('proxyLibrary.statusEnabled')
                               : t('proxyLibrary.statusDisabled')}
                           </div>
+                          <Button
+                            variant="secondary"
+                            className="h-8 px-2"
+                            onClick={() => void handleTestEntry(entry)}
+                            disabled={testingEntryId === entry.id}
+                          >
+                            {testingEntryId === entry.id
+                              ? t('proxyLibrary.testingEntry')
+                              : t('proxyLibrary.testEntry')}
+                          </Button>
                           <Button
                             variant="ghost"
                             className="h-8 px-2"

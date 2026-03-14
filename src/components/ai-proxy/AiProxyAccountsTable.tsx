@@ -1,12 +1,9 @@
 import { useMemo, useState } from 'react';
 import { PlugZap, Trash2, PenSquare, ChevronRight } from 'lucide-react';
-import { ButtonBase } from '../ui';
+import { ButtonBase, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui';
 
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
-import { ProviderLogo } from '../ui/ProviderLogo';
-import { StatusBadge } from '../ui/StatusBadge';
-import { UsageBar } from '../ui/UsageBar';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
 

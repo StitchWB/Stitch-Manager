@@ -13,9 +13,7 @@ import {
   type WaitForEmailOptions,
 } from '../../lib/tauri/modules/emailInbox';
 import type { IMAPConfig } from '../../stores/registration/types';
-import { Input } from '../ui/Input';
-import { Select } from '../ui/Select';
-import { Button } from '../ui/Button';
+import { Input, Select, Button } from '@/components/ui';
 import { Mail, Search, Timer, Trash2, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 

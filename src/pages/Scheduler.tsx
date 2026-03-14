@@ -13,18 +13,7 @@ import {
   CopyPlus,
   Pencil,
 } from 'lucide-react';
-import {
-  Button,
-  IconButton,
-  Toggle,
-  EmptyState,
-  GlassCard,
-  StatCard,
-  StatusBadge,
-  ProgressBar,
-  Modal,
-  ConfirmDialog,
-} from '../components/ui';
+
 import { useSchedulerStore } from '../stores/scheduler';
 import { TaskType, Schedule } from '../types/generated';
 import { CreateTaskModal } from './Scheduler/components/CreateTaskModal';
@@ -41,6 +30,7 @@ import {
 } from './Scheduler/components/SchedulerTaskForm';
 import { formatDistanceToNow } from 'date-fns';
 import type { SchedulerTemplate } from '../lib/tauri/modules/scheduler';
+import { Button, ConfirmDialog, EmptyState, GlassCard, IconButton, Modal, ProgressBar, StatCard, StatusBadge, Toggle } from '@/components/ui';
 
 function parseJsonObject(raw: string): Record<string, unknown> {
   try {

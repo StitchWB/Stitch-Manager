@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Button, Modal } from '../../../components/ui';
+
 import { useSchedulerStore } from '../../../stores/scheduler';
 import {
   SchedulerTaskForm,
@@ -14,6 +14,7 @@ import {
   SchedulerTaskCreationModeSection,
   type SchedulerTaskCreateMode,
 } from './SchedulerTaskCreationModeSection';
+import { Button, Modal } from '@/components/ui';
 
 interface CreateTaskModalProps {
   onClose: () => void;

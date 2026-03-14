@@ -1,7 +1,8 @@
 import { Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
-import { Input, ButtonBase } from '../ui';
+import { ButtonBase, Input } from '@/components/ui';
+
 
 interface LaunchPadProps {
   count: number;

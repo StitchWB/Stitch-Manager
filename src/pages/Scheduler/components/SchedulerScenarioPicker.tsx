@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Input, Select } from '../../../components/ui';
+
 import {
   listRecordedScenarios,
   type ScenarioRecordItem,
 } from '../../../lib/tauri/modules/pythonJobs';
 import { listFingerprintProfiles } from '../../../lib/tauri/modules/profiles';
 import { formatProfileAlias } from '../../../lib/profiles/displayName';
+import { Button, Input, Select } from '@/components/ui';
 
 interface SchedulerScenarioPickerProps {
   profileAlias: string;

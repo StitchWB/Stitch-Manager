@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Modal, Button, IconButton } from '../ui';
+
 import {
   startOAuthFlowSafe,
   pollOAuthStatusSafe,
   openUrlInBrowser,
 } from '../../lib/tauri/modules/aiProxy';
 import { ExternalLink, Loader2, Copy, Check } from 'lucide-react';
+import { Button, IconButton, Modal } from '@/components/ui';
 
 interface OAuthModalProps {
   isOpen: boolean;

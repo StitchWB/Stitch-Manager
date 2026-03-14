@@ -3,8 +3,9 @@ import { Bell, Globe, X, Info, CheckCircle, AlertTriangle, AlertCircle } from 'l
 import { useAppStore } from '../../stores/app';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
-import { IconButton } from '../ui/IconButton';
-import { ButtonBase } from '../ui/ButtonBase';
+import { ButtonBase, IconButton } from '@/components/ui';
+
+
 
 const languages = [
   { code: 'en', label: 'English' },

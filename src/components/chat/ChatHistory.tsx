@@ -1,10 +1,11 @@
 import { useRef, useEffect } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
-import { EmptyState } from '../ui';
-import { LoadingSpinner } from '../ui';
+
+
 import { t } from '../../lib/i18n';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
+import { EmptyState, LoadingSpinner } from '@/components/ui';
 
 interface ChatHistoryProps {
   messages: ChatMessageType[];

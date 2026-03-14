@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Wifi } from 'lucide-react';
-import { Button, Input, Checkbox, ButtonBase } from '../ui';
+
 import { parseProxyString, validateProxyString } from '../../lib/proxyUtils';
 import { invoke } from '@tauri-apps/api/core';
+import { Button, ButtonBase, Checkbox, Input } from '@/components/ui';
 
 interface ProxyItem {
   id: string;

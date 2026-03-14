@@ -2,12 +2,13 @@ import { Globe, Trash2, Settings, FolderKanban } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { t } from '../lib/i18n';
-import { Button, EmptyState } from './ui';
+
 import { LayoutGrid } from 'lucide-react';
 import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
 import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
 import { getProfileSettings } from '@/lib/tauri/modules/profiles';
 import { ProfileScenariosPanel } from './scenarioRecorder/ProfileScenariosPanel';
+import { Button, EmptyState } from '@/components/ui';
 
 export interface ProfileItem {
   alias: string;

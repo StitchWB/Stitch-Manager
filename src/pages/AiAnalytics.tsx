@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Activity, TrendingUp, DollarSign, Clock, BarChart3 } from 'lucide-react';
 import Header from '../components/layout/Header';
-import { StatCard, Button, EmptyState } from '../components/ui';
+
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import {
   getDailyStats,
@@ -11,6 +11,7 @@ import {
 } from '../lib/tauri/modules/aiProxy';
 import type { DailyStats, ModelUsage, DailyStatsPoint } from '../types/generated';
 import { t } from '../lib/i18n';
+import { Button, EmptyState, StatCard } from '@/components/ui';
 
 export default function AiAnalytics() {
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);

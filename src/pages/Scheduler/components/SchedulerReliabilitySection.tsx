@@ -1,4 +1,4 @@
-import { Input, Toggle } from '../../../components/ui';
+import { Input, Toggle } from '@/components/ui';
 
 export interface SchedulerReliabilityState {
   retryEnabled: boolean;

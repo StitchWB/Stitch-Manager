@@ -3,18 +3,8 @@ import { AlertTriangle, FileSpreadsheet, Search, Table } from 'lucide-react';
 
 import type { GoogleSheetsDataset, GoogleSheetsSheet, GoogleSheetsRow } from '@/types/googleSheets';
 import { cn } from '@/lib/utils';
-import {
-  EmptyState,
-  FilterDropdown,
-  Input,
-  ButtonBase,
-  Table as UITable,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../ui';
+import { ButtonBase, EmptyState, FilterDropdown, Input, TableBody, TableCell, TableHead, TableHeader, TableRow, UITable } from '@/components/ui';
+
 
 type SheetFilterOption = 'all' | string;
 

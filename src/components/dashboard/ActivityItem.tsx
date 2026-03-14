@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
-import { LoadingSpinner } from '../ui';
+import { LoadingSpinner } from '@/components/ui';
+
 
 interface ActivityItemProps {
   status: 'success' | 'pending' | 'failed';

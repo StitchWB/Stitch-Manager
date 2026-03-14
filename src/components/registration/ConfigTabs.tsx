@@ -1,5 +1,6 @@
 import { User, Settings2, Wifi, Repeat, Inbox } from 'lucide-react';
-import { TabButton } from '../ui/TabButton';
+import { TabButton } from '@/components/ui';
+
 
 export type ConfigTab = 'identity' | 'engine' | 'network' | 'automation' | 'inbox';
 

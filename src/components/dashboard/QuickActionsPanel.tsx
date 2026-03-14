@@ -1,7 +1,8 @@
 import React from 'react';
 import { Play, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react';
-import { Button } from '../ui/Button';
+
 import { t } from '../../lib/i18n';
+import { Button } from '@/components/ui';
 
 interface QuickActionsPanelProps {
   onStartRegistration: () => void;

@@ -1,4 +1,4 @@
-import { SegmentedControl } from '../ui';
+import { SegmentedControl } from '@/components/ui';
 
 interface PatchVersion {
   id: string;

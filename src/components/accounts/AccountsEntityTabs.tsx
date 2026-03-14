@@ -1,5 +1,5 @@
 import { Users, LayoutGrid } from 'lucide-react';
-import { TabButton } from '../ui/TabButton';
+import { TabButton } from '@/components/ui';
 import { t } from '../../lib/i18n';
 
 export type AccountsEntityTab = 'accounts' | 'profiles';

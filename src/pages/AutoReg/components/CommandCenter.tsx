@@ -1,5 +1,5 @@
-import { type IdentityConfig } from '../../../components/ui/IdentitySystemCard';
-import { type NetworkConfig } from '../../../components/ui/NetworkCard';
+
+
 import {
   ProviderSelector,
   ConfigTabs,
@@ -17,6 +17,7 @@ import { type SaveStatus } from '../../../stores/registration/types';
 import type { IMAPConfig } from '../../../stores/registration/types';
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { type IdentityConfig, type NetworkConfig } from '@/components/ui';
 
 interface CommandCenterProps {
   // Provider

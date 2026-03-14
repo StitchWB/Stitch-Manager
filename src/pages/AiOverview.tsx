@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Settings2, Database, Activity, Zap, Orbit, Key } from 'lucide-react';
 import Header from '../components/layout/Header';
-import { Button } from '../components/ui';
+
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { t } from '../lib/i18n';
+import { Button } from '@/components/ui';
 
 interface HubCard {
   title: string;

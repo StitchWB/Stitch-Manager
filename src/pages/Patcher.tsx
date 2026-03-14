@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';import { ButtonBase } from '../components/ui';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Search, AlertCircle, XCircle, Code, Settings as SettingsIcon, Code2 } from 'lucide-react';
 import Header from '../components/layout/Header';
@@ -14,9 +14,10 @@ import {
   BackupsList,
   PatcherSettingsDrawer,
 } from '../components/patcher';
-import { Button } from '../components/ui/Button';
+
 import { getKiroPatchConfig, saveKiroPatchConfig } from '@/lib/tauri';
 import type { KiroPatchConfig } from '../types/generated';
+import { Button, ButtonBase } from '@/components/ui';
 
 export default function PatcherV2() {
   const { language } = useAppStore();

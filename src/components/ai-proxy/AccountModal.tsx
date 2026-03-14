@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Modal, Button, Input, Select, Toggle } from '../ui';
+
 import { createAiProxyAccount, updateAiProxyAccount } from '../../lib/tauri/modules/aiProxy';
 import OAuthModal from './OAuthModal';
 import type { AiProxyAccount } from '../../types/generated';
+import { Button, Input, Modal, Select, Toggle } from '@/components/ui';
 
 interface AccountModalProps {
   isOpen: boolean;

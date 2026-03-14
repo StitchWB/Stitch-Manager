@@ -21,6 +21,19 @@ export type { SelectProps } from './Select';
 export { SegmentedControl } from './SegmentedControl';
 export type { SegmentedControlProps, SegmentedOption } from './SegmentedControl';
 
+export { ViewModeSwitch } from './ViewModeSwitch';
+export type { ViewModeSwitchOption } from './ViewModeSwitch';
+
+export { StickyToolbar } from './StickyToolbar';
+
+export { ToolbarTitle } from './ToolbarTitle';
+export { ToolbarRow } from './ToolbarRow';
+export { ToolbarFiltersGroup } from './ToolbarFiltersGroup';
+export { ListHeaderRow } from './ListHeaderRow';
+export { ToolbarSearchField } from './ToolbarSearchField';
+export { ToolbarActionsCluster } from './ToolbarActionsCluster';
+export { ToolbarSection } from './ToolbarSection';
+
 export { StatCard } from './StatCard';
 
 export { TabButton } from './TabButton';
@@ -60,6 +73,9 @@ export type { LoadingOverlayProps } from './LoadingOverlay';
 export { Tooltip } from './Tooltip';
 export type { TooltipProps } from './Tooltip';
 
+export { Tooltip as UITooltip } from './Tooltip';
+export type { TooltipProps as UITooltipProps } from './Tooltip';
+
 export { FilterDropdown } from './FilterDropdown';
 export type { FilterDropdownProps, FilterOption } from './FilterDropdown';
 
@@ -75,6 +91,8 @@ export type { BadgeProps } from './Badge';
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './Table';
 export type { TableProps } from './Table';
 
+export { Table as UITable } from './Table';
+
 export { ActionButtonGroup } from './ActionButtonGroup';
 export type { ActionButtonGroupProps, ActionButton } from './ActionButtonGroup';
 
@@ -88,11 +106,26 @@ export { GlassCard } from './GlassCard';
 
 export { StatusBadge } from './StatusBadge';
 
+export { UsageBar } from './UsageBar';
+
 export { Checkbox } from './Checkbox';
 
 export { Radio } from './Radio';
 
 export { ProviderLogo } from './ProviderLogo';
+
+export { CommandPalette } from './CommandPalette';
+export { QuotaDisplay } from './QuotaDisplay';
+export { ModuleCard } from './ModuleCard';
+export type { ModuleStatus } from './ModuleCard';
+export { MissionControlHUD } from './MissionControlHUD';
+export { StatusBar } from './StatusBar';
+export { IdentitySystemCard } from './IdentitySystemCard';
+export type { IdentityConfig } from './IdentitySystemCard';
+export { NetworkCard } from './NetworkCard';
+export type { NetworkConfig } from './NetworkCard';
+export { FloatingActionBar } from './FloatingActionBar';
+export { default as AccountDetailsModal } from './AccountDetailsModal';
 
 export { ButtonBase } from './ButtonBase';
 export type { ButtonBaseProps } from './ButtonBase';

@@ -10,6 +10,20 @@ import '@testing-library/jest-dom';
 // when using userEvent and async state updates.
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+if (typeof globalThis.crypto === 'undefined') {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: {
+      randomUUID: () => `test-uuid-${Math.random().toString(16).slice(2)}`,
+    },
+    configurable: true,
+  });
+} else if (typeof globalThis.crypto.randomUUID !== 'function') {
+  Object.defineProperty(globalThis.crypto, 'randomUUID', {
+    value: () => `test-uuid-${Math.random().toString(16).slice(2)}`,
+    configurable: true,
+  });
+}
+
 // Mock Tauri API
 Object.defineProperty(window, '__TAURI_INTERNALS__', {
   value: {},

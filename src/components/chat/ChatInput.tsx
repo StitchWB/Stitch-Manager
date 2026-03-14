@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, Square, Paperclip, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
-import { LoadingSpinner, Textarea, ButtonBase } from '../ui';
+
 import type { ContentBlock } from '../../types/generated';
+import { ButtonBase, LoadingSpinner, Textarea } from '@/components/ui';
 
 interface PendingAttachment {
   id: string;

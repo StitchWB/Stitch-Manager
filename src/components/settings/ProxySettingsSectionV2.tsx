@@ -1,10 +1,11 @@
 import { Globe, Info, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { SectionHeader } from '../ui/SectionHeader';
+
 import { useState, useEffect } from 'react';
-import { Checkbox, ButtonBase } from '../ui';
+
 import { ProxyListManager } from './ProxyListManager';
 import { useProxyConfig } from '../../hooks/useProxyConfig';
 import type { ProxyItem, ProxyType } from '../../types/generated';
+import { ButtonBase, Checkbox, SectionHeader } from '@/components/ui';
 
 interface ProxyItemUI {
   id: string;
@@ -117,10 +118,13 @@ export function ProxySettingsSectionV2() {
         description="Настройте прокси для сетевых запросов."
         icon={<Globe className="w-4 h-4 text-primary" />}
       >
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-red-400">
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-amber-300">
             <AlertCircle className="w-4 h-4" />
-            <span>Ошибка загрузки: {error}</span>
+            <span>
+              Ошибка загрузки legacy proxy config: {error}. Можно продолжать через Proxy Library
+              выше.
+            </span>
           </div>
         </div>
       </SectionHeader>

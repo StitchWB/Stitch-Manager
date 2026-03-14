@@ -1,9 +1,10 @@
-import { IdentitySystemCard, type IdentityConfig } from '../ui/IdentitySystemCard';
+
 import type { ProviderName } from '../../types';
 import type { SaveStatus } from '../../stores/registration';
 import { AlertTriangle, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PROVIDER_REQUIREMENT_HINTS } from './providerRequirements';
+import { IdentitySystemCard, type IdentityConfig } from '@/components/ui';
 
 interface IdentityTabProps {
   provider: ProviderName;

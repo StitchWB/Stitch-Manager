@@ -1,5 +1,6 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import AutoReg from '../../pages/AutoReg';
 
 // Mock all heavy subcomponents/hooks to keep this a behavior/contract test.
@@ -118,22 +119,33 @@ jest.mock('../../stores/registration', () => {
 });
 
 describe('AutoReg page', () => {
+  const renderAutoReg = () =>
+    render(
+      <MemoryRouter>
+        <AutoReg />
+      </MemoryRouter>
+    );
+
   beforeEach(() => {
     loadSettingsSpy.mockClear();
     saveImmediatelySpy.mockClear();
   });
 
   it('calls loadSettings only once on mount (does not re-run init effect on rerender)', () => {
-    const { rerender } = render(<AutoReg />);
+    const { rerender } = renderAutoReg();
 
     expect(loadSettingsSpy).toHaveBeenCalledTimes(1);
 
-    rerender(<AutoReg />);
+    rerender(
+      <MemoryRouter>
+        <AutoReg />
+      </MemoryRouter>
+    );
     expect(loadSettingsSpy).toHaveBeenCalledTimes(1);
   });
 
   it('passes only supported providers to CommandCenter selector', () => {
-    const { getByTestId } = render(<AutoReg />);
+    const { getByTestId } = renderAutoReg();
     const cc = getByTestId('command-center');
     const allowed = JSON.parse(cc.getAttribute('data-allowed') || '[]');
 
@@ -142,7 +154,7 @@ describe('AutoReg page', () => {
   });
 
   it('includes openai in supported providers allowlist', () => {
-    const { getByTestId } = render(<AutoReg />);
+    const { getByTestId } = renderAutoReg();
     const cc = getByTestId('command-center');
     const allowed = JSON.parse(cc.getAttribute('data-allowed') || '[]');
 
@@ -150,7 +162,7 @@ describe('AutoReg page', () => {
   });
 
   it('keeps debug visibility toggle synced between CommandCenter and ConsolePanel', () => {
-    const { getByTestId } = render(<AutoReg />);
+    const { getByTestId } = renderAutoReg();
     const cc = getByTestId('command-center');
     const consolePanel = getByTestId('console-panel');
 
@@ -159,7 +171,7 @@ describe('AutoReg page', () => {
   });
 
   it('passes debug toggle props to CommandCenter and ConsolePanel', () => {
-    const { getByTestId } = render(<AutoReg />);
+    const { getByTestId } = renderAutoReg();
     expect(getByTestId('command-center').getAttribute('data-show-debug')).toBe('false');
     expect(getByTestId('console-panel').getAttribute('data-show-debug')).toBe('false');
   });

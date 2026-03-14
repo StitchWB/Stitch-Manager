@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { TabButton } from '../ui';
+
 import { t } from '../../lib/i18n';
+import { TabButton } from '@/components/ui';
 
 type AiTabId =
   | 'overview'

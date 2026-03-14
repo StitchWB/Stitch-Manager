@@ -1,7 +1,8 @@
-import { CheckCircle, XCircle } from 'lucide-react';import { ButtonBase } from '../ui';
+import { CheckCircle, XCircle } from 'lucide-react';
 
 import type { DetectedIDE } from '../../types';
 import { getIDEIcon, getIDEGradient, getIDELabel } from '../../lib/patcher';
+import { ButtonBase } from '@/components/ui';
 
 interface IDECardProps {
   ide: DetectedIDE;

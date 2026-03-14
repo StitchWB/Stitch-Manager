@@ -7,12 +7,12 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { ButtonBase } from '../ui';
+
 import { createPortal } from 'react-dom';
 import { Columns3, RotateCcw } from 'lucide-react';
 import { t } from '../../lib/i18n';
-import { Button } from '../ui/Button';
-import { Checkbox } from '../ui/Checkbox';
+import { Button, ButtonBase, Checkbox } from '@/components/ui';
+
 
 export interface AccountsVisibleColumns {
   lastLogin: boolean;

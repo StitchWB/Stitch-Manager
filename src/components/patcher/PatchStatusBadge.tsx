@@ -1,5 +1,6 @@
 import { t } from '../../lib/i18n';
-import { LoadingSpinner, StatusBadge } from '../ui';
+import { LoadingSpinner, StatusBadge } from '@/components/ui';
+
 
 interface PatchStatusBadgeProps {
   isPatched: boolean;
