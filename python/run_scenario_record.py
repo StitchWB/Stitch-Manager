@@ -147,6 +147,47 @@ def _parse_proxy_switch_raw(value: Any) -> dict[str, Any] | None:
     }
 
 
+def _parse_proxy_library_catalog_item(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+
+    proxy_id = str(value.get("id") or "").strip()
+    host = str(value.get("host") or "").strip()
+    if not proxy_id or not host:
+        return None
+
+    try:
+        port = int(value.get("port") or 0)
+    except Exception:
+        return None
+    if port <= 0 or port > 65535:
+        return None
+
+    scheme = str(value.get("proxyType") or "http").strip().lower()
+    if scheme not in ("http", "https", "socks5"):
+        scheme = "http"
+
+    return {
+        "id": proxy_id,
+        "scheme": scheme,
+        "host": host,
+        "port": port,
+        "username": value.get("username"),
+        "password": value.get("password"),
+    }
+
+
+def _build_proxy_url_from_catalog_item(item: dict[str, Any]) -> str:
+    scheme = str(item.get("scheme") or "http")
+    host = str(item.get("host") or "")
+    port = int(item.get("port") or 0)
+    username = item.get("username")
+    password = item.get("password")
+    if username:
+        return f"{scheme}://{username}:{password or ''}@{host}:{port}"
+    return f"{scheme}://{host}:{port}"
+
+
 def _mask_proxy_for_display(data: dict[str, Any]) -> str:
     scheme = str(data.get("scheme") or "http")
     host = str(data.get("host") or "")
@@ -154,17 +195,6 @@ def _mask_proxy_for_display(data: dict[str, Any]) -> str:
     username = data.get("username")
     if username:
         return f"{scheme}://{username}:***@{host}:{port}"
-    return f"{scheme}://{host}:{port}"
-
-
-def _build_proxy_url_for_runtime(parsed: dict[str, Any]) -> str:
-    scheme = str(parsed.get("scheme") or "http")
-    host = str(parsed.get("host") or "")
-    port = int(parsed.get("port") or 0)
-    username = parsed.get("username")
-    password = parsed.get("password")
-    if username:
-        return f"{scheme}://{username}:{password or ''}@{host}:{port}"
     return f"{scheme}://{host}:{port}"
 
 
@@ -248,11 +278,72 @@ RECORDER_INIT_SCRIPT = r"""
     return { tag, type, role, ariaLabel: aria, placeholder, text };
   };
 
+  const looksSensitive = (s) => {
+    const value = (s ?? '').toString().trim().toLowerCase();
+    if (!value) return false;
+    return [
+      'password',
+      'passcode',
+      'otp',
+      'one-time',
+      'token',
+      'secret',
+      'cvv',
+      'cvc',
+      'security code',
+      'card',
+      'pan',
+      'expiry',
+      'exp',
+      'iban',
+      'ssn',
+    ].some((part) => value.includes(part));
+  };
+
+  const shouldRedact = (el) => {
+    const type = (safe(() => el?.getAttribute?.('type')) || '').toString().toLowerCase();
+    if (type === 'password') return true;
+    const attrs = [
+      safe(() => el?.getAttribute?.('name')),
+      safe(() => el?.getAttribute?.('id')),
+      safe(() => el?.getAttribute?.('autocomplete')),
+      safe(() => el?.getAttribute?.('aria-label')),
+      safe(() => el?.getAttribute?.('placeholder')),
+    ];
+    return attrs.some((v) => looksSensitive(v));
+  };
+
   const redactValue = (el, value) => {
-    const t = safe(() => el.getAttribute?.('type')) || '';
-    if (t.toLowerCase() === 'password') return '***';
+    if (shouldRedact(el)) return '***';
     return value;
   };
+
+  const inputTimers = new WeakMap();
+
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (isOverlayEvent(el)) return;
+
+    try {
+      const prev = inputTimers.get(el);
+      if (prev) clearTimeout(prev);
+    } catch {}
+
+    const timer = setTimeout(() => {
+      const value = safe(() => el && 'value' in el ? el.value : null);
+      send({
+        kind: 'input',
+        ts: new Date().toISOString(),
+        url: location.href,
+        selector: cssPath(el),
+        value: redactValue(el, value),
+        meta: describeEl(el)
+      });
+      try { inputTimers.delete(el); } catch {}
+    }, 220);
+
+    try { inputTimers.set(el, timer); } catch {}
+  }, true);
 
   document.addEventListener('click', (e) => {
     const el = e.target;
@@ -334,13 +425,102 @@ RECORDER_OVERLAY_SCRIPT = r"""
       collapsed: false,
       count: Number(window.__stitchRecorderStepCount || 0),
       savedPath: '',
+      tabs: [],
+      activeTabId: null,
+      activeProxyId: (window.__stitchRecorderActiveProxyId || '').toString(),
+      activeProxyLabel: (window.__stitchRecorderActiveProxyLabel || '').toString(),
     };
   }
 
   const state = window.__stitchRecorderOverlayState;
-  const runtimeCatalog = Array.isArray(window.__stitchRecorderRuntimeProxyCatalog)
-    ? window.__stitchRecorderRuntimeProxyCatalog
-    : [];
+  const getRuntimeCatalog = () => (
+    Array.isArray(window.__stitchRecorderRuntimeProxyCatalog)
+      ? window.__stitchRecorderRuntimeProxyCatalog
+      : []
+  );
+
+  const getRuntimeMap = () => (
+    window.__stitchRecorderRuntimeProxyMap &&
+    typeof window.__stitchRecorderRuntimeProxyMap === 'object'
+      ? window.__stitchRecorderRuntimeProxyMap
+      : {}
+  );
+
+  const syncProxyPicker = (picker, input) => {
+    if (!picker) return;
+
+    const runtimeCatalog = getRuntimeCatalog();
+    const runtimeMap = getRuntimeMap();
+    const runtimeMapKeys = Object.keys(runtimeMap || {});
+
+    const currentProxyId = (state.activeProxyId || '').toString().trim();
+    const currentProxyLabel = (state.activeProxyLabel || '').toString().trim();
+    const preserved = (
+      (picker.value || '').toString().trim() ||
+      (input && input.value ? input.value.toString().trim() : '') ||
+      currentProxyId
+    );
+
+    while (picker.firstChild) picker.removeChild(picker.firstChild);
+
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = runtimeCatalog.length || runtimeMapKeys.length
+      ? 'Pick proxy from library'
+      : 'No enabled proxies in library';
+    picker.appendChild(defaultOpt);
+
+    const seen = new Set();
+    if (currentProxyId) {
+      const currentOpt = document.createElement('option');
+      currentOpt.value = currentProxyId;
+      currentOpt.textContent = currentProxyLabel || `Current proxy (${currentProxyId})`;
+      picker.appendChild(currentOpt);
+      seen.add(currentProxyId);
+    }
+
+    for (const item of runtimeCatalog) {
+      try {
+        const id = (item.id || '').toString().trim();
+        if (!id || seen.has(id)) continue;
+        const opt = document.createElement('option');
+        opt.value = id;
+        const label = (item.label || '').toString().trim() || id;
+        const host = (item.host || '').toString();
+        const port = String(item.port || '');
+        const type = (item.proxyType || 'http').toString();
+        opt.textContent = `${label} (${type}://${host}:${port})`;
+        picker.appendChild(opt);
+        seen.add(id);
+      } catch {}
+    }
+
+    if (!runtimeCatalog.length && runtimeMapKeys.length) {
+      for (const key of runtimeMapKeys) {
+        try {
+          const id = String(key || '').trim();
+          if (!id || seen.has(id)) continue;
+          const raw = (runtimeMap[key] || '').toString();
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = raw ? `${id} (${raw})` : id;
+          picker.appendChild(opt);
+          seen.add(id);
+        } catch {}
+      }
+    }
+
+    const selectedId = preserved && seen.has(preserved)
+      ? preserved
+      : currentProxyId && seen.has(currentProxyId)
+        ? currentProxyId
+        : '';
+
+    picker.value = selectedId;
+    if (input && !input.value && selectedId) {
+      input.value = selectedId;
+    }
+  };
 
   const sendControl = (cmd) => {
     // Primary channel: Playwright binding (if available)
@@ -356,45 +536,40 @@ RECORDER_OVERLAY_SCRIPT = r"""
     } catch {}
   };
 
-  const emitProxySwitch = (proxyLibraryId, raw) => {
-    const id = (proxyLibraryId || '').toString().trim();
-    const value = (raw || '').toString().trim();
-    if (!id && !value) return;
-    try {
-      const payload = {
-        kind: 'proxy.switch',
-        ts: new Date().toISOString(),
-        url: location.href,
-        selector: null,
-        value: id ? null : value,
-        meta: {
-          proxyLibraryId: id || null,
-          hasDirectProxy: !id && !!value,
-        },
-      };
+    const emitProxySwitch = (proxyLibraryId) => {
+      const id = (proxyLibraryId || '').toString().trim();
+      if (!id) return;
+      try {
+        const payload = {
+          kind: 'proxy.switch',
+          ts: new Date().toISOString(),
+          url: location.href,
+          selector: null,
+          value: null,
+          meta: {
+            proxyLibraryId: id || null,
+            hasDirectProxy: false,
+          },
+        };
 
-      // Primary secure channel: Playwright binding (avoids sensitive console logs)
-      if (typeof window.__stitchRecordEvent === 'function') {
-        window.__stitchRecordEvent(payload);
-      } else {
-        // Console fallback MUST NOT leak secrets.
-        // For direct raw proxy input, skip step emission over console channel.
-        if (!id) return;
-        console.info('__STITCH_REC_STEP__' + JSON.stringify(payload));
-      }
-    } catch {}
-  };
+        // Primary secure channel: Playwright binding (avoids sensitive console logs)
+        if (typeof window.__stitchRecordEvent === 'function') {
+          window.__stitchRecordEvent(payload);
+        } else {
+          console.info('__STITCH_REC_STEP__' + JSON.stringify(payload));
+        }
+      } catch {}
+    };
 
-  const requestProxyRestart = (proxyLibraryId, raw) => {
-    try {
-      const payload = {
-        action: 'proxy.restart',
-        proxyLibraryId: (proxyLibraryId || '').toString().trim() || null,
-        raw: (raw || '').toString().trim() || null,
-        url: location.href,
-      };
-      sendControl(JSON.stringify(payload));
-    } catch {}
+    const requestProxyRestart = (proxyLibraryId) => {
+      try {
+        const payload = {
+          action: 'proxy.restart',
+          proxyLibraryId: (proxyLibraryId || '').toString().trim() || null,
+          url: location.href,
+        };
+        sendControl(JSON.stringify(payload));
+      } catch {}
   };
 
   const makeOverlay = () => {
@@ -483,6 +658,24 @@ RECORDER_OVERLAY_SCRIPT = r"""
     pausedFor.style.marginBottom = '8px';
     pausedFor.style.display = 'none';
 
+    const tabsBlock = document.createElement('div');
+    tabsBlock.id = '__stitch-recorder-tabs';
+    tabsBlock.style.marginBottom = '8px';
+
+    const tabsHeader = document.createElement('div');
+    tabsHeader.textContent = 'Tabs';
+    tabsHeader.style.opacity = '0.85';
+    tabsHeader.style.marginBottom = '4px';
+
+    const tabsList = document.createElement('div');
+    tabsList.id = '__stitch-recorder-tabs-list';
+    tabsList.style.display = 'flex';
+    tabsList.style.flexDirection = 'column';
+    tabsList.style.gap = '4px';
+
+    tabsBlock.appendChild(tabsHeader);
+    tabsBlock.appendChild(tabsList);
+
     const row = document.createElement('div');
     row.style.display = 'flex';
     row.style.gap = '6px';
@@ -501,7 +694,7 @@ RECORDER_OVERLAY_SCRIPT = r"""
     const proxyInput = document.createElement('input');
     proxyInput.type = 'text';
     proxyInput.id = '__stitch-recorder-proxy-input';
-    proxyInput.placeholder = 'proxyId or host:port:user:pass';
+    proxyInput.placeholder = 'proxyLibraryId';
     proxyInput.style.background = 'rgba(2,6,23,0.45)';
     proxyInput.style.border = '1px solid rgba(148,163,184,0.25)';
     proxyInput.style.color = '#e2e8f0';
@@ -519,25 +712,7 @@ RECORDER_OVERLAY_SCRIPT = r"""
     proxyPicker.style.fontSize = '12px';
     proxyPicker.style.marginBottom = '8px';
 
-    const defaultOpt = document.createElement('option');
-    defaultOpt.value = '';
-    defaultOpt.textContent = runtimeCatalog.length
-      ? 'Pick proxy from library'
-      : 'No enabled proxies in library';
-    proxyPicker.appendChild(defaultOpt);
-
-    for (const item of runtimeCatalog) {
-      try {
-        const opt = document.createElement('option');
-        opt.value = (item.id || '').toString();
-        const label = (item.label || '').toString().trim() || (item.id || '').toString();
-        const host = (item.host || '').toString();
-        const port = String(item.port || '');
-        const type = (item.proxyType || 'http').toString();
-        opt.textContent = `${label} (${type}://${host}:${port})`;
-        proxyPicker.appendChild(opt);
-      } catch {}
-    }
+    syncProxyPicker(proxyPicker, proxyInput);
 
     proxyPicker.onchange = () => {
       const id = (proxyPicker.value || '').trim();
@@ -545,27 +720,25 @@ RECORDER_OVERLAY_SCRIPT = r"""
       proxyInput.value = id;
     };
 
+    const initialProxyId = (state.activeProxyId || '').toString().trim();
+    if (initialProxyId && !proxyInput.value) {
+      proxyInput.value = initialProxyId;
+    }
+
     const proxyRecordBtn = mkBtn('Record Step', '#0f766e');
     const proxyApplyBtn = mkBtn('Apply&Continue', '#1d4ed8');
 
     const splitProxyInput = () => {
       const raw = (proxyInput.value || '').trim();
       if (!raw) return null;
-      let proxyId = '';
-      let direct = '';
-      if (/^[a-zA-Z0-9\-]{8,}$/.test(raw) && raw.indexOf(':') === -1) {
-        proxyId = raw;
-      } else {
-        direct = raw;
-      }
-      return { proxyId, direct };
+      return { proxyId: raw };
     };
 
     proxyRecordBtn.onclick = () => {
       const data = splitProxyInput();
       if (!data) return;
-      const { proxyId, direct } = data;
-      emitProxySwitch(proxyId, direct);
+      const { proxyId } = data;
+      emitProxySwitch(proxyId);
       state.reason = proxyId ? `Proxy switched (${proxyId})` : 'Proxy switch recorded';
       ensureOverlayAttached();
     };
@@ -573,9 +746,9 @@ RECORDER_OVERLAY_SCRIPT = r"""
     proxyApplyBtn.onclick = () => {
       const data = splitProxyInput();
       if (!data) return;
-      const { proxyId, direct } = data;
-      emitProxySwitch(proxyId, direct);
-      requestProxyRestart(proxyId, direct);
+      const { proxyId } = data;
+      emitProxySwitch(proxyId);
+      requestProxyRestart(proxyId);
       state.status = 'Restarting...';
       state.reason = proxyId ? `Restarting with ${proxyId}` : 'Restarting with proxy';
       ensureOverlayAttached();
@@ -588,6 +761,7 @@ RECORDER_OVERLAY_SCRIPT = r"""
     const pauseBtn = mkBtn('Pause', '#334155');
     pauseBtn.id = '__stitch-recorder-pause';
     const stopBtn = mkBtn('Finish & Save', '#7f1d1d');
+    const closeBrowserBtn = mkBtn('Close Browser', '#7c3aed');
     const newTabBtn = mkBtn('New tab', '#475569');
 
     pauseBtn.onclick = () => {
@@ -615,9 +789,18 @@ RECORDER_OVERLAY_SCRIPT = r"""
       sendControl('stop');
     };
 
+    closeBrowserBtn.onclick = () => {
+      state.status = 'Closing browser...';
+      state.reason = 'Operator requested browser close';
+      renderOverlay();
+      try {
+        sendControl(JSON.stringify({ action: 'browser.close' }));
+      } catch {}
+    };
+
     newTabBtn.onclick = () => {
       try {
-        window.open('about:blank', '_blank', 'noopener,noreferrer');
+        sendControl(JSON.stringify({ action: 'tab.new' }));
       } catch {}
     };
 
@@ -628,6 +811,7 @@ RECORDER_OVERLAY_SCRIPT = r"""
 
     row.appendChild(pauseBtn);
     row.appendChild(stopBtn);
+    row.appendChild(closeBrowserBtn);
 
     utilityRow.appendChild(newTabBtn);
 
@@ -639,6 +823,7 @@ RECORDER_OVERLAY_SCRIPT = r"""
     body.appendChild(count);
     body.appendChild(reason);
     body.appendChild(pausedFor);
+    body.appendChild(tabsBlock);
     body.appendChild(proxyPicker);
     body.appendChild(proxyRow);
     body.appendChild(row);
@@ -658,14 +843,30 @@ RECORDER_OVERLAY_SCRIPT = r"""
     const count = box.querySelector('#__stitch-recorder-count');
     const reason = box.querySelector('#__stitch-recorder-reason');
     const pausedFor = box.querySelector('#__stitch-recorder-paused');
+    const tabsList = box.querySelector('#__stitch-recorder-tabs-list');
     const pauseBtn = box.querySelector('#__stitch-recorder-pause');
     const collapseBtn = box.querySelector('#__stitch-recorder-collapse');
     const compact = box.querySelector('#__stitch-recorder-compact');
     const body = box.querySelector('#__stitch-recorder-body');
+    const proxyPicker = box.querySelector('#__stitch-recorder-proxy-picker');
+    const proxyInput = box.querySelector('#__stitch-recorder-proxy-input');
+
+    syncProxyPicker(proxyPicker, proxyInput);
 
     if (status) status.textContent = `Status: ${state.status || 'Recording'}`;
     if (count) count.textContent = `Steps: ${Number.isFinite(Number(state.count)) ? Number(state.count) : 0}`;
     if (reason) reason.textContent = `Reason: ${(state.reason || '-').toString()}`;
+
+    const currentProxyId = (state.activeProxyId || '').toString().trim();
+    const currentProxyLabel = (state.activeProxyLabel || '').toString().trim();
+    if (!state.reason || state.reason === '-') {
+      if (currentProxyId || currentProxyLabel) {
+        state.reason = currentProxyLabel
+          ? `Proxy: ${currentProxyLabel}`
+          : `Proxy: ${currentProxyId}`;
+        if (reason) reason.textContent = `Reason: ${state.reason}`;
+      }
+    }
 
     if (pauseBtn) {
       pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
@@ -694,6 +895,114 @@ RECORDER_OVERLAY_SCRIPT = r"""
       } else {
         pausedFor.style.display = 'none';
         pausedFor.textContent = 'Paused: -';
+      }
+    }
+
+    if (tabsList) {
+      while (tabsList.firstChild) tabsList.removeChild(tabsList.firstChild);
+      const tabs = Array.isArray(state.tabs) ? state.tabs : [];
+      const activeTabId = (state.activeTabId || '').toString();
+
+      if (!tabs.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'No tabs';
+        empty.style.opacity = '0.7';
+        tabsList.appendChild(empty);
+      } else {
+        let tabIdx = 0;
+        for (const tab of tabs) {
+          const tabId = (tab && tab.id != null ? String(tab.id) : '').trim();
+          if (!tabId) continue;
+          tabIdx += 1;
+
+          const row = document.createElement('div');
+          row.style.display = 'grid';
+          row.style.gridTemplateColumns = '1fr auto';
+          row.style.gap = '6px';
+          row.style.alignItems = 'center';
+
+          const activate = document.createElement('button');
+          activate.type = 'button';
+          activate.textContent = (tab.title || tab.url || 'tab').toString().slice(0, 42);
+          activate.style.padding = '4px 6px';
+          activate.style.textAlign = 'left';
+          activate.style.borderRadius = '6px';
+          activate.style.border = '1px solid rgba(148,163,184,0.25)';
+          const isActive = tabId === activeTabId;
+          activate.style.background = isActive ? 'rgba(29,78,216,0.35)' : 'rgba(2,6,23,0.45)';
+          activate.style.color = '#e2e8f0';
+          activate.style.cursor = 'pointer';
+          activate.style.fontSize = '11px';
+          activate.title = (tab.url || '').toString();
+
+          const content = document.createElement('span');
+          content.style.display = 'inline-flex';
+          content.style.alignItems = 'center';
+          content.style.gap = '6px';
+
+          const indexBadge = document.createElement('span');
+          indexBadge.textContent = String(tabIdx);
+          indexBadge.style.opacity = '0.75';
+          indexBadge.style.minWidth = '12px';
+          indexBadge.style.fontVariantNumeric = 'tabular-nums';
+
+          const faviconUrl = (tab.favicon || '').toString().trim();
+          let iconEl = null;
+          if (faviconUrl) {
+            const img = document.createElement('img');
+            img.src = faviconUrl;
+            img.alt = '';
+            img.width = 14;
+            img.height = 14;
+            img.style.width = '14px';
+            img.style.height = '14px';
+            img.style.borderRadius = '3px';
+            img.style.objectFit = 'cover';
+            img.style.background = 'rgba(15,23,42,0.5)';
+            img.referrerPolicy = 'no-referrer';
+            img.onerror = () => {
+              try {
+                img.remove();
+              } catch {}
+            };
+            iconEl = img;
+          }
+
+          const label = document.createElement('span');
+          label.textContent = (tab.title || tab.url || 'tab').toString().slice(0, 42);
+
+          content.appendChild(indexBadge);
+          if (iconEl) content.appendChild(iconEl);
+          content.appendChild(label);
+          activate.textContent = '';
+          activate.appendChild(content);
+
+          activate.onclick = () => {
+            try {
+              sendControl(JSON.stringify({ action: 'tab.activate', tabId }));
+            } catch {}
+          };
+
+          const close = document.createElement('button');
+          close.type = 'button';
+          close.textContent = '×';
+          close.style.padding = '4px 8px';
+          close.style.borderRadius = '6px';
+          close.style.border = '1px solid rgba(148,163,184,0.25)';
+          close.style.background = 'rgba(127,29,29,0.7)';
+          close.style.color = '#fff';
+          close.style.cursor = 'pointer';
+          close.style.fontSize = '11px';
+          close.onclick = () => {
+            try {
+              sendControl(JSON.stringify({ action: 'tab.close', tabId }));
+            } catch {}
+          };
+
+          row.appendChild(activate);
+          row.appendChild(close);
+          tabsList.appendChild(row);
+        }
       }
     }
   };
@@ -742,6 +1051,34 @@ RECORDER_OVERLAY_SCRIPT = r"""
     ensureOverlayAttached();
   };
 
+  window.__stitchRecorderOverlaySetTabs = (payload) => {
+    const data = payload && typeof payload === 'object' ? payload : {};
+    const tabs = Array.isArray(data.tabs) ? data.tabs : [];
+    state.tabs = tabs
+      .map((t) => {
+        if (!t || typeof t !== 'object') return null;
+        const id = (t.id || '').toString().trim();
+        if (!id) return null;
+        return {
+          id,
+          title: (t.title || '').toString(),
+          url: (t.url || '').toString(),
+          favicon: (t.favicon || '').toString(),
+        };
+      })
+      .filter(Boolean);
+    const activeTabId = (data.activeTabId || '').toString().trim();
+    state.activeTabId = activeTabId || (state.tabs[0] ? state.tabs[0].id : null);
+    ensureOverlayAttached();
+  };
+
+  window.__stitchRecorderOverlaySetProxy = (payload) => {
+    const data = payload && typeof payload === 'object' ? payload : {};
+    state.activeProxyId = (data.proxyLibraryId || '').toString().trim();
+    state.activeProxyLabel = (data.label || '').toString().trim();
+    ensureOverlayAttached();
+  };
+
   // Restore current count on reinjection/navigation.
   state.count = Number(window.__stitchRecorderStepCount || 0);
   ensureOverlayAttached();
@@ -779,11 +1116,17 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Optional NDJSON command file path for pause/resume/stop control",
     )
+    p.add_argument(
+        "--no-overlay",
+        action="store_true",
+        help="Disable in-browser recorder overlay UI (recording stays active)",
+    )
     return p.parse_args()
 
 
 async def main_async() -> int:
     args = _parse_args()
+    overlay_enabled = not bool(args.no_overlay)
 
     try:
         from playwright.async_api import Page
@@ -831,11 +1174,16 @@ async def main_async() -> int:
     )
 
     steps: list[RecordedStep] = []
-    stop_event = asyncio.Event()
+    stop_requested = False
     paused = False
+    keep_browser_open_after_save = False
     console_hooks_page_ids: set[int] = set()
     runtime_proxy_map: dict[str, str] = {}
     pending_proxy_restart: dict[str, Any] | None = None
+    pending_browser_close = False
+    pending_tab_controls: list[dict[str, Any]] = []
+    active_proxy_url: str | None = args.proxy or None
+    active_page_id: str | None = None
 
     config: dict[str, Any] = {"timezone_id": "Auto", "geolocation": "Auto"}
     if args.config_json and args.config_json.strip():
@@ -861,6 +1209,84 @@ async def main_async() -> int:
         and str(item.get("label") or "").strip()
     ]
 
+    runtime_proxy_catalog_map: dict[str, dict[str, Any]] = {}
+    for item in runtime_proxy_catalog:
+        parsed_item = _parse_proxy_library_catalog_item(item)
+        if parsed_item is not None:
+            runtime_proxy_catalog_map[parsed_item["id"]] = parsed_item
+
+    for proxy_id, item in runtime_proxy_catalog_map.items():
+        if proxy_id not in runtime_proxy_map:
+            runtime_proxy_map[proxy_id] = _build_proxy_url_from_catalog_item(item)
+
+    active_proxy_library_id = str(config.get("proxy_library_id") or "").strip() or None
+
+    # Auto-apply configured profile proxy on startup.
+    # Previously proxy was only applied after manual overlay restart action,
+    # which caused recording sessions to start without proxy even when profile
+    # had proxy_library_id + runtime_proxy_map configured.
+    if not active_proxy_url:
+        if active_proxy_library_id and active_proxy_library_id in runtime_proxy_map:
+            active_proxy_url = runtime_proxy_map.get(active_proxy_library_id)
+        elif len(runtime_proxy_map) == 1:
+            only_id, only_url = next(iter(runtime_proxy_map.items()))
+            active_proxy_library_id = active_proxy_library_id or str(only_id)
+            active_proxy_url = str(only_url)
+
+    def _build_active_proxy_payload(
+        proxy_library_id: str | None, proxy_url: str | None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "proxyLibraryId": proxy_library_id or "",
+            "label": "",
+            "proxyUrl": proxy_url or "",
+        }
+
+        if proxy_library_id:
+            item = runtime_proxy_catalog_map.get(proxy_library_id)
+            if item is not None:
+                label = str(item.get("label") or "").strip()
+                host = str(item.get("host") or "").strip()
+                port = str(item.get("port") or "").strip()
+                proxy_type = str(item.get("proxyType") or "http").strip()
+                payload["label"] = label or f"{proxy_type}://{host}:{port}"
+            else:
+                payload["label"] = proxy_library_id
+        elif proxy_url:
+            payload["label"] = proxy_url
+
+        return payload
+
+    def _ensure_recorder_tab_ui_prefs() -> None:
+        """Force native clickable tabs for recorder windows.
+
+        Some profile-level prefs can hide tab UI, which makes newly opened tabs
+        switchable only via keyboard shortcuts (e.g. Ctrl+Tab). Recorder should
+        preserve native tab interaction (click to switch/close).
+        """
+
+        raw_launch_kwargs = config.get("launch_kwargs")
+        launch_kwargs: dict[str, Any] = (
+            dict(raw_launch_kwargs) if isinstance(raw_launch_kwargs, dict) else {}
+        )
+
+        raw_prefs = launch_kwargs.get("firefox_user_prefs")
+        firefox_prefs: dict[str, Any] = dict(raw_prefs) if isinstance(raw_prefs, dict) else {}
+
+        # Keep tab strip visible and avoid closing browser window when the last
+        # tab is closed by accident during recording.
+        firefox_prefs.setdefault("browser.tabs.autoHide", False)
+        firefox_prefs.setdefault("browser.tabs.forceHide", False)
+        firefox_prefs.setdefault("browser.tabs.closeWindowWithLastTab", False)
+
+        # Prefer classic tab behavior over sidebar-only vertical tabs.
+        firefox_prefs.setdefault("sidebar.verticalTabs", False)
+
+        launch_kwargs["firefox_user_prefs"] = firefox_prefs
+        config["launch_kwargs"] = launch_kwargs
+
+    _ensure_recorder_tab_ui_prefs()
+
     def on_record(payload: dict[str, Any]) -> None:
         nonlocal paused
         if paused:
@@ -874,14 +1300,9 @@ async def main_async() -> int:
         # Normalize proxy.switch payload and avoid leaking credentials in step.value.
         if kind == "proxy.switch":
             switch_meta = dict(payload.get("meta") or {})
-            raw_value = payload.get("value")
             proxy_id = str(switch_meta.get("proxyLibraryId") or "").strip() or None
 
-            resolved_raw = None
-            if proxy_id and proxy_id in runtime_proxy_map:
-                resolved_raw = runtime_proxy_map.get(proxy_id)
-            elif isinstance(raw_value, str) and raw_value.strip():
-                resolved_raw = raw_value.strip()
+            resolved_raw = runtime_proxy_map.get(proxy_id) if proxy_id else None
 
             parsed = _parse_proxy_switch_raw(resolved_raw)
             if not parsed:
@@ -971,7 +1392,13 @@ async def main_async() -> int:
         return
 
     def on_control(command: str) -> None:
-        nonlocal paused, pending_proxy_restart
+        nonlocal \
+            paused, \
+            stop_requested, \
+            pending_proxy_restart, \
+            pending_tab_controls, \
+            pending_browser_close, \
+            keep_browser_open_after_save
         raw_cmd = str(command or "").strip()
         if not raw_cmd:
             return
@@ -996,6 +1423,28 @@ async def main_async() -> int:
                     )
                     return
 
+                if action in ("tab.new", "tab.activate", "tab.close"):
+                    pending_tab_controls.append(payload)
+                    _event(
+                        "scenario.record.control.tab",
+                        {
+                            "runId": run_id,
+                            "action": action,
+                            "tabId": payload.get("tabId"),
+                        },
+                    )
+                    return
+
+                if action == "browser.close":
+                    pending_browser_close = True
+                    _event(
+                        "scenario.record.control.browser_close",
+                        {
+                            "runId": run_id,
+                        },
+                    )
+                    return
+
         cmd = raw_cmd.lower()
         if cmd == "pause":
             paused = True
@@ -1005,22 +1454,23 @@ async def main_async() -> int:
             paused = False
             _event("scenario.record.control.resume", {"runId": run_id})
             return
-        if cmd in ("stop", "abort", "cancel"):
+        if cmd == "stop":
+            keep_browser_open_after_save = True
+            _event("scenario.record.control.stop", {"runId": run_id, "mode": "save_only"})
+            stop_requested = True
+            return
+        if cmd in ("abort", "cancel"):
+            keep_browser_open_after_save = False
             _event("scenario.record.control.stop", {"runId": run_id})
-            stop_event.set()
+            stop_requested = True
             return
 
     async def resolve_runtime_proxy_from_payload(payload: dict[str, Any]) -> str | None:
         proxy_id = str(payload.get("proxyLibraryId") or "").strip()
-        raw = str(payload.get("raw") or "").strip()
 
         if proxy_id and proxy_id in runtime_proxy_map:
             return runtime_proxy_map.get(proxy_id)
-
-        parsed = _parse_proxy_switch_raw(raw)
-        if not parsed:
-            return None
-        return _build_proxy_url_for_runtime(parsed)
+        return None
 
     async def attach_console_listeners(ctx: Any) -> None:
         try:
@@ -1076,7 +1526,11 @@ async def main_async() -> int:
         paused_flag: bool | None = None,
         count: int | None = None,
         saved_path: str | None = None,
+        tabs_payload: dict[str, Any] | None = None,
+        proxy_payload: dict[str, Any] | None = None,
     ) -> None:
+        if not overlay_enabled:
+            return
         try:
             if status is not None:
                 await page.evaluate(
@@ -1103,6 +1557,16 @@ async def main_async() -> int:
                     "(arg) => window.__stitchRecorderOverlaySetSaved && window.__stitchRecorderOverlaySetSaved(arg.path)",
                     {"path": saved_path},
                 )
+            if tabs_payload is not None:
+                await page.evaluate(
+                    "(arg) => window.__stitchRecorderOverlaySetTabs && window.__stitchRecorderOverlaySetTabs(arg)",
+                    tabs_payload,
+                )
+            if proxy_payload is not None:
+                await page.evaluate(
+                    "(arg) => window.__stitchRecorderOverlaySetProxy && window.__stitchRecorderOverlaySetProxy(arg)",
+                    proxy_payload,
+                )
         except Exception:
             pass
 
@@ -1114,7 +1578,11 @@ async def main_async() -> int:
         paused_flag: bool | None = None,
         count: int | None = None,
         saved_path: str | None = None,
+        tabs_payload: dict[str, Any] | None = None,
+        proxy_payload: dict[str, Any] | None = None,
     ) -> None:
+        if not overlay_enabled:
+            return
         try:
             pages = [p for p in getattr(ctx, "pages", []) if p and not p.is_closed()]
         except Exception:
@@ -1127,7 +1595,174 @@ async def main_async() -> int:
                 paused_flag=paused_flag,
                 count=count,
                 saved_path=saved_path,
+                tabs_payload=tabs_payload,
+                proxy_payload=proxy_payload,
             )
+
+    def _page_id(p: Any) -> str:
+        try:
+            return str(id(p))
+        except Exception:
+            return ""
+
+    def _tab_title(url: str) -> str:
+        try:
+            parsed = urlsplit(url)
+            host = (parsed.hostname or "").strip()
+            if host:
+                return host
+        except Exception:
+            pass
+        return "tab"
+
+    def _tab_favicon(url: str) -> str:
+        try:
+            parsed = urlsplit(url)
+            if parsed.scheme in ("http", "https") and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+        except Exception:
+            pass
+        return ""
+
+    def build_tabs_payload(ctx: Any) -> dict[str, Any]:
+        nonlocal active_page_id
+        try:
+            pages = [p for p in getattr(ctx, "pages", []) if p and not p.is_closed()]
+        except Exception:
+            pages = []
+
+        tabs: list[dict[str, str]] = []
+        active_exists = False
+        seen_blank = False
+        kept_blank_id: str | None = None
+        active_blank_skipped = False
+
+        for p in pages:
+            pid = _page_id(p)
+            if not pid:
+                continue
+            try:
+                url = str(p.url or "")
+            except Exception:
+                url = ""
+
+            is_blank = url.strip().lower() == "about:blank"
+            if is_blank and seen_blank:
+                if active_page_id and pid == active_page_id:
+                    active_blank_skipped = True
+                continue
+
+            if is_blank:
+                seen_blank = True
+                kept_blank_id = pid
+
+            tabs.append(
+                {
+                    "id": pid,
+                    "title": _tab_title(url),
+                    "url": url,
+                    "favicon": _tab_favicon(url),
+                }
+            )
+            if active_page_id and pid == active_page_id:
+                active_exists = True
+
+        if not active_exists and active_blank_skipped and kept_blank_id:
+            active_page_id = kept_blank_id
+            active_exists = True
+
+        if not active_exists:
+            active_page_id = tabs[0]["id"] if tabs else None
+
+        return {
+            "tabs": tabs,
+            "activeTabId": active_page_id,
+        }
+
+    async def update_tabs_overlay(ctx: Any) -> None:
+        await update_overlay_all(ctx, tabs_payload=build_tabs_payload(ctx))
+
+    async def apply_pending_tab_controls(ctx: Any) -> None:
+        nonlocal pending_tab_controls, page, active_page_id
+
+        if not pending_tab_controls:
+            return
+
+        queue = list(pending_tab_controls)
+        pending_tab_controls = []
+
+        for payload in queue:
+            action = str(payload.get("action") or "").strip().lower()
+            tab_id = str(payload.get("tabId") or "").strip()
+
+            try:
+                pages = [p for p in getattr(ctx, "pages", []) if p and not p.is_closed()]
+            except Exception:
+                pages = []
+
+            if action == "tab.new":
+                try:
+                    new_page = await ctx.new_page()
+                    try:
+                        await new_page.goto("about:blank", wait_until="domcontentloaded")
+                    except Exception:
+                        pass
+                    page = new_page
+                    active_page_id = _page_id(new_page) or active_page_id
+                except Exception:
+                    continue
+
+            elif action == "tab.activate" and tab_id:
+                target = None
+                for p in pages:
+                    if _page_id(p) == tab_id:
+                        target = p
+                        break
+                if target is not None:
+                    try:
+                        await target.bring_to_front()
+                    except Exception:
+                        pass
+                    page = target
+                    active_page_id = tab_id
+
+            elif action == "tab.close" and tab_id:
+                target = None
+                for p in pages:
+                    if _page_id(p) == tab_id:
+                        target = p
+                        break
+                if target is not None:
+                    try:
+                        await target.close()
+                    except Exception:
+                        pass
+                    try:
+                        remaining = [
+                            p for p in getattr(ctx, "pages", []) if p and not p.is_closed()
+                        ]
+                    except Exception:
+                        remaining = []
+                    if remaining:
+                        if active_page_id == tab_id:
+                            page = remaining[0]
+                            active_page_id = _page_id(page)
+                    else:
+                        # Keep recording session alive with at least one tab.
+                        try:
+                            replacement = await ctx.new_page()
+                            try:
+                                await replacement.goto("about:blank", wait_until="domcontentloaded")
+                            except Exception:
+                                pass
+                            page = replacement
+                            active_page_id = _page_id(replacement)
+                        except Exception:
+                            pass
+
+        await ensure_recorder_installed(ctx)
+        await attach_console_listeners(ctx)
+        await update_tabs_overlay(ctx)
 
     last_len = 0
     last_save_ts = 0.0
@@ -1141,7 +1776,8 @@ async def main_async() -> int:
             return
         try:
             await ctx.add_init_script(RECORDER_INIT_SCRIPT)
-            await ctx.add_init_script(RECORDER_OVERLAY_SCRIPT)
+            if overlay_enabled:
+                await ctx.add_init_script(RECORDER_OVERLAY_SCRIPT)
             context_scripts_installed = True
         except Exception:
             # best-effort
@@ -1186,7 +1822,8 @@ async def main_async() -> int:
         # Ensure init scripts apply for future navigations on this page.
         try:
             await page.add_init_script(RECORDER_INIT_SCRIPT)
-            await page.add_init_script(RECORDER_OVERLAY_SCRIPT)
+            if overlay_enabled:
+                await page.add_init_script(RECORDER_OVERLAY_SCRIPT)
         except Exception:
             pass
 
@@ -1195,18 +1832,27 @@ async def main_async() -> int:
             await page.evaluate(RECORDER_INIT_SCRIPT)
         except Exception:
             pass
-        try:
-            await page.evaluate(RECORDER_OVERLAY_SCRIPT)
-        except Exception:
-            pass
-        try:
-            await page.evaluate(
-                "(catalog) => { window.__stitchRecorderRuntimeProxyCatalog = catalog; }",
-                runtime_proxy_catalog,
-            )
-            await page.evaluate(RECORDER_OVERLAY_SCRIPT)
-        except Exception:
-            pass
+        if overlay_enabled:
+            try:
+                await page.evaluate(RECORDER_OVERLAY_SCRIPT)
+            except Exception:
+                pass
+            try:
+                await page.evaluate(
+                    "(catalog) => { window.__stitchRecorderRuntimeProxyCatalog = catalog; }",
+                    runtime_proxy_catalog,
+                )
+                await page.evaluate(
+                    "(proxyMap) => { window.__stitchRecorderRuntimeProxyMap = proxyMap; }",
+                    runtime_proxy_map,
+                )
+                await page.evaluate(
+                    "(payload) => { window.__stitchRecorderActiveProxyId = payload.proxyLibraryId || ''; window.__stitchRecorderActiveProxyLabel = payload.label || ''; }",
+                    _build_active_proxy_payload(active_proxy_library_id, active_proxy_url),
+                )
+                await page.evaluate(RECORDER_OVERLAY_SCRIPT)
+            except Exception:
+                pass
 
     async def ensure_recorder_installed(ctx: Any) -> None:
         # Make overlay resilient across navigations and new tabs.
@@ -1264,7 +1910,11 @@ async def main_async() -> int:
     ctx: Any | None = None
 
     async def start_recording_session(url: str, proxy_url: str | None) -> tuple[Any, Any, Any]:
-        nonlocal context_bindings_installed, context_scripts_installed
+        nonlocal \
+            context_bindings_installed, \
+            context_scripts_installed, \
+            active_page_id, \
+            active_proxy_library_id
         local_launcher = ProfileLauncher(
             profile_id=args.alias,
             headless=bool(args.headless),
@@ -1284,8 +1934,101 @@ async def main_async() -> int:
             reason="",
             paused_flag=False,
             count=len(steps),
+            proxy_payload=_build_active_proxy_payload(active_proxy_library_id, proxy_url),
         )
+        active_page_id = _page_id(local_page) or active_page_id
+        await update_tabs_overlay(local_ctx)
         return local_launcher, local_page, local_ctx
+
+    def _safe_current_url(default_url: str) -> str:
+        try:
+            if page is not None and not page.is_closed():
+                candidate = str(page.url or "").strip()
+                if candidate:
+                    return candidate
+        except Exception:
+            pass
+        return default_url
+
+    async def recover_recording_context(reason: str) -> bool:
+        """Best-effort recovery when pages/context disappear during recording."""
+
+        nonlocal launcher, page, ctx, active_page_id
+
+        _event(
+            "scenario.record.recover.started",
+            {
+                "runId": run_id,
+                "reason": reason,
+            },
+        )
+
+        # Fast path: if context still exists, create a replacement page.
+        try:
+            if ctx is not None:
+                replacement = await ctx.new_page()
+                try:
+                    await replacement.goto("about:blank", wait_until="domcontentloaded")
+                except Exception:
+                    pass
+                page = replacement
+                active_page_id = _page_id(replacement) or active_page_id
+                await ensure_recorder_installed(ctx)
+                await attach_console_listeners(ctx)
+                await update_overlay_all(
+                    ctx,
+                    status="Recording",
+                    reason="Recovered after tab close",
+                    paused_flag=False,
+                    count=len(steps),
+                )
+                await update_tabs_overlay(ctx)
+                _event(
+                    "scenario.record.recover.done",
+                    {
+                        "runId": run_id,
+                        "reason": reason,
+                        "mode": "new_page",
+                    },
+                )
+                return True
+        except Exception:
+            pass
+
+        # Fallback: restart browser session and continue recording with current steps.
+        restart_url = _safe_current_url(args.url)
+        try:
+            await close_recording_session()
+            launcher, page, ctx = await start_recording_session(restart_url, active_proxy_url)
+            active_page_id = _page_id(page) if page is not None else active_page_id
+            await update_overlay_all(
+                ctx,
+                status="Recording",
+                reason="Recovered after browser close",
+                paused_flag=False,
+                count=len(steps),
+            )
+            await update_tabs_overlay(ctx)
+            _event(
+                "scenario.record.recover.done",
+                {
+                    "runId": run_id,
+                    "reason": reason,
+                    "mode": "session_restart",
+                    "url": restart_url,
+                },
+            )
+            return True
+        except Exception as e:
+            _event(
+                "scenario.record.recover.failed",
+                {
+                    "runId": run_id,
+                    "reason": reason,
+                    "error": str(e),
+                },
+            )
+            return False
 
     async def close_recording_session() -> None:
         nonlocal launcher, page, ctx
@@ -1299,7 +2042,7 @@ async def main_async() -> int:
         ctx = None
 
     try:
-        launcher, page, ctx = await start_recording_session(args.url, args.proxy or None)
+        launcher, page, ctx = await start_recording_session(args.url, active_proxy_url)
 
         _event(
             "scenario.record.ready",
@@ -1360,14 +2103,23 @@ async def main_async() -> int:
                     },
                 )
                 await close_recording_session()
-                launcher, page, ctx = await start_recording_session(current_url, next_proxy)
+                active_proxy_library_id = (
+                    str(restart_payload.get("proxyLibraryId") or "").strip() or None
+                )
+                active_proxy_url = next_proxy
+                launcher, page, ctx = await start_recording_session(current_url, active_proxy_url)
+                active_page_id = _page_id(page) if page is not None else active_page_id
                 await update_overlay_all(
                     ctx,
                     status="Recording",
                     reason="Proxy switched (restart)",
                     paused_flag=False,
                     count=len(steps),
+                    proxy_payload=_build_active_proxy_payload(
+                        active_proxy_library_id, active_proxy_url
+                    ),
                 )
+                await update_tabs_overlay(ctx)
                 _event(
                     "scenario.record.proxy_restart.done",
                     {
@@ -1376,9 +2128,36 @@ async def main_async() -> int:
                     },
                 )
 
-            await ensure_recorder_installed(ctx)
-            # Ensure console listeners attached to any new pages
-            await attach_console_listeners(ctx)
+            if pending_browser_close:
+                pending_browser_close = False
+                await close_recording_session()
+                _event(
+                    "scenario.record.browser.closed",
+                    {
+                        "runId": run_id,
+                    },
+                )
+                break
+
+            await apply_pending_tab_controls(ctx)
+
+            try:
+                await ensure_recorder_installed(ctx)
+                # Ensure console listeners attached to any new pages
+                await attach_console_listeners(ctx)
+            except Exception:
+                recovered = await recover_recording_context("context_unavailable")
+                if not recovered:
+                    _log(
+                        "warn",
+                        "Recorder context unavailable and recovery failed - stopping record",
+                        step="record",
+                    )
+                    break
+                continue
+
+            await update_tabs_overlay(ctx)
+
             if paused:
                 await update_overlay_all(
                     ctx,
@@ -1395,7 +2174,7 @@ async def main_async() -> int:
                     paused_flag=False,
                     count=len(steps),
                 )
-            if stop_event.is_set():
+            if stop_requested:
                 _log("info", "Stop requested from browser overlay", step="record")
                 break
             try:
@@ -1403,22 +2182,39 @@ async def main_async() -> int:
             except Exception:
                 live_pages = []
             if not live_pages:
-                _log("info", "All pages closed - stopping record", step="record")
-                break
+                recovered = await recover_recording_context("all_pages_closed")
+                if not recovered:
+                    _log(
+                        "warn",
+                        "All pages closed and recovery failed - stopping record",
+                        step="record",
+                    )
+                    break
+                continue
 
-        await update_overlay_all(ctx, status="Saving", reason="", paused_flag=False, count=len(steps))
+        await update_overlay_all(
+            ctx, status="Saving", reason="", paused_flag=False, count=len(steps)
+        )
     except Exception as e:
         await close_recording_session()
         _result(False, error={"code": "record_failed", "message": str(e)})
         return 1
 
-    await close_recording_session()
+    if not keep_browser_open_after_save:
+        await close_recording_session()
 
     export_snapshot()
 
     try:
-        # Session is already closed by design after save.
-        pass
+        if ctx is not None:
+            await update_overlay_all(
+                ctx,
+                status="Saved",
+                reason="Scenario saved",
+                paused_flag=True,
+                count=len(steps),
+                saved_path=str(scenario_path),
+            )
     except Exception:
         pass
 

@@ -1,5 +1,7 @@
 export type ScenarioStepKind = 'click' | 'change' | 'submit' | 'nav' | 'proxy.switch' | 'unknown';
 
+export type ScenarioRunnerMode = 'native' | 'extension';
+
 export interface ScenarioRecordedStep {
   kind: ScenarioStepKind | string;
   ts: string;

@@ -9,15 +9,18 @@ import {
   type PythonJobStartResponse,
 } from '@/lib/tauri/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
+import type { ScenarioRunnerMode } from './types';
 
 type ScenarioReplayOptions = {
   alias: string;
   scenarioPath: string;
+  fromStep?: number;
   startUrl?: string | null;
   proxy?: string | null;
   configJson?: string | null;
   continueOnError?: boolean;
   headless?: boolean;
+  runnerMode?: ScenarioRunnerMode;
 };
 
 export type ScenarioReplayStatus =
@@ -143,25 +146,38 @@ export function useScenarioReplay() {
 
     let job: PythonJobStartResponse;
     try {
+      const runnerMode: ScenarioRunnerMode = opts.runnerMode ?? 'native';
       const args: string[] = ['--alias', opts.alias, '--scenario-path', opts.scenarioPath];
+      if (
+        typeof opts.fromStep === 'number' &&
+        Number.isFinite(opts.fromStep) &&
+        opts.fromStep > 1
+      ) {
+        args.push('--from-step', String(Math.floor(opts.fromStep)));
+      }
       if (opts.startUrl && opts.startUrl.trim()) {
         args.push('--start-url', opts.startUrl.trim());
       }
-      if (opts.proxy && opts.proxy.trim()) {
-        args.push('--proxy', opts.proxy.trim());
-      }
-      if (opts.configJson && opts.configJson.trim()) {
-        args.push('--config-json', opts.configJson.trim());
-      }
-      if (opts.continueOnError) {
-        args.push('--continue-on-error');
-      }
-      if (opts.headless) {
-        args.push('--headless');
+      if (runnerMode === 'native') {
+        if (opts.proxy && opts.proxy.trim()) {
+          args.push('--proxy', opts.proxy.trim());
+        }
+        if (opts.configJson && opts.configJson.trim()) {
+          args.push('--config-json', opts.configJson.trim());
+        }
+        if (opts.continueOnError) {
+          args.push('--continue-on-error');
+        }
+        if (opts.headless) {
+          args.push('--headless');
+        }
       }
 
       job = await startPythonJob({
-        scriptPath: 'python/run_scenario_replay.py',
+        scriptPath:
+          runnerMode === 'extension'
+            ? 'python/run_extension_replay.py'
+            : 'python/run_scenario_replay.py',
         args,
         correlationId,
         timeoutMs: 3_600_000,
@@ -194,7 +210,14 @@ export function useScenarioReplay() {
     if (!jobId) return;
     setState(prev => ({ ...prev, status: 'stopping' }));
     try {
-      await cancelPythonJob(jobId);
+      if (state.commandFilePath) {
+        await sendPythonJobControl({
+          commandFilePath: state.commandFilePath,
+          command: 'stop',
+        });
+      } else {
+        await cancelPythonJob(jobId);
+      }
     } catch (e) {
       setState(prev => ({
         ...prev,
@@ -202,7 +225,7 @@ export function useScenarioReplay() {
         error: e instanceof Error ? e.message : String(e),
       }));
     }
-  }, [state.jobId]);
+  }, [state.commandFilePath, state.jobId]);
 
   // Polling fallback: ensures UI sees job failure even if obs stream is silent.
   useEffect(() => {
@@ -500,6 +523,7 @@ export function useScenarioReplay() {
       correlationId: state.correlationId,
       alias: opts?.alias,
       scenarioPath: opts?.scenarioPath,
+      runnerMode: opts?.runnerMode ?? 'native',
       startUrl: opts?.startUrl,
       proxy: opts?.proxy,
     };

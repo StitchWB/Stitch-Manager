@@ -37,6 +37,12 @@ WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
 DEFAULT_LOCALE = "en-US"
 DEFAULT_TIMEZONE_ID = "America/New_York"
 DEFAULT_ACCEPT_LANGUAGE = "en-US,en;q=0.9"
+PROXY_ACCEPT_LANGUAGE_FALLBACK = "en-US,en;q=0.9"
+
+DEFAULT_BROWSER_WINDOW = (1920, 1080)
+MIN_BROWSER_WINDOW = (800, 600)
+MAX_BROWSER_WINDOW = (7680, 4320)
+FIT_SCREEN_MARGIN = (16, 88)
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,139 @@ def _safe_stderr(msg: str) -> None:
         sys.stderr.flush()
     except Exception:
         pass
+
+
+def _to_positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(float(value))
+    except Exception:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _normalize_window_tuple(value: Any) -> tuple[int, int] | None:
+    if isinstance(value, (tuple, list)) and len(value) >= 2:
+        width = _to_positive_int(value[0])
+        height = _to_positive_int(value[1])
+        if width and height:
+            return width, height
+
+    if isinstance(value, dict):
+        width = _to_positive_int(value.get("width"))
+        height = _to_positive_int(value.get("height"))
+        if width and height:
+            return width, height
+
+    if isinstance(value, str):
+        raw = value.strip().lower()
+        match = re.match(r"^\s*(\d{3,5})\s*[x,]\s*(\d{3,5})\s*$", raw)
+        if match:
+            width = _to_positive_int(match.group(1))
+            height = _to_positive_int(match.group(2))
+            if width and height:
+                return width, height
+
+    return None
+
+
+def _detect_primary_screen_size() -> tuple[int, int] | None:
+    # 1) explicit env override for CI/debug
+    env_w = _to_positive_int(os.environ.get("STITCH_SCREEN_WIDTH"))
+    env_h = _to_positive_int(os.environ.get("STITCH_SCREEN_HEIGHT"))
+    if env_w and env_h:
+        return env_w, env_h
+
+    # 2) Windows-native metrics (most reliable for this app's primary target)
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        width = _to_positive_int(user32.GetSystemMetrics(0))
+        height = _to_positive_int(user32.GetSystemMetrics(1))
+        if width and height:
+            return width, height
+    except Exception:
+        pass
+
+    # 3) generic fallback via tkinter
+    try:
+        import tkinter as tk
+
+        root = tk.Tk()
+        root.withdraw()
+        width = _to_positive_int(root.winfo_screenwidth())
+        height = _to_positive_int(root.winfo_screenheight())
+        root.destroy()
+        if width and height:
+            return width, height
+    except Exception:
+        pass
+
+    return None
+
+
+def _fit_window_to_screen(screen_size: tuple[int, int]) -> tuple[int, int]:
+    screen_w, screen_h = screen_size
+    margin_w, margin_h = FIT_SCREEN_MARGIN
+    width = max(MIN_BROWSER_WINDOW[0], screen_w - margin_w)
+    height = max(MIN_BROWSER_WINDOW[1], screen_h - margin_h)
+    return width, height
+
+
+def _clamp_window_size(
+    size: tuple[int, int],
+    *,
+    screen_size: tuple[int, int] | None,
+) -> tuple[int, int]:
+    width = max(MIN_BROWSER_WINDOW[0], min(MAX_BROWSER_WINDOW[0], int(size[0])))
+    height = max(MIN_BROWSER_WINDOW[1], min(MAX_BROWSER_WINDOW[1], int(size[1])))
+
+    if screen_size is not None:
+        screen_w = max(MIN_BROWSER_WINDOW[0], int(screen_size[0]))
+        screen_h = max(MIN_BROWSER_WINDOW[1], int(screen_size[1]))
+        width = min(width, screen_w)
+        height = min(height, screen_h)
+
+    return width, height
+
+
+def _resolve_browser_window(
+    config: dict[str, Any],
+    *,
+    current_window: Any,
+) -> tuple[tuple[int, int], bool]:
+    raw = config.get("browser_window")
+    current_normalized = _normalize_window_tuple(current_window)
+    screen_size = _detect_primary_screen_size()
+    fit_size = _fit_window_to_screen(screen_size) if screen_size is not None else None
+
+    mode = "fit-screen"
+    maximize_on_start = False
+    explicit_size: tuple[int, int] | None = None
+
+    if isinstance(raw, dict):
+        raw_mode = str(raw.get("mode") or "").strip().lower()
+        if raw_mode in ("auto", "fit-screen", "fixed"):
+            mode = raw_mode
+
+        maximize_on_start = bool(raw.get("maximize_on_start") or raw.get("maximizeOnStart"))
+
+        width = _to_positive_int(raw.get("width"))
+        height = _to_positive_int(raw.get("height"))
+        if width and height:
+            explicit_size = (width, height)
+
+    if mode == "fixed":
+        size = explicit_size or current_normalized or DEFAULT_BROWSER_WINDOW
+    elif mode == "auto":
+        size = current_normalized or fit_size or DEFAULT_BROWSER_WINDOW
+    else:
+        size = fit_size or current_normalized or DEFAULT_BROWSER_WINDOW
+
+    if maximize_on_start and fit_size is not None:
+        size = fit_size
+
+    return _clamp_window_size(size, screen_size=screen_size), maximize_on_start
 
 
 def _sanitize_profile_id(raw: str) -> str:
@@ -456,6 +595,16 @@ class ProfileLauncher:
         locale = self._config.get("locale") or self._config.get("browser_locale")
         return str(locale).strip() if isinstance(locale, str) and locale.strip() else DEFAULT_LOCALE
 
+    def _has_explicit_locale(self) -> bool:
+        locale = self._config.get("locale") or self._config.get("browser_locale")
+        return bool(isinstance(locale, str) and locale.strip() and not _is_auto(locale))
+
+    def _has_explicit_timezone(self) -> bool:
+        tz = self._config.get("timezone_id")
+        if tz is None:
+            tz = self._config.get("timezone")
+        return bool(isinstance(tz, str) and tz.strip() and not _is_auto(tz))
+
     def _effective_timezone(self) -> str | None:
         tz = self._config.get("timezone_id")
         if tz is None:
@@ -482,9 +631,12 @@ class ProfileLauncher:
 
         # Enforce Accept-Language default if not provided.
         if not any(k.lower() == "accept-language" for k in headers.keys()):
-            headers["Accept-Language"] = (
-                self._config.get("accept_language") or DEFAULT_ACCEPT_LANGUAGE
+            fallback = self._config.get("accept_language") or (
+                PROXY_ACCEPT_LANGUAGE_FALLBACK
+                if self._proxy is not None
+                else DEFAULT_ACCEPT_LANGUAGE
             )
+            headers["Accept-Language"] = fallback
         return headers
 
     async def start(self) -> BrowserContext:
@@ -502,25 +654,41 @@ class ProfileLauncher:
             timezone_id = self._effective_timezone()
             geolocation = self._effective_geolocation()
             extra_headers = self._effective_extra_headers()
+            explicit_locale = self._has_explicit_locale()
+            explicit_timezone = self._has_explicit_timezone()
 
             # Auto-resolve if requested.
             if timezone_id == "Auto" or geolocation == "Auto":
                 resolved_geo, resolved_tz = await _resolve_geo_and_timezone(proxy=self._proxy)
                 if timezone_id == "Auto":
-                    timezone_id = resolved_tz or DEFAULT_TIMEZONE_ID
+                    timezone_id = resolved_tz
                 if geolocation == "Auto":
                     geolocation = resolved_geo
 
-            # Enforce timezone default if not provided.
+            # Enforce timezone default if not provided. When a proxy is active,
+            # avoid silently pinning to a US timezone because that creates an
+            # obvious mismatch against the proxy exit geography.
             if not timezone_id:
-                timezone_id = DEFAULT_TIMEZONE_ID
+                timezone_id = (
+                    None
+                    if self._proxy is not None and not explicit_timezone
+                    else DEFAULT_TIMEZONE_ID
+                )
+
+            # Likewise, do not force a locale value into proxy sessions unless
+            # it was explicitly configured by the profile or caller.
+            if self._proxy is not None and not explicit_locale:
+                locale = None
 
             launch_kwargs: dict[str, Any] = {
                 # Keep options within safe Playwright/Camoufox surface.
-                "locale": locale,
-                "timezone_id": timezone_id,
                 "extra_http_headers": extra_headers,
             }
+
+            if locale:
+                launch_kwargs["locale"] = locale
+            if timezone_id:
+                launch_kwargs["timezone_id"] = timezone_id
 
             if (
                 isinstance(geolocation, dict)
@@ -537,7 +705,28 @@ class ProfileLauncher:
                 # Avoid overriding our enforced defaults unless explicitly requested.
                 launch_kwargs.update(raw_launch_kwargs)
 
+            # Camoufox/browserforge compatibility: dict-based `screen` can break.
+            if isinstance(launch_kwargs.get("screen"), dict):
+                launch_kwargs.pop("screen", None)
+
+            resolved_window, maximize_on_start = _resolve_browser_window(
+                self._config,
+                current_window=launch_kwargs.get("window"),
+            )
+            launch_kwargs["window"] = resolved_window
+
+            if maximize_on_start:
+                raw_prefs = launch_kwargs.get("firefox_user_prefs")
+                firefox_prefs: dict[str, Any] = (
+                    dict(raw_prefs) if isinstance(raw_prefs, dict) else {}
+                )
+                firefox_prefs["browser.startup.maximized"] = True
+                launch_kwargs["firefox_user_prefs"] = firefox_prefs
+
             proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
+
+            # Check if uBlock should be disabled (for payment processors like Stripe)
+            disable_ublock = self._config.get("disable_ublock", False)
 
             manager = FirefoxProfileManager(
                 profile_id=self.profile_id,
@@ -545,6 +734,7 @@ class ProfileLauncher:
                 headless=self.headless,
                 proxy_url=proxy_url,
                 launch_kwargs=launch_kwargs,
+                disable_ublock=disable_ublock,
             )
 
             context = await manager.start()
@@ -563,7 +753,13 @@ class ProfileLauncher:
             self._manager = None
             raise
 
-    async def open(self, url: str, *, wait_until: WaitUntil = "domcontentloaded") -> Page:
+    async def open(
+        self,
+        url: str,
+        *,
+        wait_until: WaitUntil = "domcontentloaded",
+        prefer_existing: bool = False,
+    ) -> Page:
         if not url:
             raise ValueError("url is required")
         if self._manager is None:
@@ -571,7 +767,37 @@ class ProfileLauncher:
         assert self._manager is not None
 
         page = await self._manager.get_page()
-        await page.goto(url, wait_until=cast(WaitUntil, wait_until))
+        if prefer_existing:
+            try:
+                current_url = str(page.url or "").strip()
+            except Exception:
+                current_url = ""
+            if current_url and current_url not in ("about:blank", "about:newtab"):
+                return page
+
+        target_url = str(url).strip()
+        try:
+            current_url = str(page.url or "").strip()
+        except Exception:
+            current_url = ""
+
+        # Avoid redundant navigation to the same location on persistent tabs.
+        if current_url and current_url.rstrip("/") == target_url.rstrip("/"):
+            return page
+
+        try:
+            await page.goto(target_url, wait_until=cast(WaitUntil, wait_until))
+        except Exception as e:
+            # Firefox/Playwright may surface benign NS_BINDING_ABORTED when a tab
+            # is already navigating (redirect/reload race). If page stays alive,
+            # keep the existing tab instead of hard-failing open flow.
+            if "NS_BINDING_ABORTED" in str(e):
+                try:
+                    if not page.is_closed():
+                        return page
+                except Exception:
+                    pass
+            raise
         return page
 
     async def close(self) -> None:
