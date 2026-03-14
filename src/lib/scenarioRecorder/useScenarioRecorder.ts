@@ -8,7 +8,7 @@ import {
   type PythonJobStartResponse,
 } from '@/lib/tauri/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
-import type { ScenarioRecordStatus } from './types';
+import type { ScenarioRecordStatus, ScenarioRunnerMode } from './types';
 
 type ScenarioRecorderOptions = {
   alias: string;
@@ -16,6 +16,8 @@ type ScenarioRecorderOptions = {
   scenarioName: string;
   proxy?: string | null;
   configJson?: string | null;
+  noOverlay?: boolean;
+  runnerMode?: ScenarioRunnerMode;
 };
 
 type ScenarioRecorderState = {
@@ -99,6 +101,7 @@ export function useScenarioRecorder() {
 
     let job: PythonJobStartResponse;
     try {
+      const runnerMode: ScenarioRunnerMode = opts.runnerMode ?? 'native';
       const args: string[] = [
         '--alias',
         opts.alias,
@@ -108,15 +111,23 @@ export function useScenarioRecorder() {
         opts.scenarioName,
       ];
 
-      if (opts.proxy && opts.proxy.trim()) {
-        args.push('--proxy', opts.proxy.trim());
-      }
-      if (opts.configJson && opts.configJson.trim()) {
-        args.push('--config-json', opts.configJson.trim());
+      if (runnerMode === 'native') {
+        if (opts.proxy && opts.proxy.trim()) {
+          args.push('--proxy', opts.proxy.trim());
+        }
+        if (opts.configJson && opts.configJson.trim()) {
+          args.push('--config-json', opts.configJson.trim());
+        }
+        if (opts.noOverlay) {
+          args.push('--no-overlay');
+        }
       }
 
       job = await startPythonJob({
-        scriptPath: 'python/run_scenario_record.py',
+        scriptPath:
+          runnerMode === 'extension'
+            ? 'python/run_extension_record.py'
+            : 'python/run_scenario_record.py',
         args,
         correlationId,
         timeoutMs: 3_600_000,
@@ -274,8 +285,11 @@ export function useScenarioRecorder() {
             // Heuristic: if browser runtime is missing, Playwright usually errors with
             // messages suggesting to run "playwright install".
             if (!ok) {
-              const err = (fields as any).error as any;
-              const errMsg = String(err?.message ?? payload.message ?? '');
+              const fieldErr = (fields as any).error as any;
+              const payloadErr = (payload as any).error as any;
+              const errMsg = String(
+                payloadErr?.message ?? fieldErr?.message ?? payload.message ?? 'Recording failed'
+              );
               error = errMsg || 'Recording failed';
               if (errMsg.toLowerCase().includes('playwright install')) {
                 runtimeMissing = true;
@@ -350,6 +364,7 @@ export function useScenarioRecorder() {
       alias: opts?.alias,
       url: opts?.url,
       scenarioName: opts?.scenarioName,
+      runnerMode: opts?.runnerMode ?? 'native',
       proxy: opts?.proxy,
       configJson: opts?.configJson,
       commandFilePath: state.commandFilePath,

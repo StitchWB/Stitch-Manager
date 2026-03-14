@@ -6,6 +6,8 @@ import {
   CheckCircle,
   AlertCircle,
   Zap,
+  Table2,
+  Puzzle,
 } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
@@ -21,6 +23,7 @@ import {
   getEmailCounter,
   setEmailCounter,
 } from '@/lib/tauri';
+import { normalizeSpreadsheetId } from '@/lib/tauri/modules/googleSheets';
 import { SettingsData } from '../types/generated';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
@@ -34,15 +37,24 @@ import {
   IMAPSettingsSection,
   EmailCounterSection,
   EmailServicesSection,
+  GoogleSheetsSettingsSection,
+  ExtensionSettingsSection,
 } from '../components/settings';
+
+const SETTINGS_SECRET_MASK = '********';
 import { ProxySettingsSectionV2 } from '../components/settings/ProxySettingsSectionV2';
 import { ProxyLibrarySection } from '../components/settings/ProxyLibrarySection';
 import { AiProxySettings } from '../components/settings/AiProxySettings';
 import { AutomationTab } from '../components/registration/AutomationTab';
-import { TabButton } from '../components/ui/TabButton';
-import { LoadingSpinner } from '../components/ui';
+import { LoadingSpinner, TabButton } from '@/components/ui';
 
-type SettingsCategory = 'general' | 'connectivity' | 'automation' | 'ai-proxy';
+type SettingsCategory =
+  | 'general'
+  | 'connectivity'
+  | 'automation'
+  | 'google-sheets'
+  | 'ai-proxy'
+  | 'extension';
 
 interface CategoryConfig {
   id: SettingsCategory;
@@ -67,9 +79,19 @@ const categories: CategoryConfig[] = [
     icon: <Repeat className="w-4 h-4" />,
   },
   {
+    id: 'google-sheets',
+    labelKey: 'settings.categories.googleSheets',
+    icon: <Table2 className="w-4 h-4" />,
+  },
+  {
     id: 'ai-proxy',
     labelKey: 'settings.categories.aiProxy',
     icon: <Zap className="w-4 h-4" />,
+  },
+  {
+    id: 'extension',
+    labelKey: 'settings.categories.extension',
+    icon: <Puzzle className="w-4 h-4" />,
   },
 ];
 
@@ -125,6 +147,10 @@ export default function Settings() {
   const [connectionMessage, setConnectionMessage] = useState('');
 
   const [customIdePaths, setCustomIdePaths] = useState<Record<string, string>>({});
+  const [googleSheetsSpreadsheetId, setGoogleSheetsSpreadsheetId] = useState('');
+  const [googleSheetsServiceAccountJson, setGoogleSheetsServiceAccountJson] = useState('');
+  const [hasStoredGoogleSheetsServiceAccountJson, setHasStoredGoogleSheetsServiceAccountJson] =
+    useState(false);
 
   // Email counter state
   const [emailCounter, setEmailCounterState] = useState<number>(0);
@@ -194,6 +220,18 @@ export default function Settings() {
       setMailtmEnabled(data.mailtmEnabled || false);
 
       setCustomIdePaths(data.customIdePaths || {});
+      setGoogleSheetsSpreadsheetId((data as any).googleSheetsSpreadsheetId || '');
+      setGoogleSheetsServiceAccountJson(
+        (data as any).googleSheetsServiceAccountJson === '********'
+          ? ''
+          : (data as any).googleSheetsServiceAccountJson || ''
+      );
+      setHasStoredGoogleSheetsServiceAccountJson(
+        Boolean(
+          (data as any).googleSheetsServiceAccountJson &&
+          (data as any).googleSheetsServiceAccountJson === SETTINGS_SECRET_MASK
+        )
+      );
 
       if (data.theme && ['light', 'dark', 'system'].includes(data.theme)) {
         setTheme(data.theme as 'light' | 'dark' | 'system');
@@ -389,13 +427,15 @@ export default function Settings() {
     } finally {
       setIsSaving(false);
     }
-  }, [addyioApiTokenDraft, addLog, t]);
+  }, [addyioApiTokenDraft, addLog]);
 
   const handleSave = useCallback(async () => {
     try {
       setIsSaving(true);
       setSaveStatus('idle');
       setErrorMessage('');
+
+      const normalizedGoogleSheetsSpreadsheetId = normalizeSpreadsheetId(googleSheetsSpreadsheetId);
 
       const settingsToSave = {
         theme,
@@ -418,12 +458,25 @@ export default function Settings() {
         thirtyThreeMailDomain: thirtyThreeMailDomain,
         mailtmEnabled: mailtmEnabled,
         customIdePaths: customIdePaths,
+        googleSheetsSpreadsheetId: normalizedGoogleSheetsSpreadsheetId,
         // Removed automation settings (managed in PatcherSettingsDrawer)
       };
 
+      if (googleSheetsServiceAccountJson.trim()) {
+        (settingsToSave as any).googleSheetsServiceAccountJson = googleSheetsServiceAccountJson;
+      }
+
       await updateSettings(settingsToSave);
+      if (normalizedGoogleSheetsSpreadsheetId !== googleSheetsSpreadsheetId) {
+        setGoogleSheetsSpreadsheetId(normalizedGoogleSheetsSpreadsheetId);
+      }
 
       setSaveStatus('success');
+
+      if (googleSheetsServiceAccountJson.trim()) {
+        setGoogleSheetsServiceAccountJson('');
+        setHasStoredGoogleSheetsServiceAccountJson(true);
+      }
     } catch (error) {
       console.error('[Settings] Save failed:', error);
       setSaveStatus('error');
@@ -444,7 +497,6 @@ export default function Settings() {
     imapPassword,
     addyioEnabled,
     addyioApiToken,
-    addyioApiTokenDraft,
     addyioAliasFormat,
     addyioDomain,
     addyioAutoDelete,
@@ -456,8 +508,9 @@ export default function Settings() {
     thirtyThreeMailDomain,
     mailtmEnabled,
     customIdePaths,
+    googleSheetsSpreadsheetId,
+    googleSheetsServiceAccountJson,
     addLog,
-    t,
   ]);
 
   const debouncedAutoSave = useCallback(() => {
@@ -674,10 +727,29 @@ export default function Settings() {
         return renderConnectivitySettings();
       case 'automation':
         return <AutomationTab />;
+      case 'google-sheets':
+        return (
+          <div style={getAnimationStyle(0)}>
+            <GoogleSheetsSettingsSection
+              spreadsheetId={googleSheetsSpreadsheetId}
+              serviceAccountJson={googleSheetsServiceAccountJson}
+              hasStoredServiceAccountJson={hasStoredGoogleSheetsServiceAccountJson}
+              onSpreadsheetIdChange={value => setGoogleSheetsSpreadsheetId(value)}
+              onServiceAccountJsonChange={value => setGoogleSheetsServiceAccountJson(value)}
+              onSave={handleSave}
+            />
+          </div>
+        );
       case 'ai-proxy':
         return (
           <div style={getAnimationStyle(0)}>
             <AiProxySettings />
+          </div>
+        );
+      case 'extension':
+        return (
+          <div style={getAnimationStyle(0)}>
+            <ExtensionSettingsSection />
           </div>
         );
       default:

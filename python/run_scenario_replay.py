@@ -337,6 +337,12 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Replay a scenario in Camoufox persistent profile")
     p.add_argument("--alias", required=True, help="Profile alias")
     p.add_argument("--scenario-path", required=True, help="Path to scenario.json")
+    p.add_argument(
+        "--from-step",
+        type=int,
+        default=1,
+        help="Optional 1-based step index to start replay from",
+    )
     p.add_argument("--start-url", default="", help="Optional start URL override")
     p.add_argument("--timeout-s", type=int, default=3600, help="Max replay duration")
     p.add_argument("--pause-timeout-s", type=int, default=1800, help="Timeout for manual pause")
@@ -1024,6 +1030,10 @@ async def main_async() -> int:
         )
     steps = sanitized_steps
     total_steps = len(steps)
+    from_step = max(1, int(getattr(args, "from_step", 1) or 1))
+    if total_steps > 0 and from_step > total_steps:
+        from_step = total_steps
+    replay_steps = steps[from_step - 1 :] if total_steps > 0 else []
 
     _event(
         "scenario.replay.location",
@@ -1044,9 +1054,20 @@ async def main_async() -> int:
             "runId": run_id,
             "alias": args.alias,
             "steps": total_steps,
+            "fromStep": from_step,
             "startUrl": start_url,
         },
     )
+
+    if total_steps > 0 and from_step > 1:
+        _event(
+            "scenario.replay.resume.from_step",
+            {
+                "runId": run_id,
+                "fromStep": from_step,
+                "totalSteps": total_steps,
+            },
+        )
 
     passed = 0
     failed = 0
@@ -1164,7 +1185,8 @@ async def main_async() -> int:
         _log("warn", "Dry-run mode: browser will NOT be launched", step="init")
         try:
             deadline = time.time() + float(max(1, args.timeout_s))
-            for idx, step in enumerate(steps, start=1):
+            for run_idx, step in enumerate(replay_steps, start=1):
+                idx = from_step + run_idx - 1
                 if time.time() > deadline:
                     raise TimeoutError("Replay timeout reached")
 
@@ -1173,21 +1195,21 @@ async def main_async() -> int:
                 url = step.get("url") if isinstance(step.get("url"), str) else None
 
                 _event(
-                "scenario.replay.step.start",
-                {
-                    "runId": run_id,
-                    "index": idx,
-                    "total": total_steps,
-                    "kind": kind,
-                    "selector": selector,
-                    "url": url,
-                    "display": (
-                        (step.get("meta") or {}).get("display")
-                        if isinstance(step.get("meta"), dict)
-                        else None
-                    ),
-                },
-            )
+                    "scenario.replay.step.start",
+                    {
+                        "runId": run_id,
+                        "index": idx,
+                        "total": total_steps,
+                        "kind": kind,
+                        "selector": selector,
+                        "url": url,
+                        "display": (
+                            (step.get("meta") or {}).get("display")
+                            if isinstance(step.get("meta"), dict)
+                            else None
+                        ),
+                    },
+                )
 
                 if kind in (
                     "manual.pause",
@@ -1318,7 +1340,8 @@ async def main_async() -> int:
         await _start_session(active_proxy, start_url)
 
         deadline = time.time() + float(max(1, args.timeout_s))
-        for idx, step in enumerate(steps, start=1):
+        for run_idx, step in enumerate(replay_steps, start=1):
+            idx = from_step + run_idx - 1
             if page is None:
                 raise RuntimeError("Replay session is not active")
 
@@ -1377,9 +1400,12 @@ async def main_async() -> int:
                 pass
 
             try:
-                if kind in ("manual.pause", "manual", "manual.captcha", "captcha") or _looks_like_captcha(
-                    step
-                ):
+                if kind in (
+                    "manual.pause",
+                    "manual",
+                    "manual.captcha",
+                    "captcha",
+                ) or _looks_like_captcha(step):
                     reason = "captcha" if _looks_like_captcha(step) else kind
                     try:
                         await page.evaluate(
@@ -1415,7 +1441,11 @@ async def main_async() -> int:
 
                 if kind == "proxy.switch":
                     meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
-                    new_proxy = str(meta.get("runtimeProxy") or "").strip() if isinstance(meta, dict) else ""
+                    new_proxy = (
+                        str(meta.get("runtimeProxy") or "").strip()
+                        if isinstance(meta, dict)
+                        else ""
+                    )
                     if not new_proxy:
                         raise ValueError("proxy.switch has no resolved runtime proxy")
 
@@ -1434,8 +1464,12 @@ async def main_async() -> int:
                         {
                             "applied": True,
                             "reason": "session_restart_with_new_proxy",
-                            "proxyLibraryId": meta.get("proxyLibraryId") if isinstance(meta, dict) else None,
-                            "proxy": meta.get("runtimeProxyMasked") if isinstance(meta, dict) else None,
+                            "proxyLibraryId": meta.get("proxyLibraryId")
+                            if isinstance(meta, dict)
+                            else None,
+                            "proxy": meta.get("runtimeProxyMasked")
+                            if isinstance(meta, dict)
+                            else None,
                         },
                     )
                 else:
@@ -1455,7 +1489,9 @@ async def main_async() -> int:
                 raise
             except Exception as e:
                 failed += 1
-                artifacts = await _save_step_artifacts(page, artifacts_dir, idx) if page is not None else {}
+                artifacts = (
+                    await _save_step_artifacts(page, artifacts_dir, idx) if page is not None else {}
+                )
                 failed_entry = {
                     "index": idx,
                     "kind": kind,

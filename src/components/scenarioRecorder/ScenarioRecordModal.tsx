@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Modal, Button, Input, Textarea } from '@/components/ui';
+import { Modal, Button, Input, Textarea, Checkbox, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { getProfileSettings, saveProfileSettings } from '@/lib/tauri/modules/profiles';
 import { useScenarioRecorder } from '@/lib/scenarioRecorder/useScenarioRecorder';
@@ -8,8 +8,11 @@ import { BrowserRuntimeInstallModal } from './BrowserRuntimeInstallModal';
 import { checkBrowserRuntimeOnce } from '@/lib/scenarioRecorder/runtimeCheck';
 import { buildRunnerConfigFromProfileSettings } from '@/lib/scenarioRecorder/configBuilder';
 import { upsertRecordedScenario } from '@/lib/tauri/modules/pythonJobs';
+import { listProxyLibrary } from '@/lib/tauri/modules/proxyLibrary';
 import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
+import type { ScenarioRunnerMode } from '@/lib/scenarioRecorder/types';
+import { useExtensionBridgeProbe } from '@/lib/scenarioRecorder/useExtensionBridgeProbe';
 
 type ScenarioRecordModalProps = {
   alias: string | null;
@@ -42,6 +45,21 @@ export function ScenarioRecordModal({
   const [runtimeChecking, setRuntimeChecking] = useState(false);
   const [autoStarted, setAutoStarted] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [proxyPreflightError, setProxyPreflightError] = useState<string | null>(null);
+  const [noOverlay, setNoOverlay] = useState(false);
+  const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
+  const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
+
+  const noOverlayPrefKey = useMemo(() => `stitch.recorder.noOverlay.${alias || 'global'}`, [alias]);
+  const runnerModePrefKey = useMemo(
+    () => `stitch.recorder.runnerMode.${alias || 'global'}`,
+    [alias]
+  );
+  const isNativeRunner = runnerMode === 'native';
+  const extensionBridge = useExtensionBridgeProbe({
+    isOpen,
+    runnerMode,
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -59,9 +77,41 @@ export function ScenarioRecordModal({
         });
         setConfigJson(built.configJson);
         setUrl(built.startUrl);
+
+        const proxy = record?.settings?.network?.proxy;
+        const wantsProxy = Boolean(proxy?.enabled);
+        const selectedProxyId = (proxy?.proxyLibraryId || '').trim();
+        if (wantsProxy) {
+          if (!selectedProxyId) {
+            setProxyPreflightError('Proxy enabled in profile, but no proxy selected.');
+          } else {
+            try {
+              const items = await listProxyLibrary();
+              const selected = items.find(item => item.id === selectedProxyId);
+              if (!selected) {
+                setProxyPreflightError(
+                  `Selected proxy (${selectedProxyId}) is missing from Proxy Library.`
+                );
+              } else if (!selected.enabled) {
+                setProxyPreflightError(
+                  `Selected proxy (${selected.label || selected.id}) is disabled.`
+                );
+              } else {
+                setProxyPreflightError(null);
+              }
+            } catch {
+              setProxyPreflightError(
+                'Unable to validate proxy selection. Check Settings → Proxy Library.'
+              );
+            }
+          }
+        } else {
+          setProxyPreflightError(null);
+        }
       } catch {
         if (cancelled) return;
         setConfigJson('');
+        setProxyPreflightError(null);
       } finally {
         if (!cancelled) setLoadingSettings(false);
       }
@@ -82,7 +132,8 @@ export function ScenarioRecordModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setUrl(defaultUrl);
+    // Keep URL resolved from profile settings; only fallback when empty.
+    setUrl(prev => (prev?.trim() ? prev : defaultUrl));
   }, [defaultUrl, isOpen]);
 
   const refreshRuntime = useCallback(async () => {
@@ -101,6 +152,52 @@ export function ScenarioRecordModal({
     if (!isOpen) return;
     void refreshRuntime();
   }, [isOpen, refreshRuntime]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const raw = localStorage.getItem(noOverlayPrefKey);
+      setNoOverlay(raw === '1');
+    } catch {
+      setNoOverlay(false);
+    }
+  }, [isOpen, noOverlayPrefKey]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      localStorage.setItem(noOverlayPrefKey, noOverlay ? '1' : '0');
+    } catch {
+      // best effort only
+    }
+  }, [isOpen, noOverlay, noOverlayPrefKey]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const raw = localStorage.getItem(runnerModePrefKey);
+      setRunnerMode(raw === 'extension' ? 'extension' : 'native');
+      setRunnerModeHydrated(true);
+    } catch {
+      setRunnerMode('native');
+      setRunnerModeHydrated(true);
+    }
+  }, [isOpen, runnerModePrefKey]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setRunnerModeHydrated(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      localStorage.setItem(runnerModePrefKey, runnerMode);
+    } catch {
+      // best effort only
+    }
+  }, [isOpen, runnerMode, runnerModePrefKey]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -202,6 +299,12 @@ export function ScenarioRecordModal({
   const startRecording = useCallback(async () => {
     if (!alias) return;
 
+    if (proxyPreflightError) {
+      if (isNativeRunner) {
+        toast.warning(proxyPreflightError);
+      }
+    }
+
     try {
       const existing = await getProfileSettings({ alias });
       const current = existing?.settings ?? {
@@ -230,15 +333,29 @@ export function ScenarioRecordModal({
       url,
       scenarioName: name,
       configJson,
+      noOverlay,
+      runnerMode,
     });
-  }, [alias, configJson, name, recorder, url]);
+  }, [
+    alias,
+    configJson,
+    isNativeRunner,
+    name,
+    noOverlay,
+    proxyPreflightError,
+    recorder,
+    runnerMode,
+    url,
+  ]);
 
   useEffect(() => {
     if (!quickStart || autoStarted) return;
     if (!isOpen) return;
     if (!canStart) return;
     if (loadingSettings) return;
-    if (runtimeInstalled !== true) return;
+    if (!runnerModeHydrated) return;
+    if (isNativeRunner && runtimeInstalled !== true) return;
+    if (!isNativeRunner && extensionBridge.state.connected !== true) return;
     if (recorder.state.status !== 'idle') return;
 
     setAutoStarted(true);
@@ -247,8 +364,11 @@ export function ScenarioRecordModal({
     quickStart,
     autoStarted,
     isOpen,
+    runnerModeHydrated,
     canStart,
     loadingSettings,
+    isNativeRunner,
+    extensionBridge.state.connected,
     runtimeInstalled,
     recorder.state.status,
     startRecording,
@@ -268,9 +388,11 @@ export function ScenarioRecordModal({
               <Button variant="secondary" onClick={onClose}>
                 {t('common.close')}
               </Button>
-              <Button variant="secondary" onClick={() => setRuntimeModalOpen(true)}>
-                {t('common.installRuntime') || 'Install runtime'}
-              </Button>
+              {isNativeRunner ? (
+                <Button variant="secondary" onClick={() => setRuntimeModalOpen(true)}>
+                  {t('common.installRuntime') || 'Install runtime'}
+                </Button>
+              ) : null}
               <Button
                 variant="danger"
                 onClick={() => void recorder.stop()}
@@ -286,16 +408,50 @@ export function ScenarioRecordModal({
                   !canStart ||
                   recorder.state.status === 'recording' ||
                   recorder.state.status === 'starting' ||
-                  runtimeInstalled === false
+                  (isNativeRunner && runtimeInstalled === false) ||
+                  (!isNativeRunner && extensionBridge.state.connected !== true)
                 }
               >
                 {t('common.start')}
               </Button>
             </div>
           </div>
-          {runtimeInstalled === false ? (
+          {isNativeRunner && runtimeInstalled === false ? (
             <div className="text-xs text-amber-300">
               Recorder runtime missing. Install it to start recording.
+            </div>
+          ) : null}
+          {isNativeRunner && proxyPreflightError ? (
+            <div className="text-xs text-amber-300">{proxyPreflightError}</div>
+          ) : null}
+          {!isNativeRunner ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs">
+              <div className="text-cyan-100">
+                {t('recorder.extensionBridgeStatusLabel')}:&nbsp;
+                {extensionBridge.state.checking && extensionBridge.state.connected == null
+                  ? t('recorder.extensionBridgeChecking')
+                  : extensionBridge.state.connected
+                    ? t('recorder.extensionBridgeConnected')
+                    : t('recorder.extensionBridgeDisconnected')}
+              </div>
+              <div className="flex items-center gap-2">
+                {extensionBridge.state.error ? (
+                  <span
+                    className="text-[11px] text-red-200 max-w-[380px] truncate"
+                    title={extensionBridge.state.error}
+                  >
+                    {extensionBridge.state.error}
+                  </span>
+                ) : null}
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => void extensionBridge.refresh()}
+                  disabled={extensionBridge.state.checking}
+                >
+                  {t('recorder.extensionBridgeRefresh')}
+                </Button>
+              </div>
             </div>
           ) : null}
         </div>
@@ -316,19 +472,24 @@ export function ScenarioRecordModal({
           </div>
           <div
             className={`text-[11px] px-2 py-1 rounded-md border ${
-              runtimeInstalled === true
-                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                : runtimeInstalled === false
-                  ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
-                  : 'border-white/10 bg-black/30 text-slate-400'
+              !isNativeRunner
+                ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-200'
+                : runtimeInstalled === true
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                  : runtimeInstalled === false
+                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                    : 'border-white/10 bg-black/30 text-slate-400'
             }`}
           >
-            Runtime{' '}
-            {runtimeInstalled === true
-              ? 'ready'
-              : runtimeInstalled === false
-                ? 'missing'
-                : 'checking'}
+            {isNativeRunner
+              ? `Runtime ${
+                  runtimeInstalled === true
+                    ? 'ready'
+                    : runtimeInstalled === false
+                      ? 'missing'
+                      : 'checking'
+                }`
+              : 'Runner extension'}
           </div>
         </div>
 
@@ -345,6 +506,35 @@ export function ScenarioRecordModal({
             onChange={e => setUrl(e.target.value)}
             className="h-9"
           />
+        </div>
+
+        <SegmentedControl
+          size="sm"
+          value={runnerMode}
+          onChange={value => setRunnerMode(value as ScenarioRunnerMode)}
+          options={[
+            { label: 'Native runner', value: 'native' },
+            { label: 'Extension runner', value: 'extension' },
+          ]}
+        />
+        {runnerMode === 'extension' ? (
+          <div className="text-[11px] text-cyan-200/90 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
+            {t('recorder.extensionRunnerBridgeHint')}
+          </div>
+        ) : null}
+
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2">
+          <Checkbox
+            checked={noOverlay}
+            onChange={e => setNoOverlay(e.currentTarget.checked)}
+            label={t('recorder.recordWithoutOverlayLabel')}
+            description={t('recorder.recordWithoutOverlayDescription')}
+            className="-mx-1"
+            disabled={!isNativeRunner}
+          />
+          <div className="text-[11px] leading-relaxed text-slate-300/90 px-2">
+            {t('recorder.fieldCapturePrivacyNote')}
+          </div>
         </div>
 
         {recorder.state.scenarioPath && (
@@ -450,10 +640,12 @@ export function ScenarioRecordModal({
         </div>
       </div>
 
-      <BrowserRuntimeInstallModal
-        isOpen={runtimeModalOpen}
-        onClose={() => setRuntimeModalOpen(false)}
-      />
+      {isNativeRunner ? (
+        <BrowserRuntimeInstallModal
+          isOpen={runtimeModalOpen}
+          onClose={() => setRuntimeModalOpen(false)}
+        />
+      ) : null}
     </Modal>
   );
 }
