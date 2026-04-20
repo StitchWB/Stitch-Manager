@@ -138,6 +138,26 @@ async def main_async() -> int:
                 if msg_type == "record_stopped":
                     stop_requested = True
                     continue
+
+                if msg_type == "session_active":
+                    event(
+                        "scenario.record.session.active",
+                        {
+                            "runId": obj.get("payload", {}).get("runId") or run_id,
+                            "mode": obj.get("payload", {}).get("mode") or "record",
+                            "stepCount": obj.get("payload", {}).get("stepCount"),
+                            "paused": obj.get("payload", {}).get("paused"),
+                        },
+                    )
+                    continue
+
+                payload_hint = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+                log(
+                    "warn",
+                    f"Unhandled WS message type: {msg_type}",
+                    step="ws_handler",
+                    data={"rawType": msg_type, "payload": payload_hint},
+                )
         finally:
             if server_state.current_ws is websocket:
                 server_state.current_ws = None

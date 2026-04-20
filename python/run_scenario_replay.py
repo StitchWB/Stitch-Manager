@@ -87,8 +87,170 @@ class ReplayAbort(Exception):
     pass
 
 
-REPLAY_OVERLAY_SCRIPT = r"""
+_SHARED_OVERLAY_RUNTIME_PATH = (
+    PYTHON_ROOT.parent / "extension" / "stitch-scenario-runner" / "overlay_runtime.js"
+)
+
+
+def _overlay_runtime_shim_script() -> str:
+    return r"""
 (() => {
+  if (window.StitchOverlayRuntime) return;
+  const fallback = {
+    createOverlayShell(options = {}) {
+      const parent = document.documentElement || document.body;
+      if (!parent) return null;
+      const hostId = String(options.hostId || '__stitch-overlay-host');
+      let host = document.getElementById(hostId);
+      if (!host) {
+        host = document.createElement('div');
+        host.id = hostId;
+      }
+      host.style.position = 'fixed';
+      host.style.zIndex = '2147483647';
+      host.style.pointerEvents = 'none';
+      host.style.right = `${Number.isFinite(Number(options.offsetX)) ? Number(options.offsetX) : 16}px`;
+      if (String(options.position || '') === 'bottom-right') {
+        host.style.bottom = `${Number.isFinite(Number(options.offsetY)) ? Number(options.offsetY) : 16}px`;
+        host.style.top = '';
+      } else {
+        host.style.top = `${Number.isFinite(Number(options.offsetY)) ? Number(options.offsetY) : 16}px`;
+        host.style.bottom = '';
+      }
+      if (options.markerAttr) host.setAttribute(String(options.markerAttr), '1');
+      if (!host.isConnected) parent.appendChild(host);
+      if (!host.shadowRoot) {
+        host.attachShadow({ mode: 'open' });
+      }
+      const root = host.shadowRoot;
+      let panel = root.getElementById('__shim_panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = '__shim_panel';
+        panel.style.pointerEvents = 'auto';
+        panel.style.background = 'rgba(8,14,22,.95)';
+        panel.style.color = '#f0f7ff';
+        panel.style.border = '1px solid rgba(133,180,208,.36)';
+        panel.style.borderRadius = '12px';
+        panel.style.padding = '10px';
+        panel.style.fontFamily = 'Segoe UI, Tahoma, sans-serif';
+        panel.style.fontSize = '12px';
+        panel.style.minWidth = '220px';
+        const title = document.createElement('div');
+        title.id = '__shim_title';
+        const status = document.createElement('div');
+        status.id = '__shim_status';
+        const main = document.createElement('div');
+        main.id = '__shim_main';
+        main.style.margin = '6px 0';
+        const reason = document.createElement('div');
+        reason.id = '__shim_reason';
+        const paused = document.createElement('div');
+        paused.id = '__shim_paused';
+        const compact = document.createElement('div');
+        compact.id = '__shim_compact';
+        compact.style.display = 'none';
+        const body = document.createElement('div');
+        body.id = '__shim_body';
+        const extra = document.createElement('div');
+        extra.id = '__shim_extra';
+        const controls = document.createElement('div');
+        controls.id = '__shim_controls';
+        controls.style.display = 'flex';
+        controls.style.gap = '6px';
+        controls.style.flexWrap = 'wrap';
+        body.appendChild(main);
+        body.appendChild(reason);
+        body.appendChild(paused);
+        body.appendChild(extra);
+        body.appendChild(controls);
+        panel.appendChild(title);
+        panel.appendChild(status);
+        panel.appendChild(compact);
+        panel.appendChild(body);
+        root.appendChild(panel);
+      }
+      return {
+        host,
+        root,
+        panel,
+        titleEl: root.getElementById('__shim_title'),
+        statusEl: root.getElementById('__shim_status'),
+        mainEl: root.getElementById('__shim_main'),
+        reasonEl: root.getElementById('__shim_reason'),
+        pausedEl: root.getElementById('__shim_paused'),
+        extraEl: root.getElementById('__shim_extra'),
+        controlsEl: root.getElementById('__shim_controls'),
+        compactEl: root.getElementById('__shim_compact'),
+        bodyEl: root.getElementById('__shim_body'),
+        collapseBtn: null,
+        collapsed: false,
+        setCollapsed(next) {
+          this.collapsed = Boolean(next);
+          if (this.compactEl) this.compactEl.style.display = this.collapsed ? 'block' : 'none';
+          if (this.bodyEl) this.bodyEl.style.display = this.collapsed ? 'none' : 'block';
+        },
+        setVisible(visible) {
+          host.style.display = visible ? 'block' : 'none';
+        },
+      };
+    },
+    renderControls(shell, controls, onCommand) {
+      if (!shell || !shell.controlsEl) return;
+      shell.controlsEl.textContent = '';
+      for (const entry of controls || []) {
+        const btn = document.createElement('button');
+        const command = String((entry && entry.command) || '');
+        btn.type = 'button';
+        btn.textContent = String((entry && entry.label) || command || 'Action');
+        btn.dataset.command = command;
+        btn.style.padding = '6px 8px';
+        btn.style.borderRadius = '7px';
+        btn.style.cursor = 'pointer';
+        btn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof onCommand === 'function') onCommand(command, entry || {}, event);
+        });
+        shell.controlsEl.appendChild(btn);
+      }
+    },
+    setControlState(shell, command, patch = {}) {
+      const btn = shell && shell.controlsEl
+        ? shell.controlsEl.querySelector(`button[data-command="${String(command || '')}"]`)
+        : null;
+      if (!btn) return;
+      if (Object.prototype.hasOwnProperty.call(patch, 'disabled')) btn.disabled = Boolean(patch.disabled);
+      if (Object.prototype.hasOwnProperty.call(patch, 'label')) btn.textContent = String(patch.label || btn.textContent || '');
+    },
+  };
+  window.StitchOverlayRuntime = fallback;
+})();
+"""
+
+
+def _load_shared_overlay_runtime_script() -> str:
+    try:
+        source = _SHARED_OVERLAY_RUNTIME_PATH.read_text(encoding="utf-8")
+        if source.strip():
+            return source
+    except Exception as e:
+        _log(
+            "warn",
+            f"Shared overlay runtime unavailable, using shim: {e}",
+            step="overlay",
+        )
+    return _overlay_runtime_shim_script()
+
+
+_REPLAY_OVERLAY_BOOTSTRAP = r"""
+(() => {
+  try {
+    if (window.top !== window.self) return;
+  } catch {
+    return;
+  }
+
   if (window.__stitchReplayOverlayInstalled) return;
   window.__stitchReplayOverlayInstalled = true;
 
@@ -100,97 +262,33 @@ REPLAY_OVERLAY_SCRIPT = r"""
       stepCurrent: 0,
       stepTotal: 0,
       status: 'Running',
+      reason: '-',
     };
   }
   const state = window.__stitchReplayOverlayState;
+  const runtime = window.StitchOverlayRuntime;
+  if (!runtime || typeof runtime.createOverlayShell !== 'function') return;
 
-  const box = document.createElement('div');
-  box.style.position = 'fixed';
-  box.style.right = '16px';
-  box.style.bottom = '16px';
-  box.style.zIndex = '2147483647';
-  box.style.background = 'rgba(11,13,18,0.92)';
-  box.style.color = '#e2e8f0';
-  box.style.border = '1px solid rgba(148,163,184,0.25)';
-  box.style.borderRadius = '10px';
-  box.style.padding = '10px';
-  box.style.fontFamily = 'Inter, Segoe UI, Arial, sans-serif';
-  box.style.fontSize = '12px';
-  box.style.minWidth = '220px';
-  box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.4)';
-
-  const mkBtn = (label, bg) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.style.padding = '6px 10px';
-    b.style.borderRadius = '7px';
-    b.style.border = '1px solid rgba(148,163,184,0.25)';
-    b.style.background = bg;
-    b.style.color = '#fff';
-    b.style.cursor = 'pointer';
-    b.style.fontSize = '12px';
-    return b;
-  };
-
-  const title = document.createElement('div');
-  title.textContent = 'Stitch Replay';
-  title.style.fontWeight = '700';
-
-  const topRow = document.createElement('div');
-  topRow.style.display = 'flex';
-  topRow.style.alignItems = 'center';
-  topRow.style.justifyContent = 'space-between';
-  topRow.style.marginBottom = '6px';
-
-  const topActions = document.createElement('div');
-  topActions.style.display = 'flex';
-  topActions.style.gap = '6px';
-
-  const collapseBtn = mkBtn(state.collapsed ? 'Expand' : 'Collapse', '#1e293b');
-  collapseBtn.id = '__stitch-replay-collapse';
-
-  const compact = document.createElement('div');
-  compact.id = '__stitch-replay-compact';
-  compact.style.display = 'none';
-  compact.style.opacity = '0.9';
-  compact.style.fontSize = '11px';
-  compact.style.fontWeight = '600';
-  compact.style.marginTop = '2px';
-
-  const body = document.createElement('div');
-  body.id = '__stitch-replay-body';
-
-  const status = document.createElement('div');
-  status.textContent = 'Status: Running';
-  status.style.opacity = '0.9';
-  status.style.marginBottom = '8px';
-
-  const step = document.createElement('div');
-  step.textContent = 'Step: -/-';
-  step.style.opacity = '0.85';
-  step.style.marginBottom = '8px';
-
-  const reason = document.createElement('div');
-  reason.textContent = 'Reason: -';
-  reason.style.opacity = '0.8';
-  reason.style.marginBottom = '6px';
-
-  const pausedFor = document.createElement('div');
-  pausedFor.textContent = 'Paused: -';
-  pausedFor.style.opacity = '0.8';
-  pausedFor.style.marginBottom = '8px';
-  pausedFor.style.display = 'none';
-
-  let pausedSince = state.pausedSince || null;
-
-  const row = document.createElement('div');
-  row.style.display = 'flex';
-  row.style.gap = '6px';
-
-  const pauseBtn = mkBtn('Pause', '#334155');
-  const stopBtn = mkBtn('Stop', '#7f1d1d');
-  let paused = Boolean(state.paused);
+  const shell = runtime.createOverlayShell({
+    hostId: '__stitch-replay-overlay-host',
+    position: 'bottom-right',
+    offsetX: 16,
+    offsetY: 16,
+    markerAttr: 'data-stitch-replay-overlay',
+    title: 'Replay',
+    status: 'Running',
+    mainText: 'Step: -/-',
+    reasonText: 'Reason: -',
+    pausedText: '',
+    visible: true,
+    collapsible: true,
+    collapsed: Boolean(state.collapsed),
+    onToggleCollapse: (collapsed) => {
+      state.collapsed = Boolean(collapsed);
+      render();
+    },
+  });
+  if (!shell) return;
 
   const sendControl = (cmd) => {
     if (typeof window.__stitchReplayControl === 'function') {
@@ -198,139 +296,123 @@ REPLAY_OVERLAY_SCRIPT = r"""
     }
   };
 
-  pauseBtn.onclick = () => {
-      paused = !paused;
-      state.paused = paused;
-      if (paused) {
-        pauseBtn.textContent = 'Resume';
-        status.textContent = 'Status: Paused';
-        reason.textContent = 'Reason: Operator pause';
-        if (!pausedSince) pausedSince = Date.now();
-        state.pausedSince = pausedSince;
-        pausedFor.style.display = 'block';
-        sendControl('pause');
-      } else {
-        pauseBtn.textContent = 'Pause';
-        status.textContent = 'Status: Running';
-        reason.textContent = 'Reason: -';
-        pausedSince = null;
-        state.pausedSince = null;
-        pausedFor.style.display = 'none';
-        pausedFor.textContent = 'Paused: -';
-        sendControl('resume');
+  runtime.renderControls(
+    shell,
+    [
+      { command: 'pause', label: state.paused ? 'Resume' : 'Pause' },
+      { command: 'stop', label: 'Stop', variant: 'stop' },
+    ],
+    (command) => {
+      if (command === 'pause') {
+        state.paused = !state.paused;
+        if (state.paused) {
+          if (!state.pausedSince) state.pausedSince = Date.now();
+          state.status = 'Paused';
+          state.reason = 'Operator pause';
+          sendControl('pause');
+        } else {
+          state.pausedSince = null;
+          state.status = 'Running';
+          state.reason = '-';
+          sendControl('resume');
+        }
+        render();
+        return;
       }
-      renderOverlay();
-    };
+      if (command === 'stop') {
+        state.status = 'Stopping...';
+        state.paused = false;
+        state.pausedSince = null;
+        sendControl('stop');
+        render();
+      }
+    }
+  );
 
-  stopBtn.onclick = () => {
-      status.textContent = 'Status: Stopping...';
-      pausedSince = null;
-      state.pausedSince = null;
-      sendControl('stop');
-      renderOverlay();
-    };
+  const render = () => {
+    if (shell.titleEl) shell.titleEl.textContent = 'Replay';
+    if (shell.statusEl) shell.statusEl.textContent = `Status: ${state.status || 'Running'}`;
 
-  collapseBtn.onclick = () => {
-    state.collapsed = !state.collapsed;
-    renderOverlay();
-  };
+    const current = Number(state.stepCurrent || 0);
+    const total = Number(state.stepTotal || 0);
+    const progress = current && total ? `${current}/${total}` : '-/-';
 
-  row.appendChild(pauseBtn);
-  row.appendChild(stopBtn);
-  topActions.appendChild(collapseBtn);
-  topRow.appendChild(title);
-  topRow.appendChild(topActions);
-
-  body.appendChild(status);
-  body.appendChild(step);
-  body.appendChild(reason);
-  body.appendChild(pausedFor);
-  body.appendChild(row);
-
-  box.appendChild(topRow);
-  box.appendChild(compact);
-  box.appendChild(body);
-  document.documentElement.appendChild(box);
-
-  const renderOverlay = () => {
-    if (collapseBtn) {
-      collapseBtn.textContent = state.collapsed ? 'Expand' : 'Collapse';
+    if (shell.mainEl) shell.mainEl.textContent = `Step: ${progress}`;
+    if (shell.reasonEl) {
+      shell.reasonEl.textContent = `Reason: ${String(state.reason || '-').trim() || '-'}`;
+      shell.reasonEl.style.display = 'block';
     }
 
-    if (compact) {
-      const current = Number(state.stepCurrent || 0);
-      const total = Number(state.stepTotal || 0);
-      const progress = total > 0 ? `${current}/${total}` : '-/-';
-      compact.textContent = `${state.paused ? 'PAUSED' : 'RUN'} • ${progress}`;
-      compact.style.display = state.collapsed ? 'block' : 'none';
+    if (shell.pausedEl) {
+      if (state.paused && state.pausedSince) {
+        const sec = Math.max(0, Math.floor((Date.now() - state.pausedSince) / 1000));
+        shell.pausedEl.textContent = `Paused: ${sec}s`;
+        shell.pausedEl.style.display = 'block';
+      } else {
+        shell.pausedEl.textContent = 'Paused: -';
+        shell.pausedEl.style.display = 'none';
+      }
     }
 
-    if (body) {
-      body.style.display = state.collapsed ? 'none' : 'block';
+    if (shell.compactEl) {
+      shell.compactEl.textContent = `${state.paused ? 'PAUSED' : 'RUN'} • ${progress}`;
     }
 
-    box.style.minWidth = state.collapsed ? '140px' : '220px';
+    runtime.setControlState(shell, 'pause', {
+      label: state.paused ? 'Resume' : 'Pause',
+    });
+    shell.setCollapsed(Boolean(state.collapsed));
+    shell.setVisible(true);
   };
 
   window.__stitchReplayOverlaySetStatus = (text) => {
     state.status = (text || 'Running').toString();
-    status.textContent = `Status: ${state.status}`;
-    renderOverlay();
+    render();
   };
 
   window.__stitchReplayOverlaySetStep = (current, total) => {
     state.stepCurrent = Number(current || 0);
     state.stepTotal = Number(total || 0);
-    if (!current || !total) {
-      step.textContent = 'Step: -/-';
-      renderOverlay();
-      return;
-    }
-    step.textContent = `Step: ${current}/${total}`;
-    renderOverlay();
+    render();
   };
 
   window.__stitchReplayOverlaySetReason = (text) => {
     const v = (text || '').toString().trim();
-    reason.textContent = `Reason: ${v || '-'}`;
-    renderOverlay();
+    state.reason = v || '-';
+    render();
   };
 
   window.__stitchReplayOverlaySetPaused = (flag) => {
     state.paused = Boolean(flag);
-    if (flag) {
-      if (!pausedSince) pausedSince = Date.now();
-      state.pausedSince = pausedSince;
-      pausedFor.style.display = 'block';
+    if (state.paused) {
+      if (!state.pausedSince) state.pausedSince = Date.now();
+      if (!state.reason || state.reason === '-') state.reason = 'Operator pause';
     } else {
-      pausedSince = null;
       state.pausedSince = null;
-      pausedFor.style.display = 'none';
-      pausedFor.textContent = 'Paused: -';
+      if (state.reason === 'Operator pause') state.reason = '-';
     }
-    renderOverlay();
+    render();
   };
 
   window.__stitchReplayOverlaySetSaved = (path) => {
-    status.textContent = 'Status: Saved';
-    reason.textContent = `Reason: ${path ? `Saved report ${path}` : 'Saved'}`;
-    pausedSince = null;
-    state.pausedSince = null;
+    state.status = 'Saved';
+    state.reason = path ? `Saved report ${path}` : 'Saved';
     state.paused = false;
-    pausedFor.style.display = 'none';
-    pausedFor.textContent = 'Paused: -';
-    renderOverlay();
+    state.pausedSince = null;
+    render();
   };
 
   setInterval(() => {
-    if (!pausedSince) return;
-    const sec = Math.max(0, Math.floor((Date.now() - pausedSince) / 1000));
-    pausedFor.textContent = `Paused: ${sec}s`;
+    if (!state.paused || !state.pausedSince) return;
+    render();
   }, 1000);
 
-  renderOverlay();
+  render();
 })();
 """
+
+
+REPLAY_OVERLAY_SCRIPT = _load_shared_overlay_runtime_script() + "\n" + _REPLAY_OVERLAY_BOOTSTRAP
 
 
 def _parse_args() -> argparse.Namespace:

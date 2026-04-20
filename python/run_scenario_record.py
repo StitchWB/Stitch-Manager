@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 """Scenario Recorder (MVP)
 
 Records user interactions in a headed Camoufox persistent profile and exports
@@ -16,14 +18,16 @@ Usage example:
   python python/run_scenario_record.py --alias "test@local.profile" --url "https://example.com/login" --scenario-name "login"
 """
 
-from __future__ import annotations
+# Early startup logging to stderr for debugging (after __future__ import)
+import sys
+import time
+sys.stderr.write(f"[run_scenario_record.py] Starting at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+sys.stderr.flush()
 
 import argparse
 import asyncio
 import json
 import os
-import sys
-import time
 from urllib.parse import urlsplit
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,6 +96,7 @@ class RecordedStep:
     selector: str | None
     value: str | None
     meta: dict[str, Any]
+    frameSrc: str | None = None
 
 
 def _parse_proxy_switch_raw(value: Any) -> dict[str, Any] | None:
@@ -200,10 +205,20 @@ def _mask_proxy_for_display(data: dict[str, Any]) -> str:
 
 RECORDER_INIT_SCRIPT = r"""
 (() => {
-  // Only record events in top-level document.
-  // Prevent duplicate listeners inside iframes (e.g., reCAPTCHA).
+  // Record events in top-level document and same-origin iframes.
+  // Cross-origin iframes are blocked by browser security.
+  let _isTopFrame = true;
+  let _frameSrc = null;
   try {
-    if (window.top !== window.self) return;
+    if (window.top !== window.self) {
+      try {
+        void window.top.document;
+        _isTopFrame = false;
+        _frameSrc = location.href;
+      } catch {
+        return;
+      }
+    }
   } catch {
     return;
   }
@@ -248,6 +263,9 @@ RECORDER_INIT_SCRIPT = r"""
   const send = (payload) => {
     if (window.__stitchRecorderPaused) return;
     try {
+      if (!_isTopFrame && _frameSrc) {
+        payload.frameSrc = _frameSrc;
+      }
       // Primary channel: console-based protocol. More reliable than window bindings on some pages.
       console.info('__STITCH_REC_STEP__' + JSON.stringify(payload));
       window.__stitchRecorderStepCount = (window.__stitchRecorderStepCount || 0) + 1;
@@ -1432,6 +1450,7 @@ async def main_async() -> int:
                 selector=str(payload.get("selector")) if payload.get("selector") else None,
                 value=str(payload.get("value")) if payload.get("value") is not None else None,
                 meta=dict(payload.get("meta") or {}),
+                frameSrc=str(payload.get("frameSrc")) if payload.get("frameSrc") else None,
             )
             steps.append(step)
             _event(
@@ -1979,6 +1998,7 @@ async def main_async() -> int:
                         "selector": s.selector,
                         "value": s.value,
                         "meta": s.meta,
+                        "frameSrc": s.frameSrc,
                     }
                     for s in steps
                 ],
@@ -1998,6 +2018,19 @@ async def main_async() -> int:
     try:
         import playwright
         _log("info", f"Playwright {playwright.__version__}", step="init")
+        # Check if browsers are installed
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser_path = p.chromium.executable_path
+                _log("info", f"Chromium browser path: {browser_path}", step="init")
+                if not browser_path or not Path(browser_path).exists():
+                    _log("error", "Chromium browser not found! Run: playwright install chromium", step="init")
+                    sys.stderr.write("ERROR: Chromium browser not found! Run: playwright install chromium\n")
+                    _result(False, error={"code": "browser_not_installed", "message": "Chromium not found. Run: playwright install chromium"})
+                    return 1
+        except Exception as browser_err:
+            _log("warn", f"Could not check browser path: {browser_err}", step="init")
     except Exception:
         pass
     _log("info", f"Starting recording: alias={args.alias}, url={args.url}, headless={args.headless}", step="init")
@@ -2015,12 +2048,14 @@ async def main_async() -> int:
             active_page_id, \
             active_proxy_library_id
         try:
+            _log("info", f"Creating ProfileLauncher with profile_id={args.alias}, headless={args.headless}, proxy={'yes' if proxy_url else 'no'}", step="init")
             local_launcher = ProfileLauncher(
                 profile_id=args.alias,
                 headless=bool(args.headless),
                 proxy=proxy_url or None,
                 config=config,
             )
+            _log("info", "ProfileLauncher created successfully", step="init")
         except Exception as e:
             import traceback
             _log("error", f"Failed to create ProfileLauncher: {e}", step="init")
