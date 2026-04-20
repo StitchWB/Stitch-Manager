@@ -175,6 +175,20 @@ async def main_async() -> int:
                     )
                     continue
 
+                if msg_type == "replay_step_waiting":
+                    index = int(payload.get("index") or current_step)
+                    event(
+                        "scenario.replay.step.waiting",
+                        {
+                            "runId": run_id,
+                            "index": index,
+                            "total": total_steps,
+                            "kind": payload.get("kind") or "unknown",
+                            "message": payload.get("message") or "Manual action required",
+                        },
+                    )
+                    continue
+
                 if msg_type == "replay_step_fail":
                     index = int(payload.get("index") or current_step)
                     failed += 1
@@ -199,9 +213,37 @@ async def main_async() -> int:
                     continue
 
                 if msg_type == "replay_error":
+                    err = str(payload.get("error") or "Replay failed")
+                    last_error = err
                     stop_requested = True
-                    last_error = str(payload.get("error") or "Replay failed")
+                    event(
+                        "scenario.replay.error",
+                        {
+                            "runId": run_id,
+                            "error": err,
+                        },
+                    )
                     continue
+
+                if msg_type == "session_active":
+                    event(
+                        "scenario.replay.session.active",
+                        {
+                            "runId": payload.get("runId") or run_id,
+                            "mode": payload.get("mode") or "replay",
+                            "current": payload.get("current"),
+                            "total": payload.get("total"),
+                            "paused": payload.get("paused"),
+                        },
+                    )
+                    continue
+
+                log(
+                    "warn",
+                    f"Unhandled WS message type: {msg_type}",
+                    step="ws_handler",
+                    data={"rawType": msg_type, "payload": payload},
+                )
         finally:
             if server_state.current_ws is websocket:
                 server_state.current_ws = None
