@@ -259,12 +259,23 @@ RECORDER_INIT_SCRIPT = r"""
     }
   };
 
-  const isOverlayEvent = (el) => {
+  const isOverlayEvent = (event, el) => {
     try {
-      return !!(el && el.closest && el.closest('[data-stitch-recorder="1"]'));
-    } catch {
-      return false;
-    }
+      if (el && el.closest && el.closest('[data-stitch-recorder="1"]')) return true;
+    } catch {}
+    try {
+      if (event && typeof event.composedPath === 'function') {
+        const path = event.composedPath();
+        if (Array.isArray(path)) {
+          for (const node of path) {
+            if (node && node.nodeType === 1 && node.getAttribute) {
+              if (node.getAttribute('data-stitch-recorder') === '1') return true;
+            }
+          }
+        }
+      }
+    } catch {}
+    return false;
   };
 
   const describeEl = (el) => {
@@ -322,7 +333,7 @@ RECORDER_INIT_SCRIPT = r"""
 
   document.addEventListener('input', (e) => {
     const el = e.target;
-    if (isOverlayEvent(el)) return;
+    if (isOverlayEvent(e, el)) return;
 
     try {
       const prev = inputTimers.get(el);
@@ -347,7 +358,7 @@ RECORDER_INIT_SCRIPT = r"""
 
   document.addEventListener('click', (e) => {
     const el = e.target;
-    if (isOverlayEvent(el)) return;
+    if (isOverlayEvent(e, el)) return;
     send({
       kind: 'click',
       ts: new Date().toISOString(),
@@ -360,7 +371,7 @@ RECORDER_INIT_SCRIPT = r"""
 
   document.addEventListener('change', (e) => {
     const el = e.target;
-    if (isOverlayEvent(el)) return;
+    if (isOverlayEvent(e, el)) return;
     const value = safe(() => el && 'value' in el ? el.value : null);
     send({
       kind: 'change',
@@ -374,7 +385,7 @@ RECORDER_INIT_SCRIPT = r"""
 
   document.addEventListener('submit', (e) => {
     const el = e.target;
-    if (isOverlayEvent(el)) return;
+    if (isOverlayEvent(e, el)) return;
     send({
       kind: 'submit',
       ts: new Date().toISOString(),
@@ -407,6 +418,160 @@ RECORDER_INIT_SCRIPT = r"""
 """
 
 
+_SHARED_OVERLAY_RUNTIME_PATH = (
+    PYTHON_ROOT.parent / "extension" / "stitch-scenario-runner" / "overlay_runtime.js"
+)
+
+
+def _overlay_runtime_shim_script() -> str:
+    return r"""
+(() => {
+  if (window.StitchOverlayRuntime) return;
+  const fallback = {
+    createOverlayShell(options = {}) {
+      const parent = document.documentElement || document.body;
+      if (!parent) return null;
+      const hostId = String(options.hostId || '__stitch-overlay-host');
+      let host = document.getElementById(hostId);
+      if (!host) {
+        host = document.createElement('div');
+        host.id = hostId;
+      }
+      host.style.position = 'fixed';
+      host.style.zIndex = '2147483647';
+      host.style.pointerEvents = 'none';
+      host.style.right = `${Number.isFinite(Number(options.offsetX)) ? Number(options.offsetX) : 16}px`;
+      if (String(options.position || '') === 'bottom-right') {
+        host.style.bottom = `${Number.isFinite(Number(options.offsetY)) ? Number(options.offsetY) : 16}px`;
+        host.style.top = '';
+      } else {
+        host.style.top = `${Number.isFinite(Number(options.offsetY)) ? Number(options.offsetY) : 16}px`;
+        host.style.bottom = '';
+      }
+      if (options.markerAttr) host.setAttribute(String(options.markerAttr), '1');
+      if (!host.isConnected) parent.appendChild(host);
+      if (!host.shadowRoot) host.attachShadow({ mode: 'open' });
+      const root = host.shadowRoot;
+      let panel = root.getElementById('__shim_panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = '__shim_panel';
+        panel.style.pointerEvents = 'auto';
+        panel.style.background = 'rgba(8,14,22,.95)';
+        panel.style.color = '#f0f7ff';
+        panel.style.border = '1px solid rgba(133,180,208,.36)';
+        panel.style.borderRadius = '12px';
+        panel.style.padding = '10px';
+        panel.style.fontFamily = 'Segoe UI, Tahoma, sans-serif';
+        panel.style.fontSize = '12px';
+        panel.style.minWidth = '220px';
+        const title = document.createElement('div');
+        title.id = '__shim_title';
+        const status = document.createElement('div');
+        status.id = '__shim_status';
+        const main = document.createElement('div');
+        main.id = '__shim_main';
+        main.style.margin = '6px 0';
+        const reason = document.createElement('div');
+        reason.id = '__shim_reason';
+        const paused = document.createElement('div');
+        paused.id = '__shim_paused';
+        const compact = document.createElement('div');
+        compact.id = '__shim_compact';
+        compact.style.display = 'none';
+        const body = document.createElement('div');
+        body.id = '__shim_body';
+        const extra = document.createElement('div');
+        extra.id = '__shim_extra';
+        const controls = document.createElement('div');
+        controls.id = '__shim_controls';
+        controls.style.display = 'flex';
+        controls.style.gap = '6px';
+        controls.style.flexWrap = 'wrap';
+        body.appendChild(main);
+        body.appendChild(reason);
+        body.appendChild(paused);
+        body.appendChild(extra);
+        body.appendChild(controls);
+        panel.appendChild(title);
+        panel.appendChild(status);
+        panel.appendChild(compact);
+        panel.appendChild(body);
+        root.appendChild(panel);
+      }
+      return {
+        host,
+        root,
+        panel,
+        titleEl: root.getElementById('__shim_title'),
+        statusEl: root.getElementById('__shim_status'),
+        mainEl: root.getElementById('__shim_main'),
+        reasonEl: root.getElementById('__shim_reason'),
+        pausedEl: root.getElementById('__shim_paused'),
+        extraEl: root.getElementById('__shim_extra'),
+        controlsEl: root.getElementById('__shim_controls'),
+        compactEl: root.getElementById('__shim_compact'),
+        bodyEl: root.getElementById('__shim_body'),
+        collapseBtn: null,
+        collapsed: false,
+        setCollapsed(next) {
+          this.collapsed = Boolean(next);
+          if (this.compactEl) this.compactEl.style.display = this.collapsed ? 'block' : 'none';
+          if (this.bodyEl) this.bodyEl.style.display = this.collapsed ? 'none' : 'block';
+        },
+        setVisible(visible) {
+          host.style.display = visible ? 'block' : 'none';
+        },
+      };
+    },
+    renderControls(shell, controls, onCommand) {
+      if (!shell || !shell.controlsEl) return;
+      shell.controlsEl.textContent = '';
+      for (const entry of controls || []) {
+        const btn = document.createElement('button');
+        const command = String((entry && entry.command) || '');
+        btn.type = 'button';
+        btn.textContent = String((entry && entry.label) || command || 'Action');
+        btn.dataset.command = command;
+        btn.style.padding = '6px 8px';
+        btn.style.borderRadius = '7px';
+        btn.style.cursor = 'pointer';
+        btn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof onCommand === 'function') onCommand(command, entry || {}, event);
+        });
+        shell.controlsEl.appendChild(btn);
+      }
+    },
+    setControlState(shell, command, patch = {}) {
+      const btn = shell && shell.controlsEl
+        ? shell.controlsEl.querySelector(`button[data-command="${String(command || '')}"]`)
+        : null;
+      if (!btn) return;
+      if (Object.prototype.hasOwnProperty.call(patch, 'disabled')) btn.disabled = Boolean(patch.disabled);
+      if (Object.prototype.hasOwnProperty.call(patch, 'label')) btn.textContent = String(patch.label || btn.textContent || '');
+    },
+  };
+  window.StitchOverlayRuntime = fallback;
+})();
+"""
+
+
+def _load_shared_overlay_runtime_script() -> str:
+    try:
+        source = _SHARED_OVERLAY_RUNTIME_PATH.read_text(encoding="utf-8")
+        if source.strip():
+            return source
+    except Exception as e:
+        _log(
+            "warn",
+            f"Shared overlay runtime unavailable, using shim: {e}",
+            step="overlay",
+        )
+    return _overlay_runtime_shim_script()
+
+
 RECORDER_OVERLAY_SCRIPT = r"""
 (() => {
   // Only render overlay in top-level document (avoid iframes like reCAPTCHA).
@@ -431,8 +596,12 @@ RECORDER_OVERLAY_SCRIPT = r"""
       activeProxyLabel: (window.__stitchRecorderActiveProxyLabel || '').toString(),
     };
   }
+  window.__stitchRecorderRecording = true;
 
   const state = window.__stitchRecorderOverlayState;
+  const runtime = window.StitchOverlayRuntime;
+  if (!runtime || typeof runtime.createOverlayShell !== 'function') return;
+
   const getRuntimeCatalog = () => (
     Array.isArray(window.__stitchRecorderRuntimeProxyCatalog)
       ? window.__stitchRecorderRuntimeProxyCatalog
@@ -448,11 +617,9 @@ RECORDER_OVERLAY_SCRIPT = r"""
 
   const syncProxyPicker = (picker, input) => {
     if (!picker) return;
-
     const runtimeCatalog = getRuntimeCatalog();
     const runtimeMap = getRuntimeMap();
     const runtimeMapKeys = Object.keys(runtimeMap || {});
-
     const currentProxyId = (state.activeProxyId || '').toString().trim();
     const currentProxyLabel = (state.activeProxyLabel || '').toString().trim();
     const preserved = (
@@ -515,175 +682,213 @@ RECORDER_OVERLAY_SCRIPT = r"""
       : currentProxyId && seen.has(currentProxyId)
         ? currentProxyId
         : '';
-
     picker.value = selectedId;
-    if (input && !input.value && selectedId) {
-      input.value = selectedId;
-    }
+    if (input && !input.value && selectedId) input.value = selectedId;
   };
 
   const sendControl = (cmd) => {
-    // Primary channel: Playwright binding (if available)
     try {
       if (typeof window.__stitchRecordControl === 'function') {
         window.__stitchRecordControl(cmd);
         return;
       }
     } catch {}
-    // Fallback channel: console protocol (works even if bindings are blocked)
     try {
       console.info('__STITCH_REC_CTRL__' + String(cmd || ''));
     } catch {}
   };
 
-    const emitProxySwitch = (proxyLibraryId) => {
-      const id = (proxyLibraryId || '').toString().trim();
-      if (!id) return;
-      try {
-        const payload = {
-          kind: 'proxy.switch',
-          ts: new Date().toISOString(),
-          url: location.href,
-          selector: null,
-          value: null,
-          meta: {
-            proxyLibraryId: id || null,
-            hasDirectProxy: false,
-          },
-        };
-
-        // Primary secure channel: Playwright binding (avoids sensitive console logs)
-        if (typeof window.__stitchRecordEvent === 'function') {
-          window.__stitchRecordEvent(payload);
-        } else {
-          console.info('__STITCH_REC_STEP__' + JSON.stringify(payload));
-        }
-      } catch {}
-    };
-
-    const requestProxyRestart = (proxyLibraryId) => {
-      try {
-        const payload = {
-          action: 'proxy.restart',
-          proxyLibraryId: (proxyLibraryId || '').toString().trim() || null,
-          url: location.href,
-        };
-        sendControl(JSON.stringify(payload));
-      } catch {}
+  const emitProxySwitch = (proxyLibraryId) => {
+    const id = (proxyLibraryId || '').toString().trim();
+    if (!id) return;
+    try {
+      const payload = {
+        kind: 'proxy.switch',
+        ts: new Date().toISOString(),
+        url: location.href,
+        selector: null,
+        value: null,
+        meta: {
+          proxyLibraryId: id,
+          hasDirectProxy: false,
+        },
+      };
+      if (typeof window.__stitchRecordEvent === 'function') {
+        window.__stitchRecordEvent(payload);
+      } else {
+        console.info('__STITCH_REC_STEP__' + JSON.stringify(payload));
+      }
+    } catch {}
   };
 
-  const makeOverlay = () => {
-    const existing = document.getElementById('__stitch-recorder-overlay');
-    if (existing) return existing;
+  const requestProxyRestart = (proxyLibraryId) => {
+    try {
+      sendControl(JSON.stringify({
+        action: 'proxy.restart',
+        proxyLibraryId: (proxyLibraryId || '').toString().trim() || null,
+        url: location.href,
+      }));
+    } catch {}
+  };
 
-    const box = document.createElement('div');
-    box.id = '__stitch-recorder-overlay';
-    box.setAttribute('data-stitch-recorder', '1');
-    box.style.all = 'initial';
-    box.style.position = 'fixed';
-    box.style.right = '16px';
-    box.style.bottom = '16px';
-    box.style.zIndex = '2147483647';
-    box.style.background = 'rgba(11,13,18,0.92)';
-    box.style.color = '#e2e8f0';
-    box.style.border = '1px solid rgba(148,163,184,0.25)';
-    box.style.borderRadius = '10px';
-    box.style.padding = '10px';
-    box.style.fontFamily = 'Inter, Segoe UI, Arial, sans-serif';
-    box.style.fontSize = '12px';
-    box.style.minWidth = '220px';
-    box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.4)';
-    box.style.display = 'block';
+  let shell = null;
+  let ui = null;
 
-    const title = document.createElement('div');
-    title.textContent = 'Stitch Recorder';
-    title.style.fontWeight = '700';
+  const ensureShell = () => {
+    if (shell && shell.host && shell.host.isConnected) return shell;
+    shell = runtime.createOverlayShell({
+      hostId: '__stitch-recorder-overlay-host',
+      position: 'bottom-right',
+      offsetX: 16,
+      offsetY: 16,
+      markerAttr: 'data-stitch-recorder',
+      title: 'Recorder',
+      status: 'Status: Recording',
+      mainText: 'Steps: 0',
+      reasonText: 'Reason: -',
+      pausedText: '',
+      visible: true,
+      collapsible: true,
+      collapsed: Boolean(state.collapsed),
+      onToggleCollapse: (collapsed) => {
+        state.collapsed = Boolean(collapsed);
+        renderOverlay();
+      },
+    });
+    if (!shell) return null;
 
-    const topRow = document.createElement('div');
-    topRow.style.display = 'flex';
-    topRow.style.alignItems = 'center';
-    topRow.style.justifyContent = 'space-between';
-    topRow.style.marginBottom = '6px';
+    runtime.renderControls(
+      shell,
+      [
+        ...(window.__stitchRecorderRecording && !state.paused ? [{ command: 'manual', label: 'Manual ⏸', variant: 'accent' }] : []),
+        { command: 'pause', label: state.paused ? 'Resume' : 'Pause' },
+        { command: 'stop', label: 'Finish & Save', variant: 'stop' },
+        { command: 'browser.close', label: 'Close Browser', variant: 'accent' },
+      ],
+      (command) => {
+        if (command === 'manual') {
+          // Record manual step and pause
+          if (window.__stitchRecordEvent) {
+            window.__stitchRecordEvent({
+              kind: 'manual',
+              ts: new Date().toISOString(),
+              url: location.href,
+              selector: null,
+              value: null,
+              meta: { source: 'manual-step', description: 'Manual action required (e.g., captcha)' },
+            });
+          } else {
+            console.info('__STITCH_REC_STEP__' + JSON.stringify({
+              kind: 'manual',
+              ts: new Date().toISOString(),
+              url: location.href,
+              selector: null,
+              value: null,
+              meta: { source: 'manual-step', description: 'Manual action required (e.g., captcha)' },
+            }));
+          }
+          // Pause recording
+          state.paused = true;
+          window.__stitchRecorderPaused = true;
+          state.status = 'Manual step';
+          state.reason = 'Complete the action manually, then click Resume';
+          state.pausedSince = Date.now();
+          sendControl('pause');
+          renderOverlay();
+          return;
+        }
 
-    const topActions = document.createElement('div');
-    topActions.style.display = 'flex';
-    topActions.style.gap = '6px';
+        if (command === 'pause') {
+          // If resuming from manual step, record manual-continue step
+          if (state.status === 'Manual step' && state.paused) {
+            if (window.__stitchRecordEvent) {
+              window.__stitchRecordEvent({
+                kind: 'manual-continue',
+                ts: new Date().toISOString(),
+                url: location.href,
+                selector: null,
+                value: null,
+                meta: { source: 'manual-step-continue' },
+              });
+            } else {
+              console.info('__STITCH_REC_STEP__' + JSON.stringify({
+                kind: 'manual-continue',
+                ts: new Date().toISOString(),
+                url: location.href,
+                selector: null,
+                value: null,
+                meta: { source: 'manual-step-continue' },
+              }));
+            }
+          }
+          state.paused = !state.paused;
+          window.__stitchRecorderPaused = state.paused;
+          if (state.paused) {
+            state.status = 'Paused';
+            state.reason = 'Operator pause';
+            if (!state.pausedSince) state.pausedSince = Date.now();
+            sendControl('pause');
+          } else {
+            state.status = 'Recording';
+            state.reason = '-';
+            state.pausedSince = null;
+            sendControl('resume');
+          }
+          renderOverlay();
+          return;
+        }
 
-    const mkBtn = (label, bg) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = label;
-      b.style.padding = '6px 10px';
-      b.style.borderRadius = '7px';
-      b.style.border = '1px solid rgba(148,163,184,0.25)';
-      b.style.background = bg;
-      b.style.color = '#fff';
-      b.style.cursor = 'pointer';
-      b.style.fontSize = '12px';
-      return b;
-    };
+        if (command === 'stop') {
+          state.status = 'Stopping...';
+          window.__stitchRecorderPaused = true;
+          state.pausedSince = null;
+          renderOverlay();
+          sendControl('stop');
+          return;
+        }
 
-    const collapseBtn = mkBtn(state.collapsed ? 'Expand' : 'Collapse', '#1e293b');
-    collapseBtn.id = '__stitch-recorder-collapse';
+        if (command === 'browser.close') {
+          state.status = 'Closing browser...';
+          state.reason = 'Operator requested browser close';
+          renderOverlay();
+          sendControl(JSON.stringify({ action: 'browser.close' }));
+        }
+      }
+    );
+    return shell;
+  };
 
-    const compact = document.createElement('div');
-    compact.id = '__stitch-recorder-compact';
-    compact.style.display = 'none';
-    compact.style.opacity = '0.9';
-    compact.style.fontSize = '11px';
-    compact.style.fontWeight = '600';
-    compact.style.marginTop = '2px';
+  const makeBtn = (label, variant) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `stitch-btn${variant ? ` ${variant}` : ''}`;
+    btn.textContent = label;
+    return btn;
+  };
 
-    const body = document.createElement('div');
-    body.id = '__stitch-recorder-body';
+  const ensureUi = () => {
+    const currentShell = ensureShell();
+    if (!currentShell || !currentShell.extraEl) return null;
+    if (ui && ui.tabsList && ui.tabsList.isConnected) return ui;
 
-    const status = document.createElement('div');
-    status.id = '__stitch-recorder-status';
-    status.style.opacity = '0.9';
-    status.style.marginBottom = '8px';
-
-    const count = document.createElement('div');
-    count.id = '__stitch-recorder-count';
-    count.style.opacity = '0.85';
-    count.style.marginBottom = '8px';
-
-    const reason = document.createElement('div');
-    reason.id = '__stitch-recorder-reason';
-    reason.style.opacity = '0.8';
-    reason.style.marginBottom = '6px';
-
-    const pausedFor = document.createElement('div');
-    pausedFor.id = '__stitch-recorder-paused';
-    pausedFor.style.opacity = '0.8';
-    pausedFor.style.marginBottom = '8px';
-    pausedFor.style.display = 'none';
+    const extra = currentShell.extraEl;
+    extra.textContent = '';
 
     const tabsBlock = document.createElement('div');
-    tabsBlock.id = '__stitch-recorder-tabs';
     tabsBlock.style.marginBottom = '8px';
-
     const tabsHeader = document.createElement('div');
     tabsHeader.textContent = 'Tabs';
-    tabsHeader.style.opacity = '0.85';
-    tabsHeader.style.marginBottom = '4px';
-
+    tabsHeader.className = 'stitch-subhead';
     const tabsList = document.createElement('div');
-    tabsList.id = '__stitch-recorder-tabs-list';
     tabsList.style.display = 'flex';
     tabsList.style.flexDirection = 'column';
     tabsList.style.gap = '4px';
-
     tabsBlock.appendChild(tabsHeader);
     tabsBlock.appendChild(tabsList);
 
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.gap = '6px';
-
-    const utilityRow = document.createElement('div');
-    utilityRow.style.display = 'flex';
-    utilityRow.style.gap = '6px';
-    utilityRow.style.marginTop = '8px';
+    const proxyPicker = document.createElement('select');
+    proxyPicker.className = 'stitch-field';
+    proxyPicker.style.marginBottom = '8px';
 
     const proxyRow = document.createElement('div');
     proxyRow.style.display = 'grid';
@@ -693,324 +898,198 @@ RECORDER_OVERLAY_SCRIPT = r"""
 
     const proxyInput = document.createElement('input');
     proxyInput.type = 'text';
-    proxyInput.id = '__stitch-recorder-proxy-input';
     proxyInput.placeholder = 'proxyLibraryId';
-    proxyInput.style.background = 'rgba(2,6,23,0.45)';
-    proxyInput.style.border = '1px solid rgba(148,163,184,0.25)';
-    proxyInput.style.color = '#e2e8f0';
-    proxyInput.style.borderRadius = '7px';
-    proxyInput.style.padding = '6px 8px';
-    proxyInput.style.fontSize = '12px';
+    proxyInput.className = 'stitch-field';
+    proxyInput.style.padding = '8px 10px';
 
-    const proxyPicker = document.createElement('select');
-    proxyPicker.id = '__stitch-recorder-proxy-picker';
-    proxyPicker.style.background = 'rgba(2,6,23,0.45)';
-    proxyPicker.style.border = '1px solid rgba(148,163,184,0.25)';
-    proxyPicker.style.color = '#e2e8f0';
-    proxyPicker.style.borderRadius = '7px';
-    proxyPicker.style.padding = '6px 8px';
-    proxyPicker.style.fontSize = '12px';
-    proxyPicker.style.marginBottom = '8px';
-
-    syncProxyPicker(proxyPicker, proxyInput);
+    const proxyRecordBtn = makeBtn('Record Step', 'success');
+    const proxyApplyBtn = makeBtn('Apply&Continue', 'accent');
 
     proxyPicker.onchange = () => {
       const id = (proxyPicker.value || '').trim();
-      if (!id) return;
-      proxyInput.value = id;
-    };
-
-    const initialProxyId = (state.activeProxyId || '').toString().trim();
-    if (initialProxyId && !proxyInput.value) {
-      proxyInput.value = initialProxyId;
-    }
-
-    const proxyRecordBtn = mkBtn('Record Step', '#0f766e');
-    const proxyApplyBtn = mkBtn('Apply&Continue', '#1d4ed8');
-
-    const splitProxyInput = () => {
-      const raw = (proxyInput.value || '').trim();
-      if (!raw) return null;
-      return { proxyId: raw };
+      if (id) proxyInput.value = id;
     };
 
     proxyRecordBtn.onclick = () => {
-      const data = splitProxyInput();
-      if (!data) return;
-      const { proxyId } = data;
-      emitProxySwitch(proxyId);
-      state.reason = proxyId ? `Proxy switched (${proxyId})` : 'Proxy switch recorded';
-      ensureOverlayAttached();
+      const id = (proxyInput.value || '').trim();
+      if (!id) return;
+      emitProxySwitch(id);
+      state.reason = `Proxy switched (${id})`;
+      renderOverlay();
     };
 
     proxyApplyBtn.onclick = () => {
-      const data = splitProxyInput();
-      if (!data) return;
-      const { proxyId } = data;
-      emitProxySwitch(proxyId);
-      requestProxyRestart(proxyId);
+      const id = (proxyInput.value || '').trim();
+      if (!id) return;
+      emitProxySwitch(id);
+      requestProxyRestart(id);
       state.status = 'Restarting...';
-      state.reason = proxyId ? `Restarting with ${proxyId}` : 'Restarting with proxy';
-      ensureOverlayAttached();
+      state.reason = `Restarting with ${id}`;
+      renderOverlay();
     };
 
     proxyRow.appendChild(proxyInput);
     proxyRow.appendChild(proxyRecordBtn);
     proxyRow.appendChild(proxyApplyBtn);
 
-    const pauseBtn = mkBtn('Pause', '#334155');
-    pauseBtn.id = '__stitch-recorder-pause';
-    const stopBtn = mkBtn('Finish & Save', '#7f1d1d');
-    const closeBrowserBtn = mkBtn('Close Browser', '#7c3aed');
-    const newTabBtn = mkBtn('New tab', '#475569');
-
-    pauseBtn.onclick = () => {
-      state.paused = !state.paused;
-      window.__stitchRecorderPaused = state.paused;
-      if (state.paused) {
-        state.status = 'Paused';
-        state.reason = 'Operator pause';
-        if (!state.pausedSince) state.pausedSince = Date.now();
-        sendControl('pause');
-      } else {
-        state.status = 'Recording';
-        state.reason = '-';
-        state.pausedSince = null;
-        sendControl('resume');
-      }
-      renderOverlay();
-    };
-
-    stopBtn.onclick = () => {
-      state.status = 'Stopping...';
-      window.__stitchRecorderPaused = true;
-      state.pausedSince = null;
-      renderOverlay();
-      sendControl('stop');
-    };
-
-    closeBrowserBtn.onclick = () => {
-      state.status = 'Closing browser...';
-      state.reason = 'Operator requested browser close';
-      renderOverlay();
-      try {
-        sendControl(JSON.stringify({ action: 'browser.close' }));
-      } catch {}
-    };
-
+    const utilityRow = document.createElement('div');
+    utilityRow.style.display = 'flex';
+    utilityRow.style.gap = '6px';
+    utilityRow.style.marginTop = '8px';
+    const newTabBtn = makeBtn('New tab', '');
     newTabBtn.onclick = () => {
-      try {
-        sendControl(JSON.stringify({ action: 'tab.new' }));
-      } catch {}
+      sendControl(JSON.stringify({ action: 'tab.new' }));
     };
-
-    collapseBtn.onclick = () => {
-      state.collapsed = !state.collapsed;
-      renderOverlay();
-    };
-
-    row.appendChild(pauseBtn);
-    row.appendChild(stopBtn);
-    row.appendChild(closeBrowserBtn);
-
     utilityRow.appendChild(newTabBtn);
 
-    topActions.appendChild(collapseBtn);
-    topRow.appendChild(title);
-    topRow.appendChild(topActions);
+    extra.appendChild(tabsBlock);
+    extra.appendChild(proxyPicker);
+    extra.appendChild(proxyRow);
+    extra.appendChild(utilityRow);
 
-    body.appendChild(status);
-    body.appendChild(count);
-    body.appendChild(reason);
-    body.appendChild(pausedFor);
-    body.appendChild(tabsBlock);
-    body.appendChild(proxyPicker);
-    body.appendChild(proxyRow);
-    body.appendChild(row);
-    body.appendChild(utilityRow);
+    ui = {
+      tabsList,
+      proxyPicker,
+      proxyInput,
+      newTabBtn,
+    };
+    return ui;
+  };
 
-    box.appendChild(topRow);
-    box.appendChild(compact);
-    box.appendChild(body);
+  const renderTabs = () => {
+    const refs = ensureUi();
+    if (!refs) return;
+    const tabsList = refs.tabsList;
+    while (tabsList.firstChild) tabsList.removeChild(tabsList.firstChild);
 
-    (document.body || document.documentElement).appendChild(box);
-    return box;
+    const tabs = Array.isArray(state.tabs) ? state.tabs : [];
+    const activeTabId = (state.activeTabId || '').toString();
+    if (!tabs.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No tabs';
+      empty.style.opacity = '0.7';
+      tabsList.appendChild(empty);
+      return;
+    }
+
+    let tabIdx = 0;
+    for (const tab of tabs) {
+      const tabId = (tab && tab.id != null ? String(tab.id) : '').trim();
+      if (!tabId) continue;
+      tabIdx += 1;
+
+      const row = document.createElement('div');
+      row.className = 'stitch-tab-row';
+
+      const activate = document.createElement('button');
+      activate.type = 'button';
+      activate.className = `stitch-tab-btn${tabId === activeTabId ? ' active' : ''}`;
+      activate.title = (tab.url || '').toString();
+
+      const content = document.createElement('span');
+      content.style.display = 'inline-flex';
+      content.style.alignItems = 'center';
+      content.style.gap = '6px';
+
+      const indexBadge = document.createElement('span');
+      indexBadge.textContent = String(tabIdx);
+      indexBadge.style.opacity = '0.75';
+      indexBadge.style.minWidth = '12px';
+
+      const faviconUrl = (tab.favicon || '').toString().trim();
+      if (faviconUrl) {
+        const img = document.createElement('img');
+        img.src = faviconUrl;
+        img.alt = '';
+        img.width = 14;
+        img.height = 14;
+        img.style.width = '14px';
+        img.style.height = '14px';
+        img.style.borderRadius = '3px';
+        img.style.objectFit = 'cover';
+        img.style.background = 'rgba(15,23,42,0.5)';
+        img.referrerPolicy = 'no-referrer';
+        img.onerror = () => {
+          try { img.remove(); } catch {}
+        };
+        content.appendChild(img);
+      }
+
+      const label = document.createElement('span');
+      label.textContent = (tab.title || tab.url || 'tab').toString().slice(0, 42);
+      content.appendChild(indexBadge);
+      content.appendChild(label);
+      activate.textContent = '';
+      activate.appendChild(content);
+
+      activate.onclick = () => {
+        sendControl(JSON.stringify({ action: 'tab.activate', tabId }));
+      };
+
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = '×';
+      close.className = 'stitch-tab-close';
+      close.onclick = () => {
+        sendControl(JSON.stringify({ action: 'tab.close', tabId }));
+      };
+
+      row.appendChild(activate);
+      row.appendChild(close);
+      tabsList.appendChild(row);
+    }
   };
 
   const renderOverlay = () => {
-    const box = makeOverlay();
-    const status = box.querySelector('#__stitch-recorder-status');
-    const count = box.querySelector('#__stitch-recorder-count');
-    const reason = box.querySelector('#__stitch-recorder-reason');
-    const pausedFor = box.querySelector('#__stitch-recorder-paused');
-    const tabsList = box.querySelector('#__stitch-recorder-tabs-list');
-    const pauseBtn = box.querySelector('#__stitch-recorder-pause');
-    const collapseBtn = box.querySelector('#__stitch-recorder-collapse');
-    const compact = box.querySelector('#__stitch-recorder-compact');
-    const body = box.querySelector('#__stitch-recorder-body');
-    const proxyPicker = box.querySelector('#__stitch-recorder-proxy-picker');
-    const proxyInput = box.querySelector('#__stitch-recorder-proxy-input');
+    const currentShell = ensureShell();
+    const refs = ensureUi();
+    if (!currentShell || !refs) return;
 
-    syncProxyPicker(proxyPicker, proxyInput);
+    syncProxyPicker(refs.proxyPicker, refs.proxyInput);
 
-    if (status) status.textContent = `Status: ${state.status || 'Recording'}`;
-    if (count) count.textContent = `Steps: ${Number.isFinite(Number(state.count)) ? Number(state.count) : 0}`;
-    if (reason) reason.textContent = `Reason: ${(state.reason || '-').toString()}`;
+    if (currentShell.titleEl) currentShell.titleEl.textContent = 'Recorder';
+    if (currentShell.statusEl) currentShell.statusEl.textContent = `Status: ${state.status || 'Recording'}`;
+    if (currentShell.mainEl) currentShell.mainEl.textContent = `Steps: ${Number.isFinite(Number(state.count)) ? Number(state.count) : 0}`;
 
-    const currentProxyId = (state.activeProxyId || '').toString().trim();
-    const currentProxyLabel = (state.activeProxyLabel || '').toString().trim();
-    if (!state.reason || state.reason === '-') {
+    let reasonValue = (state.reason || '-').toString();
+    if (!reasonValue || reasonValue === '-') {
+      const currentProxyId = (state.activeProxyId || '').toString().trim();
+      const currentProxyLabel = (state.activeProxyLabel || '').toString().trim();
       if (currentProxyId || currentProxyLabel) {
-        state.reason = currentProxyLabel
-          ? `Proxy: ${currentProxyLabel}`
-          : `Proxy: ${currentProxyId}`;
-        if (reason) reason.textContent = `Reason: ${state.reason}`;
+        reasonValue = currentProxyLabel ? `Proxy: ${currentProxyLabel}` : `Proxy: ${currentProxyId}`;
       }
     }
-
-    if (pauseBtn) {
-      pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+    if (currentShell.reasonEl) {
+      currentShell.reasonEl.textContent = `Reason: ${reasonValue || '-'}`;
+      currentShell.reasonEl.style.display = 'block';
     }
 
-    if (collapseBtn) {
-      collapseBtn.textContent = state.collapsed ? 'Expand' : 'Collapse';
-    }
-
-    if (compact) {
-      compact.textContent = `${state.paused ? 'PAUSED' : 'REC'} • ${Number.isFinite(Number(state.count)) ? Number(state.count) : 0}`;
-      compact.style.display = state.collapsed ? 'block' : 'none';
-    }
-
-    if (body) {
-      body.style.display = state.collapsed ? 'none' : 'block';
-    }
-
-    box.style.minWidth = state.collapsed ? '140px' : '220px';
-
-    if (pausedFor) {
+    if (currentShell.pausedEl) {
       if (state.paused && state.pausedSince) {
-        pausedFor.style.display = 'block';
         const sec = Math.max(0, Math.floor((Date.now() - state.pausedSince) / 1000));
-        pausedFor.textContent = `Paused: ${sec}s`;
+        currentShell.pausedEl.textContent = `Paused: ${sec}s`;
+        currentShell.pausedEl.style.display = 'block';
       } else {
-        pausedFor.style.display = 'none';
-        pausedFor.textContent = 'Paused: -';
+        currentShell.pausedEl.textContent = 'Paused: -';
+        currentShell.pausedEl.style.display = 'none';
       }
     }
 
-    if (tabsList) {
-      while (tabsList.firstChild) tabsList.removeChild(tabsList.firstChild);
-      const tabs = Array.isArray(state.tabs) ? state.tabs : [];
-      const activeTabId = (state.activeTabId || '').toString();
-
-      if (!tabs.length) {
-        const empty = document.createElement('div');
-        empty.textContent = 'No tabs';
-        empty.style.opacity = '0.7';
-        tabsList.appendChild(empty);
-      } else {
-        let tabIdx = 0;
-        for (const tab of tabs) {
-          const tabId = (tab && tab.id != null ? String(tab.id) : '').trim();
-          if (!tabId) continue;
-          tabIdx += 1;
-
-          const row = document.createElement('div');
-          row.style.display = 'grid';
-          row.style.gridTemplateColumns = '1fr auto';
-          row.style.gap = '6px';
-          row.style.alignItems = 'center';
-
-          const activate = document.createElement('button');
-          activate.type = 'button';
-          activate.textContent = (tab.title || tab.url || 'tab').toString().slice(0, 42);
-          activate.style.padding = '4px 6px';
-          activate.style.textAlign = 'left';
-          activate.style.borderRadius = '6px';
-          activate.style.border = '1px solid rgba(148,163,184,0.25)';
-          const isActive = tabId === activeTabId;
-          activate.style.background = isActive ? 'rgba(29,78,216,0.35)' : 'rgba(2,6,23,0.45)';
-          activate.style.color = '#e2e8f0';
-          activate.style.cursor = 'pointer';
-          activate.style.fontSize = '11px';
-          activate.title = (tab.url || '').toString();
-
-          const content = document.createElement('span');
-          content.style.display = 'inline-flex';
-          content.style.alignItems = 'center';
-          content.style.gap = '6px';
-
-          const indexBadge = document.createElement('span');
-          indexBadge.textContent = String(tabIdx);
-          indexBadge.style.opacity = '0.75';
-          indexBadge.style.minWidth = '12px';
-          indexBadge.style.fontVariantNumeric = 'tabular-nums';
-
-          const faviconUrl = (tab.favicon || '').toString().trim();
-          let iconEl = null;
-          if (faviconUrl) {
-            const img = document.createElement('img');
-            img.src = faviconUrl;
-            img.alt = '';
-            img.width = 14;
-            img.height = 14;
-            img.style.width = '14px';
-            img.style.height = '14px';
-            img.style.borderRadius = '3px';
-            img.style.objectFit = 'cover';
-            img.style.background = 'rgba(15,23,42,0.5)';
-            img.referrerPolicy = 'no-referrer';
-            img.onerror = () => {
-              try {
-                img.remove();
-              } catch {}
-            };
-            iconEl = img;
-          }
-
-          const label = document.createElement('span');
-          label.textContent = (tab.title || tab.url || 'tab').toString().slice(0, 42);
-
-          content.appendChild(indexBadge);
-          if (iconEl) content.appendChild(iconEl);
-          content.appendChild(label);
-          activate.textContent = '';
-          activate.appendChild(content);
-
-          activate.onclick = () => {
-            try {
-              sendControl(JSON.stringify({ action: 'tab.activate', tabId }));
-            } catch {}
-          };
-
-          const close = document.createElement('button');
-          close.type = 'button';
-          close.textContent = '×';
-          close.style.padding = '4px 8px';
-          close.style.borderRadius = '6px';
-          close.style.border = '1px solid rgba(148,163,184,0.25)';
-          close.style.background = 'rgba(127,29,29,0.7)';
-          close.style.color = '#fff';
-          close.style.cursor = 'pointer';
-          close.style.fontSize = '11px';
-          close.onclick = () => {
-            try {
-              sendControl(JSON.stringify({ action: 'tab.close', tabId }));
-            } catch {}
-          };
-
-          row.appendChild(activate);
-          row.appendChild(close);
-          tabsList.appendChild(row);
-        }
-      }
+    if (currentShell.compactEl) {
+      currentShell.compactEl.textContent = `${state.paused ? 'PAUSED' : 'REC'} • ${Number.isFinite(Number(state.count)) ? Number(state.count) : 0}`;
     }
+
+    runtime.setControlState(currentShell, 'pause', { label: state.paused ? 'Resume' : 'Pause' });
+    currentShell.setCollapsed(Boolean(state.collapsed));
+    currentShell.setVisible(true);
+    renderTabs();
   };
 
   const ensureOverlayAttached = () => {
-    const box = makeOverlay();
-    if (!box.isConnected) {
-      (document.body || document.documentElement).appendChild(box);
+    const currentShell = ensureShell();
+    if (!currentShell) return;
+    if (!currentShell.host.isConnected) {
+      (document.body || document.documentElement).appendChild(currentShell.host);
     }
     renderOverlay();
   };
@@ -1079,7 +1158,6 @@ RECORDER_OVERLAY_SCRIPT = r"""
     ensureOverlayAttached();
   };
 
-  // Restore current count on reinjection/navigation.
   state.count = Number(window.__stitchRecorderStepCount || 0);
   ensureOverlayAttached();
 
@@ -1093,6 +1171,9 @@ RECORDER_OVERLAY_SCRIPT = r"""
   }, 700);
 })();
 """
+
+
+RECORDER_OVERLAY_SCRIPT = _load_shared_overlay_runtime_script() + "\n" + RECORDER_OVERLAY_SCRIPT
 
 
 def _parse_args() -> argparse.Namespace:
@@ -1128,12 +1209,20 @@ async def main_async() -> int:
     args = _parse_args()
     overlay_enabled = not bool(args.no_overlay)
 
+    # Enhanced error logging for debugging startup failures
+    import_error_details = None
     try:
         from playwright.async_api import Page
         from autoreg.core.paths import get_paths
         from autoreg.browser.profile_launcher import ProfileLauncher
     except Exception as e:
-        _result(False, error={"code": "import_error", "message": str(e)})
+        import_error_details = str(e)
+        import traceback
+        _log("error", f"Import error: {e}", step="init")
+        sys.stderr.write(f"IMPORT ERROR: {e}\n")
+        sys.stderr.write(traceback.format_exc())
+        sys.stderr.flush()
+        _result(False, error={"code": "import_error", "message": str(e), "details": traceback.format_exc()})
         return 1
 
     run_id = f"rec_{int(time.time())}"
@@ -1903,6 +1992,16 @@ async def main_async() -> int:
             return
 
     _log("info", f"Starting recorder: {args.scenario_name}", step="init")
+    # Log versions for debugging
+    import platform
+    _log("info", f"Python {platform.python_version()} on {platform.system()}", step="init")
+    try:
+        import playwright
+        _log("info", f"Playwright {playwright.__version__}", step="init")
+    except Exception:
+        pass
+    _log("info", f"Starting recording: alias={args.alias}, url={args.url}, headless={args.headless}", step="init")
+
     _event("scenario.record.started", {"runId": run_id, "alias": args.alias})
 
     launcher: Any | None = None
@@ -1915,14 +2014,30 @@ async def main_async() -> int:
             context_scripts_installed, \
             active_page_id, \
             active_proxy_library_id
-        local_launcher = ProfileLauncher(
-            profile_id=args.alias,
-            headless=bool(args.headless),
-            proxy=proxy_url or None,
-            config=config,
-        )
-        local_page = await local_launcher.open(url, wait_until="domcontentloaded")
-        local_ctx = local_page.context
+        try:
+            local_launcher = ProfileLauncher(
+                profile_id=args.alias,
+                headless=bool(args.headless),
+                proxy=proxy_url or None,
+                config=config,
+            )
+        except Exception as e:
+            import traceback
+            _log("error", f"Failed to create ProfileLauncher: {e}", step="init")
+            sys.stderr.write(f"PROFILE LAUNCHER ERROR: {e}\n")
+            sys.stderr.write(traceback.format_exc())
+            sys.stderr.flush()
+            raise
+        try:
+            local_page = await local_launcher.open(url, wait_until="domcontentloaded")
+            local_ctx = local_page.context
+        except Exception as e:
+            import traceback
+            _log("error", f"Failed to open browser page: {e}", step="init")
+            sys.stderr.write(f"BROWSER OPEN ERROR: {e}\n")
+            sys.stderr.write(traceback.format_exc())
+            sys.stderr.flush()
+            raise
 
         context_bindings_installed = False
         context_scripts_installed = False
@@ -2196,8 +2311,15 @@ async def main_async() -> int:
             ctx, status="Saving", reason="", paused_flag=False, count=len(steps)
         )
     except Exception as e:
+        import traceback
+        error_msg = str(e)
+        error_traceback = traceback.format_exc()
+        _log("error", f"Recording failed: {error_msg}", step="record")
+        sys.stderr.write(f"RECORDING ERROR: {error_msg}\n")
+        sys.stderr.write(error_traceback)
+        sys.stderr.flush()
         await close_recording_session()
-        _result(False, error={"code": "record_failed", "message": str(e)})
+        _result(False, error={"code": "record_failed", "message": error_msg, "traceback": error_traceback})
         return 1
 
     if not keep_browser_open_after_save:
