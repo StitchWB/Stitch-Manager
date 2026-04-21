@@ -86,6 +86,16 @@ export const PROVIDERS: ProviderConfig[] = [
     disabled: true,
     category: 'ai',
   },
+  {
+    id: 'fireworks',
+    name: 'Fireworks AI',
+    icon: 'FW',
+    color: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+    gradient: 'from-rose-500/20 to-orange-500/20 text-rose-400',
+    hexColor: '#f43f5e',
+    disabled: false,
+    category: 'ai',
+  },
 ] as const;
 
 // ============================================

@@ -30,6 +30,11 @@ from .session_manager import (
     SessionStatus,
     get_session_manager,
 )
+from .tauri_db import (
+    get_imap_settings_from_db,
+    get_proxy_settings_from_db,
+    get_registration_settings_from_db,
+)
 
 __all__ = [
     # OAuth
@@ -62,4 +67,8 @@ __all__ = [
     'create_logger',
     'LogLevel',
     'LogStage',
+    # Tauri database interface
+    'get_imap_settings_from_db',
+    'get_proxy_settings_from_db',
+    'get_registration_settings_from_db',
 ]

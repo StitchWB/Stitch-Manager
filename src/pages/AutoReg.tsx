@@ -26,7 +26,7 @@ import {
 export default function AutoRegNext() {
   const location = useLocation();
   const autoRegSupportedProviders = useMemo<ProviderName[]>(
-    () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai'],
+    () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks'],
     []
   );
 

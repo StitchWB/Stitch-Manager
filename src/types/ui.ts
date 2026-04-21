@@ -1,6 +1,6 @@
 import type { Account, DashboardStats, KiroPatchConfig, PatchResult } from './generated';
 
-export type ProviderName = 'kiro' | 'windsurf' | 'trae' | 'copilot' | 'github' | 'aws' | 'openai';
+export type ProviderName = 'kiro' | 'windsurf' | 'trae' | 'copilot' | 'github' | 'aws' | 'openai' | 'fireworks';
 
 export type Theme = 'dark' | 'light' | 'system';
 
