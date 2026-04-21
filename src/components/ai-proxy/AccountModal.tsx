@@ -19,6 +19,7 @@ const PROVIDERS = [
   { value: 'gemini', label: 'Gemini' },
   { value: 'kiro', label: 'Kiro' },
   { value: 'antigravity', label: 'Antigravity' },
+  { value: 'fireworks', label: 'Fireworks AI' },
 ];
 
 const AUTH_METHODS = [
@@ -35,7 +36,7 @@ const ACCOUNT_TYPES = [
 ];
 
 // Providers that support OAuth
-const OAUTH_PROVIDERS = ['openai', 'claude', 'gemini', 'kiro', 'antigravity'];
+const OAUTH_PROVIDERS = ['openai', 'claude', 'gemini', 'kiro', 'antigravity', 'fireworks'];
 
 export default function AccountModal({ isOpen, account, onClose, onSubmit }: AccountModalProps) {
   const [formData, setFormData] = useState({

@@ -18,13 +18,14 @@ import json
 import os
 import re
 import sys
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ..core.paths import get_paths
-from .firefox_profile_manager import FirefoxProfileManager
+from .firefox_profile_manager import FirefoxProfileManager, DEBUG_TIMING
 
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -666,8 +667,13 @@ class ProfileLauncher:
         if self._manager is not None:
             return await self._manager.start()
 
+        t0 = time.perf_counter()
         # Lock first to prevent concurrent profile use.
+        t1 = time.perf_counter()
         self._acquire_profile_lock()
+        t2 = time.perf_counter()
+        if DEBUG_TIMING:
+            _safe_stderr(f"[ProfileLauncher] TIMING: _acquire_profile_lock: {t2-t1:.2f}s")
 
         try:
             locale = self._effective_locale()
@@ -750,7 +756,13 @@ class ProfileLauncher:
                 disable_ublock=disable_ublock,
             )
 
+            t3 = time.perf_counter()
+            if DEBUG_TIMING:
+                _safe_stderr(f"[ProfileLauncher] TIMING: before manager.start(): {t3-t0:.2f}s total")
             context = await manager.start()
+            t4 = time.perf_counter()
+            if DEBUG_TIMING:
+                _safe_stderr(f"[ProfileLauncher] TIMING: manager.start(): {t4-t3:.2f}s, total: {t4-t0:.2f}s")
             self._manager = manager
 
             # Cookie injection (best-effort). Do before navigation.
