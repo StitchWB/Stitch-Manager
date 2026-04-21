@@ -6,7 +6,7 @@ import type {
   PatchStatusType,
   UIBackupInfo,
   PatchResult,
-} from '../types';
+} from '../types/ui';
 import {
   detectIDEs,
   getPatchStatus,
@@ -34,31 +34,31 @@ interface PatcherState {
   scanning: boolean;
   backupsLoading: boolean;
   error: string | null;
-  
+
   // Operation status
   operationInProgress: Record<string, 'patching' | 'unpatching' | 'restoring' | null>;
-  
+
   // Trae storage patch state
   traePatched: boolean | null;
   traeExtensionPatched: boolean | null;
   traeWorkbenchPatched: boolean | null;
   traePatchLoading: boolean;
-  
+
   // Actions
   detectIDEs: () => Promise<DetectedIDE[]>;
   getAllPatchStatuses: () => Promise<void>;
   applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
-  
+
   // Trae storage patch actions
   checkTraePatched: () => Promise<boolean>;
   patchTraeFull: () => Promise<PatchResult>;
-  
+
   // Backup management
   listBackups: (ideId?: string) => Promise<UIBackupInfo[]>;
   restoreBackup: (backupId: string) => Promise<PatchResult>;
   deleteBackup: (backupId: string) => Promise<void>;
-  
+
   // Error handling
   clearError: () => void;
 }
@@ -93,10 +93,10 @@ export const usePatcherStore = create<PatcherState>()(
           try {
             const ides = await detectIDEs();
             set({ detectedIDEs: ides, scanning: false });
-            
+
             // Fetch patch status for all detected IDEs
             await get().getAllPatchStatuses();
-            
+
             return ides;
           } catch (error) {
             const message = error instanceof TauriError ? error.message : String(error);
@@ -112,7 +112,7 @@ export const usePatcherStore = create<PatcherState>()(
         getPatchStatus: async (ideId: string) => {
           try {
             const status = await getPatchStatus({ ideId });
-            set((state) => ({
+            set(state => ({
               patchStatus: { ...state.patchStatus, [ideId]: status },
             }));
             return status;
@@ -124,7 +124,7 @@ export const usePatcherStore = create<PatcherState>()(
               status: 'error',
               error: message,
             };
-            set((state) => ({
+            set(state => ({
               patchStatus: { ...state.patchStatus, [ideId]: errorStatus },
             }));
             throw error;
@@ -151,7 +151,7 @@ export const usePatcherStore = create<PatcherState>()(
             }
           });
 
-          set((state) => ({
+          set(state => ({
             patchStatus: { ...state.patchStatus, ...newStatuses },
           }));
         },
@@ -167,7 +167,7 @@ export const usePatcherStore = create<PatcherState>()(
               isTraeExtensionPatched().catch(() => null),
               isTraeWorkbenchPatched().catch(() => null),
             ]);
-            set({ 
+            set({
               traePatched: storagePatched,
               traeExtensionPatched: extensionPatched,
               traeWorkbenchPatched: workbenchPatched,
@@ -185,7 +185,7 @@ export const usePatcherStore = create<PatcherState>()(
           try {
             const result = await patchTraeFull();
             if (result.success) {
-              set({ 
+              set({
                 traePatched: true,
                 traeExtensionPatched: true,
                 traeWorkbenchPatched: true,
@@ -200,8 +200,8 @@ export const usePatcherStore = create<PatcherState>()(
           }
         },
 
-        applyPatch: async (ideId: string, createBackup = true) => { 
-          set((state) => ({
+        applyPatch: async (ideId: string, createBackup = true) => {
+          set(state => ({
             operationInProgress: { ...state.operationInProgress, [ideId]: 'patching' },
             error: null,
           }));
@@ -209,10 +209,10 @@ export const usePatcherStore = create<PatcherState>()(
           try {
             // Always use injection strategy (v3 patch)
             const result = await patchIDE({ ideId, createBackup, strategy: 'injection' });
-            
+
             if (result.success) {
               // Update IDE status
-              set((state) => ({
+              set(state => ({
                 detectedIDEs: state.detectedIDEs.map((ide: DetectedIDE) =>
                   ide.id === ideId ? { ...ide, isPatched: true } : ide
                 ),
@@ -235,14 +235,14 @@ export const usePatcherStore = create<PatcherState>()(
               set({ error: result.message || 'Patch failed for an unknown reason.' });
             }
 
-            set((state) => ({
+            set(state => ({
               operationInProgress: { ...state.operationInProgress, [ideId]: null },
             }));
 
             return result;
           } catch (error) {
             const message = error instanceof TauriError ? error.message : String(error);
-            set((state) => ({
+            set(state => ({
               error: message,
               operationInProgress: { ...state.operationInProgress, [ideId]: null },
             }));
@@ -251,17 +251,17 @@ export const usePatcherStore = create<PatcherState>()(
         },
 
         removePatch: async (ideId: string, restoreBackupFlag = true) => {
-          set((state) => ({
+          set(state => ({
             operationInProgress: { ...state.operationInProgress, [ideId]: 'unpatching' },
             error: null,
           }));
 
           try {
             const result = await unpatchIDE({ ideId, restoreBackup: restoreBackupFlag });
-            
+
             if (result.success) {
               // Update IDE status
-              set((state) => ({
+              set(state => ({
                 detectedIDEs: state.detectedIDEs.map((ide: DetectedIDE) =>
                   ide.id === ideId ? { ...ide, isPatched: false, patchVersion: undefined } : ide
                 ),
@@ -275,14 +275,14 @@ export const usePatcherStore = create<PatcherState>()(
               }));
             }
 
-            set((state) => ({
+            set(state => ({
               operationInProgress: { ...state.operationInProgress, [ideId]: null },
             }));
 
             return result;
           } catch (error) {
             const message = error instanceof TauriError ? error.message : String(error);
-            set((state) => ({
+            set(state => ({
               error: message,
               operationInProgress: { ...state.operationInProgress, [ideId]: null },
             }));
@@ -298,7 +298,7 @@ export const usePatcherStore = create<PatcherState>()(
           set({ backupsLoading: true });
           try {
             const backupList = await listBackups({ ideId });
-            
+
             // Group backups by IDE
             const groupedBackups: Record<string, UIBackupInfo[]> = {};
             for (const backup of backupList) {
@@ -308,10 +308,8 @@ export const usePatcherStore = create<PatcherState>()(
               groupedBackups[backup.ideId].push(backup);
             }
 
-            set((state) => ({
-              backups: ideId
-                ? { ...state.backups, [ideId]: backupList }
-                : groupedBackups,
+            set(state => ({
+              backups: ideId ? { ...state.backups, [ideId]: backupList } : groupedBackups,
               backupsLoading: false,
             }));
 
@@ -328,7 +326,7 @@ export const usePatcherStore = create<PatcherState>()(
           const { backups, detectedIDEs } = get();
           let ideId: string | null = null;
           let backup: UIBackupInfo | null = null;
-          
+
           for (const [id, backupList] of Object.entries(backups)) {
             const foundBackup = backupList.find((b: UIBackupInfo) => b.id === backupId);
             if (foundBackup) {
@@ -347,7 +345,7 @@ export const usePatcherStore = create<PatcherState>()(
           const ideType = ide?.type || 'kiro';
 
           if (ideId) {
-            set((state) => ({
+            set(state => ({
               operationInProgress: { ...state.operationInProgress, [ideId!]: 'restoring' },
               error: null,
             }));
@@ -355,10 +353,10 @@ export const usePatcherStore = create<PatcherState>()(
 
           try {
             const result = await restoreBackup({ ideType, backupPath: backup.path });
-            
+
             if (result.success && ideId) {
               // Update IDE status
-              set((state) => ({
+              set(state => ({
                 detectedIDEs: state.detectedIDEs.map((ide: DetectedIDE) =>
                   ide.id === ideId ? { ...ide, isPatched: false, patchVersion: undefined } : ide
                 ),
@@ -373,7 +371,7 @@ export const usePatcherStore = create<PatcherState>()(
             }
 
             if (ideId) {
-              set((state) => ({
+              set(state => ({
                 operationInProgress: { ...state.operationInProgress, [ideId!]: null },
               }));
             }
@@ -381,7 +379,7 @@ export const usePatcherStore = create<PatcherState>()(
             return result;
           } catch (error) {
             const message = error instanceof TauriError ? error.message : String(error);
-            set((state) => ({
+            set(state => ({
               error: message,
               operationInProgress: ideId
                 ? { ...state.operationInProgress, [ideId]: null }
@@ -394,12 +392,14 @@ export const usePatcherStore = create<PatcherState>()(
         deleteBackup: async (backupId: string) => {
           try {
             await deleteBackup({ backupId });
-            
+
             // Remove backup from state (backupId is the path)
-            set((state) => {
+            set(state => {
               const newBackups = { ...state.backups };
               for (const ideId of Object.keys(newBackups)) {
-                newBackups[ideId] = newBackups[ideId].filter((b: UIBackupInfo) => b.path !== backupId);
+                newBackups[ideId] = newBackups[ideId].filter(
+                  (b: UIBackupInfo) => b.path !== backupId
+                );
               }
               return { backups: newBackups };
             });
@@ -420,7 +420,7 @@ export const usePatcherStore = create<PatcherState>()(
       }),
       {
         name: 'patcher-store',
-        partialize: (state) => ({
+        partialize: state => ({
           // Only persist detected IDEs (not status which should be refreshed)
           detectedIDEs: state.detectedIDEs,
         }),
@@ -429,5 +429,3 @@ export const usePatcherStore = create<PatcherState>()(
     { name: 'patcher-store' }
   )
 );
-
-

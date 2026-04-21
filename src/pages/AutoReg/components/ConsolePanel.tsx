@@ -1,8 +1,5 @@
-
-
-
 import { t } from '../../../lib/i18n';
-import type { RegistrationLog } from '../../../types';
+import type { RegistrationLog } from '../../../types/ui';
 import { ButtonBase, MissionControlHUD, StatusBar } from '@/components/ui';
 
 interface ConsolePanelProps {

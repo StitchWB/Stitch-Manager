@@ -9,6 +9,7 @@ import {
   FileText,
   Terminal,
   MessageSquare,
+  Mail,
   FolderKanban,
   ChevronLeft,
   ChevronRight,
@@ -20,7 +21,6 @@ import { t } from '../../lib/i18n';
 import { cn } from '../../lib/utils';
 import { version as appVersion } from '../../../package.json';
 import { ButtonBase } from '@/components/ui';
-
 
 interface NavItemProps {
   to: string;
@@ -157,6 +157,12 @@ export default function Sidebar() {
           to="/chat"
           icon={<MessageSquare size={20} />}
           label={t('sidebar.chat')}
+          collapsed={sidebarCollapsed}
+        />
+        <NavItem
+          to="/mail"
+          icon={<Mail size={20} />}
+          label={t('sidebar.mail')}
           collapsed={sidebarCollapsed}
         />
         <NavItem

@@ -11,7 +11,7 @@ import {
   clearAccountProfileSession,
   updateAccountNotesTags,
   checkAccountStatus,
-} from '@/lib/tauri';
+} from '@/lib/tauri/modules/accounts';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
 import {

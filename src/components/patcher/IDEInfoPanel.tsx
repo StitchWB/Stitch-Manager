@@ -1,7 +1,7 @@
 import { Info } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { truncateMiddle } from '../../lib/patcher';
-import type { DetectedIDE } from '../../types';
+import type { DetectedIDE } from '../../types/ui';
 import PatchStatusBadge from './PatchStatusBadge';
 
 interface IDEInfoPanelProps {

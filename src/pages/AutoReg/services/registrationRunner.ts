@@ -18,7 +18,7 @@ import {
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
 import { DEFAULT_IMAP_PORT } from '../../../constants/registration';
-import type { ProviderName } from '../../../types';
+import type { ProviderName, OpenAIAutoregResult } from '../../../types/ui';
 import type { RegistrationConfig } from '../../../stores/registration/types';
 import type {
   PythonAutoregResult,
@@ -27,7 +27,6 @@ import type {
   TraeAutoregResult,
   GithubAutoregResult,
 } from '../../../types/generated';
-import type { OpenAIAutoregResult } from '../../../types';
 import { validateAliasConfiguration, type PythonAliasStrategy } from './aliasValidation';
 
 // Timeout for each registration attempt (5 minutes)

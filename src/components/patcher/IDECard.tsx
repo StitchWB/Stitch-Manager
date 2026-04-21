@@ -1,6 +1,6 @@
 import { CheckCircle, XCircle } from 'lucide-react';
 
-import type { DetectedIDE } from '../../types';
+import type { DetectedIDE } from '../../types/ui';
 import { getIDEIcon, getIDEGradient, getIDELabel } from '../../lib/patcher';
 import { ButtonBase } from '@/components/ui';
 
@@ -26,9 +26,7 @@ export default function IDECard({ ide, isActive, onSelect }: IDECardProps) {
         }
       `}
     >
-      {isActive && (
-        <div className={`absolute inset-0 bg-gradient-to-r ${gradient} opacity-20`} />
-      )}
+      {isActive && <div className={`absolute inset-0 bg-gradient-to-r ${gradient} opacity-20`} />}
 
       <div
         className={`

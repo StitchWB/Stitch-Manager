@@ -34,9 +34,26 @@ module.exports = {
     'no-restricted-imports': [
       'error',
       {
+        paths: [
+          {
+            name: '@/types',
+            message:
+              "Types barrel is forbidden. Import directly from '@/types/ui', '@/types/generated', or specific type modules.",
+          },
+          {
+            name: '@/types/index',
+            message:
+              "Types barrel is forbidden. Import directly from '@/types/ui', '@/types/generated', or specific type modules.",
+          },
+          {
+            name: '@/types/index.ts',
+            message:
+              "Types barrel is forbidden. Import directly from '@/types/ui', '@/types/generated', or specific type modules.",
+          },
+        ],
         patterns: [
           {
-            group: ['**/ui/*', '**/components/ui/*'],
+            group: ['**/components/ui/*'],
             message: "Import UI primitives from '@/components/ui' only (single entrypoint).",
           },
         ],

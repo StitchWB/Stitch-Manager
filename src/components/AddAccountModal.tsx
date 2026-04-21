@@ -1,10 +1,9 @@
 import { useState, useRef } from 'react';
-import type { ProviderName } from '../types';
+import type { ProviderName } from '../types/ui';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
 import { PROVIDERS } from '../constants/providers';
 import { Button, Input, Modal, Select } from '@/components/ui';
-
 
 interface AddAccountModalProps {
   isOpen: boolean;

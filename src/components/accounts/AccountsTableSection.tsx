@@ -1,4 +1,4 @@
-import type { Account } from '../../types';
+import type { Account } from '../../types/generated';
 import AccountsTable from '../AccountsTable';
 import type { AccountsTableProps } from '../AccountsTable';
 

@@ -12,8 +12,8 @@ export function ExtensionSettingsSection() {
     runnerMode: 'extension',
   });
 
-  const extensionRelativePath = 'extension/stitch-scenario-runner';
-  const extensionAbsolutePath = useMemo(() => extensionRelativePath, []);
+  const extensionRelativePath = 'extension/stitch-scenario-runner/dist';
+  const extensionPathForUi = useMemo(() => extensionRelativePath, []);
 
   const bridgeStatusText = bridge.state.checking
     ? t('recorder.extensionBridgeChecking')
@@ -35,7 +35,7 @@ export function ExtensionSettingsSection() {
 
   const openExtensionFolder = async () => {
     try {
-      await openInFileManager({ path: extensionAbsolutePath });
+      await openInFileManager({ path: extensionRelativePath });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
@@ -43,7 +43,7 @@ export function ExtensionSettingsSection() {
 
   const copyExtensionPath = async () => {
     try {
-      await copyToClipboard({ text: extensionAbsolutePath });
+      await copyToClipboard({ text: extensionPathForUi });
       toast.success(t('notifications.copied'));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -72,7 +72,7 @@ export function ExtensionSettingsSection() {
               {t('settings.extension.extensionPath')}
             </div>
             <div className="text-xs text-slate-200 font-mono break-all">
-              {extensionAbsolutePath}
+              {extensionPathForUi}
             </div>
             <div className="mt-1 text-[11px] text-slate-500">
               {t('settings.extension.pathHint')}
@@ -162,7 +162,7 @@ export function ExtensionSettingsSection() {
                 `2. ${t('settings.extension.installStep2')}`,
                 `3. ${t('settings.extension.installStep3')}`,
                 `4. ${t('settings.extension.installStep4')}`,
-                `${t('settings.extension.extensionPath')}: ${extensionAbsolutePath}`,
+                `${t('settings.extension.extensionPath')}: ${extensionPathForUi}`,
               ].join('\n');
 
               try {

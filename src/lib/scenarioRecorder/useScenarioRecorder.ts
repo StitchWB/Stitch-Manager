@@ -59,6 +59,9 @@ export function useScenarioRecorder() {
     stderr: [],
   }));
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const optionsRef = useRef<ScenarioRecorderOptions | null>(null);
   const unlistenRef = useRef<UnlistenFn | null>(null);
 
@@ -95,6 +98,7 @@ export function useScenarioRecorder() {
       lastEvent: null,
       scenarioPath: null,
       sessionDir: null,
+      commandFilePath: null,
       error: null,
       events: [],
     }));
@@ -133,10 +137,30 @@ export function useScenarioRecorder() {
         timeoutMs: 3_600_000,
       });
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+
+      // Tauri "Couldn't find callback id" occurs when the frontend reloads
+      // or the component unmounts before the Rust side resolves the invoke
+      // promise.  The job may actually have started on the Rust side, so
+      // rather than treating this as a hard error we move to a transitional
+      // state and let the polling effect discover the real job status.
+      if (errMsg.includes("Couldn't find callback")) {
+        console.warn('[useScenarioRecorder] Tauri callback lost during startPythonJob — job may still be running. Polling will recover status.');
+        setState(prev => ({
+          ...prev,
+          // Keep 'starting' so the polling effect continues trying to
+          // discover the job.  If the Rust side succeeded, the obs:event
+          // listener or the next poll will transition us to 'recording'.
+          status: 'starting',
+          error: null,
+        }));
+        return;
+      }
+
       setState(prev => ({
         ...prev,
         status: 'error',
-        error: e instanceof Error ? e.message : String(e),
+        error: errMsg,
       }));
       return;
     }
@@ -149,13 +173,14 @@ export function useScenarioRecorder() {
   }, []);
 
   const stop = useCallback(async () => {
-    const jobId = state.jobId;
+    const currentState = stateRef.current;
+    const jobId = currentState.jobId;
     if (!jobId) return;
     setState(prev => ({ ...prev, status: 'stopping' }));
     try {
-      if (state.commandFilePath) {
+      if (currentState.commandFilePath) {
         await sendPythonJobControl({
-          commandFilePath: state.commandFilePath,
+          commandFilePath: currentState.commandFilePath,
           command: 'stop',
         });
       } else {
@@ -168,48 +193,74 @@ export function useScenarioRecorder() {
         error: e instanceof Error ? e.message : String(e),
       }));
     }
-  }, [state.commandFilePath, state.jobId]);
+  }, []);
+
+  // Timeout for 'starting' state: if we're stuck in 'starting' without a
+  // jobId for more than 15 seconds, the Tauri callback was likely lost and
+  // we never received the job ID.  Transition to error so the UI isn't stuck.
+  useEffect(() => {
+    if (state.status !== 'starting') return;
+    if (state.jobId) return; // have jobId — polling effect handles the rest
+
+    const timer = window.setTimeout(() => {
+      setState(prev => {
+        if (prev.status !== 'starting' || prev.jobId) return prev;
+        return {
+          ...prev,
+          status: 'error' as ScenarioRecordStatus,
+          error: 'Failed to start recorder: Tauri callback was lost. Try again or restart the app.',
+        };
+      });
+    }, 15_000);
+
+    return () => window.clearTimeout(timer);
+  }, [state.status, state.jobId]);
 
   // Polling fallback: ensures UI sees job failure even if obs stream is silent.
   useEffect(() => {
-    const jobId = state.jobId;
-    if (!jobId) return;
+    const currentJobId = stateRef.current.jobId;
+    if (!currentJobId) return;
+    const currentStatus = stateRef.current.status;
     if (
-      state.status !== 'starting' &&
-      state.status !== 'recording' &&
-      state.status !== 'stopping'
+      currentStatus !== 'starting' &&
+      currentStatus !== 'recording' &&
+      currentStatus !== 'stopping'
     ) {
       return;
     }
 
     let stopped = false;
     const timer = window.setInterval(() => {
-      void (async () => {
-        if (stopped) return;
-        const status = await getPythonJobStatus(jobId);
-        if (!status) return;
-        if (status.state === 'succeeded') {
-          setState(prev => ({ ...prev, status: 'done' }));
-        }
-        if (
-          status.state === 'failed' ||
-          status.state === 'cancelled' ||
-          status.state === 'timedout'
-        ) {
-          setState(prev => ({
-            ...prev,
-            status: 'error',
-            error: status.error ?? `Job ${status.state}`,
-          }));
-        }
-      })();
+      const latestJobId = stateRef.current.jobId;
+      if (stopped || !latestJobId) return;
+      getPythonJobStatus(latestJobId)
+        .then(status => {
+          if (stopped || !status) return;
+          if (status.state === 'succeeded') {
+            setState(prev => ({ ...prev, status: 'done' }));
+          }
+          if (
+            status.state === 'failed' ||
+            status.state === 'cancelled' ||
+            status.state === 'timedout'
+          ) {
+            setState(prev => ({
+              ...prev,
+              status: 'error',
+              error: status.error ?? `Job ${status.state}`,
+            }));
+          }
+        })
+        .catch(() => {
+          // Best effort - ignore polling errors
+        });
     }, 1000);
 
     return () => {
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [state.jobId, state.status]);
+  }, []);
 
   // Subscribe to obs:event and filter to this jobId/correlationId
   useEffect(() => {
@@ -222,6 +273,8 @@ export function useScenarioRecorder() {
     const setup = async () => {
       const unlisten = await listen<ObsEvent>('obs:event', event => {
         if (disposed) return;
+        const current = stateRef.current;
+        if (current.jobId !== jobId || current.correlationId !== correlationId) return;
         const payload = event.payload;
         if (!payload) return;
         if (payload.source !== 'python') return;
@@ -335,6 +388,7 @@ export function useScenarioRecorder() {
     const setup = async () => {
       unlisten = await listen<ObsEvent>('obs:event', event => {
         if (disposed) return;
+        if (stateRef.current.jobId !== jobId) return;
         const payload = event.payload;
         if (!payload) return;
         if (payload.source !== 'python') return;

@@ -41,6 +41,8 @@ import {
   createOrGetProxyLibraryEntry,
   parseProxyLibraryInput,
   testProxyLibraryDraft,
+  ensureProxySaveUseAllowed,
+  ProxyLibraryError,
   type ProxyLibraryDraft,
   type ProxyLibraryEntry,
 } from '@/lib/tauri/modules/proxyLibrary';
@@ -167,7 +169,7 @@ function buildUniqueDuplicateAlias(baseAlias: string, existingAliases: string[])
   const fallback = normalized.length > 0 ? normalized : 'profile';
   const existing = new Set(existingAliases.map(alias => alias.toLowerCase()));
 
-  let candidate = `${fallback}.copy`;
+  const candidate = `${fallback}.copy`;
   if (!existing.has(candidate.toLowerCase())) {
     return candidate;
   }
@@ -335,6 +337,9 @@ export function ProfileSettingsModal({
   const [addProxyParsed, setAddProxyParsed] = useState(false);
   const [addProxyLastTestOk, setAddProxyLastTestOk] = useState(false);
   const [requireProxyTestBeforeSave, setRequireProxyTestBeforeSave] = useState(true);
+  const [selectedProxyTesting, setSelectedProxyTesting] = useState(false);
+  const [selectedProxyTestResult, setSelectedProxyTestResult] = useState<string | null>(null);
+  const [selectedProxyTestError, setSelectedProxyTestError] = useState<string | null>(null);
   const initialDraftRef = useRef<ProfileSettingsV1>(defaultSettings);
   const initialAliasRef = useRef('');
 
@@ -663,6 +668,94 @@ export function ProfileSettingsModal({
     setRequireProxyTestBeforeSave(true);
   };
 
+  const runSelectedProxyTest = async (options?: {
+    persistResult?: boolean;
+    setUiState?: boolean;
+  }): Promise<{ ok: boolean; message?: string }> => {
+    const selectedId = draft.network.proxy?.proxyLibraryId?.trim() ?? '';
+    if (!selectedId) {
+      const message = t('profileProxy.addProxyTestRequiredMessage');
+      if (options?.setUiState) {
+        setSelectedProxyTestError(message);
+        setSelectedProxyTestResult(null);
+      }
+      return { ok: false, message };
+    }
+
+    const selectedProxy = proxyLibrary.find(item => item.id === selectedId) ?? null;
+    if (!selectedProxy) {
+      const message = t('profileProxy.addProxyTestRequiredMessage');
+      if (options?.setUiState) {
+        setSelectedProxyTestError(message);
+        setSelectedProxyTestResult(null);
+      }
+      return { ok: false, message };
+    }
+
+    if (options?.setUiState) {
+      setSelectedProxyTesting(true);
+      setSelectedProxyTestError(null);
+      setSelectedProxyTestResult(null);
+    }
+
+    try {
+      const result = await testProxyLibraryDraft(
+        {
+          label: selectedProxy.label,
+          host: selectedProxy.host,
+          port: selectedProxy.port,
+          username: selectedProxy.username ?? null,
+          password: selectedProxy.password ?? null,
+          proxyType: selectedProxy.proxyType,
+          enabled: selectedProxy.enabled,
+          notes: selectedProxy.notes ?? null,
+        },
+        {
+          proxyLibraryId: selectedId,
+          persistResult: options?.persistResult ?? true,
+        }
+      );
+
+      if (result.success) {
+        const message = `${t('profileProxy.testOk')}${
+          result.responseTimeMs != null ? ` • ${result.responseTimeMs}ms` : ''
+        }${result.ip ? ` • ${result.ip}` : ''}${result.location ? ` • ${result.location}` : ''}`;
+
+        if (options?.setUiState) {
+          setSelectedProxyTestResult(message);
+          setSelectedProxyTestError(null);
+        }
+
+        return { ok: true, message };
+      }
+
+      const message = `${t('profileProxy.testFail')}${result.error ? ` • ${result.error}` : ''}`;
+      if (options?.setUiState) {
+        setSelectedProxyTestResult(message);
+        setSelectedProxyTestError(null);
+      }
+      return { ok: false, message };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : t('profileProxy.addProxyTestError');
+      if (options?.setUiState) {
+        setSelectedProxyTestError(message);
+        setSelectedProxyTestResult(null);
+      }
+      return { ok: false, message };
+    } finally {
+      if (options?.setUiState) {
+        setSelectedProxyTesting(false);
+      }
+    }
+  };
+
+  const handleTestSelectedProxy = async () => {
+    await runSelectedProxyTest({
+      persistResult: true,
+      setUiState: true,
+    });
+  };
+
   const normalizeProxyDraft = (draft: ProxyLibraryDraft): ProxyLibraryDraft => ({
     ...draft,
     label: draft.label?.trim() || `${alias ?? 'profile'} proxy`,
@@ -789,6 +882,46 @@ export function ProfileSettingsModal({
         ...draft,
         version: 1,
       });
+
+      if (normalized.network.proxy?.enabled) {
+        const selectedId = normalized.network.proxy.proxyLibraryId?.trim() ?? '';
+        if (!selectedId) {
+          setError(t('profileProxy.addProxyTestRequiredMessage'));
+          return;
+        }
+
+        const selectedProxy = proxyLibrary.find(item => item.id === selectedId) ?? null;
+        if (!selectedProxy) {
+          setError(t('profileProxy.addProxyTestRequiredMessage'));
+          return;
+        }
+
+        let guardOk = true;
+        try {
+          guardOk = await ensureProxySaveUseAllowed({
+            proxyLibraryId: selectedId,
+          });
+        } catch (guardError) {
+          if (guardError instanceof ProxyLibraryError) {
+            const isGuardFailure = guardError.code === 'proxy_save_use_guard_failed';
+            if (isGuardFailure) {
+              setError(t('profileProxy.addProxyTestRequiredMessage'));
+              return;
+            }
+            const guardMessage = guardError.message?.trim();
+            if (guardMessage) {
+              setError(guardMessage);
+              return;
+            }
+          }
+          guardOk = false;
+        }
+
+        if (!guardOk) {
+          setError(t('profileProxy.addProxyTestRequiredMessage'));
+          return;
+        }
+      }
 
       let savedAlias = currentAlias;
       if (nextAlias !== currentAlias) {
@@ -1590,10 +1723,28 @@ export function ProfileSettingsModal({
                             </div>
                           )}
 
-                          <Button size="xs" variant="secondary" onClick={openAddProxyModal}>
-                            {t('profileProxy.addProxyButton')}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              onClick={() => void handleTestSelectedProxy()}
+                              disabled={!selectedLibraryProxy || selectedProxyTesting || saving}
+                            >
+                              {selectedProxyTesting
+                                ? t('profileProxy.addProxyTesting')
+                                : t('profileProxy.addProxyTest')}
+                            </Button>
+                            <Button size="xs" variant="secondary" onClick={openAddProxyModal}>
+                              {t('profileProxy.addProxyButton')}
+                            </Button>
+                          </div>
                         </div>
+                        {selectedProxyTestError ? (
+                          <div className="text-xs text-red-300">{selectedProxyTestError}</div>
+                        ) : null}
+                        {selectedProxyTestResult ? (
+                          <div className="text-xs text-slate-300">{selectedProxyTestResult}</div>
+                        ) : null}
                       </>
                     ) : null}
                   </div>

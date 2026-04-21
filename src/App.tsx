@@ -16,6 +16,7 @@ const AiOverview = lazy(() => import('./pages/AiOverview'));
 const Antigravity = lazy(() => import('./pages/Antigravity'));
 const Patcher = lazy(() => import('./pages/Patcher'));
 const Scheduler = lazy(() => import('./pages/Scheduler'));
+const Mail = lazy(() => import('./pages/Mail'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Logs = lazy(() => import('./pages/Logs'));
 const Chat = lazy(() => import('./pages/Chat'));
@@ -27,6 +28,7 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 const prefetchAccounts = () => import('./pages/Accounts');
 const prefetchScenarios = () => import('./pages/Scenarios');
 const prefetchScheduler = () => import('./pages/Scheduler');
+const prefetchMail = () => import('./pages/Mail');
 const prefetchLogs = () => import('./pages/Logs');
 const prefetchSettings = () => import('./pages/Settings');
 
@@ -135,6 +137,7 @@ function App() {
       prefetchAccounts,
       prefetchScenarios,
       prefetchScheduler,
+      prefetchMail,
       prefetchLogs,
       prefetchSettings,
     ];
@@ -192,6 +195,7 @@ function App() {
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
             <Route path="/patcher" element={<Patcher />} />
             <Route path="/scheduler" element={<Scheduler />} />
+            <Route path="/mail" element={<Mail />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/logs" element={<Logs />} />
             <Route path="/chat" element={<Chat />} />

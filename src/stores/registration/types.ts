@@ -2,7 +2,7 @@
  * Shared types for registration stores
  */
 
-import type { ProviderName } from '../../types';
+import type { ProviderName } from '../../types/ui';
 
 // Mail strategy type
 export type MailStrategy = 'custom' | 'gmail';

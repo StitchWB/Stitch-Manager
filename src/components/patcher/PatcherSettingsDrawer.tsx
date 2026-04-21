@@ -17,12 +17,6 @@ import {
 import { toast } from 'sonner';
 import { t } from '../../lib/i18n';
 
-
-
-
-
-
-
 import PromptEditor from '../PromptEditor';
 import { AiProxySettings } from '../settings/AiProxySettings';
 import {
@@ -37,10 +31,19 @@ import {
   updateSettings,
 } from '@/lib/tauri';
 import type { KiroPatchConfig } from '../../types/kiro-patch';
-import type { Account } from '../../types';
+import type { Account } from '../../types/generated';
 import type { SettingsData } from '../../types/generated';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
-import { Button, ButtonBase, Checkbox, Input, LoadingSpinner, SegmentedControl, Select, Tooltip } from '@/components/ui';
+import {
+  Button,
+  ButtonBase,
+  Checkbox,
+  Input,
+  LoadingSpinner,
+  SegmentedControl,
+  Select,
+  Tooltip,
+} from '@/components/ui';
 
 const isKiroLogLevel = (value: string): value is KiroPatchConfig['logLevel'] => {
   return value === 'debug' || value === 'info' || value === 'warn' || value === 'error';

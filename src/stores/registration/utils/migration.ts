@@ -2,7 +2,7 @@
  * Migration utilities for provider strategies
  */
 
-import type { ProviderName } from '../../../types';
+import type { ProviderName } from '../../../types/ui';
 import type { IMAPConfig, ProviderEmailStrategy, ProviderEmailStrategies } from '../types';
 
 const DEFAULT_EMAIL_STRATEGY: ProviderEmailStrategy = {

@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { getSettings, updateSettings } from '../../lib/tauri';
 import type { SettingsData } from '../../types/generated';
-import type { ProviderName } from '../../types';
+import type { ProviderName } from '../../types/ui';
 import type { LogVerbosity } from '../../constants/logging';
 import type {
   RegistrationConfig,

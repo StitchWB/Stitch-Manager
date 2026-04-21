@@ -8,7 +8,8 @@ import { useLogsStore } from '../stores/logs';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
 import { getRegistrationJobs, clearRegistrationJobs, getDashboardStats } from '../lib/tauri';
 import { t } from '../lib/i18n';
-import type { RegistrationJob, DashboardStats } from '../types';
+import type { RegistrationJob } from '../types/ui';
+import type { DashboardStats } from '../types/generated';
 import {
   StatsGrid,
   QuickActionsPanel,

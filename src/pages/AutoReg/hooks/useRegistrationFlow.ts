@@ -4,7 +4,7 @@ import { useAppStore } from '../../../stores/app';
 import { stopRegistration } from '../../../lib/tauri';
 import { testInboxConnection } from '../../../lib/tauri/modules/registration';
 import { runRegistration, cancelActiveRegistrationJob } from '../services';
-import type { ProviderName } from '../../../types';
+import type { ProviderName } from '../../../types/ui';
 
 interface UseRegistrationFlowProps {
   config: any;

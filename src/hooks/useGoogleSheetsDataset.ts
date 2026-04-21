@@ -10,12 +10,13 @@ import type {
   GoogleSheetsServiceAccount,
   GoogleSheetsSheet,
 } from '@/types/googleSheets';
-import type { AccountsGraphDataset, KeyValue, NormalizedRow } from '@/types/generated';
+import type { AccountsGraphDataset, NormalizedRow } from '@/types/generated';
+import { cellsToRecord, parseList, pickFirst } from '@/lib/googleSheets/rowHelpers';
 import {
   fetchGoogleSheetsDataset,
   testGoogleSheetsConnection,
   type GoogleSheetsParams,
-} from '@/lib/tauri';
+} from '@/lib/tauri/modules/googleSheets';
 
 type GoogleSheetsDatasetResult = {
   dataset: GoogleSheetsDataset | null;
@@ -39,48 +40,6 @@ const fallbackDataset = (): GoogleSheetsDataset => ({
 
 const fallbackFetch = async (): Promise<GoogleSheetsDataset> => fallbackDataset();
 const fallbackTest = async (): Promise<boolean> => false;
-
-const cellsToRecord = (cells: KeyValue[]): Record<string, string> => {
-  return cells.reduce(
-    (acc, kv) => {
-      acc[kv.key] = kv.value;
-      return acc;
-    },
-    {} as Record<string, string>
-  );
-};
-
-const pickFirst = (record: Record<string, string>, keys: string[]): string => {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  return '';
-};
-
-const parseList = (value: string): string[] => {
-  if (!value) return [];
-  const trimmed = value.trim();
-  if (!trimmed) return [];
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map(item => String(item).trim())
-        .filter(Boolean)
-        .slice(0, 25);
-    }
-  } catch {
-    // fall through to delimiter parsing
-  }
-  return trimmed
-    .split(/[;,|]/g)
-    .map(item => item.trim())
-    .filter(Boolean)
-    .slice(0, 25);
-};
 
 const normalizeServiceName = (sheetName: string): string => {
   const upper = sheetName.toUpperCase();

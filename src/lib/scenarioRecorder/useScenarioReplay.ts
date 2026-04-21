@@ -92,6 +92,9 @@ export function useScenarioReplay() {
     startedAtMs: null,
   }));
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const optionsRef = useRef<ScenarioReplayOptions | null>(null);
   const unlistenRef = useRef<UnlistenFn | null>(null);
 
@@ -206,13 +209,14 @@ export function useScenarioReplay() {
   }, []);
 
   const stop = useCallback(async () => {
-    const jobId = state.jobId;
+    const currentState = stateRef.current;
+    const jobId = currentState.jobId;
     if (!jobId) return;
     setState(prev => ({ ...prev, status: 'stopping' }));
     try {
-      if (state.commandFilePath) {
+      if (currentState.commandFilePath) {
         await sendPythonJobControl({
-          commandFilePath: state.commandFilePath,
+          commandFilePath: currentState.commandFilePath,
           command: 'stop',
         });
       } else {
@@ -225,53 +229,58 @@ export function useScenarioReplay() {
         error: e instanceof Error ? e.message : String(e),
       }));
     }
-  }, [state.commandFilePath, state.jobId]);
+  }, []);
 
   // Polling fallback: ensures UI sees job failure even if obs stream is silent.
   useEffect(() => {
-    const jobId = state.jobId;
-    if (!jobId) return;
+    const currentJobId = stateRef.current.jobId;
+    if (!currentJobId) return;
+    const currentStatus = stateRef.current.status;
     if (
-      state.status !== 'starting' &&
-      state.status !== 'running' &&
-      state.status !== 'manual_pause' &&
-      state.status !== 'stopping'
+      currentStatus !== 'starting' &&
+      currentStatus !== 'running' &&
+      currentStatus !== 'manual_pause' &&
+      currentStatus !== 'stopping'
     ) {
       return;
     }
 
     let stopped = false;
     const timer = window.setInterval(() => {
-      void (async () => {
-        if (stopped) return;
-        const status = await getPythonJobStatus(jobId);
-        if (!status) return;
-        if (status.state === 'succeeded') {
-          setState(prev => ({ ...prev, status: 'done' }));
-        }
-        if (
-          status.state === 'failed' ||
-          status.state === 'cancelled' ||
-          status.state === 'timedout'
-        ) {
-          setState(prev => ({
-            ...prev,
-            status: 'error',
-            error: status.error ?? `Job ${status.state}`,
-          }));
-        }
-      })();
+      const latestJobId = stateRef.current.jobId;
+      if (stopped || !latestJobId) return;
+      getPythonJobStatus(latestJobId)
+        .then(status => {
+          if (stopped || !status) return;
+          if (status.state === 'succeeded') {
+            setState(prev => ({ ...prev, status: 'done' }));
+          }
+          if (
+            status.state === 'failed' ||
+            status.state === 'cancelled' ||
+            status.state === 'timedout'
+          ) {
+            setState(prev => ({
+              ...prev,
+              status: 'error',
+              error: status.error ?? `Job ${status.state}`,
+            }));
+          }
+        })
+        .catch(() => {
+          // Best effort - ignore polling errors
+        });
     }, 1000);
 
     return () => {
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [state.jobId, state.status]);
+  }, []);
 
   const sendControl = useCallback(
     async (command: 'resume' | 'continue' | 'abort' | 'cancel' | 'stop', payload?: unknown) => {
-      const commandFilePath = state.commandFilePath;
+      const commandFilePath = stateRef.current.commandFilePath;
       if (!commandFilePath) {
         throw new Error('No commandFilePath available yet');
       }
@@ -281,7 +290,7 @@ export function useScenarioReplay() {
         payload,
       });
     },
-    [state.commandFilePath]
+    []
   );
 
   // Subscribe to obs:event and filter by jobId/correlationId
@@ -294,6 +303,8 @@ export function useScenarioReplay() {
     const setup = async () => {
       const unlisten = await listen<ObsEvent>('obs:event', event => {
         if (disposed) return;
+        const current = stateRef.current;
+        if (current.jobId !== jobId || current.correlationId !== correlationId) return;
         const payload = event.payload;
         if (!payload) return;
         if (payload.source !== 'python') return;
@@ -495,6 +506,7 @@ export function useScenarioReplay() {
     const setup = async () => {
       unlisten = await listen<ObsEvent>('obs:event', event => {
         if (disposed) return;
+        if (stateRef.current.jobId !== jobId) return;
         const payload = event.payload;
         if (!payload) return;
         if (payload.source !== 'python') return;
