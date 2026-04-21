@@ -7,7 +7,7 @@ import { useConfigStore } from './config.store';
 import { useRuntimeStore } from './runtime.store';
 import { usePersistenceStore } from './persistence.store';
 import { createDebouncedSave, clearSaveTimeout } from './utils/debounce';
-import type { ProviderName } from '../../types';
+import type { ProviderName } from '../../types/ui';
 import type { LogVerbosity } from '../../constants/logging';
 import type {
   RegistrationConfig,
@@ -16,7 +16,7 @@ import type {
   AdvancedSettings,
   SaveStatus,
 } from './types';
-import type { RegistrationLog, RegistrationProgress, RegistrationStatus } from '../../types';
+import type { RegistrationLog, RegistrationProgress, RegistrationStatus } from '../../types/ui';
 import type {
   StageProgressData,
   RegistrationResult,

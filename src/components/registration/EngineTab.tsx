@@ -3,7 +3,7 @@ import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';
 
 import { t } from '../../lib/i18n';
-import type { ProviderName } from '../../types';
+import type { ProviderName } from '../../types/ui';
 import type { LogVerbosity } from '../../constants/logging';
 import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
 import { RangeSlider, SectionHeader, Select, Toggle } from '@/components/ui';

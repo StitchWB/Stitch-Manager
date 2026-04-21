@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import type { Account, ProviderName, AccountStatus } from '../types';
+import type { Account } from '../types/generated';
+import type { ProviderName, AccountStatus } from '../types/ui';
 import {
   listAccounts,
   addAccount,

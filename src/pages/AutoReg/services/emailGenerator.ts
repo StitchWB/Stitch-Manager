@@ -5,7 +5,7 @@
 
 import { getNextCounter } from '../../../lib/tauri';
 import { RANDOM_NAMES } from '../../../constants/registration';
-import type { ProviderName } from '../../../types';
+import type { ProviderName } from '../../../types/ui';
 import type { IMAPConfig } from '../../../stores/registration/types';
 
 export interface EmailGenerationOptions {
@@ -77,10 +77,7 @@ export async function generateEmail(
 /**
  * Generate Gmail email with plus addressing
  */
-async function generateGmailEmail(
-  provider: ProviderName,
-  imapConfig: IMAPConfig
-): Promise<string> {
+async function generateGmailEmail(provider: ProviderName, imapConfig: IMAPConfig): Promise<string> {
   const base = imapConfig.gmailBase.replace('@gmail.com', '');
   let alias = imapConfig.gmailAlias || 'alias';
   const timestamp = Date.now();

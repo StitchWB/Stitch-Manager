@@ -12,17 +12,16 @@ import time
 from pathlib import Path
 from typing import Any
 
-from extension_runner_common import (
-    WsServerState,
-    event,
-    log,
-    now_iso,
-    read_control_commands,
-    result,
-    wait_for_client_connected,
-)
-
 BRIDGE_RECORD_PORT = 18731
+
+# --- stderr diagnostics (written before NDJSON protocol starts) ---
+def _stderr(msg: str) -> None:
+    try:
+        sys.stderr.write(f"[run_extension_record.py] {msg}\n")
+    except UnicodeEncodeError:
+        sys.stderr.buffer.write(f"[run_extension_record.py] {msg}\n".encode('utf-8'))
+    sys.stderr.flush()
+
 
 try:
     import websockets
@@ -44,11 +43,27 @@ def parse_args() -> argparse.Namespace:
 
 
 async def main_async() -> int:
+    _stderr("Step 1: checking dependencies...")
     if websockets is None:
+        _stderr(f"Step 1: FAILED — websockets import error: {IMPORT_ERROR}")
+        from extension_runner_common import result
         result(False, error={"code": "import_error", "message": str(IMPORT_ERROR)})
         return 1
+    _stderr("Step 1: imports OK")
+
+    from extension_runner_common import (
+        WsServerState,
+        event,
+        log,
+        now_iso,
+        read_control_commands,
+        result,
+        wait_for_client_connected,
+    )
 
     args = parse_args()
+    _stderr(f"Step 2: Python {sys.version.split()[0]} on {sys.platform}")
+    _stderr(f"Step 3: Starting extension recorder alias={args.alias} url={args.url} scenario={args.scenario_name}")
     run_id = f"ext_rec_{int(time.time())}"
 
     base_dir = Path.home() / ".stitch-manager" / "scenarios"
@@ -139,6 +154,13 @@ async def main_async() -> int:
                     stop_requested = True
                     continue
 
+                if msg_type == "record_error":
+                    err_msg = str(obj.get("payload", {}).get("error") or "Extension record error")
+                    log("error", f"Extension reported error: {err_msg}", step="ws_handler")
+                    result(False, error={"code": "extension_record_error", "message": err_msg})
+                    stop_requested = True
+                    continue
+
                 if msg_type == "session_active":
                     event(
                         "scenario.record.session.active",
@@ -162,9 +184,11 @@ async def main_async() -> int:
             if server_state.current_ws is websocket:
                 server_state.current_ws = None
 
+    _stderr(f"Step 4: Binding WebSocket on 127.0.0.1:{port}...")
     try:
         server = await websockets.serve(ws_handler, "127.0.0.1", port)
     except OSError as e:
+        _stderr(f"Step 4: FAILED — bind error: {e}")
         result(
             False,
             error={
@@ -173,6 +197,7 @@ async def main_async() -> int:
             },
         )
         return 1
+    _stderr(f"Step 4: WebSocket server listening on 127.0.0.1:{port}")
 
     def _sig_stop(*_):
         nonlocal stop_requested
@@ -204,14 +229,17 @@ async def main_async() -> int:
     )
     event("scenario.record.started", {"runId": run_id, "alias": args.alias, "mode": "extension"})
 
+    _stderr("Step 5: Waiting for extension to connect (timeout=120s)...")
     ok_client = await wait_for_client_connected(server_state, timeout_s=120.0)
     if not ok_client:
+        _stderr("Step 5: FAILED — extension did not connect within timeout")
         server.close()
         await server.wait_closed()
         result(
             False, error={"code": "extension_not_connected", "message": "Extension did not connect"}
         )
         return 1
+    _stderr("Step 5: Extension connected, entering record loop")
 
     started = time.time()
     while not stop_requested and (time.time() - started) < max(5, int(args.timeout_s)):
@@ -250,11 +278,19 @@ def main() -> None:
     try:
         code = asyncio.run(main_async())
     except KeyboardInterrupt:
+        from extension_runner_common import result
         result(False, error={"code": "interrupted", "message": "Interrupted"})
         code = 130
     except Exception as e:
-        log("error", f"Extension recorder crashed: {e}", step="fatal")
-        result(False, error={"code": "record_failed", "message": str(e)})
+        import traceback
+        tb = traceback.format_exc()
+        sys.stderr.write(f"[run_extension_record.py] FATAL: {e}\n{tb}")
+        sys.stderr.flush()
+        try:
+            from extension_runner_common import result
+            result(False, error={"code": "record_failed", "message": str(e), "traceback": tb})
+        except Exception:
+            pass
         code = 1
     raise SystemExit(code)
 

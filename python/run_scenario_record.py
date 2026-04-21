@@ -19,10 +19,23 @@ Usage example:
 """
 
 # Early startup logging to stderr for debugging (after __future__ import)
+import os
 import sys
 import time
-sys.stderr.write(f"[run_scenario_record.py] Starting at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-sys.stderr.flush()
+
+def _safe_stderr(msg: str) -> None:
+    """Write to stderr with encoding error handling for Windows."""
+    try:
+        sys.stderr.write(msg.rstrip() + os.linesep)
+        sys.stderr.flush()
+    except Exception:
+        try:
+            if hasattr(sys.stderr, 'buffer'):
+                sys.stderr.buffer.write(msg.encode('utf-8', errors='replace') + b'\n')
+        except Exception:
+            pass
+
+_safe_stderr(f"[run_scenario_record.py] Starting at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
 import argparse
 import asyncio

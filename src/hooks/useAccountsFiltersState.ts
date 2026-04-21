@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Account, AccountStatus } from '../types';
+import type { Account } from '../types/generated';
+import type { AccountStatus } from '../types/ui';
 
 import { useUrlState } from './useUrlState';
 import { t } from '../lib/i18n';

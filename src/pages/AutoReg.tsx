@@ -1,10 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 
-
-
 import { type ConfigTab } from '../components/registration';
-import { type ProviderName } from '../types';
+import { type ProviderName } from '../types/ui';
 import { type LogVerbosity } from '../constants/logging';
 import { t } from '../lib/i18n';
 
@@ -17,9 +15,13 @@ import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
 import { useAccountsStore } from '../stores/accounts';
-import { Button, GlassCard, Select, type IdentityConfig, type NetworkConfig } from '@/components/ui';
-
-
+import {
+  Button,
+  GlassCard,
+  Select,
+  type IdentityConfig,
+  type NetworkConfig,
+} from '@/components/ui';
 
 export default function AutoRegNext() {
   const location = useLocation();

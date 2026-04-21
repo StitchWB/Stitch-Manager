@@ -7,18 +7,18 @@ import { Zap } from 'lucide-react';
 import { t } from '../lib/i18n';
 
 import {
-  startOAuthFlow,
-  pollOAuthStatus,
+  providerAuthFlowStart,
+  providerAuthFlowStatus,
   openUrlInBrowser,
   scanAuthFiles,
 } from '@/lib/tauri/modules/aiProxy';
 
-import type { AuthFile, OAuthUrlResponse } from '../types/generated';
+import type { AuthFile } from '../types/generated';
 import { Button, EmptyState, GlassCard, Modal, SectionHeader } from '@/components/ui';
 
 type OAuthSession = {
   provider: string;
-  state: string;
+  sessionId: string;
   url: string;
 };
 
@@ -58,11 +58,11 @@ export default function Antigravity() {
 
   const handleStartLogin = useCallback(async () => {
     try {
-      const res: OAuthUrlResponse = await startOAuthFlow('antigravity');
-      setOauthSession({ provider: 'antigravity', state: res.state, url: res.url });
+      const res = await providerAuthFlowStart({ provider: 'antigravity' });
+      setOauthSession({ provider: 'antigravity', sessionId: res.sessionId, url: res.authUrl });
       setIsOauthModalOpen(true);
       try {
-        await openUrlInBrowser(res.url);
+        await openUrlInBrowser(res.authUrl);
       } catch {
         // ok: user can open manually
       }
@@ -82,7 +82,11 @@ export default function Antigravity() {
   } | null> => {
     if (!oauthSession) return null;
     try {
-      return await pollOAuthStatus(oauthSession.provider, oauthSession.state);
+      const res = await providerAuthFlowStatus({ sessionId: oauthSession.sessionId });
+      return {
+        status: res.phase,
+        error: res.error,
+      };
     } catch (e) {
       appToast.error(
         t('aiHub.antigravity.errors.oauthPollFailed', {
@@ -106,7 +110,7 @@ export default function Antigravity() {
           await new Promise(r => setTimeout(r, 1000));
           continue;
         }
-        if (res.status === 'ok' || res.status === 'completed') {
+        if (res.status === 'token_ready') {
           appToast.success(
             t('aiHub.antigravity.toasts.loginCompletedRefreshing'),
             'antigravity.oauth.poll'
@@ -114,7 +118,7 @@ export default function Antigravity() {
           await refreshAuthFiles();
           return;
         }
-        if (res.status === 'error' || res.status === 'failed') {
+        if (res.status === 'failed' || res.status === 'expired' || res.status === 'cancelled') {
           appToast.error(
             res.error || t('aiHub.antigravity.toasts.oauthFailedGeneric'),
             'antigravity.oauth.poll'

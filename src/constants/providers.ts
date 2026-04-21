@@ -1,4 +1,4 @@
-import type { ProviderName } from '../types';
+import type { ProviderName } from '../types/ui';
 
 // ============================================
 // Unified Provider Configuration
@@ -8,11 +8,11 @@ export interface ProviderConfig {
   id: ProviderName;
   name: string;
   icon: string;
-  color: string;           // Tailwind classes for badges/buttons
-  gradient: string;        // Gradient classes for cards
-  hexColor: string;        // Hex color for charts
-  disabled?: boolean;      // Whether registration is disabled
-  category?: 'ide' | 'cloud' | 'git' | 'ai';  // Provider category for unified UI
+  color: string; // Tailwind classes for badges/buttons
+  gradient: string; // Gradient classes for cards
+  hexColor: string; // Hex color for charts
+  disabled?: boolean; // Whether registration is disabled
+  category?: 'ide' | 'cloud' | 'git' | 'ai'; // Provider category for unified UI
 }
 
 export const PROVIDERS: ProviderConfig[] = [

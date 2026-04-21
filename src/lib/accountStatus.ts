@@ -1,4 +1,4 @@
-import type { AccountStatus } from '../types';
+import type { AccountStatus } from '../types/ui';
 import { t } from './i18n';
 
 export type AccountStatusVariant = 'success' | 'error' | 'warning' | 'neutral' | 'default';

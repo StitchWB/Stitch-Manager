@@ -2,10 +2,9 @@ import { Archive, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { formatDate, formatSize } from '../../lib/patcher';
 
-import type { UIBackupInfo } from '../../types';
+import type { UIBackupInfo } from '../../types/ui';
 import { Tooltip } from '../Tooltip';
 import { Button, ButtonBase, LoadingSpinner } from '@/components/ui';
-
 
 interface BackupsListProps {
   backups: UIBackupInfo[];
@@ -79,11 +78,7 @@ export default function BackupsList({
                       disabled={isRestoring || !backup.isValid}
                       className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded disabled:opacity-40"
                     >
-                      {isRestoring ? (
-                        <LoadingSpinner size="xs" />
-                      ) : (
-                        <RotateCcw size={14} />
-                      )}
+                      {isRestoring ? <LoadingSpinner size="xs" /> : <RotateCcw size={14} />}
                     </ButtonBase>
                   </Tooltip>
                   <Tooltip content={t('common.delete')}>

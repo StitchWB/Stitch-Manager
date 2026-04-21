@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Account } from '../types';
+import type { Account } from '../types/generated';
 import {
   extractRelationEdges,
   hasAnyRelations,

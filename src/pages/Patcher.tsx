@@ -5,7 +5,7 @@ import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
-import type { UIBackupInfo } from '../types';
+import type { UIBackupInfo } from '../types/ui';
 import { PATCH_VERSIONS, PATCH_OPTIONS } from '../constants/patcher';
 import {
   IDEGrid,
@@ -16,7 +16,7 @@ import {
 } from '../components/patcher';
 
 import { getKiroPatchConfig, saveKiroPatchConfig } from '@/lib/tauri';
-import type { KiroPatchConfig } from '../types/generated';
+import type { KiroPatchConfig } from '../types/kiro-patch';
 import { Button, ButtonBase } from '@/components/ui';
 
 export default function PatcherV2() {

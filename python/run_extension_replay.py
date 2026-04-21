@@ -7,19 +7,21 @@ import argparse
 import asyncio
 import json
 import signal
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
-from extension_runner_common import (
-    WsServerState,
-    event,
-    log,
-    now_iso,
-    read_control_commands,
-    result,
-    wait_for_client_connected,
-)
+BRIDGE_REPLAY_PORT = 18732
+
+# --- stderr diagnostics (written before NDJSON protocol starts) ---
+def _stderr(msg: str) -> None:
+    try:
+        sys.stderr.write(f"[run_extension_replay.py] {msg}\n")
+    except UnicodeEncodeError:
+        sys.stderr.buffer.write(f"[run_extension_replay.py] {msg}\n".encode('utf-8'))
+    sys.stderr.flush()
+
 
 try:
     import websockets
@@ -28,9 +30,6 @@ except Exception as e:  # pragma: no cover
     IMPORT_ERROR = e
 else:
     IMPORT_ERROR = None
-
-
-BRIDGE_REPLAY_PORT = 18732
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,19 +58,38 @@ def _load_steps(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
 
 async def main_async() -> int:
+    _stderr("Step 1: checking dependencies...")
     if websockets is None:
+        _stderr(f"Step 1: FAILED — websockets import error: {IMPORT_ERROR}")
+        from extension_runner_common import result
         result(False, error={"code": "import_error", "message": str(IMPORT_ERROR)})
         return 1
+    _stderr("Step 1: imports OK")
+
+    from extension_runner_common import (
+        WsServerState,
+        event,
+        log,
+        now_iso,
+        read_control_commands,
+        result,
+        wait_for_client_connected,
+    )
 
     args = parse_args()
+    _stderr(f"Step 2: Python {sys.version.split()[0]} on {sys.platform}")
+    _stderr(f"Step 3: Starting extension replay alias={args.alias} scenario={args.scenario_path}")
+
     scenario_path = Path(args.scenario_path).expanduser().resolve()
     if not scenario_path.exists():
+        _stderr(f"Step 3: FAILED — scenario not found: {scenario_path}")
         result(False, error={"code": "scenario_not_found", "message": str(scenario_path)})
         return 1
 
     try:
         scenario, steps = _load_steps(scenario_path)
     except Exception as e:
+        _stderr(f"Step 3: FAILED — scenario parse error: {e}")
         result(False, error={"code": "scenario_invalid", "message": str(e)})
         return 1
 
@@ -248,9 +266,11 @@ async def main_async() -> int:
             if server_state.current_ws is websocket:
                 server_state.current_ws = None
 
+    _stderr(f"Step 4: Binding WebSocket on 127.0.0.1:{BRIDGE_REPLAY_PORT}...")
     try:
         server = await websockets.serve(ws_handler, "127.0.0.1", BRIDGE_REPLAY_PORT)
     except OSError as e:
+        _stderr(f"Step 4: FAILED — bind error: {e}")
         result(
             False,
             error={
@@ -259,6 +279,7 @@ async def main_async() -> int:
             },
         )
         return 1
+    _stderr(f"Step 4: WebSocket server listening on 127.0.0.1:{BRIDGE_REPLAY_PORT}")
 
     def _sig_stop(*_):
         nonlocal stop_requested
@@ -304,14 +325,17 @@ async def main_async() -> int:
         },
     )
 
+    _stderr("Step 5: Waiting for extension to connect (timeout=120s)...")
     ok_client = await wait_for_client_connected(server_state, timeout_s=120.0)
     if not ok_client:
+        _stderr("Step 5: FAILED — extension did not connect within timeout")
         server.close()
         await server.wait_closed()
         result(
             False, error={"code": "extension_not_connected", "message": "Extension did not connect"}
         )
         return 1
+    _stderr("Step 5: Extension connected, entering replay loop")
 
     started = time.time()
     while not stop_requested and (time.time() - started) < max(5, int(args.timeout_s)):
@@ -386,11 +410,19 @@ def main() -> None:
     try:
         code = asyncio.run(main_async())
     except KeyboardInterrupt:
+        from extension_runner_common import result
         result(False, error={"code": "interrupted", "message": "Interrupted"})
         code = 130
     except Exception as e:
-        log("error", f"Extension replay crashed: {e}", step="fatal")
-        result(False, error={"code": "replay_failed", "message": str(e)})
+        import traceback
+        tb = traceback.format_exc()
+        sys.stderr.write(f"[run_extension_replay.py] FATAL: {e}\n{tb}")
+        sys.stderr.flush()
+        try:
+            from extension_runner_common import result
+            result(False, error={"code": "replay_failed", "message": str(e), "traceback": tb})
+        except Exception:
+            pass
         code = 1
     raise SystemExit(code)
 

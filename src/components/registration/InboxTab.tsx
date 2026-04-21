@@ -13,9 +13,20 @@ import {
   type WaitForEmailOptions,
 } from '../../lib/tauri/modules/emailInbox';
 import type { IMAPConfig } from '../../stores/registration/types';
-import { Input, Select, Button } from '@/components/ui';
+import { Input, Select, Button, Checkbox } from '@/components/ui';
 import { Mail, Search, Timer, Trash2, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import {
+  buildEmailQuery,
+  buildImapConnectInput,
+  buildMailTmConnectInput,
+  buildWaitForEmailOptions,
+  buildImapAccountIdFromRegistration,
+  deriveImapFieldsFromRegistration,
+  markMessageAsReadLocal,
+  removeMessageLocal,
+  upsertMessageById,
+} from '@/lib/mail/runtime';
 
 interface InboxTabProps {
   imap: IMAPConfig;
@@ -43,19 +54,18 @@ export function InboxTab({ imap, disabled, onLog }: InboxTabProps) {
     if (provider === 'mail_tm') {
       return Boolean(mailtmAddress.trim() && mailtmPassword.trim());
     }
-    const server = imap.strategy === 'gmail' ? 'imap.gmail.com' : imap.server;
-    const user = imap.strategy === 'gmail' ? imap.gmailBase : imap.email;
-    const pass = imap.strategy === 'gmail' ? imap.gmailAppPassword : imap.password;
+    const { host: server, username: user, password: pass } = deriveImapFieldsFromRegistration(imap);
     return Boolean(server?.trim() && user?.trim() && pass?.trim());
   }, [provider, mailtmAddress, mailtmPassword, imap]);
 
-  const buildQuery = () => ({
-    from: queryFrom.trim() || null,
-    subjectContains: querySubject.trim() || null,
-    bodyContains: queryBody.trim() || null,
-    unreadOnly,
-    limit: 50,
-  });
+  const buildQuery = () =>
+    buildEmailQuery({
+      from: queryFrom,
+      subjectContains: querySubject,
+      bodyContains: queryBody,
+      unreadOnly,
+      limit: 50,
+    });
 
   const log = (level: 'info' | 'warn' | 'error' | 'success' | 'debug', message: string) => {
     onLog?.(level, `[Inbox] ${message}`);
@@ -71,34 +81,21 @@ export function InboxTab({ imap, disabled, onLog }: InboxTabProps) {
 
       const input =
         provider === 'mail_tm'
-          ? {
-              provider: 'mail_tm' as const,
+          ? buildMailTmConnectInput({
               accountId: `mailtm:${mailtmAddress}`,
+              readOnly: false,
               credentials: {
-                type: 'mail_tm' as const,
-                value: {
-                  address: mailtmAddress,
-                  password: mailtmPassword,
-                  baseUrl: mailtmBaseUrl.trim() || null,
-                },
+                address: mailtmAddress,
+                password: mailtmPassword,
+                baseUrl: mailtmBaseUrl,
               },
-              options: { mailbox: null, readOnly: false },
-            }
-          : {
-              provider: 'imap' as const,
-              accountId: `imap:${imap.email || imap.gmailBase}`,
-              credentials: {
-                type: 'imap' as const,
-                value: {
-                  host: imap.strategy === 'gmail' ? 'imap.gmail.com' : imap.server,
-                  port: imap.port,
-                  username: imap.strategy === 'gmail' ? imap.gmailBase : imap.email,
-                  password: imap.strategy === 'gmail' ? imap.gmailAppPassword : imap.password,
-                  useTls: imap.useTLS,
-                },
-              },
-              options: { mailbox: 'INBOX', readOnly: false },
-            };
+            })
+          : buildImapConnectInput({
+              accountId: buildImapAccountIdFromRegistration(imap),
+              mailbox: 'INBOX',
+              readOnly: false,
+              credentials: deriveImapFieldsFromRegistration(imap),
+            });
 
       const nextSession = await emailInboxConnect(input);
       const caps = await emailInboxGetCapabilities(nextSession.sessionId);
@@ -148,13 +145,13 @@ export function InboxTab({ imap, disabled, onLog }: InboxTabProps) {
     if (!session) return;
     setIsBusy(true);
     try {
-      const waitOptions: WaitForEmailOptions = {
+      const waitOptions: WaitForEmailOptions = buildWaitForEmailOptions({
         timeoutMs,
         pollIntervalMs,
-        dedupeKey: dedupeKey.trim() || null,
-      };
+        dedupeKey,
+      });
       const message = await emailInboxWaitForEmail(session.sessionId, buildQuery(), waitOptions);
-      setMessages(prev => [message, ...prev.filter(m => m.id !== message.id)]);
+      setMessages(prev => upsertMessageById(prev, message));
       log('success', `Email received: ${message.subject || '(no subject)'}`);
     } catch (error) {
       log('warn', `Wait finished: ${String(error)}`);
@@ -167,7 +164,7 @@ export function InboxTab({ imap, disabled, onLog }: InboxTabProps) {
     if (!session) return;
     try {
       await emailInboxMarkAsRead(session.sessionId, messageId);
-      setMessages(prev => prev.map(m => (m.id === messageId ? { ...m, isRead: true } : m)));
+      setMessages(prev => markMessageAsReadLocal(prev, messageId));
       log('info', `Marked as read: ${messageId}`);
     } catch (error) {
       log('warn', `Mark as read failed: ${String(error)}`);
@@ -178,7 +175,7 @@ export function InboxTab({ imap, disabled, onLog }: InboxTabProps) {
     if (!session) return;
     try {
       await emailInboxDelete(session.sessionId, messageId);
-      setMessages(prev => prev.filter(m => m.id !== messageId));
+      setMessages(prev => removeMessageLocal(prev, messageId));
       log('info', `Deleted message: ${messageId}`);
     } catch (error) {
       log('warn', `Delete failed: ${String(error)}`);
@@ -274,15 +271,12 @@ export function InboxTab({ imap, disabled, onLog }: InboxTabProps) {
             disabled={!session || disabled || isBusy}
           />
           <div className="flex items-end">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={unreadOnly}
-                onChange={e => setUnreadOnly(e.target.checked)}
-                disabled={!session || disabled || isBusy}
-              />
-              Unread only
-            </label>
+            <Checkbox
+              checked={unreadOnly}
+              onChange={e => setUnreadOnly(e.target.checked)}
+              disabled={!session || disabled || isBusy}
+              label="Unread only"
+            />
           </div>
         </div>
 

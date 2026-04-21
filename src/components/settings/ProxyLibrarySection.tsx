@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Trash2, Upload, Save, AlertCircle, CheckCircle2, Globe, Eye, EyeOff } from 'lucide-react';
 
-import { SectionHeader, Button, Input, Select, Textarea, Toggle } from '@/components/ui';
+import {
+  ConfirmDialog,
+  SectionHeader,
+  Button,
+  Checkbox,
+  Input,
+  Select,
+  Textarea,
+  Toggle,
+} from '@/components/ui';
 import { t } from '@/lib/i18n';
 import {
   createOrGetProxyLibraryEntry,
@@ -18,7 +27,23 @@ import {
   type ProxyLibraryEntry,
   type ProxyLibraryImportResult,
   type ProxyLibraryType,
+  type ProxyLibraryUsage,
 } from '@/lib/tauri/modules/proxyLibrary';
+
+interface ForceUpdateDialogState {
+  isOpen: boolean;
+  id: string;
+  draft: ProxyLibraryDraft;
+  errorMessage: string;
+  usage: ProxyLibraryUsage;
+}
+
+interface ForceDeleteDialogState {
+  isOpen: boolean;
+  id: string;
+  errorMessage: string;
+  usage: ProxyLibraryUsage;
+}
 
 const defaultDraft: ProxyLibraryDraft = {
   label: '',
@@ -81,6 +106,9 @@ export function ProxyLibrarySection() {
   const [testBusy, setTestBusy] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testingEntryId, setTestingEntryId] = useState<string | null>(null);
+  const [forceUpdateDialog, setForceUpdateDialog] = useState<ForceUpdateDialogState | null>(null);
+  const [forceDeleteDialog, setForceDeleteDialog] = useState<ForceDeleteDialogState | null>(null);
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -211,26 +239,13 @@ export function ProxyLibrarySection() {
       if (e instanceof ProxyLibraryError && e.code === 'proxy_in_use' && editingId) {
         const usage = await getProxyLibraryUsage(editingId).catch(() => null);
         if (usage) {
-          const forceDisable = window.confirm(
-            `${e.message}\n\n${t('proxyLibrary.referencesProfiles')}:\n${usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${usage.scenarioPaths.join('\n') || '-'}\n\n${t('proxyLibrary.forceDeleteConfirm')}`
-          );
-          if (forceDisable) {
-            try {
-              const updated = await updateProxyLibraryEntry({
-                id: editingId,
-                draft: normalizeDraft(editDraft),
-                options: { force: true },
-              });
-              setItems(prev => prev.map(it => (it.id === updated.id ? updated : it)));
-              cancelEdit();
-              return;
-            } catch (forceErr) {
-              setError(
-                forceErr instanceof Error ? forceErr.message : t('proxyLibrary.updateError')
-              );
-              return;
-            }
-          }
+          setForceUpdateDialog({
+            isOpen: true,
+            id: editingId,
+            draft: normalizeDraft(editDraft),
+            errorMessage: e.message,
+            usage,
+          });
           setError(
             `${e.message}\n${t('proxyLibrary.referencesProfiles')}: ${usage.profileAliases.join(', ') || '-'}\n${t('proxyLibrary.referencesScenarios')}: ${usage.scenarioPaths.length}`
           );
@@ -245,25 +260,31 @@ export function ProxyLibrarySection() {
 
   const handleDelete = async (id: string, force = false) => {
     setError(null);
+    console.log('[handleDelete] Starting delete for id:', id, 'force:', force);
     try {
       const res = await deleteProxyLibraryEntry({ id, options: { force } });
+      console.log('[handleDelete] Delete result:', res);
       if (res.changed) {
-        setItems(prev => prev.filter(it => it.id !== id));
+        setItems(prev => {
+          const filtered = prev.filter(it => it.id !== id);
+          console.log('[handleDelete] Updated items, removed:', id, 'remaining:', filtered.length);
+          return filtered;
+        });
+      } else {
+        console.log('[handleDelete] Delete returned changed=false, item may not have been deleted');
       }
     } catch (e) {
+      console.log('[handleDelete] Error:', e);
       if (e instanceof ProxyLibraryError && e.code === 'proxy_in_use') {
+        // Always show force-delete dialog, even if usage lookup fails
         const usage = await getProxyLibraryUsage(id).catch(() => null);
-        if (usage) {
-          const forceDelete = window.confirm(
-            `${e.message}\n\n${t('proxyLibrary.referencesProfiles')}:\n${usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${
-              usage.scenarioPaths.join('\n') || '-'
-            }\n\n${t('proxyLibrary.forceDeleteConfirm')}`
-          );
-          if (forceDelete) {
-            await handleDelete(id, true);
-          }
-          return;
-        }
+        setForceDeleteDialog({
+          isOpen: true,
+          id,
+          errorMessage: e.message,
+          usage: usage || { profileAliases: [], scenarioPaths: [] },
+        });
+        return;
       }
       setError(e instanceof Error ? e.message : t('proxyLibrary.deleteError'));
     }
@@ -300,16 +321,21 @@ export function ProxyLibrarySection() {
 
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return;
-    const confirmDelete = window.confirm(
-      t('proxyLibrary.forceDeletePrompt', { count: selectedIds.length })
-    );
-    if (!confirmDelete) return;
+    setBatchDeleteDialogOpen(true);
+  };
+
+  const handleConfirmBatchDelete = async () => {
+    if (selectedIds.length === 0) {
+      setBatchDeleteDialogOpen(false);
+      return;
+    }
 
     for (const id of selectedIds) {
       await handleDelete(id, true);
     }
     await load();
     setSelectedIds([]);
+    setBatchDeleteDialogOpen(false);
   };
 
   const handleBulkImport = async () => {
@@ -621,8 +647,7 @@ export function ProxyLibrarySection() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="mb-1">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={selectedIds.includes(entry.id)}
                               onChange={e => {
                                 setSelectedIds(prev =>
@@ -631,6 +656,7 @@ export function ProxyLibrarySection() {
                                     : prev.filter(id => id !== entry.id)
                                 );
                               }}
+                              className="py-0 px-0"
                             />
                           </div>
                           <div className="text-sm text-slate-100 font-medium">{entry.label}</div>
@@ -724,6 +750,77 @@ export function ProxyLibrarySection() {
             {t('proxyLibrary.ready')}
           </div>
         ) : null}
+
+        <ConfirmDialog
+          isOpen={Boolean(forceUpdateDialog?.isOpen)}
+          onClose={() => setForceUpdateDialog(null)}
+          onConfirm={() => {
+            if (!forceUpdateDialog) return;
+            void (async () => {
+              try {
+                const updated = await updateProxyLibraryEntry({
+                  id: forceUpdateDialog.id,
+                  draft: forceUpdateDialog.draft,
+                  options: { force: true },
+                });
+                setItems(prev => prev.map(it => (it.id === updated.id ? updated : it)));
+                cancelEdit();
+              } catch (forceErr) {
+                setError(
+                  forceErr instanceof Error ? forceErr.message : t('proxyLibrary.updateError')
+                );
+              } finally {
+                setForceUpdateDialog(null);
+              }
+            })();
+          }}
+          title={t('proxyLibrary.forceDeleteConfirm')}
+          message={
+            forceUpdateDialog
+              ? `${forceUpdateDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceUpdateDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceUpdateDialog.usage.scenarioPaths.join('\n') || '-'}`
+              : ''
+          }
+          confirmText={t('common.confirm')}
+          cancelText={t('common.cancel')}
+          variant="warning"
+        />
+
+        <ConfirmDialog
+          isOpen={Boolean(forceDeleteDialog?.isOpen)}
+          onClose={() => setForceDeleteDialog(null)}
+          onConfirm={() => {
+            if (!forceDeleteDialog) return;
+            void (async () => {
+              try {
+                await handleDelete(forceDeleteDialog.id, true);
+              } finally {
+                setForceDeleteDialog(null);
+              }
+            })();
+          }}
+          title={t('proxyLibrary.forceDeleteConfirm')}
+          message={
+            forceDeleteDialog
+              ? `${forceDeleteDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceDeleteDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceDeleteDialog.usage.scenarioPaths.join('\n') || '-'}`
+              : ''
+          }
+          confirmText={t('common.delete')}
+          cancelText={t('common.cancel')}
+          variant="danger"
+        />
+
+        <ConfirmDialog
+          isOpen={batchDeleteDialogOpen}
+          onClose={() => setBatchDeleteDialogOpen(false)}
+          onConfirm={() => {
+            void handleConfirmBatchDelete();
+          }}
+          title={t('proxyLibrary.batchDelete')}
+          message={t('proxyLibrary.forceDeletePrompt', { count: selectedIds.length })}
+          confirmText={t('common.delete')}
+          cancelText={t('common.cancel')}
+          variant="danger"
+        />
       </div>
     </SectionHeader>
   );

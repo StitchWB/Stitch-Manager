@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import type { RegistrationLog, RegistrationProgress, RegistrationStatus } from '../../types';
+import type { RegistrationLog, RegistrationProgress, RegistrationStatus } from '../../types/ui';
 
 // Stage progress data
 export interface StageProgressData {

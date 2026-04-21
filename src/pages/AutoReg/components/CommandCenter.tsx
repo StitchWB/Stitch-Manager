@@ -1,5 +1,3 @@
-
-
 import {
   ProviderSelector,
   ConfigTabs,
@@ -11,7 +9,7 @@ import {
   InboxTab,
   LaunchPad,
 } from '../../../components/registration';
-import { type ProviderName } from '../../../types';
+import { type ProviderName } from '../../../types/ui';
 import { type LogVerbosity } from '../../../constants/logging';
 import { type SaveStatus } from '../../../stores/registration/types';
 import type { IMAPConfig } from '../../../stores/registration/types';

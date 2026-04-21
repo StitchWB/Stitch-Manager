@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { ProfileItem } from '../components/ProfilesTable';
-import type { Account } from '../types';
+import type { Account } from '../types/generated';
 import { formatProfileAlias } from '../lib/profiles/displayName';
 
 export type ProfileListFilter = 'all' | 'standalone' | 'linked' | 'used_kiro';

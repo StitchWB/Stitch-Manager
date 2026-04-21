@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 
 import {
-  startOAuthFlowSafe,
-  pollOAuthStatusSafe,
+  providerAuthFlowStart,
+  providerAuthFlowStatus,
   openUrlInBrowser,
 } from '../../lib/tauri/modules/aiProxy';
 import { ExternalLink, Loader2, Copy, Check } from 'lucide-react';
@@ -28,33 +28,18 @@ export default function OAuthModal({
   onSuccess,
 }: OAuthModalProps) {
   const [oauthUrl, setOauthUrl] = useState('');
-  const [oauthState, setOauthState] = useState('');
+  const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pollAttempts, setPollAttempts] = useState(0);
 
-  useEffect(() => {
-    if (isOpen && provider) {
-      initOAuth();
-    }
-    return () => {
-      setPolling(false);
-      setPollAttempts(0);
-    };
-  }, [isOpen, provider]);
-
-  const initOAuth = async () => {
+  const initOAuth = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await startOAuthFlowSafe(provider);
-      if (!response) {
-        toast.error('AI Proxy is not ready. Start the proxy and try again.');
-        onClose();
-        return;
-      }
-      setOauthUrl(response.url);
-      setOauthState(response.state);
+      const response = await providerAuthFlowStart({ provider });
+      setOauthUrl(response.authUrl);
+      setSessionId(response.sessionId);
     } catch (e) {
       console.error('[OAuthModal] Failed to start OAuth:', e);
       const message = e instanceof Error ? e.message : String(e);
@@ -68,7 +53,17 @@ export default function OAuthModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [provider, onClose]);
+
+  useEffect(() => {
+    if (isOpen && provider) {
+      void initOAuth();
+    }
+    return () => {
+      setPolling(false);
+      setPollAttempts(0);
+    };
+  }, [isOpen, provider, initOAuth]);
 
   const handleStartOAuth = async () => {
     if (!oauthUrl) return;
@@ -93,7 +88,7 @@ export default function OAuthModal({
   };
 
   const pollStatus = async () => {
-    if (!oauthState) return;
+    if (!sessionId) return;
 
     let attempts = 0;
     const interval = setInterval(async () => {
@@ -108,18 +103,18 @@ export default function OAuthModal({
       }
 
       try {
-        const status = await pollOAuthStatusSafe(provider, oauthState);
-        if (!status) {
-          // Proxy not available; keep waiting silently.
-          return;
-        }
+        const status = await providerAuthFlowStatus({ sessionId });
 
-        if (status.status === 'ok') {
+        if (status.phase === 'token_ready') {
           clearInterval(interval);
           setPolling(false);
           toast.success('OAuth completed successfully!');
           onSuccess();
-        } else if (status.status === 'error') {
+        } else if (
+          status.phase === 'failed' ||
+          status.phase === 'expired' ||
+          status.phase === 'cancelled'
+        ) {
           clearInterval(interval);
           setPolling(false);
           toast.error(`OAuth failed: ${status.error || 'Unknown error'}`);
@@ -193,9 +188,9 @@ export default function OAuthModal({
         {/* Authorization URL */}
         {oauthUrl && (
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">
               Authorization URL
-            </label>
+            </div>
             <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2.5 border border-white/10">
               <span className="flex-1 text-xs text-slate-300 font-mono truncate">
                 {truncateUrl(oauthUrl)}

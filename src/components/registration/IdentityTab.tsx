@@ -1,5 +1,4 @@
-
-import type { ProviderName } from '../../types';
+import type { ProviderName } from '../../types/ui';
 import type { SaveStatus } from '../../stores/registration';
 import { AlertTriangle, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';

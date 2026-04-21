@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import type { ProviderName, Theme, Provider } from '../types';
+import type { ProviderName, Theme, Provider } from '../types/ui';
 import { setLocale } from '../lib/i18n';
 
 export type Language = 'en' | 'ru' | 'zh';

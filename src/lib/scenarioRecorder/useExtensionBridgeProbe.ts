@@ -14,8 +14,6 @@ type UseExtensionBridgeProbeOptions = {
   runnerMode: 'native' | 'extension';
 };
 
-const POLL_MS = 35_000;
-
 export function useExtensionBridgeProbe({ isOpen, runnerMode }: UseExtensionBridgeProbeOptions) {
   const [state, setState] = useState<ExtensionBridgeProbeState>({
     checking: false,
@@ -88,10 +86,7 @@ export function useExtensionBridgeProbe({ isOpen, runnerMode }: UseExtensionBrid
   useEffect(() => {
     if (!isOpen || runnerMode !== 'extension') return;
     void runProbe();
-    const id = window.setInterval(() => {
-      void runProbe();
-    }, POLL_MS);
-    return () => window.clearInterval(id);
+    return () => {};
   }, [isOpen, runProbe, runnerMode]);
 
   useEffect(() => {

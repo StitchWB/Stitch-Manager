@@ -22,7 +22,8 @@ import {
   ProviderLogo,
 } from '@/components/ui';
 import { cn } from '../../lib/utils';
-import type { Account, AccountStatus } from '../../types';
+import type { Account } from '../../types/generated';
+import type { AccountStatus } from '../../types/ui';
 import type { AccountRelationEdge, RelationType } from '../../lib/accounts/relations';
 import type { AccountsTableVisibleColumns } from '../../stores/uiPreferences';
 import { providerLabelToKey } from '../../lib/accounts/relations';

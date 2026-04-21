@@ -565,7 +565,25 @@ class ProfileLauncher:
     def _lock_path(self) -> Path:
         return self.profile_path / ".profile.lock"
 
+    def _cleanup_stale_profile_lock(self) -> None:
+        """Clean up stale profile lock file from previous crashed sessions.
+
+        Zombie process cleanup is handled by FirefoxProfileManager._cleanup_stale_firefox_locks()
+        during browser start — no need to duplicate it here.
+        """
+        lock_path = self._lock_path()
+        if not lock_path.exists():
+            return
+
+        try:
+            lock_path.unlink()
+        except Exception:
+            pass
+
     def _acquire_profile_lock(self) -> None:
+        # Clean up stale lock file first
+        self._cleanup_stale_profile_lock()
+        
         try:
             from filelock import FileLock, Timeout
         except Exception as e:  # pragma: no cover
@@ -576,9 +594,14 @@ class ProfileLauncher:
         try:
             lock.acquire(timeout=0)
         except Timeout as e:
-            raise RuntimeError(
-                f"Profile '{self.profile_id}' is already locked (in use). Path: {self.profile_path}"
-            ) from e
+            # Try one more cleanup and retry
+            self._cleanup_stale_profile_lock()
+            try:
+                lock.acquire(timeout=0)
+            except Timeout:
+                raise RuntimeError(
+                    f"Profile '{self.profile_id}' is already locked (in use). Path: {self.profile_path}"
+                ) from e
         self._lock = lock
 
     def _release_profile_lock(self) -> None:
@@ -647,9 +670,6 @@ class ProfileLauncher:
         self._acquire_profile_lock()
 
         try:
-            if self._proxy is not None:
-                await _proxy_health_check(self._proxy)
-
             locale = self._effective_locale()
             timezone_id = self._effective_timezone()
             geolocation = self._effective_geolocation()
@@ -657,26 +677,19 @@ class ProfileLauncher:
             explicit_locale = self._has_explicit_locale()
             explicit_timezone = self._has_explicit_timezone()
 
-            # Auto-resolve if requested.
-            if timezone_id == "Auto" or geolocation == "Auto":
-                resolved_geo, resolved_tz = await _resolve_geo_and_timezone(proxy=self._proxy)
-                if timezone_id == "Auto":
-                    timezone_id = resolved_tz
-                if geolocation == "Auto":
-                    geolocation = resolved_geo
+            # Skip auto-resolve during launch — resolved inside browser via JS.
+            # This prevents 10-30s HTTP delays before browser even starts.
+            if timezone_id == "Auto":
+                timezone_id = None
+            if geolocation == "Auto":
+                geolocation = None
 
-            # Enforce timezone default if not provided. When a proxy is active,
-            # avoid silently pinning to a US timezone because that creates an
-            # obvious mismatch against the proxy exit geography.
+            # Enforce timezone default if not provided.
             if not timezone_id:
-                timezone_id = (
-                    None
-                    if self._proxy is not None and not explicit_timezone
-                    else DEFAULT_TIMEZONE_ID
-                )
+                timezone_id = DEFAULT_TIMEZONE_ID
 
-            # Likewise, do not force a locale value into proxy sessions unless
-            # it was explicitly configured by the profile or caller.
+            # Skip locale forcing for proxy sessions unless explicitly set.
+            # Proxy geo is handled by Camoufox fingerprinting inside browser.
             if self._proxy is not None and not explicit_locale:
                 locale = None
 
@@ -786,17 +799,51 @@ class ProfileLauncher:
             return page
 
         try:
+            # Validate page state before navigation
+            try:
+                page_state = "unknown"
+                if hasattr(page, 'is_closed'):
+                    page_state = "closed" if page.is_closed() else "open"
+                _safe_stderr(f"[ProfileLauncher] Navigating to {target_url} (page state: {page_state}, wait_until: {wait_until})")
+            except Exception as diag_err:
+                _safe_stderr(f"[ProfileLauncher] Could not check page state: {diag_err}")
+            
             await page.goto(target_url, wait_until=cast(WaitUntil, wait_until))
+            _safe_stderr(f"[ProfileLauncher] Navigation successful to {target_url}")
         except Exception as e:
+            err_msg = str(e)
             # Firefox/Playwright may surface benign NS_BINDING_ABORTED when a tab
             # is already navigating (redirect/reload race). If page stays alive,
             # keep the existing tab instead of hard-failing open flow.
-            if "NS_BINDING_ABORTED" in str(e):
+            if "NS_BINDING_ABORTED" in err_msg:
                 try:
                     if not page.is_closed():
                         return page
                 except Exception:
                     pass
+            # NS_ERROR_PROXY_CONNECTION_REFUSED: proxy is dead but browser is alive.
+            # Fall back to about:blank so the recorder keeps running — the user can
+            # switch proxy via the overlay later.
+            if "PROXY_CONNECTION_REFUSED" in err_msg or "proxy_connection_refused" in err_msg.lower():
+                _safe_stderr(
+                    f"[ProfileLauncher] Proxy refused for {target_url}, opening about:blank instead. "
+                    f"Use the overlay to switch proxy."
+                )
+                try:
+                    await page.goto("about:blank", wait_until="domcontentloaded")
+                except Exception:
+                    pass
+                return page
+            # Handle [Errno 22] Invalid argument - try without wait_until as fallback
+            if "invalid argument" in err_msg.lower() or err_msg == "[Errno 22] Invalid argument":
+                _safe_stderr(f"[ProfileLauncher] Navigation failed with '{err_msg}', retrying without wait_until parameter...")
+                try:
+                    await page.goto(target_url)
+                    _safe_stderr(f"[ProfileLauncher] Navigation successful on retry (no wait_until)")
+                    return page
+                except Exception as retry_err:
+                    _safe_stderr(f"[ProfileLauncher] Retry also failed: {retry_err}")
+                    raise
             raise
         return page
 

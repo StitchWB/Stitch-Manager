@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import type { ProviderName } from '../../types';
+import type { ProviderName } from '../../types/ui';
 import type { LogVerbosity } from '../../constants/logging';
 import type {
   RegistrationConfig,
@@ -32,7 +32,7 @@ interface ConfigState {
   updateConfig: (updates: Partial<RegistrationConfig>) => void;
 }
 
-export const useConfigStore = create<ConfigState>((set) => ({
+export const useConfigStore = create<ConfigState>(set => ({
   config: DEFAULT_CONFIG,
   logVerbosity: 'normal',
 

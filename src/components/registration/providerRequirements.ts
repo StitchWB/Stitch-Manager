@@ -1,4 +1,4 @@
-import type { ProviderName } from '../../types';
+import type { ProviderName } from '../../types/ui';
 
 export interface ProviderRequirementHint {
   title: string;
