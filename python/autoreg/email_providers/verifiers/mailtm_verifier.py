@@ -27,19 +27,22 @@ class MailTmVerifier(IEmailVerifier):
         context: EmailContext,
         sender_keywords: List[str],
         max_wait: int = 120,
-        session_id: str | None = None
+        session_id: str | None = None,
+        url_pattern: str | None = None,
     ) -> str | None:
         """
-        Get verification code from Mail.tm inbox
+        Get verification code or URL from Mail.tm inbox
         
         Args:
             context: EmailContext with email and password in metadata
             sender_keywords: Keywords to match in sender address/name
             max_wait: Maximum seconds to wait for email
             session_id: Optional session identifier for logging
+            url_pattern: Regex pattern to extract a URL instead of a code.
+                         If provided, returns the first URL matching this pattern.
             
         Returns:
-            Verification code if found, None otherwise
+            Verification code or URL if found, None otherwise
         """
         log_prefix = f"[{session_id}]" if session_id else ""
         logger.info(
@@ -84,14 +87,24 @@ class MailTmVerifier(IEmailVerifier):
                         # Get full message with body
                         full_msg = self.service.get_message(msg['id'])
                         
-                        # Extract code from message
-                        code = self._extract_code(full_msg)
-                        if code:
-                            logger.info(
-                                f"{log_prefix} Found verification code: {code} "
-                                f"from {sender_address}"
-                            )
-                            return code
+                        if url_pattern:
+                            # Extract URL from message
+                            url = self._extract_url(full_msg, url_pattern)
+                            if url:
+                                logger.info(
+                                    f"{log_prefix} Found confirmation URL "
+                                    f"from {sender_address}"
+                                )
+                                return url
+                        else:
+                            # Extract code from message
+                            code = self._extract_code(full_msg)
+                            if code:
+                                logger.info(
+                                    f"{log_prefix} Found verification code: {code} "
+                                    f"from {sender_address}"
+                                )
+                                return code
                 
                 # Wait before next check
                 elapsed = time.time() - start_time
@@ -110,7 +123,8 @@ class MailTmVerifier(IEmailVerifier):
                 time.sleep(check_interval)
         
         logger.warning(
-            f"{log_prefix} No verification code found after {max_wait}s"
+            f"{log_prefix} No {'URL' if url_pattern else 'verification code'} "
+            f"found after {max_wait}s"
         )
         return None
     
@@ -161,6 +175,51 @@ class MailTmVerifier(IEmailVerifier):
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(1)
+        
+        return None
+    
+    def _extract_url(self, message: dict, url_pattern: str) -> str | None:
+        """
+        Extract a URL from message matching the given pattern
+        
+        Args:
+            message: Full message object with 'text' and 'html' fields
+            url_pattern: Regex pattern to match URLs
+            
+        Returns:
+            URL if found, None otherwise
+        """
+        # Try text content first
+        text = message.get('text', '')
+        url = self._find_url_in_text(text, url_pattern)
+        if url:
+            return url
+        
+        # Try HTML content
+        html = message.get('html', [])
+        if isinstance(html, list):
+            html = ' '.join(html)
+        
+        url = self._find_url_in_text(html, url_pattern)
+        return url
+    
+    def _find_url_in_text(self, text: str, url_pattern: str) -> str | None:
+        """
+        Find URL matching pattern in text
+        
+        Args:
+            text: Text to search
+            url_pattern: Regex pattern to match URLs
+            
+        Returns:
+            URL if found, None otherwise
+        """
+        # Decode HTML entities that might break URLs
+        text = text.replace('&amp;', '&')
+        
+        match = re.search(url_pattern, text)
+        if match:
+            return match.group(0)
         
         return None
     

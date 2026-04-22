@@ -25,7 +25,14 @@ class ImapConnectionPool:
         self.pool_size = pool_size
         self.pool: Queue = Queue(maxsize=pool_size)
         self.lock = threading.Lock()
-        self._initialize_pool()
+        self._initialized = False
+    
+    def _ensure_initialized(self):
+        """Lazily create initial connections on first use"""
+        with self.lock:
+            if not self._initialized:
+                self._initialized = True
+                self._initialize_pool()
     
     def _initialize_pool(self):
         """Create initial connections"""
@@ -67,6 +74,8 @@ class ImapConnectionPool:
         """
         conn = None
         try:
+            # Ensure pool connections are created on first use
+            self._ensure_initialized()
             # Try to get from pool
             conn = self.pool.get(timeout=timeout)
             
