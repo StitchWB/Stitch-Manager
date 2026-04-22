@@ -11,6 +11,7 @@ import {
   startTraeAutoregJob,
   startGithubAutoregJob,
   startOpenAIAutoregJob,
+  startFireworksAutoregJob,
   startRegistrationV2,
   listAccounts,
   stopRegistration,
@@ -18,7 +19,7 @@ import {
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
 import { DEFAULT_IMAP_PORT } from '../../../constants/registration';
-import type { ProviderName, OpenAIAutoregResult } from '../../../types/ui';
+import type { ProviderName, OpenAIAutoregResult, FireworksAutoregResult } from '../../../types/ui';
 import type { RegistrationConfig } from '../../../stores/registration/types';
 import type {
   PythonAutoregResult,
@@ -131,6 +132,7 @@ export async function runRegistration(options: RegistrationOptions): Promise<Reg
           provider: config.provider,
           imapConfig: config.imap,
           emailPattern: config.patterns.emailPattern,
+          emailCustomPrefix: config.patterns.emailCustomPrefix,
           emailDomain,
         });
 
@@ -337,6 +339,7 @@ async function runProviderRegistration(params: {
   | TraeAutoregResult
   | GithubAutoregResult
   | OpenAIAutoregResult
+  | FireworksAutoregResult
 > {
   const {
     provider,
@@ -492,8 +495,9 @@ async function runProviderRegistration(params: {
   if (provider === 'openai') {
     const normalizedImapServer = imapServer?.trim() ? imapServer : null;
     const normalizedImapUser = imapUser?.trim() ? imapUser : null;
+    // NOTE: Don't filter '********' sentinel — Rust resolves it from keyring via resolve_password()
     const normalizedImapPassword =
-      imapPassword?.trim() && imapPassword !== '********' ? imapPassword : null;
+      imapPassword?.trim() ? imapPassword : null;
 
     const inboxBridgeFields = {
       inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
@@ -528,8 +532,8 @@ async function runProviderRegistration(params: {
           ? 'addyio'
           : config.imap.thirtyThreeMailEnabled
             ? '33mail'
-            : null,
-      baseEmail: config.imap.email || imapUser || null,
+            : 'static',
+      baseEmail: email || config.imap.email || imapUser || null,
       ...inboxBridgeFields,
     });
     return await waitForJobResult<OpenAIAutoregResult>(
@@ -543,6 +547,72 @@ async function runProviderRegistration(params: {
         password: null,
         name: null,
         error: 'OpenAI job failed',
+      }
+    );
+  }
+
+  if (provider === 'fireworks') {
+    const normalizedImapServer = imapServer?.trim() ? imapServer : null;
+    const normalizedImapUser = imapUser?.trim() ? imapUser : null;
+    // NOTE: Don't filter '********' sentinel — Rust resolves it from keyring via resolve_password()
+    const normalizedImapPassword =
+      imapPassword?.trim() ? imapPassword : null;
+
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? normalizedImapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? normalizedImapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
+
+    const fireworksPassword = `Fw${Math.random().toString(36).substring(2, 10)}!1`;
+    const startResponse = await startFireworksAutoregJob({
+      email,
+      password: fireworksPassword,
+      name: null,
+      firstName: null,
+      lastName: null,
+      headless: config.advanced.headless,
+      proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+      imapServer: normalizedImapServer,
+      imapPort: normalizedImapServer ? config.imap.port || DEFAULT_IMAP_PORT : null,
+      imapUser: normalizedImapUser,
+      imapPassword: normalizedImapPassword,
+      addyioEnabled: config.imap.addyioEnabled ?? null,
+      addyioApiToken: config.imap.addyioApiToken ?? null,
+      addyioDomain: config.imap.addyioDomain ?? null,
+      addyioAliasFormat: config.imap.addyioAliasFormat ?? null,
+      addyioAutoDelete: config.imap.addyioAutoDelete ?? null,
+      mailtmEnabled: config.imap.mailtmEnabled ?? null,
+      thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled ?? null,
+      thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername ?? null,
+      thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
+      emailStrategy: config.imap.mailtmEnabled
+        ? 'mailtm'
+        : config.imap.addyioEnabled
+          ? 'addyio'
+          : config.imap.thirtyThreeMailEnabled
+            ? '33mail'
+            : 'static',
+      baseEmail: email || config.imap.email || imapUser || null,
+      correlationId: createCorrelationId(),
+      ...inboxBridgeFields,
+    });
+    return await waitForJobResult<FireworksAutoregResult>(
+      startResponse.jobId,
+      REGISTRATION_TIMEOUT_MS,
+      onCancelled,
+      onLog,
+      {
+        success: false,
+        email,
+        password: fireworksPassword,
+        name: null,
+        firstName: null,
+        lastName: null,
+        plan: null,
+        error: 'Fireworks job failed',
       }
     );
   }
@@ -566,7 +636,7 @@ async function runProviderRegistration(params: {
           ? 'addyio'
           : aliasStrategy === '33mail'
             ? '33mail'
-            : null,
+            : 'static',
     proxyUrl: config.proxy.enabled ? config.proxy.url : null,
     speedMultiplier: config.advanced.speedMultiplier,
     verificationCodeTimeout: config.advanced.verificationCodeTimeout,
