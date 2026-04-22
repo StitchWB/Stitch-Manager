@@ -214,6 +214,7 @@ def get_verification_code_from_imap(
     session_id: Optional[str] = None,
     max_retries: int = 3,
     logger=None,
+    url_pattern: Optional[str] = None,
 ) -> Optional[str]:
     r"""
     Universal function to retrieve verification code from IMAP with retry logic.
@@ -267,7 +268,7 @@ def get_verification_code_from_imap(
             log(f"[Email] Retry attempt {retry_attempt + 1}/{max_retries} after {delay}s delay (reason: email mismatch)")
             time.sleep(delay)
         
-        # Try to get verification code
+        # Try to get verification code/URL
         code = _get_verification_code_internal(
             imap_config=imap_config,
             sender_keywords=sender_keywords,
@@ -278,11 +279,12 @@ def get_verification_code_from_imap(
             target_email=target_email,
             session_id=session_id,
             logger=logger,
+            url_pattern=url_pattern,
         )
         
         if code:
             if retry_attempt > 0:
-                log(f"[Email] Successfully retrieved code after {retry_attempt + 1} attempts")
+                log(f"[Email] Successfully retrieved result after {retry_attempt + 1} attempts")
             return code
         
         # If no code found and we have retries left, log and continue
@@ -303,6 +305,7 @@ def _get_verification_code_internal(
     target_email: Optional[str],
     session_id: Optional[str],
     logger=None,
+    url_pattern: Optional[str] = None,
 ) -> Optional[str]:
     """
     Internal function to retrieve verification code from IMAP (single attempt).
@@ -357,11 +360,10 @@ def _get_verification_code_internal(
             mail.select('INBOX')
             
             messages = None
-            search_queries = [
-                ('FROM', primary_keyword),
-                ('FROM', 'verify.windsurf.ai'),
-                ('SUBJECT', 'Windsurf'),
-            ]
+            # Build dynamic search queries from sender_keywords
+            search_queries = [('FROM', kw) for kw in sender_keywords]
+            # Fallback: search by SUBJECT using first keyword
+            search_queries.append(('SUBJECT', primary_keyword))
 
             for key, value in search_queries:
                 try:
@@ -415,14 +417,24 @@ def _get_verification_code_internal(
                         body = extract_body_text(msg)
                         
                         # Email validation: Check if target_email is mentioned in body
-                        # This prevents using codes from wrong emails in parallel registrations
+                        # This prevents using codes from wrong emails in parallel registrations.
+                        # NOTE: For 33mail/forwarded emails, the target_email (33mail address) won't
+                        # appear in body because 33mail forwards the original email content verbatim.
+                        # sender_keywords filtering above is the authoritative filter for such cases.
                         if target_email:
                             email_in_body = target_email.lower() in body.lower()
-                            log(f"[Email] Searching for: {target_email}, Found in body: {email_in_body}")
-                            
                             if not email_in_body:
-                                log(f"[Email] Skipping email - target email not found in body")
-                                continue
+                                # For forwarded emails (33mail etc.) the target address won't be in body.
+                                # Don't skip — sender_keywords already filtered the correct sender.
+                                log(f'[Email] Target email not in body (likely forwarded email — using sender_keywords filter instead)')
+                        
+                        # Try to extract URL first (if url_pattern provided, e.g. for Fireworks confirm URL)
+                        if url_pattern:
+                            url_matches = re.findall(url_pattern, body)
+                            if url_matches:
+                                mail.logout()
+                                log(f"[Email] Found confirmation URL in body (email date: {date_str})")
+                                return url_matches[0]
                         
                         # Try to extract code from subject first (if pattern provided)
                         if subject_pattern:
