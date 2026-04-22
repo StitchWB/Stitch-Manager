@@ -149,7 +149,7 @@ describe('AutoReg page', () => {
     const cc = getByTestId('command-center');
     const allowed = JSON.parse(cc.getAttribute('data-allowed') || '[]');
 
-    expect(allowed).toEqual(['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai']);
+    expect(allowed).toEqual(['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks']);
     expect(allowed).toContain('openai');
   });
 

@@ -25,6 +25,7 @@ export type MailStrategy = 'custom' | 'gmail';
 export interface IdentityConfig {
   strategy: MailStrategy;
   emailPattern: string;
+  emailCustomPrefix?: string;
   server: string;
   port: number;
   email: string;

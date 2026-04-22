@@ -12,6 +12,7 @@ export interface EmailGenerationOptions {
   provider: ProviderName;
   imapConfig: IMAPConfig;
   emailPattern: string;
+  emailCustomPrefix?: string; // actual template when emailPattern === 'custom_prefix'
   emailDomain: string;
 }
 
@@ -28,7 +29,7 @@ export interface EmailGenerationResult {
 export async function generateEmail(
   options: EmailGenerationOptions
 ): Promise<EmailGenerationResult> {
-  const { provider, imapConfig, emailPattern, emailDomain } = options;
+  const { provider, imapConfig, emailPattern, emailCustomPrefix, emailDomain } = options;
 
   // If addy.io, 33mail, or Mail.tm is enabled, let Python generate the email
   if (imapConfig.addyioEnabled) {
@@ -65,8 +66,14 @@ export async function generateEmail(
     };
   }
 
-  // Custom domain strategy
-  const email = await generateCustomEmail(provider, emailPattern, emailDomain);
+  // Custom domain strategy — resolve actual template
+  // emailPattern is an enum key (e.g. 'custom_prefix'), emailCustomPrefix is the real template
+  const resolvedPattern =
+    emailPattern === 'custom_prefix' && emailCustomPrefix
+      ? emailCustomPrefix
+      : emailPattern;
+
+  const email = await generateCustomEmail(provider, resolvedPattern, emailDomain);
   return {
     email,
     strategy: 'custom',

@@ -92,8 +92,13 @@ export function IdentityTab({
       <IdentitySystemCard
         config={identityConfig}
         onChange={updates => {
+          // Map emailPattern to emailCustomPrefix for storage
           if ('emailPattern' in updates) {
-            onConfigChange({ ...updates });
+            const { emailPattern, ...rest } = updates;
+            onConfigChange({
+              ...rest,
+              emailCustomPrefix: emailPattern,
+            });
           } else {
             onConfigChange(updates);
           }

@@ -314,7 +314,7 @@ export default function AutoRegNext() {
   // Identity config adapter for IdentitySystemCard
   const identityConfig: IdentityConfig = {
     strategy: config.imap.strategy,
-    emailPattern: String(config.patterns.emailPattern),
+    emailPattern: config.patterns.emailCustomPrefix || config.imap.emailCustomPrefix || '',
     server: config.imap.server,
     port: config.imap.port,
     email: config.imap.email,
