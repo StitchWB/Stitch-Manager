@@ -107,6 +107,48 @@ export interface OpenAIAutoregResult {
   error: string | null;
 }
 
+export interface FireworksAutoregConfig {
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  emailStrategy: string | null;
+  baseEmail: string | null;
+  headless: boolean;
+  proxyUrl: string | null;
+  imapServer: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  mailtmEnabled: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+  inboxProvider: string | null;
+  inboxMailbox: string | null;
+  inboxMailtmAddress: string | null;
+  inboxMailtmPassword: string | null;
+  inboxMailtmBaseUrl: string | null;
+  correlationId: string | null;
+}
+
+export interface FireworksAutoregResult {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  plan: string | null;
+  error: string | null;
+}
+
 export type IDEType = 'kiro' | 'windsurf' | 'trae' | 'vscode' | 'vscodium' | 'other';
 
 export type PatchStatusType = 'unpatched' | 'patched' | 'outdated' | 'error' | 'unknown';

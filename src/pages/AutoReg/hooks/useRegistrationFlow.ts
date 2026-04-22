@@ -57,6 +57,7 @@ export const useRegistrationFlow = ({
       'trae',
       'github',
       'openai',
+      'fireworks',
     ];
     if (!supportedProviders.includes(config.provider)) {
       const provider = String(config.provider);
