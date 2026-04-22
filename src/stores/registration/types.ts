@@ -21,6 +21,8 @@ export interface IMAPConfig {
   email: string;
   password: string;
   useTLS: boolean;
+  // Email pattern configuration (for custom domain pattern generation)
+  emailCustomPrefix: string;
   // Gmail alias fields (GLOBAL - shared across providers)
   gmailBase: string;
   gmailAlias: string;
@@ -62,6 +64,7 @@ export interface ProviderEmailStrategies {
   aws: ProviderEmailStrategy;
   copilot: ProviderEmailStrategy;
   openai: ProviderEmailStrategy;
+  fireworks: ProviderEmailStrategy;
 }
 
 // Proxy configuration
@@ -151,6 +154,7 @@ export const DEFAULT_IMAP_CONFIG: IMAPConfig = {
   email: '',
   password: '',
   useTLS: true,
+  emailCustomPrefix: '',
   gmailBase: '',
   gmailAlias: '',
   gmailAppPassword: '',
@@ -191,6 +195,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     aws: { ...DEFAULT_EMAIL_STRATEGY },
     copilot: { ...DEFAULT_EMAIL_STRATEGY },
     openai: { ...DEFAULT_EMAIL_STRATEGY },
+    fireworks: { ...DEFAULT_EMAIL_STRATEGY },
   },
   proxy: {
     enabled: false,
