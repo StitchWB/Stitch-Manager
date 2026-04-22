@@ -32,19 +32,22 @@ class MailTmStrategy(IEmailStrategy):
         description: str | None = None,
         sender_keywords: list[str] | None = None,
         max_wait: int = 120,
-        session_id: str | None = None
+        session_id: str | None = None,
+        url_pattern: str | None = None,
     ) -> tuple[EmailContext, str | None]:
         """
-        Generate Mail.tm email and get verification code
+        Generate Mail.tm email and get verification code or URL
         
         Args:
             description: Optional description for the email
             sender_keywords: Keywords to match in sender (required for verification)
             max_wait: Maximum seconds to wait for verification email
             session_id: Optional session identifier for logging
+            url_pattern: Regex pattern to extract a URL instead of a code.
+                         If provided, returns the first URL matching this pattern.
             
         Returns:
-            Tuple of (EmailContext, verification_code or None)
+            Tuple of (EmailContext, verification_code/url or None)
         """
         log_prefix = f"[{session_id}]" if session_id else ""
         
@@ -60,24 +63,25 @@ class MailTmStrategy(IEmailStrategy):
             )
             return context, None
         
-        # Get verification code
+        # Get verification code or URL
         logger.info(
             f"{log_prefix} Waiting for verification email "
             f"from {sender_keywords}"
         )
-        code = self.verifier.verify(
+        result = self.verifier.verify(
             context=context,
             sender_keywords=sender_keywords,
             max_wait=max_wait,
-            session_id=session_id
+            session_id=session_id,
+            url_pattern=url_pattern,
         )
         
-        if code:
-            logger.info(f"{log_prefix} Verification successful: {code}")
+        if result:
+            logger.info(f"{log_prefix} Verification successful: {'URL' if url_pattern else 'code'} found")
         else:
-            logger.warning(f"{log_prefix} No verification code received")
+            logger.warning(f"{log_prefix} No verification {'URL' if url_pattern else 'code'} received")
         
-        return context, code
+        return context, result
     
     def close(self):
         """Close resources"""
