@@ -156,13 +156,14 @@ export const useRegistrationStore = <T = RegistrationState>(
     );
   });
 
-  // Trigger save helper
+  // Trigger save helper - always read latest from store, not from render closure
   const triggerSave = () => {
+    const loaded = usePersistenceStore.getState().settingsLoaded;
     console.log(
       '[REGISTRATION_STORE] triggerSave called, settingsLoaded:',
-      persistenceStore.settingsLoaded
+      loaded
     );
-    debouncedSave(persistenceStore.settingsLoaded);
+    debouncedSave(loaded);
   };
 
   // Wrap config actions to trigger auto-save

@@ -60,6 +60,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         email: settings.imapEmail || '',
         password: imapPasswordMasked ? '' : settings.imapPassword || '',
         useTLS: true,
+        emailCustomPrefix: settings.emailCustomPrefix || '',
         gmailBase: settings.gmailBase || '',
         gmailAlias: settings.gmailAlias || '',
         gmailAppPassword: gmailAppPasswordMasked ? '' : settings.gmailAppPassword || '',
@@ -113,7 +114,9 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
           rotationEnabled: settings.proxyRotationEnabled || false,
         },
         patterns: {
-          emailPattern: (settings.emailPattern as EmailPattern) || 'provider_timestamp',
+          emailPattern: settings.emailCustomPrefix
+            ? 'custom_prefix'
+            : (settings.emailPattern as EmailPattern) || 'provider_timestamp',
           emailCustomPrefix: settings.emailCustomPrefix || '',
           namePattern: (settings.namePattern as NamePattern) || 'random',
           nameCustomFirst: settings.nameCustomFirst || '',
@@ -201,7 +204,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         proxyList: config.proxy.list,
         proxyRotationEnabled: config.proxy.rotationEnabled,
         emailPattern: config.patterns.emailPattern,
-        emailCustomPrefix: config.patterns.emailCustomPrefix,
+        emailCustomPrefix: config.imap.emailCustomPrefix || config.patterns.emailCustomPrefix || '',
         namePattern: config.patterns.namePattern,
         nameCustomFirst: config.patterns.nameCustomFirst,
         nameCustomLast: config.patterns.nameCustomLast,

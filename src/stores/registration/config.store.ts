@@ -11,7 +11,6 @@ import type {
   IMAPConfig,
   ProxyConfig,
   AdvancedSettings,
-  EmailPattern,
   ProviderEmailStrategy,
 } from './types';
 import { DEFAULT_CONFIG } from './types';
@@ -108,17 +107,13 @@ export const useConfigStore = create<ConfigState>(set => ({
         providerEmailStrategies: updatedStrategies,
       };
 
-      // If emailPattern is being updated, also update patterns
-      if ('emailPattern' in imap) {
-        const imapWithPattern = imap as Partial<IMAPConfig> & { emailPattern: EmailPattern };
+      // If emailCustomPrefix is being updated, also update patterns to use custom_prefix strategy
+      if ('emailCustomPrefix' in imap && imap.emailCustomPrefix !== undefined) {
         updates.patterns = {
           ...state.config.patterns,
-          emailPattern: imapWithPattern.emailPattern,
+          emailPattern: imap.emailCustomPrefix ? 'custom_prefix' : 'random',
+          emailCustomPrefix: imap.emailCustomPrefix,
         };
-        // Remove emailPattern from imap updates
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { emailPattern, ...imapWithoutPattern } = imapWithPattern;
-        updates.imap = { ...state.config.imap, ...imapWithoutPattern };
       }
 
       console.log('[CONFIG_STORE] setIMAPConfig: new config updates:', updates);
