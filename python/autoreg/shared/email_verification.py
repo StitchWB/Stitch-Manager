@@ -399,6 +399,9 @@ def _get_verification_code_internal(
                         date_str = msg.get('Date', '')
                         from_addr = decode_header_value(msg.get('From', '')).lower()
                         subject = decode_header_value(msg.get('Subject', '')).strip()
+                        to_addr = decode_header_value(msg.get('To', '')).lower()
+                        delivered_to = decode_header_value(msg.get('Delivered-To', '')).lower()
+                        x_forwarded_to = decode_header_value(msg.get('X-Forwarded-To', '')).lower()
                         
                         # Verify sender matches any keyword
                         if not any(keyword.lower() in from_addr for keyword in sender_keywords):
@@ -416,17 +419,18 @@ def _get_verification_code_internal(
                         
                         body = extract_body_text(msg)
                         
-                        # Email validation: Check if target_email is mentioned in body
-                        # This prevents using codes from wrong emails in parallel registrations.
-                        # NOTE: For 33mail/forwarded emails, the target_email (33mail address) won't
-                        # appear in body because 33mail forwards the original email content verbatim.
-                        # sender_keywords filtering above is the authoritative filter for such cases.
+                        # Email validation: Check if target_email is mentioned in body or headers
+                        # This prevents using codes from wrong emails in parallel or sequential registrations.
                         if target_email:
-                            email_in_body = target_email.lower() in body.lower()
-                            if not email_in_body:
-                                # For forwarded emails (33mail etc.) the target address won't be in body.
-                                # Don't skip — sender_keywords already filtered the correct sender.
-                                log(f'[Email] Target email not in body (likely forwarded email — using sender_keywords filter instead)')
+                            target_lower = target_email.lower()
+                            email_in_body = target_lower in body.lower()
+                            email_in_to = target_lower in to_addr
+                            email_in_delivered = target_lower in delivered_to
+                            email_in_forwarded = target_lower in x_forwarded_to
+                            
+                            if not any([email_in_body, email_in_to, email_in_delivered, email_in_forwarded]):
+                                log(f'[Email] Target email {target_email} not found in headers or body. Skipping this email to avoid mismatch.')
+                                continue
                         
                         # Try to extract URL first (if url_pattern provided, e.g. for Fireworks confirm URL)
                         if url_pattern:
@@ -456,7 +460,6 @@ def _get_verification_code_internal(
                             mail.logout()
                             log(f"[Email] Found code in body: {codes[0]} (email date: {date_str})")
                             return codes[0]
-                    
                     except Exception as e:
                         log(f"[Email] Error processing email: {e}")
                         continue

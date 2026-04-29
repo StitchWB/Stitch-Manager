@@ -215,5 +215,6 @@ export const providerLabelToKey = (providerLabel: string): string | null => {
   if (normalized === 'windsurf') return 'windsurf';
   if (normalized === 'trae') return 'trae';
   if (normalized === 'openai') return 'openai';
+  if (normalized === 'fireworks ai' || normalized === 'fireworks') return 'fireworks';
   return null;
 };

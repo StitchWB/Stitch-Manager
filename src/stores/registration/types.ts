@@ -65,6 +65,7 @@ export interface ProviderEmailStrategies {
   copilot: ProviderEmailStrategy;
   openai: ProviderEmailStrategy;
   fireworks: ProviderEmailStrategy;
+  bitbucket: ProviderEmailStrategy;
 }
 
 // Proxy configuration
@@ -122,6 +123,11 @@ export interface AdvancedSettings {
   realisticTyping: boolean;
   humanDelays: boolean;
   screenshotsOnError: boolean;
+  captchaTimeout: number; // in minutes
+  captchaSoundEnabled: boolean;
+
+  // Card pool (pipe/CSV/space format, one per line)
+  cardsText?: string;
 
   // Google Sheets Identity Graph (NO encryption in this phase)
   googleSheetsSpreadsheetId?: string;
@@ -196,6 +202,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     copilot: { ...DEFAULT_EMAIL_STRATEGY },
     openai: { ...DEFAULT_EMAIL_STRATEGY },
     fireworks: { ...DEFAULT_EMAIL_STRATEGY },
+    bitbucket: { ...DEFAULT_EMAIL_STRATEGY },
   },
   proxy: {
     enabled: false,
@@ -229,6 +236,9 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     realisticTyping: true,
     humanDelays: true,
     screenshotsOnError: true,
+    captchaTimeout: 5,
+    captchaSoundEnabled: true,
+    cardsText: '',
 
     // Google Sheets Identity Graph (plaintext; encryption deferred)
     googleSheetsSpreadsheetId: '',

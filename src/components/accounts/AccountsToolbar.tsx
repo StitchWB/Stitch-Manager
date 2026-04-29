@@ -21,7 +21,6 @@ import {
   ToolbarFiltersGroup,
   ToolbarSearchField,
   ToolbarActionsCluster,
-  ToolbarSection,
   type FilterOption,
 } from '@/components/ui';
 import type { AccountsEntityTab } from './AccountsEntityTabs';
@@ -130,162 +129,36 @@ export function AccountsToolbar({
       topClassName="top-0"
       className="shrink-0 border-b border-white/5 bg-[#0b0b10]/85 px-6 py-4"
     >
-      <ToolbarSection
-        left={
-          <div className="flex min-w-0 flex-col gap-4">
-            <ToolbarRow className="gap-3">
-              <AccountsEntityTabs
-                value={normalizedEntityFilter}
-                onChange={onEntityFilterChange}
-                accountsCount={accountsCount}
-                profilesCount={profilesCount}
+      <div className="flex flex-col gap-4 w-full">
+        {/* Top Row: Tabs and Action Buttons */}
+        <div className="flex flex-wrap justify-between items-start gap-4 w-full">
+          <ToolbarRow className="gap-3 min-w-0 flex-1">
+            <AccountsEntityTabs
+              value={normalizedEntityFilter}
+              onChange={onEntityFilterChange}
+              accountsCount={accountsCount}
+              profilesCount={profilesCount}
+            />
+
+            {showAccountsModes && (
+              <ViewModeSwitch
+                value={resolvedViewMode}
+                onChange={onViewModeChange}
+                options={[
+                  { value: 'list', label: t('accounts.viewList'), icon: <List size={14} /> },
+                  { value: 'graph', label: t('accounts.viewGraph'), icon: <Share2 size={14} /> },
+                  {
+                    value: 'sheets',
+                    label: t('accounts.viewSheets'),
+                    icon: <FileSpreadsheet size={14} />,
+                  },
+                ]}
+                className="shrink-0"
               />
-
-              {showAccountsModes && (
-                <ViewModeSwitch
-                  value={resolvedViewMode}
-                  onChange={onViewModeChange}
-                  options={[
-                    { value: 'list', label: t('accounts.viewList'), icon: <List size={14} /> },
-                    { value: 'graph', label: t('accounts.viewGraph'), icon: <Share2 size={14} /> },
-                    {
-                      value: 'sheets',
-                      label: t('accounts.viewSheets'),
-                      icon: <FileSpreadsheet size={14} />,
-                    },
-                  ]}
-                  className="shrink-0"
-                />
-              )}
-            </ToolbarRow>
-
-            {resolvedViewMode === 'list' ? (
-              <div className="flex min-w-0 flex-col gap-4">
-                <ToolbarSearchField
-                  value={searchQuery}
-                  onValueChange={onSearchQueryChange}
-                  placeholder={t('accounts.searchPlaceholder')}
-                  shellClassName="border-white/10 bg-black/40 focus-within:border-indigo-500/40 focus-within:bg-black/60"
-                  containerClassName="w-full min-w-[260px] max-w-md"
-                />
-
-                {normalizedEntityFilter === 'profiles' ? (
-                  <ToolbarFiltersGroup align="end">
-                    <FilterDropdown
-                      value={profileListFilter}
-                      onChange={value =>
-                        onProfileFilterChange(
-                          value as 'all' | 'standalone' | 'linked' | 'used_kiro'
-                        )
-                      }
-                      label={t('accounts.profilesFilterLabel')}
-                      options={[
-                        { value: 'all', label: t('accounts.profilesFilterAll') },
-                        { value: 'standalone', label: t('accounts.profilesFilterStandalone') },
-                        { value: 'linked', label: t('accounts.profilesFilterLinked') },
-                        { value: 'used_kiro', label: t('accounts.profilesFilterUsedForKiro') },
-                      ]}
-                      triggerClassName="h-9 min-w-[180px]"
-                      menuClassName="min-w-[220px]"
-                      showActiveState
-                    />
-
-                    <FilterDropdown
-                      value={profileOpenTarget}
-                      onChange={value => onProfileOpenTargetChange(String(value))}
-                      label={t('accounts.profileDestinationLabel')}
-                      options={[
-                        { value: 'kiro', label: 'Kiro' },
-                        { value: 'windsurf', label: 'Windsurf' },
-                        { value: 'trae', label: 'Trae' },
-                        { value: 'github', label: 'GitHub' },
-                        { value: 'custom', label: t('accounts.profileDestinationCustom') },
-                      ]}
-                      triggerClassName="h-9 min-w-[180px]"
-                      menuClassName="min-w-[220px]"
-                      showActiveState
-                    />
-
-                    {profileOpenTarget === 'custom' && (
-                      <Input
-                        label=""
-                        value={profileCustomUrl}
-                        onChange={event => onProfileCustomUrlChange(event.target.value)}
-                        placeholder={t('accounts.profileOpenUrlPlaceholder')}
-                        containerClassName="w-[360px] shrink-0"
-                        className="h-9"
-                      />
-                    )}
-                  </ToolbarFiltersGroup>
-                ) : (
-                  <ToolbarFiltersGroup mobileScrollable>
-                    <FilterDropdown
-                      value={statusFilter}
-                      onChange={onStatusFilterChange}
-                      options={[
-                        { value: 'all', label: t('filters.anyStatus') },
-                        { value: 'active', label: getAccountStatusLabel('active') },
-                        { value: 'banned', label: getAccountStatusLabel('banned') },
-                        { value: 'limit_hit', label: getAccountStatusLabel('limit_hit') },
-                        { value: 'expired', label: getAccountStatusLabel('expired') },
-                        { value: 'unknown', label: getAccountStatusLabel('unknown') },
-                      ]}
-                      label={t('filters.status')}
-                      triggerClassName="h-9 min-w-[148px]"
-                      menuClassName="min-w-[220px]"
-                      showActiveState
-                    />
-
-                    <FilterDropdown
-                      value={tagFilter}
-                      onChange={onTagFilterChange}
-                      options={tagOptions}
-                      label={t('accounts.tags')}
-                      triggerClassName="h-9 min-w-[132px]"
-                      menuClassName="min-w-[220px]"
-                      showActiveState
-                    />
-
-                    <FilterDropdown
-                      value={relationFilter}
-                      onChange={onRelationFilterChange}
-                      options={relationOptions}
-                      label={t('accounts.relationFilterLabel')}
-                      triggerClassName="h-9 min-w-[132px]"
-                      menuClassName="min-w-[220px]"
-                      showActiveState
-                    />
-
-                    <FilterDropdown
-                      value={quotaFilter}
-                      onChange={onQuotaFilterChange}
-                      options={[
-                        { value: 'any', label: t('filters.any') },
-                        { value: 'has_quota', label: t('filters.hasQuota') },
-                        { value: 'low_quota', label: t('filters.lowQuota') },
-                        { value: 'empty', label: t('filters.empty') },
-                        { value: 'full', label: t('filters.full') },
-                      ]}
-                      label={t('filters.quota')}
-                      triggerClassName="h-9 min-w-[132px]"
-                      menuClassName="min-w-[220px]"
-                      showActiveState
-                    />
-                  </ToolbarFiltersGroup>
-                )}
-              </div>
-            ) : (
-              <div className="text-[11px] text-slate-500">
-                {t('accounts.sheetsIntegration')}
-                {sheetsUpdatedAt
-                  ? ` • ${t('logs.lastUpdated')} ${new Date(sheetsUpdatedAt).toLocaleString()}`
-                  : ''}
-              </div>
             )}
-          </div>
-        }
-        right={
-          <ToolbarActionsCluster className="justify-start xl:justify-end" align="start">
+          </ToolbarRow>
+
+          <ToolbarActionsCluster className="justify-start xl:justify-end shrink-0" align="start">
             {resolvedViewMode === 'list' && normalizedEntityFilter !== 'profiles' ? (
               <ActionButtonGroup
                 actions={[
@@ -386,8 +259,133 @@ export function AccountsToolbar({
               </Button>
             </div>
           </ToolbarActionsCluster>
-        }
-      />
+        </div>
+
+        {/* Bottom Row: Search and Filters */}
+        {resolvedViewMode === 'list' ? (
+          <div className="flex flex-wrap items-center gap-4 w-full">
+            <ToolbarSearchField
+              value={searchQuery}
+              onValueChange={onSearchQueryChange}
+              placeholder={t('accounts.searchPlaceholder')}
+              shellClassName="border-white/10 bg-black/40 focus-within:border-indigo-500/40 focus-within:bg-black/60"
+              containerClassName="w-full min-w-[260px] max-w-md flex-1"
+            />
+
+            {normalizedEntityFilter === 'profiles' ? (
+              <ToolbarFiltersGroup align="end">
+                <FilterDropdown
+                  value={profileListFilter}
+                  onChange={value =>
+                    onProfileFilterChange(
+                      value as 'all' | 'standalone' | 'linked' | 'used_kiro'
+                    )
+                  }
+                  label={t('accounts.profilesFilterLabel')}
+                  options={[
+                    { value: 'all', label: t('accounts.profilesFilterAll') },
+                    { value: 'standalone', label: t('accounts.profilesFilterStandalone') },
+                    { value: 'linked', label: t('accounts.profilesFilterLinked') },
+                    { value: 'used_kiro', label: t('accounts.profilesFilterUsedForKiro') },
+                  ]}
+                  triggerClassName="h-9 min-w-[180px]"
+                  menuClassName="min-w-[220px]"
+                  showActiveState
+                />
+
+                <FilterDropdown
+                  value={profileOpenTarget}
+                  onChange={value => onProfileOpenTargetChange(String(value))}
+                  label={t('accounts.profileDestinationLabel')}
+                  options={[
+                    { value: 'kiro', label: 'Kiro' },
+                    { value: 'windsurf', label: 'Windsurf' },
+                    { value: 'trae', label: 'Trae' },
+                    { value: 'github', label: 'GitHub' },
+                    { value: 'custom', label: t('accounts.profileDestinationCustom') },
+                  ]}
+                  triggerClassName="h-9 min-w-[180px]"
+                  menuClassName="min-w-[220px]"
+                  showActiveState
+                />
+
+                {profileOpenTarget === 'custom' && (
+                  <Input
+                    label=""
+                    value={profileCustomUrl}
+                    onChange={event => onProfileCustomUrlChange(event.target.value)}
+                    placeholder={t('accounts.profileOpenUrlPlaceholder')}
+                    containerClassName="w-[360px] shrink-0"
+                    className="h-9"
+                  />
+                )}
+              </ToolbarFiltersGroup>
+            ) : (
+              <ToolbarFiltersGroup mobileScrollable>
+                <FilterDropdown
+                  value={statusFilter}
+                  onChange={onStatusFilterChange}
+                  options={[
+                    { value: 'all', label: t('filters.anyStatus') },
+                    { value: 'active', label: getAccountStatusLabel('active') },
+                    { value: 'banned', label: getAccountStatusLabel('banned') },
+                    { value: 'limit_hit', label: getAccountStatusLabel('limit_hit') },
+                    { value: 'expired', label: getAccountStatusLabel('expired') },
+                    { value: 'unknown', label: getAccountStatusLabel('unknown') },
+                  ]}
+                  label={t('filters.status')}
+                  triggerClassName="h-9 min-w-[148px]"
+                  menuClassName="min-w-[220px]"
+                  showActiveState
+                />
+
+                <FilterDropdown
+                  value={tagFilter}
+                  onChange={onTagFilterChange}
+                  options={tagOptions}
+                  label={t('accounts.tags')}
+                  triggerClassName="h-9 min-w-[132px]"
+                  menuClassName="min-w-[220px]"
+                  showActiveState
+                />
+
+                <FilterDropdown
+                  value={relationFilter}
+                  onChange={onRelationFilterChange}
+                  options={relationOptions}
+                  label={t('accounts.relationFilterLabel')}
+                  triggerClassName="h-9 min-w-[132px]"
+                  menuClassName="min-w-[220px]"
+                  showActiveState
+                />
+
+                <FilterDropdown
+                  value={quotaFilter}
+                  onChange={onQuotaFilterChange}
+                  options={[
+                    { value: 'any', label: t('filters.any') },
+                    { value: 'has_quota', label: t('filters.hasQuota') },
+                    { value: 'low_quota', label: t('filters.lowQuota') },
+                    { value: 'empty', label: t('filters.empty') },
+                    { value: 'full', label: t('filters.full') },
+                  ]}
+                  label={t('filters.quota')}
+                  triggerClassName="h-9 min-w-[132px]"
+                  menuClassName="min-w-[220px]"
+                  showActiveState
+                />
+              </ToolbarFiltersGroup>
+            )}
+          </div>
+        ) : (
+          <div className="text-[11px] text-slate-500">
+            {t('accounts.sheetsIntegration')}
+            {sheetsUpdatedAt
+              ? ` • ${t('logs.lastUpdated')} ${new Date(sheetsUpdatedAt).toLocaleString()}`
+              : ''}
+          </div>
+        )}
+      </div>
     </StickyToolbar>
   );
 }

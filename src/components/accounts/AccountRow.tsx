@@ -66,6 +66,7 @@ const statusVariantMap: Record<AccountStatus, 'success' | 'warning' | 'danger' |
 
 const providerLabelMap: Record<string, string> = {
   aws_builder_id: 'AWS Builder ID',
+  fireworks: 'Fireworks AI',
 };
 
 function parseJsonValue(input: string | null): Record<string, unknown> {

@@ -75,6 +75,8 @@ interface CommandCenterProps {
   onHumanDelaysChange: (enabled: boolean) => void;
   screenshotsOnError: boolean;
   onScreenshotsOnErrorChange: (enabled: boolean) => void;
+  cardsText?: string;
+  onCardsTextChange?: (text: string) => void;
 
   // Network
   networkConfig: NetworkConfig;
@@ -145,6 +147,8 @@ export const CommandCenter = ({
   onHumanDelaysChange,
   screenshotsOnError,
   onScreenshotsOnErrorChange,
+  cardsText,
+  onCardsTextChange,
   networkConfig,
   onNetworkConfigChange,
   count,
@@ -250,6 +254,8 @@ export const CommandCenter = ({
             onHumanDelaysChange={onHumanDelaysChange}
             screenshotsOnError={screenshotsOnError}
             onScreenshotsOnErrorChange={onScreenshotsOnErrorChange}
+            cardsText={cardsText}
+            onCardsTextChange={onCardsTextChange}
             disabled={disabled}
           />
         )}

@@ -18,7 +18,7 @@ export function AccountsEntityTabs({
   profilesCount,
 }: AccountsEntityTabsProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2 shrink-0">
+    <div className="flex flex-wrap items-center gap-2 min-w-0">
       <TabButton
         active={value === 'accounts'}
         onClick={() => onChange('accounts')}

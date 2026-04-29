@@ -28,9 +28,9 @@ export function ToolbarSection({
   }
 
   return (
-    <div className={cn('grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto]', className)}>
-      <div className={cn('min-w-0', leftClassName)}>{left}</div>
-      {right ? <div className={cn('min-w-0', rightClassName)}>{right}</div> : null}
+    <div className={cn('flex flex-wrap justify-between gap-4', className)}>
+      <div className={cn('flex-[1_1_500px] min-w-[300px]', leftClassName)}>{left}</div>
+      {right ? <div className={cn('flex-[0_1_auto] min-w-0', rightClassName)}>{right}</div> : null}
     </div>
   );
 }

@@ -327,13 +327,55 @@ useRegistrationStore.getState = (): RegistrationState => {
     saveStatus: persistenceStore.saveStatus,
     imapPasswordSet: persistenceStore.imapPasswordSet,
     gmailAppPasswordSet: persistenceStore.gmailAppPasswordSet,
-    setProvider: configStore.setProvider,
-    setIMAPConfig: configStore.setIMAPConfig,
-    setProxyConfig: configStore.setProxyConfig,
-    setAdvancedSettings: configStore.setAdvancedSettings,
-    setCount: configStore.setCount,
-    setUIScale: configStore.setUIScale,
-    setLogVerbosity: configStore.setLogVerbosity,
+    setProvider: (provider: ProviderName) => {
+      configStore.setProvider(provider);
+      const latestPersistenceStore = usePersistenceStore.getState();
+      if (latestPersistenceStore.settingsLoaded) {
+        persistenceStore.saveSettings(useConfigStore.getState().config, useConfigStore.getState().logVerbosity);
+      }
+    },
+    setIMAPConfig: (imap: Partial<IMAPConfig>) => {
+      configStore.setIMAPConfig(imap);
+      const latestPersistenceStore = usePersistenceStore.getState();
+      if (latestPersistenceStore.settingsLoaded) {
+        persistenceStore.saveSettings(useConfigStore.getState().config, useConfigStore.getState().logVerbosity);
+      }
+    },
+    setProxyConfig: (proxy: Partial<ProxyConfig>) => {
+      configStore.setProxyConfig(proxy);
+      const latestPersistenceStore = usePersistenceStore.getState();
+      if (latestPersistenceStore.settingsLoaded) {
+        persistenceStore.saveSettings(useConfigStore.getState().config, useConfigStore.getState().logVerbosity);
+      }
+    },
+    setAdvancedSettings: (settings: Partial<AdvancedSettings>) => {
+      configStore.setAdvancedSettings(settings);
+      const latestPersistenceStore = usePersistenceStore.getState();
+      if (latestPersistenceStore.settingsLoaded) {
+        persistenceStore.saveSettings(useConfigStore.getState().config, useConfigStore.getState().logVerbosity);
+      }
+    },
+    setCount: (count: number) => {
+      configStore.setCount(count);
+      const latestPersistenceStore = usePersistenceStore.getState();
+      if (latestPersistenceStore.settingsLoaded) {
+        persistenceStore.saveSettings(useConfigStore.getState().config, useConfigStore.getState().logVerbosity);
+      }
+    },
+    setUIScale: (scale: number) => {
+      configStore.setUIScale(scale);
+      const latestPersistenceStore = usePersistenceStore.getState();
+      if (latestPersistenceStore.settingsLoaded) {
+        persistenceStore.saveSettings(useConfigStore.getState().config, useConfigStore.getState().logVerbosity);
+      }
+    },
+    setLogVerbosity: (level: LogVerbosity) => {
+      configStore.setLogVerbosity(level);
+      const latestPersistenceStore = usePersistenceStore.getState();
+      if (latestPersistenceStore.settingsLoaded) {
+        persistenceStore.saveSettings(useConfigStore.getState().config, useConfigStore.getState().logVerbosity);
+      }
+    },
     loadSettings: async () => {
       const config = await persistenceStore.loadSettings();
       if (config) {

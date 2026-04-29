@@ -12,6 +12,7 @@ import {
   startGithubAutoregJob,
   startOpenAIAutoregJob,
   startFireworksAutoregJob,
+  startBitbucketAutoregJob,
   startRegistrationV2,
   listAccounts,
   stopRegistration,
@@ -19,7 +20,7 @@ import {
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
 import { DEFAULT_IMAP_PORT } from '../../../constants/registration';
-import type { ProviderName, OpenAIAutoregResult, FireworksAutoregResult } from '../../../types/ui';
+import type { ProviderName, OpenAIAutoregResult, FireworksAutoregResult, BitbucketAutoregResult } from '../../../types/ui';
 import type { RegistrationConfig } from '../../../stores/registration/types';
 import type {
   PythonAutoregResult,
@@ -30,8 +31,8 @@ import type {
 } from '../../../types/generated';
 import { validateAliasConfiguration, type PythonAliasStrategy } from './aliasValidation';
 
-// Timeout for each registration attempt (5 minutes)
-const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
+// Timeout for each registration attempt (10 minutes)
+const REGISTRATION_TIMEOUT_MS = 10 * 60 * 1000;
 
 export type LogLevel = 'info' | 'error' | 'success' | 'warn' | 'debug';
 export type RegistrationStatus = 'pending' | 'running' | 'completed' | 'failed';
@@ -340,6 +341,7 @@ async function runProviderRegistration(params: {
   | GithubAutoregResult
   | OpenAIAutoregResult
   | FireworksAutoregResult
+  | BitbucketAutoregResult
 > {
   const {
     provider,
@@ -597,6 +599,10 @@ async function runProviderRegistration(params: {
             : 'static',
       baseEmail: email || config.imap.email || imapUser || null,
       correlationId: createCorrelationId(),
+      cardsFile: null,
+      cardsText: config.advanced.cardsText?.trim() || null,
+      captchaTimeout: config.advanced.captchaTimeout,
+      captchaSoundEnabled: config.advanced.captchaSoundEnabled,
       ...inboxBridgeFields,
     });
     return await waitForJobResult<FireworksAutoregResult>(
@@ -613,6 +619,52 @@ async function runProviderRegistration(params: {
         lastName: null,
         plan: null,
         error: 'Fireworks job failed',
+      }
+    );
+  }
+
+  if (provider === 'bitbucket') {
+    const correlationId = createCorrelationId();
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? imapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? imapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
+    const startResponse = await startBitbucketAutoregJob({
+      email,
+      password: null,
+      name: null,
+      headless: config.advanced.headless,
+      proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+      imapServer,
+      imapPort: config.imap.port || DEFAULT_IMAP_PORT,
+      imapUser,
+      imapPassword,
+      addyioEnabled: config.imap.addyioEnabled ?? null,
+      addyioApiToken: config.imap.addyioApiToken ?? null,
+      addyioDomain: config.imap.addyioDomain ?? null,
+      addyioAliasFormat: config.imap.addyioAliasFormat ?? null,
+      addyioAutoDelete: config.imap.addyioAutoDelete ?? null,
+      thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled ?? null,
+      thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername ?? null,
+      thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
+      mailtmEnabled: config.imap.mailtmEnabled ?? null,
+      correlationId,
+      ...inboxBridgeFields,
+    });
+    return await waitForJobResult<BitbucketAutoregResult>(
+      startResponse.jobId,
+      REGISTRATION_TIMEOUT_MS,
+      onCancelled,
+      onLog,
+      {
+        success: false,
+        email,
+        password: null,
+        name: null,
+        error: 'Bitbucket job failed',
       }
     );
   }

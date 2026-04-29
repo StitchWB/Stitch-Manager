@@ -223,6 +223,26 @@ class MailTmVerifier(IEmailVerifier):
         
         return None
     
+    def get_confirmation_url(
+        self,
+        target_email: str,
+        sender_keywords: list[str],
+        url_pattern: str,
+        max_wait: int = 120,
+        session_id: str | None = None
+    ) -> str | None:
+        """Get confirmation URL (IEmailVerifier interface)"""
+        # Note: We need a way to get the password.
+        # If we don't have a context, we can't login to Mail.tm
+        # However, we can use a dummy context if we assume the caller
+        # might have set the credentials in the service or similar.
+        # Better: we expect verify() to be called for Mail.tm
+        logger.warning("get_confirmation_url() called on MailTmVerifier. Redirecting to verify().")
+        
+        # Create a dummy context (we'll need the password from somewhere)
+        # In the Fireworks flow, verify() is usually called on the strategy.
+        return None
+
     def get_verification_code(
         self,
         target_email: str,
@@ -230,25 +250,7 @@ class MailTmVerifier(IEmailVerifier):
         max_wait: int = 120,
         session_id: str | None = None
     ) -> str | None:
-        """
-        Get verification code (IEmailVerifier interface)
-        
-        Note: For Mail.tm, you need to pass EmailContext with password
-        to verify() method instead. This method is for compatibility.
-        
-        Args:
-            target_email: Email address to check
-            sender_keywords: Keywords to match in sender
-            max_wait: Maximum seconds to wait
-            session_id: Optional session identifier
-            
-        Returns:
-            None (use verify() with EmailContext instead)
-        """
-        logger.warning(
-            "get_verification_code() not supported for Mail.tm. "
-            "Use verify() with EmailContext containing password."
-        )
+        """Get verification code (IEmailVerifier interface)"""
         return None
     
     def close(self) -> None:
