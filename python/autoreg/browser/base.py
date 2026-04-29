@@ -412,8 +412,9 @@ class BaseBrowser:
             finally:
                 self.page = None
         
-        # Cleanup temporary profile
-        if self._temp_profile and os.path.exists(self._temp_profile):
+        # Cleanup temporary profile (only if not persistent)
+        if (self._temp_profile and os.path.exists(self._temp_profile)
+                and getattr(self, '_cleanup_profile_on_close', True)):
             try:
                 import shutil
                 shutil.rmtree(self._temp_profile, ignore_errors=True)
