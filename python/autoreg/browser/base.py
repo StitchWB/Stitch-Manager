@@ -353,6 +353,46 @@ class BaseBrowser:
             raise RuntimeError("Browser not initialized")
         return self.page.url
     
+    def persist_profile(self, target_dir: str) -> str:
+        """Copy temp profile to a persistent location.
+        
+        Call this BEFORE close() to save the browser session for later reuse.
+        The temp profile is copied to target_dir. The original temp directory
+        is still cleaned up by close().
+        
+        Args:
+            target_dir: Target directory for persistent profile.
+            
+        Returns:
+            Path to the persistent profile (target_dir).
+        """
+        if not self._temp_profile or not os.path.exists(self._temp_profile):
+            logger.warning("No temp profile to persist")
+            return target_dir
+        
+        import shutil
+        
+        try:
+            # Ensure target directory exists
+            os.makedirs(target_dir, exist_ok=True)
+            
+            # Copy all contents from temp to persistent
+            for item in os.listdir(self._temp_profile):
+                src = os.path.join(self._temp_profile, item)
+                dst = os.path.join(target_dir, item)
+                if os.path.isdir(src):
+                    if os.path.exists(dst):
+                        shutil.rmtree(dst, ignore_errors=True)
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+            
+            logger.info(f"Browser profile persisted to: {target_dir}")
+            return target_dir
+        except Exception as e:
+            logger.error(f"Failed to persist browser profile: {e}")
+            return target_dir
+
     def close(self) -> None:
         """
         Close browser and cleanup resources.
