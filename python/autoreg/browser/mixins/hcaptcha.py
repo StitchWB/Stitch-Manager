@@ -99,12 +99,41 @@ class HCaptchaMixin:
         return self._click_hcaptcha_cdp(page, iframe)
 
     def is_hcaptcha_solved(self, page) -> bool:
-        """Check if hCaptcha is solved by looking at h-captcha-response value."""
+        """Check if hCaptcha is solved by looking for h-captcha-response anywhere.
+
+        Checks both main page DOM and hCaptcha iframe content.
+        """
         try:
+            # Check main page DOM first
             result = page.run_js("""
                 const response = document.querySelector('[name="h-captcha-response"]');
-                return response && response.value && response.value.length > 0;
+                if (response && response.value && response.value.length > 0) return true;
+                
+                // Check inside hCaptcha iframe
+                const iframe = document.querySelector('iframe[src*="hcaptcha"]');
+                if (iframe && iframe.contentDocument) {
+                    const r2 = iframe.contentDocument.querySelector('[name="h-captcha-response"]');
+                    if (r2 && r2.value && r2.value.length > 0) return true;
+                }
+                return false;
             """)
             return bool(result)
+        except Exception:
+            return False
+
+    def is_hcaptcha_visible(self, page) -> bool:
+        """Check if hCaptcha iframe is currently visible (challenge showing)."""
+        try:
+            iframe = page.ele('css:iframe[src*="hcaptcha"]', timeout=1)
+            if not iframe:
+                return False
+            # Check if iframe has non-zero dimensions
+            visible = page.run_js("""
+                const iframe = document.querySelector('iframe[src*="hcaptcha"]');
+                if (!iframe) return false;
+                const rect = iframe.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            """)
+            return bool(visible)
         except Exception:
             return False
