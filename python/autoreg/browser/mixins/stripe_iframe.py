@@ -1,5 +1,6 @@
 """Mixin for Stripe checkout iframe handling"""
 import logging
+from typing import Any
 from DrissionPage import ChromiumPage
 
 logger = logging.getLogger(__name__)
