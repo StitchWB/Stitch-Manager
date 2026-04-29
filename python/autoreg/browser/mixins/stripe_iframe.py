@@ -30,28 +30,11 @@ class StripeIframeMixin:
             self.human_delay(0.3, 0.5) if hasattr(self, 'human_delay') else __import__('time').sleep(0.5)
         return None
     
-    def fill_stripe_field_in_iframe(self, page, iframe, field_variants: list[str], value: str, label: str = "Field", timeout: float = 0.5):
-        """Fill a field inside a Stripe iframe using multiple selector variants.
-        
-        Args:
-            page: ChromiumPage
-            iframe: The iframe element containing the field
-            field_variants: List of possible field name attributes (e.g. ['cardNumber', 'number'])
-            value: Value to fill
-            label: Log label for this field
-            timeout: Timeout per selector attempt
-            
-        Returns:
-            bool: success
+    def _try_fill_field(self, page_or_frame, field_variants: list[str], value: str, label: str, timeout: float = 0.5) -> Any:
+        """Try to find and return a field element using multiple selector variants.
+
+        Returns the field element if found, None otherwise.
         """
-        if not value:
-            return False
-        
-        frame = page.get_frame(iframe)
-        if not frame:
-            logger.warning(f"Could not get frame for {label}")
-            return False
-        
         field = None
         for variant in field_variants:
             selectors = [
@@ -62,23 +45,64 @@ class StripeIframeMixin:
             ]
             for sel in selectors:
                 try:
-                    field = frame.ele(sel, timeout=timeout)
+                    field = page_or_frame.ele(sel, timeout=timeout)
                     if field:
-                        break
-                except:
+                        return field
+                except Exception:
                     pass
-            if field:
-                break
-        
+        return None
+
+    def fill_stripe_field(self, page, field_variants: list[str], value: str, label: str = "Field", timeout: float = 0.5, iframe=None):
+        """Fill a Stripe field with page-first, iframe-fallback strategy.
+
+        Stripe checkout may render fields either:
+        1. Directly in the page DOM (hosted checkout, direct embedding)
+        2. Inside a Stripe iframe (Elements iframe, some integrations)
+
+        This method first tries to find the field directly on the page.
+        Only if not found does it fall back to the iframe (if provided).
+
+        Args:
+            page: ChromiumPage
+            field_variants: List of possible field name attributes (e.g. ['cardNumber', 'number'])
+            value: Value to fill
+            label: Log label for this field
+            timeout: Timeout per selector attempt
+            iframe: Optional iframe element to search inside if page search fails
+
+        Returns:
+            bool: success
+        """
+        if not value:
+            return False
+
+        # Strategy 1: Find field directly on the page (most common for hosted checkout)
+        field = self._try_fill_field(page, field_variants, value, label, timeout)
+        source = "page"
+
+        # Strategy 2: Fallback to iframe if provided and not found on page
+        if not field and iframe:
+            frame = page.get_frame(iframe)
+            if frame:
+                field = self._try_fill_field(frame, field_variants, value, label, timeout)
+                source = "iframe"
+
         if field:
             try:
                 field.click()
                 self.human_delay(0.05, 0.1) if hasattr(self, 'human_delay') else __import__('time').sleep(0.1)
                 field.input(value)
-                logger.info(f"Filled Stripe field: {label}")
+                logger.info(f"Filled Stripe field: {label} (source: {source})")
                 return True
             except Exception as e:
                 logger.warning(f"Error filling {label}: {e}")
         else:
-            logger.warning(f"Stripe field {label} not found in iframe (variants: {field_variants})")
+            logger.warning(f"Stripe field {label} not found (variants: {field_variants})")
         return False
+
+    def fill_stripe_field_in_iframe(self, page, iframe, field_variants: list[str], value: str, label: str = "Field", timeout: float = 0.5):
+        """Legacy method: fill a field inside a Stripe iframe.
+
+        DEPRECATED: Use fill_stripe_field() which handles both page-DOM and iframe cases.
+        """
+        return self.fill_stripe_field(page, field_variants, value, label, timeout, iframe=iframe)
