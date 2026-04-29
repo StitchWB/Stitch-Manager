@@ -1,4 +1,4 @@
-import { Settings2, Eye, EyeOff, Timer, Keyboard, MessageSquare } from 'lucide-react';
+import { Settings2, Eye, EyeOff, Timer, Keyboard, MessageSquare, CreditCard } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';
 
@@ -43,6 +43,8 @@ interface EngineTabProps {
   onHumanDelaysChange: (enabled: boolean) => void;
   screenshotsOnError: boolean;
   onScreenshotsOnErrorChange: (enabled: boolean) => void;
+  cardsText?: string;
+  onCardsTextChange?: (text: string) => void;
   disabled?: boolean;
 }
 
@@ -80,6 +82,8 @@ export function EngineTab({
   onHumanDelaysChange,
   screenshotsOnError,
   onScreenshotsOnErrorChange,
+  cardsText,
+  onCardsTextChange,
   disabled,
 }: EngineTabProps) {
   return (
@@ -342,6 +346,48 @@ export function EngineTab({
           />
         </div>
       </SectionHeader>
+
+      {/* Card Pool — Fireworks only */}
+      {provider === 'fireworks' && onCardsTextChange && (
+        <div
+          className="rounded-lg p-3"
+          style={{
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.05)',
+          }}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+              <CreditCard className="w-4 h-4 text-slate-500" />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-medium text-slate-200">Card Pool</div>
+              <div className="text-[10px] text-slate-500">
+                One card per line: num|MM|YYYY|CVV or num,MM,YYYY,CVV
+              </div>
+            </div>
+          </div>
+          <textarea
+            value={cardsText || ''}
+            onChange={e => onCardsTextChange(e.target.value)}
+            placeholder={`4242424242424242|12|2026|123\n5555555555554444|01|2027|456`}
+            rows={4}
+            disabled={disabled}
+            className={cn(
+              'w-full rounded-md px-3 py-2 text-xs font-mono',
+              'bg-white/5 border border-white/10 text-slate-200',
+              'placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50',
+              'resize-y min-h-[60px]',
+              disabled && 'opacity-50 cursor-not-allowed'
+            )}
+          />
+          {cardsText && (
+            <div className="mt-1 text-[10px] text-slate-500">
+              {cardsText.split('\n').filter(l => l.trim()).length} card(s) loaded
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -13,7 +13,7 @@ def get_correlation_id() -> str | None:
 
 def emit_event(event: dict) -> None:
     """Emit a single NDJSON line to stdout."""
-    print(json.dumps(event, ensure_ascii=False), flush=True)
+    print(json.dumps(event, ensure_ascii=True), flush=True)
 
 
 def emit_log(message: str, level: str = "info", **fields) -> None:

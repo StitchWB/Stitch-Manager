@@ -270,6 +270,12 @@ class TraeRegistrationConfig(PythonAutoregConfig):
     pass  # Uses base config for now
 
 
+class BitbucketRegistrationConfig(PythonAutoregConfig):
+    """Bitbucket-specific registration configuration"""
+
+    pass  # Uses base config for now
+
+
 class WindsurfRegistrationConfig(PythonAutoregConfig):
     """Windsurf-specific registration configuration"""
 
@@ -287,5 +293,6 @@ __all__ = [
     "KiroRegistrationConfig",
     "GithubRegistrationConfig",
     "TraeRegistrationConfig",
+    "BitbucketRegistrationConfig",
     "WindsurfRegistrationConfig",
 ]

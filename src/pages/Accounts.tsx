@@ -417,13 +417,9 @@ export default function Accounts() {
 
       <div className="flex-1 flex overflow-hidden">
         <AccountsFiltersRail
-          entityFilter={entityFilter}
           providerFilter={providerFilter}
           statusFilter={statusFilter}
-          accountsCount={storeAccounts.length}
-          profilesCount={profileAliases.length}
           providerCounts={providerCounts}
-          onEntityFilterChange={handleEntityFilterChange}
           onProviderFilterChange={handleProviderFilterChange}
           onStatusFilterChange={handleStatusFilterChange}
         />

@@ -1,4 +1,4 @@
-import { Cloud, Github } from 'lucide-react';
+import { Cloud, Github, Flame } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 // Import provider icons
@@ -45,6 +45,7 @@ const fallbackIcons = {
   aws: Cloud,
   aws_builder_id: Cloud,
   github: Github,
+  fireworks: Flame,
 };
 
 export function ProviderLogo({ provider, size = 20, className, colored = false }: ProviderLogoProps) {

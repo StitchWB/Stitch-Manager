@@ -1,6 +1,6 @@
 import type { Account, DashboardStats, KiroPatchConfig, PatchResult } from './generated';
 
-export type ProviderName = 'kiro' | 'windsurf' | 'trae' | 'copilot' | 'github' | 'aws' | 'openai' | 'fireworks';
+export type ProviderName = 'kiro' | 'windsurf' | 'trae' | 'copilot' | 'github' | 'aws' | 'openai' | 'fireworks' | 'bitbucket';
 
 export type Theme = 'dark' | 'light' | 'system';
 
@@ -136,6 +136,10 @@ export interface FireworksAutoregConfig {
   inboxMailtmPassword: string | null;
   inboxMailtmBaseUrl: string | null;
   correlationId: string | null;
+  cardsFile: string | null;
+  cardsText: string | null;
+  captchaTimeout: number;
+  captchaSoundEnabled: boolean;
 }
 
 export interface FireworksAutoregResult {
@@ -145,7 +149,44 @@ export interface FireworksAutoregResult {
   name: string | null;
   firstName: string | null;
   lastName: string | null;
+  apiKey?: string | null;
+  api_key?: string | null;
   plan: string | null;
+  error: string | null;
+}
+
+export interface BitbucketAutoregConfig {
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  headless: boolean;
+  proxyUrl: string | null;
+  imapServer: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+  mailtmEnabled: boolean | null;
+  inboxProvider: string | null;
+  inboxMailbox: string | null;
+  inboxMailtmAddress: string | null;
+  inboxMailtmPassword: string | null;
+  inboxMailtmBaseUrl: string | null;
+  correlationId: string | null;
+}
+
+export interface BitbucketAutoregResult {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  name: string | null;
   error: string | null;
 }
 

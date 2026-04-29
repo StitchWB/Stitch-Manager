@@ -96,6 +96,16 @@ export const PROVIDERS: ProviderConfig[] = [
     disabled: false,
     category: 'ai',
   },
+  {
+    id: 'bitbucket',
+    name: 'Bitbucket',
+    icon: 'BB',
+    color: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    gradient: 'from-blue-500/20 to-sky-500/20 text-blue-400',
+    hexColor: '#2684ff',
+    disabled: false,
+    category: 'git',
+  },
 ] as const;
 
 // ============================================

@@ -26,7 +26,7 @@ import {
 export default function AutoRegNext() {
   const location = useLocation();
   const autoRegSupportedProviders = useMemo<ProviderName[]>(
-    () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks'],
+    () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'bitbucket'],
     []
   );
 
@@ -314,7 +314,8 @@ export default function AutoRegNext() {
   // Identity config adapter for IdentitySystemCard
   const identityConfig: IdentityConfig = {
     strategy: config.imap.strategy,
-    emailPattern: config.patterns.emailCustomPrefix || config.imap.emailCustomPrefix || '',
+    // Use imap.emailCustomPrefix first (loaded from DB), patterns as fallback
+    emailPattern: config.imap.emailCustomPrefix || config.patterns.emailCustomPrefix || '',
     server: config.imap.server,
     port: config.imap.port,
     email: config.imap.email,
@@ -507,6 +508,8 @@ export default function AutoRegNext() {
         onScreenshotsOnErrorChange={screenshotsOnError =>
           stableSetAdvancedSettings({ screenshotsOnError })
         }
+        cardsText={config.advanced.cardsText || ''}
+        onCardsTextChange={cardsText => stableSetAdvancedSettings({ cardsText })}
         networkConfig={networkConfig}
         onNetworkConfigChange={stableSetProxyConfig}
         count={config.count}
