@@ -14,46 +14,70 @@ class HCaptchaMixin:
     def _find_hcaptcha_iframe(self, page, timeout=3):
         """Find the hCaptcha iframe on the page.
 
+        Tries multiple selectors because hCaptcha may use different iframe patterns.
         Returns: iframe element or None
         """
-        try:
-            iframe = page.ele('css:iframe[src*="hcaptcha"]', timeout=timeout)
-            return iframe
-        except Exception:
-            return None
+        selectors = [
+            'css:iframe[src*="hcaptcha"]',
+            'css:iframe[src*="hcaptcha.com"]',
+            'css:iframe[data-hcaptcha-widget-id]',
+            'css:iframe[title*="hCaptcha"]',
+        ]
+        for sel in selectors:
+            try:
+                iframe = page.ele(sel, timeout=timeout)
+                if iframe:
+                    return iframe
+            except Exception:
+                continue
+        return None
 
     def _click_hcaptcha_in_iframe(self, page, iframe):
         """Click hCaptcha checkbox inside the iframe using DrissionPage frame context.
 
         DrissionPage's get_frame() allows direct access to cross-origin iframes
-        without CORS restrictions. Finds the checkbox by its ID and clicks it.
+        without CORS restrictions. Retries up to 6 times (1s apart) because
+        hCaptcha may take time to render its checkbox after the iframe appears.
 
         Returns: bool - success
         """
         try:
             frame = page.get_frame(iframe)
             if not frame:
-                logger.warning("Could not get DrissionPage frame context for hCaptcha iframe — will try CDP fallback")
+                logger.warning(
+                    "Could not get DrissionPage frame context for hCaptcha iframe — will try CDP fallback"
+                )
                 return False
 
-            # The checkbox element has id="checkbox" in hCaptcha iframes
-            checkbox = frame.ele('css:#checkbox', timeout=2)
-            if checkbox:
-                checkbox.click()
-                logger.info("Clicked hCaptcha checkbox via DrissionPage frame context")
-                return True
+            # hCaptcha renders its checkbox asynchronously — retry with pauses
+            for attempt in range(6):
+                checkbox = frame.ele('css:#checkbox', timeout=2)
+                if not checkbox:
+                    checkbox = frame.ele('css:input[type="checkbox"]', timeout=1)
+                if not checkbox:
+                    # Try class-based selectors (newer hCaptcha versions)
+                    checkbox = frame.ele('css:.h-captcha-checkbox', timeout=1)
+                if not checkbox:
+                    checkbox = frame.ele('css:[id*="checkbox"]', timeout=1)
 
-            # Fallback: try any input[type=checkbox] inside the frame
-            checkbox = frame.ele('css:input[type="checkbox"]', timeout=1)
-            if checkbox:
-                checkbox.click()
-                logger.info("Clicked hCaptcha checkbox (input fallback)")
-                return True
+                if checkbox:
+                    checkbox.click()
+                    logger.info(
+                        f"Clicked hCaptcha checkbox via DrissionPage frame context (attempt {attempt + 1})"
+                    )
+                    return True
 
-            logger.warning("hCaptcha checkbox element not found in frame (tried #checkbox and input[type=checkbox])")
+                if attempt < 5:
+                    logger.debug(f"hCaptcha checkbox not rendered yet (attempt {attempt + 1}/6)")
+                    time.sleep(1.0)
+
+            logger.warning(
+                "hCaptcha checkbox not found in frame after 6 retries "
+                "(tried #checkbox, input[type=checkbox], .h-captcha-checkbox, [id*=checkbox])"
+            )
             return False
         except Exception as e:
-            logger.warning(f"Failed to click hCaptcha via frame context: {e}")
+            logger.warning(f"Failed to click hCaptcha via frame context: {e}", exc_info=True)
             return False
 
     def _click_hcaptcha_cdp(self, page, iframe):
