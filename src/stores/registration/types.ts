@@ -147,6 +147,7 @@ export interface RegistrationConfig {
   timeout: number;
   retryAttempts: number;
   uiScale: number;
+  logVerbosity?: string;
 }
 
 // Save status for UI feedback
@@ -248,4 +249,5 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
   timeout: 60000,
   retryAttempts: 3,
   uiScale: 1.0,
+  logVerbosity: 'normal',
 };

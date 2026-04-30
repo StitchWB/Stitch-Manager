@@ -173,7 +173,7 @@ export default function AutoRegNext() {
   // Use custom hooks
   const { activeThreads, isStopping, handleStart, handleTestImap, handleStop } =
     useRegistrationFlow({
-      config,
+      config: { ...config, logVerbosity },
       emailDomain,
       useRegistrationV2,
       canStart,

@@ -603,6 +603,7 @@ async function runProviderRegistration(params: {
       cardsText: config.advanced.cardsText?.trim() || null,
       captchaTimeout: config.advanced.captchaTimeout,
       captchaSoundEnabled: config.advanced.captchaSoundEnabled,
+      debug: config.logVerbosity === 'debug',
       ...inboxBridgeFields,
     });
     return await waitForJobResult<FireworksAutoregResult>(
