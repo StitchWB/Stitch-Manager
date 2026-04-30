@@ -99,22 +99,23 @@ class HCaptchaMixin:
         return self._click_hcaptcha_cdp(page, iframe)
 
     def is_hcaptcha_solved(self, page) -> bool:
-        """Check if hCaptcha is solved by looking for h-captcha-response anywhere.
+        """Check if hCaptcha is solved by looking for h-captcha-response with value.
 
-        Checks both main page DOM and hCaptcha iframe content.
+        Stripe renders hCaptcha in an HCaptcha-container div containing:
+        - An iframe with data-hcaptcha-widget-id
+        - A textarea #h-captcha-response-{widget_id} that gets filled on solve
         """
         try:
-            # Check main page DOM first
             result = page.run_js("""
-                const response = document.querySelector('[name="h-captcha-response"]');
-                if (response && response.value && response.value.length > 0) return true;
-                
-                // Check inside hCaptcha iframe
-                const iframe = document.querySelector('iframe[src*="hcaptcha"]');
-                if (iframe && iframe.contentDocument) {
-                    const r2 = iframe.contentDocument.querySelector('[name="h-captcha-response"]');
-                    if (r2 && r2.value && r2.value.length > 0) return true;
+                // Check HCaptcha-container textareas (Stripe hosted checkout)
+                const container = document.querySelector('.HCaptcha-container');
+                if (container) {
+                    const ta = container.querySelector('textarea[id^="h-captcha-response"]');
+                    if (ta && ta.value && ta.value.length > 0) return true;
                 }
+                // Check page-global h-captcha-response (older integrations)
+                const global_ta = document.querySelector('[name="h-captcha-response"]');
+                if (global_ta && global_ta.value && global_ta.value.length > 0) return true;
                 return false;
             """)
             return bool(result)
