@@ -140,6 +140,7 @@ export interface FireworksAutoregConfig {
   cardsText: string | null;
   captchaTimeout: number;
   captchaSoundEnabled: boolean;
+  debug?: boolean;
 }
 
 export interface FireworksAutoregResult {

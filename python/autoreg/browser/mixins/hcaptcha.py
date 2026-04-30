@@ -14,77 +14,161 @@ class HCaptchaMixin:
     def _find_hcaptcha_iframe(self, page, timeout=3):
         """Find the hCaptcha iframe on the page.
 
-        Tries multiple selectors because hCaptcha may use different iframe patterns.
+        Tries multiple selectors because hCaptcha may use different iframe patterns
+        (direct iframe, inside HCaptcha-container div, etc.).
         Returns: iframe element or None
         """
         selectors = [
+            'css:.HCaptcha-container iframe',
             'css:iframe[src*="hcaptcha"]',
             'css:iframe[src*="hcaptcha.com"]',
             'css:iframe[data-hcaptcha-widget-id]',
             'css:iframe[title*="hCaptcha"]',
+            'css:iframe[id*="hcaptcha"]',
         ]
         for sel in selectors:
             try:
                 iframe = page.ele(sel, timeout=timeout)
                 if iframe:
+                    logger.info(f"Found hCaptcha iframe with selector: {sel}")
                     return iframe
             except Exception:
                 continue
+        
+        # Final fallback: search all iframes for hcaptcha in src
+        try:
+            iframes = page.eles('css:iframe')
+            for iframe in iframes:
+                try:
+                    src = iframe.attr('src') or ''
+                    if 'hcaptcha' in src.lower():
+                        logger.info(f"Found hCaptcha iframe by src scan: {src[:80]}")
+                        return iframe
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        
         return None
 
     def _click_hcaptcha_in_iframe(self, page, iframe):
-        """Click hCaptcha checkbox inside the iframe using DrissionPage frame context.
+        """Click hCaptcha checkbox inside the iframe using multiple strategies.
 
-        DrissionPage's get_frame() allows direct access to cross-origin iframes
-        without CORS restrictions. Retries up to 6 times (1s apart) because
-        hCaptcha may take time to render its checkbox after the iframe appears.
+        Strategy 1: DrissionPage frame context (get_frame + ele.click)
+        Strategy 2: JavaScript injection via contentWindow (bypasses CORS)
+        Strategy 3: JavaScript click on the iframe element itself
+
+        Retries up to 10 times (1s apart) because hCaptcha renders asynchronously.
 
         Returns: bool - success
         """
+        # --- Strategy 1: DrissionPage frame context ---
         try:
             frame = page.get_frame(iframe)
-            if not frame:
-                logger.warning(
-                    "Could not get DrissionPage frame context for hCaptcha iframe — will try CDP fallback"
-                )
-                return False
+            if frame:
+                for attempt in range(6):
+                    checkbox = frame.ele('css:#checkbox', timeout=2)
+                    if not checkbox:
+                        checkbox = frame.ele('css:input[type="checkbox"]', timeout=1)
+                    if not checkbox:
+                        checkbox = frame.ele('css:.h-captcha-checkbox', timeout=1)
+                    if not checkbox:
+                        checkbox = frame.ele('css:[id*="checkbox"]', timeout=1)
+                    if not checkbox:
+                        checkbox = frame.ele('css:.checkbox', timeout=1)
 
-            # hCaptcha renders its checkbox asynchronously — retry with pauses
-            for attempt in range(6):
-                checkbox = frame.ele('css:#checkbox', timeout=2)
-                if not checkbox:
-                    checkbox = frame.ele('css:input[type="checkbox"]', timeout=1)
-                if not checkbox:
-                    # Try class-based selectors (newer hCaptcha versions)
-                    checkbox = frame.ele('css:.h-captcha-checkbox', timeout=1)
-                if not checkbox:
-                    checkbox = frame.ele('css:[id*="checkbox"]', timeout=1)
+                    if checkbox:
+                        checkbox.click()
+                        logger.info(
+                            f"Clicked hCaptcha checkbox via DrissionPage frame (attempt {attempt + 1})"
+                        )
+                        return True
 
-                if checkbox:
-                    checkbox.click()
-                    logger.info(
-                        f"Clicked hCaptcha checkbox via DrissionPage frame context (attempt {attempt + 1})"
-                    )
-                    return True
-
-                if attempt < 5:
-                    logger.debug(f"hCaptcha checkbox not rendered yet (attempt {attempt + 1}/6)")
-                    time.sleep(1.0)
-
-            logger.warning(
-                "hCaptcha checkbox not found in frame after 6 retries "
-                "(tried #checkbox, input[type=checkbox], .h-captcha-checkbox, [id*=checkbox])"
-            )
-            return False
+                    if attempt < 5:
+                        logger.debug(f"hCaptcha checkbox not in frame yet (attempt {attempt + 1}/6)")
+                        time.sleep(1.0)
         except Exception as e:
-            logger.warning(f"Failed to click hCaptcha via frame context: {e}", exc_info=True)
-            return False
+            logger.debug(f"DrissionPage frame context failed: {e}")
+
+        # --- Strategy 2: JavaScript via contentWindow ---
+        try:
+            logger.info("Trying JS contentWindow strategy for hCaptcha")
+            result = page.run_js("""
+                const iframe = document.querySelector('iframe[src*="hcaptcha"], iframe[data-hcaptcha-widget-id], .HCaptcha-container iframe');
+                if (!iframe) return { success: false, error: 'iframe not found' };
+                
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    if (!iframeDoc) return { success: false, error: 'cannot access iframe document' };
+                    
+                    // Try multiple checkbox selectors
+                    const selectors = [
+                        '#checkbox',
+                        'input[type="checkbox"]',
+                        '.h-captcha-checkbox',
+                        '[id*="checkbox"]',
+                        '.checkbox',
+                        'div[role="checkbox"]',
+                        '.check'
+                    ];
+                    
+                    for (const sel of selectors) {
+                        const el = iframeDoc.querySelector(sel);
+                        if (el) {
+                            el.click();
+                            return { success: true, selector: sel, method: 'contentWindow' };
+                        }
+                    }
+                    
+                    // If no specific checkbox found, try clicking the body center
+                    // (hCaptcha sometimes uses a single clickable div)
+                    const body = iframeDoc.body;
+                    if (body) {
+                        const rect = body.getBoundingClientRect();
+                        const clickEvent = new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            clientX: rect.width / 2,
+                            clientY: rect.height / 2
+                        });
+                        body.dispatchEvent(clickEvent);
+                        return { success: true, method: 'body_click' };
+                    }
+                    
+                    return { success: false, error: 'no clickable element found in iframe' };
+                } catch (e) {
+                    return { success: false, error: e.message };
+                }
+            """)
+            
+            if isinstance(result, dict) and result.get('success'):
+                logger.info(f"Clicked hCaptcha via JS contentWindow: {result.get('method')}")
+                return True
+            else:
+                logger.debug(f"JS contentWindow failed: {result}")
+        except Exception as e:
+            logger.debug(f"JS contentWindow strategy error: {e}")
+
+        # --- Strategy 3: Click the iframe element itself (triggers hCaptcha) ---
+        try:
+            logger.info("Trying direct iframe click strategy")
+            iframe.click()
+            logger.info("Clicked hCaptcha iframe element directly")
+            return True
+        except Exception as e:
+            logger.debug(f"Direct iframe click failed: {e}")
+
+        logger.warning(
+            "All hCaptcha click strategies failed "
+            "(tried DrissionPage frame, JS contentWindow, direct iframe click)"
+        )
+        return False
 
     def _click_hcaptcha_cdp(self, page, iframe):
         """Click hCaptcha using CDP Input.dispatchMouseEvent as last-resort fallback.
 
         Uses iframe rect relative to viewport. Coordinates target the center of the
-        checkbox (≈ 66×66 px at offset ~19,22 inside the iframe).
+        checkbox area inside the iframe.
 
         Returns: bool - success
         """
@@ -92,7 +176,7 @@ class HCaptchaMixin:
             rect = iframe.rect if hasattr(iframe, 'rect') else None
             if not rect:
                 rect = page.run_js('''
-                    const iframe = document.querySelector('iframe[src*="hcaptcha"]');
+                    const iframe = document.querySelector('iframe[src*="hcaptcha"], iframe[data-hcaptcha-widget-id], .HCaptcha-container iframe');
                     if (!iframe) return null;
                     const r = iframe.getBoundingClientRect();
                     return {left: r.left, top: r.top, width: r.width, height: r.height};
@@ -100,14 +184,16 @@ class HCaptchaMixin:
                 if not rect:
                     return False
 
-            # Click the checkbox area (offset ~19,22 inside 66×66 iframe)
-            x = rect['left'] + 19 + 33 * 0.5
-            y = rect['top'] + 22 + 33 * 0.5
+            # hCaptcha checkbox iframe is typically 66x66 or 303x78 px
+            # The checkbox itself is in the top-left area, ~30x30 px
+            # Click at 1/3 from left, 1/3 from top (conservative checkbox area)
+            x = rect['left'] + min(rect['width'] * 0.25, 20)
+            y = rect['top'] + min(rect['height'] * 0.35, 25)
 
             page.run_cdp('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', clickCount=1)
             time.sleep(0.1)
             page.run_cdp('Input.dispatchMouseEvent', type='mouseReleased', x=x, y=y, button='left', clickCount=1)
-            logger.info("Clicked hCaptcha via CDP mouse event")
+            logger.info(f"Clicked hCaptcha via CDP at ({x:.1f}, {y:.1f})")
             return True
         except Exception as e:
             logger.warning(f"Failed CDP hCaptcha click: {e}")
