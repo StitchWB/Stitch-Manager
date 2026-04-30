@@ -23,32 +23,44 @@ class HCaptchaMixin:
             return None
 
     def _click_hcaptcha_in_iframe(self, page, iframe):
-        """Click hCaptcha checkbox inside the iframe using JS.
+        """Click hCaptcha checkbox inside the iframe using DrissionPage frame context.
+
+        DrissionPage's get_frame() allows direct access to cross-origin iframes
+        without CORS restrictions. Finds the checkbox by its ID and clicks it.
 
         Returns: bool - success
         """
         try:
-            page.run_js('''
-                const iframe = document.querySelector('iframe[src*="hcaptcha"]');
-                if (!iframe) return false;
-                const rect = iframe.getBoundingClientRect();
-                const x = rect.left + rect.width * 0.4;
-                const y = rect.top + rect.height * 0.55;
-                const clickEvent = new MouseEvent('click', {
-                    bubbles: true, cancelable: true,
-                    clientX: x, clientY: y
-                });
-                iframe.contentDocument?.dispatchEvent(clickEvent);
-                return true;
-            ''')
-            logger.info("Clicked hCaptcha checkbox via JS in iframe")
-            return True
+            frame = page.get_frame(iframe)
+            if not frame:
+                logger.debug("Could not get DrissionPage frame context for hCaptcha iframe")
+                return False
+
+            # The checkbox element has id="checkbox" in hCaptcha iframes
+            checkbox = frame.ele('css:#checkbox', timeout=2)
+            if checkbox:
+                checkbox.click()
+                logger.info("Clicked hCaptcha checkbox via DrissionPage frame context")
+                return True
+
+            # Fallback: try any input[type=checkbox] inside the frame
+            checkbox = frame.ele('css:input[type="checkbox"]', timeout=1)
+            if checkbox:
+                checkbox.click()
+                logger.info("Clicked hCaptcha checkbox (input fallback)")
+                return True
+
+            logger.debug("hCaptcha checkbox element not found in frame")
+            return False
         except Exception as e:
-            logger.warning(f"Failed to click hCaptcha in iframe: {e}")
+            logger.warning(f"Failed to click hCaptcha via frame context: {e}")
             return False
 
     def _click_hcaptcha_cdp(self, page, iframe):
-        """Click hCaptcha using CDP Input.dispatchMouseEvent as fallback.
+        """Click hCaptcha using CDP Input.dispatchMouseEvent as last-resort fallback.
+
+        Uses iframe rect relative to viewport. Coordinates target the center of the
+        checkbox (≈ 66×66 px at offset ~19,22 inside the iframe).
 
         Returns: bool - success
         """
@@ -59,13 +71,14 @@ class HCaptchaMixin:
                     const iframe = document.querySelector('iframe[src*="hcaptcha"]');
                     if (!iframe) return null;
                     const r = iframe.getBoundingClientRect();
-                    return {x: r.x, y: r.y, width: r.width, height: r.height};
+                    return {left: r.left, top: r.top, width: r.width, height: r.height};
                 ''')
                 if not rect:
                     return False
 
-            x = rect['x'] + rect['width'] * 0.4
-            y = rect['y'] + rect['height'] * 0.55
+            # Click the checkbox area (offset ~19,22 inside 66×66 iframe)
+            x = rect['left'] + 19 + 33 * 0.5
+            y = rect['top'] + 22 + 33 * 0.5
 
             page.run_cdp('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', clickCount=1)
             time.sleep(0.1)
@@ -80,7 +93,7 @@ class HCaptchaMixin:
         """Click hCaptcha checkbox with multiple fallback methods.
 
         1. Find iframe
-        2. JS click inside iframe
+        2. DrissionPage frame context (get_frame + ele.click) ← primary
         3. CDP mouse event fallback
 
         Returns: True if clicked, False if hCaptcha not found
@@ -95,7 +108,7 @@ class HCaptchaMixin:
         if self._click_hcaptcha_in_iframe(page, iframe):
             return True
 
-        logger.info("JS click failed, trying CDP fallback...")
+        logger.info("Frame-context click failed, trying CDP fallback...")
         return self._click_hcaptcha_cdp(page, iframe)
 
     def is_hcaptcha_solved(self, page) -> bool:
