@@ -34,15 +34,21 @@ class StripeIframeMixin:
     def _try_fill_field(self, page_or_frame, field_variants: list[str], value: str, label: str, timeout: float = 0.5) -> Any:
         """Try to find and return a field element using multiple selector variants.
 
+        Searches for both <input> and <select> elements (e.g. state/country dropdowns).
         Returns the field element if found, None otherwise.
         """
         field = None
         for variant in field_variants:
+            # Try <input> first (most fields)
             selectors = [
                 f'css:input[name="{variant}"]',
                 f'css:input#{variant}',
                 f'css:input[placeholder*="{variant}"]',
                 f'css:input[aria-label*="{variant}"]',
+                # Also try <select> (dropdowns like state/country)
+                f'css:select[name="{variant}"]',
+                f'css:select#{variant}',
+                f'css:select[aria-label*="{variant}"]',
             ]
             for sel in selectors:
                 try:
@@ -92,7 +98,22 @@ class StripeIframeMixin:
             try:
                 field.click()
                 self.human_delay(0.05, 0.1) if hasattr(self, 'human_delay') else __import__('time').sleep(0.1)
-                field.input(value)
+                # Handle <select> dropdowns (e.g. state/country) differently from <input>
+                tag = getattr(field, 'tag', None) or getattr(field, 'tag_name', None)
+                if tag and tag.lower() == 'select':
+                    # Use JavaScript to set select value — more reliable than .select()
+                    page.run_js(
+                        f'''
+                        var el = document.querySelector('select[name="{field_variants[0]}"], select#{field_variants[0]}');
+                        if (el) {{
+                            el.value = "{value}";
+                            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        }}
+                        '''
+                    )
+                else:
+                    field.input(value)
                 logger.info(f"Filled Stripe field: {label} (source: {source})")
                 return True
             except Exception as e:
