@@ -33,7 +33,7 @@ class HCaptchaMixin:
         try:
             frame = page.get_frame(iframe)
             if not frame:
-                logger.debug("Could not get DrissionPage frame context for hCaptcha iframe")
+                logger.warning("Could not get DrissionPage frame context for hCaptcha iframe — will try CDP fallback")
                 return False
 
             # The checkbox element has id="checkbox" in hCaptcha iframes
@@ -50,7 +50,7 @@ class HCaptchaMixin:
                 logger.info("Clicked hCaptcha checkbox (input fallback)")
                 return True
 
-            logger.debug("hCaptcha checkbox element not found in frame")
+            logger.warning("hCaptcha checkbox element not found in frame (tried #checkbox and input[type=checkbox])")
             return False
         except Exception as e:
             logger.warning(f"Failed to click hCaptcha via frame context: {e}")
@@ -102,7 +102,7 @@ class HCaptchaMixin:
 
         iframe = self._find_hcaptcha_iframe(page, timeout=2)
         if not iframe:
-            logger.debug("No hCaptcha iframe found on page")
+            logger.warning("No hCaptcha iframe found on page — cannot click")
             return False
 
         if self._click_hcaptcha_in_iframe(page, iframe):
@@ -132,7 +132,8 @@ class HCaptchaMixin:
                 return false;
             """)
             return bool(result)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"is_hcaptcha_solved check failed: {e}")
             return False
 
     def is_hcaptcha_visible(self, page) -> bool:
@@ -140,6 +141,7 @@ class HCaptchaMixin:
         try:
             iframe = page.ele('css:iframe[src*="hcaptcha"]', timeout=1)
             if not iframe:
+                logger.debug("hCaptcha iframe not found in DOM — not visible")
                 return False
             # Check if iframe has non-zero dimensions
             visible = page.run_js("""
@@ -149,5 +151,6 @@ class HCaptchaMixin:
                 return rect.width > 0 && rect.height > 0;
             """)
             return bool(visible)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"is_hcaptcha_visible check failed: {e}")
             return False
