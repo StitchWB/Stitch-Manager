@@ -270,6 +270,8 @@ class HCaptchaMixin:
         except Exception as e:
             logger.debug(f"CDP Runtime.evaluate failed: {e}")
             return False
+
+    def _click_hcaptcha_cdp(self, page, iframe):
         """Click hCaptcha using CDP Input.dispatchMouseEvent as last-resort fallback.
 
         Uses iframe rect relative to viewport. Coordinates target the center of the
