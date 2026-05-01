@@ -104,6 +104,10 @@ export type OpenAIApiKey = { apiKey: string; baseUrl?: string | null; prefix?: s
 
 export type AntigravityApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
 
+export type FireworksApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
+
+export type FireworksKeyStatus = { valid: boolean; apiKey: string; accountName?: string | null; accountEmail?: string | null; accountState?: string | null; suspendState?: string | null; monthlySpendLimit?: number | null; monthlySpendUsed?: number | null; monthlySpendRemaining?: number | null; monthlySpendMax?: number | null; tier?: string | null; serverlessRpmLimit?: number | null; serverlessRpmUsage?: number | null; statusMessage?: string | null; isFrozen: boolean; isLimitReached: boolean; rawResponse?: string | null }
+
 export type ScheduledTask = { id: number; name: string; taskType: TaskType; enabled: boolean; schedule: Schedule; config: string; lastRun: number | null; nextRun: number; runCount: number; successCount: number; errorCount: number; lastError: string | null; createdAt: number; updatedAt: number }
 
 export type TaskType = { registerProvider: { provider: string } } | { loginAccount: { account_id: number } } | { refreshToken: { account_id: number } } | { customScript: { script_path: string } }
