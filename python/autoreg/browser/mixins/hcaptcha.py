@@ -321,16 +321,34 @@ class HCaptchaMixin:
                     return False
                 left, top, width, height = js_rect['left'], js_rect['top'], js_rect['width'], js_rect['height']
 
-            # hCaptcha checkbox iframe is typically 66x66 or 303x78 px
-            # The checkbox itself is in the top-left area, ~30x30 px
-            # Click at 1/3 from left, 1/3 from top (conservative checkbox area)
-            x = left + min(width * 0.25, 20)
-            y = top + min(height * 0.35, 25)
-
-            page.run_cdp('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', clickCount=1)
-            time.sleep(0.1)
-            page.run_cdp('Input.dispatchMouseEvent', type='mouseReleased', x=x, y=y, button='left', clickCount=1)
-            logger.info(f"Clicked hCaptcha via CDP at ({x:.1f}, {y:.1f})")
+            # Try multiple click positions — checkbox may be at different spots
+            # depending on hCaptcha version and layout
+            positions = [
+                (width * 0.25, height * 0.35),   # top-left area (classic 66x66 iframe)
+                (width * 0.15, height * 0.30),   # more aggressive top-left
+                (width * 0.50, height * 0.40),   # center (full-page overlay)
+                (width * 0.50, height * 0.50),   # dead center
+                (width * 0.35, height * 0.45),   # alternative center
+            ]
+            
+            clicked = False
+            for px, py in positions:
+                x = left + px
+                y = top + py
+                try:
+                    page.run_cdp('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', clickCount=1)
+                    time.sleep(0.05)
+                    page.run_cdp('Input.dispatchMouseEvent', type='mouseReleased', x=x, y=y, button='left', clickCount=1)
+                    clicked = True
+                    logger.info(f"Clicked hCaptcha via CDP at ({x:.0f}, {y:.0f}) — ({px/width*100:.0f}%, {py/height*100:.0f}%)")
+                    break
+                except Exception:
+                    continue
+            
+            if not clicked:
+                logger.warning("All CDP click positions failed")
+                return False
+            
             return True
         except Exception as e:
             logger.warning(f"Failed CDP hCaptcha click: {e}")
