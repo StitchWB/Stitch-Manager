@@ -181,7 +181,95 @@ class HCaptchaMixin:
         )
         return False
 
-    def _click_hcaptcha_cdp(self, page, iframe):
+    def _click_hcaptcha_via_cdp_eval(self, page, iframe) -> bool:
+        """Click hCaptcha checkbox using CDP Runtime.evaluate inside the iframe context.
+
+        This uses CDP's execution context system to run JavaScript INSIDE the
+        cross-origin iframe, completely bypassing CORS restrictions. Much more
+        reliable than DrissionPage frame context or contentWindow injection.
+
+        Returns: bool - success
+        """
+        try:
+            # 1. Get all execution contexts from CDP
+            contexts_result = page.run_cdp('Runtime.getExecutionContexts')
+            contexts = contexts_result.get('contexts', []) if isinstance(contexts_result, dict) else []
+            
+            # 2. Find the context for the hCaptcha iframe
+            # The iframe name/source helps identify it
+            hcaptcha_ctx = None
+            for ctx in contexts:
+                name = ctx.get('name', '')
+                origin = ctx.get('origin', '')
+                frame_id = ctx.get('auxData', {}).get('frameId', '') if isinstance(ctx.get('auxData'), dict) else ''
+                if 'hcaptcha' in name.lower() or 'hcaptcha' in origin.lower():
+                    hcaptcha_ctx = ctx['id']
+                    logger.info(f"Found hCaptcha CDP context: {name} (frame: {frame_id})")
+                    break
+            
+            if not hcaptcha_ctx:
+                # Fallback: try to match by iframe name pattern
+                try:
+                    iframe_name = page.run_js("""
+                        const f = document.querySelector('iframe[src*="hcaptcha"]');
+                        return f ? f.name : null;
+                    """)
+                    if iframe_name:
+                        for ctx in contexts:
+                            if ctx.get('name', '') == iframe_name:
+                                hcaptcha_ctx = ctx['id']
+                                break
+                except Exception:
+                    pass
+            
+            if not hcaptcha_ctx:
+                logger.debug("Could not find hCaptcha execution context via CDP")
+                return False
+            
+            # 3. Evaluate JS inside the iframe to find and click the checkbox
+            for attempt in range(6):
+                result = page.run_cdp('Runtime.evaluate', **{
+                    'expression': '''
+                        (function() {
+                            const selectors = [
+                                '#checkbox',
+                                'input[type="checkbox"]',
+                                '.h-captcha-checkbox',
+                                '[id*="checkbox"]',
+                                '.checkbox',
+                                'div[role="checkbox"]',
+                                'div[aria-checked]',
+                                '.check'
+                            ];
+                            for (const sel of selectors) {
+                                const el = document.querySelector(sel);
+                                if (el) {
+                                    el.click();
+                                    return {success: true, selector: sel};
+                                }
+                            }
+                            return {success: false, error: 'no checkbox in iframe'};
+                        })()
+                    ''',
+                    'contextId': hcaptcha_ctx,
+                    'returnByValue': True,
+                })
+                
+                if isinstance(result, dict):
+                    value = result.get('result', {}).get('value') if isinstance(result.get('result'), dict) else result.get('value')
+                    if isinstance(value, dict) and value.get('success'):
+                        logger.info(f"Clicked hCaptcha via CDP eval: {value.get('selector')} (attempt {attempt + 1})")
+                        return True
+                
+                if attempt < 5:
+                    logger.debug(f"hCaptcha CDP eval not ready (attempt {attempt + 1}/6)")
+                    time.sleep(1.0)
+            
+            logger.warning("hCaptcha checkbox not found via CDP eval after 6 attempts")
+            return False
+        except Exception as e:
+            logger.debug(f"CDP Runtime.evaluate failed: {e}")
+            return False
         """Click hCaptcha using CDP Input.dispatchMouseEvent as last-resort fallback.
 
         Uses iframe rect relative to viewport. Coordinates target the center of the
@@ -233,9 +321,10 @@ class HCaptchaMixin:
     def click_hcaptcha(self, page) -> bool:
         """Click hCaptcha checkbox with multiple fallback methods.
 
-        1. Find iframe
-        2. DrissionPage frame context (get_frame + ele.click) ← primary
-        3. CDP mouse event fallback
+        Strategy priority (most reliable first):
+        1. CDP Runtime.evaluate inside frame context (bypasses CORS)
+        2. CDP Input.dispatchMouseEvent at checkbox coordinates
+        3. DrissionPage frame context + JS contentWindow + direct click
 
         Returns: True if clicked, False if hCaptcha not found
         """
@@ -246,11 +335,18 @@ class HCaptchaMixin:
             logger.warning("No hCaptcha iframe found on page — cannot click")
             return False
 
-        if self._click_hcaptcha_in_iframe(page, iframe):
+        # Primary: CDP Runtime.evaluate (JS inside iframe, no CORS)
+        if self._click_hcaptcha_via_cdp_eval(page, iframe):
             return True
 
-        logger.info("Frame-context click failed, trying CDP fallback...")
-        return self._click_hcaptcha_cdp(page, iframe)
+        # Secondary: CDP mouse event at calculated coordinates
+        logger.info("CDP eval failed, trying CDP mouse event...")
+        if self._click_hcaptcha_cdp(page, iframe):
+            return True
+
+        # Tertiary: DrissionPage frame-based strategies
+        logger.info("CDP mouse event failed, trying frame-context strategies...")
+        return self._click_hcaptcha_in_iframe(page, iframe)
 
     def is_hcaptcha_solved(self, page) -> bool:
         """Check if hCaptcha is solved by looking for h-captcha-response with value.
