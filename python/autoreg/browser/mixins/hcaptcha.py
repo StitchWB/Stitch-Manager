@@ -76,6 +76,19 @@ class HCaptchaMixin:
                         checkbox = frame.ele('css:[id*="checkbox"]', timeout=1)
                     if not checkbox:
                         checkbox = frame.ele('css:.checkbox', timeout=1)
+                    if not checkbox:
+                        # hCaptcha v2+ sometimes uses a div with role or aria-checkbox
+                        checkbox = frame.ele('css:div[role="checkbox"], css:div[aria-checked]', timeout=1)
+                    if not checkbox:
+                        # Try clicking the frame's body as last resort
+                        try:
+                            body = frame.ele('css:body', timeout=1)
+                            if body:
+                                body.click()
+                                logger.info("Clicked hCaptcha frame body via DrissionPage")
+                                return True
+                        except Exception:
+                            pass
 
                     if checkbox:
                         checkbox.click()
@@ -152,7 +165,11 @@ class HCaptchaMixin:
         # --- Strategy 3: Click the iframe element itself (triggers hCaptcha) ---
         try:
             logger.info("Trying direct iframe click strategy")
-            iframe.click()
+            # ChromiumFrame objects don't have .click() — use page.run_js instead
+            try:
+                iframe.click()
+            except AttributeError:
+                page.run_js("arguments[0].click();", iframe)
             logger.info("Clicked hCaptcha iframe element directly")
             return True
         except Exception as e:
@@ -174,21 +191,35 @@ class HCaptchaMixin:
         """
         try:
             rect = iframe.rect if hasattr(iframe, 'rect') else None
-            if not rect:
-                rect = page.run_js('''
+            
+            # Extract coordinates — rect may be a FrameRect object (attributes)
+            # or a dict from JS getBoundingClientRect
+            if rect is not None:
+                if isinstance(rect, dict):
+                    left, top, width, height = rect['left'], rect['top'], rect['width'], rect['height']
+                else:
+                    # FrameRect / ChromiumRect object — use attribute access
+                    left = rect.left if hasattr(rect, 'left') else rect.get('left', 0)
+                    top = rect.top if hasattr(rect, 'top') else rect.get('top', 0)
+                    width = rect.width if hasattr(rect, 'width') else rect.get('width', 0)
+                    height = rect.height if hasattr(rect, 'height') else rect.get('height', 0)
+            else:
+                # Fallback: get rect via JS
+                js_rect = page.run_js('''
                     const iframe = document.querySelector('iframe[src*="hcaptcha"], iframe[data-hcaptcha-widget-id], .HCaptcha-container iframe');
                     if (!iframe) return null;
                     const r = iframe.getBoundingClientRect();
                     return {left: r.left, top: r.top, width: r.width, height: r.height};
                 ''')
-                if not rect:
+                if not js_rect or not isinstance(js_rect, dict):
                     return False
+                left, top, width, height = js_rect['left'], js_rect['top'], js_rect['width'], js_rect['height']
 
             # hCaptcha checkbox iframe is typically 66x66 or 303x78 px
             # The checkbox itself is in the top-left area, ~30x30 px
             # Click at 1/3 from left, 1/3 from top (conservative checkbox area)
-            x = rect['left'] + min(rect['width'] * 0.25, 20)
-            y = rect['top'] + min(rect['height'] * 0.35, 25)
+            x = left + min(width * 0.25, 20)
+            y = top + min(height * 0.35, 25)
 
             page.run_cdp('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', clickCount=1)
             time.sleep(0.1)
@@ -224,9 +255,9 @@ class HCaptchaMixin:
     def is_hcaptcha_solved(self, page) -> bool:
         """Check if hCaptcha is solved by looking for h-captcha-response with value.
 
-        Stripe renders hCaptcha in an HCaptcha-container div containing:
-        - An iframe with data-hcaptcha-widget-id
-        - A textarea #h-captcha-response-{widget_id} that gets filled on solve
+        Stripe renders hCaptcha in two ways:
+        - HCaptcha-container div (older Stripe integrations)
+        - data-react-aria-top-layer overlay (newer Stripe)
         """
         try:
             result = page.run_js("""
@@ -234,6 +265,12 @@ class HCaptchaMixin:
                 const container = document.querySelector('.HCaptcha-container');
                 if (container) {
                     const ta = container.querySelector('textarea[id^="h-captcha-response"]');
+                    if (ta && ta.value && ta.value.length > 0) return true;
+                }
+                // Check top-level overlay (newer Stripe: data-react-aria-top-layer)
+                const overlay = document.querySelector('[data-react-aria-top-layer]');
+                if (overlay) {
+                    const ta = overlay.querySelector('textarea[id^="h-captcha-response"]');
                     if (ta && ta.value && ta.value.length > 0) return true;
                 }
                 // Check page-global h-captcha-response (older integrations)
