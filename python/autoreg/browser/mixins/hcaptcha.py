@@ -195,6 +195,12 @@ class HCaptchaMixin:
             contexts_result = page.run_cdp('Runtime.getExecutionContexts')
             contexts = contexts_result.get('contexts', []) if isinstance(contexts_result, dict) else []
             
+            logger.debug(f"CDP contexts found: {len(contexts)}")
+            for ctx in contexts:
+                name = ctx.get('name', '')
+                origin = ctx.get('origin', '')
+                logger.debug(f"  CDP ctx: name={name[:60]}, origin={origin[:60]}, id={ctx.get('id', '?')[:12]}")
+            
             # 2. Find the context for the hCaptcha iframe
             # The iframe name/source helps identify it
             hcaptcha_ctx = None
@@ -269,6 +275,9 @@ class HCaptchaMixin:
             return False
         except Exception as e:
             logger.debug(f"CDP Runtime.evaluate failed: {e}")
+            if os.environ.get("AUTOREG_DEBUG", "").lower() in ("1", "true", "yes"):
+                import traceback
+                logger.debug(f"CDP eval traceback: {traceback.format_exc()}")
             return False
 
     def _click_hcaptcha_cdp(self, page, iframe):
@@ -285,14 +294,21 @@ class HCaptchaMixin:
             # Extract coordinates — rect may be a FrameRect object (attributes)
             # or a dict from JS getBoundingClientRect
             if rect is not None:
-                if isinstance(rect, dict):
-                    left, top, width, height = rect['left'], rect['top'], rect['width'], rect['height']
-                else:
-                    # FrameRect / ChromiumRect object — use attribute access
-                    left = rect.left if hasattr(rect, 'left') else rect.get('left', 0)
-                    top = rect.top if hasattr(rect, 'top') else rect.get('top', 0)
-                    width = rect.width if hasattr(rect, 'width') else rect.get('width', 0)
-                    height = rect.height if hasattr(rect, 'height') else rect.get('height', 0)
+                try:
+                    # FrameRect / ChromiumRect — use direct attribute access
+                    left = rect.left
+                    top = rect.top
+                    width = rect.width
+                    height = rect.height
+                except (AttributeError, TypeError):
+                    try:
+                        # Might be a dict from JS getBoundingClientRect
+                        left = rect['left']
+                        top = rect['top']
+                        width = rect['width']
+                        height = rect['height']
+                    except (KeyError, TypeError):
+                        rect = None
             else:
                 # Fallback: get rect via JS
                 js_rect = page.run_js('''
