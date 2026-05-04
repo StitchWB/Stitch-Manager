@@ -12,6 +12,7 @@ import {
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
 import { useRegistrationStore } from '../stores/registration';
+import { useUIState } from '../hooks/useUIState';
 import {
   getSettings,
   updateSettings,
@@ -107,7 +108,11 @@ export default function Settings() {
   const addLog = useLogsStore(state => state.addLog);
   const { copy } = useCopyToClipboard();
 
-  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('general');
+  const [activeCategory, setActiveCategory] = useUIState<SettingsCategory>(
+    'settings-active-category',
+    'general',
+    'persist'
+  );
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);

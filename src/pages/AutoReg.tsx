@@ -15,6 +15,7 @@ import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
 import { useAccountsStore } from '../stores/accounts';
+import { useUIState } from '../hooks/useUIState';
 import {
   Button,
   GlassCard,
@@ -73,19 +74,27 @@ export default function AutoRegNext() {
   const { autoRegPage, setAutoRegTab, setAutoRegV2, setAutoRegRunning } = useUIPreferencesStore();
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
-  const [showDebugLogs, setShowDebugLogs] = useState(false);
-  const [launchContext, setLaunchContext] = useState<{
-    source?: 'profile';
-    profileAlias?: string;
-    targetProvider?: string;
-    awsBootstrapAccountId?: number;
-    launchMode?: string;
-  } | null>(null);
-  const [kiroBootstrapMode, setKiroBootstrapMode] = useState<'new_aws' | 'existing_aws_session'>(
-    'existing_aws_session'
+  const [showDebugLogs, setShowDebugLogs] = useUIState('autoreg-show-debug-logs', false, 'session');
+  const [launchContext, setLaunchContext] = useUIState(
+    'autoreg-launch-context',
+    null as {
+      source?: 'profile';
+      profileAlias?: string;
+      targetProvider?: string;
+      awsBootstrapAccountId?: number;
+      launchMode?: string;
+    } | null,
+    'session'
   );
-  const [selectedAwsBootstrapAccountId, setSelectedAwsBootstrapAccountId] = useState<number | null>(
-    null
+  const [kiroBootstrapMode, setKiroBootstrapMode] = useUIState(
+    'autoreg-kiro-bootstrap-mode',
+    'existing_aws_session' as 'new_aws' | 'existing_aws_session',
+    'session'
+  );
+  const [selectedAwsBootstrapAccountId, setSelectedAwsBootstrapAccountId] = useUIState(
+    'autoreg-aws-bootstrap-account-id',
+    null as number | null,
+    'session'
   );
   const { accounts: allAccounts, fetchAccounts: fetchAccountsForPicker } = useAccountsStore();
 
