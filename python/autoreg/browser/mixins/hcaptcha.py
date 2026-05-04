@@ -1,5 +1,6 @@
 """Mixin for hCaptcha checkbox interaction"""
 import logging
+import os
 import time
 
 logger = logging.getLogger(__name__)
