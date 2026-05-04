@@ -57,6 +57,8 @@ export interface Translations {
     name: string;
     history: string;
     rollback: string;
+    expand: string;
+    collapse: string;
   };
 
   status: {

@@ -54,6 +54,8 @@ export const ru: Translations = {
     name: 'Название',
     history: 'История',
     rollback: 'Откатить',
+    expand: 'Развернуть',
+    collapse: 'Свернуть',
   },
 
   recorder: {
