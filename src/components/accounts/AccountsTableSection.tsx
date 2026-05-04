@@ -71,7 +71,7 @@ export function AccountsTableSection({
 
   return (
     <div className={sectionClassName ?? 'flex flex-col h-full'}>
-      {(selectedIdsSize > 0 || tagFilter.startsWith('profile:')) && (
+      {selectedIdsSize > 0 && (
         <ProfileSessionsPanel
           selectedCount={selectedIdsSize}
           showHintWhenEmpty={showHintWhenEmpty}
