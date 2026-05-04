@@ -190,7 +190,8 @@ export default function AccountsTable({
 
           <div className="flex items-center gap-2">
             <Button size="xs" variant="secondary" onClick={onClearSelection}>
-              {t('accounts.clearSelection')}
+              <span className="hidden sm:inline">{t('accounts.clearSelection')}</span>
+              <span className="sm:hidden">×</span>
             </Button>
             <Button
               size="xs"
@@ -198,18 +199,19 @@ export default function AccountsTable({
               leftIcon={<Trash2 size={12} />}
               onClick={openBulkDelete}
             >
-              {t('common.delete')}
+              <span className="hidden sm:inline">{t('common.delete')}</span>
             </Button>
           </div>
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
-        <Table
-          containerClassName="h-full overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
-          className="w-full table-fixed text-[13px]"
-          aria-label={t('accounts.accountsTable')}
-        >
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
+        <div className="min-w-[1200px] h-full">
+          <Table
+            containerClassName="h-full overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
+            className="w-full table-fixed text-[13px]"
+            aria-label={t('accounts.accountsTable')}
+          >
           <TableHeader className="sticky top-0 z-20 border-b border-white/[0.04] bg-slate-900/60 backdrop-blur-sm">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[44px] px-3 py-3 text-xs text-slate-400">
@@ -305,7 +307,8 @@ export default function AccountsTable({
               />
             ))}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </div>
 
       <AccountDetailsModal
