@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, LayoutGrid, ScrollText, Stethoscope } from 'lucide-react';
+import { useUIState } from '@/hooks/useUIState';
 import { ConfirmDialog, Modal, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { getProfileSettings } from '@/lib/tauri/modules/profiles';
@@ -133,7 +134,11 @@ export function ScenarioReplayModal({
   const [runStatusFilter, setRunStatusFilter] = useState<ReplayRunStatusFilter>('all');
   const [presetToDelete, setPresetToDelete] = useState<ReplayRunPreset | null>(null);
   const [reindexing, setReindexing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'diagnostics'>('overview');
+  const [activeTab, setActiveTab] = useUIState<'overview' | 'details' | 'diagnostics'>(
+    'scenario-replay-active-tab',
+    'overview',
+    'session'
+  );
   const announcedPauseRef = useRef(false);
   const runnerModePrefKey = useMemo(() => `stitch.replay.runnerMode.${alias || 'global'}`, [alias]);
   const isNativeRunner = runnerMode === 'native';

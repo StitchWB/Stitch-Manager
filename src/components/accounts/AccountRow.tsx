@@ -359,7 +359,7 @@ export function AccountRow({
 
       {/* Quota Column */}
       <TableCell className="hidden px-2 py-3 align-middle lg:table-cell w-[160px]">
-        {account.quota ? (
+        {account.quota && (account.quota.limit > 0 || account.quota.used > 0) ? (
           <div className="w-full max-w-[140px]">
             <QuotaDisplay
               used={account.quota.used}
@@ -367,6 +367,15 @@ export function AccountRow({
               variant="compact"
             />
           </div>
+        ) : account.token ? (
+          <button
+            onClick={() => onCheckStatus(account.id)}
+            className="text-[11px] text-slate-400 hover:text-indigo-300 transition-colors flex items-center gap-1.5"
+            title={t('accountsTable.checkStatus')}
+          >
+            <RefreshCw size={12} />
+            <span>{t('accountsTable.checkStatus')}</span>
+          </button>
         ) : (
           <span className="text-xs text-slate-500">—</span>
         )}

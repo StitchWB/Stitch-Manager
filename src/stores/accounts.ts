@@ -128,6 +128,34 @@ export const useAccountsStore = create<AccountsState>()(
             set({ accounts, loading: false });
             // Load active accounts after fetching
             await get().loadActiveAccounts();
+
+            // Auto-refresh quota for accounts that have a token but no quota info
+            // This runs asynchronously and doesn't block the UI
+            const accountsNeedingQuota = accounts.filter(
+              a => a.token && a.quota.limit === 0 && a.quota.used === 0
+            );
+            if (accountsNeedingQuota.length > 0) {
+              // Fire and forget - update as results come in
+              Promise.allSettled(
+                accountsNeedingQuota.map(account =>
+                  refreshAccountQuota({ accountId: account.id })
+                )
+              ).then(results => {
+                const updatedMap = new Map<number, Account>();
+                results.forEach((result, index) => {
+                  if (result.status === 'fulfilled') {
+                    updatedMap.set(accountsNeedingQuota[index].id, result.value);
+                  }
+                });
+                if (updatedMap.size > 0) {
+                  set(state => ({
+                    accounts: state.accounts.map(a =>
+                      updatedMap.has(a.id) ? updatedMap.get(a.id)! : a
+                    ),
+                  }));
+                }
+              });
+            }
           } catch (error) {
             const message = error instanceof TauriError ? error.message : String(error);
             set({ error: message, loading: false });

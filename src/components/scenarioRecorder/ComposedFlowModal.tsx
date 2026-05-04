@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUIState } from '@/hooks/useUIState';
 import { Modal, Input, Select } from '@/components/ui';
 import { toast } from 'sonner';
 import {
@@ -69,7 +70,11 @@ type JobRunState = {
 
 export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalProps) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'setup' | 'flow' | 'run'>('flow');
+  const [activeTab, setActiveTab] = useUIState<'setup' | 'flow' | 'run'>(
+    'composed-flow-active-tab',
+    'flow',
+    'session'
+  );
   const [scenariosLoading, setScenariosLoading] = useState(false);
   const [scenarios, setScenarios] = useState<
     Array<{ id: string; name: string; scenarioPath: string }>
@@ -160,7 +165,6 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
       setAutoFollowRunningNode(false);
-      setActiveTab('flow');
       return;
     }
     if (alias && !flow) {
