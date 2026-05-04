@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { useUISessionStore } from '../stores/uiSession';
 

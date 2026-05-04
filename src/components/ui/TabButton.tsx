@@ -4,7 +4,7 @@ interface TabButtonProps {
   active: boolean;
   onClick: () => void;
   icon?: React.ReactNode;
-  label: string;
+  label: React.ReactNode;
   disabled?: boolean;
   className?: string;
 }

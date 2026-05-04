@@ -293,6 +293,7 @@ export interface Translations {
     columnLastLogin: string;
     columnProxy: string;
     columnTags: string;
+    columnQuota: string;
     columnsReset: string;
     noAccounts: string;
     noAccountsSubtitle: string;
