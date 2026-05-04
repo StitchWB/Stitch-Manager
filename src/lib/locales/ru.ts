@@ -455,6 +455,7 @@ export const ru: Translations = {
     columnLastLogin: 'Последний вход',
     columnProxy: 'Прокси',
     columnTags: 'Теги',
+    columnQuota: 'Квота',
     columnsReset: 'Сбросить',
     noAccounts: 'Нет аккаунтов',
     noAccountsSubtitle: 'Добавьте первый аккаунт',

@@ -358,9 +358,9 @@ export function AccountRow({
       </TableCell>
 
       {/* Quota Column */}
-      <TableCell className="hidden px-2 py-3 align-middle xl:table-cell w-[180px]">
-        {account.quota && (account.quota.used > 0 || account.quota.limit > 0) ? (
-          <div className="w-full max-w-[160px]">
+      <TableCell className="hidden px-2 py-3 align-middle lg:table-cell w-[160px]">
+        {account.quota ? (
+          <div className="w-full max-w-[140px]">
             <QuotaDisplay
               used={account.quota.used}
               limit={account.quota.limit}

@@ -181,7 +181,7 @@ export default function AccountsTable({
   return (
     <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
-        <div className="min-w-[1200px] h-full">
+        <div className="min-w-[1100px] h-full">
           <Table
             containerClassName="h-full overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
             className="w-full table-fixed text-[13px]"
@@ -236,8 +236,8 @@ export default function AccountsTable({
               >
                 {t('accounts.tags')}
               </TableHead>
-              <TableHead className="hidden px-2 py-3 text-xs text-slate-400 xl:table-cell w-[180px]">
-                {t('accounts.quota')}
+              <TableHead className="hidden px-2 py-3 text-xs text-slate-400 lg:table-cell w-[160px]">
+                {t('accounts.columnQuota')}
               </TableHead>
               <TableHead className="px-2 py-3 text-right text-xs text-slate-400">
                 {t('common.actions')}
