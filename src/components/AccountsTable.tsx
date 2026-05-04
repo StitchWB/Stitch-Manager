@@ -180,31 +180,6 @@ export default function AccountsTable({
 
   return (
     <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
-      {selectedCount > 0 ? (
-        <div className="mb-3 mt-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" size="sm" className="normal-case tracking-normal">
-              {t('accounts.selectedCountLabel')}: {selectedCount}
-            </Badge>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button size="xs" variant="secondary" onClick={onClearSelection}>
-              <span className="hidden sm:inline">{t('accounts.clearSelection')}</span>
-              <span className="sm:hidden">×</span>
-            </Button>
-            <Button
-              size="xs"
-              variant="danger"
-              leftIcon={<Trash2 size={12} />}
-              onClick={openBulkDelete}
-            >
-              <span className="hidden sm:inline">{t('common.delete')}</span>
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
         <div className="min-w-[1200px] h-full">
           <Table

@@ -127,12 +127,12 @@ export function AccountsToolbar({
   return (
     <StickyToolbar
       topClassName="top-0"
-      className="shrink-0 border-b border-white/5 bg-[#0b0b10]/85 px-6 py-4"
+      className="shrink-0 border-b border-white/5 bg-[#0b0b10]/85 px-4 py-3"
     >
       <div className="flex flex-col gap-4 w-full">
         {/* Top Row: Tabs and Action Buttons */}
-        <div className="flex flex-wrap justify-between items-start gap-4 w-full">
-          <ToolbarRow className="gap-3 min-w-0 flex-1">
+        <div className="flex flex-wrap justify-between items-center gap-2 w-full">
+          <ToolbarRow className="gap-2 min-w-0 flex-1 items-center">
             <AccountsEntityTabs
               value={normalizedEntityFilter}
               onChange={onEntityFilterChange}
@@ -263,13 +263,13 @@ export function AccountsToolbar({
 
         {/* Bottom Row: Search and Filters */}
         {resolvedViewMode === 'list' ? (
-          <div className="flex flex-wrap items-center gap-4 w-full">
+          <div className="flex flex-wrap items-center gap-2 w-full">
             <ToolbarSearchField
               value={searchQuery}
               onValueChange={onSearchQueryChange}
               placeholder={t('accounts.searchPlaceholder')}
-              shellClassName="border-white/10 bg-black/40 focus-within:border-indigo-500/40 focus-within:bg-black/60"
-              containerClassName="w-full min-w-[260px] max-w-md flex-1"
+              shellClassName="border-white/10 bg-black/40 focus-within:border-indigo-500/40 focus-within:bg-black/60 h-8"
+              containerClassName="w-full min-w-[200px] max-w-xs flex-1"
             />
 
             {normalizedEntityFilter === 'profiles' ? (
@@ -333,9 +333,8 @@ export function AccountsToolbar({
                     { value: 'expired', label: getAccountStatusLabel('expired') },
                     { value: 'unknown', label: getAccountStatusLabel('unknown') },
                   ]}
-                  label={t('filters.status')}
-                  triggerClassName="h-9 min-w-[148px]"
-                  menuClassName="min-w-[220px]"
+                  triggerClassName="h-8 min-w-[128px] px-2.5 text-[11px]"
+                  menuClassName="min-w-[200px]"
                   showActiveState
                 />
 
@@ -343,9 +342,8 @@ export function AccountsToolbar({
                   value={tagFilter}
                   onChange={onTagFilterChange}
                   options={tagOptions}
-                  label={t('accounts.tags')}
-                  triggerClassName="h-9 min-w-[132px]"
-                  menuClassName="min-w-[220px]"
+                  triggerClassName="h-8 min-w-[108px] px-2.5 text-[11px]"
+                  menuClassName="min-w-[200px]"
                   showActiveState
                 />
 
@@ -353,9 +351,8 @@ export function AccountsToolbar({
                   value={relationFilter}
                   onChange={onRelationFilterChange}
                   options={relationOptions}
-                  label={t('accounts.relationFilterLabel')}
-                  triggerClassName="h-9 min-w-[132px]"
-                  menuClassName="min-w-[220px]"
+                  triggerClassName="h-8 min-w-[108px] px-2.5 text-[11px]"
+                  menuClassName="min-w-[200px]"
                   showActiveState
                 />
 
@@ -369,9 +366,8 @@ export function AccountsToolbar({
                     { value: 'empty', label: t('filters.empty') },
                     { value: 'full', label: t('filters.full') },
                   ]}
-                  label={t('filters.quota')}
-                  triggerClassName="h-9 min-w-[132px]"
-                  menuClassName="min-w-[220px]"
+                  triggerClassName="h-8 min-w-[108px] px-2.5 text-[11px]"
+                  menuClassName="min-w-[200px]"
                   showActiveState
                 />
               </ToolbarFiltersGroup>
