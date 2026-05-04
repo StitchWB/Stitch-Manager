@@ -17,6 +17,7 @@ import {
   FileUp,
   Wand2,
 } from 'lucide-react';
+import { useUIState } from '../../hooks/useUIState';
 import { open, save } from '@tauri-apps/plugin-dialog';
 
 import { t } from '../../lib/i18n';
@@ -322,7 +323,7 @@ export function ProfileSettingsModal({
   const [importOverwrite, setImportOverwrite] = useState(true);
   const [existingAliases, setExistingAliases] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [activeTab, setActiveTab] = useState<SettingsTab>('main');
+  const [activeTab, setActiveTab] = useUIState<SettingsTab>('profile-settings-active-tab', 'main', 'session');
   const [showCookieEditor, setShowCookieEditor] = useState(false);
   const [proxyLibrary, setProxyLibrary] = useState<ProxyLibraryEntry[]>([]);
   const [proxyLibraryLoading, setProxyLibraryLoading] = useState(false);
@@ -544,7 +545,6 @@ export function ProfileSettingsModal({
     setError(null);
     setAliasDraft(alias);
     setDirty(false);
-    setActiveTab('main');
     setShowAdvanced(false);
     setShowCookieEditor(false);
 
