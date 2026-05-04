@@ -55,6 +55,10 @@ interface ScenariosPagePreferences {
 }
 
 interface UIPreferencesState {
+  // Global UI preferences
+  activeRoute: string;
+  setActiveRoute: (route: string) => void;
+
   // Page-specific preferences
   accountsPage: AccountsPagePreferences;
   logsPage: LogsPagePreferences;
@@ -97,6 +101,11 @@ interface UIPreferencesState {
   // Actions for Scenarios page
   setScenariosViewMode: (mode: 'cards' | 'list') => void;
   resetScenariosPreferences: () => void;
+
+  // Generic component preferences (for UI Kit state persistence)
+  componentPreferences: Record<string, unknown>;
+  setComponentPreference: (key: string, value: unknown) => void;
+  getComponentPreference: <T>(key: string, defaultValue: T) => T;
 
   // Global reset
   resetAllPreferences: () => void;
@@ -151,6 +160,10 @@ const defaultScenariosPreferences: ScenariosPagePreferences = {
 export const useUIPreferencesStore = create<UIPreferencesState>()(
   persist(
     set => ({
+      // Global state
+      activeRoute: '/',
+      setActiveRoute: route => set({ activeRoute: route }),
+
       // Initial state
       accountsPage: defaultAccountsPreferences,
       logsPage: defaultLogsPreferences,
@@ -340,21 +353,50 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       },
 
       // ============================================
+      // ============================================
+      // Generic Component Preferences
+      // ============================================
+
+      componentPreferences: {},
+      setComponentPreference: (key, value) =>
+        set(state => ({
+          componentPreferences: {
+            ...state.componentPreferences,
+            [key]: value,
+          },
+        })),
+      getComponentPreference: <T,>(key: string, defaultValue: T): T => {
+        const state = useUIPreferencesStore.getState();
+        if (!(key in state.componentPreferences)) return defaultValue;
+        return state.componentPreferences[key] as T;
+      },
+
+      // ============================================
       // Global Actions
       // ============================================
 
       resetAllPreferences: () => {
         set({
+          activeRoute: '/',
           accountsPage: defaultAccountsPreferences,
           logsPage: defaultLogsPreferences,
           autoRegPage: defaultAutoRegPreferences,
           scenariosPage: defaultScenariosPreferences,
+          componentPreferences: {},
         });
       },
     }),
     {
       name: 'ui-preferences-storage',
-      version: 2,
+      version: 3,
+      partialize: state => ({
+        activeRoute: state.activeRoute,
+        accountsPage: state.accountsPage,
+        logsPage: state.logsPage,
+        autoRegPage: state.autoRegPage,
+        scenariosPage: state.scenariosPage,
+        componentPreferences: state.componentPreferences,
+      }),
     }
   )
 );

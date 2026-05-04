@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, Link } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import Layout from './components/layout/Layout';
@@ -6,6 +6,7 @@ import Layout from './components/layout/Layout';
 import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
+import { useUIPreferencesStore } from './stores/uiPreferences';
 import { CommandPalette } from '@/components/ui';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -55,6 +56,58 @@ function RouteLoadingFallback() {
       Loading page...
     </div>
   );
+}
+
+/**
+ * Tracks route changes and persists/restores the active route.
+ */
+function RouteTracker() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const hasRestored = useRef(false);
+  const { activeRoute, setActiveRoute } = useUIPreferencesStore();
+
+  // Restore route on first mount (once only)
+  useEffect(() => {
+    if (hasRestored.current) return;
+    hasRestored.current = true;
+
+    if (activeRoute && activeRoute !== '/' && activeRoute !== location.pathname) {
+      // Ensure the route exists in our route list
+      const validRoutes = [
+        '/',
+        '/accounts',
+        '/autoreg',
+        '/ai',
+        '/ai/antigravity',
+        '/ai/api-keys',
+        '/ai/:section',
+        '/patcher',
+        '/scheduler',
+        '/mail',
+        '/settings',
+        '/logs',
+        '/chat',
+        '/scenarios',
+      ];
+      // Simple check - if it starts with a known route base
+      const isValid = validRoutes.some(
+        r => activeRoute === r || activeRoute.startsWith(r.replace(':section', ''))
+      );
+      if (isValid) {
+        navigate(activeRoute, { replace: true });
+      }
+    }
+  }, [activeRoute, navigate, location.pathname]);
+
+  // Persist route on every change
+  useEffect(() => {
+    if (location.pathname !== activeRoute) {
+      setActiveRoute(location.pathname);
+    }
+  }, [location.pathname, activeRoute, setActiveRoute]);
+
+  return null;
 }
 
 function App() {
@@ -182,6 +235,7 @@ function App() {
       </Link>
 
       <Layout>
+        <RouteTracker />
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
