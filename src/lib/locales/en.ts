@@ -50,6 +50,8 @@ export const en: Translations = {
     name: 'Name',
     history: 'History',
     rollback: 'Rollback',
+    expand: 'Expand',
+    collapse: 'Collapse',
   },
 
   recorder: {
