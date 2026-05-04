@@ -449,6 +449,7 @@ export const en: Translations = {
     columnLastLogin: 'Last login',
     columnProxy: 'Proxy',
     columnTags: 'Tags',
+    columnQuota: 'Quota',
     columnsReset: 'Reset',
     noAccounts: 'No accounts',
     noAccountsSubtitle: 'Add one to get started',
