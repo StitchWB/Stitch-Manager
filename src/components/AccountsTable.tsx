@@ -181,7 +181,7 @@ export default function AccountsTable({
   return (
     <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
-        <div className="min-w-full xl:min-w-[900px] h-full">
+        <div className="min-w-full h-full">
           <Table
             containerClassName="h-full overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
             className="w-full table-fixed text-[13px]"
@@ -200,19 +200,19 @@ export default function AccountsTable({
                   aria-label={t('accounts.selectAll')}
                 />
               </TableHead>
-              <TableHead className="px-2 py-3 text-xs text-slate-400">
+              <TableHead className="w-[120px] px-2 py-3 text-xs text-slate-400">
                 {t('accounts.provider')}
               </TableHead>
-              <TableHead className="px-2 py-3 text-xs text-slate-400">
+              <TableHead className="w-[220px] px-2 py-3 text-xs text-slate-400">
                 {t('accounts.account')}
               </TableHead>
-              <TableHead className="px-2 py-3 text-xs text-slate-400">
+              <TableHead className="w-[100px] px-2 py-3 text-xs text-slate-400">
                 {t('accounts.statusHeader')}
               </TableHead>
               <TableHead
                 className={
                   visibleColumns.lastLogin
-                    ? 'hidden px-2 py-3 text-xs text-slate-400 md:table-cell'
+                    ? 'hidden w-[120px] px-2 py-3 text-xs text-slate-400 md:table-cell'
                     : 'hidden'
                 }
               >
@@ -221,7 +221,7 @@ export default function AccountsTable({
               <TableHead
                 className={
                   visibleColumns.proxy
-                    ? 'hidden px-2 py-3 text-xs text-slate-400 lg:table-cell'
+                    ? 'hidden w-[140px] px-2 py-3 text-xs text-slate-400 lg:table-cell'
                     : 'hidden'
                 }
               >
@@ -230,16 +230,16 @@ export default function AccountsTable({
               <TableHead
                 className={
                   visibleColumns.tags
-                    ? 'hidden px-2 py-3 text-xs text-slate-400 lg:table-cell'
+                    ? 'hidden w-[120px] px-2 py-3 text-xs text-slate-400 lg:table-cell'
                     : 'hidden'
                 }
               >
                 {t('accounts.tags')}
               </TableHead>
-              <TableHead className="hidden px-2 py-3 text-xs text-slate-400 lg:table-cell w-[160px]">
+              <TableHead className="hidden w-[120px] px-2 py-3 text-xs text-slate-400 lg:table-cell">
                 {t('accounts.columnQuota')}
               </TableHead>
-              <TableHead className="px-2 py-3 text-right text-xs text-slate-400">
+              <TableHead className="w-[90px] px-2 py-3 text-right text-xs text-slate-400">
                 {t('common.actions')}
               </TableHead>
             </TableRow>
