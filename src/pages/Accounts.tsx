@@ -9,6 +9,7 @@ import { ProfileSettingsModal } from '../components/profiles/ProfileSettingsModa
 
 import { useAccountsStore } from '../stores/accounts';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
+import { useUIState } from '../hooks/useUIState';
 import {
   getOrCreateFingerprintProfile,
   saveFingerprintProfile,
@@ -56,8 +57,8 @@ export default function Accounts() {
     setStatusFilter: setStoreStatusFilter,
   } = useAccountsStore();
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useUIState('accounts-modal-open', false, 'session');
+  const [isImporting, setIsImporting] = useUIState('accounts-importing', false, 'session');
   const {
     startBulkRefresh,
     isRefreshing: isBulkRefreshing,
@@ -121,11 +122,27 @@ export default function Accounts() {
       onPersist: setAccountsVisibleColumns,
     });
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
-  const [profileSettingsAlias, setProfileSettingsAlias] = useState<string | null>(null);
+  const [profileSettingsAlias, setProfileSettingsAlias] = useUIState(
+    'accounts-profile-settings-alias',
+    null as string | null,
+    'session'
+  );
   const [profilesLoading, setProfilesLoading] = useState(false);
-  const [profileListFilter, setProfileListFilter] = useState<ProfileListFilter>('all');
-  const [profileOpenTarget, setProfileOpenTarget] = useState<string>('kiro');
-  const [profileCustomUrl, setProfileCustomUrl] = useState('');
+  const [profileListFilter, setProfileListFilter] = useUIState<ProfileListFilter>(
+    'accounts-profile-list-filter',
+    'all',
+    'persist'
+  );
+  const [profileOpenTarget, setProfileOpenTarget] = useUIState(
+    'accounts-profile-open-target',
+    'kiro',
+    'persist'
+  );
+  const [profileCustomUrl, setProfileCustomUrl] = useUIState(
+    'accounts-profile-custom-url',
+    '',
+    'session'
+  );
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);
     try {

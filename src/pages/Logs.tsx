@@ -23,6 +23,7 @@ import { useAppStore } from '../stores/app';
 import { useLogsStore, LogLevel, LogEntry } from '../stores/logs';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { useRegistrationStore } from '../stores/registration';
+import { useUIState } from '../hooks/useUIState';
 import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
@@ -170,9 +171,9 @@ export default function Logs() {
     resetLogsFilters,
   } = useUIPreferencesStore();
 
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useUIState('logs-clear-confirm', false, 'session');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isResizingPane, setIsResizingPane] = useState(false);
+  const [isResizingPane, setIsResizingPane] = useUIState('logs-resizing-pane', false, 'session');
   const { copy } = useCopyToClipboard();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 

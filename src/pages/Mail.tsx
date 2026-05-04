@@ -15,6 +15,7 @@ import { Badge, Button, ButtonBase, Modal, Select } from '@/components/ui';
 import { useMailRuntime } from '@/hooks/useMailRuntime';
 import { useRegistrationStore } from '@/stores/registration';
 import { t } from '@/lib/i18n';
+import { useUIState } from '@/hooks/useUIState';
 import {
   buildImapAccountIdFromRegistration,
   deriveImapFieldsFromRegistration,
@@ -26,8 +27,12 @@ export default function Mail() {
   const runtime = useMailRuntime();
   const registrationImap = useRegistrationStore(state => state.config.imap);
 
-  const [rawModalOpen, setRawModalOpen] = useState(false);
-  const [providerFilter, setProviderFilter] = useState<ProviderFilter>('all');
+  const [rawModalOpen, setRawModalOpen] = useUIState('mail-raw-modal', false, 'session');
+  const [providerFilter, setProviderFilter] = useUIState<ProviderFilter>(
+    'mail-provider-filter',
+    'all',
+    'persist'
+  );
 
   const {
     accountId,

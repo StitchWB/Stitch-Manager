@@ -11,6 +11,7 @@ import { ScenarioReplayModal } from '@/components/scenarioRecorder/ScenarioRepla
 import { ProfileScenariosPanel } from '@/components/scenarioRecorder/ProfileScenariosPanel';
 import { ComposedFlowModal } from '@/components/scenarioRecorder/ComposedFlowModal';
 import { Button, EmptyState, Select } from '@/components/ui';
+import { useUIState } from '../hooks/useUIState';
 
 const DEFAULT_START_URL = 'https://google.com';
 
@@ -18,15 +19,31 @@ export default function Scenarios() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
-  const [activeRecordAlias, setActiveRecordAlias] = useState<string | null>(null);
-  const [activeRecordMeta, setActiveRecordMeta] = useState<{
-    alias: string;
-    scenarioName: string;
-    startUrl: string;
-  } | null>(null);
-  const [replayAlias, setReplayAlias] = useState<string | null>(null);
-  const [replayInitialScenarioPath, setReplayInitialScenarioPath] = useState<string | null>(null);
-  const [composedFlowAlias, setComposedFlowAlias] = useState<string | null>(null);
+  const [activeRecordAlias, setActiveRecordAlias] = useUIState(
+    'scenarios-active-record-alias',
+    null as string | null,
+    'session'
+  );
+  const [activeRecordMeta, setActiveRecordMeta] = useUIState(
+    'scenarios-active-record-meta',
+    null as { alias: string; scenarioName: string; startUrl: string } | null,
+    'session'
+  );
+  const [replayAlias, setReplayAlias] = useUIState(
+    'scenarios-replay-alias',
+    null as string | null,
+    'session'
+  );
+  const [replayInitialScenarioPath, setReplayInitialScenarioPath] = useUIState(
+    'scenarios-replay-path',
+    null as string | null,
+    'session'
+  );
+  const [composedFlowAlias, setComposedFlowAlias] = useUIState(
+    'scenarios-composed-flow-alias',
+    null as string | null,
+    'session'
+  );
 
   const queryAlias = useMemo(() => searchParams.get('alias')?.trim() || '', [searchParams]);
   const queryOpenCompose = useMemo(() => searchParams.get('openCompose') === '1', [searchParams]);
