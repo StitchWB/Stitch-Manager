@@ -20,6 +20,7 @@ import {
   TableRow,
   Tooltip,
   ProviderLogo,
+  QuotaDisplay,
 } from '@/components/ui';
 import { cn } from '../../lib/utils';
 import type { Account } from '../../types/generated';
@@ -62,6 +63,14 @@ const statusVariantMap: Record<AccountStatus, 'success' | 'warning' | 'danger' |
   limit_hit: 'warning',
   expired: 'outline',
   unknown: 'outline',
+};
+
+const statusDotColorMap: Record<AccountStatus, string> = {
+  active: 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]',
+  banned: 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]',
+  limit_hit: 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]',
+  expired: 'bg-slate-500',
+  unknown: 'bg-slate-500',
 };
 
 const providerLabelMap: Record<string, string> = {
@@ -295,8 +304,9 @@ export function AccountRow({
         <Badge
           variant={statusVariantMap[status]}
           size="sm"
-          className="normal-case tracking-normal border-0"
+          className="normal-case tracking-normal border-0 gap-1.5"
         >
+          <span className={cn('w-1.5 h-1.5 rounded-full', statusDotColorMap[status])} />
           {getAccountStatusLabel(status)}
         </Badge>
       </TableCell>
@@ -345,6 +355,21 @@ export function AccountRow({
             <span className="text-xs text-slate-500">+{remainingTagsCount}</span>
           ) : null}
         </div>
+      </TableCell>
+
+      {/* Quota Column */}
+      <TableCell className="hidden px-2 py-3 align-middle xl:table-cell w-[180px]">
+        {account.quota && (account.quota.used > 0 || account.quota.limit > 0) ? (
+          <div className="w-full max-w-[160px]">
+            <QuotaDisplay
+              used={account.quota.used}
+              limit={account.quota.limit}
+              variant="compact"
+            />
+          </div>
+        ) : (
+          <span className="text-xs text-slate-500">—</span>
+        )}
       </TableCell>
 
       <TableCell

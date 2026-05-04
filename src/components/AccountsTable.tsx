@@ -18,6 +18,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  QuotaDisplay,
 } from './ui';
 
 export interface AccountsTableProps {
@@ -257,6 +258,9 @@ export default function AccountsTable({
                 }
               >
                 {t('accounts.tags')}
+              </TableHead>
+              <TableHead className="hidden px-2 py-3 text-xs text-slate-400 xl:table-cell w-[180px]">
+                {t('accounts.quota')}
               </TableHead>
               <TableHead className="px-2 py-3 text-right text-xs text-slate-400">
                 {t('common.actions')}
