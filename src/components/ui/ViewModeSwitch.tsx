@@ -23,7 +23,7 @@ export function ViewModeSwitch({ value, onChange, options, className }: ViewMode
       value={value}
       onChange={onChange}
       options={options}
-      className={cn('h-9 shrink-0', className)}
+      className={cn('h-8 shrink-0', className)}
     />
   );
 }

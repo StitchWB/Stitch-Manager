@@ -52,7 +52,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <div
           className={cn(
             getFieldShellClassName(error, props.disabled),
-            'flex items-center h-9',
+            'flex items-center h-8',
             shellClassName
           )}
         >

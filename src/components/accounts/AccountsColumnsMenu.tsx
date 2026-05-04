@@ -18,6 +18,7 @@ export interface AccountsVisibleColumns {
   lastLogin: boolean;
   proxy: boolean;
   tags: boolean;
+  quota: boolean;
 }
 
 interface AccountsColumnsMenuProps {
@@ -163,6 +164,15 @@ export function AccountsColumnsMenu({
                   checked={visibleColumns.tags}
                   onChange={event => onToggleColumn('tags', event.target.checked)}
                   label={t('accounts.columnTags')}
+                  className="!py-1"
+                />
+              </div>
+
+              <div className="rounded-lg px-1 py-0.5 hover:bg-white/5">
+                <Checkbox
+                  checked={visibleColumns.quota}
+                  onChange={event => onToggleColumn('quota', event.target.checked)}
+                  label={t('accounts.columnQuota')}
                   className="!py-1"
                 />
               </div>

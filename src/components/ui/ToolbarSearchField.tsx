@@ -22,7 +22,7 @@ export function ToolbarSearchField({
       value={value}
       onChange={event => onValueChange(event.target.value)}
       leftIcon={<Search size={14} />}
-      shellClassName={cn('h-9', shellClassName)}
+      shellClassName={cn('h-8', shellClassName)}
       className={cn('text-sm', className)}
       {...props}
     />

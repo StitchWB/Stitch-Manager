@@ -98,7 +98,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
         {/* Status Indicator */}
         <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10"
+          className="flex items-center gap-2 px-3 h-8 rounded-lg bg-white/5 border border-white/10"
           role="status"
           aria-live="polite"
           aria-label={isOnline ? t('header.systemOnline') : t('header.serverOffline')}

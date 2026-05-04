@@ -55,7 +55,7 @@ export default function AccountsTable({
   selectedIds,
   activeAccountIds,
   isLoading = false,
-  visibleColumns = { lastLogin: true, proxy: true, tags: true },
+  visibleColumns = { lastLogin: true, proxy: true, tags: true, quota: true },
   onToggleSelection,
   onSelectAll,
   onClearSelection,
@@ -169,16 +169,18 @@ export default function AccountsTable({
 
   return (
     <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
+      <div className="relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-xl border border-white/[0.04] bg-[#0b0b10]/80">
+        {/* Fade gradient right edge hint */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-12 bg-gradient-to-l from-[#0b0b10]/90 to-transparent" />
         <div className="min-w-full h-full">
           <Table
             containerClassName="h-full overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
-            className="w-full table-auto text-[13px]"
+            className="w-full table-auto text-xs"
             aria-label={t('accounts.accountsTable')}
           >
           <TableHeader className="sticky top-0 z-20 border-b border-white/[0.04] bg-slate-900/60 backdrop-blur-sm">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-[44px] w-[44px] max-w-[44px] px-3 py-3 text-xs text-slate-400 whitespace-nowrap">
+              <TableHead className="sticky left-0 z-30 min-w-[44px] w-[44px] max-w-[44px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap bg-[#0f1218]">
                 <Checkbox
                   checked={allSelected}
                   onChange={() => {
@@ -189,19 +191,19 @@ export default function AccountsTable({
                   aria-label={t('accounts.selectAll')}
                 />
               </TableHead>
-              <TableHead className="min-w-[100px] px-2 py-3 text-xs text-slate-400 whitespace-nowrap">
+              <TableHead className="sticky left-[44px] z-30 min-w-[100px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap bg-[#0f1218]">
                 {t('accounts.provider')}
               </TableHead>
-              <TableHead className="min-w-[180px] px-2 py-3 text-xs text-slate-400 whitespace-nowrap">
+              <TableHead className="sticky left-[144px] z-30 min-w-[140px] max-w-[200px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap bg-[#0f1218]">
                 {t('accounts.account')}
               </TableHead>
-              <TableHead className="min-w-[90px] px-2 py-3 text-xs text-slate-400 whitespace-nowrap">
+              <TableHead className="min-w-[90px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap">
                 {t('accounts.statusHeader')}
               </TableHead>
               <TableHead
                 className={
                   visibleColumns.lastLogin
-                    ? 'hidden min-w-[120px] px-2 py-3 text-xs text-slate-400 whitespace-nowrap md:table-cell'
+                    ? 'min-w-[100px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap'
                     : 'hidden'
                 }
               >
@@ -210,7 +212,7 @@ export default function AccountsTable({
               <TableHead
                 className={
                   visibleColumns.proxy
-                    ? 'hidden min-w-[130px] px-2 py-3 text-xs text-slate-400 whitespace-nowrap lg:table-cell'
+                    ? 'min-w-[120px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap'
                     : 'hidden'
                 }
               >
@@ -219,16 +221,22 @@ export default function AccountsTable({
               <TableHead
                 className={
                   visibleColumns.tags
-                    ? 'hidden min-w-[100px] px-2 py-3 text-xs text-slate-400 whitespace-nowrap lg:table-cell'
+                    ? 'min-w-[100px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap'
                     : 'hidden'
                 }
               >
                 {t('accounts.tags')}
               </TableHead>
-              <TableHead className="hidden min-w-[110px] px-2 py-3 text-xs text-slate-400 whitespace-nowrap lg:table-cell">
+              <TableHead
+                className={
+                  visibleColumns.quota
+                    ? 'min-w-[110px] px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap'
+                    : 'hidden'
+                }
+              >
                 {t('accounts.columnQuota')}
               </TableHead>
-              <TableHead className="min-w-[72px] w-[72px] max-w-[72px] px-2 py-3 text-right text-xs text-slate-400 whitespace-nowrap">
+              <TableHead className="min-w-[72px] w-[72px] max-w-[72px] px-3 py-2.5 text-right text-xs text-slate-400 whitespace-nowrap">
                 {t('common.actions')}
               </TableHead>
             </TableRow>

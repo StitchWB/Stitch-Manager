@@ -28,7 +28,7 @@ export function SegmentedControl({
     <div
       className={cn(
         'flex items-center bg-black/40 border border-white/10 overflow-hidden relative',
-        size === 'sm' ? 'h-9 rounded-lg p-1' : 'h-10 rounded-xl p-1',
+        size === 'sm' ? 'h-8 rounded-lg p-1' : 'h-10 rounded-xl p-1',
         className
       )}
     >
@@ -43,7 +43,7 @@ export function SegmentedControl({
               'relative flex items-center justify-center gap-2 px-3 text-xs font-medium transition-colors duration-300 z-10 select-none',
               stretch && 'flex-1',
               isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300',
-              size === 'sm' ? 'h-7 text-xs' : 'h-8'
+              size === 'sm' ? 'h-6 text-xs' : 'h-8'
             )}
           >
             {isActive && (

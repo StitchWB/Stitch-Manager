@@ -16,6 +16,7 @@ const defaultVisibleColumns: AccountsVisibleColumns = {
   lastLogin: true,
   proxy: true,
   tags: true,
+  quota: true,
 };
 
 export function useAccountsVisibleColumnsState({
