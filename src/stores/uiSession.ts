@@ -71,11 +71,11 @@ export const useUISessionStore = create<UISessionState>()(set => ({
       return { pageStates: next };
     }),
 
-  setComponentState: (componentKey, value) =>
+  setComponentState: (componentKey: string, value: unknown) =>
     set(state => ({
       componentStates: {
         ...state.componentStates,
-        [componentKey]: value,
+        [componentKey]: value as ComponentSessionState,
       },
     })),
 

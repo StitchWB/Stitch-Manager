@@ -219,7 +219,7 @@ export function AccountRow({
       )}
     >
       <TableCell
-        className="w-[44px] px-3 py-3 align-middle"
+        className="min-w-[44px] w-[44px] max-w-[44px] px-3 py-3 align-middle"
         onClick={event => event.stopPropagation()}
       >
         <Checkbox
@@ -230,14 +230,14 @@ export function AccountRow({
         />
       </TableCell>
 
-      <TableCell className="w-[120px] px-2 py-3 align-middle">
+      <TableCell className="min-w-[100px] px-2 py-3 align-middle">
         <div className="flex items-center gap-2">
           <ProviderLogo provider={account.provider} size={14} className="shrink-0" />
           <span className="truncate whitespace-nowrap text-xs text-slate-300">{providerLabel}</span>
         </div>
       </TableCell>
 
-      <TableCell className="w-[220px] px-2 py-3 align-middle">
+      <TableCell className="min-w-[180px] px-2 py-3 align-middle">
         <ButtonBase
           type="button"
           onClick={() => onShowDetails(account)}
@@ -300,7 +300,7 @@ export function AccountRow({
         )}
       </TableCell>
 
-      <TableCell className="w-[100px] px-2 py-3 align-middle">
+      <TableCell className="min-w-[90px] px-2 py-3 align-middle">
         <Badge
           variant={statusVariantMap[status]}
           size="sm"
@@ -314,7 +314,7 @@ export function AccountRow({
       <TableCell
         className={cn(
           visibleColumns.lastLogin
-            ? 'hidden w-[120px] px-2 py-3 align-middle text-xs text-slate-300 tabular-nums md:table-cell'
+            ? 'hidden min-w-[120px] px-2 py-3 align-middle text-xs text-slate-300 tabular-nums md:table-cell'
             : 'hidden'
         )}
       >
@@ -323,7 +323,7 @@ export function AccountRow({
 
       <TableCell
         className={cn(
-          visibleColumns.proxy ? 'hidden w-[140px] px-2 py-3 align-middle lg:table-cell' : 'hidden'
+          visibleColumns.proxy ? 'hidden min-w-[130px] px-2 py-3 align-middle lg:table-cell' : 'hidden'
         )}
       >
         <Tooltip content={proxyValue} side="top">
@@ -333,7 +333,7 @@ export function AccountRow({
 
       <TableCell
         className={cn(
-          visibleColumns.tags ? 'hidden w-[120px] px-2 py-3 align-middle lg:table-cell' : 'hidden'
+          visibleColumns.tags ? 'hidden min-w-[100px] px-2 py-3 align-middle lg:table-cell' : 'hidden'
         )}
       >
         <div className="flex items-center gap-1.5">
@@ -358,7 +358,7 @@ export function AccountRow({
       </TableCell>
 
       {/* Quota Column */}
-      <TableCell className="hidden px-2 py-3 align-middle lg:table-cell w-[120px]">
+      <TableCell className="hidden min-w-[110px] px-2 py-3 align-middle lg:table-cell">
         {account.quota && (account.quota.limit > 0 || account.quota.used > 0) ? (
           <div className="w-full max-w-[100px]">
             <QuotaDisplay
@@ -382,7 +382,7 @@ export function AccountRow({
       </TableCell>
 
       <TableCell
-        className="w-[90px] px-2 py-3 align-middle"
+        className="min-w-[72px] w-[72px] max-w-[72px] px-2 py-3 align-middle"
         onClick={event => event.stopPropagation()}
       >
         <div className="relative flex justify-end" data-row-actions-menu="true">
