@@ -216,7 +216,7 @@ export function MultiFilterDropdown<T = string>({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         className={cn(
-          'inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all duration-200',
+          'inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all duration-200',
           isActive
             ? 'border-indigo-500/35 bg-indigo-500/12 text-indigo-200'
             : 'border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/5 hover:text-white',

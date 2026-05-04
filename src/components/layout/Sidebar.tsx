@@ -36,9 +36,9 @@ interface NavItemProps {
       className={({ isActive }) =>
         cn(
           'flex items-center transition-all duration-200 rounded-xl group relative',
-          collapsed ? 'justify-center px-2 py-2 mx-1' : 'gap-3 px-3 py-2.5 mx-2',
+          collapsed ? 'justify-center px-2 py-2.5 mx-1' : 'gap-3 px-3 py-2.5 mx-2',
           isActive
-            ? 'bg-indigo-500/35 text-white shadow-md shadow-indigo-900/20 font-semibold'
+            ? 'bg-white/[0.06] text-white font-semibold'
             : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
         )
       }

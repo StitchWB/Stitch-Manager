@@ -25,19 +25,19 @@ export function TableBody({ className, ...props }: React.HTMLAttributes<HTMLTabl
 
 export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTableRowElement>) {
   return (
-    <tr className={cn('border-b border-white/5 hover:bg-white/[0.03]', className)} {...props} />
+    <tr className={cn('border-b border-white/5 hover:bg-white/[0.03] items-center', className)} {...props} />
   );
 }
 
 export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
-      className={cn('px-4 py-2 text-left font-semibold uppercase tracking-wider', className)}
+      className={cn('px-3 py-2.5 text-left font-semibold uppercase tracking-wider', className)}
       {...props}
     />
   );
 }
 
 export function TableCell({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn('px-4 py-2 text-slate-200', className)} {...props} />;
+  return <td className={cn('px-3 py-2.5 text-slate-200', className)} {...props} />;
 }

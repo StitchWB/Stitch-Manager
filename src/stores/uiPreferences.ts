@@ -22,6 +22,7 @@ export interface AccountsTableVisibleColumns {
   lastLogin: boolean;
   proxy: boolean;
   tags: boolean;
+  quota: boolean;
 }
 
 interface LogsPagePreferences {
@@ -127,6 +128,7 @@ const defaultAccountsPreferences: AccountsPagePreferences = {
     lastLogin: true,
     proxy: true,
     tags: true,
+    quota: true,
   },
   sortField: 'email',
   sortDirection: 'asc',
@@ -388,7 +390,20 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
     }),
     {
       name: 'ui-preferences-storage',
-      version: 3,
+      version: 4,
+      migrate: (persistedState: unknown) => {
+        const state = persistedState as Record<string, unknown>;
+        if (state.accountsPage) {
+          const accountsPage = state.accountsPage as Record<string, unknown>;
+          if (accountsPage.tableVisibleColumns) {
+            const cols = accountsPage.tableVisibleColumns as Record<string, boolean>;
+            if (!('quota' in cols)) {
+              accountsPage.tableVisibleColumns = { ...cols, quota: true };
+            }
+          }
+        }
+        return state as unknown as UIPreferencesState;
+      },
       partialize: state => ({
         activeRoute: state.activeRoute,
         accountsPage: state.accountsPage,

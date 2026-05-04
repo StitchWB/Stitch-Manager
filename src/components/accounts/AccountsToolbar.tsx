@@ -185,7 +185,7 @@ export function AccountsToolbar({
                 ]}
                 spacing="tight"
                 size="sm"
-                className="h-9 rounded-lg bg-transparent px-2"
+                className="h-8 rounded-lg bg-transparent px-2"
               />
             ) : resolvedViewMode !== 'list' ? (
               <>
@@ -231,7 +231,7 @@ export function AccountsToolbar({
                   onClick={onOpenAutoReg}
                   variant="secondary"
                   size="sm"
-                  className="h-9 rounded-lg"
+                  className="h-8 rounded-lg"
                 >
                   <span className="hidden sm:inline">{t('sidebar.autoReg')}</span>
                   <span className="sm:hidden">АР</span>
@@ -241,7 +241,7 @@ export function AccountsToolbar({
                 onClick={onCreateStandaloneProfile}
                 variant="secondary"
                 size="sm"
-                className="h-9 rounded-lg"
+                className="h-8 rounded-lg"
                 leftIcon={<LayoutGrid size={16} />}
               >
                 <span className="hidden sm:inline">{t('accounts.profilesCreateButton')}</span>
@@ -252,7 +252,7 @@ export function AccountsToolbar({
                 variant="primary"
                 size="sm"
                 leftIcon={<Plus size={18} />}
-                className="h-9 rounded-lg shadow-none"
+                className="h-8 rounded-lg shadow-none"
               >
                 <span className="hidden sm:inline">{t('accounts.addAccount')}</span>
                 <span className="sm:hidden">{t('common.add')}</span>
@@ -263,7 +263,7 @@ export function AccountsToolbar({
 
         {/* Bottom Row: Search and Filters */}
         {resolvedViewMode === 'list' ? (
-          <div className="flex flex-wrap items-center gap-2 w-full">
+          <div className="flex flex-wrap items-center gap-3 w-full">
             <ToolbarSearchField
               value={searchQuery}
               onValueChange={onSearchQueryChange}
@@ -288,7 +288,7 @@ export function AccountsToolbar({
                     { value: 'linked', label: t('accounts.profilesFilterLinked') },
                     { value: 'used_kiro', label: t('accounts.profilesFilterUsedForKiro') },
                   ]}
-                  triggerClassName="h-9 min-w-[180px]"
+                  triggerClassName="h-8 min-w-[180px]"
                   menuClassName="min-w-[220px]"
                   showActiveState
                 />
@@ -304,7 +304,7 @@ export function AccountsToolbar({
                     { value: 'github', label: 'GitHub' },
                     { value: 'custom', label: t('accounts.profileDestinationCustom') },
                   ]}
-                  triggerClassName="h-9 min-w-[180px]"
+                  triggerClassName="h-8 min-w-[180px]"
                   menuClassName="min-w-[220px]"
                   showActiveState
                 />
@@ -316,7 +316,7 @@ export function AccountsToolbar({
                     onChange={event => onProfileCustomUrlChange(event.target.value)}
                     placeholder={t('accounts.profileOpenUrlPlaceholder')}
                     containerClassName="w-[360px] shrink-0"
-                    className="h-9"
+                    className="h-8"
                   />
                 )}
               </ToolbarFiltersGroup>
@@ -333,7 +333,7 @@ export function AccountsToolbar({
                     { value: 'expired', label: getAccountStatusLabel('expired') },
                     { value: 'unknown', label: getAccountStatusLabel('unknown') },
                   ]}
-                  triggerClassName="h-8 min-w-[128px] px-2.5 text-[11px]"
+                  triggerClassName="h-8 min-w-[128px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />
@@ -342,7 +342,7 @@ export function AccountsToolbar({
                   value={tagFilter}
                   onChange={onTagFilterChange}
                   options={tagOptions}
-                  triggerClassName="h-8 min-w-[108px] px-2.5 text-[11px]"
+                  triggerClassName="h-8 min-w-[108px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />
@@ -351,7 +351,7 @@ export function AccountsToolbar({
                   value={relationFilter}
                   onChange={onRelationFilterChange}
                   options={relationOptions}
-                  triggerClassName="h-8 min-w-[108px] px-2.5 text-[11px]"
+                  triggerClassName="h-8 min-w-[108px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />
@@ -366,7 +366,7 @@ export function AccountsToolbar({
                     { value: 'empty', label: t('filters.empty') },
                     { value: 'full', label: t('filters.full') },
                   ]}
-                  triggerClassName="h-8 min-w-[108px] px-2.5 text-[11px]"
+                  triggerClassName="h-8 min-w-[108px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />

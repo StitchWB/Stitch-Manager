@@ -11,6 +11,18 @@
     --color-primary: 99 102 241;
     --color-accent: 6 182 212;
     --ds-bg: #0a0a0c;
+
+    /* Design System Surface Tokens */
+    --ds-surface-base: #0a0a0c;
+    --ds-surface-elevated: #0f1115;
+    --ds-surface-overlay: #111116;
+    --ds-surface-sunken: #0b0b10;
+    --ds-surface-input: rgba(255,255,255,0.05);
+
+    /* Design System Border Tokens */
+    --ds-border-subtle: rgba(255,255,255,0.05);
+    --ds-border-default: rgba(255,255,255,0.10);
+    --ds-border-strong: rgba(255,255,255,0.15);
   }
 
   html {
@@ -32,8 +44,23 @@
 }
 
 /* ============================================
-   Custom Scrollbar - Sleek & Minimal
+   Design System Token Utilities
    ============================================ */
+.ds-surface-base { background-color: var(--ds-surface-base); }
+.ds-surface-elevated { background-color: var(--ds-surface-elevated); }
+.ds-surface-overlay { background-color: var(--ds-surface-overlay); }
+.ds-surface-sunken { background-color: var(--ds-surface-sunken); }
+.ds-surface-input { background-color: var(--ds-surface-input); }
+
+.ds-border-subtle { border-color: var(--ds-border-subtle); }
+.ds-border-default { border-color: var(--ds-border-default); }
+.ds-border-strong { border-color: var(--ds-border-strong); }
+
+/* ============================================
+   Standard Design System Scrollbar
+   ============================================ */
+
+/* Global default scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -44,7 +71,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
   border-radius: 3px;
 }
 
@@ -52,43 +79,55 @@
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* Firefox scrollbar */
+/* Firefox scrollbar — global default */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
 }
 
-/* Accounts Table Custom Scrollbar */
-.accounts-table-container::-webkit-scrollbar {
+/* Unified DS scrollbar class + backward-compatible aliases */
+.ds-scrollbar::-webkit-scrollbar,
+.accounts-table-container::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar,
+.terminal-scroll::-webkit-scrollbar,
+.scrollbar-thin::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.accounts-table-container::-webkit-scrollbar-track {
+.ds-scrollbar::-webkit-scrollbar-track,
+.accounts-table-container::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track,
+.terminal-scroll::-webkit-scrollbar-track,
+.scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.accounts-table-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+.ds-scrollbar::-webkit-scrollbar-thumb,
+.accounts-table-container::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb,
+.terminal-scroll::-webkit-scrollbar-thumb,
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 3px;
 }
 
-.accounts-table-container::-webkit-scrollbar-thumb:hover {
+.ds-scrollbar::-webkit-scrollbar-thumb:hover,
+.accounts-table-container::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.terminal-scroll::-webkit-scrollbar-thumb:hover,
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+/* Firefox scrollbar — DS class + aliases */
+.ds-scrollbar,
+.accounts-table-container,
+.custom-scrollbar,
+.terminal-scroll,
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
 }
 
 /* ============================================
@@ -519,18 +558,6 @@ nav a:focus-visible {
   background: rgba(0, 0, 0, 0.4);
 }
 
-.terminal-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-
-.terminal-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.terminal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-}
 
 /* ============================================
    Progress Bar Styles
@@ -774,25 +801,6 @@ tr:hover .action-btn,
   @apply px-3 py-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider;
 }
 
-/* ============================================
-   Thin Scrollbar
-   ============================================ */
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
 
 /* ============================================
    Range Slider Styles

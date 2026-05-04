@@ -48,6 +48,21 @@ export default {
           'purple': 'rgba(139, 92, 246, 0.3)',
           'blue': 'rgba(59, 130, 246, 0.3)',
         },
+        // Design System tokens — surfaces & borders
+        ds: {
+          surface: {
+            base: '#0a0a0c',
+            elevated: '#0f1115',
+            overlay: '#111116',
+            sunken: '#0b0b10',
+            input: 'rgba(255,255,255,0.05)',
+          },
+          border: {
+            subtle: 'rgba(255,255,255,0.05)',
+            DEFAULT: 'rgba(255,255,255,0.10)',
+            strong: 'rgba(255,255,255,0.15)',
+          }
+        },
       },
       fontFamily: {
         sans: ['Segoe UI', 'system-ui', 'sans-serif'],
