@@ -29,13 +29,14 @@ interface NavItemProps {
   collapsed?: boolean;
 }
 
-function NavItem({ to, icon, label, collapsed }: NavItemProps) {
+  function NavItem({ to, icon, label, collapsed }: NavItemProps) {
   return (
     <NavLink
       to={to}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-3 px-3 py-2.5 transition-all duration-200 rounded-xl mx-2 group relative',
+          'flex items-center transition-all duration-200 rounded-xl group relative',
+          collapsed ? 'justify-center px-2 py-2 mx-1' : 'gap-3 px-3 py-2.5 mx-2',
           isActive
             ? 'bg-indigo-500/35 text-white shadow-md shadow-indigo-900/20 font-semibold'
             : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
@@ -64,9 +65,11 @@ export default function Sidebar() {
   useEffect(() => {
     queueMicrotask(() => setMounted(true));
 
-    // Auto-collapse sidebar on small screens
+    // Auto-collapse sidebar on small screens (< 1200px)
     const handleResize = () => {
-      if (window.innerWidth < 1024 && !useAppStore.getState().sidebarCollapsed) {
+      const shouldCollapse = window.innerWidth < 1200;
+      const isCollapsed = useAppStore.getState().sidebarCollapsed;
+      if (shouldCollapse && !isCollapsed) {
         useAppStore.getState().toggleSidebar();
       }
     };
@@ -85,7 +88,7 @@ export default function Sidebar() {
     <aside
       className={cn(
         'flex flex-col shrink-0 transition-all duration-300 ease-in-out border-r border-white/10 relative z-40 bg-[#111116]/80 backdrop-blur-3xl',
-        sidebarCollapsed ? 'w-20' : 'w-64'
+        sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
       {/* Collapse Toggle Button */}
@@ -97,7 +100,7 @@ export default function Sidebar() {
       </ButtonBase>
 
       {/* Logo */}
-      <div className="h-20 flex items-center px-5 mb-2">
+      <div className={cn('h-20 flex items-center mb-2', sidebarCollapsed ? 'px-3 justify-center' : 'px-5')}>
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="rounded-xl w-10 h-10 flex items-center justify-center shrink-0 bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-xl shadow-indigo-900/40">
             <Terminal className="w-5 h-5 text-white" />
@@ -195,11 +198,11 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-white/5">
+      <div className={cn('border-t border-white/5', sidebarCollapsed ? 'p-2' : 'p-4')}>
         <div
           className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/5',
-            sidebarCollapsed && 'justify-center'
+            'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
+            sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
           )}
         >
           <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
