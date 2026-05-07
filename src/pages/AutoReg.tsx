@@ -14,7 +14,6 @@ import { useRegistrationFlow } from './AutoReg/hooks/useRegistrationFlow';
 import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
-import { PipelineControls } from '../components/registration/PipelineControls';
 import { getActivePythonJobId } from './AutoReg/services';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIState } from '../hooks/useUIState';
@@ -548,8 +547,6 @@ export default function AutoRegNext() {
         disabled={activeThreads > 0}
       />
 
-      <PipelineControls jobId={pipelineJobId} isRunning={isRunning} />
-
       {/* Right Panel - Console */}
       <ConsolePanel
         logs={logs}
@@ -564,6 +561,7 @@ export default function AutoRegNext() {
         onProviderChange={provider => setActiveProvider(provider || '')}
         showDebug={showDebugLogs}
         onShowDebugChange={setShowDebugLogs}
+        pipelineJobId={pipelineJobId}
       />
     </div>
   );

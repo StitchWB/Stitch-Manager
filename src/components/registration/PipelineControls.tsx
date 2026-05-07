@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { registrationControl, type PipelineControlAction } from '../../lib/tauri';
-import { Button, GlassCard, Badge } from '@/components/ui';
+import { Button, Badge } from '@/components/ui';
 import { Play, SkipForward, Hand, X } from 'lucide-react';
 import type {
   PipelineStepConfig,
@@ -47,13 +47,8 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
     const unlistenPromises: Promise<() => void>[] = [];
 
     import('@tauri-apps/api/event').then(({ listen }) => {
-      const handler = (label: string) => (event: any) => {
-        console.log(`[PipelineControls] ${label}`, event.payload);
-      };
-
       unlistenPromises.push(
         listen('registration:pipeline_config', (event: any) => {
-          handler('pipeline_config')(event);
           const data = event.payload?.data;
           if (data?.steps) {
             setSteps(data.steps);
@@ -63,7 +58,6 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
 
       unlistenPromises.push(
         listen('registration:step_started', (event: any) => {
-          console.log('[PipelineControls] step_started', event.payload);
           const data = event.payload?.data;
           if (data?.step) {
             setSteps(prev =>
@@ -108,17 +102,10 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
 
       unlistenPromises.push(
         listen('registration:step_waiting', (event: any) => {
-          console.log('[PipelineControls] step_waiting', event.payload);
           const data = event.payload?.data;
           if (data) {
             setWaitingStep(data as PipelineStepWaitingEvent);
           }
-        })
-      );
-
-      unlistenPromises.push(
-        listen('registration:pipeline_paused', () => {
-          // handled by step_waiting
         })
       );
 
@@ -170,89 +157,79 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
   const waitingStepConfig = waitingStep ? steps.find(s => s.id === waitingStep.stepId) : null;
 
   return (
-    <GlassCard className="shrink-0 border-amber-500/20 bg-gradient-to-b from-amber-500/[0.06] to-transparent">
-      {/* Step Progress */}
-      <div className="p-3 space-y-1">
-        <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-2">Pipeline Steps</div>
-        {steps.map(step => (
-          <div key={step.id} className="flex items-center gap-2 text-xs">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={step.enabled}
-                disabled={step.status !== 'pending' || !step.skippable}
-                onChange={() => {
-                  if (jobId && step.skippable) {
-                    registrationControl(jobId, step.enabled ? 'skip' : 'resume', step.id).catch(
-                      console.error
-                    );
-                  }
-                }}
-                className="rounded border-slate-600 bg-slate-800 text-indigo-500"
-              />
-              <span className={`${STATUS_COLOR[step.status]} ${step.status === 'running' ? 'animate-pulse' : ''}`}>
+    <div className="border-b border-white/5">
+      {/* Horizontal step progress */}
+      <div className="px-4 py-2 flex items-center gap-1 overflow-x-auto">
+        {steps.map((step, i) => (
+          <div key={step.id} className="flex items-center gap-1 shrink-0">
+            {i > 0 && <span className="text-slate-700 text-[10px] mx-0.5">→</span>}
+            <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.03]">
+              <span className={`${STATUS_COLOR[step.status]} text-xs ${step.status === 'running' ? 'animate-pulse' : ''}`}>
                 {STATUS_ICON[step.status]}
               </span>
-              <span className={step.status === 'pending' && !step.enabled ? 'line-through text-slate-600' : 'text-slate-200'}>
+              <span className={`text-xs whitespace-nowrap ${
+                step.status === 'pending' && !step.enabled ? 'line-through text-slate-600' :
+                step.status === 'completed' ? 'text-slate-300' :
+                step.status === 'running' ? 'text-white font-medium' :
+                'text-slate-400'
+              }`}>
                 {step.label}
               </span>
-            </label>
-            {step.status === 'failed' && step.skippable && (
-              <button
-                onClick={() => sendCommand('skip', step.id)}
-                className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
-              >
-                skip
-              </button>
-            )}
-            {step.status === 'failed' && step.retryOnFail && (
-              <button
-                onClick={() => sendCommand('retry', step.id)}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
-              >
-                retry
-              </button>
-            )}
+              {step.status === 'failed' && step.skippable && (
+                <button
+                  onClick={() => sendCommand('skip', step.id)}
+                  className="text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                >
+                  skip
+                </button>
+              )}
+              {step.status === 'failed' && step.retryOnFail && (
+                <button
+                  onClick={() => sendCommand('retry', step.id)}
+                  className="text-[10px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
+                >
+                  retry
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Live Controls */}
+      {/* Waiting controls — inline, only when paused */}
       {waitingStep && (
-        <div className="border-t border-amber-500/20 p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="warning" size="sm" withDot withPulse>
-              {manualMode ? 'Manual Control' : 'Paused'}
-            </Badge>
-            <span className="text-xs text-slate-400">
-              {waitingStepConfig?.label || waitingStep.stepId}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
+        <div className="px-4 py-2 flex items-center gap-2 bg-amber-500/[0.04] border-t border-amber-500/10">
+          <Badge variant="warning" size="sm" withDot withPulse>
+            {manualMode ? 'Manual' : 'Paused'}
+          </Badge>
+          <span className="text-xs text-slate-400">
+            {waitingStepConfig?.label || waitingStep.stepId}
+          </span>
+          <div className="flex items-center gap-1.5 ml-auto">
             <Button
-              size="sm"
+              size="xs"
               variant="primary"
               leftIcon={<Play className="w-3 h-3" />}
               onClick={() => sendCommand('resume', waitingStep.stepId)}
+              className="animate-pulse"
             >
               Resume
             </Button>
 
             {waitingStepConfig?.skippable && (
               <Button
-                size="sm"
+                size="xs"
                 variant="ghost"
                 leftIcon={<SkipForward className="w-3 h-3" />}
                 onClick={() => sendCommand('skip', waitingStep.stepId)}
               >
-                Skip Step
+                Skip
               </Button>
             )}
 
             {waitingStepConfig?.allowManual && !manualMode && (
               <Button
-                size="sm"
+                size="xs"
                 variant="ghost"
                 leftIcon={<Hand className="w-3 h-3" />}
                 onClick={() => sendCommand('manual', waitingStep.stepId)}
@@ -263,17 +240,17 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
 
             {manualMode && (
               <Button
-                size="sm"
+                size="xs"
                 variant="primary"
                 leftIcon={<Play className="w-3 h-3" />}
                 onClick={() => sendCommand('resume', waitingStep.stepId)}
               >
-                Done, Continue
+                Done
               </Button>
             )}
 
             <Button
-              size="sm"
+              size="xs"
               variant="danger"
               leftIcon={<X className="w-3 h-3" />}
               onClick={() => sendCommand('abort', waitingStep.stepId)}
@@ -283,6 +260,6 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
           </div>
         </div>
       )}
-    </GlassCard>
+    </div>
   );
 }
