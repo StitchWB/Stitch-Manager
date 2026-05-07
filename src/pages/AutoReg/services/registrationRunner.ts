@@ -65,6 +65,10 @@ export interface RegistrationSummary {
 
 let activePythonJobId: string | null = null;
 
+export function getActivePythonJobId(): string | null {
+  return activePythonJobId;
+}
+
 export async function cancelActiveRegistrationJob(): Promise<void> {
   if (!activePythonJobId) return;
   const jobId = activePythonJobId;

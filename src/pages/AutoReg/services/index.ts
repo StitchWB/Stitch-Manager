@@ -15,6 +15,7 @@ export {
 export {
   runRegistration,
   cancelActiveRegistrationJob,
+  getActivePythonJobId,
   type RegistrationOptions,
   type RegistrationSummary,
   type LogLevel,
