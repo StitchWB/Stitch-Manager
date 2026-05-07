@@ -1,6 +1,7 @@
 import { t } from '../../../lib/i18n';
 import type { RegistrationLog } from '../../../types/ui';
 import { ButtonBase, MissionControlHUD, StatusBar } from '@/components/ui';
+import { PipelineControls } from '../../../components/registration/PipelineControls';
 
 interface ConsolePanelProps {
   logs: RegistrationLog[];
@@ -15,6 +16,7 @@ interface ConsolePanelProps {
   onProviderChange: (provider: string) => void;
   showDebug: boolean;
   onShowDebugChange: (show: boolean) => void;
+  pipelineJobId: string | null;
 }
 
 export const ConsolePanel = ({
@@ -30,6 +32,7 @@ export const ConsolePanel = ({
   onProviderChange,
   showDebug,
   onShowDebugChange,
+  pipelineJobId,
 }: ConsolePanelProps) => {
   return (
     <div className="flex-1 flex flex-col min-w-0 p-4" style={{ background: '#050508' }}>
@@ -47,6 +50,9 @@ export const ConsolePanel = ({
             </ButtonBase>
           </div>
         </div>
+
+        {/* Pipeline steps + controls (inline) */}
+        <PipelineControls jobId={pipelineJobId} isRunning={isRunning} />
 
         {/* Mission Control HUD */}
         <div className="flex-1 min-h-0">
