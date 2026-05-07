@@ -14,6 +14,8 @@ import { useRegistrationFlow } from './AutoReg/hooks/useRegistrationFlow';
 import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
+import { PipelineControls } from '../components/registration/PipelineControls';
+import { getActivePythonJobId } from './AutoReg/services';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIState } from '../hooks/useUIState';
 import {
@@ -74,6 +76,7 @@ export default function AutoRegNext() {
   const { autoRegPage, setAutoRegTab, setAutoRegV2, setAutoRegRunning } = useUIPreferencesStore();
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
+  const [pipelineJobId, setPipelineJobId] = useState<string | null>(null);
   const [showDebugLogs, setShowDebugLogs] = useUIState('autoreg-show-debug-logs', false, 'session');
   const [launchContext, setLaunchContext] = useUIState(
     'autoreg-launch-context',
@@ -191,6 +194,19 @@ export default function AutoRegNext() {
     });
 
   useEventListeners({ onThreadsChange: handleSetActiveThreads, launchContext });
+
+  const isRunning = activeThreads > 0 || isStopping;
+
+  useEffect(() => {
+    if (!isRunning) {
+      setPipelineJobId(null);
+      return;
+    }
+    const interval = setInterval(() => {
+      setPipelineJobId(getActivePythonJobId());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isRunning]);
 
   const {
     addyioDomains,
@@ -531,6 +547,8 @@ export default function AutoRegNext() {
         saveStatus={saveStatus}
         disabled={activeThreads > 0}
       />
+
+      <PipelineControls jobId={pipelineJobId} isRunning={isRunning} />
 
       {/* Right Panel - Console */}
       <ConsolePanel
