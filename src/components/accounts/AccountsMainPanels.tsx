@@ -84,10 +84,7 @@ export function AccountsMainPanels({
   onOpenProfileScenarios,
   openTarget,
   customUrl,
-  selectedIdsSize,
   tagFilter,
-  onCreateProfilesForSelected,
-  onBatchProfileAction,
   filteredAccounts,
   loading,
   searchQuery,
@@ -112,7 +109,7 @@ export function AccountsMainPanels({
       {resolvedViewMode === 'graph' ? (
         <ServiceAccountsPanel
           header={
-            <div className="flex items-center justify-between border-b border-white/5 bg-[#0a0a0c]/60 px-6 py-3 text-xs text-slate-400">
+            <div className="flex items-center justify-between border-b border-white/5 bg-ds-surface-base/60 px-6 py-3 text-xs text-slate-400">
               <div className="flex items-center gap-2">
                 <Share2 className="h-4 w-4 text-indigo-400" />
                 <span className="font-semibold text-white">{t('accounts.relationGraphTitle')}</span>
@@ -137,7 +134,7 @@ export function AccountsMainPanels({
       ) : resolvedViewMode === 'sheets' ? (
         <ServiceAccountsPanel
           header={
-            <div className="flex items-center justify-between border-b border-white/5 bg-[#0a0a0c]/60 px-6 py-3 text-xs text-slate-400">
+            <div className="flex items-center justify-between border-b border-white/5 bg-ds-surface-base/60 px-6 py-3 text-xs text-slate-400">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
                 <span className="font-semibold text-white">
@@ -184,19 +181,14 @@ export function AccountsMainPanels({
 
           <AccountsTableSection
             sectionClassName="flex flex-col h-[55%] min-h-[260px]"
-            profilePanelClassName="mx-6 mt-2 rounded-xl border border-white/5 bg-[#0f1115]/60 p-4"
-            showHintWhenEmpty={false}
             accounts={filteredAccounts}
             loading={loading}
             visibleColumns={visibleColumns}
-            selectedIdsSize={selectedIdsSize}
             tagFilter={tagFilter}
             searchQuery={searchQuery}
             statusFilter={statusFilter}
             quotaFilter={quotaFilter}
             relationFilter={relationFilter}
-            onCreateProfilesForSelected={onCreateProfilesForSelected}
-            onBatchProfileAction={onBatchProfileAction}
             tableProps={{
               ...baseAccountsTableProps,
               relationEdgesById,
@@ -229,14 +221,11 @@ export function AccountsMainPanels({
               accounts={filteredAccounts}
               loading={loading}
               visibleColumns={visibleColumns}
-              selectedIdsSize={selectedIdsSize}
               tagFilter={tagFilter}
               searchQuery={searchQuery}
               statusFilter={statusFilter}
               quotaFilter={quotaFilter}
               relationFilter={relationFilter}
-              onCreateProfilesForSelected={onCreateProfilesForSelected}
-              onBatchProfileAction={onBatchProfileAction}
               tableProps={{
                 ...baseAccountsTableProps,
                 relationEdgesById,

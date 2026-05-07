@@ -1,8 +1,6 @@
 import { Play, Square } from 'lucide-react';
-import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
-import { ButtonBase, Input } from '@/components/ui';
-
+import { Button, GlassCard, Badge, Input } from '@/components/ui';
 
 interface LaunchPadProps {
   count: number;
@@ -27,85 +25,63 @@ export function LaunchPad({
   const startBlocked = !canStart || isPythonBlocked;
 
   return (
-    <div className="shrink-0 p-4 border-t border-white/5">
-      <div
-        className="flex rounded-lg overflow-hidden"
-        style={{ boxShadow: '0 0 20px rgba(99, 102, 241, 0.15)' }}
-      >
+    <GlassCard className="shrink-0 border-indigo-500/20 bg-gradient-to-b from-indigo-500/[0.06] to-transparent">
+      <div className="flex items-center gap-3 p-3">
         {/* Count Input */}
-        <div className="relative">
-          <Input
-            type="number"
-            min={1}
-            max={100}
-            value={count.toString()}
-            onChange={e => onCountChange(parseInt(e.target.value) || 1)}
-            disabled={isRunning}
-            className="w-14 h-11 text-center font-mono font-bold text-white text-lg rounded-l-lg rounded-r-none border-r-0 focus:outline-none focus:ring-0"
-            shellClassName="rounded-l-lg rounded-r-none border-r-0"
-            containerClassName="w-14"
-            style={{
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRight: 'none',
-            }}
-          />
-        </div>
+        <Input
+          type="number"
+          min={1}
+          max={100}
+          value={count.toString()}
+          onChange={e => onCountChange(parseInt(e.target.value) || 1)}
+          disabled={isRunning}
+          className="w-16 text-center font-mono font-bold text-lg tabular-nums text-white"
+          containerClassName="w-16"
+        />
 
         {/* Start/Stop Button */}
         {!isRunning ? (
-          <ButtonBase
+          <Button
             type="button"
             onClick={onStart}
             disabled={startBlocked}
-            className={cn(
-              'flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2',
-              'text-white transition-all',
-              !startBlocked
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500'
-                : 'bg-slate-700/50 cursor-not-allowed'
-            )}
+            variant="primary"
+            size="lg"
+            leftIcon={<Play className="w-4 h-4" />}
+            className="flex-1"
           >
-            <Play className="w-4 h-4" />
             {t('autoReg.start')}
-          </ButtonBase>
+          </Button>
         ) : (
-          <ButtonBase
+          <Button
             type="button"
             onClick={onStop}
-            className="flex-1 h-11 rounded-l-none rounded-r-lg text-sm font-semibold flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white transition-colors"
+            variant="danger"
+            size="lg"
+            leftIcon={<Square className="w-4 h-4" />}
+            className="flex-1"
           >
-            <Square className="w-4 h-4" />
             {t('autoReg.stop')}
-          </ButtonBase>
+          </Button>
         )}
       </div>
 
       {/* Status indicator */}
-      <div className="flex flex-col items-end gap-1 mt-2 text-[10px] text-slate-500">
-        <div className="flex items-center gap-1.5">
-          {isPythonBlocked ? (
-            <>
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              <span>Python auto-reg unavailable</span>
-            </>
-          ) : canStart ? (
-            <>
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px] shadow-emerald-500/50" />
-              <span>{t('autoReg.readyToStart')}</span>
-            </>
-          ) : (
-            <>
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              <span>{t('autoReg.configureMailFirst')}</span>
-            </>
-          )}
-        </div>
-
-        {isPythonBlocked && (
-          <div className="text-[10px] text-slate-600">Install Python + DrissionPage</div>
+      <div className="flex items-center justify-end gap-2 px-3 pb-3">
+        {isPythonBlocked ? (
+          <Badge variant="danger" size="sm">Python авто-рег недоступен</Badge>
+        ) : canStart ? (
+          <Badge variant="success" size="sm" withDot withPulse>{t('autoReg.readyToStart')}</Badge>
+        ) : (
+          <Badge variant="warning" size="sm">{t('autoReg.configureMailFirst')}</Badge>
         )}
       </div>
-    </div>
+
+      {isPythonBlocked && (
+        <div className="px-3 pb-3 text-xs text-slate-500">
+          Установите Python + DrissionPage
+        </div>
+      )}
+    </GlassCard>
   );
 }

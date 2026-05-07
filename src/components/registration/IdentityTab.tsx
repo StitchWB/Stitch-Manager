@@ -1,9 +1,9 @@
 import type { ProviderName } from '../../types/ui';
 import type { SaveStatus } from '../../stores/registration';
-import { AlertTriangle, EyeOff } from 'lucide-react';
+import { AlertTriangle, EyeOff, Shield } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PROVIDER_REQUIREMENT_HINTS } from './providerRequirements';
-import { IdentitySystemCard, type IdentityConfig } from '@/components/ui';
+import { IdentitySystemCard, type IdentityConfig, GlassCard, Badge } from '@/components/ui';
 
 interface IdentityTabProps {
   provider: ProviderName;
@@ -42,21 +42,18 @@ export function IdentityTab({
   // AWS doesn't need IMAP configuration
   if (provider === 'aws') {
     return (
-      <div className="card border border-orange-500/20 p-8 text-center">
-        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-orange-500/10 flex items-center justify-center">
-          <svg className="w-10 h-10 text-orange-400" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M6.763 10.036c.022.615.022 1.194.022 1.773 0 .615 0 1.195-.022 1.773h-6.74c-.022-.578-.022-1.158-.022-1.773s0-1.195.022-1.773h6.74zm6.104 6.741c.434.638.868 1.195 1.302 1.753.434.558.868 1.116 1.302 1.674-1.085.434-2.17.723-3.255.868-.434-.578-.868-1.116-1.302-1.674-.434-.558-.868-1.116-1.302-1.753 1.085-.145 2.17-.434 3.255-.868zm-6.104-13.482c.022.615.022 1.194.022 1.773 0 .615 0 1.195-.022 1.773h-6.74c-.022-.578-.022-1.158-.022-1.773s0-1.195.022-1.773h6.74zm13.482 6.741c.022.578.022 1.158.022 1.773s0 1.195-.022 1.773h-6.74c.022-.578.022-1.158.022-1.773s0-1.195-.022-1.773h6.74zm-6.104-6.741c.434.638.868 1.195 1.302 1.753.434.558.868 1.116 1.302 1.674-1.085.434-2.17.723-3.255.868-.434-.578-.868-1.116-1.302-1.674-.434-.558-.868-1.116-1.302-1.753 1.085-.145 2.17-.434 3.255-.868zm-6.104 13.482c-.434-.638-.868-1.195-1.302-1.753-.434-.558-.868-1.116-1.302-1.674 1.085-.434 2.17-.723 3.255-.868.434.578.868 1.116 1.302 1.674.434.558.868 1.116 1.302 1.753-1.085.145-2.17.434-3.255.868z" />
-          </svg>
+      <GlassCard className="p-8 text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+          <Shield className="w-8 h-8 text-orange-400" />
         </div>
-        <h3 className="text-xl font-semibold text-white mb-2">AWS Builder ID</h3>
-        <p className="text-sm text-slate-400 mb-6">
-          Configure count and headless mode in Engine tab, then click START
+        <h3 className="text-lg font-semibold text-white mb-2">AWS Builder ID</h3>
+        <p className="text-sm text-slate-400 mb-4">
+          Настройте количество и режим headless во вкладке Движок, затем нажмите СТАРТ
         </p>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 border border-orange-500/30 text-sm text-orange-400">
-          <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px] shadow-orange-500/50 animate-pulse" />
-          Ready
-        </div>
-      </div>
+        <Badge variant="warning" size="lg" withDot withPulse>
+          Готов
+        </Badge>
+      </GlassCard>
     );
   }
 
@@ -78,9 +75,9 @@ export function IdentityTab({
                 <li>
                   • {PROVIDER_REQUIREMENT_HINTS.openai.points[1]} —{' '}
                   <span className="text-amber-300 font-semibold inline-flex items-center gap-1">
-                    <EyeOff className="w-3 h-3" /> headless OFF
+                    <EyeOff className="w-3 h-3" /> headless ВЫКЛ
                   </span>{' '}
-                  recommended
+                  рекомендуется
                 </li>
                 <li>• {PROVIDER_REQUIREMENT_HINTS.openai.points[2]}</li>
               </ul>

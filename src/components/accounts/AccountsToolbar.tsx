@@ -1,19 +1,26 @@
 import {
+  Battery,
+  Bot,
   Download,
   FileSpreadsheet,
+  Globe,
   LayoutGrid,
   List,
   Plus,
   RefreshCw,
   Share2,
+  Tag,
   Upload,
+  UserPlus,
 } from 'lucide-react';
 import { t } from '../../lib/i18n';
+import { cn } from '../../lib/utils';
 import { getAccountStatusLabel } from '../../lib/accountStatus';
 import {
   ActionButtonGroup,
   Button,
   FilterDropdown,
+  IconButton,
   Input,
   ViewModeSwitch,
   StickyToolbar,
@@ -26,6 +33,7 @@ import {
 import type { AccountsEntityTab } from './AccountsEntityTabs';
 import { AccountsEntityTabs } from './AccountsEntityTabs';
 import { AccountsColumnsMenu, type AccountsVisibleColumns } from './AccountsColumnsMenu';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 type ViewMode = 'list' | 'graph' | 'sheets';
 
@@ -36,10 +44,12 @@ interface AccountsToolbarProps {
   accountsCount: number;
   profilesCount: number;
   searchQuery: string;
+  providerFilter: string;
   statusFilter: string;
   tagFilter: string;
   relationFilter: string;
   quotaFilter: string;
+  providerCounts: Record<string, number>;
   profileListFilter: 'all' | 'standalone' | 'linked' | 'used_kiro';
   profileOpenTarget: string;
   profileCustomUrl: string;
@@ -57,6 +67,7 @@ interface AccountsToolbarProps {
   onEntityFilterChange: (value: AccountsEntityTab) => void;
   onViewModeChange: (value: string) => void;
   onSearchQueryChange: (value: string) => void;
+  onProviderFilterChange: (value: string) => void;
   onStatusFilterChange: (value: string) => void;
   onTagFilterChange: (value: string) => void;
   onRelationFilterChange: (value: string) => void;
@@ -84,6 +95,7 @@ export function AccountsToolbar({
   accountsCount,
   profilesCount,
   searchQuery,
+  providerFilter,
   statusFilter,
   tagFilter,
   relationFilter,
@@ -93,6 +105,7 @@ export function AccountsToolbar({
   profileCustomUrl,
   tagOptions,
   relationOptions,
+  providerCounts,
   sheetsUpdatedAt,
   isBulkRefreshing,
   isImporting,
@@ -105,6 +118,7 @@ export function AccountsToolbar({
   onEntityFilterChange,
   onViewModeChange,
   onSearchQueryChange,
+  onProviderFilterChange,
   onStatusFilterChange,
   onTagFilterChange,
   onRelationFilterChange,
@@ -124,22 +138,30 @@ export function AccountsToolbar({
   onToggleVisibleColumn,
   onResetVisibleColumns,
 }: AccountsToolbarProps) {
+  const isAccountsList = resolvedViewMode === 'list' && normalizedEntityFilter !== 'profiles';
+  const isProfilesList = resolvedViewMode === 'list' && normalizedEntityFilter === 'profiles';
+  const isSheetsView = resolvedViewMode !== 'list';
+
   return (
     <StickyToolbar
       topClassName="top-0"
-      className="shrink-0 border-b border-white/5 bg-[#0b0b10]/85 px-4 py-3"
+      className="shrink-0 px-6 py-3"
     >
       <div className="flex flex-col gap-4 w-full">
-        {/* Top Row: Tabs and Action Buttons */}
-        <div className="flex flex-wrap justify-between items-center gap-2 w-full">
-          <ToolbarRow className="gap-2 min-w-0 flex-1 items-center">
+        {/* Row 1: Navigation (Tabs left) + View Switcher (right-center) + Actions (far right) */}
+        <div className="flex items-center justify-between gap-4 w-full">
+          {/* Left: Tabs only */}
+          <ToolbarRow className="gap-3 items-center">
             <AccountsEntityTabs
               value={normalizedEntityFilter}
               onChange={onEntityFilterChange}
               accountsCount={accountsCount}
               profilesCount={profilesCount}
             />
+          </ToolbarRow>
 
+          {/* Right: View Switcher + Utility Actions + Primary Button */}
+          <div className="flex items-center gap-3">
             {showAccountsModes && (
               <ViewModeSwitch
                 value={resolvedViewMode}
@@ -156,10 +178,10 @@ export function AccountsToolbar({
                 className="shrink-0"
               />
             )}
-          </ToolbarRow>
 
-          <ToolbarActionsCluster className="justify-start xl:justify-end shrink-0" align="start">
-            {resolvedViewMode === 'list' && normalizedEntityFilter !== 'profiles' ? (
+            <ToolbarActionsCluster className="gap-2" align="end">
+            {/* Utility Group: Refresh/Import/Export */}
+            {isAccountsList ? (
               <ActionButtonGroup
                 actions={[
                   {
@@ -185,10 +207,10 @@ export function AccountsToolbar({
                 ]}
                 spacing="tight"
                 size="sm"
-                className="h-8 rounded-lg bg-transparent px-2"
+                className="h-8 rounded-lg bg-transparent px-1"
               />
-            ) : resolvedViewMode !== 'list' ? (
-              <>
+            ) : isSheetsView ? (
+              <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -214,10 +236,11 @@ export function AccountsToolbar({
                 >
                   {t('common.settings')}
                 </Button>
-              </>
+              </div>
             ) : null}
 
-            {resolvedViewMode === 'list' && normalizedEntityFilter !== 'profiles' ? (
+            {/* Columns Menu */}
+            {isAccountsList ? (
               <AccountsColumnsMenu
                 visibleColumns={visibleColumns}
                 onToggleColumn={onToggleVisibleColumn}
@@ -225,55 +248,69 @@ export function AccountsToolbar({
               />
             ) : null}
 
-            <div className="flex items-center gap-2">
-              {normalizedEntityFilter !== 'profiles' ? (
-                <Button
-                  onClick={onOpenAutoReg}
-                  variant="secondary"
-                  size="sm"
-                  className="h-8 rounded-lg"
-                >
-                  <span className="hidden sm:inline">{t('sidebar.autoReg')}</span>
-                  <span className="sm:hidden">АР</span>
-                </Button>
-              ) : null}
-              <Button
-                onClick={onCreateStandaloneProfile}
-                variant="secondary"
-                size="sm"
-                className="h-8 rounded-lg"
-                leftIcon={<LayoutGrid size={16} />}
-              >
-                <span className="hidden sm:inline">{t('accounts.profilesCreateButton')}</span>
-                <span className="sm:hidden">{t('accounts.entityProfiles')}</span>
-              </Button>
-              <Button
-                onClick={onAddAccount}
-                variant="primary"
-                size="sm"
-                leftIcon={<Plus size={18} />}
-                className="h-8 rounded-lg shadow-none"
-              >
-                <span className="hidden sm:inline">{t('accounts.addAccount')}</span>
-                <span className="sm:hidden">{t('common.add')}</span>
-              </Button>
-            </div>
-          </ToolbarActionsCluster>
+            {/* Compact IconButtons: Auto-Reg, Create Profile */}
+            {isAccountsList ? (
+              <div className="flex items-center gap-1">
+                <Tooltip content={t('sidebar.autoReg')}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    onClick={onOpenAutoReg}
+                    className="h-8 w-8 rounded-lg"
+                  >
+                    <Bot size={16} />
+                  </IconButton>
+                </Tooltip>
+
+                <Tooltip content={t('accounts.profilesCreateButton')}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    onClick={onCreateStandaloneProfile}
+                    className="h-8 w-8 rounded-lg"
+                  >
+                    <UserPlus size={16} />
+                  </IconButton>
+                </Tooltip>
+              </div>
+            ) : null}
+
+            {/* Primary Add Account Button */}
+            <Button
+              onClick={onAddAccount}
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={16} />}
+              className="h-8 rounded-lg shadow-none whitespace-nowrap"
+            >
+              <span className="hidden sm:inline">
+                {normalizedEntityFilter !== 'profiles'
+                  ? t('accounts.addAccount')
+                  : t('accounts.profilesCreateButton')}
+              </span>
+            </Button>
+            </ToolbarActionsCluster>
+          </div>
         </div>
 
-        {/* Bottom Row: Search and Filters */}
+        {/* Row 2: Search (30%) + Filters (flex-1, fills remaining space) */}
         {resolvedViewMode === 'list' ? (
-          <div className="flex flex-wrap items-center gap-3 w-full">
+          <div className="flex items-center gap-3 w-full">
+            {/* Search Field - 30% width */}
             <ToolbarSearchField
               value={searchQuery}
               onValueChange={onSearchQueryChange}
               placeholder={t('accounts.searchPlaceholder')}
               shellClassName="border-white/10 bg-black/40 focus-within:border-indigo-500/40 focus-within:bg-black/60 h-8"
-              containerClassName="w-full min-w-[200px] max-w-xs flex-1"
+              containerClassName="w-[28%] min-w-[160px]"
             />
 
-            {normalizedEntityFilter === 'profiles' ? (
-              <ToolbarFiltersGroup align="end">
+            {/* Visual separator */}
+            <div className="h-6 w-px bg-white/20 shrink-0 mx-1" />
+
+            {/* Filters - fills remaining space */}
+            {isProfilesList ? (
+              <div className="flex items-center gap-3 w-[60%]">
                 <FilterDropdown
                   value={profileListFilter}
                   onChange={value =>
@@ -281,6 +318,7 @@ export function AccountsToolbar({
                       value as 'all' | 'standalone' | 'linked' | 'used_kiro'
                     )
                   }
+                  icon={<LayoutGrid size={14} />}
                   label={t('accounts.profilesFilterLabel')}
                   options={[
                     { value: 'all', label: t('accounts.profilesFilterAll') },
@@ -296,6 +334,7 @@ export function AccountsToolbar({
                 <FilterDropdown
                   value={profileOpenTarget}
                   onChange={value => onProfileOpenTargetChange(String(value))}
+                  icon={<Globe size={14} />}
                   label={t('accounts.profileDestinationLabel')}
                   options={[
                     { value: 'kiro', label: 'Kiro' },
@@ -315,25 +354,53 @@ export function AccountsToolbar({
                     value={profileCustomUrl}
                     onChange={event => onProfileCustomUrlChange(event.target.value)}
                     placeholder={t('accounts.profileOpenUrlPlaceholder')}
-                    containerClassName="w-[360px] shrink-0"
+                    containerClassName="flex-1 min-w-[200px]"
                     className="h-8"
                   />
                 )}
-              </ToolbarFiltersGroup>
+              </div>
             ) : (
-              <ToolbarFiltersGroup mobileScrollable>
+              <ToolbarFiltersGroup mobileScrollable className="flex-1">
+                <FilterDropdown
+                  value={providerFilter}
+                  onChange={onProviderFilterChange}
+                  icon={<LayoutGrid size={14} />}
+                  options={[
+                    { value: 'all', label: t('accounts.allProviders'), count: providerCounts.all ?? 0 },
+                    { value: 'kiro', label: 'Kiro', count: providerCounts.kiro ?? 0 },
+                    { value: 'windsurf', label: 'Windsurf', count: providerCounts.windsurf ?? 0 },
+                    { value: 'trae', label: 'Trae', count: providerCounts.trae ?? 0 },
+                    { value: 'aws_builder_id', label: 'AWS Builder ID', count: providerCounts.aws_builder_id ?? 0 },
+                    { value: 'github', label: 'GitHub', count: providerCounts.github ?? 0 },
+                    { value: 'fireworks', label: 'Fireworks AI', count: providerCounts.fireworks ?? 0 },
+                  ]}
+                  triggerClassName="h-8 min-w-[160px] px-2.5 text-xs"
+                  menuClassName="min-w-[200px]"
+                  showActiveState
+                />
+
                 <FilterDropdown
                   value={statusFilter}
                   onChange={onStatusFilterChange}
+                  icon={
+                    <span className={cn(
+                      'h-2.5 w-2.5 rounded-full shrink-0',
+                      statusFilter === 'active' ? 'bg-emerald-500' :
+                      statusFilter === 'banned' ? 'bg-red-500' :
+                      statusFilter === 'limit_hit' ? 'bg-amber-500' :
+                      statusFilter === 'expired' ? 'bg-orange-500' :
+                      'bg-slate-500'
+                    )} />
+                  }
                   options={[
-                    { value: 'all', label: t('filters.anyStatus') },
-                    { value: 'active', label: getAccountStatusLabel('active') },
-                    { value: 'banned', label: getAccountStatusLabel('banned') },
-                    { value: 'limit_hit', label: getAccountStatusLabel('limit_hit') },
-                    { value: 'expired', label: getAccountStatusLabel('expired') },
-                    { value: 'unknown', label: getAccountStatusLabel('unknown') },
+                    { value: 'all', label: t('filters.anyStatus'), dot: 'bg-slate-500' },
+                    { value: 'active', label: getAccountStatusLabel('active'), dot: 'bg-emerald-500' },
+                    { value: 'banned', label: getAccountStatusLabel('banned'), dot: 'bg-red-500' },
+                    { value: 'limit_hit', label: getAccountStatusLabel('limit_hit'), dot: 'bg-amber-500' },
+                    { value: 'expired', label: getAccountStatusLabel('expired'), dot: 'bg-orange-500' },
+                    { value: 'unknown', label: getAccountStatusLabel('unknown'), dot: 'bg-slate-500' },
                   ]}
-                  triggerClassName="h-8 min-w-[128px] px-2.5 text-xs"
+                  triggerClassName="h-8 min-w-[100px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />
@@ -341,8 +408,9 @@ export function AccountsToolbar({
                 <FilterDropdown
                   value={tagFilter}
                   onChange={onTagFilterChange}
+                  icon={<Tag size={14} />}
                   options={tagOptions}
-                  triggerClassName="h-8 min-w-[108px] px-2.5 text-xs"
+                  triggerClassName="h-8 min-w-[100px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />
@@ -350,8 +418,9 @@ export function AccountsToolbar({
                 <FilterDropdown
                   value={relationFilter}
                   onChange={onRelationFilterChange}
+                  icon={<Share2 size={14} />}
                   options={relationOptions}
-                  triggerClassName="h-8 min-w-[108px] px-2.5 text-xs"
+                  triggerClassName="h-8 min-w-[100px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />
@@ -359,6 +428,7 @@ export function AccountsToolbar({
                 <FilterDropdown
                   value={quotaFilter}
                   onChange={onQuotaFilterChange}
+                  icon={<Battery size={14} />}
                   options={[
                     { value: 'any', label: t('filters.any') },
                     { value: 'has_quota', label: t('filters.hasQuota') },
@@ -366,7 +436,7 @@ export function AccountsToolbar({
                     { value: 'empty', label: t('filters.empty') },
                     { value: 'full', label: t('filters.full') },
                   ]}
-                  triggerClassName="h-8 min-w-[108px] px-2.5 text-xs"
+                  triggerClassName="h-8 min-w-[100px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />

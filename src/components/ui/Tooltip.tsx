@@ -95,7 +95,7 @@ export function Tooltip({
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.15, delay: delay }}
               className={cn(
-                'fixed z-[99999] px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-[#1a1b26] border border-white/10 rounded-md shadow-xl backdrop-blur-xl whitespace-nowrap pointer-events-none',
+                'fixed z-[99999] px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-ds-surface-overlay border border-ds-border rounded-md shadow-xl backdrop-blur-xl whitespace-nowrap pointer-events-none',
                 className
               )}
               style={{
@@ -108,7 +108,7 @@ export function Tooltip({
               {/* Tiny arrow */}
               <div
                 className={cn(
-                  'absolute w-2 h-2 bg-[#1a1b26] border-white/10 rotate-45',
+                  'absolute w-2 h-2 bg-ds-surface-overlay border-ds-border rotate-45',
                   side === 'top' && 'bottom-[-5px] left-1/2 -translate-x-1/2 border-b border-r',
                   side === 'bottom' && 'top-[-5px] left-1/2 -translate-x-1/2 border-t border-l',
                   side === 'left' && 'right-[-5px] top-1/2 -translate-y-1/2 border-t border-r',

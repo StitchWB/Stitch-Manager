@@ -51,26 +51,24 @@ export const QuotaDisplay = React.memo(function QuotaDisplay({
 
   if (variant === 'compact') {
     return (
-      <div className={cn('flex flex-col gap-1 w-full', className)}>
-        <div className="flex justify-between items-baseline">
+      <div className={cn('flex flex-col gap-0.5 w-full min-w-0', className)}>
+        <div className="flex items-baseline gap-1.5">
           <span
             className={cn(
-              'text-lg font-black tracking-tighter tabular-nums leading-none',
+              'text-xs font-bold tabular-nums leading-none',
               getStatusColor()
             )}
           >
             {isUnknown ? '—' : `${Math.round(percent)}%`}
           </span>
-          <span className="text-[10px] text-slate-500 font-bold tabular-nums">
-            {isUnknown ? 'Unknown' : `${formatValue(used)} / ${formatValue(limit)}`}
+          <span className="text-[9px] text-slate-500 tabular-nums truncate">
+            {isUnknown ? '' : `${formatValue(used)} / ${formatValue(limit)}`}
           </span>
         </div>
-        <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${percent}%` }}
-            transition={{ duration: 1, ease: 'easeOut' }}
-            className={cn('h-full rounded-full transition-all duration-500', getBarColor())}
+        <div className="h-1 w-full bg-white/[0.04] rounded-full overflow-hidden">
+          <div
+            className={cn('h-full rounded-full', getBarColor())}
+            style={{ width: `${percent}%` }}
           />
         </div>
       </div>

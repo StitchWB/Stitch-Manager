@@ -64,8 +64,8 @@ export function IdentityGraphLinkEditorDrawer({
   if (!open) return null;
 
   return (
-    <div className="absolute inset-0 z-20 bg-black/50 backdrop-blur-sm flex justify-end">
-      <div className="w-full max-w-md h-full bg-[#0b0d11] border-l border-white/10 p-4 overflow-auto">
+    <div className="absolute inset-0 z-20 bg-void-base/50 backdrop-blur-sm flex justify-end">
+      <div className="w-full max-w-md h-full bg-ds-surface-elevated border-l border-white/10 p-4 overflow-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
             <div className="text-sm font-semibold text-white">

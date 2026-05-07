@@ -39,7 +39,7 @@ export function IdentityGraphHeader({
   onStatusFilterChange,
 }: IdentityGraphHeaderProps) {
   return (
-    <div className="shrink-0 border-b border-white/5 bg-[#0a0a0c]/60 px-4 py-3">
+    <div className="shrink-0 border-b border-white/5 bg-ds-surface-base/60 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <Users className="w-4 h-4 text-indigo-400" />

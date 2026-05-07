@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { ChevronRight, Check, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
+import { GlassCard } from './GlassCard';
 
 export type ModuleStatus = 'ready' | 'warning' | 'error' | 'idle';
 
@@ -38,44 +39,47 @@ export function ModuleCard({
   const config = STATUS_CONFIG[status];
 
   return (
-    <div 
-      className={cn(
-        'rounded-lg border border-white/5 transition-colors',
-        isExpanded ? 'bg-white/[0.05]' : 'bg-white/[0.03] hover:bg-white/[0.05]',
-        disabled && 'opacity-50 pointer-events-none'
-      )}
-    >
+    <GlassCard className={cn(
+      'overflow-hidden transition-colors',
+      disabled && 'opacity-50 pointer-events-none'
+    )}>
       {/* Header - Always visible */}
       <button
         onClick={() => onToggle(id)}
-        className="w-full flex items-center gap-3 px-3 py-3 text-left"
+        className={cn(
+          'w-full flex items-center justify-between p-3 transition-colors',
+          !disabled && 'hover:bg-white/[0.02]',
+          disabled && 'cursor-not-allowed opacity-60'
+        )}
         aria-expanded={isExpanded}
         aria-controls={`module-content-${id}`}
         id={`module-header-${id}`}
       >
-        {/* Icon */}
-        <div className={cn(
-          'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-          isExpanded ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/[0.05] text-slate-500'
-        )}>
-          {icon}
-        </div>
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Icon */}
+          <div className={cn(
+            'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors',
+            isExpanded ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/[0.05] text-slate-500'
+          )}>
+            {icon}
+          </div>
 
-        {/* Title & Summary */}
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-slate-200">{title}</div>
-          {summary && !isExpanded && (
-            <div className={cn('text-xs font-mono truncate', config.text)}>
-              {summary}
-            </div>
-          )}
-          {!summary && !isExpanded && status === 'idle' && (
-            <div className="text-xs text-slate-600">{t('status.notConfigured')}</div>
-          )}
+          {/* Title & Summary */}
+          <div className="flex-1 min-w-0 text-left">
+            <div className="text-sm font-semibold text-white truncate">{title}</div>
+            {summary && !isExpanded && (
+              <div className={cn('text-xs font-mono truncate', config.text)}>
+                {summary}
+              </div>
+            )}
+            {!summary && !isExpanded && status === 'idle' && (
+              <div className="text-xs text-slate-500">{t('status.notConfigured')}</div>
+            )}
+          </div>
         </div>
 
         {/* Status Indicator */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {status === 'ready' && !isExpanded && (
             <Check className="w-4 h-4 text-emerald-500" />
           )}
@@ -88,7 +92,7 @@ export function ModuleCard({
             config.glow && `shadow-[0_0_8px] ${config.glow}`
           )} />
           <ChevronRight className={cn(
-            'w-4 h-4 text-slate-600 transition-transform duration-200',
+            'w-4 h-4 text-slate-500 transition-transform duration-200',
             isExpanded && 'rotate-90'
           )} />
         </div>
@@ -98,7 +102,7 @@ export function ModuleCard({
       <div 
         id={`module-content-${id}`}
         className={cn(
-          'overflow-hidden transition-all duration-200',
+          'overflow-hidden transition-all duration-200 ease-out',
           isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
         )}
         role="region"
@@ -108,6 +112,6 @@ export function ModuleCard({
           {children}
         </div>
       </div>
-    </div>
+    </GlassCard>
   );
 }

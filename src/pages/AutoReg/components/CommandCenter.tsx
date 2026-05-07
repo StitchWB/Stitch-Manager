@@ -15,7 +15,7 @@ import { type SaveStatus } from '../../../stores/registration/types';
 import type { IMAPConfig } from '../../../stores/registration/types';
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { type IdentityConfig, type NetworkConfig } from '@/components/ui';
+import { type IdentityConfig, type NetworkConfig, StatusBadge } from '@/components/ui';
 
 interface CommandCenterProps {
   // Provider
@@ -163,17 +163,17 @@ export const CommandCenter = ({
 }: CommandCenterProps) => {
   const savePill =
     saveStatus === 'saving' ? (
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-300 bg-white/5 border border-white/10 px-2 py-1 rounded-md">
-        <Loader2 className="w-3 h-3 animate-spin" /> Saving
-      </span>
+      <StatusBadge status="idle" size="sm" className="rounded-md border border-white/10">
+        <Loader2 className="w-3 h-3 animate-spin" /> Сохранение
+      </StatusBadge>
     ) : saveStatus === 'saved' ? (
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-md">
-        <CheckCircle2 className="w-3 h-3" /> Saved
-      </span>
+      <StatusBadge status="success" size="sm" className="rounded-md border border-emerald-500/20">
+        <CheckCircle2 className="w-3 h-3" /> Сохранено
+      </StatusBadge>
     ) : saveStatus === 'error' ? (
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-md">
-        <XCircle className="w-3 h-3" /> Save failed
-      </span>
+      <StatusBadge status="error" size="sm" className="rounded-md border border-red-500/20">
+        <XCircle className="w-3 h-3" /> Ошибка сохранения
+      </StatusBadge>
     ) : null;
 
   return (
@@ -192,8 +192,8 @@ export const CommandCenter = ({
       {/* Tab Bar */}
       <ConfigTabs activeTab={activeTab} onTabChange={onTabChange} disabled={disabled} />
 
-      {/* Tabbed Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-2">
+      {/* Tabbed Content - with scroll */}
+      <div className="flex-1 overflow-y-auto px-4 py-2 min-h-0">
         {activeTab === 'identity' && (
           <IdentityTab
             provider={activeProvider}

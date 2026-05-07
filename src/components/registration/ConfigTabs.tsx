@@ -11,11 +11,11 @@ interface ConfigTabsProps {
 }
 
 const tabs: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'identity', label: 'Ident', icon: <User className="w-3.5 h-3.5" /> },
-  { id: 'engine', label: 'Engine', icon: <Settings2 className="w-3.5 h-3.5" /> },
-  { id: 'network', label: 'Net', icon: <Wifi className="w-3.5 h-3.5" /> },
-  { id: 'automation', label: 'Auto', icon: <Repeat className="w-3.5 h-3.5" /> },
-  { id: 'inbox', label: 'Inbox', icon: <Inbox className="w-3.5 h-3.5" /> },
+  { id: 'identity', label: 'ID', icon: <User className="w-3.5 h-3.5" /> },
+  { id: 'engine', label: 'Движок', icon: <Settings2 className="w-3.5 h-3.5" /> },
+  { id: 'network', label: 'Сеть', icon: <Wifi className="w-3.5 h-3.5" /> },
+  { id: 'automation', label: 'Авто', icon: <Repeat className="w-3.5 h-3.5" /> },
+  { id: 'inbox', label: 'Почта', icon: <Inbox className="w-3.5 h-3.5" /> },
 ];
 
 export function ConfigTabs({ activeTab, onTabChange, disabled }: ConfigTabsProps) {

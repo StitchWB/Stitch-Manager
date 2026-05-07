@@ -355,27 +355,27 @@ export default function AutoRegNext() {
   };
 
   return (
-    <div className="h-full flex flex-col md:flex-row" style={{ background: '#050508' }}>
+    <div className="h-full flex flex-col md:flex-row bg-[var(--ds-bg)]">
       {launchContext?.source === 'profile' && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-[min(960px,calc(100%-24px))]">
           <GlassCard className="p-3 border-cyan-500/20 bg-cyan-500/5">
             <div className="flex flex-wrap items-end gap-3 justify-between">
               <div className="min-w-[240px]">
-                <div className="text-[10px] uppercase tracking-widest text-cyan-300/80">
-                  Launch Context
+                <div className="text-xs uppercase tracking-widest text-cyan-300/80">
+                  Контекст запуска
                 </div>
                 <div className="text-sm text-white font-semibold mt-1 truncate">
-                  Profile: {launchContext.profileAlias}
+                  Профиль: {launchContext.profileAlias}
                 </div>
                 <div className="text-xs text-slate-300 mt-1">
-                  Target: {launchContext.targetProvider || config.provider}
+                  Цель: {launchContext.targetProvider || config.provider}
                 </div>
               </div>
 
               {config.provider === 'kiro' && (
                 <div className="flex flex-wrap items-end gap-3">
                   <div>
-                    <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">
+                    <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">
                       AWS Bootstrap
                     </div>
                     <Select
@@ -404,7 +404,7 @@ export default function AutoRegNext() {
 
                   {kiroBootstrapMode === 'existing_aws_session' && (
                     <div>
-                      <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">
+                        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">
                         AWS Account
                       </div>
                       <Select
@@ -431,7 +431,7 @@ export default function AutoRegNext() {
                         ))}
                       </Select>
                       {selectedAwsBootstrapAccountId === null && (
-                        <div className="text-[10px] text-amber-300/90 mt-1">
+                        <div className="text-xs text-amber-300/90 mt-1">
                           {t('accounts.launchContextHintSelectAws')}
                         </div>
                       )}
@@ -446,7 +446,7 @@ export default function AutoRegNext() {
               )}
 
               <Button size="xs" variant="ghost" onClick={() => setLaunchContext(null)}>
-                Clear Launch Context
+                Очистить контекст
               </Button>
             </div>
           </GlassCard>

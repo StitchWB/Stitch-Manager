@@ -23,6 +23,7 @@ export function ViewModeSwitch({ value, onChange, options, className }: ViewMode
       value={value}
       onChange={onChange}
       options={options}
+      responsiveLabels
       className={cn('h-8 shrink-0', className)}
     />
   );

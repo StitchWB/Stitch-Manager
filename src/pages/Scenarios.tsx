@@ -180,7 +180,7 @@ export default function Scenarios() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
       <Header
         title={t('scenarios.title')}
         subtitle={t('scenarios.subtitle')}
@@ -189,7 +189,7 @@ export default function Scenarios() {
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-[1200px] mx-auto space-y-6">
-          <div className="rounded-2xl border border-white/10 bg-[#0f1115]/70 px-5 py-5 shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
+          <div className="rounded-2xl border border-white/10 bg-ds-surface-elevated/70 px-5 py-5 shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
             <div className="flex flex-col lg:flex-row lg:items-end gap-4">
               <div className="flex-1 min-w-0">
                 <Select
@@ -228,7 +228,7 @@ export default function Scenarios() {
               variant="panel"
             />
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-[#0f1115]/70 p-6">
+            <div className="rounded-2xl border border-white/10 bg-ds-surface-elevated/70 p-6">
               <EmptyState
                 icon={FolderKanban}
                 title={t('scenarios.emptyTitle')}

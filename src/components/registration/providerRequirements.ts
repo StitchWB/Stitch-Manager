@@ -7,15 +7,15 @@ export interface ProviderRequirementHint {
 
 export const PROVIDER_REQUIREMENT_HINTS: Partial<Record<ProviderName, ProviderRequirementHint>> = {
   openai: {
-    title: 'OpenAI requirements',
+    title: 'Требования OpenAI',
     points: [
-      'Email verification required (IMAP/mailbox must be configured)',
-      'CAPTCHA/payment/phone checks may appear; keep browser visible',
-      'Expect occasional manual intervention during sign-up',
+      'Требуется верификация email (IMAP/почтовый ящик должен быть настроен)',
+      'Могут появляться CAPTCHA/проверка оплаты/телефона; держите браузер видимым',
+      'Возможно ручное вмешательство во время регистрации',
     ],
   },
   aws: {
-    title: 'AWS Builder ID note',
-    points: ['No IMAP/email verification required for AWS flow'],
+    title: 'Примечание AWS Builder ID',
+    points: ['Для потока AWS не требуется IMAP/верификация email'],
   },
 };

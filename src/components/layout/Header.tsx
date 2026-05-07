@@ -71,34 +71,34 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
   return (
     <header
-      className="h-14 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 border-t border-t-white/[0.03] flex items-center justify-between px-6 shrink-0 sticky top-0 z-20"
+      className="h-12 bg-black/60 border-b border-white/[0.06] flex items-center shrink-0 sticky top-0 z-[60]"
       role="banner"
     >
-      <div className="flex items-center gap-3">
+      {/* Left: Title, subtitle, icon */}
+      <div className="flex items-center gap-2.5 px-4 flex-1 min-w-0">
         {icon && (
-          <span className="text-primary" aria-hidden="true">
+          <span className="text-slate-400 shrink-0" aria-hidden="true">
             {icon}
           </span>
         )}
-        <div className="flex items-center gap-3">
-          <h1 className="text-base font-semibold text-white">{title}</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-sm font-medium text-white truncate">{title}</h1>
           {subtitle && (
             <>
-              <span className="text-slate-600" aria-hidden="true">
-                •
-              </span>
-              <p className="text-xs text-slate-500">{subtitle}</p>
+              <span className="text-slate-700" aria-hidden="true">/</span>
+              <p className="text-xs text-slate-500 truncate">{subtitle}</p>
             </>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      {/* Right: Status, language, notifications, actions */}
+      <div className="flex items-center gap-2 px-4 shrink-0">
         {actions}
 
         {/* Status Indicator */}
         <div
-          className="flex items-center gap-2 px-3 h-8 rounded-lg bg-white/5 border border-white/10"
+          className="flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-white/[0.04] border border-white/[0.06]"
           role="status"
           aria-live="polite"
           aria-label={isOnline ? t('header.systemOnline') : t('header.serverOffline')}
@@ -128,7 +128,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           </IconButton>
           {langOpen && (
             <div
-              className="absolute right-0 top-full mt-1 w-32 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 py-1"
+              className="absolute right-0 top-full mt-1 w-32 bg-ds-surface-elevated border border-ds-border rounded-sm shadow-xl z-50 py-1"
               role="listbox"
               aria-label={t('header.selectLanguage')}
             >
@@ -176,7 +176,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           </IconButton>
 
           {notifOpen && (
-            <div className="absolute right-0 top-full mt-1 w-80 bg-slate-800 border border-white/5 rounded-sm shadow-xl z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 w-80 bg-ds-surface-elevated border border-ds-border rounded-sm shadow-xl z-50 overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
                 <span className="text-xs font-medium text-white">{t('header.notifications')}</span>

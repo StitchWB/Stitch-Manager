@@ -1,32 +1,15 @@
-import { useMemo, useState } from 'react';
+import type { IMAPConfig } from '@/stores/registration/types';
 import {
-  emailInboxConnect,
-  emailInboxDelete,
-  emailInboxDisconnect,
-  emailInboxGetCapabilities,
-  emailInboxList,
-  emailInboxMarkAsRead,
-  emailInboxWaitForEmail,
-  type EmailMailboxSession,
-  type EmailMessage,
-  type EmailProviderType,
-  type WaitForEmailOptions,
-} from '../../lib/tauri/modules/emailInbox';
-import type { IMAPConfig } from '../../stores/registration/types';
-import { Input, Select, Button, Checkbox } from '@/components/ui';
-import { Mail, Search, Timer, Trash2, Eye } from 'lucide-react';
-import { cn } from '../../lib/utils';
+  CollapsibleGroup,
+  ExpandAllToggle,
+} from '@/components/ui';
 import {
-  buildEmailQuery,
-  buildImapConnectInput,
-  buildMailTmConnectInput,
-  buildWaitForEmailOptions,
-  buildImapAccountIdFromRegistration,
-  deriveImapFieldsFromRegistration,
-  markMessageAsReadLocal,
-  removeMessageLocal,
-  upsertMessageById,
-} from '@/lib/mail/runtime';
+  useInboxTab,
+  InboxProviderSection,
+  InboxFiltersSection,
+  InboxAdvancedSection,
+  InboxMessagesSection,
+} from './inbox';
 
 interface InboxTabProps {
   imap: IMAPConfig;
@@ -35,326 +18,108 @@ interface InboxTabProps {
 }
 
 export function InboxTab({ imap, disabled, onLog }: InboxTabProps) {
-  const [provider, setProvider] = useState<EmailProviderType>('imap');
-  const [mailtmAddress, setMailtmAddress] = useState('');
-  const [mailtmPassword, setMailtmPassword] = useState('');
-  const [mailtmBaseUrl, setMailtmBaseUrl] = useState('');
-  const [session, setSession] = useState<EmailMailboxSession | null>(null);
-  const [messages, setMessages] = useState<EmailMessage[]>([]);
-  const [isBusy, setIsBusy] = useState(false);
-  const [queryFrom, setQueryFrom] = useState('');
-  const [querySubject, setQuerySubject] = useState('');
-  const [queryBody, setQueryBody] = useState('');
-  const [unreadOnly, setUnreadOnly] = useState(true);
-  const [timeoutMs, setTimeoutMs] = useState(120000);
-  const [pollIntervalMs, setPollIntervalMs] = useState(3000);
-  const [dedupeKey, setDedupeKey] = useState('ui');
-
-  const canConnect = useMemo(() => {
-    if (provider === 'mail_tm') {
-      return Boolean(mailtmAddress.trim() && mailtmPassword.trim());
-    }
-    const { host: server, username: user, password: pass } = deriveImapFieldsFromRegistration(imap);
-    return Boolean(server?.trim() && user?.trim() && pass?.trim());
-  }, [provider, mailtmAddress, mailtmPassword, imap]);
-
-  const buildQuery = () =>
-    buildEmailQuery({
-      from: queryFrom,
-      subjectContains: querySubject,
-      bodyContains: queryBody,
-      unreadOnly,
-      limit: 50,
-    });
-
-  const log = (level: 'info' | 'warn' | 'error' | 'success' | 'debug', message: string) => {
-    onLog?.(level, `[Inbox] ${message}`);
-  };
-
-  const handleConnect = async () => {
-    if (!canConnect || disabled) return;
-    setIsBusy(true);
-    try {
-      if (session) {
-        await emailInboxDisconnect(session.sessionId);
-      }
-
-      const input =
-        provider === 'mail_tm'
-          ? buildMailTmConnectInput({
-              accountId: `mailtm:${mailtmAddress}`,
-              readOnly: false,
-              credentials: {
-                address: mailtmAddress,
-                password: mailtmPassword,
-                baseUrl: mailtmBaseUrl,
-              },
-            })
-          : buildImapConnectInput({
-              accountId: buildImapAccountIdFromRegistration(imap),
-              mailbox: 'INBOX',
-              readOnly: false,
-              credentials: deriveImapFieldsFromRegistration(imap),
-            });
-
-      const nextSession = await emailInboxConnect(input);
-      const caps = await emailInboxGetCapabilities(nextSession.sessionId);
-      setSession(nextSession);
-      setMessages([]);
-      log(
-        'success',
-        `Connected to ${nextSession.provider}. delete=${caps.canDelete}, markAsRead=${caps.canMarkAsRead}`
-      );
-    } catch (error) {
-      log('error', `Connect failed: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    if (!session) return;
-    setIsBusy(true);
-    try {
-      await emailInboxDisconnect(session.sessionId);
-      setSession(null);
-      setMessages([]);
-      log('info', 'Disconnected');
-    } catch (error) {
-      log('error', `Disconnect failed: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleList = async () => {
-    if (!session) return;
-    setIsBusy(true);
-    try {
-      const list = await emailInboxList(session.sessionId, buildQuery());
-      setMessages(list);
-      log('info', `Loaded ${list.length} message(s)`);
-    } catch (error) {
-      log('error', `List failed: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleWait = async () => {
-    if (!session) return;
-    setIsBusy(true);
-    try {
-      const waitOptions: WaitForEmailOptions = buildWaitForEmailOptions({
-        timeoutMs,
-        pollIntervalMs,
-        dedupeKey,
-      });
-      const message = await emailInboxWaitForEmail(session.sessionId, buildQuery(), waitOptions);
-      setMessages(prev => upsertMessageById(prev, message));
-      log('success', `Email received: ${message.subject || '(no subject)'}`);
-    } catch (error) {
-      log('warn', `Wait finished: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleMarkAsRead = async (messageId: string) => {
-    if (!session) return;
-    try {
-      await emailInboxMarkAsRead(session.sessionId, messageId);
-      setMessages(prev => markMessageAsReadLocal(prev, messageId));
-      log('info', `Marked as read: ${messageId}`);
-    } catch (error) {
-      log('warn', `Mark as read failed: ${String(error)}`);
-    }
-  };
-
-  const handleDelete = async (messageId: string) => {
-    if (!session) return;
-    try {
-      await emailInboxDelete(session.sessionId, messageId);
-      setMessages(prev => removeMessageLocal(prev, messageId));
-      log('info', `Deleted message: ${messageId}`);
-    } catch (error) {
-      log('warn', `Delete failed: ${String(error)}`);
-    }
-  };
+  const {
+    provider,
+    setProvider,
+    mailtmAddress,
+    setMailtmAddress,
+    mailtmPassword,
+    setMailtmPassword,
+    mailtmBaseUrl,
+    setMailtmBaseUrl,
+    canConnect,
+    session,
+    messages,
+    isBusy,
+    queryFrom,
+    setQueryFrom,
+    querySubject,
+    setQuerySubject,
+    queryBody,
+    setQueryBody,
+    unreadOnly,
+    setUnreadOnly,
+    timeoutMs,
+    setTimeoutMs,
+    pollIntervalMs,
+    setPollIntervalMs,
+    dedupeKey,
+    setDedupeKey,
+    allExpanded,
+    toggleAll,
+    handleConnect,
+    handleDisconnect,
+    handleList,
+    handleWait,
+    handleMarkAsRead,
+    handleDelete,
+  } = useInboxTab({ imap, disabled, onLog });
 
   return (
-    <div className="space-y-4">
-      <div className="card border border-white/10 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-white text-sm font-semibold">
-          <Mail className="w-4 h-4" /> Inbox Provider
-        </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <ExpandAllToggle allExpanded={allExpanded} onToggle={toggleAll} />
+      </div>
 
-        <Select
-          label="Provider"
-          value={provider}
-          onValueChange={value => setProvider(value as EmailProviderType)}
-          options={[
-            { value: 'imap', label: 'IMAP' },
-            { value: 'mail_tm', label: 'Mail.tm' },
-          ]}
-          disabled={disabled || isBusy || Boolean(session)}
+      <CollapsibleGroup gap="sm">
+        <InboxProviderSection
+          provider={provider}
+          onProviderChange={setProvider}
+          mailtmAddress={mailtmAddress}
+          onMailtmAddressChange={setMailtmAddress}
+          mailtmPassword={mailtmPassword}
+          onMailtmPasswordChange={setMailtmPassword}
+          mailtmBaseUrl={mailtmBaseUrl}
+          onMailtmBaseUrlChange={setMailtmBaseUrl}
+          session={session}
+          canConnect={canConnect}
+          isBusy={isBusy}
+          disabled={disabled}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          allExpanded={allExpanded}
         />
 
-        {provider === 'mail_tm' && (
-          <div className="grid grid-cols-1 gap-3">
-            <Input
-              label="Mail.tm address"
-              value={mailtmAddress}
-              onChange={e => setMailtmAddress(e.target.value)}
-              placeholder="name@domain"
-              disabled={disabled || isBusy || Boolean(session)}
-            />
-            <Input
-              label="Mail.tm password"
-              type="password"
-              value={mailtmPassword}
-              onChange={e => setMailtmPassword(e.target.value)}
-              placeholder="password"
-              disabled={disabled || isBusy || Boolean(session)}
-            />
-            <Input
-              label="Mail.tm base URL (optional)"
-              value={mailtmBaseUrl}
-              onChange={e => setMailtmBaseUrl(e.target.value)}
-              placeholder="https://api.mail.tm"
-              disabled={disabled || isBusy || Boolean(session)}
-            />
-          </div>
-        )}
+        <InboxFiltersSection
+          queryFrom={queryFrom}
+          onQueryFromChange={setQueryFrom}
+          querySubject={querySubject}
+          onQuerySubjectChange={setQuerySubject}
+          queryBody={queryBody}
+          onQueryBodyChange={setQueryBody}
+          unreadOnly={unreadOnly}
+          onUnreadOnlyChange={setUnreadOnly}
+          session={session}
+          isBusy={isBusy}
+          disabled={disabled}
+          onList={handleList}
+          allExpanded={allExpanded}
+        />
 
-        <div className="flex gap-2">
-          <Button
-            onClick={handleConnect}
-            disabled={!canConnect || disabled || isBusy || Boolean(session)}
-          >
-            Connect
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={handleDisconnect}
-            disabled={!session || isBusy || disabled}
-          >
-            Disconnect
-          </Button>
-        </div>
+        <InboxAdvancedSection
+          timeoutMs={timeoutMs}
+          onTimeoutMsChange={setTimeoutMs}
+          pollIntervalMs={pollIntervalMs}
+          onPollIntervalMsChange={setPollIntervalMs}
+          dedupeKey={dedupeKey}
+          onDedupeKeyChange={setDedupeKey}
+          session={session}
+          isBusy={isBusy}
+          disabled={disabled}
+          onWait={handleWait}
+          allExpanded={allExpanded}
+        />
 
-        {session && (
-          <div className="text-xs text-slate-400">
-            session: <span className="text-slate-200">{session.sessionId}</span>
-          </div>
-        )}
-      </div>
-
-      <div className={cn('card border border-white/10 p-4 space-y-3', !session && 'opacity-60')}>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Input
-            label="From contains"
-            value={queryFrom}
-            onChange={e => setQueryFrom(e.target.value)}
-            disabled={!session || disabled || isBusy}
-          />
-          <Input
-            label="Subject contains"
-            value={querySubject}
-            onChange={e => setQuerySubject(e.target.value)}
-            disabled={!session || disabled || isBusy}
-          />
-          <Input
-            label="Body contains"
-            value={queryBody}
-            onChange={e => setQueryBody(e.target.value)}
-            disabled={!session || disabled || isBusy}
-          />
-          <div className="flex items-end">
-            <Checkbox
-              checked={unreadOnly}
-              onChange={e => setUnreadOnly(e.target.checked)}
-              disabled={!session || disabled || isBusy}
-              label="Unread only"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Input
-            label="Timeout ms"
-            type="number"
-            value={String(timeoutMs)}
-            onChange={e => setTimeoutMs(Number(e.target.value) || 120000)}
-            disabled={!session || disabled || isBusy}
-          />
-          <Input
-            label="Poll interval ms"
-            type="number"
-            value={String(pollIntervalMs)}
-            onChange={e => setPollIntervalMs(Number(e.target.value) || 3000)}
-            disabled={!session || disabled || isBusy}
-          />
-          <Input
-            label="Dedupe key"
-            value={dedupeKey}
-            onChange={e => setDedupeKey(e.target.value)}
-            disabled={!session || disabled || isBusy}
-          />
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <Button onClick={handleList} disabled={!session || disabled || isBusy}>
-            <Search className="w-4 h-4" /> List
-          </Button>
-          <Button
-            onClick={handleWait}
-            disabled={!session || disabled || isBusy}
-            variant="secondary"
-          >
-            <Timer className="w-4 h-4" /> Wait for email
-          </Button>
-        </div>
-      </div>
-
-      <div className="card border border-white/10 p-4 space-y-3">
-        <div className="text-sm font-semibold text-white">Messages ({messages.length})</div>
-        <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
-          {messages.map(message => (
-            <div key={message.id} className="rounded-lg border border-white/10 p-3 space-y-2">
-              <div className="text-xs text-slate-400">{message.receivedAt}</div>
-              <div className="text-sm text-white font-medium truncate">
-                {message.subject || '(no subject)'}
-              </div>
-              <div className="text-xs text-slate-300">from: {message.from?.email || '-'}</div>
-              <div className="text-xs text-slate-400 line-clamp-2">
-                {message.text || message.html || ''}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleMarkAsRead(message.id)}
-                  disabled={!session || isBusy || message.isRead}
-                >
-                  <Eye className="w-3.5 h-3.5" /> Mark read
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(message.id)}
-                  disabled={!session || isBusy}
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                </Button>
-              </div>
-            </div>
-          ))}
-          {messages.length === 0 && (
-            <div className="text-xs text-slate-500">No messages loaded</div>
-          )}
-        </div>
-      </div>
+        <InboxMessagesSection
+          messages={messages}
+          session={session}
+          isBusy={isBusy}
+          disabled={disabled}
+          onMarkAsRead={handleMarkAsRead}
+          onDelete={handleDelete}
+          allExpanded={allExpanded}
+        />
+      </CollapsibleGroup>
     </div>
   );
 }

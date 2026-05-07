@@ -26,7 +26,6 @@ import { useAccountsPageLifecycle } from '../hooks/useAccountsPageLifecycle';
 import { useConstrainSelectionToVisibleAccounts } from '../hooks/useConstrainSelectionToVisibleAccounts';
 import { useAccountsVisibleColumnsState } from '../hooks/useAccountsVisibleColumnsState';
 import { AccountsToolbar } from '../components/accounts/AccountsToolbar';
-import { AccountsFiltersRail } from '../components/accounts/AccountsFiltersRail';
 import { SheetsConfigPanel } from '../components/accounts/SheetsConfigPanel';
 import { AccountsMainPanels } from '../components/accounts/AccountsMainPanels';
 import { AccountsErrorBanner } from '../components/accounts/AccountsErrorBanner';
@@ -209,7 +208,7 @@ export default function Accounts() {
     [deleteAccount, fetchAccounts]
   );
 
-  const { filteredAccounts, filteredAccountIds, expiredAccountIds, providerCounts, expiredCount } =
+  const { filteredAccounts, filteredAccountIds, expiredAccountIds, expiredCount, providerCounts } =
     useAccountsListViewModel({
       accounts: storeAccounts,
       providerFilter,
@@ -429,20 +428,12 @@ export default function Accounts() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0c] font-sans">
+    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base font-sans">
       <Header title={t('accounts.title')} icon={<Users size={18} />} />
 
       <div className="flex-1 flex overflow-hidden">
-        <AccountsFiltersRail
-          providerFilter={providerFilter}
-          statusFilter={statusFilter}
-          providerCounts={providerCounts}
-          onProviderFilterChange={handleProviderFilterChange}
-          onStatusFilterChange={handleStatusFilterChange}
-        />
-
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden p-6">
           <AccountsToolbar
             resolvedViewMode={resolvedViewMode}
             showAccountsModes={showAccountsModes}
@@ -450,10 +441,12 @@ export default function Accounts() {
             accountsCount={storeAccounts.length}
             profilesCount={profileAliases.length}
             searchQuery={searchQuery}
+            providerFilter={providerFilter}
             statusFilter={statusFilter}
             tagFilter={tagFilter}
             relationFilter={relationFilter}
             quotaFilter={quotaFilter}
+            providerCounts={providerCounts}
             profileListFilter={profileListFilter}
             profileOpenTarget={profileOpenTarget}
             profileCustomUrl={profileCustomUrl}
@@ -471,6 +464,7 @@ export default function Accounts() {
             onEntityFilterChange={handleEntityFilterChange}
             onViewModeChange={handleViewModeChange}
             onSearchQueryChange={handleSearchQueryChange}
+            onProviderFilterChange={handleProviderFilterChange}
             onStatusFilterChange={handleStatusFilterChange}
             onTagFilterChange={handleTagFilterChange}
             onRelationFilterChange={handleRelationFilterChange}
@@ -542,8 +536,8 @@ export default function Accounts() {
               loading={loading}
               searchQuery={searchQuery}
               statusFilter={statusFilter}
-              quotaFilter={quotaFilter}
-              relationFilter={relationFilter}
+            quotaFilter={quotaFilter}
+            relationFilter={relationFilter}
               visibleColumns={visibleColumns}
               baseAccountsTableProps={{
                 selectedIds,
@@ -596,6 +590,10 @@ export default function Accounts() {
               onRefreshAll={handleRefreshAll}
               isRefreshing={isBulkRefreshing}
               refreshProgress={bulkProgress}
+              onCreateProfiles={handleCreateProfilesForSelected}
+              onOpenProfileSession={() => handleBatchProfileAction('open')}
+              onConfirmProfileSession={() => handleBatchProfileAction('confirm')}
+              onClearProfileSession={() => handleBatchProfileAction('clear')}
             />
           </div>
         </div>

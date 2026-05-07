@@ -94,7 +94,7 @@ export default function Mail() {
   }, [loadFolders, session]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
       <Header title={t('mail.title')} subtitle={t('mail.subtitle')} icon={<MailIcon size={18} />} />
 
       <div className="flex-1 min-h-0 overflow-hidden px-4 pb-4 md:px-6 md:pb-6">

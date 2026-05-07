@@ -18,7 +18,7 @@ export function AiProvidersSidebar({
   onSelectProvider,
 }: AiProvidersSidebarProps) {
   return (
-    <aside className="w-[200px] lg:w-[220px] shrink-0 bg-[#111116]/50 backdrop-blur-md border-r border-white/5 flex flex-col overflow-hidden hidden md:flex">
+    <aside className="w-[200px] lg:w-[220px] shrink-0 bg-ds-surface-overlay/50 backdrop-blur-md border-r border-white/5 flex flex-col overflow-hidden hidden md:flex">
       <div className="p-3 flex-1 overflow-y-auto">
         <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
           {t('aiHub.labels.providers')}

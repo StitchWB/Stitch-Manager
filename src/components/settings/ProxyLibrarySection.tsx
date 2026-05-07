@@ -8,6 +8,7 @@ import {
   Checkbox,
   Input,
   Select,
+  StatusBadge,
   Textarea,
   Toggle,
 } from '@/components/ui';
@@ -684,17 +685,15 @@ export function ProxyLibrarySection() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <div
-                            className={`text-[11px] px-2 py-1 rounded border ${
-                              entry.enabled
-                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                                : 'border-slate-500/20 bg-slate-500/10 text-slate-300'
-                            }`}
+                          <StatusBadge
+                            status={entry.enabled ? 'active' : 'inactive'}
+                            size="sm"
+                            className="text-[11px]"
                           >
                             {entry.enabled
                               ? t('proxyLibrary.statusEnabled')
                               : t('proxyLibrary.statusDisabled')}
-                          </div>
+                          </StatusBadge>
                           <Button
                             variant="secondary"
                             className="h-8 px-2"

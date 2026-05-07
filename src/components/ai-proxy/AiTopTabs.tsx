@@ -45,7 +45,7 @@ export function AiTopTabs() {
   const current = activeTab(location.pathname);
 
   return (
-    <div className="px-6 py-3 border-b border-white/5 bg-[#0a0a0c]/70 backdrop-blur-xl sticky top-0 z-20">
+    <div className="px-6 py-3 border-b border-white/5 bg-ds-surface-base/70 backdrop-blur-xl sticky top-0 z-20">
       <div className="flex flex-wrap items-center gap-2">
         {AI_TABS.map(tab => (
           <TabButton

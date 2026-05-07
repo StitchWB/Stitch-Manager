@@ -134,7 +134,7 @@ export default function Antigravity() {
   }, [oauthSession, isPolling, pollOnce, refreshAuthFiles]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
       <Header
         title={t('aiHub.sections.antigravity.title')}
         subtitle={t('aiHub.sections.antigravity.subtitle')}

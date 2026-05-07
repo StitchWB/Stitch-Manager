@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input, Select } from '@/components/ui';
+import { Button, Checkbox, FormGrid, Input, Select } from '@/components/ui';
 import type {
   ComposedFlow,
   ComposedFlowNode,
@@ -42,7 +42,7 @@ export function ComposerNodeEditor({
           onChange={e => updateNode(node.id, n => ({ ...n, name: e.target.value }))}
           className="h-9"
         />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <FormGrid responsive>
           <Input
             label="Alias"
             value={node.context.alias ?? ''}
@@ -77,9 +77,9 @@ export function ComposerNodeEditor({
             }
             className="h-9"
           />
-        </div>
+        </FormGrid>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <FormGrid responsive>
           <Input
             label="Context login"
             value={node.context.credentials?.login ?? ''}
@@ -120,7 +120,7 @@ export function ComposerNodeEditor({
             }
             className="h-9"
           />
-        </div>
+        </FormGrid>
 
         <Select
           label="Success next node"
@@ -215,7 +215,7 @@ export function ComposerNodeEditor({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <FormGrid responsive>
         <Input
           label="Name"
           value={node.name}
@@ -233,9 +233,9 @@ export function ComposerNodeEditor({
             })
           }
         />
-      </div>
+      </FormGrid>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <FormGrid responsive>
         <Input
           label="Start URL override"
           value={node.startUrl ?? ''}
@@ -264,9 +264,9 @@ export function ComposerNodeEditor({
           }
           className="h-9"
         />
-      </div>
+      </FormGrid>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <FormGrid responsive>
         <Select
           label="Success next node"
           value={node.nextNodeId ?? ''}
@@ -295,9 +295,9 @@ export function ComposerNodeEditor({
             })
           }
         />
-      </div>
+      </FormGrid>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <FormGrid responsive>
         <Input
           label="Alias override"
           value={node.contextOverride?.alias ?? ''}
@@ -328,11 +328,11 @@ export function ComposerNodeEditor({
                 };
               })
             }
-          />
+            />
         </div>
-      </div>
+      </FormGrid>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <FormGrid responsive>
         <Input
           label="Login override"
           value={node.contextOverride?.credentials?.login ?? ''}
@@ -373,7 +373,7 @@ export function ComposerNodeEditor({
           }
           className="h-9"
         />
-      </div>
+      </FormGrid>
 
       <div className="rounded-lg border border-white/10 bg-black/20 p-2 space-y-2">
         <div className="flex items-center justify-between">
@@ -388,7 +388,7 @@ export function ComposerNodeEditor({
         ) : (
           bindingEntries.map(([key, binding]) => (
             <div key={key} className="rounded-md border border-white/10 bg-black/20 p-2 space-y-2">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <FormGrid columns={4} responsive>
                 <Input
                   label="Variable"
                   value={key}
@@ -464,7 +464,7 @@ export function ComposerNodeEditor({
                 ) : null}
 
                 {binding.kind === 'list' ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:col-span-2">
+                  <FormGrid responsive className="md:col-span-2">
                     <Select
                       label="List source"
                       value={binding.sourceId}
@@ -493,7 +493,7 @@ export function ComposerNodeEditor({
                         })
                       }
                     />
-                  </div>
+                  </FormGrid>
                 ) : null}
 
                 <div className="flex items-end">
@@ -501,7 +501,7 @@ export function ComposerNodeEditor({
                     Remove binding
                   </Button>
                 </div>
-              </div>
+              </FormGrid>
             </div>
           ))
         )}

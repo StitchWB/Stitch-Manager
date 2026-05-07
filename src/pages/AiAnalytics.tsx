@@ -46,7 +46,7 @@ export default function AiAnalytics() {
 
   if (loading) {
     return (
-      <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+      <div className="flex flex-col h-full overflow-hidden bg-void-base">
         <Header title={t('aiHub.analytics.title')} icon={<BarChart3 size={18} />} />
         <AiTopTabs />
         <div className="flex-1 flex items-center justify-center">
@@ -58,7 +58,7 @@ export default function AiAnalytics() {
 
   if (!dailyStats) {
     return (
-      <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+      <div className="flex flex-col h-full overflow-hidden bg-void-base">
         <Header title={t('aiHub.analytics.title')} icon={<BarChart3 size={18} />} />
         <AiTopTabs />
         <div className="flex-1 overflow-auto p-6">
@@ -73,7 +73,7 @@ export default function AiAnalytics() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+    <div className="flex flex-col h-full overflow-hidden bg-void-base">
       <Header
         title={t('aiHub.analytics.title')}
         subtitle={t('aiHub.analytics.subtitle')}

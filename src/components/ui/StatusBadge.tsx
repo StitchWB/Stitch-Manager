@@ -2,7 +2,7 @@ import { cn } from '../../lib/utils';
 import { STATUS_COLORS } from '../../constants/colors';
 
 type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'default' | 'neutral';
-type StatusType = 'active' | 'inactive' | 'error' | 'warning' | 'success' | 'pending';
+type StatusType = 'active' | 'inactive' | 'error' | 'warning' | 'success' | 'pending' | 'info' | 'idle';
 
 interface StatusBadgePropsOld {
   variant: BadgeVariant;
@@ -18,6 +18,7 @@ interface StatusBadgePropsNew {
   withPulse?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  children?: React.ReactNode;
 }
 
 type StatusBadgeProps = StatusBadgePropsOld | StatusBadgePropsNew;
@@ -55,6 +56,8 @@ const statusStyles: Record<StatusType, string> = {
   warning: `${STATUS_COLORS.warning.bgOpacity} ${STATUS_COLORS.warning.text}`,
   inactive: `${STATUS_COLORS.inactive.bgOpacity} ${STATUS_COLORS.inactive.text}`,
   pending: `${STATUS_COLORS.info.bgOpacity} ${STATUS_COLORS.info.text}`,
+  info: `${STATUS_COLORS.info.bgOpacity} ${STATUS_COLORS.info.text}`,
+  idle: 'bg-white/5 text-white/60',
 };
 
 const dotColors: Record<StatusType, string> = {
@@ -64,6 +67,8 @@ const dotColors: Record<StatusType, string> = {
   warning: STATUS_COLORS.warning.text.replace('text-', 'bg-'),
   inactive: STATUS_COLORS.inactive.bg,
   pending: STATUS_COLORS.info.text.replace('text-', 'bg-'),
+  info: STATUS_COLORS.info.text.replace('text-', 'bg-'),
+  idle: 'bg-slate-500',
 };
 
 const newSizeStyles: Record<'sm' | 'md' | 'lg', string> = {
@@ -85,19 +90,19 @@ function isNewProps(props: StatusBadgeProps): props is StatusBadgePropsNew {
 export function StatusBadge(props: StatusBadgeProps) {
   // New API with status prop
   if (isNewProps(props)) {
-    const { status, withDot = false, withPulse = false, size = 'md', className } = props;
-    
+    const { status, withDot = false, withPulse = false, size = 'md', className, children } = props;
+
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1.5 font-bold uppercase tracking-wide rounded-full',
+          'inline-flex items-center gap-1.5 font-bold tracking-wide rounded-full',
           statusStyles[status],
           newSizeStyles[size],
           className
         )}
       >
         {withDot && (
-          <span 
+          <span
             className={cn(
               'rounded-full',
               dotColors[status],
@@ -106,7 +111,19 @@ export function StatusBadge(props: StatusBadgeProps) {
             )}
           />
         )}
-        <span className="capitalize">{status}</span>
+        {children ?? (
+          <span className="capitalize uppercase">{
+            status === 'active' ? 'активен' :
+            status === 'inactive' ? 'неактивен' :
+            status === 'error' ? 'ошибка' :
+            status === 'warning' ? 'предупреждение' :
+            status === 'success' ? 'успешно' :
+            status === 'pending' ? 'в ожидании' :
+            status === 'info' ? 'инфо' :
+            status === 'idle' ? 'idle' :
+            status
+          }</span>
+        )}
       </span>
     );
   }

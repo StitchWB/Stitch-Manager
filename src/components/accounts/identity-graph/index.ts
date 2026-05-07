@@ -10,4 +10,8 @@ export {
 } from './IdentityGraphActiveIdentityCard';
 export { IdentityGraphIdentityCardsList } from './IdentityGraphIdentityCardsList';
 export { IdentityGraphLinkEditorDrawer } from './IdentityGraphLinkEditorDrawer';
+export { AccountRelationsSection } from './AccountRelationsSection';
+export { ProfileRelationsSection } from './ProfileRelationsSection';
+export { AuthMethodsSection } from './AuthMethodsSection';
+export { AccountAuthLinksSection } from './AccountAuthLinksSection';
 export { getServiceBadgeClass, getLinkTypeBadgeClass } from './badgeStyles';

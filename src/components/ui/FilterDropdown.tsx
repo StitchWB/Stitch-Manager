@@ -195,7 +195,7 @@ export function FilterDropdown<T = string>({
           triggerClassName
         )}
       >
-        {icon && <span className="w-3 h-3">{icon}</span>}
+        {icon && <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">{icon}</span>}
         {label && <span>{label}:</span>}
         <span>{selectedOption?.label || placeholder || 'Select...'}</span>
         {selectedOption?.count !== undefined && (

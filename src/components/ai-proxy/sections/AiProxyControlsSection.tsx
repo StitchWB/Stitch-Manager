@@ -3,7 +3,7 @@ import { Copy, Power, RefreshCw } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { ProxySettings, ProxyStatus } from '../../../types/generated';
 import { t } from '../../../lib/i18n';
-import { Button, Input, Select, Toggle } from '@/components/ui';
+import { Button, FormGrid, Input, Select, Toggle } from '@/components/ui';
 
 interface AiProxyControlsSectionProps {
   visible: boolean;
@@ -58,7 +58,7 @@ export function AiProxyControlsSection({
   const isExternallyRunning = Boolean(proxyStatus?.running && !proxyStatus?.managedByApp);
 
   return (
-    <div className="mb-4 bg-[#111116]/80 border border-white/10 rounded-xl p-4 md:p-6">
+    <div className="mb-4 bg-ds-surface-overlay/80 border border-white/10 rounded-xl p-4 md:p-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -90,7 +90,7 @@ export function AiProxyControlsSection({
 
           <div className="mt-2 text-xs text-slate-400">{t('aiHub.proxy.summary')}</div>
 
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+          <FormGrid responsive className="mt-3">
             <div className="flex items-center justify-between gap-2 bg-black/30 border border-white/10 rounded-lg px-3 py-2">
               <div className="min-w-0">
                 <div className="text-[10px] uppercase tracking-wider text-slate-500">
@@ -128,7 +128,7 @@ export function AiProxyControlsSection({
                 {t('aiHub.actions.copy')}
               </Button>
             </div>
-          </div>
+          </FormGrid>
 
           {showProxyActions && (
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-2 items-end">
