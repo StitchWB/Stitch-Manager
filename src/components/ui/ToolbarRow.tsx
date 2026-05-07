@@ -8,6 +8,6 @@ interface ToolbarRowProps {
 
 export function ToolbarRow({ children, className }: ToolbarRowProps) {
   return (
-    <div className={cn('flex flex-wrap items-center gap-2 min-w-0', className)}>{children}</div>
+    <div className={cn('flex items-center gap-2 min-w-0', className)}>{children}</div>
   );
 }

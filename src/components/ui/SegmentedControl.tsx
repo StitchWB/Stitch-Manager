@@ -14,6 +14,7 @@ export interface SegmentedControlProps {
   className?: string;
   size?: 'sm' | 'md';
   stretch?: boolean;
+  responsiveLabels?: boolean;
 }
 
 export function SegmentedControl({
@@ -23,6 +24,7 @@ export function SegmentedControl({
   className,
   size = 'md',
   stretch = true,
+  responsiveLabels = false,
 }: SegmentedControlProps) {
   return (
     <div
@@ -63,7 +65,7 @@ export function SegmentedControl({
                 {opt.icon}
               </span>
             )}
-            <span className="relative">{opt.label}</span>
+            <span className={cn('relative', responsiveLabels && 'hidden sm:inline')}>{opt.label}</span>
           </button>
         );
       })}

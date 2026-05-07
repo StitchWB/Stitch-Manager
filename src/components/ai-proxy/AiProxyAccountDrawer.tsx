@@ -154,7 +154,7 @@ export function AiProxyAccountDrawer({
           'transform transition-transform duration-150 ease-out',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
-        style={{ background: '#020617' }}
+        style={{ background: 'var(--color-ds-surface-overlay)' }}
         role="dialog"
         aria-modal="true"
         aria-label="AI Proxy account details"

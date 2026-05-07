@@ -1,12 +1,16 @@
-import { Settings2, Eye, EyeOff, Timer, Keyboard, MessageSquare, CreditCard } from 'lucide-react';
+import { useState } from 'react';
+import {
+  Settings2,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';
-
-import { t } from '../../lib/i18n';
 import type { ProviderName } from '../../types/ui';
 import type { LogVerbosity } from '../../constants/logging';
 import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
-import { RangeSlider, SectionHeader, Select, Toggle } from '@/components/ui';
+import { GlassCard, Select, Toggle, Textarea, Badge } from '@/components/ui';
 import { NumberInput } from '../ui/NumberInput';
 
 interface EngineTabProps {
@@ -48,6 +52,91 @@ interface EngineTabProps {
   disabled?: boolean;
 }
 
+// Compact collapsible group — minimal chrome, persists to localStorage
+function CompactGroup({
+  title,
+  children,
+  defaultExpanded = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
+}) {
+  const storageKey = `engine-tab-expanded-${title}`;
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored !== null ? stored === 'true' : defaultExpanded;
+    } catch {
+      return defaultExpanded;
+    }
+  });
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      localStorage.setItem(storageKey, String(next));
+    } catch {
+      // ignore
+    }
+  };
+  return (
+    <div className="border-t border-white/[0.06] first:border-0">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center justify-between py-1.5 group"
+      >
+        <span className="text-[10px] font-semibold text-slate-600 tracking-wide group-hover:text-slate-500 transition-colors">
+          {title}
+        </span>
+        {expanded ? (
+          <ChevronUp className="w-3 h-3 text-slate-700 group-hover:text-slate-500" />
+        ) : (
+          <ChevronDown className="w-3 h-3 text-slate-700 group-hover:text-slate-500" />
+        )}
+      </button>
+      <div
+        className={cn(
+          'overflow-hidden transition-all duration-200',
+          expanded ? 'max-h-[800px] opacity-100 pb-2' : 'max-h-0 opacity-0'
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Inline toggle — label + toggle close together
+function InlineToggle({
+  label,
+  tooltip,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  tooltip?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  const content = (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-slate-400">{label}</span>
+      <Toggle
+        label=""
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        tooltip={tooltip}
+      />
+    </div>
+  );
+  return tooltip ? <Tooltip content={tooltip}>{content}</Tooltip> : content;
+}
+
 export function EngineTab({
   provider,
   useRegistrationV2,
@@ -87,306 +176,231 @@ export function EngineTab({
   disabled,
 }: EngineTabProps) {
   return (
-    <div className="space-y-4">
-      {/* Registration V2 Toggle - Only for AWS/Kiro */}
-      {provider === 'aws' && (
-        <div
-          className="rounded-lg p-3"
-          style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.05)',
-          }}
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-              <Settings2
-                className={cn('w-4 h-4', useRegistrationV2 ? 'text-indigo-400' : 'text-slate-500')}
+    <div className="flex flex-col gap-2">
+      {/* ===== CRITICAL SETTINGS — always visible, compact, single card ===== */}
+      <GlassCard className="p-2">
+        <div className="flex flex-col gap-1.5">
+          {/* Row 1: Headless | Speed | Delay | Password */}
+          <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-2 items-center">
+            <InlineToggle
+              label="Без окна"
+              checked={headless}
+              onChange={onHeadlessChange}
+              disabled={disabled}
+              tooltip="Запуск браузера без видимого окна. Ускоряет, но может быть обнаружен."
+            />
+            <Tooltip content="Скорость выполнения операций">
+              <NumberInput
+                label=""
+                value={speedMultiplier}
+                onChange={onSpeedMultiplierChange}
+                min={0.5}
+                max={2}
+                step={0.1}
+                unit="×"
+                className="w-full"
+              />
+            </Tooltip>
+            <Tooltip content="Задержка между регистрациями">
+              <NumberInput
+                label=""
+                value={delayBetweenAccounts}
+                onChange={onDelayBetweenAccountsChange}
+                min={1}
+                max={10}
+                step={1}
+                unit="сек"
+                className="w-full"
+              />
+            </Tooltip>
+            <Tooltip content="Длина генерируемого пароля">
+              <NumberInput
+                label=""
+                value={passwordLength}
+                onChange={onPasswordLengthChange}
+                min={12}
+                max={24}
+                step={1}
+                unit="сим"
+                className="w-full"
+              />
+            </Tooltip>
+          </div>
+
+          {/* Row 2: Logs + Debug toggle */}
+          <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 shrink-0">Логи</span>
+              <Select
+                value={logVerbosity}
+                onChange={e => onLogVerbosityChange(e.target.value as LogVerbosity)}
+                options={LOG_VERBOSITY_OPTIONS.map(opt => ({
+                  value: opt.value,
+                  label: opt.label,
+                }))}
+                disabled={disabled}
+                containerClassName="flex-1"
+                shellClassName="h-8 rounded-md"
+                className="h-full py-0 px-2 pr-8 text-xs"
               />
             </div>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-slate-200 flex items-center gap-2">
-                Registration V2
-                <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                  NEW
-                </span>
-              </div>
-              <div className="text-[10px] text-slate-500">
-                Rust-based flow with better error handling
-              </div>
-            </div>
+            <InlineToggle
+              label="Debug"
+              checked={showDebugLogsInConsole}
+              onChange={onShowDebugLogsInConsoleChange}
+              disabled={disabled}
+              tooltip="Показывать технические детали в консоли браузера"
+            />
           </div>
-          <Toggle
-            label="Enable Registration V2"
-            checked={useRegistrationV2}
-            onChange={onUseRegistrationV2Change}
-            disabled={disabled}
-          />
+        </div>
+      </GlassCard>
+
+      {/* Warning for OpenAI */}
+      {provider === 'openai' && headless && (
+        <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20">
+          <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+          <span className="text-[11px] text-amber-300">
+            OpenAI может требовать CAPTCHA — рекомендуется видимый браузер
+          </span>
         </div>
       )}
 
-      {/* Headless Mode */}
-      <div
-        className="rounded-lg p-3"
-        style={{
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.05)',
-        }}
-      >
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-            {headless ? (
-              <EyeOff className="w-4 h-4 text-indigo-400" />
-            ) : (
-              <Eye className="w-4 h-4 text-slate-500" />
+      {/* ===== ADVANCED — collapsible groups, flat, minimal ===== */}
+      <div className="flex flex-col">
+        <CompactGroup title="Таймауты">
+          <div className="grid grid-cols-3 gap-x-2 gap-y-1">
+            <NumberInput
+              label="Email"
+              value={verificationCodeTimeout}
+              onChange={onVerificationCodeTimeoutChange}
+              min={60}
+              max={180}
+              step={10}
+              unit="сек"
+              disabled={disabled}
+              tooltip="Ожидание верификации email"
+            />
+            <NumberInput
+              label="OAuth"
+              value={oauthCallbackTimeout}
+              onChange={onOauthCallbackTimeoutChange}
+              min={30}
+              max={180}
+              step={10}
+              unit="сек"
+              disabled={disabled}
+              tooltip="Ожидание OAuth авторизации"
+            />
+            <NumberInput
+              label="Доступ"
+              value={allowAccessWait}
+              onChange={onAllowAccessWaitChange}
+              min={60}
+              max={300}
+              step={10}
+              unit="сек"
+              disabled={disabled}
+              tooltip="Ожидание страницы разрешения"
+            />
+            <NumberInput
+              label="Страница"
+              value={pageLoadTimeout}
+              onChange={onPageLoadTimeoutChange}
+              min={2}
+              max={15}
+              step={1}
+              unit="сек"
+              disabled={disabled}
+              tooltip="Загрузка страницы"
+            />
+            <NumberInput
+              label="Элемент"
+              value={elementWaitTimeout}
+              onChange={onElementWaitTimeoutChange}
+              min={1}
+              max={10}
+              step={1}
+              unit="сек"
+              disabled={disabled}
+              tooltip="Появление элемента на странице"
+            />
+            <NumberInput
+              label="IMAP"
+              value={imapPollInterval}
+              onChange={onImapPollIntervalChange}
+              min={0.5}
+              max={5}
+              step={0.5}
+              unit="сек"
+              disabled={disabled}
+              tooltip="Интервал проверки почты"
+            />
+          </div>
+        </CompactGroup>
+
+        <CompactGroup title="Браузер">
+          <div className="flex gap-3">
+            <InlineToggle
+              label="Набор"
+              checked={realisticTyping}
+              onChange={onRealisticTypingChange}
+              disabled={disabled}
+              tooltip="Имитация человеческого набора с задержками"
+            />
+            <InlineToggle
+              label="Паузы"
+              checked={humanDelays}
+              onChange={onHumanDelaysChange}
+              disabled={disabled}
+              tooltip="Случайные паузы между действиями"
+            />
+            <InlineToggle
+              label="Скриншоты"
+              checked={screenshotsOnError}
+              onChange={onScreenshotsOnErrorChange}
+              disabled={disabled}
+              tooltip="Скриншоты при ошибках для отладки"
+            />
+          </div>
+        </CompactGroup>
+
+        {provider === 'fireworks' && onCardsTextChange && (
+          <CompactGroup title="Карты">
+            <Textarea
+              value={cardsText || ''}
+              onChange={e => onCardsTextChange(e.target.value)}
+              placeholder={`4242424242424242|12|2026|123\n5555555555554444|01|2027|456`}
+              rows={2}
+              disabled={disabled}
+              className="font-mono text-xs min-h-[60px]"
+            />
+            {cardsText && (
+              <div className="mt-1 text-[11px] text-slate-500">
+                {cardsText.split('\n').filter(l => l.trim()).length} карт загружено
+              </div>
             )}
-          </div>
-          <div className="flex-1">
-            <div className="text-sm font-medium text-slate-200">{t('autoReg.headless')}</div>
-            <div className="text-[10px] text-slate-500">{t('autoReg.headlessDescription')}</div>
-          </div>
-        </div>
-        <Toggle
-          label={t('autoReg.headless')}
-          checked={headless}
-          onChange={onHeadlessChange}
-          disabled={disabled}
-        />
-        {provider === 'openai' && headless && (
-          <div className="mt-2 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-md px-2 py-1">
-            OpenAI flow may require CAPTCHA/payment checks — visible browser is recommended.
-          </div>
+          </CompactGroup>
         )}
       </div>
 
-      {/* Log Verbosity */}
-      <div
-        className="rounded-lg p-3"
-        style={{
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.05)',
-        }}
-      >
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-slate-500" />
-          </div>
-          <div className="flex-1">
-            <div className="text-sm font-medium text-slate-200">{t('autoReg.logVerbosity')}</div>
-            <div className="text-[10px] text-slate-500">{t('autoReg.logVerbosityDescription')}</div>
-          </div>
-        </div>
-        <Tooltip content={t('autoReg.logVerbosityTooltip')}>
-          <Select
-            value={logVerbosity}
-            onChange={e => onLogVerbosityChange(e.target.value as LogVerbosity)}
-            options={LOG_VERBOSITY_OPTIONS.map(opt => ({
-              value: opt.value,
-              label: opt.label,
-            }))}
-            disabled={disabled}
-          />
-        </Tooltip>
-        <div className="mt-2">
-          <Toggle
-            label="Debug entries in console"
-            checked={showDebugLogsInConsole}
-            onChange={onShowDebugLogsInConsoleChange}
-            disabled={disabled}
-            tooltip="Only affects console filtering; does not change backend log verbosity"
-          />
-        </div>
-      </div>
-
-      {/* Speed & Delay Row */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Speed Multiplier */}
-        <Tooltip content={t('autoReg.tooltips.speed')}>
-          <RangeSlider
-            label={t('autoReg.speed')}
-            value={speedMultiplier}
-            onChange={onSpeedMultiplierChange}
-            min={0.5}
-            max={2}
-            step={0.1}
-            unit="x"
-            valueFormatter={v => v.toFixed(1)}
-            showMinMax
-            minLabel={t('autoReg.slow')}
-            maxLabel={t('autoReg.fast')}
-          />
-        </Tooltip>
-
-        {/* Delay Between Accounts */}
-        <Tooltip content={t('autoReg.tooltips.delay')}>
-          <RangeSlider
-            label={t('autoReg.delay')}
-            value={delayBetweenAccounts}
-            onChange={onDelayBetweenAccountsChange}
-            min={1}
-            max={10}
-            step={1}
-            unit="s"
-            showMinMax
-            minLabel="1s"
-            maxLabel="10s"
-          />
-        </Tooltip>
-      </div>
-
-      {/* Timeouts Section */}
-      <SectionHeader
-        title={t('autoReg.timeouts')}
-        icon={<Timer className="w-3.5 h-3.5 text-slate-500" />}
-      >
-        <div className="grid grid-cols-2 gap-2">
-          <NumberInput
-            label={t('autoReg.verification')}
-            value={verificationCodeTimeout}
-            onChange={onVerificationCodeTimeoutChange}
-            min={60}
-            max={180}
-            step={10}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.verification')}
-          />
-          <NumberInput
-            label={t('autoReg.oauth')}
-            value={oauthCallbackTimeout}
-            onChange={onOauthCallbackTimeoutChange}
-            min={30}
-            max={180}
-            step={10}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.oauth')}
-          />
-          <NumberInput
-            label={t('autoReg.allowAccess')}
-            value={allowAccessWait}
-            onChange={onAllowAccessWaitChange}
-            min={60}
-            max={300}
-            step={10}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.allowAccess')}
-          />
-          <NumberInput
-            label={t('autoReg.pageLoad')}
-            value={pageLoadTimeout}
-            onChange={onPageLoadTimeoutChange}
-            min={2}
-            max={15}
-            step={1}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.pageLoad')}
-          />
-          <NumberInput
-            label={t('autoReg.elementWait')}
-            value={elementWaitTimeout}
-            onChange={onElementWaitTimeoutChange}
-            min={1}
-            max={10}
-            step={1}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.elementWait')}
-          />
-          <NumberInput
-            label={t('autoReg.imapPoll')}
-            value={imapPollInterval}
-            onChange={onImapPollIntervalChange}
-            min={0.5}
-            max={5}
-            step={0.5}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.imapPoll')}
-          />
-        </div>
-      </SectionHeader>
-
-      {/* Browser Behavior Section */}
-      <SectionHeader
-        title={t('autoReg.behavior')}
-        icon={<Keyboard className="w-3.5 h-3.5 text-slate-500" />}
-      >
-        {/* Password Length */}
-        <Tooltip content={t('autoReg.tooltips.passwordLength')}>
-          <RangeSlider
-            label={t('autoReg.passwordLength')}
-            value={passwordLength}
-            onChange={onPasswordLengthChange}
-            min={12}
-            max={24}
-            step={1}
-            showMinMax={false}
-            className="mb-3"
-          />
-        </Tooltip>
-
-        {/* Toggle Switches */}
-        <div className="grid grid-cols-2 gap-2">
-          <Toggle
-            label={t('autoReg.realisticTyping')}
-            checked={realisticTyping}
-            onChange={onRealisticTypingChange}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.realisticTyping')}
-          />
-          <Toggle
-            label={t('autoReg.humanDelays')}
-            checked={humanDelays}
-            onChange={onHumanDelaysChange}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.humanDelays')}
-          />
-          <Toggle
-            label={t('autoReg.screenshots')}
-            checked={screenshotsOnError}
-            onChange={onScreenshotsOnErrorChange}
-            disabled={disabled}
-            tooltip={t('autoReg.tooltips.screenshots')}
-          />
-        </div>
-      </SectionHeader>
-
-      {/* Card Pool — Fireworks only */}
-      {provider === 'fireworks' && onCardsTextChange && (
-        <div
-          className="rounded-lg p-3"
-          style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.05)',
-          }}
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-              <CreditCard className="w-4 h-4 text-slate-500" />
+      {/* Registration V2 badge (rare, bottom) */}
+      {provider === 'aws' && (
+        <GlassCard className="p-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Settings2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-xs text-slate-400">Регистрация V2</span>
+              <Badge variant="info" size="sm" withDot>Rust</Badge>
             </div>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-slate-200">Card Pool</div>
-              <div className="text-[10px] text-slate-500">
-                One card per line: num|MM|YYYY|CVV or num,MM,YYYY,CVV
-              </div>
-            </div>
+            <Toggle
+              label=""
+              checked={useRegistrationV2}
+              onChange={onUseRegistrationV2Change}
+              disabled={disabled}
+              tooltip="Новый Rust-based поток с улучшенной обработкой ошибок"
+            />
           </div>
-          <textarea
-            value={cardsText || ''}
-            onChange={e => onCardsTextChange(e.target.value)}
-            placeholder={`4242424242424242|12|2026|123\n5555555555554444|01|2027|456`}
-            rows={4}
-            disabled={disabled}
-            className={cn(
-              'w-full rounded-md px-3 py-2 text-xs font-mono',
-              'bg-white/5 border border-white/10 text-slate-200',
-              'placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50',
-              'resize-y min-h-[60px]',
-              disabled && 'opacity-50 cursor-not-allowed'
-            )}
-          />
-          {cardsText && (
-            <div className="mt-1 text-[10px] text-slate-500">
-              {cardsText.split('\n').filter(l => l.trim()).length} card(s) loaded
-            </div>
-          )}
-        </div>
+        </GlassCard>
       )}
     </div>
   );

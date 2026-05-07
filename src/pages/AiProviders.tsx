@@ -170,7 +170,7 @@ export default function AiProviders() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+    <div className="flex flex-col h-full overflow-hidden bg-void-base">
       <Header title={sectionTitle} icon={<Zap size={18} />} />
       <AiTopTabs />
 

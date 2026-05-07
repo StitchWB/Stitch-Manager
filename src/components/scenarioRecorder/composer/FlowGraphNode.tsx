@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from 'reactflow';
 import type { ComposedFlowNode } from '@/lib/scenarioFlow/types';
+import { Badge } from '@/components/ui';
 
 export type FlowNodeBadgeTone = 'emerald' | 'amber';
 
@@ -58,14 +59,14 @@ const FlowCanvasNode = ({ data }: NodeProps<FlowCanvasNodeData>) => {
         {data.type === 'runScenario' ? 'Scenario execution' : 'Context override'}
       </div>
       {data.executed ? (
-        <div className="mt-1 inline-flex rounded-full border border-cyan-300/40 bg-cyan-500/15 px-2 py-0.5 text-[10px] text-cyan-100">
+        <Badge variant="info" size="sm" className="mt-1 normal-case tracking-normal text-[10px]">
           executed
-        </div>
+        </Badge>
       ) : null}
       {!data.executed && data.running ? (
-        <div className="mt-1 inline-flex rounded-full border border-amber-300/40 bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-100">
+        <Badge variant="warning" size="sm" className="mt-1 normal-case tracking-normal text-[10px]">
           running
-        </div>
+        </Badge>
       ) : null}
       <Handle type="target" id="in" position={Position.Left} className="!bg-slate-400/70" />
       <Handle

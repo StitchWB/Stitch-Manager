@@ -143,7 +143,7 @@ export function MailMessageList({
 
   return (
     <section className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 flex flex-col h-full min-h-[420px]">
-      <div className="sticky top-0 z-10 bg-[#0b0d14]/95 backdrop-blur border-b border-white/10 pb-2 mb-2 px-1 pt-1">
+      <div className="sticky top-0 z-10 bg-ds-surface-sunken/95 backdrop-blur border-b border-white/10 pb-2 mb-2 px-1 pt-1">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-white tracking-wide">
             {t('mail.messagesTitle')}

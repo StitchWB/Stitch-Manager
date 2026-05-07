@@ -98,7 +98,7 @@ export function AiProxyAccountsTable({
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#111116]/80 overflow-hidden">
+    <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 overflow-hidden">
       <div className="hidden lg:grid grid-cols-[34px_minmax(220px,1fr)_140px_220px_140px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 bg-black/20 sticky top-0 z-20">
         <ButtonBase
           type="button"

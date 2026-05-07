@@ -34,7 +34,7 @@ export function IdentityGraphIdentityCardsList({
         return (
           <div
             key={node.id}
-            className="rounded-xl border border-white/10 bg-[#111116]/80 p-4 space-y-3"
+            className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 p-4 space-y-3"
           >
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">

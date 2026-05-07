@@ -120,7 +120,7 @@ export function DropdownMenu<TValue = string>({
       {isOpen ? (
         <div
           className={cn(
-            'absolute z-50 mt-2 left-0 min-w-[160px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in',
+            'absolute z-50 mt-2 left-0 min-w-[160px] bg-ds-surface-elevated/95 backdrop-blur-xl border border-ds-border rounded-lg shadow-2xl overflow-hidden animate-fade-in',
             menuClassName
           )}
           role="listbox"

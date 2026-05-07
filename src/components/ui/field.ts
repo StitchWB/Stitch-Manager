@@ -2,10 +2,10 @@ import { createElement, useId } from 'react';
 import { cn } from '../../lib/utils';
 
 export const fieldClasses = {
-  container: 'flex flex-col gap-1.5 w-full',
-  label: 'text-xs font-semibold text-slate-300 px-0.5 leading-4',
+  container: 'flex flex-col w-full',
+  label: 'text-xs font-semibold text-slate-300 px-0.5 leading-4 mb-1.5',
   shellBase:
-    'relative group rounded-lg overflow-hidden bg-white/[0.05] border transition-all duration-200',
+    'relative group rounded-lg overflow-hidden bg-black/40 border transition-all duration-200',
   shellOk: 'border-white/15 focus-within:border-indigo-400/70',
   shellError: 'border-red-500/50 focus-within:border-red-500',
   shellDisabled: 'opacity-50 grayscale-[0.5]',

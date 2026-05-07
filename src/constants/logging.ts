@@ -39,8 +39,8 @@ export const LOG_PRESETS: Record<LogVerbosity, LogPreset> = {
 };
 
 export const LOG_VERBOSITY_OPTIONS = [
-  { value: 'minimal', label: 'Minimal - Only results' },
-  { value: 'normal', label: 'Normal - Important steps' },
-  { value: 'verbose', label: 'Verbose - All details' },
-  { value: 'debug', label: 'Debug - Everything' },
+  { value: 'minimal', label: 'Минимальный - Только результаты' },
+  { value: 'normal', label: 'Обычный - важные шаги' },
+  { value: 'verbose', label: 'Подробный - Все детали' },
+  { value: 'debug', label: 'Отладка - Всё' },
 ] as const;

@@ -16,7 +16,7 @@ interface ProviderSelectorProps {
 const PROVIDER_CATEGORIES = {
   ide: { label: 'IDE', providers: PROVIDERS.filter(p => p.category === 'ide') },
   ai: { label: 'AI', providers: PROVIDERS.filter(p => p.category === 'ai') },
-  cloud: { label: 'Cloud', providers: PROVIDERS.filter(p => p.category === 'cloud') },
+  cloud: { label: 'Облако', providers: PROVIDERS.filter(p => p.category === 'cloud') },
   git: { label: 'Git', providers: PROVIDERS.filter(p => p.category === 'git') },
 } as const;
 

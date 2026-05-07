@@ -11,7 +11,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Columns3, RotateCcw } from 'lucide-react';
 import { t } from '../../lib/i18n';
-import { Button, ButtonBase, Checkbox } from '@/components/ui';
+import { ButtonBase, Checkbox } from '@/components/ui';
 
 
 export interface AccountsVisibleColumns {
@@ -117,25 +117,22 @@ export function AccountsColumnsMenu({
 
   return (
     <div ref={rootRef} className="relative z-[30]">
-      <Button
-        size="sm"
-        variant="secondary"
-        className="h-9 rounded-lg"
-        leftIcon={<Columns3 size={15} />}
+      <ButtonBase
+        className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.04] transition-colors"
         onClick={() => {
           if (isOpen) closeMenu();
           else setIsOpen(true);
         }}
       >
-        {t('accounts.columnsMenuLabel')}
-      </Button>
+        <Columns3 size={15} />
+      </ButtonBase>
 
       {isOpen && portalRoot && menuStyle
         ? createPortal(
             <div
               ref={menuRef}
               style={menuStyle}
-              className="z-[9999] overflow-y-auto rounded-xl border border-white/10 bg-[#11151f] p-2 shadow-2xl shadow-black/70 ring-1 ring-black/40"
+              className="z-[9999] overflow-y-auto rounded-xl border border-white/10 bg-ds-surface-overlay p-2 shadow-2xl shadow-black/70 ring-1 ring-black/40"
             >
               <div className="px-2 py-1 text-[11px] uppercase tracking-wider text-slate-400">
                 {t('accounts.columnsMenuTitle')}

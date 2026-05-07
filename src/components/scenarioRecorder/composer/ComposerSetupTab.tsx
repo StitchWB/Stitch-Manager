@@ -1,4 +1,4 @@
-import { Button, Input, Select, Textarea } from '@/components/ui';
+import { Button, FormGrid, Input, Select, Textarea } from '@/components/ui';
 import { useState } from 'react';
 import type { ComposedFlow } from '@/lib/scenarioFlow/types';
 
@@ -43,7 +43,7 @@ export function ComposerSetupTab({
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <FormGrid responsive>
         <Input
           label="Default alias"
           value={flow.defaults.alias}
@@ -59,7 +59,7 @@ export function ComposerSetupTab({
           }
           className="h-9"
         />
-      </div>
+      </FormGrid>
 
       <div className="rounded-lg border border-white/10 bg-black/20 p-2">
         <Button variant="secondary" size="xs" onClick={() => setAdvancedOpen(prev => !prev)}>
@@ -67,7 +67,7 @@ export function ComposerSetupTab({
         </Button>
         {advancedOpen ? (
           <div className="space-y-2 mt-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <FormGrid responsive>
               <Input
                 label="Default proxy"
                 value={flow.defaults.proxy ?? ''}
@@ -96,9 +96,9 @@ export function ComposerSetupTab({
                 }
                 className="h-9"
               />
-            </div>
+            </FormGrid>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <FormGrid responsive>
               <Input
                 label="Default credential login"
                 value={flow.defaults.credentials?.login ?? ''}
@@ -133,7 +133,7 @@ export function ComposerSetupTab({
                 }
                 className="h-9"
               />
-            </div>
+            </FormGrid>
           </div>
         ) : null}
       </div>
@@ -150,7 +150,7 @@ export function ComposerSetupTab({
         ) : (
           <div className="space-y-2">
             {inputDefaultEntries.map(([key, value]) => (
-              <div key={key} className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <FormGrid responsive key={key}>
                 <Input
                   label="Input key"
                   value={key}
@@ -168,7 +168,7 @@ export function ComposerSetupTab({
                     Remove
                   </Button>
                 </div>
-              </div>
+              </FormGrid>
             ))}
           </div>
         )}
@@ -200,7 +200,7 @@ export function ComposerSetupTab({
             Configure Google Sheets credentials in AutoReg settings first.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <FormGrid columns={3} responsive>
             <Select
               label="Sheet"
               value={selectedSheetId}
@@ -220,11 +220,11 @@ export function ComposerSetupTab({
               <Button variant="secondary" onClick={() => void refreshSheets()}>
                 Refresh sheets
               </Button>
-              <Button variant="secondary" onClick={importEmailsFromSheet}>
-                Import
-              </Button>
-            </div>
-          </div>
+                <Button variant="secondary" onClick={importEmailsFromSheet}>
+                  Import
+                </Button>
+              </div>
+          </FormGrid>
         )}
         {sheetsError ? <div className="text-xs text-amber-300">{sheetsError}</div> : null}
       </div>

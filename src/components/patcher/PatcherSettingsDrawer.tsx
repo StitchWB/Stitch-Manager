@@ -188,11 +188,11 @@ export default function PatcherSettingsDrawer({
       <ButtonBase
         type="button"
         aria-label={t('common.cancel')}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[45]"
+        className="fixed inset-0 bg-void-base/60 backdrop-blur-sm z-[45]"
         onClick={onClose}
       />
 
-      <div className="fixed right-0 top-0 bottom-0 w-[580px] bg-[#0a0a0c] border-l border-white/5 z-[50] flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+      <div className="fixed right-0 top-0 bottom-0 w-[580px] bg-ds-surface-base border-l border-white/5 z-[50] flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
         {/* Header */}
         <div className="shrink-0 p-6 flex items-center justify-between bg-white/[0.02] border-b border-white/5">
           <div className="flex items-center gap-4">
@@ -532,8 +532,8 @@ export default function PatcherSettingsDrawer({
 
       {/* Bind Account Dialog */}
       {showBindDialog && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[60] p-4">
-          <div className="bg-[#0f1115] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-void-base/80 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+          <div className="bg-ds-surface-elevated border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
             <h3 className="text-base font-bold text-white mb-6 tracking-tight">
               {t('kiroPatch.bindModalTitle')}
             </h3>
@@ -554,7 +554,7 @@ export default function PatcherSettingsDrawer({
                 >
                   <option value="">{t('kiroPatch.bindModalAccountIdPlaceholder')}</option>
                   {accounts.map(account => (
-                    <option key={account.id} value={String(account.id)} className="bg-[#0f1115]">
+                    <option key={account.id} value={String(account.id)} className="bg-ds-surface-elevated">
                       {account.email} ({account.provider})
                     </option>
                   ))}

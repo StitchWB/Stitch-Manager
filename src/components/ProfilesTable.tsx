@@ -230,7 +230,7 @@ export default function ProfilesTable({
 
   return (
     <div className="flex flex-col h-full overflow-hidden px-2 sm:px-4">
-      <div className="hidden xl:grid grid-cols-[minmax(260px,1fr)_160px_minmax(300px,auto)] gap-4 py-3 px-4 border-b border-white/10 sticky top-0 bg-[#050508]/95 backdrop-blur-md z-40">
+      <div className="hidden xl:grid grid-cols-[minmax(260px,1fr)_160px_minmax(300px,auto)] gap-4 py-3 px-4 border-b border-white/10 sticky top-0 bg-void-base/95 backdrop-blur-md z-40">
         <span className="text-xs font-semibold text-slate-400 tracking-wide">
           {t('accounts.profileAlias')}
         </span>
@@ -249,7 +249,7 @@ export default function ProfilesTable({
           return (
             <div
               key={profile.alias}
-              className="relative rounded-xl border bg-[#0f1115]/60 border-white/[0.03] hover:border-white/[0.08] hover:bg-[#161920] transition-all duration-200 overflow-visible"
+              className="relative rounded-xl border bg-ds-surface-elevated/60 border-white/[0.03] hover:border-white/[0.08] hover:bg-ds-surface-elevated transition-all duration-200 overflow-visible"
             >
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,1fr)_160px_minmax(300px,auto)] gap-4 items-start xl:items-center px-4 py-3">
                 <div className="flex flex-col min-w-0 xl:pr-2">
@@ -358,7 +358,7 @@ export default function ProfilesTable({
         ? createPortal(
             <div
               ref={menuContainerRef}
-              className="fixed z-[9999] w-52 rounded-lg border border-white/10 bg-[#0b0d12] p-1 shadow-xl shadow-black/40"
+              className="fixed z-[9999] w-52 rounded-lg border border-white/10 bg-ds-surface-sunken p-1 shadow-xl shadow-black/40"
               style={{ top: menuPosition.top, left: menuPosition.left }}
             >
               <Button

@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import type { Account } from '../types/generated';
 import {
   bulkExportAccounts,
   importAccountsPayload,
@@ -11,6 +12,7 @@ import {
   clearAccountProfileSession,
   updateAccountNotesTags,
   checkAccountStatus,
+  checkFireworksApiKey,
 } from '@/lib/tauri/modules/accounts';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
@@ -44,14 +46,54 @@ export function useAccountsActions({
   deleteAccounts,
   clearSelection,
 }: UseAccountsActionsParams) {
+  // Helper: extract Fireworks API key from account (token or parsed metadata)
+  const getFireworksApiKey = (account: Account): string | null => {
+    if (account.token?.trim()) return account.token.trim();
+    if (account.metadata) {
+      try {
+        const meta = JSON.parse(account.metadata);
+        return meta.api_key || meta.apiKey || null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
   const handleCheckStatus = useCallback(
     async (id: number) => {
+      const store = useAccountsStore.getState();
+      store.setQuotaChecking(id, true);
+      store.clearQuotaCheckError(id);
       try {
+        const account = store.accounts.find(a => a.id === id);
+        if (account?.provider?.toLowerCase() === 'fireworks') {
+          const apiKey = getFireworksApiKey(account);
+          if (apiKey) {
+            const status = await checkFireworksApiKey({ apiKey });
+            if (typeof status.monthlySpendLimit === 'number' && typeof status.monthlySpendUsed === 'number') {
+              const limit = status.monthlySpendLimit;
+              const used = status.monthlySpendUsed;
+              const remaining = status.monthlySpendRemaining ?? Math.max(0, limit - used);
+              store.setProviderQuota(id, {
+                limit,
+                used,
+                remaining,
+                checkedAt: Date.now(),
+              });
+            }
+            return;
+          }
+        }
         await checkAccountStatus({ accountId: id });
-        await useAccountsStore.getState().refreshAccount(id);
+        await store.refreshAccount(id);
         await fetchAccounts();
       } catch (error) {
-        console.error(error);
+        const message = error instanceof Error ? error.message : String(error);
+        store.setQuotaCheckError(id, message);
+        console.error(`[QuotaCheck] Account ${id}: ${message}`);
+      } finally {
+        store.setQuotaChecking(id, false);
       }
     },
     [fetchAccounts]

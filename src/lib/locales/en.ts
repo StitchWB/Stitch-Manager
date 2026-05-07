@@ -2094,6 +2094,7 @@ export const en: Translations = {
     legacySettings: 'Legacy Settings',
     legacyAutoSwitching: 'Old Auto-Switching',
     checkInterval: 'Check Interval',
+    proxyPort: 'AI Proxy Port',
     switchThreshold: 'Switch After',
     maxErrors: 'Max Errors',
     cooldown: 'Cooldown',

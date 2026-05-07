@@ -15,7 +15,7 @@ export function ToolbarActionsCluster({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-2',
+        'flex items-center gap-2',
         align === 'start' ? 'justify-start' : 'justify-end',
         className
       )}

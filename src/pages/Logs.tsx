@@ -647,7 +647,7 @@ export default function Logs() {
         }
       />
 
-      <div className="px-6 pt-3 pb-2 border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-xl sticky top-0 z-20">
+      <div className="px-6 pt-3 pb-2 border-b border-white/5 bg-ds-surface-base/80 backdrop-blur-xl sticky top-0 z-20">
         <div className="flex flex-wrap items-center gap-2">
           <FilterDropdown
             value={levelFilter}
@@ -923,7 +923,7 @@ export default function Logs() {
             </div>
           )}
 
-          <div className="h-full card overflow-hidden flex flex-col bg-[#0a0a0a]">
+          <div className="h-full card overflow-hidden flex flex-col bg-ds-surface-base">
             <div className="overflow-auto flex-1">
               {logs.length === 0 && !isLoading ? (
                 <EmptyState
@@ -982,7 +982,7 @@ export default function Logs() {
           aria-hidden="true"
         />
         <aside
-          className="hidden xl:flex border-l border-white/5 bg-[#090b10] p-4 flex-col gap-3"
+          className="hidden xl:flex border-l border-white/5 bg-ds-surface-base p-4 flex-col gap-3"
           style={{ width: `${detailsPaneWidth}px` }}
         >
           <div className="text-xs uppercase tracking-wider text-slate-500">Details</div>

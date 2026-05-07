@@ -18,7 +18,7 @@ export function IdentityGraphStateBlocks({
   return (
     <>
       {isLoading ? (
-        <div className="rounded-xl border border-white/10 bg-[#111116]/70 p-6 text-sm text-slate-400">
+        <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/70 p-6 text-sm text-slate-400">
           Loading identity graph...
         </div>
       ) : null}

@@ -18,6 +18,13 @@ import {
 // Types
 // ============================================
 
+export interface ProviderQuotaInfo {
+  limit: number;
+  used: number;
+  remaining: number;
+  checkedAt: number; // timestamp
+}
+
 interface AccountsState {
   // State
   accounts: Account[];
@@ -45,6 +52,15 @@ interface AccountsState {
     | 'lastLoginAt'
     | 'successRate';
   sortDirection: 'asc' | 'desc';
+
+  // Provider-specific quota cache (for providers not supported by backend quota refresh)
+  providerQuotaCache: Record<number, ProviderQuotaInfo>;
+
+  // Quota check progress tracking (accountId -> true if checking)
+  quotaCheckProgress: Record<number, boolean>;
+
+  // Quota check errors (accountId -> error message)
+  quotaCheckErrors: Record<number, string | null>;
 
   // Actions
   fetchAccounts: (provider?: ProviderName) => Promise<void>;
@@ -89,6 +105,15 @@ interface AccountsState {
   ) => void;
   setSortDirection: (direction: 'asc' | 'desc') => void;
 
+  // Provider-specific quota
+  setProviderQuota: (accountId: number, quota: ProviderQuotaInfo) => void;
+  getProviderQuota: (accountId: number) => ProviderQuotaInfo | undefined;
+
+  // Quota check progress
+  setQuotaChecking: (accountId: number, checking: boolean) => void;
+  setQuotaCheckError: (accountId: number, error: string | null) => void;
+  clearQuotaCheckError: (accountId: number) => void;
+
   // Computed helpers
   getFilteredAccounts: () => Account[];
   getAccountsByProvider: (provider: ProviderName) => Account[];
@@ -116,6 +141,48 @@ export const useAccountsStore = create<AccountsState>()(
         activeAccountIds: {},
         sortField: 'email',
         sortDirection: 'asc',
+        providerQuotaCache: {},
+        quotaCheckProgress: {},
+        quotaCheckErrors: {},
+
+        // ============================================
+        // Provider-specific quota cache
+        // ============================================
+        setProviderQuota: (accountId, quota) => {
+          set(state => ({
+            providerQuotaCache: {
+              ...state.providerQuotaCache,
+              [accountId]: quota,
+            },
+          }));
+        },
+        // Quota check progress
+        setQuotaChecking: (accountId, checking) => {
+          set(state => ({
+            quotaCheckProgress: {
+              ...state.quotaCheckProgress,
+              [accountId]: checking,
+            },
+          }));
+        },
+        setQuotaCheckError: (accountId, error) => {
+          set(state => ({
+            quotaCheckErrors: {
+              ...state.quotaCheckErrors,
+              [accountId]: error,
+            },
+          }));
+        },
+        clearQuotaCheckError: accountId => {
+          set(state => {
+            const next = { ...state.quotaCheckErrors };
+            delete next[accountId];
+            return { quotaCheckErrors: next };
+          });
+        },
+        getProviderQuota: accountId => {
+          return get().providerQuotaCache[accountId];
+        },
 
         // ============================================
         // Core Actions
@@ -508,6 +575,7 @@ export const useAccountsStore = create<AccountsState>()(
           quotaFilter: state.quotaFilter,
           sortField: state.sortField,
           sortDirection: state.sortDirection,
+          providerQuotaCache: state.providerQuotaCache,
         }),
       }
     ),

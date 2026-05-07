@@ -1,16 +1,4 @@
-import {
-  Check,
-  Copy,
-  Globe,
-  Info,
-  MoreHorizontal,
-  Play,
-  RefreshCw,
-  Square,
-  Trash2,
-  User,
-  X,
-} from 'lucide-react';
+import { Play, MoreHorizontal } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -20,17 +8,16 @@ import {
   TableRow,
   Tooltip,
   ProviderLogo,
-  QuotaDisplay,
 } from '@/components/ui';
-import { cn } from '../../lib/utils';
-import type { Account } from '../../types/generated';
-import type { AccountStatus } from '../../types/ui';
-import type { AccountRelationEdge, RelationType } from '../../lib/accounts/relations';
-import type { AccountsTableVisibleColumns } from '../../stores/uiPreferences';
-import { providerLabelToKey } from '../../lib/accounts/relations';
-import { getAccountStatusLabel } from '../../lib/accountStatus';
-import { t } from '../../lib/i18n';
-import { formatProfileAlias } from '../../lib/profiles/displayName';
+import { cn } from '@/lib/utils';
+import type { Account } from '@/types/generated';
+import type { AccountsTableVisibleColumns } from '@/stores/uiPreferences';
+import { getAccountStatusLabel } from '@/lib/accountStatus';
+import { t } from '@/lib/i18n';
+import type { AccountRelationEdge, RelationType } from '@/lib/accounts/relations';
+import { useAccountRowData } from '@/hooks/useAccountRow';
+import { AccountRowMenu } from './AccountRowMenu';
+import { AccountQuotaCell } from './AccountQuotaCell';
 
 interface AccountRowProps {
   account: Account;
@@ -57,103 +44,6 @@ interface AccountRowProps {
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
 }
 
-const statusVariantMap: Record<AccountStatus, 'success' | 'warning' | 'danger' | 'outline'> = {
-  active: 'success',
-  banned: 'danger',
-  limit_hit: 'warning',
-  expired: 'outline',
-  unknown: 'outline',
-};
-
-const statusDotColorMap: Record<AccountStatus, string> = {
-  active: 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]',
-  banned: 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]',
-  limit_hit: 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]',
-  expired: 'bg-slate-500',
-  unknown: 'bg-slate-500',
-};
-
-const providerLabelMap: Record<string, string> = {
-  aws_builder_id: 'AWS Builder ID',
-  fireworks: 'Fireworks AI',
-};
-
-function parseJsonValue(input: string | null): Record<string, unknown> {
-  if (!input) return {};
-  try {
-    const parsed = JSON.parse(input);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // ignore invalid json
-  }
-  return {};
-}
-
-function parseTags(tagsString: string | null): string[] {
-  if (!tagsString) return [];
-  try {
-    const parsed = JSON.parse(tagsString);
-    return Array.isArray(parsed) ? parsed.filter(tag => typeof tag === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function getAlias(account: Account): string {
-  const metadata = parseJsonValue(account.metadata);
-  const aliasRaw = metadata.alias ?? metadata.name;
-  if (typeof aliasRaw === 'string' && aliasRaw.trim()) {
-    return aliasRaw.trim();
-  }
-  const [emailPrefix] = account.email.split('@');
-  return emailPrefix || account.email;
-}
-
-function getProfileId(account: Account): string {
-  if (account.browserProfilePath && account.browserProfilePath.trim())
-    return account.browserProfilePath;
-  if (account.machineId && account.machineId.trim()) return account.machineId;
-  return `account-${account.id}`;
-}
-
-function getProxyValue(account: Account): string {
-  const metadata = parseJsonValue(account.metadata);
-  const providerMeta = parseJsonValue(account.providerMetadata);
-
-  const directProxy =
-    metadata.proxy ?? metadata.proxyUrl ?? providerMeta.proxy ?? providerMeta.proxyUrl;
-  if (typeof directProxy === 'string' && directProxy.trim()) {
-    return directProxy.trim();
-  }
-
-  const metadataNetwork = metadata.network;
-  if (metadataNetwork && typeof metadataNetwork === 'object') {
-    const proxy = (metadataNetwork as Record<string, unknown>).proxy;
-    if (proxy && typeof proxy === 'object') {
-      const url = (proxy as Record<string, unknown>).url;
-      if (typeof url === 'string' && url.trim()) return url.trim();
-    }
-  }
-
-  return '—';
-}
-
-function formatLastLogin(account: Account): string {
-  const rawDate = account.lastLoginAt ?? account.lastUsedAt ?? account.updatedAt;
-  if (!rawDate) return '—';
-  const parsedDate = new Date(rawDate);
-  if (Number.isNaN(parsedDate.getTime())) return '—';
-  return parsedDate.toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 export function AccountRow({
   account,
   isSelected,
@@ -178,48 +68,18 @@ export function AccountRow({
   onClearProfileSession,
   onRelationEdgeClick,
 }: AccountRowProps) {
-  const alias = getAlias(account);
-  const displayAlias = formatProfileAlias(alias);
-  const profileId = getProfileId(account);
-  const status = account.status as AccountStatus;
-  const tags = parseTags(account.tags);
-  const visibleTags = tags.slice(0, 2);
-  const remainingTagsCount = Math.max(0, tags.length - visibleTags.length);
-  const proxyValue = getProxyValue(account);
-  const providerLabel = providerLabelMap[account.provider] ?? account.provider;
-  const accountIdentifier = account.email;
-
-  const profileSessionReady = tags.some(tag => tag.startsWith('profile:'));
-  const profileSessionPending = tags.includes('profile:pending');
-  const allowProfileAction =
-    account.provider === 'kiro' ||
-    tags.includes('profile:manual') ||
-    tags.includes('profile:antidetect');
-  const relationHintList = relationHints ?? [];
-  const relationEdgeList = relationEdges ?? [];
-  const relationProviderEntries = Array.from(
-    relationEdgeList.reduce((map, edge) => {
-      const providerKey = providerLabelToKey(edge.targetProvider);
-      if (!providerKey) return map;
-
-      const existing = map.get(providerKey);
-      if (!existing || (!existing.explicit && edge.explicit)) {
-        map.set(providerKey, edge);
-      }
-
-      return map;
-    }, new Map<string, AccountRelationEdge>())
-  );
+  const data = useAccountRowData(account, relationHints, relationEdges);
 
   return (
     <TableRow
       className={cn(
-        'group/row min-h-14 border-white/[0.04] hover:bg-white/[0.02]',
+        'group/row min-h-16 border-white/[0.04] hover:bg-white/[0.02]',
         isSelected && 'bg-indigo-500/10'
       )}
     >
+      {/* Checkbox */}
       <TableCell
-        className="sticky left-0 z-10 min-w-[44px] w-[44px] max-w-[44px] px-3 py-2.5 align-middle bg-[#0f1218] group-hover/row:bg-white/[0.02]"
+        className="sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 align-middle bg-ds-surface-sunken group-hover/row:bg-white/[0.03]"
         onClick={event => event.stopPropagation()}
       >
         <Checkbox
@@ -230,50 +90,46 @@ export function AccountRow({
         />
       </TableCell>
 
-      <TableCell className="sticky left-[44px] z-10 min-w-[100px] px-3 py-2.5 align-middle bg-[#0f1218] group-hover/row:bg-white/[0.02]">
-        <div className="flex items-center gap-2 overflow-hidden">
+      {/* Provider */}
+      <TableCell className="sticky left-[40px] z-10 w-[70px] min-w-[70px] px-2 py-2 align-middle bg-ds-surface-sunken group-hover/row:bg-white/[0.03]">
+        <div className="flex items-center gap-1 overflow-hidden">
           <ProviderLogo provider={account.provider} size={14} className="shrink-0" />
-          <span className="truncate whitespace-nowrap text-xs text-slate-300">{providerLabel}</span>
+          <span className="truncate whitespace-nowrap text-[11px] text-slate-300">{data.providerLabel}</span>
         </div>
       </TableCell>
 
-      <TableCell className="sticky left-[144px] z-10 min-w-[140px] max-w-[200px] px-3 py-2.5 align-middle bg-[#0f1218] group-hover/row:bg-white/[0.02]">
+      {/* Account */}
+      <TableCell className="sticky left-[110px] z-10 w-[130px] min-w-[130px] max-w-[150px] px-2 py-2 align-middle bg-ds-surface-sunken group-hover/row:bg-white/[0.03]">
         <ButtonBase
           type="button"
           onClick={() => onShowDetails(account)}
           className="group/account inline-flex max-w-full flex-col items-start overflow-hidden text-left"
         >
           <span className="w-full truncate text-sm font-semibold text-white group-hover/account:text-indigo-200">
-            {displayAlias}
+            {data.displayAlias}
           </span>
-          {displayAlias !== alias ? (
-            <span className="w-full truncate font-mono text-[10px] text-slate-500">
-              {alias}
-            </span>
+          {data.alias && data.alias !== data.displayAlias && data.alias !== data.accountIdentifier ? (
+            <span className="w-full truncate text-[10px] text-slate-500">{data.alias}</span>
           ) : null}
           <Tooltip
             content={
               <div className="space-y-1 text-[11px]">
-                <div className="font-medium text-white">{accountIdentifier}</div>
-                <div className="text-slate-400">
-                  {t('accounts.profileIdLabel')}: {profileId}
-                </div>
+                <div className="font-medium text-white">{data.accountIdentifier}</div>
+                <div className="text-slate-400">{t('accounts.profileIdLabel')}: {data.profileId}</div>
               </div>
             }
             side="top"
           >
-            <span className="w-full truncate font-mono text-xs text-slate-500">
-              {accountIdentifier}
+            <span className="w-full truncate text-[11px] text-slate-500">
+              {data.accountIdentifier !== data.displayAlias && data.accountIdentifier !== data.alias ? data.accountIdentifier : '\u00A0'}
             </span>
           </Tooltip>
         </ButtonBase>
-        {(relationProviderEntries.length > 0 || relationHintList.length > 0) && (
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
-            <span className="uppercase tracking-wider text-[9px] text-slate-600">
-              {t('accounts.relationLabel')}
-            </span>
+
+        {(data.relationProviderEntries.length > 0 || data.relationHintList.length > 0) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
             <div className="flex items-center gap-1">
-              {relationProviderEntries.slice(0, 4).map(([providerKey, edge]) => (
+              {data.relationProviderEntries.slice(0, 4).map(([providerKey, edge]) => (
                 <Tooltip key={`${providerKey}-${edge.type}`} content={edge.label}>
                   <ButtonBase
                     type="button"
@@ -288,10 +144,10 @@ export function AccountRow({
                 </Tooltip>
               ))}
             </div>
-            {relationHintList.slice(0, 2).map(hint => (
+            {data.relationHintList.slice(0, 2).map(hint => (
               <span
                 key={`${account.id}-${hint}`}
-                className="rounded border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] text-cyan-200"
+                className="rounded border border-cyan-500/20 bg-cyan-500/10 px-1 py-0.5 text-[9px] text-cyan-200"
               >
                 {hint}
               </span>
@@ -300,50 +156,54 @@ export function AccountRow({
         )}
       </TableCell>
 
-      <TableCell className="min-w-[90px] px-3 py-2.5 align-middle">
+      {/* Status */}
+      <TableCell className="w-[70px] min-w-[70px] px-2 py-2 align-middle">
         <Badge
-          variant={statusVariantMap[status]}
+          variant={data.statusVariant as any}
           size="sm"
-          className="normal-case tracking-normal border-0 gap-1.5"
+          className="normal-case tracking-normal border-0 gap-1"
         >
-          <span className={cn('w-1.5 h-1.5 rounded-full', statusDotColorMap[status])} />
-          {getAccountStatusLabel(status)}
+          <span className={cn('w-1.5 h-1.5 rounded-full', data.statusDotColor)} />
+          {getAccountStatusLabel(account.status as any)}
         </Badge>
       </TableCell>
 
+      {/* Last Login */}
       <TableCell
         className={cn(
           visibleColumns.lastLogin
-            ? 'min-w-[100px] px-3 py-2.5 align-middle text-xs text-slate-300 tabular-nums'
+            ? 'w-[70px] min-w-[70px] px-2 py-2 align-middle text-[11px] text-slate-300 tabular-nums'
             : 'hidden'
         )}
       >
-        {formatLastLogin(account)}
+        {data.lastLoginFormatted}
       </TableCell>
 
+      {/* Proxy */}
       <TableCell
         className={cn(
-          visibleColumns.proxy ? 'min-w-[120px] px-3 py-2.5 align-middle' : 'hidden'
+          visibleColumns.proxy ? 'w-[70px] min-w-[70px] px-2 py-2 align-middle' : 'hidden'
         )}
       >
-        <Tooltip content={proxyValue} side="top">
-          <span className="block truncate font-mono text-xs text-slate-200">{proxyValue}</span>
+        <Tooltip content={data.proxyValue} side="top">
+          <span className="block truncate font-mono text-[11px] text-slate-200">{data.proxyValue}</span>
         </Tooltip>
       </TableCell>
 
+      {/* Tags */}
       <TableCell
         className={cn(
-          visibleColumns.tags ? 'min-w-[100px] px-3 py-2.5 align-middle' : 'hidden'
+          visibleColumns.tags ? 'w-[60px] min-w-[60px] px-2 py-2 align-middle' : 'hidden'
         )}
       >
-        <div className="flex items-center gap-1.5">
-          {visibleTags.length > 0 ? (
-            visibleTags.map(tag => (
+        <div className="flex items-center gap-1">
+          {data.visibleTags.length > 0 ? (
+            data.visibleTags.map(tag => (
               <Badge
                 key={`${account.id}-${tag}`}
                 variant="outline"
                 size="sm"
-                className="max-w-[92px] truncate border-white/10 bg-white/[0.02] normal-case tracking-normal"
+                className="max-w-[60px] truncate border-white/10 bg-white/[0.02] normal-case tracking-normal"
               >
                 {tag}
               </Badge>
@@ -351,42 +211,24 @@ export function AccountRow({
           ) : (
             <span className="text-xs text-slate-500">—</span>
           )}
-          {remainingTagsCount > 0 ? (
-            <span className="text-xs text-slate-500">+{remainingTagsCount}</span>
+          {data.remainingTagsCount > 0 ? (
+            <span className="text-xs text-slate-500">+{data.remainingTagsCount}</span>
           ) : null}
         </div>
       </TableCell>
 
-      {/* Quota Column */}
+      {/* Quota */}
       <TableCell
         className={cn(
-          visibleColumns.quota ? 'min-w-[110px] px-3 py-2.5 align-middle' : 'hidden'
+          visibleColumns.quota ? 'w-[65px] min-w-[65px] px-2 py-2 align-middle' : 'hidden'
         )}
       >
-        {account.quota && (account.quota.limit > 0 || account.quota.used > 0) ? (
-          <div className="w-full max-w-[100px]">
-            <QuotaDisplay
-              used={account.quota.used}
-              limit={account.quota.limit}
-              variant="compact"
-            />
-          </div>
-        ) : account.token ? (
-          <Tooltip content={t('accountsTable.checkStatus')}>
-            <button
-              onClick={() => onCheckStatus(account.id)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-indigo-300 transition-colors"
-            >
-              <RefreshCw size={13} />
-            </button>
-          </Tooltip>
-        ) : (
-          <span className="text-xs text-slate-500">—</span>
-        )}
+        <AccountQuotaCell account={account} onCheckStatus={onCheckStatus} />
       </TableCell>
 
+      {/* Actions */}
       <TableCell
-        className="min-w-[72px] w-[72px] max-w-[72px] px-3 py-2.5 align-middle"
+        className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-2 align-middle"
         onClick={event => event.stopPropagation()}
       >
         <div className="relative flex justify-end" data-row-actions-menu="true">
@@ -398,22 +240,9 @@ export function AccountRow({
           >
             <Button
               type="button"
-              size="xs"
-              variant="outline"
-              className="hidden h-7 border-white/15 bg-transparent px-2.5 text-xs text-slate-300 hover:border-white/30 hover:bg-white/[0.04] hover:text-white sm:inline-flex"
-              leftIcon={<Play size={12} />}
-              onClick={() => {
-                void onLaunch(account);
-                onCloseMenu();
-              }}
-            >
-              {t('common.start')}
-            </Button>
-            <Button
-              type="button"
               size="icon"
               variant="outline"
-              className="inline-flex h-7 w-7 border-white/15 bg-transparent text-slate-300 hover:border-white/30 hover:bg-white/[0.04] hover:text-white sm:hidden"
+              className="inline-flex h-7 w-7 border-white/15 bg-transparent text-slate-300 hover:border-white/30 hover:bg-white/[0.04] hover:text-white"
               onClick={() => {
                 void onLaunch(account);
                 onCloseMenu();
@@ -432,132 +261,25 @@ export function AccountRow({
             </ButtonBase>
           </div>
 
-          {isMenuOpen ? (
-            <div
-              className="absolute right-0 top-8 z-50 w-56 rounded-lg border border-white/10 bg-[#0f1218] p-1 shadow-xl shadow-black/50"
-              data-row-actions-menu="true"
-            >
-              <ButtonBase
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                onClick={() => {
-                  void onCheckStatus(account.id);
-                  onCloseMenu();
-                }}
-              >
-                <RefreshCw size={12} className={cn(isRefreshing && 'animate-spin')} />
-                {t('accountsTable.checkStatus')}
-              </ButtonBase>
-
-              {onOpenBrowser ? (
-                <ButtonBase
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                  onClick={() => {
-                    void onOpenBrowser(account.id);
-                    onCloseMenu();
-                  }}
-                >
-                  <Globe size={12} />
-                  {t('accountsTable.openBrowser')}
-                </ButtonBase>
-              ) : null}
-
-              <ButtonBase
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                onClick={() => {
-                  void onToggleActive(account);
-                  onCloseMenu();
-                }}
-              >
-                {isActive ? <Square size={12} /> : <Play size={12} />}
-                {isActive ? t('accounts.deactivate') : t('accounts.activate')}
-              </ButtonBase>
-
-              {onOpenProfileSession && allowProfileAction ? (
-                <ButtonBase
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                  onClick={() => {
-                    void onOpenProfileSession(account.id);
-                    onCloseMenu();
-                  }}
-                >
-                  <User size={12} />
-                  {t('accounts.profileSessionOpen')}
-                </ButtonBase>
-              ) : null}
-
-              {onConfirmProfileSession && profileSessionPending ? (
-                <ButtonBase
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                  onClick={() => {
-                    void onConfirmProfileSession(account.id);
-                    onCloseMenu();
-                  }}
-                >
-                  <Check size={12} />
-                  {t('accounts.profileSessionConfirm')}
-                </ButtonBase>
-              ) : null}
-
-              {onClearProfileSession && profileSessionReady ? (
-                <ButtonBase
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                  onClick={() => {
-                    void onClearProfileSession(account.id);
-                    onCloseMenu();
-                  }}
-                >
-                  <X size={12} />
-                  {t('accounts.profileSessionClear')}
-                </ButtonBase>
-              ) : null}
-
-              {account.token ? (
-                <ButtonBase
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                  onClick={() => {
-                    void onCopyToken(account.token ?? '');
-                    onCloseMenu();
-                  }}
-                >
-                  <Copy size={12} />
-                  {t('accounts.copyToken')}
-                </ButtonBase>
-              ) : null}
-
-              <ButtonBase
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-                onClick={() => {
-                  onShowDetails(account);
-                  onCloseMenu();
-                }}
-              >
-                <Info size={12} />
-                {t('common.more')}
-              </ButtonBase>
-
-              <div className="my-1 h-px bg-white/10" />
-
-              <ButtonBase
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-rose-300 hover:bg-rose-500/10"
-                onClick={() => {
-                  onDelete(account.id);
-                  onCloseMenu();
-                }}
-              >
-                <Trash2 size={12} />
-                {t('accounts.deleteAccountTitle')}
-              </ButtonBase>
-            </div>
-          ) : null}
+          <AccountRowMenu
+            account={account}
+            isActive={isActive}
+            isRefreshing={isRefreshing}
+            isMenuOpen={isMenuOpen}
+            allowProfileAction={data.allowProfileAction}
+            profileSessionPending={data.profileSessionPending}
+            profileSessionReady={data.profileSessionReady}
+            onCheckStatus={onCheckStatus}
+            onOpenBrowser={onOpenBrowser}
+            onToggleActive={onToggleActive}
+            onOpenProfileSession={onOpenProfileSession}
+            onConfirmProfileSession={onConfirmProfileSession}
+            onClearProfileSession={onClearProfileSession}
+            onCopyToken={onCopyToken}
+            onShowDetails={onShowDetails}
+            onDelete={onDelete}
+            onCloseMenu={onCloseMenu}
+          />
         </div>
       </TableCell>
     </TableRow>

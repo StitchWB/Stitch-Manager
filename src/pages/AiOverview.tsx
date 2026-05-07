@@ -63,7 +63,7 @@ export default function AiOverview() {
   ];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#050508]">
+    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
       <Header
         title={t('aiHub.sections.overview.title')}
         subtitle={t('aiHub.sections.overview.subtitle')}
@@ -76,7 +76,7 @@ export default function AiOverview() {
           {cards.map(card => (
             <div
               key={card.to}
-              className="bg-[#111116]/80 border border-white/10 rounded-xl p-5 flex flex-col gap-3"
+              className="bg-ds-surface-overlay/80 border border-white/10 rounded-xl p-5 flex flex-col gap-3"
             >
               <div className="flex items-center gap-2 text-white">
                 {card.icon}

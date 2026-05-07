@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Trash2, X, RefreshCw } from 'lucide-react';
+import { Download, Trash2, X, RefreshCw, UserPlus, FolderOpen, CheckCircle, Eraser } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -14,6 +14,11 @@ interface FloatingActionBarProps {
   // Bulk refresh state
   isRefreshing?: boolean;
   refreshProgress?: { current: number; total: number };
+  // Profile session actions
+  onCreateProfiles?: () => void | Promise<void>;
+  onOpenProfileSession?: () => void;
+  onConfirmProfileSession?: () => void;
+  onClearProfileSession?: () => void;
 }
 
 export function FloatingActionBar({
@@ -25,6 +30,10 @@ export function FloatingActionBar({
   className,
   isRefreshing = false,
   refreshProgress,
+  onCreateProfiles,
+  onOpenProfileSession,
+  onConfirmProfileSession,
+  onClearProfileSession,
 }: FloatingActionBarProps) {
   const progressText = refreshProgress 
     ? t('accounts.syncing', { 
@@ -32,6 +41,8 @@ export function FloatingActionBar({
         total: refreshProgress.total.toString() 
       }) || `Syncing ${refreshProgress.current}/${refreshProgress.total}...`
     : null;
+
+  const hasProfileActions = onCreateProfiles || onOpenProfileSession || onConfirmProfileSession || onClearProfileSession;
 
   return (
     <AnimatePresence>
@@ -72,6 +83,61 @@ export function FloatingActionBar({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
+            {/* Profile session actions (left group) */}
+            {hasProfileActions && (
+              <div className="flex items-center gap-1.5 mr-2 pr-3 border-r border-white/10">
+                {onCreateProfiles && (
+                  <button
+                    onClick={() => void onCreateProfiles()}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={t('accounts.profilesCreateButton') || 'Create Profile'}
+                    title={t('accounts.profilesCreateButton') || 'Create Profile'}
+                  >
+                    <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">{t('accounts.profilesCreateButton')}</span>
+                  </button>
+                )}
+                {onOpenProfileSession && (
+                  <button
+                    onClick={onOpenProfileSession}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={t('accounts.profileSessionOpen') || 'Open Session'}
+                    title={t('accounts.profileSessionOpen') || 'Open Session'}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">{t('accounts.profileSessionOpen')}</span>
+                  </button>
+                )}
+                {onConfirmProfileSession && (
+                  <button
+                    onClick={onConfirmProfileSession}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={t('accounts.profileSessionConfirm') || 'Confirm Session'}
+                    title={t('accounts.profileSessionConfirm') || 'Confirm Session'}
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">{t('accounts.profileSessionConfirm')}</span>
+                  </button>
+                )}
+                {onClearProfileSession && (
+                  <button
+                    onClick={onClearProfileSession}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={t('accounts.profileSessionClear') || 'Clear Session'}
+                    title={t('accounts.profileSessionClear') || 'Clear Session'}
+                  >
+                    <Eraser className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">{t('accounts.profileSessionClear')}</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Standard actions (right group) */}
             <button
               onClick={onRefreshAll}
               disabled={isRefreshing}

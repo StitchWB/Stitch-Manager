@@ -34,7 +34,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   render(): React.ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-[#050508] text-slate-200 p-6">
+        <div className="min-h-screen flex items-center justify-center bg-void-base text-slate-200 p-6">
           <div className="max-w-xl w-full rounded-xl border border-white/10 bg-black/30 p-6">
             <h1 className="text-lg font-semibold mb-3">UI crashed</h1>
             <p className="text-sm text-slate-300 mb-4">

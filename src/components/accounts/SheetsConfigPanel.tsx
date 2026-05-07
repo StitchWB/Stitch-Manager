@@ -19,7 +19,7 @@ export function SheetsConfigPanel({
   onServiceAccountJsonChange,
 }: SheetsConfigPanelProps) {
   return (
-    <div className="shrink-0 border-b border-white/5 bg-[#0a0a0c]/65 px-6 pb-4">
+    <div className="shrink-0 border-b border-white/5 bg-ds-surface-base/65 px-6 pb-4">
       <div className="rounded-xl border border-white/10 bg-white/5 p-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,2fr)]">
           <FormField

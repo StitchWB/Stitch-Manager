@@ -992,7 +992,7 @@ export function ProfileScenariosPanel({
 
   if (variant === 'panel') {
     return (
-      <div className="rounded-2xl border border-white/10 bg-[#0f1115]/70 px-6 py-6 shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
+      <div className="rounded-2xl border border-white/10 bg-ds-surface-elevated/70 px-6 py-6 shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2 min-w-0">
             <div className="text-xs text-slate-500 uppercase tracking-[0.3em]">

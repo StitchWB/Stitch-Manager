@@ -1944,6 +1944,7 @@ export interface Translations {
     legacySettings: string;
     legacyAutoSwitching: string;
     checkInterval: string;
+    proxyPort: string;
     switchThreshold: string;
     maxErrors: string;
     cooldown: string;

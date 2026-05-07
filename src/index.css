@@ -637,12 +637,96 @@ nav a:focus-visible {
    Hide Scrollbar Utility
    ============================================ */
 .no-scrollbar::-webkit-scrollbar {
-  display: none;
+  display: none !important;
 }
 
 .no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Toolbar filters scroll - hide scrollbar with high specificity */
+div.toolbar-filters-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+div.toolbar-filters-scroll {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Also hide scrollbar for overflow-x-auto elements inside toolbar */
+.toolbar-filters-scroll::-webkit-scrollbar {
+  display: none !important;
+}
+
+.toolbar-filters-scroll {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Toolbar filters scroll - hide scrollbar with high specificity */
+div.toolbar-filters-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+div.toolbar-filters-scroll {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Also hide scrollbar for overflow-x-auto elements inside toolbar */
+.toolbar-filters-scroll::-webkit-scrollbar {
+  display: none !important;
+}
+
+.toolbar-filters-scroll {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Toolbar filters scroll - hide scrollbar with high specificity */
+div.toolbar-filters-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+div.toolbar-filters-scroll {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Also hide scrollbar for overflow-x-auto elements inside toolbar */
+.toolbar-filters-scroll::-webkit-scrollbar {
+  display: none !important;
+}
+
+.toolbar-filters-scroll {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 /* ============================================
@@ -985,4 +1069,19 @@ input[type='number']::-webkit-outer-spin-button {
 
 input[type='number'] {
   -moz-appearance: textfield;
+}
+
+/* ============================================
+   Toolbar Filters Scroll - Hide Scrollbar
+   Must be last to override global * { scrollbar-width: thin }
+   ============================================ */
+.toolbar-filters-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.toolbar-filters-scroll {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
