@@ -9,9 +9,12 @@ and cleanup operations using DrissionPage.
 import logging
 import os
 import platform
+import subprocess
+import sys
 import tempfile
 import time
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from DrissionPage import ChromiumOptions, ChromiumPage
@@ -88,10 +91,10 @@ class BaseBrowser:
         """
         Find Chrome/Chromium executable path on different platforms.
         
-        Searches common installation locations for:
-        - Google Chrome
-        - Chromium
-        - Microsoft Edge (Windows)
+        Priority:
+        1. CloakBrowser (bundled anti-detect browser)
+        2. Windows Registry (installed Chrome)
+        3. Common installation paths
         
         Returns:
             Path to Chrome executable, or None if not found
@@ -99,6 +102,32 @@ class BaseBrowser:
         system = platform.system()
         possible_paths = []
         
+        # --- Priority 1: CloakBrowser (bundled anti-detect browser) ---
+        script_dir = Path(__file__).resolve().parent
+        project_root = script_dir.parent.parent.parent
+        cloakbrowser_path = project_root / "bin" / "cloakbrowser" / "chrome.exe"
+        if cloakbrowser_path.exists():
+            logger.info(f"Found CloakBrowser (bundled): {cloakbrowser_path}")
+            return str(cloakbrowser_path)
+
+        # Attempt auto-download on first run (Windows only)
+        if system == "Windows" and os.environ.get("AUTOREG_AUTO_DOWNLOAD_CLOAKBROWSER", "1") == "1":
+            download_script = project_root / "python" / "autoreg" / "browser" / "download_cloakbrowser.py"
+            if download_script.exists():
+                logger.info("CloakBrowser not found — attempting auto-download...")
+                try:
+                    result = subprocess.run(
+                        [sys.executable, str(download_script)],
+                        capture_output=True, text=True, timeout=600,
+                    )
+                    if result.returncode == 0 and cloakbrowser_path.exists():
+                        logger.info(f"CloakBrowser auto-downloaded: {cloakbrowser_path}")
+                        return str(cloakbrowser_path)
+                    else:
+                        logger.warning(f"Auto-download failed: {result.stderr}")
+                except Exception as e:
+                    logger.warning(f"Auto-download error: {e}")
+
         if system == "Windows":
             logger.debug("OS detected: Windows")
             
