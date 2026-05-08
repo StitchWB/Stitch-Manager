@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { LoadingSpinner } from './LoadingSpinner';
 
-export type LiveAction = 
+export type LiveAction =
   | 'idle'
   | 'processing'
   | 'connecting'
@@ -28,6 +28,7 @@ export type LiveAction =
   | 'verifying'
   | 'getting_token'
   | 'success'
+  | 'warning'
   | 'error';
 
 interface LiveStatusCardProps {
@@ -138,6 +139,13 @@ function getActionConfig(): Record<LiveAction, {
       bgGlow: 'rgba(52, 211, 153, 0.2)',
       iconBg: 'bg-emerald-500/25',
     },
+    warning: {
+      icon: <AlertCircle className="w-8 h-8" />,
+      title: t('liveStatus.warning'),
+      color: 'text-amber-400',
+      bgGlow: 'rgba(251, 191, 36, 0.15)',
+      iconBg: 'bg-amber-500/20',
+    },
     error: {
       icon: <AlertCircle className="w-8 h-8" />,
       title: t('liveStatus.error'),
@@ -152,8 +160,9 @@ export function LiveStatusCard({ action, detail, onStart, canStart = true, class
   const ACTION_CONFIG = getActionConfig();
   const config = ACTION_CONFIG[action];
   const isTyping = action.startsWith('typing_');
-  const isActive = action !== 'idle' && action !== 'success' && action !== 'error';
+  const isActive = action !== 'idle' && action !== 'success' && action !== 'error' && action !== 'warning';
   const isIdle = action === 'idle';
+  const isWarning = action === 'warning';
   const isCodeAction = action === 'typing_code' || action === 'waiting_code';
 
   // Make idle state clickable as start button
@@ -174,6 +183,7 @@ export function LiveStatusCard({ action, detail, onStart, canStart = true, class
           : 'border-white/[0.05]',
         // Golden glow for code actions
         isCodeAction && 'bg-amber-500/5 border-amber-500/20',
+        isWarning && 'bg-amber-500/[0.03] border-amber-500/15',
         isActive && !isCodeAction && 'bg-white/[0.02]',
         className
       )}
@@ -191,9 +201,10 @@ export function LiveStatusCard({ action, detail, onStart, canStart = true, class
          action === 'typing_code' ? <Shield className="w-3.5 h-3.5" /> :
          action === 'waiting_code' ? <Mail className="w-3.5 h-3.5" /> :
          action === 'verifying' ? <Shield className="w-3.5 h-3.5" /> :
-         action === 'getting_token' ? <LoadingSpinner size="xs" /> :
-         action === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> :
-         <AlertCircle className="w-3.5 h-3.5" />}
+          action === 'getting_token' ? <LoadingSpinner size="xs" /> :
+          action === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> :
+          action === 'warning' ? <AlertCircle className="w-3.5 h-3.5" /> :
+          <AlertCircle className="w-3.5 h-3.5" />}
       </div>
 
       {/* Compact text - single line, monospace with blinking cursor */}

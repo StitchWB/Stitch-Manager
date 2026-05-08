@@ -77,14 +77,13 @@ class PipeTransport:
         import time
 
         deadline = None
-        if timeout:
+        if timeout is not None:
             deadline = time.monotonic() + timeout
-
         while True:
             if self._queue:
                 return self._queue.pop(0)
 
-            if deadline and time.monotonic() > deadline:
+            if deadline is not None and time.monotonic() > deadline:
                 return None
 
             time.sleep(0.1)

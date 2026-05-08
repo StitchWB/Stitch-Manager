@@ -6,4 +6,5 @@ export { NetworkTab } from './NetworkTab';
 export { AutomationTab } from './AutomationTab';
 export { InboxTab } from './InboxTab';
 export { LaunchPad } from './LaunchPad';
+export { PipelineStepConfigPanel } from './PipelineStepConfigPanel';
 export { PROVIDER_REQUIREMENT_HINTS } from './providerRequirements';

@@ -67,6 +67,7 @@ export const ConsolePanel = ({
             onProviderChange={onProviderChange}
             showDebug={showDebug}
             onShowDebugChange={onShowDebugChange}
+            hideTimeline={!!pipelineJobId}
           />
         </div>
       </div>
