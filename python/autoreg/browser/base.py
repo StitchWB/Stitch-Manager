@@ -125,12 +125,6 @@ class BaseBrowser:
                 logger.info(f"Found CloakBrowser (bundled): {path}")
                 return str(path)
 
-        # 1c. Legacy dev path (bin/cloakbrowser)
-        legacy_path = project_root / "bin" / "cloakbrowser" / ("chrome.exe" if system == "Windows" else "chrome")
-        if legacy_path.exists():
-            logger.info(f"Found CloakBrowser (legacy): {legacy_path}")
-            return str(legacy_path)
-
         # Attempt auto-download on first run (Windows only)
         if system == "Windows" and os.environ.get("AUTOREG_AUTO_DOWNLOAD_CLOAKBROWSER", "1") == "1":
             download_script = project_root / "python" / "autoreg" / "browser" / "download_cloakbrowser.py"

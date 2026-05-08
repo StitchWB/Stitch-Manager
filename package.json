@@ -6,7 +6,7 @@
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File start.ps1",
     "start:dev": "powershell -ExecutionPolicy Bypass -File start-dev.ps1",
-    "dev": "cargo watch -C src-tauri -w . -x \"run --bin stitch-manager\" --why",
+    "dev": "npm run download:cloakbrowser && cargo watch -C src-tauri -w . -x \"run --bin stitch-manager\" --why",
     "dev:web": "vite --port 5174",
     "build": "npm exec tauri -- build",
     "build:web": "tsc && vite build",
