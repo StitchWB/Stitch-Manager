@@ -71,6 +71,16 @@ class RegistrationPipeline:
 
             result = self._execute_step(step)
 
+            if result.get("human_pause"):
+                # Step requested human intervention (e.g. captcha image challenge)
+                step.status = StepStatus.WAITING
+                self._emit("human_pause", step_id=step.id, reason=result.get("human_pause_reason", "Manual intervention required"))
+                self._play_alert_sound()
+                self._wait_for_human_pause(step, result)
+                if self.state.cancelled:
+                    break
+                continue
+
             if result.get("success"):
                 step.status = StepStatus.COMPLETED
                 step.result = result
@@ -148,6 +158,63 @@ class RegistrationPipeline:
                 break
             else:
                 logger.debug(f"Buffering unexpected command between steps: {cmd.command}")
+
+    def _play_alert_sound(self) -> None:
+        """Play system alert sound to notify user of human-pause state."""
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        except Exception:
+            # Fallback: ASCII bell
+            print("\a", flush=True)
+
+    def _wait_for_human_pause(self, step: PipelineStep, result: dict[str, Any]) -> None:
+        """Handle human_pause request from a step.
+
+        Waits for resume/skip/abort command. If human_pause_timeout is configured,
+        auto-skips after timeout (for non-required steps) or aborts (for required).
+        """
+        timeout = step.config.get("human_pause_timeout")
+        if timeout is None:
+            timeout = 300  # default 5 minutes
+
+        self._emit("human_pause_waiting", step_id=step.id, timeout=timeout)
+        logger.info(f"Human pause active for step '{step.id}' (timeout={timeout}s). Waiting for resume/skip/abort...")
+
+        if timeout and timeout > 0:
+            cmd = self.transport.wait_for_command(["resume", "skip", "abort"], step_id=step.id, timeout=timeout)
+        else:
+            cmd = self.transport.wait_for_command(["resume", "skip", "abort"], step_id=step.id)
+
+        if cmd is None:
+            # Timeout reached
+            logger.warning(f"Human pause timeout ({timeout}s) reached for step '{step.id}'")
+            self._emit("human_pause_timeout", step_id=step.id)
+            if step.required:
+                step.status = StepStatus.FAILED
+                self.state.step_results[step.id] = {"success": False, "error": "Human pause timeout"}
+                self._emit("step_failed", step_id=step.id, error="Human pause timeout")
+            else:
+                step.status = StepStatus.SKIPPED
+                self.state.step_results[step.id] = {"success": True, "reason": "human_pause_timeout"}
+                self._emit("step_skipped", step_id=step.id, reason="human_pause_timeout")
+            return
+
+        if cmd.command == "resume":
+            # User indicates they manually completed the challenge
+            step.status = StepStatus.COMPLETED
+            self.state.step_results[step.id] = {"success": True, "reason": "human_pause_resolved"}
+            self._emit("step_completed", step_id=step.id, result={"success": True, "reason": "human_pause_resolved"})
+            logger.info(f"Human pause resolved for step '{step.id}' — resuming")
+        elif cmd.command == "skip":
+            step.status = StepStatus.SKIPPED
+            self.state.step_results[step.id] = {"success": True, "reason": "human_pause_skipped"}
+            self._emit("step_skipped", step_id=step.id, reason="human_pause_skip")
+            logger.info(f"Human pause skipped for step '{step.id}'")
+        elif cmd.command == "abort":
+            self.state.cancelled = True
+            self._emit("pipeline_aborted", step_id=step.id, reason="human_pause_abort")
+            logger.info(f"Pipeline aborted from human pause at step '{step.id}'")
 
     def _handle_step_failure(self, step: PipelineStep, result: dict[str, Any]) -> str:
         if step.skippable:
