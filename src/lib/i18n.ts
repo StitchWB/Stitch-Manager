@@ -34,6 +34,7 @@ export interface Translations {
     start: string;
     stop: string;
     restart: string;
+    retry: string;
     saved: string;
     browse: string;
     select: string;
@@ -648,10 +649,15 @@ export interface Translations {
     step: string;
     start: string;
     stop: string;
+    pause: string;
+    resume: string;
     readyToStart: string;
     configureMailFirst: string;
     consoleOutput: string;
     liveRegistrationLogs: string;
+    pipelineSteps: string;
+    stepEnabled: string;
+    stepDisabled: string;
     speed: string;
     slow: string;
     fast: string;
@@ -707,6 +713,19 @@ export interface Translations {
     emailAliases: string;
     configureAddyio: string;
     configure33mail: string;
+
+    pipeline: {
+      resume: string;
+      skip: string;
+      abort: string;
+      takeOver: string;
+      done: string;
+      paused: string;
+      manual: string;
+      stepWaiting: string;
+      setPause: string;
+      unsetPause: string;
+    };
 
     addyio: {
       title: string;
@@ -1689,6 +1708,7 @@ export interface Translations {
     verifying: string;
     gettingToken: string;
     success: string;
+    warning: string;
     error: string;
     clickToStart: string;
     configureFirst: string;

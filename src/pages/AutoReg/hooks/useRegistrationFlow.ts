@@ -5,6 +5,7 @@ import { stopRegistration } from '../../../lib/tauri';
 import { testInboxConnection } from '../../../lib/tauri/modules/registration';
 import { runRegistration, cancelActiveRegistrationJob } from '../services';
 import type { ProviderName } from '../../../types/ui';
+import type { PipelineStepOverride } from '../../../components/registration/PipelineStepConfigPanel';
 
 interface UseRegistrationFlowProps {
   config: any;
@@ -18,6 +19,7 @@ interface UseRegistrationFlowProps {
     awsBootstrapAccountId?: number;
     launchMode?: string;
   };
+  pipelineStepOverrides?: PipelineStepOverride[];
   onThreadsChange: (threads: number) => void;
 }
 
@@ -27,6 +29,7 @@ export const useRegistrationFlow = ({
   useRegistrationV2,
   canStart,
   launchContext,
+  pipelineStepOverrides,
   onThreadsChange,
 }: UseRegistrationFlowProps) => {
   const { addNotification } = useAppStore();
@@ -119,6 +122,7 @@ export const useRegistrationFlow = ({
         emailDomain,
         useRegistrationV2,
         launchContext,
+        pipelineStepOverrides,
         onLog: (level, message) => addLog({ level, message }),
         onHistoryEntry: addHistoryEntry,
         onCancelled: () => cancelledRef.current,

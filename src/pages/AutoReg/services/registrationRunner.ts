@@ -16,6 +16,7 @@ import {
   startRegistrationV2,
   listAccounts,
   stopRegistration,
+  registrationControl,
 } from '../../../lib/tauri';
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
@@ -30,6 +31,7 @@ import type {
   GithubAutoregResult,
 } from '../../../types/generated';
 import { validateAliasConfiguration, type PythonAliasStrategy } from './aliasValidation';
+import type { PipelineStepOverride } from '../../../components/registration/PipelineStepConfigPanel';
 
 // Timeout for each registration attempt (10 minutes)
 const REGISTRATION_TIMEOUT_MS = 10 * 60 * 1000;
@@ -48,6 +50,7 @@ export interface RegistrationOptions {
     awsBootstrapAccountId?: number;
     launchMode?: string;
   };
+  pipelineStepOverrides?: PipelineStepOverride[];
   onLog: (level: LogLevel, message: string) => void;
   onHistoryEntry: (entry: {
     provider: ProviderName;
@@ -201,6 +204,7 @@ export async function runRegistration(options: RegistrationOptions): Promise<Reg
           onCancelled,
           onLog,
           launchContext: options.launchContext,
+          pipelineStepOverrides: options.pipelineStepOverrides,
         });
 
         // Process result
@@ -338,6 +342,7 @@ async function runProviderRegistration(params: {
   onCancelled: () => boolean;
   onLog: (level: LogLevel, message: string) => void;
   launchContext?: RegistrationOptions['launchContext'];
+  pipelineStepOverrides?: PipelineStepOverride[];
 }): Promise<
   | PythonAutoregResult
   | WindsurfAutoregResult
@@ -358,6 +363,7 @@ async function runProviderRegistration(params: {
     onCancelled,
     onLog,
     launchContext,
+    pipelineStepOverrides,
   } = params;
 
   if (provider === 'windsurf') {
@@ -396,6 +402,7 @@ async function runProviderRegistration(params: {
       correlationId,
       ...inboxBridgeFields,
     });
+    activePythonJobId = startResponse.jobId;
     return await waitForJobResult<WindsurfAutoregResult>(
       startResponse.jobId,
       REGISTRATION_TIMEOUT_MS,
@@ -444,6 +451,7 @@ async function runProviderRegistration(params: {
       correlationId,
       ...inboxBridgeFields,
     });
+    activePythonJobId = startResponse.jobId;
     return await waitForJobResult<TraeAutoregResult>(
       startResponse.jobId,
       REGISTRATION_TIMEOUT_MS,
@@ -481,6 +489,7 @@ async function runProviderRegistration(params: {
       correlationId,
       ...inboxBridgeFields,
     });
+    activePythonJobId = startResponse.jobId;
     return await waitForJobResult<GithubAutoregResult>(
       startResponse.jobId,
       REGISTRATION_TIMEOUT_MS,
@@ -542,6 +551,7 @@ async function runProviderRegistration(params: {
       baseEmail: email || config.imap.email || imapUser || null,
       ...inboxBridgeFields,
     });
+    activePythonJobId = startResponse.jobId;
     return await waitForJobResult<OpenAIAutoregResult>(
       startResponse.jobId,
       REGISTRATION_TIMEOUT_MS,
@@ -610,6 +620,21 @@ async function runProviderRegistration(params: {
       debug: config.logVerbosity === 'debug',
       ...inboxBridgeFields,
     });
+    activePythonJobId = startResponse.jobId;
+
+    // Send initial step configuration overrides immediately after job starts
+    if (pipelineStepOverrides && pipelineStepOverrides.length > 0) {
+      for (const step of pipelineStepOverrides) {
+        await registrationControl(startResponse.jobId, 'configure', step.id, {
+          enabled: step.enabled,
+          pause_after: step.pauseAfter,
+          skippable: step.skippable,
+        }).catch((err: unknown) => {
+          onLog('warn', `Failed to configure step ${step.id}: ${String(err)}`);
+        });
+      }
+    }
+
     return await waitForJobResult<FireworksAutoregResult>(
       startResponse.jobId,
       REGISTRATION_TIMEOUT_MS,
@@ -659,6 +684,7 @@ async function runProviderRegistration(params: {
       correlationId,
       ...inboxBridgeFields,
     });
+    activePythonJobId = startResponse.jobId;
     return await waitForJobResult<BitbucketAutoregResult>(
       startResponse.jobId,
       REGISTRATION_TIMEOUT_MS,

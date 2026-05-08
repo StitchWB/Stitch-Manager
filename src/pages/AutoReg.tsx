@@ -15,6 +15,7 @@ import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
 import { getActivePythonJobId } from './AutoReg/services';
+import type { PipelineStepOverride } from '../components/registration/PipelineStepConfigPanel';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIState } from '../hooks/useUIState';
 import {
@@ -98,6 +99,24 @@ export default function AutoRegNext() {
     null as number | null,
     'session'
   );
+
+  // Pipeline step overrides per provider (persisted per session)
+  // All pauseAfter=false by default — user opts in to pauses explicitly
+  const [pipelineStepOverrides, setPipelineStepOverrides] = useState<Record<string, PipelineStepOverride[]>>({
+    fireworks: [
+      { id: 'signup', label: 'Sign Up', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'confirm_email', label: 'Confirm Email', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'onboarding', label: 'Onboarding', enabled: true, pauseAfter: false, skippable: true },
+      { id: 'api_key', label: 'Create API Key', enabled: true, pauseAfter: false, skippable: true },
+      { id: 'billing', label: 'Add Billing', enabled: true, pauseAfter: false, skippable: true },
+    ],
+  });
+
+  const currentPipelineSteps = useMemo(
+    () => pipelineStepOverrides[config.provider] || [],
+    [pipelineStepOverrides, config.provider]
+  );
+
   const { accounts: allAccounts, fetchAccounts: fetchAccountsForPicker } = useAccountsStore();
 
   // Use persisted preferences instead of local state
@@ -189,6 +208,7 @@ export default function AutoRegNext() {
       useRegistrationV2,
       canStart,
       launchContext: launchContext || undefined,
+      pipelineStepOverrides: currentPipelineSteps,
       onThreadsChange: handleSetActiveThreads,
     });
 
@@ -486,8 +506,6 @@ export default function AutoRegNext() {
         addyioConnectionMessage={addyioConnectionMessage}
         addyioAccountInfo={addyioAccountInfo}
         addyioDomains={addyioDomains}
-        imapConfig={config.imap}
-        onLog={(level, message) => addLog({ level, message })}
         useRegistrationV2={useRegistrationV2}
         onUseRegistrationV2Change={handleSetUseRegistrationV2}
         headless={config.advanced.headless}
@@ -536,6 +554,10 @@ export default function AutoRegNext() {
         onCardsTextChange={cardsText => stableSetAdvancedSettings({ cardsText })}
         networkConfig={networkConfig}
         onNetworkConfigChange={stableSetProxyConfig}
+        pipelineSteps={currentPipelineSteps}
+        onPipelineStepsChange={steps =>
+          setPipelineStepOverrides(prev => ({ ...prev, [config.provider]: steps }))
+        }
         count={config.count}
         onCountChange={stableSetCount}
         isRunning={activeThreads > 0 || isStopping}
@@ -543,6 +565,7 @@ export default function AutoRegNext() {
         pythonAvailable={pythonAvailable}
         onStart={handleStart}
         onStop={handleStop}
+        jobId={pipelineJobId}
         saveStatus={saveStatus}
         disabled={activeThreads > 0}
       />

@@ -24,6 +24,7 @@ interface MissionControlHUDProps {
   onProviderChange?: (provider: string) => void;
   showDebug?: boolean;
   onShowDebugChange?: (show: boolean) => void;
+  hideTimeline?: boolean;
 }
 
 // Parse log message to determine current step
@@ -131,6 +132,10 @@ function parseLiveAction(
 
   // Error
   if (lastLog.level === 'error') {
+    const msg = lastLog.message.toLowerCase();
+    if (msg.includes('timed out') || msg.includes('timeout')) {
+      return { action: 'warning', detail: lastLog.message.slice(0, 50) };
+    }
     return { action: 'error', detail: lastLog.message.slice(0, 50) };
   }
 
@@ -287,6 +292,7 @@ export function MissionControlHUD({
   onProviderChange,
   showDebug = false,
   onShowDebugChange,
+  hideTimeline = false,
 }: MissionControlHUDProps) {
   const currentStep = useMemo(() => parseCurrentStep(logs, isRunning), [logs, isRunning]);
   const { action, detail } = useMemo(() => parseLiveAction(logs, isRunning), [logs, isRunning]);
@@ -294,13 +300,15 @@ export function MissionControlHUD({
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
-      {/* Timeline - Top */}
-      <div
-        className="shrink-0 border-b border-white/5"
-        style={{ background: 'rgba(0, 0, 0, 0.3)' }}
-      >
-        <ProcessTimeline currentStep={currentStep} />
-      </div>
+      {/* Timeline - Top (hidden when PipelineControls shows its own step progress) */}
+      {!hideTimeline && (
+        <div
+          className="shrink-0 border-b border-white/5"
+          style={{ background: 'rgba(0, 0, 0, 0.3)' }}
+        >
+          <ProcessTimeline currentStep={currentStep} />
+        </div>
+      )}
 
       {/* Live Status Strip - Compact, no padding */}
       <div className="shrink-0">

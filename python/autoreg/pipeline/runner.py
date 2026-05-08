@@ -16,6 +16,7 @@ class PipelineState:
     paused: bool = False
     manual_mode: bool = False
     cancelled: bool = False
+    pause_requested: bool = False
     step_results: dict[str, dict[str, Any]] = field(default_factory=dict)
     step_errors: dict[str, str] = field(default_factory=dict)
 
@@ -55,6 +56,8 @@ class RegistrationPipeline:
             if self.state.cancelled:
                 logger.info("Pipeline cancelled")
                 break
+
+            self._drain_config_commands()
 
             if not step.enabled:
                 step.status = StepStatus.SKIPPED
@@ -102,6 +105,13 @@ class RegistrationPipeline:
                 elif action == "abort":
                     return self._fail(step.id, step.error or "Aborted by user")
 
+            # User-requested pause takes effect after current step
+            if self.state.pause_requested:
+                self.state.pause_requested = False
+                step.status = StepStatus.WAITING
+                self._emit("step_waiting", step_id=step.id, reason="user_pause")
+                self._wait_for_control(step.id)
+
             if step.pause_after:
                 step.status = StepStatus.WAITING
                 self._emit("step_waiting", step_id=step.id, reason="pause_after")
@@ -121,6 +131,23 @@ class RegistrationPipeline:
         except Exception as e:
             logger.error(f"Step {step.id} crashed: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+
+    def _drain_config_commands(self) -> None:
+        while True:
+            cmd = self.transport.read_command(timeout=0.05)
+            if cmd is None:
+                break
+            if cmd.command == "configure" and cmd.step_id:
+                self.update_step_config(cmd.step_id, cmd.data)
+            elif cmd.command == "pause":
+                self.state.pause_requested = True
+                logger.info("Pause requested — will pause after current step")
+            elif cmd.command == "abort":
+                self.state.cancelled = True
+                self._emit("pipeline_aborted", step_id=cmd.step_id)
+                break
+            else:
+                logger.debug(f"Buffering unexpected command between steps: {cmd.command}")
 
     def _handle_step_failure(self, step: PipelineStep, result: dict[str, Any]) -> str:
         if step.skippable:
@@ -145,6 +172,9 @@ class RegistrationPipeline:
                 self.state.manual_mode = False
                 self._emit("pipeline_resumed", step_id=step_id)
                 break
+            elif cmd.command == "pause":
+                logger.debug("Pause command received while already paused — ignoring")
+                continue
             elif cmd.command == "manual":
                 self.state.manual_mode = True
                 self._emit("manual_mode_entered", step_id=step_id)
@@ -185,9 +215,10 @@ class RegistrationPipeline:
     def update_step_config(self, step_id: str, config: dict[str, Any]) -> None:
         step = self._find_step(step_id)
         if step:
-            if "enabled" in config:
-                step.enabled = config["enabled"]
-            step.config.update({k: v for k, v in config.items() if k != "enabled"})
+            for key in ("enabled", "pause_after", "allow_manual", "skippable", "retry_on_fail"):
+                if key in config:
+                    setattr(step, key, config[key])
+            step.config.update({k: v for k, v in config.items() if k not in ("enabled", "pause_after", "allow_manual", "skippable", "retry_on_fail")})
             self._emit("step_config_updated", step_id=step_id, config=step.to_dict())
 
     def _emit_pipeline_config(self) -> None:

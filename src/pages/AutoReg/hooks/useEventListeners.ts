@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useRegistrationStore } from '../../../stores/registration';
 import { listAccounts, updateAccountNotesTags } from '../../../lib/tauri';
 import type { ObsEvent } from '@/lib/observability/types';
+import { remapLogLevel } from '../../../lib/logTransform';
 
 interface UseEventListenersProps {
   onThreadsChange: (threads: number) => void;
@@ -48,8 +49,12 @@ export const useEventListeners = ({ onThreadsChange, launchContext }: UseEventLi
         return;
       }
 
+      const effectiveLevel = payload.source === 'python'
+        ? (remapLogLevel(obsLevel, message) as 'info' | 'warn' | 'error' | 'debug' | 'success')
+        : obsLevel;
+
       addLog({
-        level: obsLevel,
+        level: effectiveLevel,
         message,
       });
     });

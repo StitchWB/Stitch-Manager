@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   ArrowDown,
   Trash2,
@@ -21,6 +21,7 @@ import { Tooltip } from '../Tooltip';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { EmptyState } from './EmptyState';
 import { Select } from './Select';
+import { cleanLogMessage } from '../../lib/logTransform';
 
 interface LogEntry {
   id: string;
@@ -216,11 +217,13 @@ function JsonArtifact({ message, onCopy }: { message: string; onCopy: (text: str
   );
 }
 
-function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) => void }) {
+function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (text: string) => void; debugMode: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const isDebug = log.level === 'debug';
   const isJson = isJsonArtifact(log.message);
-  const { icon, color } = getLogIcon(log.message, log.level);
+  const cleaned = useMemo(() => cleanLogMessage(log.message), [log.message]);
+  const displayMsg = debugMode ? log.message : cleaned.displayMessage;
+  const { icon, color } = getLogIcon(cleaned.displayMessage, log.level);
 
   const formatTime = (timestamp: string) => {
     try {
@@ -249,7 +252,7 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
             )}
           />
           <span className="text-[9px] text-slate-700 font-mono">{formatTime(log.timestamp)}</span>
-          <span className="text-[10px] text-slate-700 truncate">{t('logFeed.debug')}</span>
+          <span className="text-[10px] text-slate-700 truncate">{cleaned.displayMessage || t('logFeed.debug')}</span>
         </div>
         {expanded && (
           <div className="mt-1 pl-5 text-[9px] text-slate-600 break-all">{log.message}</div>
@@ -258,7 +261,6 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
     );
   }
 
-  // JSON artifact - show as inline text link
   if (isJson) {
     return (
       <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors">
@@ -273,7 +275,6 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
     );
   }
 
-  // Determine text color based on log level
   const getTextColor = () => {
     switch (log.level) {
       case 'error':
@@ -291,17 +292,26 @@ function CompactLogRow({ log, onCopy }: { log: LogEntry; onCopy: (text: string) 
 
   return (
     <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors group">
-      {/* Icon instead of dot */}
       <div className={cn('shrink-0 mt-0.5', color)}>{icon}</div>
 
-      {/* Timestamp - bigger and brighter */}
       <span className="text-[11px] text-slate-400 font-mono shrink-0 tabular-nums">
         {formatTime(log.timestamp)}
       </span>
 
-      {/* Message with highlights - color based on level */}
+      {cleaned.phaseTag && !debugMode && (
+        <span className="text-[9px] text-purple-400 font-bold shrink-0 bg-purple-500/10 px-1 rounded">
+          {cleaned.phaseTag}
+        </span>
+      )}
+
+      {cleaned.sourceTag && !debugMode && (
+        <span className="text-[9px] text-slate-600 font-mono shrink-0">
+          {cleaned.sourceTag}
+        </span>
+      )}
+
       <span className={cn('text-[11px] flex-1 break-words leading-relaxed', getTextColor())}>
-        {formatLogMessage(log.message)}
+        {formatLogMessage(displayMsg)}
       </span>
     </div>
   );
@@ -352,6 +362,16 @@ export function CompactLogFeed({
     // Hide debug logs unless toggled
     if (log.level === 'debug' && !effectiveShowDebug) return false;
 
+    // Hide internal pipeline noise (config updates, config events are not user-facing)
+    const msg = log.message;
+    if (
+      msg.includes('Pipeline event: step_config_updated') ||
+      msg.includes('Pipeline event: pipeline_config') ||
+      msg.includes('Pipeline event: pipeline_paused')
+    ) {
+      return false;
+    }
+
     // Filter by provider if not "all"
     if (activeProvider !== 'all') {
       const match = log.message.match(/^\[(\w+)\]/);
@@ -381,6 +401,7 @@ export function CompactLogFeed({
               onValueChange={onProviderChange}
               options={[
                 { value: 'all', label: 'All Providers' },
+                { value: 'fireworks', label: 'Fireworks' },
                 { value: 'kiro', label: 'Kiro' },
                 { value: 'windsurf', label: 'Windsurf' },
                 { value: 'github', label: 'GitHub' },
@@ -449,7 +470,7 @@ export function CompactLogFeed({
         ) : (
           <div className="py-1">
             {filteredLogs.map(log => (
-              <CompactLogRow key={log.id} log={log} onCopy={copy} />
+              <CompactLogRow key={log.id} log={log} onCopy={copy} debugMode={effectiveShowDebug} />
             ))}
           </div>
         )}
