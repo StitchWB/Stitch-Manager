@@ -103,12 +103,33 @@ class BaseBrowser:
         possible_paths = []
         
         # --- Priority 1: CloakBrowser (bundled anti-detect browser) ---
+        # 1a. Tauri-bundled path passed via env var (cross-platform)
+        bundled_env = os.environ.get("CLOAKBROWSER_BUNDLED_PATH")
+        if bundled_env and Path(bundled_env).exists():
+            logger.info(f"Found CloakBrowser (Tauri bundled): {bundled_env}")
+            return bundled_env
+
+        # 1b. Tauri resource directory (production layout: <app>/resources/cloakbrowser/)
         script_dir = Path(__file__).resolve().parent
         project_root = script_dir.parent.parent.parent
-        cloakbrowser_path = project_root / "bin" / "cloakbrowser" / "chrome.exe"
-        if cloakbrowser_path.exists():
-            logger.info(f"Found CloakBrowser (bundled): {cloakbrowser_path}")
-            return str(cloakbrowser_path)
+        possible_bundled = [
+            # Dev layout (project root)
+            project_root / "resources" / "cloakbrowser" / ("chrome.exe" if system == "Windows" else "chrome"),
+            # Production: next to Python binary (if bundled)
+            Path(sys.executable).parent / "resources" / "cloakbrowser" / ("chrome.exe" if system == "Windows" else "chrome"),
+            # Production: parent of Python binary (some PyInstaller layouts)
+            Path(sys.executable).parent.parent / "resources" / "cloakbrowser" / ("chrome.exe" if system == "Windows" else "chrome"),
+        ]
+        for path in possible_bundled:
+            if path.exists():
+                logger.info(f"Found CloakBrowser (bundled): {path}")
+                return str(path)
+
+        # 1c. Legacy dev path (bin/cloakbrowser)
+        legacy_path = project_root / "bin" / "cloakbrowser" / ("chrome.exe" if system == "Windows" else "chrome")
+        if legacy_path.exists():
+            logger.info(f"Found CloakBrowser (legacy): {legacy_path}")
+            return str(legacy_path)
 
         # Attempt auto-download on first run (Windows only)
         if system == "Windows" and os.environ.get("AUTOREG_AUTO_DOWNLOAD_CLOAKBROWSER", "1") == "1":
@@ -120,9 +141,10 @@ class BaseBrowser:
                         [sys.executable, str(download_script)],
                         capture_output=True, text=True, timeout=600,
                     )
-                    if result.returncode == 0 and cloakbrowser_path.exists():
-                        logger.info(f"CloakBrowser auto-downloaded: {cloakbrowser_path}")
-                        return str(cloakbrowser_path)
+                    downloaded = project_root / "resources" / "cloakbrowser" / "chrome.exe"
+                    if result.returncode == 0 and downloaded.exists():
+                        logger.info(f"CloakBrowser auto-downloaded: {downloaded}")
+                        return str(downloaded)
                     else:
                         logger.warning(f"Auto-download failed: {result.stderr}")
                 except Exception as e:

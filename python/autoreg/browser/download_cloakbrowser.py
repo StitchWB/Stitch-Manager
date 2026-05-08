@@ -1,4 +1,7 @@
-"""Auto-download CloakBrowser anti-detect browser."""
+"""Auto-download CloakBrowser anti-detect browser.
+
+Downloads to resources/cloakbrowser/ so Tauri bundles it into the app installer.
+"""
 import os
 import sys
 import urllib.request
@@ -17,17 +20,18 @@ def get_project_root() -> Path:
     return script_dir.parent.parent.parent
 
 
-def download_cloakbrowser() -> Path:
+def download_cloakbrowser(resources_dir: Path | None = None) -> Path:
     project_root = get_project_root()
-    bin_dir = project_root / "bin" / "cloakbrowser"
-    zip_path = bin_dir / "cloakbrowser.zip"
-    chrome_exe = bin_dir / "chrome.exe"
+    if resources_dir is None:
+        resources_dir = project_root / "resources" / "cloakbrowser"
+    zip_path = resources_dir / "cloakbrowser.zip"
+    chrome_exe = resources_dir / "chrome.exe"
 
     if chrome_exe.exists():
         print(f"CloakBrowser already present: {chrome_exe}")
         return chrome_exe
 
-    bin_dir.mkdir(parents=True, exist_ok=True)
+    resources_dir.mkdir(parents=True, exist_ok=True)
     print(f"Downloading CloakBrowser from GitHub... (~540 MB)")
     print(f"URL: {CLOAKBROWSER_URL}")
 
@@ -40,7 +44,7 @@ def download_cloakbrowser() -> Path:
 
     print("Extracting...")
     with zipfile.ZipFile(zip_path, 'r') as zf:
-        zf.extractall(bin_dir)
+        zf.extractall(resources_dir)
 
     zip_path.unlink()
     print(f"CloakBrowser ready: {chrome_exe}")
