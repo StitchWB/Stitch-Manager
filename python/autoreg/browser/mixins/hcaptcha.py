@@ -416,6 +416,47 @@ class HCaptchaMixin:
             logger.debug(f"is_hcaptcha_solved check failed: {e}")
             return False
 
+    def is_hcaptcha_challenge_mode(self, page, iframe) -> bool:
+        """Detect if hCaptcha entered image-challenge mode (needs human).
+
+        After clicking the checkbox, hCaptcha may expand the iframe from ~66x66
+        to a larger size (~400x400+) when it presents image selection challenges.
+        Returns True if challenge mode is detected.
+        """
+        try:
+            rect = iframe.rect if hasattr(iframe, 'rect') else None
+            if rect is not None:
+                try:
+                    width = rect.width
+                    height = rect.height
+                except (AttributeError, TypeError):
+                    try:
+                        width = rect['width']
+                        height = rect['height']
+                    except (KeyError, TypeError):
+                        rect = None
+            if rect is None:
+                js_rect = page.run_js('''
+                    const iframe = document.querySelector('iframe[src*="hcaptcha"]');
+                    if (!iframe) return null;
+                    const r = iframe.getBoundingClientRect();
+                    return {width: r.width, height: r.height};
+                ''')
+                if not js_rect or not isinstance(js_rect, dict):
+                    return False
+                width = js_rect.get('width', 0)
+                height = js_rect.get('height', 0)
+
+            # Challenge mode: iframe grows significantly larger than checkbox
+            if width > 200 and height > 200:
+                logger.info(f"hCaptcha CHALLENGE MODE detected: iframe {width:.0f}x{height:.0f}")
+                return True
+            logger.debug(f"hCaptcha iframe size {width:.0f}x{height:.0f} — likely checkbox mode")
+            return False
+        except Exception as e:
+            logger.debug(f"hCaptcha challenge mode detection failed: {e}")
+            return False
+
     def is_hcaptcha_visible(self, page) -> bool:
         """Check if hCaptcha iframe is currently visible (challenge showing)."""
         try:
