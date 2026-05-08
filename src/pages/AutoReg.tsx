@@ -29,7 +29,7 @@ import {
 export default function AutoRegNext() {
   const location = useLocation();
   const autoRegSupportedProviders = useMemo<ProviderName[]>(
-    () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'bitbucket'],
+    () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'fireworks2', 'bitbucket'],
     []
   );
 
@@ -104,6 +104,13 @@ export default function AutoRegNext() {
   // All pauseAfter=false by default — user opts in to pauses explicitly
   const [pipelineStepOverrides, setPipelineStepOverrides] = useState<Record<string, PipelineStepOverride[]>>({
     fireworks: [
+      { id: 'signup', label: 'Sign Up', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'confirm_email', label: 'Confirm Email', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'onboarding', label: 'Onboarding', enabled: true, pauseAfter: false, skippable: true },
+      { id: 'api_key', label: 'Create API Key', enabled: true, pauseAfter: false, skippable: true },
+      { id: 'billing', label: 'Add Billing', enabled: true, pauseAfter: false, skippable: true },
+    ],
+    fireworks2: [
       { id: 'signup', label: 'Sign Up', enabled: true, pauseAfter: false, skippable: false },
       { id: 'confirm_email', label: 'Confirm Email', enabled: true, pauseAfter: false, skippable: false },
       { id: 'onboarding', label: 'Onboarding', enabled: true, pauseAfter: false, skippable: true },

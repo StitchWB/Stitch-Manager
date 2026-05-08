@@ -12,6 +12,7 @@ const providerLabelMap: Record<string, string> = {
   trae: 'Trae',
   github: 'GitHub',
   fireworks: 'Fireworks AI',
+  fireworks2: 'Fireworks AI (CB)',
   aws_builder_id: 'AWS Builder',
   aws: 'AWS',
   google: 'Google',
