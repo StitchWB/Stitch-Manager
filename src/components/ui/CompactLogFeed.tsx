@@ -402,6 +402,7 @@ export function CompactLogFeed({
               options={[
                 { value: 'all', label: 'All Providers' },
                 { value: 'fireworks', label: 'Fireworks' },
+                { value: 'fireworks2', label: 'Fireworks CB' },
                 { value: 'kiro', label: 'Kiro' },
                 { value: 'windsurf', label: 'Windsurf' },
                 { value: 'github', label: 'GitHub' },

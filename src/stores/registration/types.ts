@@ -65,6 +65,7 @@ export interface ProviderEmailStrategies {
   copilot: ProviderEmailStrategy;
   openai: ProviderEmailStrategy;
   fireworks: ProviderEmailStrategy;
+  fireworks2: ProviderEmailStrategy;
   bitbucket: ProviderEmailStrategy;
 }
 
@@ -203,6 +204,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     copilot: { ...DEFAULT_EMAIL_STRATEGY },
     openai: { ...DEFAULT_EMAIL_STRATEGY },
     fireworks: { ...DEFAULT_EMAIL_STRATEGY },
+    fireworks2: { ...DEFAULT_EMAIL_STRATEGY },
     bitbucket: { ...DEFAULT_EMAIL_STRATEGY },
   },
   proxy: {
