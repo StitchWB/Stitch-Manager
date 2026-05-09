@@ -29,6 +29,7 @@ from ..core.paths import get_paths
 from .cloakbrowser_profile_manager import CloakBrowserProfileManager
 from .async_cloakbrowser_wrapper import AsyncCloakBrowserWrapper
 
+DEBUG_TIMING = os.environ.get("STITCH_DEBUG_TIMING", "0") == "1"
 
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.async_api import Page
@@ -703,6 +704,8 @@ class ProfileLauncher:
         )
 
         # Build sync manager
+        # ProfileLauncher already holds the profile lock, so tell the manager
+        # to skip its own lock acquisition to avoid deadlock.
         manager = CloakBrowserProfileManager(
             profile_id=self.profile_id,
             profiles_root=self.profiles_root,
@@ -712,6 +715,7 @@ class ProfileLauncher:
             timezone_id=tz if tz != "Auto" else None,
             geolocation=geo if isinstance(geo, dict) else None,
             window_size=resolved_window,
+            auto_lock=False,
         )
 
         # Wrap in async façade
