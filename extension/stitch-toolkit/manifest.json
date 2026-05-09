@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Stitch Toolkit",
+  "version": "0.2.1",
+  "description": "Universal tool panel for CloakBrowser profiles: Stripe filler, scenario recorder, and more.",
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs",
+    "activeTab",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["panel/panel.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["panel/*", "shared.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+}
