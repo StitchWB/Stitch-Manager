@@ -5,7 +5,7 @@
 import type { ProviderName } from '../../types/ui';
 
 // Mail strategy type
-export type MailStrategy = 'custom' | 'gmail';
+export type MailStrategy = 'custom' | 'gmail' | 'cf-to-imap';
 
 // Email strategy type
 export type EmailStrategy = 'static' | 'counter' | 'addyio' | 'addyio_counter';
@@ -42,11 +42,13 @@ export interface IMAPConfig {
   thirtyThreeMailDomain?: string;
   // Mail.tm fields (GLOBAL - shared across providers)
   mailtmEnabled?: boolean;
+  // CF-to-IMAP: explicit email generation domain (overrides imap.email domain)
+  emailGenerationDomain?: string;
 }
 
 // Provider-specific email strategy settings (NOT including IMAP credentials)
 export interface ProviderEmailStrategy {
-  strategy: MailStrategy; // custom/gmail/33mail/addyio
+  strategy: MailStrategy; // custom/gmail/cf-to-imap
   // For custom domain - which domain to use
   customDomain?: string;
   // For 33mail - which domain to use
@@ -179,6 +181,7 @@ export const DEFAULT_IMAP_CONFIG: IMAPConfig = {
   thirtyThreeMailEnabled: false,
   thirtyThreeMailUsername: '',
   thirtyThreeMailDomain: '33mail.com',
+  emailGenerationDomain: '',
 };
 
 export const DEFAULT_EMAIL_STRATEGY: ProviderEmailStrategy = {

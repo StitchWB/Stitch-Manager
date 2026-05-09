@@ -859,6 +859,15 @@ export const useMailStore = create<MailState>((set, get) => ({
       });
 
       void get().loadFolders();
+
+      // Auto-save session as profile if no active profile exists
+      if (!activeProfileId) {
+        await get().saveCurrentSessionAsProfile();
+        const afterSave = get();
+        if (afterSave.error) {
+          console.warn('Auto-save session as profile failed:', afterSave.error);
+        }
+      }
     } catch (error) {
       set({ error: toErrorMessage(error) });
     } finally {
