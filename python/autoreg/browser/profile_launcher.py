@@ -1,4 +1,4 @@
-"""ProfileLauncher - persistent Camoufox profile launcher.
+"""ProfileLauncher - persistent CloakBrowser profile launcher.
 
 Goals (explicitly safe/stability-only):
 - Persistent profile dirs (user_data_dir)
@@ -26,13 +26,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ..core.paths import get_paths
-from .firefox_profile_manager import FirefoxProfileManager, DEBUG_TIMING
 from .cloakbrowser_profile_manager import CloakBrowserProfileManager
 from .async_cloakbrowser_wrapper import AsyncCloakBrowserWrapper
 
 
 if TYPE_CHECKING:  # pragma: no cover
-    from playwright.async_api import BrowserContext, Page
+    from playwright.async_api import Page
 
 
 WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
@@ -685,12 +684,7 @@ class ProfileLauncher:
             _safe_stderr(f"[ProfileLauncher] TIMING: _acquire_profile_lock: {t1-t0:.2f}s")
 
         try:
-            # --- CloakBrowser (Chromium) path — default ---
-            if self.engine == "cloackbrowser":
-                return await self._start_cloakbrowser()
-
-            # --- Camoufox (Firefox) path — legacy ---
-            return await self._start_camoufox()
+            return await self._start_cloakbrowser()
         except Exception:
             self._release_profile_lock()
             self._manager = None
@@ -735,79 +729,6 @@ class ProfileLauncher:
             )
 
         return wrapper
-
-    async def _start_camoufox(self) -> BrowserContext:
-        """Legacy Camoufox path."""
-        locale = self._effective_locale()
-        timezone_id = self._effective_timezone()
-        geolocation = self._effective_geolocation()
-        extra_headers = self._effective_extra_headers()
-        explicit_locale = self._has_explicit_locale()
-        explicit_timezone = self._has_explicit_timezone()
-
-        if timezone_id == "Auto":
-            timezone_id = None
-        if geolocation == "Auto":
-            geolocation = None
-        if not timezone_id:
-            timezone_id = DEFAULT_TIMEZONE_ID
-        if self._proxy is not None and not explicit_locale:
-            locale = None
-
-        launch_kwargs: dict[str, Any] = {"extra_http_headers": extra_headers}
-        if locale:
-            launch_kwargs["locale"] = locale
-        if timezone_id:
-            launch_kwargs["timezone_id"] = timezone_id
-        if isinstance(geolocation, dict) and "latitude" in geolocation and "longitude" in geolocation:
-            launch_kwargs["geolocation"] = geolocation
-            launch_kwargs["permissions"] = ["geolocation"]
-
-        raw_launch_kwargs = self._config.get("launch_kwargs")
-        if isinstance(raw_launch_kwargs, dict):
-            launch_kwargs.update(raw_launch_kwargs)
-
-        if isinstance(launch_kwargs.get("screen"), dict):
-            launch_kwargs.pop("screen", None)
-
-        resolved_window, maximize_on_start = _resolve_browser_window(
-            self._config,
-            current_window=launch_kwargs.get("window"),
-        )
-        launch_kwargs["window"] = resolved_window
-
-        if maximize_on_start:
-            raw_prefs = launch_kwargs.get("firefox_user_prefs")
-            firefox_prefs: dict[str, Any] = dict(raw_prefs) if isinstance(raw_prefs, dict) else {}
-            firefox_prefs["browser.startup.maximized"] = True
-            launch_kwargs["firefox_user_prefs"] = firefox_prefs
-
-        proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
-        disable_ublock = self._config.get("disable_ublock", False)
-
-        manager = FirefoxProfileManager(
-            profile_id=self.profile_id,
-            profiles_root=self.profiles_root,
-            headless=self.headless,
-            proxy_url=proxy_url,
-            launch_kwargs=launch_kwargs,
-            disable_ublock=disable_ublock,
-        )
-
-        t3 = time.perf_counter()
-        if DEBUG_TIMING:
-            _safe_stderr(f"[ProfileLauncher] TIMING: before manager.start(): {t3-time.perf_counter():.2f}s total")
-        context = await manager.start()
-        if DEBUG_TIMING:
-            t4 = time.perf_counter()
-            _safe_stderr(f"[ProfileLauncher] TIMING: manager.start(): {t4-t3:.2f}s")
-        self._manager = manager
-
-        cookies = _load_cookies_from_config(self._config)
-        if cookies:
-            await cast(Any, context).add_cookies(cookies)
-
-        return context
 
     async def open(
         self,

@@ -416,7 +416,7 @@ REPLAY_OVERLAY_SCRIPT = _load_shared_overlay_runtime_script() + "\n" + _REPLAY_O
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Replay a scenario in Camoufox persistent profile")
+    p = argparse.ArgumentParser(description="Replay a scenario in persistent browser profile")
     p.add_argument("--alias", required=True, help="Profile alias")
     p.add_argument("--scenario-path", required=True, help="Path to scenario.json")
     p.add_argument(
@@ -429,6 +429,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--timeout-s", type=int, default=3600, help="Max replay duration")
     p.add_argument("--pause-timeout-s", type=int, default=1800, help="Timeout for manual pause")
     p.add_argument("--proxy", default="", help="Optional proxy URL")
+    p.add_argument(
+        "--engine",
+        choices=["cloackbrowser"],
+        default="cloackbrowser",
+        help="Browser engine (default: cloackbrowser)",
+    )
     p.add_argument(
         "--config-json",
         default="",
@@ -1243,6 +1249,7 @@ async def main_async() -> int:
             headless=bool(args.headless),
             proxy=proxy_url or None,
             config=config,
+            engine=args.engine,
         )
         page = await launcher.open(open_url, wait_until="domcontentloaded")
         session_page = page

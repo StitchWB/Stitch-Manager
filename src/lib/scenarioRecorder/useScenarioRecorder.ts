@@ -18,6 +18,7 @@ type ScenarioRecorderOptions = {
   configJson?: string | null;
   noOverlay?: boolean;
   runnerMode?: ScenarioRunnerMode;
+  engine?: 'cloackbrowser' | 'camoufox';
 };
 
 type ScenarioRecorderState = {
@@ -124,6 +125,9 @@ export function useScenarioRecorder() {
         }
         if (opts.noOverlay) {
           args.push('--no-overlay');
+        }
+        if (opts.engine) {
+          args.push('--engine', opts.engine);
         }
       }
 

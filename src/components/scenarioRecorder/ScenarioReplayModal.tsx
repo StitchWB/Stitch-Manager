@@ -110,6 +110,8 @@ export function ScenarioReplayModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
   const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
+  const [engine, setEngine] = useState<'cloackbrowser' | 'camoufox'>('cloackbrowser');
+  const [engineHydrated, setEngineHydrated] = useState(false);
   const [recentScenarioPaths, setRecentScenarioPaths] = useState<string[]>([]);
   const [indexedScenarios, setIndexedScenarios] = useState<ScenarioRecordItem[]>([]);
   const [indexedLoading, setIndexedLoading] = useState(false);
@@ -141,6 +143,7 @@ export function ScenarioReplayModal({
   );
   const announcedPauseRef = useRef(false);
   const runnerModePrefKey = useMemo(() => `stitch.replay.runnerMode.${alias || 'global'}`, [alias]);
+  const enginePrefKey = useMemo(() => `stitch.replay.engine.${alias || 'global'}`, [alias]);
   const isNativeRunner = runnerMode === 'native';
   const extensionBridge = useExtensionBridgeProbe({
     isOpen,
@@ -262,6 +265,7 @@ export function ScenarioReplayModal({
       setSelectedTags([]);
       setRunStatusFilter('all');
       setPresetToDelete(null);
+      setEngineHydrated(false);
       scenarioPathTouchedRef.current = false;
       return;
     }
@@ -297,6 +301,34 @@ export function ScenarioReplayModal({
       // best effort only
     }
   }, [isOpen, runnerMode, runnerModePrefKey]);
+
+  // Engine preference (cloackbrowser / camoufox)
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const raw = localStorage.getItem(enginePrefKey);
+      setEngine(raw === 'camoufox' ? 'camoufox' : 'cloackbrowser');
+      setEngineHydrated(true);
+    } catch {
+      setEngine('cloackbrowser');
+      setEngineHydrated(true);
+    }
+  }, [isOpen, enginePrefKey]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setEngineHydrated(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      localStorage.setItem(enginePrefKey, engine);
+    } catch {
+      // best effort only
+    }
+  }, [isOpen, engine, enginePrefKey]);
 
   useEffect(() => {
     if (!isOpen || !scenarioPath.trim()) {
@@ -345,10 +377,16 @@ export function ScenarioReplayModal({
         const built = await buildRunnerConfigFromProfileSettings(record, {
           defaultUrl,
           fallbackUrl: 'https://google.com',
+          engine,
         });
 
         setConfigJson(built.configJson);
         setStartUrl(built.startUrl);
+
+        const profileEngine = record?.settings?.engine;
+        if (profileEngine === 'cloackbrowser' || profileEngine === 'camoufox') {
+          setEngine(profileEngine);
+        }
 
         if (!scenarioPathTouchedRef.current) {
           const explicit = defaultScenarioPath?.trim() || '';
@@ -376,7 +414,7 @@ export function ScenarioReplayModal({
     return () => {
       cancelled = true;
     };
-  }, [alias, defaultScenarioPath, defaultUrl, isOpen, refreshIndexedScenarios]);
+  }, [alias, defaultScenarioPath, defaultUrl, engine, isOpen, refreshIndexedScenarios]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -478,13 +516,14 @@ export function ScenarioReplayModal({
         configJson: nextConfigJson,
         continueOnError: nextContinueOnError,
         runnerMode,
+        engine,
       });
 
       void markRecordedScenarioPlayed({ scenarioPath: nextScenarioPath }).catch(() => {
         // best effort
       });
     },
-    [alias, replay, runnerMode]
+    [alias, replay, runnerMode, engine]
   );
 
   const startReplay = useCallback(async () => {
@@ -591,6 +630,7 @@ export function ScenarioReplayModal({
     if (!isOpen || !alias) return;
     if (!canStart) return;
     if (!runnerModeHydrated) return;
+    if (!engineHydrated) return;
     if (isNativeRunner && runtimeInstalled !== true) return;
     if (!isNativeRunner && extensionBridge.state.connected !== true) return;
     if (replay.state.status !== 'idle') return;
@@ -605,6 +645,7 @@ export function ScenarioReplayModal({
     isNativeRunner,
     extensionBridge.state.connected,
     runnerModeHydrated,
+    engineHydrated,
     quickStart,
     replay.state.status,
     runtimeInstalled,
@@ -799,15 +840,28 @@ export function ScenarioReplayModal({
             ) : null}
           </div>
 
-          <SegmentedControl
-            size="sm"
-            value={runnerMode}
-            onChange={value => setRunnerMode(value as ScenarioRunnerMode)}
-            options={[
-              { label: 'Native runner', value: 'native' },
-              { label: 'Extension runner', value: 'extension' },
-            ]}
-          />
+          <div className="flex flex-col gap-2">
+            <SegmentedControl
+              size="sm"
+              value={runnerMode}
+              onChange={value => setRunnerMode(value as ScenarioRunnerMode)}
+              options={[
+                { label: 'Native runner', value: 'native' },
+                { label: 'Extension runner', value: 'extension' },
+              ]}
+            />
+            {runnerMode === 'native' ? (
+              <SegmentedControl
+                size="sm"
+                value={engine}
+                onChange={value => setEngine(value as 'cloackbrowser' | 'camoufox')}
+                options={[
+                  { label: 'CloakBrowser', value: 'cloackbrowser' },
+                  { label: 'Camoufox', value: 'camoufox' },
+                ]}
+              />
+            ) : null}
+          </div>
           {runnerMode === 'extension' ? (
             <div className="text-[11px] text-cyan-200/90 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
               {t('recorder.extensionRunnerBridgeHint')}
