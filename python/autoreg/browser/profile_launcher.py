@@ -14,6 +14,7 @@ Non-goals (explicitly NOT implemented):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -26,6 +27,8 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ..core.paths import get_paths
 from .firefox_profile_manager import FirefoxProfileManager, DEBUG_TIMING
+from .cloakbrowser_profile_manager import CloakBrowserProfileManager
+from .async_cloakbrowser_wrapper import AsyncCloakBrowserWrapper
 
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -533,7 +536,10 @@ async def _resolve_geo_and_timezone(
 
 
 class ProfileLauncher:
-    """Launches/opens a persistent Camoufox profile with safety utilities."""
+    """Launches/opens a persistent browser profile with safety utilities.
+
+    Dual-mode: supports CloakBrowser (Chromium, default) or Camoufox (Firefox).
+    """
 
     def __init__(
         self,
@@ -543,6 +549,7 @@ class ProfileLauncher:
         headless: bool = False,
         proxy: Any = None,
         config: dict[str, Any] | None = None,
+        engine: str = "cloackbrowser",
     ) -> None:
         self.profile_id = _sanitize_profile_id(profile_id)
         self.profiles_root = (
@@ -550,10 +557,11 @@ class ProfileLauncher:
         )
         self.profile_path = self.profiles_root / self.profile_id
         self.headless = headless
+        self.engine = engine.lower().strip()
 
         self._config: dict[str, Any] = config or {}
         self._proxy = _parse_proxy_any(proxy if proxy is not None else self._config.get("proxy"))
-        self._manager: FirefoxProfileManager | None = None
+        self._manager: Any | None = None
         self._lock = None
 
     async def __aenter__(self) -> ProfileLauncher:
@@ -663,120 +671,143 @@ class ProfileLauncher:
             headers["Accept-Language"] = fallback
         return headers
 
-    async def start(self) -> BrowserContext:
+    async def start(self) -> Any:
+        """Start browser — dual-mode: CloakBrowser (default) or Camoufox."""
         if self._manager is not None:
-            return await self._manager.start()
+            if hasattr(self._manager, "start"):
+                return await self._manager.start()
+            return self._manager
 
         t0 = time.perf_counter()
-        # Lock first to prevent concurrent profile use.
-        t1 = time.perf_counter()
         self._acquire_profile_lock()
-        t2 = time.perf_counter()
+        t1 = time.perf_counter()
         if DEBUG_TIMING:
-            _safe_stderr(f"[ProfileLauncher] TIMING: _acquire_profile_lock: {t2-t1:.2f}s")
+            _safe_stderr(f"[ProfileLauncher] TIMING: _acquire_profile_lock: {t1-t0:.2f}s")
 
         try:
-            locale = self._effective_locale()
-            timezone_id = self._effective_timezone()
-            geolocation = self._effective_geolocation()
-            extra_headers = self._effective_extra_headers()
-            explicit_locale = self._has_explicit_locale()
-            explicit_timezone = self._has_explicit_timezone()
+            # --- CloakBrowser (Chromium) path — default ---
+            if self.engine == "cloackbrowser":
+                return await self._start_cloakbrowser()
 
-            # Skip auto-resolve during launch — resolved inside browser via JS.
-            # This prevents 10-30s HTTP delays before browser even starts.
-            if timezone_id == "Auto":
-                timezone_id = None
-            if geolocation == "Auto":
-                geolocation = None
-
-            # Enforce timezone default if not provided.
-            if not timezone_id:
-                timezone_id = DEFAULT_TIMEZONE_ID
-
-            # Skip locale forcing for proxy sessions unless explicitly set.
-            # Proxy geo is handled by Camoufox fingerprinting inside browser.
-            if self._proxy is not None and not explicit_locale:
-                locale = None
-
-            launch_kwargs: dict[str, Any] = {
-                # Keep options within safe Playwright/Camoufox surface.
-                "extra_http_headers": extra_headers,
-            }
-
-            if locale:
-                launch_kwargs["locale"] = locale
-            if timezone_id:
-                launch_kwargs["timezone_id"] = timezone_id
-
-            if (
-                isinstance(geolocation, dict)
-                and "latitude" in geolocation
-                and "longitude" in geolocation
-            ):
-                launch_kwargs["geolocation"] = geolocation
-                # Permissions can also be granted later per-origin; this keeps it explicit.
-                launch_kwargs["permissions"] = ["geolocation"]
-
-            # Allow callers to pass additional safe kwargs.
-            raw_launch_kwargs = self._config.get("launch_kwargs")
-            if isinstance(raw_launch_kwargs, dict):
-                # Avoid overriding our enforced defaults unless explicitly requested.
-                launch_kwargs.update(raw_launch_kwargs)
-
-            # Camoufox/browserforge compatibility: dict-based `screen` can break.
-            if isinstance(launch_kwargs.get("screen"), dict):
-                launch_kwargs.pop("screen", None)
-
-            resolved_window, maximize_on_start = _resolve_browser_window(
-                self._config,
-                current_window=launch_kwargs.get("window"),
-            )
-            launch_kwargs["window"] = resolved_window
-
-            if maximize_on_start:
-                raw_prefs = launch_kwargs.get("firefox_user_prefs")
-                firefox_prefs: dict[str, Any] = (
-                    dict(raw_prefs) if isinstance(raw_prefs, dict) else {}
-                )
-                firefox_prefs["browser.startup.maximized"] = True
-                launch_kwargs["firefox_user_prefs"] = firefox_prefs
-
-            proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
-
-            # Check if uBlock should be disabled (for payment processors like Stripe)
-            disable_ublock = self._config.get("disable_ublock", False)
-
-            manager = FirefoxProfileManager(
-                profile_id=self.profile_id,
-                profiles_root=self.profiles_root,
-                headless=self.headless,
-                proxy_url=proxy_url,
-                launch_kwargs=launch_kwargs,
-                disable_ublock=disable_ublock,
-            )
-
-            t3 = time.perf_counter()
-            if DEBUG_TIMING:
-                _safe_stderr(f"[ProfileLauncher] TIMING: before manager.start(): {t3-t0:.2f}s total")
-            context = await manager.start()
-            t4 = time.perf_counter()
-            if DEBUG_TIMING:
-                _safe_stderr(f"[ProfileLauncher] TIMING: manager.start(): {t4-t3:.2f}s, total: {t4-t0:.2f}s")
-            self._manager = manager
-
-            # Cookie injection (best-effort). Do before navigation.
-            cookies = _load_cookies_from_config(self._config)
-            if cookies:
-                # Playwright expects a cookie parameter sequence; keep runtime flexible.
-                await cast(Any, context).add_cookies(cookies)
-
-            return context
+            # --- Camoufox (Firefox) path — legacy ---
+            return await self._start_camoufox()
         except Exception:
-            # If start fails, release lock.
             self._release_profile_lock()
             self._manager = None
             raise
+
+    async def _start_cloakbrowser(self) -> AsyncCloakBrowserWrapper:
+        """Start CloakBrowser via sync manager wrapped in async façade."""
+        proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
+        tz = self._effective_timezone()
+        geo = self._effective_geolocation()
+
+        # Parse window
+        resolved_window, _ = _resolve_browser_window(
+            self._config,
+            current_window=None,
+        )
+
+        # Build sync manager
+        manager = CloakBrowserProfileManager(
+            profile_id=self.profile_id,
+            profiles_root=self.profiles_root,
+            headless=self.headless,
+            proxy=proxy_url,
+            locale=self._effective_locale(),
+            timezone_id=tz if tz != "Auto" else None,
+            geolocation=geo if isinstance(geo, dict) else None,
+            window_size=resolved_window,
+        )
+
+        # Wrap in async façade
+        wrapper = AsyncCloakBrowserWrapper(manager)
+        await wrapper.start()
+        self._manager = wrapper
+
+        # Cookie injection
+        cookies = _load_cookies_from_config(self._config)
+        if cookies and hasattr(wrapper._manager, "add_cookies"):
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: wrapper._manager.add_cookies(cookies),
+            )
+
+        return wrapper
+
+    async def _start_camoufox(self) -> BrowserContext:
+        """Legacy Camoufox path."""
+        locale = self._effective_locale()
+        timezone_id = self._effective_timezone()
+        geolocation = self._effective_geolocation()
+        extra_headers = self._effective_extra_headers()
+        explicit_locale = self._has_explicit_locale()
+        explicit_timezone = self._has_explicit_timezone()
+
+        if timezone_id == "Auto":
+            timezone_id = None
+        if geolocation == "Auto":
+            geolocation = None
+        if not timezone_id:
+            timezone_id = DEFAULT_TIMEZONE_ID
+        if self._proxy is not None and not explicit_locale:
+            locale = None
+
+        launch_kwargs: dict[str, Any] = {"extra_http_headers": extra_headers}
+        if locale:
+            launch_kwargs["locale"] = locale
+        if timezone_id:
+            launch_kwargs["timezone_id"] = timezone_id
+        if isinstance(geolocation, dict) and "latitude" in geolocation and "longitude" in geolocation:
+            launch_kwargs["geolocation"] = geolocation
+            launch_kwargs["permissions"] = ["geolocation"]
+
+        raw_launch_kwargs = self._config.get("launch_kwargs")
+        if isinstance(raw_launch_kwargs, dict):
+            launch_kwargs.update(raw_launch_kwargs)
+
+        if isinstance(launch_kwargs.get("screen"), dict):
+            launch_kwargs.pop("screen", None)
+
+        resolved_window, maximize_on_start = _resolve_browser_window(
+            self._config,
+            current_window=launch_kwargs.get("window"),
+        )
+        launch_kwargs["window"] = resolved_window
+
+        if maximize_on_start:
+            raw_prefs = launch_kwargs.get("firefox_user_prefs")
+            firefox_prefs: dict[str, Any] = dict(raw_prefs) if isinstance(raw_prefs, dict) else {}
+            firefox_prefs["browser.startup.maximized"] = True
+            launch_kwargs["firefox_user_prefs"] = firefox_prefs
+
+        proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
+        disable_ublock = self._config.get("disable_ublock", False)
+
+        manager = FirefoxProfileManager(
+            profile_id=self.profile_id,
+            profiles_root=self.profiles_root,
+            headless=self.headless,
+            proxy_url=proxy_url,
+            launch_kwargs=launch_kwargs,
+            disable_ublock=disable_ublock,
+        )
+
+        t3 = time.perf_counter()
+        if DEBUG_TIMING:
+            _safe_stderr(f"[ProfileLauncher] TIMING: before manager.start(): {t3-time.perf_counter():.2f}s total")
+        context = await manager.start()
+        if DEBUG_TIMING:
+            t4 = time.perf_counter()
+            _safe_stderr(f"[ProfileLauncher] TIMING: manager.start(): {t4-t3:.2f}s")
+        self._manager = manager
+
+        cookies = _load_cookies_from_config(self._config)
+        if cookies:
+            await cast(Any, context).add_cookies(cookies)
+
+        return context
 
     async def open(
         self,
@@ -784,14 +815,21 @@ class ProfileLauncher:
         *,
         wait_until: WaitUntil = "domcontentloaded",
         prefer_existing: bool = False,
-    ) -> Page:
+    ) -> Any:
         if not url:
             raise ValueError("url is required")
         if self._manager is None:
             await self.start()
         assert self._manager is not None
 
-        page = await self._manager.get_page()
+        # Get page — engine-agnostic
+        if hasattr(self._manager, "get_page"):
+            page = await self._manager.get_page()
+        elif hasattr(self._manager, "get"):
+            page = await self._manager.get(url)
+        else:
+            raise RuntimeError("Browser manager has no get_page or get method")
+
         if prefer_existing:
             try:
                 current_url = str(page.url or "").strip()
@@ -811,7 +849,6 @@ class ProfileLauncher:
             return page
 
         try:
-            # Validate page state before navigation
             try:
                 page_state = "unknown"
                 if hasattr(page, 'is_closed'):
@@ -819,7 +856,7 @@ class ProfileLauncher:
                 _safe_stderr(f"[ProfileLauncher] Navigating to {target_url} (page state: {page_state}, wait_until: {wait_until})")
             except Exception as diag_err:
                 _safe_stderr(f"[ProfileLauncher] Could not check page state: {diag_err}")
-            
+
             await page.goto(target_url, wait_until=cast(WaitUntil, wait_until))
             _safe_stderr(f"[ProfileLauncher] Navigation successful to {target_url}")
         except Exception as e:
@@ -834,8 +871,6 @@ class ProfileLauncher:
                 except Exception:
                     pass
             # NS_ERROR_PROXY_CONNECTION_REFUSED: proxy is dead but browser is alive.
-            # Fall back to about:blank so the recorder keeps running — the user can
-            # switch proxy via the overlay later.
             if "PROXY_CONNECTION_REFUSED" in err_msg or "proxy_connection_refused" in err_msg.lower():
                 _safe_stderr(
                     f"[ProfileLauncher] Proxy refused for {target_url}, opening about:blank instead. "
