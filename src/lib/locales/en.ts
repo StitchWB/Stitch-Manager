@@ -738,6 +738,8 @@ export const en: Translations = {
     emailGeneration: 'Email generation',
     ready: 'Ready',
     customDomain: 'Custom Domain',
+    cfToImap: 'CF → IMAP',
+    emailGenerationDomain: 'EMAIL GENERATION DOMAIN',
     gmailAlias: 'Gmail Alias',
     masterGmail: 'MASTER GMAIL',
     aliasPattern: 'ALIAS PATTERN',
@@ -1617,6 +1619,7 @@ export const en: Translations = {
       port: 'Port',
       emailAddress: 'Email',
       password: 'Password',
+      emailGenerationDomain: 'Email Generation Domain',
     },
     proxy: {
       title: 'Proxy',

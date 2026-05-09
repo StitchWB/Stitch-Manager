@@ -26,6 +26,16 @@ import {
   type NetworkConfig,
 } from '@/components/ui';
 
+export function computeEmailDomain(imap: {
+  strategy: string;
+  emailGenerationDomain?: string;
+  email?: string;
+}): string {
+  if (imap.strategy === 'gmail') return 'gmail.com';
+  if (imap.strategy === 'cf-to-imap' && imap.emailGenerationDomain) return imap.emailGenerationDomain;
+  return imap.email?.split('@')[1] || 'example.com';
+}
+
 export default function AutoRegNext() {
   const location = useLocation();
   const autoRegSupportedProviders = useMemo<ProviderName[]>(
@@ -145,12 +155,10 @@ export default function AutoRegNext() {
   };
 
   // Get email domain for pattern generation
-  const emailDomain = useMemo(() => {
-    if (config.imap.strategy === 'gmail') {
-      return 'gmail.com';
-    }
-    return config.imap.email?.split('@')[1] || 'example.com';
-  }, [config.imap.strategy, config.imap.email]);
+  const emailDomain = useMemo(
+    () => computeEmailDomain(config.imap),
+    [config.imap.strategy, config.imap.emailGenerationDomain, config.imap.email]
+  );
 
   // Check if mail configuration is ready
   const isMailReady = useMemo(() => {
@@ -169,6 +177,10 @@ export default function AutoRegNext() {
     // Mail.tm strategy - always ready (no configuration needed)
     if (config.imap.mailtmEnabled) {
       return true;
+    }
+    // CF-to-IMAP strategy
+    if (config.imap.strategy === 'cf-to-imap') {
+      return !!(config.imap.emailGenerationDomain && config.imap.server && config.imap.email && (config.imap.password || imapPasswordSet));
     }
     // Custom domain strategy
     return !!(config.imap.server && config.imap.email && (config.imap.password || imapPasswordSet));
@@ -383,6 +395,7 @@ export default function AutoRegNext() {
     thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername,
     thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain,
     mailtmEnabled: config.imap.mailtmEnabled,
+    emailGenerationDomain: config.imap.emailGenerationDomain,
   };
 
   // Network config adapter for NetworkCard

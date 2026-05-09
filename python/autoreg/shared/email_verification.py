@@ -265,11 +265,10 @@ def get_verification_code_from_imap(
     for retry_attempt in range(max_retries):
         if retry_attempt > 0:
             delay = retry_delays[min(retry_attempt - 1, len(retry_delays) - 1)]
-            log(f"[Email] Retry attempt {retry_attempt + 1}/{max_retries} after {delay}s delay (reason: email mismatch)")
+            log(f"[Email] Retry attempt {retry_attempt + 1}/{max_retries} after {delay}s delay")
             time.sleep(delay)
         
-        # Try to get verification code/URL
-        code = _get_verification_code_internal(
+        result = _get_verification_code_internal(
             imap_config=imap_config,
             sender_keywords=sender_keywords,
             subject_pattern=subject_pattern,
@@ -281,17 +280,17 @@ def get_verification_code_from_imap(
             logger=logger,
             url_pattern=url_pattern,
         )
-        
-        if code:
+
+        if result.get("code"):
             if retry_attempt > 0:
                 log(f"[Email] Successfully retrieved result after {retry_attempt + 1} attempts")
-            return code
-        
-        # If no code found and we have retries left, log and continue
+            return result["code"]
+
+        error_info = result.get("error", "unknown")
         if retry_attempt < max_retries - 1:
             log(f"[Email] No matching code found, will retry...")
-    
-    log(f"[Email] Failed to retrieve verification code after {max_retries} attempts")
+
+    log(f"[Email] Failed to retrieve verification code after {max_retries} attempts (last error: {error_info})")
     return None
 
 
@@ -306,9 +305,10 @@ def _get_verification_code_internal(
     session_id: Optional[str],
     logger=None,
     url_pattern: Optional[str] = None,
-) -> Optional[str]:
+) -> dict:
     """
     Internal function to retrieve verification code from IMAP (single attempt).
+    Returns dict with 'code' (str or None) and 'error' (str or None).
     This is called by get_verification_code_from_imap with retry logic.
     """
     
@@ -326,7 +326,7 @@ def _get_verification_code_internal(
     
     if not all([host, user, password]):
         log("[Email] Incomplete IMAP config")
-        return None
+        return {"code": None, "error": "Incomplete IMAP config"}
 
     host = str(host)
     user = str(user)
@@ -344,7 +344,7 @@ def _get_verification_code_internal(
     primary_keyword = sender_keywords[0] if sender_keywords else None
     if not primary_keyword:
         log("[Email] No sender keywords provided")
-        return None
+        return {"code": None, "error": "No sender keywords provided"}
     
     poll_interval_sec = 3
 
@@ -360,20 +360,41 @@ def _get_verification_code_internal(
             mail.select('INBOX')
             
             messages = None
-            # Build dynamic search queries from sender_keywords
+            used_fallback = False
             search_queries = [('FROM', kw) for kw in sender_keywords]
-            # Fallback: search by SUBJECT using first keyword
             search_queries.append(('SUBJECT', primary_keyword))
+            subject_keywords = ['verification', 'verify', 'code', 'confirm', 'Atlassian', 'Bitbucket']
+            for sk in subject_keywords:
+                search_queries.append(('SUBJECT', sk))
 
             for key, value in search_queries:
                 try:
                     _, candidate = mail.search(None, key, value)
                     if candidate and candidate[0]:
                         messages = candidate
+                        log(f"[Email] Found messages via {key}={value!r}")
                         break
-                except Exception:
+                except Exception as e:
+                    log(f"[Email] Search {key}={value!r} failed: {e}")
                     continue
-            
+
+            if not messages or not messages[0]:
+                try:
+                    _, unseen = mail.search(None, 'UNSEEN')
+                    if unseen and unseen[0]:
+                        messages = unseen
+                        used_fallback = True
+                        log(f"[Email] Fallback to UNSEEN: {len(messages[0].split())} message(s)")
+                    else:
+                        _, all_msg = mail.search(None, 'ALL')
+                        if all_msg and all_msg[0]:
+                            all_ids = all_msg[0].split()
+                            messages = [b' '.join(all_ids[-20:])]
+                            used_fallback = True
+                            log(f"[Email] Fallback to ALL (last 20): {len(all_ids[-20:])} message(s)")
+                except Exception as e:
+                    log(f"[Email] Fallback search failed: {e}")
+
             if messages and messages[0]:
                 email_ids = messages[0].split()
                 
@@ -394,7 +415,7 @@ def _get_verification_code_internal(
                             continue
 
                         msg = email_lib.message_from_bytes(payload_bytes)
-                        
+
                         # Get headers
                         date_str = msg.get('Date', '')
                         from_addr = decode_header_value(msg.get('From', '')).lower()
@@ -402,11 +423,18 @@ def _get_verification_code_internal(
                         to_addr = decode_header_value(msg.get('To', '')).lower()
                         delivered_to = decode_header_value(msg.get('Delivered-To', '')).lower()
                         x_forwarded_to = decode_header_value(msg.get('X-Forwarded-To', '')).lower()
-                        
-                        # Verify sender matches any keyword
-                        if not any(keyword.lower() in from_addr for keyword in sender_keywords):
+                        x_original_to = decode_header_value(msg.get('X-Original-To', '')).lower()
+                        resent_to = decode_header_value(msg.get('Resent-To', '')).lower()
+                        envelope_to = decode_header_value(msg.get('Envelope-To', '')).lower()
+                        received_headers = [decode_header_value(h).lower() for h in msg.get_all('Received', [])]
+
+                        sender_match = any(keyword.lower() in from_addr for keyword in sender_keywords)
+                        if not sender_match and not used_fallback:
+                            log(f"[Email] Skipping email from={from_addr!r} subject={subject!r} — sender does not match keywords")
                             continue
-                        
+                        if not sender_match and used_fallback:
+                            log(f"[Email/Fallback] Checking email from={from_addr!r} subject={subject!r} (sender mismatch but fallback active)")
+
                         # Check email timestamp
                         try:
                             email_date = parsedate_to_datetime(date_str)
@@ -416,9 +444,9 @@ def _get_verification_code_internal(
                                 continue
                         except Exception:
                             pass
-                        
+
                         body = extract_body_text(msg)
-                        
+
                         # Email validation: Check if target_email is mentioned in body or headers
                         # This prevents using codes from wrong emails in parallel or sequential registrations.
                         if target_email:
@@ -427,9 +455,28 @@ def _get_verification_code_internal(
                             email_in_to = target_lower in to_addr
                             email_in_delivered = target_lower in delivered_to
                             email_in_forwarded = target_lower in x_forwarded_to
-                            
-                            if not any([email_in_body, email_in_to, email_in_delivered, email_in_forwarded]):
+                            email_in_x_original = target_lower in x_original_to
+                            email_in_resent = target_lower in resent_to
+                            email_in_envelope = target_lower in envelope_to
+                            email_in_received = any(target_lower in rh for rh in received_headers)
+
+                            match_details = {
+                                'body': email_in_body,
+                                'to_header': email_in_to,
+                                'delivered_to': email_in_delivered,
+                                'x_forwarded_to': email_in_forwarded,
+                                'x_original_to': email_in_x_original,
+                                'resent_to': email_in_resent,
+                                'envelope_to': email_in_envelope,
+                                'received': email_in_received,
+                            }
+                            found_any = any(match_details.values())
+
+                            if found_any:
+                                log(f"[Email] Target email {target_email} matched via {', '.join(k for k,v in match_details.items() if v)}. Processing email from={from_addr!r} subject={subject!r}")
+                            else:
                                 log(f'[Email] Target email {target_email} not found in headers or body. Skipping this email to avoid mismatch.')
+                                log(f'[Email/Debug] Checked: To={to_addr!r}, Delivered-To={delivered_to!r}, X-Forwarded-To={x_forwarded_to!r}, X-Original-To={x_original_to!r}, Resent-To={resent_to!r}, Envelope-To={envelope_to!r}, Received={len(received_headers)} header(s), Body snippet={body[:120]!r}')
                                 continue
                         
                         # Try to extract URL first (if url_pattern provided, e.g. for Fireworks confirm URL)
@@ -438,28 +485,54 @@ def _get_verification_code_internal(
                             if url_matches:
                                 mail.logout()
                                 log(f"[Email] Found confirmation URL in body (email date: {date_str})")
-                                return url_matches[0]
-                        
-                        # Try to extract code from subject first (if pattern provided)
+                                return {"code": url_matches[0], "error": None}
+
                         if subject_pattern:
                             subject_codes = re.findall(subject_pattern, subject)
                             if subject_codes:
                                 mail.logout()
                                 log(f"[Email] Found code in subject: {subject_codes[0]} (email date: {date_str})")
-                                return subject_codes[0]
+                                return {"code": subject_codes[0], "error": None}
 
-                        subject_fallback = re.findall(r"\b(\d{6})\b", subject)
-                        if subject_fallback:
+                        code_pattern = r'\b([A-Za-z0-9]{6})\b'
+                        alphanum_subject = re.search(code_pattern, subject)
+                        if alphanum_subject:
                             mail.logout()
-                            log(f"[Email] Found code in subject: {subject_fallback[0]} (email date: {date_str})")
-                            return subject_fallback[0]
-                        
-                        # Look for 6-digit code in body
-                        codes = re.findall(r'\b(\d{6})\b', body)
-                        if codes:
+                            log(f"[Email] Found alphanumeric code in subject: {alphanum_subject.group(1)} (email date: {date_str})")
+                            return {"code": alphanum_subject.group(1), "error": None}
+
+                        digit_subject = re.search(r'\b(\d{6})\b', subject)
+                        if digit_subject:
                             mail.logout()
-                            log(f"[Email] Found code in body: {codes[0]} (email date: {date_str})")
-                            return codes[0]
+                            log(f"[Email] Found digit code in subject: {digit_subject.group(1)} (email date: {date_str})")
+                            return {"code": digit_subject.group(1), "error": None}
+
+                        digit_body = re.search(r'\b(\d{6})\b', body)
+                        if digit_body:
+                            mail.logout()
+                            log(f"[Email] Found digit code in body: {digit_body.group(1)} (email date: {date_str})")
+                            return {"code": digit_body.group(1), "error": None}
+
+                        letter_subject = re.search(r'\b([A-Za-z]{6})\b', subject)
+                        if letter_subject:
+                            mail.logout()
+                            log(f"[Email] Found letter code in subject: {letter_subject.group(1)} (email date: {date_str})")
+                            return {"code": letter_subject.group(1), "error": None}
+
+                        body_normalized = re.sub(r'([A-Za-z0-9]{3})\s+([A-Za-z0-9]{3})', r'\1\2', body)
+                        alphanum_body = re.search(code_pattern, body_normalized)
+                        if alphanum_body:
+                            mail.logout()
+                            log(f"[Email] Found alphanumeric code in body: {alphanum_body.group(1)} (email date: {date_str})")
+                            return {"code": alphanum_body.group(1), "error": None}
+
+                        letter_body = re.search(r'\b([A-Za-z]{6})\b', body_normalized)
+                        if letter_body:
+                            mail.logout()
+                            log(f"[Email] Found letter code in body: {letter_body.group(1)} (email date: {date_str})")
+                            return {"code": letter_body.group(1), "error": None}
+
+                        log(f"[Email] Email passed all checks but no 6-char code found. from={from_addr!r} subject={subject!r} body_snippet={body[:250]!r}")
                     except Exception as e:
                         log(f"[Email] Error processing email: {e}")
                         continue
@@ -474,5 +547,6 @@ def _get_verification_code_internal(
     
     if last_error:
         log(f"[Email] Failed to get verification code: {last_error}")
-    
-    return None
+        return {"code": None, "error": last_error}
+
+    return {"code": None, "error": "Timeout — no matching emails found"}

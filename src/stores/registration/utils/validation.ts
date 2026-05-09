@@ -27,7 +27,7 @@ export const validatePort = (port: number): ValidationResult => {
 };
 
 export const validateIMAPConfig = (imap: IMAPConfig, strategy: string): ValidationResult => {
-  if (strategy === 'custom') {
+  if (strategy === 'custom' || strategy === 'cf-to-imap') {
     const emailResult = validateEmail(imap.email);
     if (!emailResult.valid) {
       return emailResult;
