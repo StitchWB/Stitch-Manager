@@ -576,8 +576,8 @@ class ProfileLauncher:
     def _cleanup_stale_profile_lock(self) -> None:
         """Clean up stale profile lock file from previous crashed sessions.
 
-        Zombie process cleanup is handled by FirefoxProfileManager._cleanup_stale_firefox_locks()
-        during browser start — no need to duplicate it here.
+        Zombie process cleanup is handled during browser start
+        — no need to duplicate it here.
         """
         lock_path = self._lock_path()
         if not lock_path.exists():

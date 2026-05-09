@@ -15,7 +15,7 @@ export type RunnerConfigBuildResult = {
 type BuildOptions = {
   defaultUrl: string;
   fallbackUrl?: string;
-  engine?: 'cloackbrowser' | 'camoufox';
+  engine?: 'cloackbrowser';
 };
 
 function parseRuntimeProxyUrl(raw: string): {
