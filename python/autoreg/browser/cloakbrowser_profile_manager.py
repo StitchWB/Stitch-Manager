@@ -122,6 +122,7 @@ class CloakBrowserProfileManager:
         window_size: tuple[int, int] | None = None,
         disable_images: bool = False,
         user_agent: str | None = None,
+        auto_lock: bool = True,
     ) -> None:
         self.profile_id = _sanitize_profile_id(profile_id)
         self.profiles_root = (
@@ -137,6 +138,7 @@ class CloakBrowserProfileManager:
         self.window_size = _normalize_window_tuple(window_size) or DEFAULT_BROWSER_WINDOW
         self.disable_images = disable_images
         self.user_agent = user_agent
+        self._auto_lock = auto_lock
 
         self._page: ChromiumPage | None = None
         self._chrome_proc: sp.Popen | None = None
@@ -319,7 +321,8 @@ class CloakBrowserProfileManager:
             return self._page
 
         t0 = time.time()
-        self._acquire_profile_lock()
+        if self._auto_lock:
+            self._acquire_profile_lock()
         self._kill_stale_chrome()
 
         debug_port = self._free_port()
