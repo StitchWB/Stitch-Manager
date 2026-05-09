@@ -1,13 +1,12 @@
 """CloakBrowser profile manager — sync Chromium-based profile launcher using DrissionPage CDP.
 
-Replaces FirefoxProfileManager/Camoufox with CloakBrowser + DrissionPage for
-consistent anti-detection across all browser automation flows.
+Provides consistent anti-detection across all browser automation flows.
 
-Key differences from FirefoxProfileManager:
+Architecture:
 - Sync API (no asyncio)
-- CloakBrowser subprocess launch (not AsyncCamoufox)
-- DrissionPage CDP connection (not Playwright)
-- Chrome profile locks (SingletonLock, not parent.lock)
+- CloakBrowser subprocess launch
+- DrissionPage CDP connection
+- Chrome profile locks (SingletonLock)
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ import shutil
 import socket
 import subprocess as sp
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -264,6 +264,21 @@ class CloakBrowserProfileManager:
                 cmd.append(f"--proxy-server={proxy_url}")
                 logger.info(f"Proxy: {proxy_url}")
 
+        # Load Stitch Toolkit extension (auto-injected for every profile)
+        # If Chrome fails to start, comment out the block below to test without extension.
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        ext_path = project_root / "extension" / "stitch-toolkit"
+        if ext_path.exists():
+            cmd.append(f"--load-extension={ext_path}")
+            # NOTE: disable-extensions-except may conflict with other extensions in profile.
+            # If Chrome fails to launch, remove the next line or the entire block.
+            # cmd.append(f"--disable-extensions-except={ext_path}")
+            cmd.append("--disable-background-timer-throttling")
+            cmd.append("--disable-renderer-backgrounding")
+            logger.info(f"Extension loaded: {ext_path}")
+        else:
+            logger.warning(f"Stitch Toolkit extension not found at {ext_path}")
+
         return cmd
 
     @staticmethod
@@ -329,8 +344,36 @@ class CloakBrowserProfileManager:
         )
         logger.info(f"CloakBrowser process started (pid={self._chrome_proc.pid})")
 
+        # Give Chrome a moment to initialize
+        time.sleep(1.0)
+
+        # Verify Chrome didn't exit immediately
+        if self._chrome_proc.poll() is not None:
+            exit_code = self._chrome_proc.returncode
+            stderr_text = ""
+            if out != sp.DEVNULL:
+                try:
+                    out.flush()
+                    with open(launch_log, "r", encoding="utf-8", errors="ignore") as f:
+                        stderr_text = f.read(2000)
+                except Exception:
+                    pass
+            raise RuntimeError(
+                f"CloakBrowser exited immediately with code {exit_code}. "
+                f"Stderr: {stderr_text or '(no output captured)'}")
+
         if not self._wait_cdp_ready(debug_port, timeout=30.0):
-            raise RuntimeError(f"CloakBrowser CDP not ready on port {debug_port} after 30s")
+            stderr_text = ""
+            if out != sp.DEVNULL:
+                try:
+                    out.flush()
+                    with open(launch_log, "r", encoding="utf-8", errors="ignore") as f:
+                        stderr_text = f.read(2000)
+                except Exception:
+                    pass
+            raise RuntimeError(
+                f"CloakBrowser CDP not ready on port {debug_port} after 30s. "
+                f"Stderr: {stderr_text or '(no output captured)'}")
 
         logger.info(f"CDP ready, connecting DrissionPage to port {debug_port}...")
         self._page = ChromiumPage(f"127.0.0.1:{debug_port}")

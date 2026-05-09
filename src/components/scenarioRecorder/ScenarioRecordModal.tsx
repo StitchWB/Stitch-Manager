@@ -49,7 +49,7 @@ export function ScenarioRecordModal({
   const [noOverlay, setNoOverlay] = useState(false);
   const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
   const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
-  const [engine, setEngine] = useState<'cloackbrowser' | 'camoufox'>('cloackbrowser');
+  const [engine, setEngine] = useState<'cloackbrowser'>('cloackbrowser');
   const [engineHydrated, setEngineHydrated] = useState(false);
 
   const noOverlayPrefKey = useMemo(() => `stitch.recorder.noOverlay.${alias || 'global'}`, [alias]);
@@ -86,7 +86,7 @@ export function ScenarioRecordModal({
         setUrl(built.startUrl);
 
         const profileEngine = record?.settings?.engine;
-        if (profileEngine === 'cloackbrowser' || profileEngine === 'camoufox') {
+        if (profileEngine === 'cloackbrowser') {
           setEngine(profileEngine);
         }
 
@@ -211,12 +211,11 @@ export function ScenarioRecordModal({
     }
   }, [isOpen, runnerMode, runnerModePrefKey]);
 
-  // Engine preference (cloackbrowser / camoufox)
+  // Engine preference (cloackbrowser only)
   useEffect(() => {
     if (!isOpen) return;
     try {
-      const raw = localStorage.getItem(enginePrefKey);
-      setEngine(raw === 'camoufox' ? 'camoufox' : 'cloackbrowser');
+      setEngine('cloackbrowser');
       setEngineHydrated(true);
     } catch {
       setEngine('cloackbrowser');
@@ -563,15 +562,9 @@ export function ScenarioRecordModal({
             ]}
           />
           {runnerMode === 'native' ? (
-            <SegmentedControl
-              size="sm"
-              value={engine}
-              onChange={value => setEngine(value as 'cloackbrowser' | 'camoufox')}
-              options={[
-                { label: 'CloakBrowser', value: 'cloackbrowser' },
-                { label: 'Camoufox', value: 'camoufox' },
-              ]}
-            />
+            <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+              Engine: CloakBrowser
+            </div>
           ) : null}
         </div>
         {runnerMode === 'extension' ? (

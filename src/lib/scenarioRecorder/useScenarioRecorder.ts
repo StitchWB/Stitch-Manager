@@ -18,7 +18,7 @@ type ScenarioRecorderOptions = {
   configJson?: string | null;
   noOverlay?: boolean;
   runnerMode?: ScenarioRunnerMode;
-  engine?: 'cloackbrowser' | 'camoufox';
+  engine?: 'cloackbrowser';
 };
 
 type ScenarioRecorderState = {
