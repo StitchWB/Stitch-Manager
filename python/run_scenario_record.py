@@ -4,7 +4,7 @@ from __future__ import annotations
 
 """Scenario Recorder (MVP)
 
-Records user interactions in a headed Camoufox persistent profile and exports
+Records user interactions in a headed CloakBrowser persistent profile and exports
 them as a simple Scenario JSON for later replay.
 
 IMPORTANT (preprod use): this recorder injects a small script into the page to

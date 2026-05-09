@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Scenario Replay Runner (MVP)
 
-Replays a previously recorded scenario JSON against a Camoufox persistent profile.
+Replays a previously recorded scenario JSON against a CloakBrowser persistent profile.
 
 Features:
 - structured step-by-step events for UI HUD
