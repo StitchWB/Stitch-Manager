@@ -1208,13 +1208,19 @@ RECORDER_OVERLAY_SCRIPT = _load_shared_overlay_runtime_script() + "\n" + RECORDE
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Record a scenario in Camoufox persistent profile")
+    p = argparse.ArgumentParser(description="Record a scenario in persistent browser profile")
     p.add_argument("--alias", required=True, help="Profile alias (maps to persistent profile id)")
     p.add_argument("--url", required=True, help="Start URL")
     p.add_argument("--scenario-name", default="scenario", help="Scenario name")
     p.add_argument("--timeout-s", type=int, default=3600, help="Max record duration")
     p.add_argument("--proxy", default="", help="Optional proxy URL")
     p.add_argument("--headless", action="store_true", help="Run browser in headless mode")
+    p.add_argument(
+        "--engine",
+        choices=["cloackbrowser"],
+        default="cloackbrowser",
+        help="Browser engine (default: cloackbrowser)",
+    )
     p.add_argument(
         "--config-json",
         default="",
@@ -2067,6 +2073,7 @@ async def main_async() -> int:
                 headless=bool(args.headless),
                 proxy=proxy_url or None,
                 config=config,
+                engine=args.engine,
             )
             _log("info", "ProfileLauncher created successfully", step="init")
         except Exception as e:

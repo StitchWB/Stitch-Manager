@@ -21,6 +21,7 @@ type ScenarioReplayOptions = {
   continueOnError?: boolean;
   headless?: boolean;
   runnerMode?: ScenarioRunnerMode;
+  engine?: 'cloackbrowser' | 'camoufox';
 };
 
 export type ScenarioReplayStatus =
@@ -173,6 +174,9 @@ export function useScenarioReplay() {
         }
         if (opts.headless) {
           args.push('--headless');
+        }
+        if (opts.engine) {
+          args.push('--engine', opts.engine);
         }
       }
 

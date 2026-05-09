@@ -15,6 +15,7 @@ export type RunnerConfigBuildResult = {
 type BuildOptions = {
   defaultUrl: string;
   fallbackUrl?: string;
+  engine?: 'cloackbrowser' | 'camoufox';
 };
 
 function parseRuntimeProxyUrl(raw: string): {
@@ -137,6 +138,7 @@ export async function buildRunnerConfigFromProfileSettings(
   const maximizeOnStart = Boolean(rawWindow?.maximizeOnStart);
 
   const config: Record<string, unknown> = {
+    engine: options.engine ?? 'cloackbrowser',
     locale: settings?.geo?.locale ?? undefined,
     timezone_id: settings?.geo?.timezone ?? 'Auto',
     geolocation: hasManualGeo

@@ -49,10 +49,16 @@ export function ScenarioRecordModal({
   const [noOverlay, setNoOverlay] = useState(false);
   const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
   const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
+  const [engine, setEngine] = useState<'cloackbrowser' | 'camoufox'>('cloackbrowser');
+  const [engineHydrated, setEngineHydrated] = useState(false);
 
   const noOverlayPrefKey = useMemo(() => `stitch.recorder.noOverlay.${alias || 'global'}`, [alias]);
   const runnerModePrefKey = useMemo(
     () => `stitch.recorder.runnerMode.${alias || 'global'}`,
+    [alias]
+  );
+  const enginePrefKey = useMemo(
+    () => `stitch.recorder.engine.${alias || 'global'}`,
     [alias]
   );
   const isNativeRunner = runnerMode === 'native';
@@ -74,9 +80,15 @@ export function ScenarioRecordModal({
         const built = await buildRunnerConfigFromProfileSettings(record, {
           defaultUrl,
           fallbackUrl: 'https://google.com',
+          engine,
         });
         setConfigJson(built.configJson);
         setUrl(built.startUrl);
+
+        const profileEngine = record?.settings?.engine;
+        if (profileEngine === 'cloackbrowser' || profileEngine === 'camoufox') {
+          setEngine(profileEngine);
+        }
 
         const proxy = record?.settings?.network?.proxy;
         const wantsProxy = Boolean(proxy?.enabled);
@@ -121,7 +133,7 @@ export function ScenarioRecordModal({
     return () => {
       cancelled = true;
     };
-  }, [alias, defaultUrl, isOpen]);
+  }, [alias, defaultUrl, isOpen, engine]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -198,6 +210,34 @@ export function ScenarioRecordModal({
       // best effort only
     }
   }, [isOpen, runnerMode, runnerModePrefKey]);
+
+  // Engine preference (cloackbrowser / camoufox)
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const raw = localStorage.getItem(enginePrefKey);
+      setEngine(raw === 'camoufox' ? 'camoufox' : 'cloackbrowser');
+      setEngineHydrated(true);
+    } catch {
+      setEngine('cloackbrowser');
+      setEngineHydrated(true);
+    }
+  }, [isOpen, enginePrefKey]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setEngineHydrated(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      localStorage.setItem(enginePrefKey, engine);
+    } catch {
+      // best effort only
+    }
+  }, [isOpen, engine, enginePrefKey]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -335,10 +375,12 @@ export function ScenarioRecordModal({
       configJson,
       noOverlay,
       runnerMode,
+      engine,
     });
   }, [
     alias,
     configJson,
+    engine,
     isNativeRunner,
     name,
     noOverlay,
@@ -354,6 +396,7 @@ export function ScenarioRecordModal({
     if (!canStart) return;
     if (loadingSettings) return;
     if (!runnerModeHydrated) return;
+    if (!engineHydrated) return;
     if (isNativeRunner && runtimeInstalled !== true) return;
     if (!isNativeRunner && extensionBridge.state.connected !== true) return;
     if (recorder.state.status !== 'idle') return;
@@ -365,6 +408,7 @@ export function ScenarioRecordModal({
     autoStarted,
     isOpen,
     runnerModeHydrated,
+    engineHydrated,
     canStart,
     loadingSettings,
     isNativeRunner,
@@ -508,15 +552,28 @@ export function ScenarioRecordModal({
           />
         </div>
 
-        <SegmentedControl
-          size="sm"
-          value={runnerMode}
-          onChange={value => setRunnerMode(value as ScenarioRunnerMode)}
-          options={[
-            { label: 'Native runner', value: 'native' },
-            { label: 'Extension runner', value: 'extension' },
-          ]}
-        />
+        <div className="flex flex-col gap-2">
+          <SegmentedControl
+            size="sm"
+            value={runnerMode}
+            onChange={value => setRunnerMode(value as ScenarioRunnerMode)}
+            options={[
+              { label: 'Native runner', value: 'native' },
+              { label: 'Extension runner', value: 'extension' },
+            ]}
+          />
+          {runnerMode === 'native' ? (
+            <SegmentedControl
+              size="sm"
+              value={engine}
+              onChange={value => setEngine(value as 'cloackbrowser' | 'camoufox')}
+              options={[
+                { label: 'CloakBrowser', value: 'cloackbrowser' },
+                { label: 'Camoufox', value: 'camoufox' },
+              ]}
+            />
+          ) : null}
+        </div>
         {runnerMode === 'extension' ? (
           <div className="text-[11px] text-cyan-200/90 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
             {t('recorder.extensionRunnerBridgeHint')}
