@@ -723,6 +723,9 @@ export const ru: Translations = {
     lastLogin: 'Посл. вход',
     success: 'Успех',
     openBrowser: 'Открыть браузер',
+    openingBrowser: 'Открываю браузер...',
+    browserOpened: 'Браузер открыт',
+    browserOpenFailed: 'Не удалось открыть браузер: {{message}}',
     openProfileSession: 'Открыть профильную сессию',
   },
   autoReg: {
