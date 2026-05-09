@@ -81,6 +81,7 @@
     "reactflow": "^11.11.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "tauri": "^0.15.0",
     "zustand": "^5.0.1"
   },
   "devDependencies": {

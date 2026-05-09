@@ -584,6 +584,8 @@ export interface Translations {
     emailGeneration: string;
     ready: string;
     customDomain: string;
+    cfToImap: string;
+    emailGenerationDomain: string;
     gmailAlias: string;
     masterGmail: string;
     aliasPattern: string;
@@ -1456,6 +1458,7 @@ export interface Translations {
       port: string;
       emailAddress: string;
       password: string;
+      emailGenerationDomain: string;
     };
     proxy: {
       title: string;

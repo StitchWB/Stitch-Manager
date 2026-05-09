@@ -15,8 +15,14 @@ import type {
   EmailPattern,
   NamePattern,
   SaveStatus,
+  MailStrategy,
 } from './types';
-import { loadProviderStrategies, saveProviderStrategies } from './utils/migration';
+import {
+  loadProviderStrategies,
+  saveProviderStrategies,
+  loadEmailGenerationDomain,
+  saveEmailGenerationDomain,
+} from './utils/migration';
 import { validateIMAPConfig } from './utils/validation';
 
 interface PersistenceState {
@@ -54,7 +60,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
 
       // Build global IMAP config (shared across all providers)
       const globalImap: IMAPConfig = {
-        strategy: (settings.mailStrategy as 'custom' | 'gmail') || 'custom',
+        strategy: (settings.mailStrategy as MailStrategy) || 'custom',
         server: settings.imapServer || '',
         port: settings.imapPort || 993,
         email: settings.imapEmail || '',
@@ -79,6 +85,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         thirtyThreeMailDomain: settings.thirtyThreeMailDomain || '33mail.com',
         // Load Mail.tm settings (global)
         mailtmEnabled: settings.mailtmEnabled || false,
+        emailGenerationDomain: loadEmailGenerationDomain(),
       };
 
       const currentProvider = (settings.provider as ProviderName) || 'kiro';
@@ -91,7 +98,12 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
       // Set current provider's strategy from DB
       finalProviderStrategies[currentProvider] = {
         strategy: globalImap.strategy,
-        customDomain: globalImap.server ? `${globalImap.email.split('@')[1] || ''}` : '',
+        customDomain:
+          globalImap.strategy === 'cf-to-imap'
+            ? globalImap.emailGenerationDomain || ''
+            : globalImap.server
+              ? `${globalImap.email.split('@')[1] || ''}`
+              : '',
         thirtyThreeMailDomain: globalImap.thirtyThreeMailDomain,
         addyioDomain: globalImap.addyioDomain,
       };
@@ -180,6 +192,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
 
     // Save provider-specific email strategies to localStorage
     saveProviderStrategies(config.providerEmailStrategies);
+    saveEmailGenerationDomain(config.imap.emailGenerationDomain || '');
 
     // Validate configuration
     const validation = validateIMAPConfig(config.imap, config.imap.strategy);

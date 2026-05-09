@@ -46,6 +46,10 @@ const SETTINGS_SECRET_MASK = '********';
 import { ProxySettingsSectionV2 } from '../components/settings/ProxySettingsSectionV2';
 import { ProxyLibrarySection } from '../components/settings/ProxyLibrarySection';
 import { AiProxySettings } from '../components/settings/AiProxySettings';
+import {
+  loadEmailGenerationDomain,
+  saveEmailGenerationDomain,
+} from '../stores/registration/utils/migration';
 import { AutomationTab } from '../components/registration/AutomationTab';
 import { LoadingSpinner, TabButton } from '@/components/ui';
 
@@ -121,6 +125,7 @@ export default function Settings() {
   const [imapPort, setImapPort] = useState('993');
   const [imapEmail, setImapEmail] = useState('');
   const [imapPassword, setImapPassword] = useState('');
+  const [emailGenerationDomain, setEmailGenerationDomain] = useState('');
 
   // Addy.io settings
   const [addyioEnabled, setAddyioEnabled] = useState(false);
@@ -223,6 +228,9 @@ export default function Settings() {
 
       // Load Mail.tm settings
       setMailtmEnabled(data.mailtmEnabled || false);
+
+      // Load email generation domain (localStorage, not in Rust DB)
+      setEmailGenerationDomain(loadEmailGenerationDomain());
 
       setCustomIdePaths(data.customIdePaths || {});
       setGoogleSheetsSpreadsheetId((data as any).googleSheetsSpreadsheetId || '');
@@ -627,6 +635,12 @@ export default function Settings() {
         imapPassword={imapPassword}
         onImapPasswordChange={password => {
           setImapPassword(password);
+          debouncedAutoSave();
+        }}
+        emailGenerationDomain={emailGenerationDomain}
+        onEmailGenerationDomainChange={domain => {
+          setEmailGenerationDomain(domain);
+          saveEmailGenerationDomain(domain);
           debouncedAutoSave();
         }}
         showPassword={showPassword}

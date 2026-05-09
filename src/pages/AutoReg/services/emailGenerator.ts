@@ -18,7 +18,7 @@ export interface EmailGenerationOptions {
 
 export interface EmailGenerationResult {
   email: string | null;
-  strategy: 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'custom';
+  strategy: 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'custom' | 'cf-to-imap';
   shouldGenerateInPython: boolean;
 }
 
@@ -66,7 +66,7 @@ export async function generateEmail(
     };
   }
 
-  // Custom domain strategy — resolve actual template
+  // Custom domain / CF-to-IMAP strategy — resolve actual template
   // emailPattern is an enum key (e.g. 'custom_prefix'), emailCustomPrefix is the real template
   const resolvedPattern =
     emailPattern === 'custom_prefix' && emailCustomPrefix
@@ -76,7 +76,7 @@ export async function generateEmail(
   const email = await generateCustomEmail(provider, resolvedPattern, emailDomain);
   return {
     email,
-    strategy: 'custom',
+    strategy: imapConfig.strategy === 'cf-to-imap' ? 'cf-to-imap' : 'custom',
     shouldGenerateInPython: false,
   };
 }

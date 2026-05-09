@@ -41,9 +41,8 @@ export const useConfigStore = create<ConfigState>(set => ({
       // Save current email strategy to current provider's slot
       const currentStrategy: ProviderEmailStrategy = {
         strategy: state.config.imap.strategy,
-        customDomain: state.config.imap.server
-          ? `${state.config.imap.email.split('@')[1] || ''}`
-          : '',
+        customDomain: state.config.imap.emailGenerationDomain
+          || (state.config.imap.server ? `${state.config.imap.email.split('@')[1] || ''}` : ''),
         thirtyThreeMailDomain: state.config.imap.thirtyThreeMailDomain,
         addyioDomain: state.config.imap.addyioDomain,
       };
@@ -68,6 +67,8 @@ export const useConfigStore = create<ConfigState>(set => ({
         // Update domain-specific fields based on strategy
         thirtyThreeMailDomain: newStrategy.thirtyThreeMailDomain,
         addyioDomain: newStrategy.addyioDomain,
+        emailGenerationDomain:
+          newStrategy.strategy === 'cf-to-imap' ? newStrategy.customDomain || '' : '',
       };
 
       return {
@@ -89,10 +90,10 @@ export const useConfigStore = create<ConfigState>(set => ({
 
       // If strategy changed, update provider-specific strategy
       let updatedStrategies = state.config.providerEmailStrategies;
-      if ('strategy' in imap || 'addyioDomain' in imap || 'thirtyThreeMailDomain' in imap) {
+      if ('strategy' in imap || 'addyioDomain' in imap || 'thirtyThreeMailDomain' in imap || 'emailGenerationDomain' in imap) {
         const currentStrategy: ProviderEmailStrategy = {
           strategy: newImap.strategy,
-          customDomain: newImap.server ? `${newImap.email.split('@')[1] || ''}` : '',
+          customDomain: newImap.emailGenerationDomain || (newImap.server ? `${newImap.email.split('@')[1] || ''}` : ''),
           thirtyThreeMailDomain: newImap.thirtyThreeMailDomain,
           addyioDomain: newImap.addyioDomain,
         };
