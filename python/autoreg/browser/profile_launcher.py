@@ -537,7 +537,7 @@ async def _resolve_geo_and_timezone(
 class ProfileLauncher:
     """Launches/opens a persistent browser profile with safety utilities.
 
-    Dual-mode: supports CloakBrowser (Chromium, default) or Camoufox (Firefox).
+    CloakBrowser (Chromium) based persistent profile launcher.
     """
 
     def __init__(
@@ -671,7 +671,7 @@ class ProfileLauncher:
         return headers
 
     async def start(self) -> Any:
-        """Start browser — dual-mode: CloakBrowser (default) or Camoufox."""
+        """Start browser — CloakBrowser based persistent profile."""
         if self._manager is not None:
             if hasattr(self._manager, "start"):
                 return await self._manager.start()
