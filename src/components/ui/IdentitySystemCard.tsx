@@ -20,7 +20,7 @@ import { Input } from './Input';
 import { Select } from './Select';
 import { Tooltip } from './Tooltip';
 
-export type MailStrategy = 'custom' | 'gmail';
+export type MailStrategy = 'custom' | 'gmail' | 'cf-to-imap';
 
 export interface IdentityConfig {
   strategy: MailStrategy;
@@ -42,6 +42,7 @@ export interface IdentityConfig {
   thirtyThreeMailUsername?: string;
   thirtyThreeMailDomain?: string;
   mailtmEnabled?: boolean;
+  emailGenerationDomain?: string;
 }
 
 export type TestConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
@@ -147,7 +148,7 @@ const ImapForm = memo(
 
 ImapForm.displayName = 'ImapForm';
 
-type GenerationMode = 'custom' | 'gmail' | 'addyio' | '33mail' | 'mailtm';
+type GenerationMode = 'custom' | 'cf-to-imap' | 'gmail' | 'addyio' | '33mail' | 'mailtm';
 
 export function IdentitySystemCard({
   config,
@@ -183,14 +184,20 @@ export function IdentitySystemCard({
         ? 'mailtm'
         : config.strategy === 'gmail'
           ? 'gmail'
-          : 'custom';
+          : config.strategy === 'cf-to-imap'
+            ? 'cf-to-imap'
+            : 'custom';
 
   const handleModeChange = (mode: GenerationMode) => {
     const updates: Partial<IdentityConfig> = {
-      strategy: mode === 'gmail' ? 'gmail' : 'custom',
+      strategy:
+        mode === 'gmail' ? 'gmail' : mode === 'cf-to-imap' ? 'cf-to-imap' : 'custom',
       addyioEnabled: mode === 'addyio',
       thirtyThreeMailEnabled: mode === '33mail',
       mailtmEnabled: mode === 'mailtm',
+      // Preserve emailGenerationDomain when in cf-to-imap mode, clear when leaving
+      emailGenerationDomain:
+        mode === 'cf-to-imap' ? (config.emailGenerationDomain || '') : '',
     };
     onChange(updates);
   };
@@ -233,7 +240,9 @@ export function IdentitySystemCard({
           ? !!(config.thirtyThreeMailUsername && config.server && config.email)
           : activeMode === 'mailtm'
             ? true
-            : !!(config.server && config.email && (config.password || passwordSet));
+            : activeMode === 'cf-to-imap'
+              ? !!(config.emailGenerationDomain && config.server && config.email && (config.password || passwordSet))
+              : !!(config.server && config.email && (config.password || passwordSet));
 
   const generatePreview = useCallback(() => {
     if (activeMode === 'gmail') {
@@ -248,6 +257,15 @@ export function IdentitySystemCard({
     } else if (activeMode === 'custom') {
       let result = config.emailPattern || 'prefix';
       const domain = config.email?.split('@')[1] || 'example.com';
+      result = result
+        .replace(/\{counter\}/gi, '1')
+        .replace(/\{rnd\}/gi, Math.random().toString(36).substring(2, 6))
+        .replace(/\{time\}/gi, Date.now().toString().slice(-6))
+        .replace(/\{name\}/gi, RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]);
+      setPreview(`${result}@${domain}`);
+    } else if (activeMode === 'cf-to-imap') {
+      let result = config.emailPattern || 'prefix';
+      const domain = config.emailGenerationDomain || 'domain.com';
       result = result
         .replace(/\{counter\}/gi, '1')
         .replace(/\{rnd\}/gi, Math.random().toString(36).substring(2, 6))
@@ -301,6 +319,7 @@ export function IdentitySystemCard({
       <div className="grid grid-cols-2 gap-1.5 p-3">
         {[
           { id: 'custom', label: t('autoReg.customDomain'), icon: Globe, color: 'text-blue-400' },
+          { id: 'cf-to-imap', label: t('autoReg.cfToImap'), icon: AtSign, color: 'text-amber-400' },
           { id: 'gmail', label: t('autoReg.gmailAlias'), icon: Mail, color: 'text-red-400' },
           { id: '33mail', label: '33mail', icon: AtSign, color: 'text-purple-400' },
           { id: 'addyio', label: 'Addy.io', icon: Shield, color: 'text-indigo-400' },
@@ -365,6 +384,69 @@ export function IdentitySystemCard({
                 placeholder="prefix"
                 className="font-mono"
                 suffixText={`@${config.email?.split('@')[1] || 'domain.com'}`}
+              />
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs text-emerald-400 font-mono font-medium truncate">
+                  {preview}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  onClick={generatePreview}
+                  className="h-6 w-6"
+                >
+                  <RefreshCw size={12} />
+                </Button>
+              </div>
+            </div>
+            <ImapForm
+              config={config}
+              onChange={onChange}
+              disabled={disabled}
+              passwordSet={passwordSet}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+            />
+          </div>
+        )}
+
+        {activeMode === 'cf-to-imap' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <Input
+              label={t('autoReg.emailGenerationDomain')}
+              placeholder="customdomain.com"
+              value={config.emailGenerationDomain || ''}
+              onChange={e => onChange({ emailGenerationDomain: e.target.value })}
+              disabled={disabled}
+              className="font-mono"
+            />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  {t('autoReg.emailPattern')}
+                </label>
+                <div className="flex gap-1">
+                  {EMAIL_SHORTCODES.map(({ id, code }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => insertShortcode(code)}
+                      disabled={disabled}
+                      className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-slate-500 hover:text-slate-300 border border-white/5 transition-colors"
+                    >
+                      {code}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Input
+                value={config.emailPattern}
+                onChange={e => onChange({ emailPattern: e.target.value })}
+                disabled={disabled}
+                placeholder="prefix"
+                className="font-mono"
+                suffixText={`@${config.emailGenerationDomain || 'domain.com'}`}
               />
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs text-emerald-400 font-mono font-medium truncate">
@@ -620,7 +702,7 @@ export function IdentitySystemCard({
         )}
       </div>
 
-      {(activeMode === 'custom' || activeMode === 'gmail') && (
+      {(activeMode === 'custom' || activeMode === 'cf-to-imap' || activeMode === 'gmail') && (
         <div className="px-5 py-4 border-t border-white/5 bg-white/[0.01] flex items-center justify-between">
           <div className="flex items-center gap-2">
             {saveStatus === 'saved' && (

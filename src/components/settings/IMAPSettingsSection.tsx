@@ -13,6 +13,8 @@ interface IMAPSettingsSectionProps {
   onImapEmailChange: (email: string) => void;
   imapPassword: string;
   onImapPasswordChange: (password: string) => void;
+  emailGenerationDomain?: string;
+  onEmailGenerationDomainChange?: (domain: string) => void;
   showPassword: boolean;
   onShowPasswordToggle: () => void;
   validationErrors: Record<string, string>;
@@ -28,6 +30,8 @@ export function IMAPSettingsSection({
   onImapEmailChange,
   imapPassword,
   onImapPasswordChange,
+  emailGenerationDomain,
+  onEmailGenerationDomainChange,
   showPassword,
   onShowPasswordToggle,
   validationErrors,
@@ -88,6 +92,14 @@ export function IMAPSettingsSection({
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </ButtonBase>
           }
+        />
+        <Input
+          type="text"
+          label={t('settings.imap.emailGenerationDomain')}
+          value={emailGenerationDomain || ''}
+          onChange={e => onEmailGenerationDomainChange?.(e.target.value)}
+          placeholder="customdomain.com (optional)"
+          containerClassName="col-span-2"
         />
       </div>
     </SectionHeader>

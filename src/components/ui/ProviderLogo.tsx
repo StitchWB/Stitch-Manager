@@ -15,6 +15,7 @@ import glmIcon from '../../assets/providers/glm.png';
 import qwenIcon from '../../assets/providers/qwen.png';
 import warpIcon from '../../assets/providers/warp.png';
 import vertexIcon from '../../assets/providers/vertex.png';
+import bitbucketIcon from '../../assets/providers/bitbucket.png';
 
 interface ProviderLogoProps {
   provider: string;
@@ -38,6 +39,7 @@ const providerIcons: Record<string, string> = {
   qwen: qwenIcon,
   warp: warpIcon,
   vertex: vertexIcon,
+  bitbucket: bitbucketIcon,
 };
 
 // Fallback Lucide icons for providers without custom icons

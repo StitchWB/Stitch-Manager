@@ -1,6 +1,6 @@
 import type { RegistrationConfig } from '../../../stores/registration/types';
 
-export type PythonAliasStrategy = 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'custom';
+export type PythonAliasStrategy = 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'custom' | 'cf-to-imap';
 
 export function validateAliasConfiguration(
   strategy: PythonAliasStrategy,

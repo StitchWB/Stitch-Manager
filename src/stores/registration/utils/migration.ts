@@ -93,3 +93,19 @@ export const saveProviderStrategies = (strategies: ProviderEmailStrategies): voi
     console.warn('[MIGRATION] Failed to save provider strategies:', error);
   }
 };
+
+export const loadEmailGenerationDomain = (): string => {
+  try {
+    return localStorage.getItem('emailGenerationDomain') || '';
+  } catch {
+    return '';
+  }
+};
+
+export const saveEmailGenerationDomain = (domain: string): void => {
+  try {
+    localStorage.setItem('emailGenerationDomain', domain);
+  } catch (error) {
+    console.warn('[MIGRATION] Failed to save emailGenerationDomain:', error);
+  }
+};

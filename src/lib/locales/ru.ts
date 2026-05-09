@@ -750,6 +750,8 @@ export const ru: Translations = {
     emailGeneration: 'Генерация email и аутентификация',
     ready: 'Готово',
     customDomain: 'Свой домен',
+    cfToImap: 'CF → IMAP',
+    emailGenerationDomain: 'ДОМЕН ГЕНЕРАЦИИ EMAIL',
     gmailAlias: 'Gmail Alias',
     masterGmail: 'MASTER GMAIL',
     aliasPattern: 'ШАБЛОН АЛИАСА',
@@ -1631,6 +1633,7 @@ export const ru: Translations = {
       port: 'Порт',
       emailAddress: 'Email адрес',
       password: 'Пароль',
+      emailGenerationDomain: 'Домен генерации Email',
     },
     proxy: {
       title: 'Прокси',
