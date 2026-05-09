@@ -557,6 +557,9 @@ export interface Translations {
     lastLogin: string;
     success: string;
     openBrowser: string;
+    openingBrowser: string;
+    browserOpened: string;
+    browserOpenFailed: string;
     openProfileSession: string;
   };
 

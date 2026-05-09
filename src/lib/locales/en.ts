@@ -711,6 +711,9 @@ export const en: Translations = {
     lastLogin: 'Last Login',
     success: 'Success',
     openBrowser: 'Open Browser',
+    openingBrowser: 'Opening browser...',
+    browserOpened: 'Browser opened',
+    browserOpenFailed: 'Failed to open browser: {{message}}',
     openProfileSession: 'Open Profile Session',
   },
   autoReg: {

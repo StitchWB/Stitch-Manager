@@ -101,9 +101,13 @@ export function useAccountsActions({
 
   const handleOpenBrowser = useCallback(async (id: number) => {
     try {
+      toast.info(t('accounts.openingBrowser'));
       await openAccountBrowser({ accountId: id });
+      toast.success(t('accounts.browserOpened'));
     } catch (error) {
-      console.error(error);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[Accounts] Failed to open browser:', error);
+      toast.error(t('accounts.browserOpenFailed', { message }));
     }
   }, []);
 
