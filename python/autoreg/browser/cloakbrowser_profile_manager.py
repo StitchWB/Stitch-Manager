@@ -236,7 +236,7 @@ class CloakBrowserProfileManager:
             "--no-default-browser-check",
             "--start-maximized",
             "--disable-infobars",
-            "--disable-blink-features=AutomationControlled",
+            # "--disable-blink-features=AutomationControlled",  # CloakBrowser already anti-detect; flag causes warning bar
             f"--lang={self.locale}",
             f"--accept-lang={self.locale},en",
             "about:blank",
