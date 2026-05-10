@@ -12,7 +12,6 @@ import {
   startGithubAutoregJob,
   startOpenAIAutoregJob,
   startFireworksAutoregJob,
-  startFireworks2AutoregJob,
   startBitbucketAutoregJob,
   startRegistrationV2,
   listAccounts,
@@ -650,89 +649,6 @@ async function runProviderRegistration(params: {
         lastName: null,
         plan: null,
         error: 'Fireworks job failed',
-      }
-    );
-  }
-
-  if (provider === 'fireworks2') {
-    const normalizedImapServer = imapServer?.trim() ? imapServer : null;
-    const normalizedImapUser = imapUser?.trim() ? imapUser : null;
-    const normalizedImapPassword = imapPassword?.trim() ? imapPassword : null;
-
-    const inboxBridgeFields = {
-      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
-      inboxMailbox: 'INBOX',
-      inboxMailtmAddress: config.imap.mailtmEnabled ? normalizedImapUser : null,
-      inboxMailtmPassword: config.imap.mailtmEnabled ? normalizedImapPassword : null,
-      inboxMailtmBaseUrl: null,
-    };
-
-    const fireworks2Password = `Fw${Math.random().toString(36).substring(2, 10)}!1`;
-    const startResponse = await startFireworks2AutoregJob({
-      email,
-      password: fireworks2Password,
-      name: null,
-      firstName: null,
-      lastName: null,
-      headless: config.advanced.headless,
-      proxyUrl: config.proxy.enabled ? config.proxy.url : null,
-      imapServer: normalizedImapServer,
-      imapPort: normalizedImapServer ? config.imap.port || DEFAULT_IMAP_PORT : null,
-      imapUser: normalizedImapUser,
-      imapPassword: normalizedImapPassword,
-      addyioEnabled: config.imap.addyioEnabled ?? null,
-      addyioApiToken: config.imap.addyioApiToken ?? null,
-      addyioDomain: config.imap.addyioDomain ?? null,
-      addyioAliasFormat: config.imap.addyioAliasFormat ?? null,
-      addyioAutoDelete: config.imap.addyioAutoDelete ?? null,
-      mailtmEnabled: config.imap.mailtmEnabled ?? null,
-      thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled ?? null,
-      thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername ?? null,
-      thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
-      emailStrategy: config.imap.mailtmEnabled
-        ? 'mailtm'
-        : config.imap.addyioEnabled
-          ? 'addyio'
-          : config.imap.thirtyThreeMailEnabled
-            ? '33mail'
-            : 'static',
-      baseEmail: email || config.imap.email || imapUser || null,
-      correlationId: createCorrelationId(),
-      cardsFile: null,
-      cardsText: config.advanced.cardsText?.trim() || null,
-      captchaTimeout: config.advanced.captchaTimeout,
-      captchaSoundEnabled: config.advanced.captchaSoundEnabled,
-      debug: config.logVerbosity === 'debug',
-      ...inboxBridgeFields,
-    });
-    activePythonJobId = startResponse.jobId;
-
-    if (pipelineStepOverrides && pipelineStepOverrides.length > 0) {
-      for (const step of pipelineStepOverrides) {
-        await registrationControl(startResponse.jobId, 'configure', step.id, {
-          enabled: step.enabled,
-          pause_after: step.pauseAfter,
-          skippable: step.skippable,
-        }).catch((err: unknown) => {
-          onLog('warn', `Failed to configure step ${step.id}: ${String(err)}`);
-        });
-      }
-    }
-
-    return await waitForJobResult<FireworksAutoregResult>(
-      startResponse.jobId,
-      REGISTRATION_TIMEOUT_MS,
-      onCancelled,
-      onLog,
-      {
-        success: false,
-        email,
-        password: fireworks2Password,
-        name: null,
-        firstName: null,
-        lastName: null,
-        plan: null,
-        error: 'Fireworks2 job failed',
       }
     );
   }
