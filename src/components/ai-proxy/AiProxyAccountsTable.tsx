@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { PlugZap, Trash2, PenSquare, ChevronRight } from 'lucide-react';
 import { ButtonBase, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui';
 
@@ -34,7 +34,8 @@ function extractFileTail(accountName: string): string | null {
 function buildIssueBadges(
   account: AiProxyAccount,
   conn?: { status: string },
-  openAiQuota?: { error?: string | null }
+  openAiQuota?: { error?: string | null },
+  kiroQuota?: { error?: string | null }
 ) {
   const badges: Array<{ status: 'warning' | 'error' | 'info'; label: string }> = [];
 
@@ -56,6 +57,9 @@ function buildIssueBadges(
   if (openAiQuota?.error) {
     badges.push({ status: 'warning', label: t('aiHub.table.badges.quotaError') });
   }
+  if (kiroQuota?.error) {
+    badges.push({ status: 'warning', label: t('aiHub.table.badges.quotaError') });
+  }
 
   return badges;
 }
@@ -73,6 +77,7 @@ export function AiProxyAccountsTable({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const openAiQuotaMap = useAiProxyStore(state => state.openAiAccountQuotas);
+  const kiroQuotaMap = useAiProxyStore(state => state.kiroAccountQuotas);
 
   const rows = useMemo(() => {
     const sorted = [...accounts];
@@ -152,6 +157,7 @@ export function AiProxyAccountsTable({
             .filter(Boolean)
             .map(normalize);
           const openAiQuota = quotaKeyCandidates.map(k => openAiQuotaMap[k]).find(Boolean);
+          const kiroQuota = account.id ? kiroQuotaMap[account.id] : undefined;
 
           const status: 'active' | 'inactive' | 'warning' | 'error' = !account.enabled
             ? 'inactive'
@@ -161,10 +167,11 @@ export function AiProxyAccountsTable({
                 ? 'active'
                 : 'active';
 
-          const issues = buildIssueBadges(account, conn, openAiQuota);
+          const issues = buildIssueBadges(account, conn, openAiQuota, kiroQuota);
 
-          const quotaNode =
-            account.provider === 'openai' && openAiQuota && !openAiQuota.error ? (
+          let quotaNode: React.ReactNode;
+          if (account.provider === 'openai' && openAiQuota && !openAiQuota.error) {
+            quotaNode = (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>{t('aiHub.table.quotaPrimary')}</span>
@@ -182,9 +189,32 @@ export function AiProxyAccountsTable({
                   </div>
                 ) : null}
               </div>
-            ) : (
+            );
+          } else if (account.provider === 'kiro' && kiroQuota && !kiroQuota.error) {
+            quotaNode = (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>{t('aiHub.table.quotaPrimary')}</span>
+                  <span className="tabular-nums text-slate-300">
+                    {Math.round(kiroQuota.percentUsed)}%
+                  </span>
+                </div>
+                <UsageBar used={Math.round(kiroQuota.percentUsed)} limit={100} />
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>{kiroQuota.used.toLocaleString()} / {kiroQuota.limit > 0 ? kiroQuota.limit.toLocaleString() : '∞'}</span>
+                  {kiroQuota.daysUntilReset ? (
+                    <span className="tabular-nums text-slate-300">
+                      {t('aiHub.table.resetsIn', { days: kiroQuota.daysUntilReset })}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            );
+          } else {
+            quotaNode = (
               <div className="text-xs text-slate-500">{t('aiHub.table.emptyValue')}</div>
             );
+          }
 
           return (
             <div

@@ -1161,6 +1161,7 @@ export interface Translations {
       };
       quotaPrimary: string;
       quotaWeekly: string;
+      resetsIn: string;
       emptyValue: string;
     };
     modals: {
