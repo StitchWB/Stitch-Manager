@@ -31,5 +31,5 @@
       "resources": ["panel/*", "shared.js"],
       "matches": ["<all_urls>"]
     }
-  ],
+  ]
 }
