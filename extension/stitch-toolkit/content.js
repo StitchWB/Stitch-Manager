@@ -5,12 +5,17 @@
 (function () {
   'use strict';
 
+  console.log('[Stitch Toolkit] Content script IIFE entered');
+
   // ── Prevent double-injection ─────────────────────────────────────────────
-  if (window.__stitchToolkitInjected) return;
+  if (window.__stitchToolkitInjected) {
+    console.log('[Stitch Toolkit] Already injected, skipping');
+    return;
+  }
   window.__stitchToolkitInjected = true;
+  console.log('[Stitch Toolkit] Flag set, proceeding');
 
   const PANEL_ID = 'stitch-toolkit-panel';
-  const SHADOW_ROOT_ID = 'stitch-toolkit-shadow';
 
   // ── Storage helpers (state inside content script scope) ──────────────────
   const _STORAGE_KEYS = {
@@ -328,14 +333,7 @@
 
   // ── Panel UI ─────────────────────────────────────────────────────────────
   function initPanel() {
-    if (document.getElementById(SHADOW_ROOT_ID)) return;
-
-    const host = document.createElement('div');
-    host.id = SHADOW_ROOT_ID;
-    host.style.cssText = 'position:fixed;top:0;right:0;z-index:2147483647;width:0;height:0;overflow:visible;';
-    document.documentElement.appendChild(host);
-
-    const shadow = host.attachShadow({ mode: 'open' });
+    if (document.getElementById(PANEL_ID)) return;
 
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
@@ -354,7 +352,7 @@
         <div class="tk-tool-area" id="tk-tool-area"></div>
       </div>
     `;
-    shadow.appendChild(panel);
+    document.body.appendChild(panel);
 
     const toggle = panel.querySelector('#tk-toggle');
     const closeBtn = panel.querySelector('#tk-close');
@@ -472,7 +470,7 @@
     if (!_recording) return;
     const el = e.target;
     if (!el) return;
-    if (el.closest && el.closest('#' + SHADOW_ROOT_ID)) return;
+    if (el.closest && el.closest('#' + PANEL_ID)) return;
     const selector = getSelector(el);
     if (!selector) return;
     sendEvent('click', {
@@ -487,7 +485,7 @@
     if (!_recording) return;
     const el = e.target;
     if (!el) return;
-    if (el.closest && el.closest('#' + SHADOW_ROOT_ID)) return;
+    if (el.closest && el.closest('#' + PANEL_ID)) return;
     const selector = getSelector(el);
     if (!selector) return;
     const value = el.type === 'password' ? '***' : String(el.value || '');
