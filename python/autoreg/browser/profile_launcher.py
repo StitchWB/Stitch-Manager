@@ -577,22 +577,63 @@ class ProfileLauncher:
     def _cleanup_stale_profile_lock(self) -> None:
         """Clean up stale profile lock file from previous crashed sessions.
 
-        Zombie process cleanup is handled during browser start
-        — no need to duplicate it here.
+        If the lock file is held by a live process (e.g. zombie open_browser.py
+        worker), kills the process before deleting the file.
         """
         lock_path = self._lock_path()
         if not lock_path.exists():
             return
 
+        # First attempt: simple unlink
+        try:
+            lock_path.unlink()
+            return
+        except (OSError, PermissionError):
+            pass  # File is held by another process
+
+        # Second attempt: find and kill zombie open_browser.py workers
+        # that use this exact profile path, then unlink again.
+        import subprocess
+        import sys
+
+        profile_str = str(self.profile_path)
+        try:
+            result = subprocess.run(
+                ['wmic', 'process', 'where', 'name="python.exe"', 'get', 'ProcessId,CommandLine', '/format:csv'],
+                capture_output=True, text=True, timeout=10,
+            )
+            for line in result.stdout.splitlines():
+                if 'open_browser.py' in line and profile_str in line:
+                    parts = line.strip().split(',')
+                    if len(parts) >= 2 and parts[1].strip().strip('"').isdigit():
+                        pid = int(parts[1].strip().strip('"'))
+                        try:
+                            subprocess.run(
+                                ['taskkill', '/F', '/PID', str(pid)],
+                                capture_output=True, timeout=5,
+                            )
+                            logger.info(f"Killed zombie open_browser worker PID {pid} for profile {self.profile_id}")
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        # Try unlink again after killing
         try:
             lock_path.unlink()
         except Exception:
             pass
 
     def _acquire_profile_lock(self) -> None:
-        # Clean up stale lock file first
+        """Acquire profile lock with zombie-worker cleanup and short wait.
+
+        1. Clean stale lock (kill zombie workers if needed).
+        2. Try non-blocking acquire.
+        3. If blocked, clean again and wait up to 5 seconds for active user.
+        4. If still blocked, raise RuntimeError.
+        """
         self._cleanup_stale_profile_lock()
-        
+
         try:
             from filelock import FileLock, Timeout
         except Exception as e:  # pragma: no cover
@@ -603,10 +644,10 @@ class ProfileLauncher:
         try:
             lock.acquire(timeout=0)
         except Timeout as e:
-            # Try one more cleanup and retry
+            # Stale lock may have been recreated by a zombie — kill and retry
             self._cleanup_stale_profile_lock()
             try:
-                lock.acquire(timeout=0)
+                lock.acquire(timeout=5)
             except Timeout:
                 raise RuntimeError(
                     f"Profile '{self.profile_id}' is already locked (in use). Path: {self.profile_path}"
