@@ -97,16 +97,6 @@ export const PROVIDERS: ProviderConfig[] = [
     category: 'ai',
   },
   {
-    id: 'fireworks2',
-    name: 'Fireworks CB',
-    icon: 'FW2',
-    color: 'bg-rose-600/20 text-rose-300 border-rose-600/30',
-    gradient: 'from-rose-600/20 to-red-500/20 text-rose-300',
-    hexColor: '#e11d48',
-    disabled: false,
-    category: 'ai',
-  },
-  {
     id: 'bitbucket',
     name: 'Bitbucket',
     icon: 'BB',

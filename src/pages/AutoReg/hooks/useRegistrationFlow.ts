@@ -61,7 +61,6 @@ export const useRegistrationFlow = ({
       'github',
       'openai',
       'fireworks',
-      'fireworks2',
       'bitbucket',
     ];
     if (!supportedProviders.includes(config.provider)) {

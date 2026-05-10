@@ -373,7 +373,6 @@ export function AccountsToolbar({
                     { value: 'aws_builder_id', label: 'AWS Builder ID', count: providerCounts.aws_builder_id ?? 0 },
                     { value: 'github', label: 'GitHub', count: providerCounts.github ?? 0 },
                     { value: 'fireworks', label: 'Fireworks AI', count: providerCounts.fireworks ?? 0 },
-                    { value: 'fireworks2', label: 'Fireworks AI (CB)', count: providerCounts.fireworks2 ?? 0 },
                   ]}
                   triggerClassName="h-8 min-w-[160px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"

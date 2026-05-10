@@ -364,7 +364,7 @@ export function EngineTab({
           </div>
         </CompactGroup>
 
-        {(provider === 'fireworks' || provider === 'fireworks2') && onCardsTextChange && (
+        {provider === 'fireworks' && onCardsTextChange && (
           <CompactGroup title="Карты">
             <Textarea
               value={cardsText || ''}
