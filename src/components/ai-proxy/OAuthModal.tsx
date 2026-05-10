@@ -32,7 +32,11 @@ export default function OAuthModal({
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [pollAttempts, setPollAttempts] = useState(0);
+  const [flowType, setFlowType] = useState<'device_code' | 'auth_code' | null>(null);
+  const [userCode, setUserCode] = useState<string | null>(null);
+  const [verificationUri, setVerificationUri] = useState<string | null>(null);
 
   const initOAuth = useCallback(async () => {
     try {
@@ -40,6 +44,9 @@ export default function OAuthModal({
       const response = await providerAuthFlowStart({ provider });
       setOauthUrl(response.authUrl);
       setSessionId(response.sessionId);
+      setFlowType(response.flowType);
+      setUserCode(response.userCode);
+      setVerificationUri(response.verificationUri);
     } catch (e) {
       console.error('[OAuthModal] Failed to start OAuth:', e);
       const message = e instanceof Error ? e.message : String(e);
@@ -62,6 +69,9 @@ export default function OAuthModal({
     return () => {
       setPolling(false);
       setPollAttempts(0);
+      setFlowType(null);
+      setUserCode(null);
+      setVerificationUri(null);
     };
   }, [isOpen, provider, initOAuth]);
 
@@ -71,7 +81,11 @@ export default function OAuthModal({
     try {
       setLoading(true);
       await openUrlInBrowser(oauthUrl);
-      toast.success('Browser opened. Please complete authorization.');
+      if (flowType === 'device_code') {
+        toast.success('Verification page opened. Enter the code above to authorize.');
+      } else {
+        toast.success('Browser opened. Please complete authorization.');
+      }
       startPolling();
     } catch (e) {
       console.error('[OAuthModal] Failed to open browser:', e);
@@ -131,8 +145,20 @@ export default function OAuthModal({
       setCopied(true);
       toast.success('URL copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
+    } catch {
       toast.error('Failed to copy URL');
+    }
+  };
+
+  const handleCopyCode = async () => {
+    if (!userCode) return;
+    try {
+      await navigator.clipboard.writeText(userCode);
+      setCopiedCode(true);
+      toast.success('Code copied to clipboard');
+      setTimeout(() => setCopiedCode(false), 2000);
+    } catch {
+      toast.error('Failed to copy code');
     }
   };
 
@@ -153,11 +179,51 @@ export default function OAuthModal({
       <div className="space-y-4">
         {/* Instructions */}
         <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-          <p className="text-sm text-slate-300">
-            Click the button below to open the authorization page in your browser. Complete the
-            OAuth flow and return here.
-          </p>
+          {flowType === 'device_code' ? (
+            <div className="space-y-2">
+              <p className="text-sm text-slate-300 font-medium">Device Code Authorization</p>
+              <ol className="text-sm text-slate-400 list-decimal list-inside space-y-1">
+                <li>Open the verification page using the button below</li>
+                <li>Enter the user code shown above</li>
+                <li>Sign in with your AWS Builder ID</li>
+                <li>Return here — authorization completes automatically</li>
+              </ol>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-300">
+              Click the button below to open the authorization page in your browser. Complete the
+              OAuth flow and return here.
+            </p>
+          )}
         </div>
+
+        {/* Device Code Display */}
+        {flowType === 'device_code' && userCode && (
+          <div className="p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+            <p className="text-sm text-slate-300 mb-3">Enter this code on the verification page:</p>
+            <div className="flex items-center gap-3">
+              <code className="text-2xl font-mono font-bold text-white tracking-widest bg-white/10 px-4 py-2 rounded flex-1 text-center">
+                {userCode}
+              </code>
+              <IconButton
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyCode}
+                title="Copy Code"
+                className="flex-shrink-0"
+              >
+                {copiedCode ? (
+                  <Check className="w-4 h-4 text-green-500" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-400" />
+                )}
+              </IconButton>
+            </div>
+            {verificationUri && (
+              <p className="text-xs text-slate-500 mt-2 truncate">{verificationUri}</p>
+            )}
+          </div>
+        )}
 
         {/* Start OAuth Button */}
         <Button
@@ -180,7 +246,7 @@ export default function OAuthModal({
           ) : (
             <>
               <ExternalLink className="w-4 h-4 mr-2" />
-              Open Authorization Page
+              {flowType === 'device_code' ? 'Open Verification Page' : 'Open Authorization Page'}
             </>
           )}
         </Button>
@@ -189,7 +255,7 @@ export default function OAuthModal({
         {oauthUrl && (
           <div className="space-y-2">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-              Authorization URL
+              {flowType === 'device_code' ? 'Verification URL' : 'Authorization URL'}
             </div>
             <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2.5 border border-white/10">
               <span className="flex-1 text-xs text-slate-300 font-mono truncate">
@@ -220,7 +286,9 @@ export default function OAuthModal({
               <div>
                 <p className="text-sm font-medium text-white">Waiting for authorization...</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Complete the OAuth flow in your browser
+                  {flowType === 'device_code'
+                    ? 'Enter the code on the verification page and sign in'
+                    : 'Complete the OAuth flow in your browser'}
                 </p>
               </div>
             </div>
