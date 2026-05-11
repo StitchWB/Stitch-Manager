@@ -134,6 +134,7 @@ export function useAiProvidersController() {
 
   const fetchProviderQuotas = useCallback(async () => {
     try {
+      console.log('[AI Hub] Fetching provider quotas...');
       const [providerQuotasResult, openAiQuotasResult, kiroQuotasResult] = await Promise.allSettled([
         fetchAllQuotasSafe(),
         fetchOpenAiAccountQuotasSafe(),
@@ -147,10 +148,13 @@ export function useAiProvidersController() {
         setOpenAiAccountQuotas(openAiQuotasResult.value);
       }
       if (kiroQuotasResult.status === 'fulfilled') {
+        console.log('[AI Hub] Kiro quotas fetched:', kiroQuotasResult.value.length, kiroQuotasResult.value);
         setKiroAccountQuotas(kiroQuotasResult.value);
+      } else {
+        console.error('[AI Hub] Kiro quotas failed:', kiroQuotasResult.reason);
       }
-    } catch {
-      // non-blocking
+    } catch (e) {
+      console.error('[AI Hub] fetchProviderQuotas error:', e);
     }
   }, [setProviderQuotas, setOpenAiAccountQuotas, setKiroAccountQuotas]);
 
