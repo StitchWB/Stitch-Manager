@@ -268,6 +268,11 @@ export function AiProxyAccountsTable({
                     {conn.message}
                   </div>
                 ) : null}
+                {account.provider === 'kiro' && kiroQuota?.error ? (
+                  <div className="text-[10px] text-amber-300 truncate" title={kiroQuota.error}>
+                    {kiroQuota.error}
+                  </div>
+                ) : null}
               </div>
 
               <div className="relative z-0">{quotaNode}</div>
