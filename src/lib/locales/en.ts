@@ -1314,6 +1314,7 @@ export const en: Translations = {
       },
       quotaPrimary: 'Primary',
       quotaWeekly: 'Weekly',
+      resetsIn: '{days}d',
       emptyValue: '—',
     },
     modals: {

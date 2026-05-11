@@ -1328,6 +1328,7 @@ export const ru: Translations = {
       },
       quotaPrimary: 'Основная',
       quotaWeekly: 'Неделя',
+      resetsIn: '{days}д',
       emptyValue: '—',
     },
     modals: {
