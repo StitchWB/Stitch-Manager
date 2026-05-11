@@ -387,19 +387,6 @@ class CloakBrowserProfileManager:
         self._page = ChromiumPage(f"127.0.0.1:{debug_port}")
         self._page.set.load_mode("normal")
 
-        # Maximize window via DrissionPage (non-headless only)
-        if self.maximize_on_start and not self.headless:
-            try:
-                self._page.set.window.max()
-                logger.info("Window maximized via DrissionPage")
-            except Exception as e:
-                logger.warning(f"set.window.max() failed: {e}; trying manual resize")
-                try:
-                    self._page.set.window.size(1920, 1080)
-                    logger.info("Window resized to 1920x1080")
-                except Exception:
-                    pass
-
         # Apply anti-detection spoofing if email/profile-based
         try:
             from autoreg.spoofers.cdp_spoofer import apply_pre_navigation_spoofing
