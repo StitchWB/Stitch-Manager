@@ -6,6 +6,7 @@ import type {
   AiProxyQuotaInfo,
 } from '../types/generated';
 import type { OpenAiAccountQuota } from '../lib/tauri/modules/aiProxy';
+import type { KiroAccountQuota } from '../types/generated';
 
 export type AiProxyAccountDailyUsage = {
   accountId: number;
@@ -35,6 +36,10 @@ interface AiProxyState {
   openAiAccountQuotas: Record<string, OpenAiAccountQuota>;
   openAiAccountQuotasUpdatedAt: number | null;
 
+  // Kiro account-level quotas
+  kiroAccountQuotas: Record<number, KiroAccountQuota>;
+  kiroAccountQuotasUpdatedAt: number | null;
+
   // Per-account daily usage
   accountDailyUsage: Record<number, AiProxyAccountDailyUsage>;
   accountDailyUsageUpdatedAt: number | null;
@@ -45,6 +50,7 @@ interface AiProxyState {
   setAccounts: (accounts: AiProxyAccount[]) => void;
   setProviderQuotas: (quotas: AiProxyQuotaInfo[], updatedAt?: number) => void;
   setOpenAiAccountQuotas: (quotas: OpenAiAccountQuota[], updatedAt?: number) => void;
+  setKiroAccountQuotas: (quotas: KiroAccountQuota[], updatedAt?: number) => void;
   setAccountDailyUsage: (usage: AiProxyAccountDailyUsage[], updatedAt?: number) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -60,6 +66,8 @@ export const useAiProxyStore = create<AiProxyState>(set => ({
   providerQuotasUpdatedAt: null,
   openAiAccountQuotas: {},
   openAiAccountQuotasUpdatedAt: null,
+  kiroAccountQuotas: {},
+  kiroAccountQuotasUpdatedAt: null,
   accountDailyUsage: {},
   accountDailyUsageUpdatedAt: null,
 
@@ -104,6 +112,14 @@ export const useAiProxyStore = create<AiProxyState>(set => ({
         return acc;
       }, {}),
       openAiAccountQuotasUpdatedAt: updatedAt,
+    }),
+  setKiroAccountQuotas: (quotas, updatedAt = Date.now()) =>
+    set({
+      kiroAccountQuotas: quotas.reduce<Record<number, KiroAccountQuota>>((acc, quota) => {
+        acc[quota.accountId] = quota;
+        return acc;
+      }, {}),
+      kiroAccountQuotasUpdatedAt: updatedAt,
     }),
   setAccountDailyUsage: (usage, updatedAt = Date.now()) =>
     set({

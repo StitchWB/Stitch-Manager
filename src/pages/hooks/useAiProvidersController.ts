@@ -20,6 +20,7 @@ import {
   importAiProxyAccountsPayload,
   fetchAllQuotasSafe,
   fetchOpenAiAccountQuotasSafe,
+  fetchKiroAccountQuotasSafe,
   scanAuthFiles as scanAuthFilesCmd,
   type ProviderCapability,
   type ProviderModelMapping,
@@ -47,6 +48,7 @@ export function maskKey(key: string, visibleTail: number = 4): string {
 export function useAiProvidersController() {
   const setProviderQuotas = useAiProxyStore(state => state.setProviderQuotas);
   const setOpenAiAccountQuotas = useAiProxyStore(state => state.setOpenAiAccountQuotas);
+  const setKiroAccountQuotas = useAiProxyStore(state => state.setKiroAccountQuotas);
   const openAiAccountQuotasMap = useAiProxyStore(state => state.openAiAccountQuotas);
   const [accounts, setAccounts] = useState<AiProxyAccount[]>([]);
   const [loading, setLoading] = useState(false);
@@ -132,9 +134,11 @@ export function useAiProvidersController() {
 
   const fetchProviderQuotas = useCallback(async () => {
     try {
-      const [providerQuotasResult, openAiQuotasResult] = await Promise.allSettled([
+      console.log('[AI Hub] Fetching provider quotas...');
+      const [providerQuotasResult, openAiQuotasResult, kiroQuotasResult] = await Promise.allSettled([
         fetchAllQuotasSafe(),
         fetchOpenAiAccountQuotasSafe(),
+        fetchKiroAccountQuotasSafe(),
       ]);
 
       if (providerQuotasResult.status === 'fulfilled') {
@@ -143,10 +147,16 @@ export function useAiProvidersController() {
       if (openAiQuotasResult.status === 'fulfilled') {
         setOpenAiAccountQuotas(openAiQuotasResult.value);
       }
-    } catch {
-      // non-blocking
+      if (kiroQuotasResult.status === 'fulfilled') {
+        console.log('[AI Hub] Kiro quotas fetched:', kiroQuotasResult.value.length, kiroQuotasResult.value);
+        setKiroAccountQuotas(kiroQuotasResult.value);
+      } else {
+        console.error('[AI Hub] Kiro quotas failed:', kiroQuotasResult.reason);
+      }
+    } catch (e) {
+      console.error('[AI Hub] fetchProviderQuotas error:', e);
     }
-  }, [setProviderQuotas, setOpenAiAccountQuotas]);
+  }, [setProviderQuotas, setOpenAiAccountQuotas, setKiroAccountQuotas]);
 
   const refreshProxyInfo = useCallback(async () => {
     if (!hasTauriBridge()) {
