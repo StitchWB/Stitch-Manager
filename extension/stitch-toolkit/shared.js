@@ -1,5 +1,5 @@
 // Shared constants for Stitch Toolkit extension
-export const TOOLKIT_VERSION = '0.2.0';
+export const TOOLKIT_VERSION = '0.6.1';
 
 // Bridge ports (kept for backward compat with existing Python runners)
 export const BRIDGE_PORTS = Object.freeze({

@@ -182,7 +182,7 @@ def _resolve_browser_window(
     fit_size = _fit_window_to_screen(screen_size) if screen_size is not None else None
 
     mode = "fit-screen"
-    maximize_on_start = False
+    maximize_on_start = True  # default to maximized for best UX
     explicit_size: tuple[int, int] | None = None
 
     if isinstance(raw, dict):
@@ -190,7 +190,10 @@ def _resolve_browser_window(
         if raw_mode in ("auto", "fit-screen", "fixed"):
             mode = raw_mode
 
-        maximize_on_start = bool(raw.get("maximize_on_start") or raw.get("maximizeOnStart"))
+        if "maximize_on_start" in raw:
+            maximize_on_start = bool(raw.get("maximize_on_start"))
+        elif "maximizeOnStart" in raw:
+            maximize_on_start = bool(raw.get("maximizeOnStart"))
 
         width = _to_positive_int(raw.get("width"))
         height = _to_positive_int(raw.get("height"))
@@ -739,7 +742,7 @@ class ProfileLauncher:
         geo = self._effective_geolocation()
 
         # Parse window
-        resolved_window, _ = _resolve_browser_window(
+        resolved_window, maximize_on_start = _resolve_browser_window(
             self._config,
             current_window=None,
         )
@@ -757,6 +760,7 @@ class ProfileLauncher:
             geolocation=geo if isinstance(geo, dict) else None,
             window_size=resolved_window,
             auto_lock=False,
+            maximize_on_start=maximize_on_start,
         )
 
         # Wrap in async façade
