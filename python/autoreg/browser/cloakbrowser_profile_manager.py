@@ -254,15 +254,17 @@ class CloakBrowserProfileManager:
             cmd.append(f"--user-agent={self.user_agent}")
 
         # Window size / maximize (non-headless)
-        # Always pass --window-size: old Chromium may ignore --start-maximized
-        # but still respects window-size. Pass both for best coverage.
+        # NOTE: --window-size and --start-maximized CONFLICT.
+        # Passing both causes Chrome to ignore --start-maximized.
+        # Use ONLY one of them depending on the desired mode.
         if not self.headless:
-            w, h = self.window_size
-            w = max(MIN_BROWSER_WINDOW[0], min(MAX_BROWSER_WINDOW[0], w))
-            h = max(MIN_BROWSER_WINDOW[1], min(MAX_BROWSER_WINDOW[1], h))
-            cmd.append(f"--window-size={w},{h}")
             if self.maximize_on_start:
                 cmd.append("--start-maximized")
+            else:
+                w, h = self.window_size
+                w = max(MIN_BROWSER_WINDOW[0], min(MAX_BROWSER_WINDOW[0], w))
+                h = max(MIN_BROWSER_WINDOW[1], min(MAX_BROWSER_WINDOW[1], h))
+                cmd.append(f"--window-size={w},{h}")
 
         # Proxy
         if self.proxy:
