@@ -6,14 +6,14 @@ import { BRIDGE_PORTS, STORAGE_KEYS, syncApiUrl } from './shared.js';
 import { sessionManager } from './session-manager.js';
 
 // ── WebSocket Bridge State ─────────────────────────────────────────────────
-const MAX_RECONNECT_ATTEMPTS = 10;
-const MAX_RECONNECT_DELAY = 30000;
+const MAX_RECONNECT_ATTEMPTS = 3;
+const MAX_RECONNECT_DELAY = 15000;
 const MAX_QUEUE_SIZE = 200;
 
 const bridgeState = {
-  record: { ws: null, connecting: false, outboundQueue: [], reconnectAttempt: 0, status: 'offline' },
-  replay: { ws: null, connecting: false, outboundQueue: [], reconnectAttempt: 0, status: 'offline' },
-  health: { ws: null, connecting: false, outboundQueue: [], reconnectAttempt: 0, status: 'offline' },
+  record: { ws: null, connecting: false, outboundQueue: [], reconnectAttempt: 0, status: 'offline', errorLogged: false },
+  replay: { ws: null, connecting: false, outboundQueue: [], reconnectAttempt: 0, status: 'offline', errorLogged: false },
+  health: { ws: null, connecting: false, outboundQueue: [], reconnectAttempt: 0, status: 'offline', errorLogged: false },
 };
 
 let _replayTask = null;
@@ -113,6 +113,11 @@ function sendWs(kind, payload) {
   const ws = state.ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     if (state.outboundQueue.length < MAX_QUEUE_SIZE) state.outboundQueue.push(payload);
+    // Lazy connect: try to establish connection if not already failed/connecting
+    if (state.status !== 'failed' && state.status !== 'connecting' && !state.connecting) {
+      const port = BRIDGE_PORTS[kind];
+      if (port) connectBridge(kind, port);
+    }
     return 'queued';
   }
   try { ws.send(JSON.stringify(payload)); return 'sent'; }
@@ -154,7 +159,7 @@ function connectBridge(kind, port) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
   state.ws = ws;
   ws.onopen = () => {
-    state.connecting = false; state.reconnectAttempt = 0; state.status = 'online';
+    state.connecting = false; state.reconnectAttempt = 0; state.status = 'online'; state.errorLogged = false;
     flushOutboundQueue(kind);
     sendWs(kind, { type: 'hello', payload: { client: 'stitch-toolkit', kind } });
     if (kind === 'record' && sessionManager.isRecording()) {
@@ -173,7 +178,12 @@ function connectBridge(kind, port) {
     state.status = `reconnecting (${state.reconnectAttempt}/${MAX_RECONNECT_ATTEMPTS})`;
     setTimeout(() => connectBridge(kind, port), delay);
   };
-  ws.onerror = (evt) => { console.error(`[bg] WS error on ${kind}:`, evt); };
+  ws.onerror = (evt) => {
+    if (!state.errorLogged) {
+      console.warn(`[bg] WS ${kind} connection failed (backend may be offline):`, evt.type || 'error');
+      state.errorLogged = true;
+    }
+  };
   ws.onmessage = async (evt) => {
     const msg = safeJsonParse(evt.data);
     if (!msg || typeof msg !== 'object') return;
@@ -645,6 +655,10 @@ function fillStripeFields(cardData) {
 }
 
 // ── Startup ────────────────────────────────────────────────────────────────
-chrome.runtime.onInstalled.addListener(() => reconnectAllBridges());
-chrome.runtime.onStartup.addListener(() => reconnectAllBridges());
-reconnectAllBridges();
+// Lazy connection: don't auto-connect on startup.
+// WebSocket bridges connect only when sendWs() is called (on-demand).
+// This avoids ERR_CONNECTION_REFUSED spam when Stitch Manager is not running.
+// If you need immediate connection, call reconnectAllBridges() manually.
+// chrome.runtime.onInstalled.addListener(() => reconnectAllBridges());
+// chrome.runtime.onStartup.addListener(() => reconnectAllBridges());
+console.log('[Stitch Toolkit] Background service worker started. WS bridges in lazy mode.');

@@ -123,6 +123,7 @@ class CloakBrowserProfileManager:
         disable_images: bool = False,
         user_agent: str | None = None,
         auto_lock: bool = True,
+        maximize_on_start: bool = False,
     ) -> None:
         self.profile_id = _sanitize_profile_id(profile_id)
         self.profiles_root = (
@@ -139,6 +140,7 @@ class CloakBrowserProfileManager:
         self.disable_images = disable_images
         self.user_agent = user_agent
         self._auto_lock = auto_lock
+        self.maximize_on_start = maximize_on_start
 
         self._page: ChromiumPage | None = None
         self._chrome_proc: sp.Popen | None = None
@@ -234,7 +236,6 @@ class CloakBrowserProfileManager:
             "--profile-directory=Default",
             "--no-first-run",
             "--no-default-browser-check",
-            "--start-maximized",
             "--disable-infobars",
             # "--disable-blink-features=AutomationControlled",  # CloakBrowser already anti-detect; flag causes warning bar
             f"--lang={self.locale}",
@@ -252,12 +253,16 @@ class CloakBrowserProfileManager:
         if self.user_agent:
             cmd.append(f"--user-agent={self.user_agent}")
 
-        # Window size (non-headless)
+        # Window size / maximize (non-headless)
+        # Always pass --window-size: old Chromium may ignore --start-maximized
+        # but still respects window-size. Pass both for best coverage.
         if not self.headless:
             w, h = self.window_size
             w = max(MIN_BROWSER_WINDOW[0], min(MAX_BROWSER_WINDOW[0], w))
             h = max(MIN_BROWSER_WINDOW[1], min(MAX_BROWSER_WINDOW[1], h))
             cmd.append(f"--window-size={w},{h}")
+            if self.maximize_on_start:
+                cmd.append("--start-maximized")
 
         # Proxy
         if self.proxy:
@@ -381,6 +386,19 @@ class CloakBrowserProfileManager:
         logger.info(f"CDP ready, connecting DrissionPage to port {debug_port}...")
         self._page = ChromiumPage(f"127.0.0.1:{debug_port}")
         self._page.set.load_mode("normal")
+
+        # Maximize window via DrissionPage (non-headless only)
+        if self.maximize_on_start and not self.headless:
+            try:
+                self._page.set.window.max()
+                logger.info("Window maximized via DrissionPage")
+            except Exception as e:
+                logger.warning(f"set.window.max() failed: {e}; trying manual resize")
+                try:
+                    self._page.set.window.size(1920, 1080)
+                    logger.info("Window resized to 1920x1080")
+                except Exception:
+                    pass
 
         # Apply anti-detection spoofing if email/profile-based
         try:
