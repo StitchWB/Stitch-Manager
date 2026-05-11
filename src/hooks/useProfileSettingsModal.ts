@@ -58,7 +58,7 @@ export const defaultSettings: ProfileSettingsV1 = {
       mode: 'fit-screen',
       width: null,
       height: null,
-      maximizeOnStart: false,
+      maximizeOnStart: true,
     },
   },
   storage: {
