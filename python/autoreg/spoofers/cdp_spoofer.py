@@ -207,18 +207,21 @@ class CDPSpoofer:
             # FAIL: Geolocation: {self._fmt_err(e)}")
 
         # 4. Device metrics через CDP
-        try:
-            page.run_cdp('Emulation.setDeviceMetricsOverride',
-                width=p.screen_width,
-                height=p.screen_height,
-                deviceScaleFactor=p.pixel_ratio,
-                mobile=False
-            )
-            results['device_metrics'] = True
-            # OK: Screen: {p.screen_width}x{p.screen_height}")
-        except Exception:
-            results['device_metrics'] = False
-            # FAIL: Device metrics: {self._fmt_err(e)}")
+        if not skip_device_metrics:
+            try:
+                page.run_cdp('Emulation.setDeviceMetricsOverride',
+                    width=p.screen_width,
+                    height=p.screen_height,
+                    deviceScaleFactor=p.pixel_ratio,
+                    mobile=False
+                )
+                results['device_metrics'] = True
+                # OK: Screen: {p.screen_width}x{p.screen_height}")
+            except Exception:
+                results['device_metrics'] = False
+                # FAIL: Device metrics: {self._fmt_err(e)}")
+        else:
+            results['device_metrics'] = 'skipped'
 
         # 5. Locale через CDP (опционально)
         try:
@@ -251,7 +254,7 @@ class CDPSpoofer:
 
         return results
 
-    def apply_pre_navigation(self, page) -> bool:
+    def apply_pre_navigation(self, page, skip_device_metrics: bool = False) -> bool:
         """
         Применяет спуфинг ДО навигации на страницу.
 
@@ -259,6 +262,7 @@ class CDPSpoofer:
 
         Args:
             page: DrissionPage ChromiumPage instance
+            skip_device_metrics: Skip Emulation.setDeviceMetricsOverride (e.g. when window is maximized)
 
         Returns:
             True если успешно
@@ -385,7 +389,7 @@ def apply_cdp_spoofing(page, profile: SpoofProfile | None = None) -> dict[str, b
     return spoofer.apply(page)
 
 
-def apply_pre_navigation_spoofing(page, profile: SpoofProfile | None = None) -> CDPSpoofer:
+def apply_pre_navigation_spoofing(page, profile: SpoofProfile | None = None, skip_device_metrics: bool = False) -> CDPSpoofer:
     """
     Применяет спуфинг ДО навигации.
 
@@ -393,10 +397,13 @@ def apply_pre_navigation_spoofing(page, profile: SpoofProfile | None = None) -> 
         spoofer = apply_pre_navigation_spoofing(page)
         page.get('https://...')
 
+    Args:
+        skip_device_metrics: Skip Emulation.setDeviceMetricsOverride (e.g. when window is maximized)
+
     Returns:
         CDPSpoofer instance
     """
     spoofer = CDPSpoofer(profile)
-    spoofer.apply_pre_navigation(page)
+    spoofer.apply_pre_navigation(page, skip_device_metrics=skip_device_metrics)
     return spoofer
 
