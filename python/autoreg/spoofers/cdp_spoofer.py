@@ -127,12 +127,13 @@ class CDPSpoofer:
         """Безопасно форматирует ошибку для вывода (удаляет китайские символы)"""
         return str(e).encode('ascii', 'replace').decode('ascii')
 
-    def apply(self, page) -> dict[str, bool]:
+    def apply(self, page, skip_device_metrics: bool = False) -> dict[str, bool]:
         """
         Применяет все спуфинги к DrissionPage.
 
         Args:
             page: DrissionPage ChromiumPage instance
+            skip_device_metrics: Skip Emulation.setDeviceMetricsOverride (e.g. when window is maximized)
 
         Returns:
             Dict с результатами применения
@@ -331,16 +332,19 @@ class CDPSpoofer:
         except Exception as e:
             print(f"   [WARN] Geolocation: {self._fmt_err(e)}")
 
-        try:
-            page.run_cdp('Emulation.setDeviceMetricsOverride',
-                width=p.screen_width,
-                height=p.screen_height,
-                deviceScaleFactor=p.pixel_ratio,
-                mobile=False
-            )
-            # OK: Screen: {p.screen_width}x{p.screen_height}")
-        except Exception as e:
-            print(f"   [WARN] Device metrics: {self._fmt_err(e)}")
+        if not skip_device_metrics:
+            try:
+                page.run_cdp('Emulation.setDeviceMetricsOverride',
+                    width=p.screen_width,
+                    height=p.screen_height,
+                    deviceScaleFactor=p.pixel_ratio,
+                    mobile=False
+                )
+                # OK: Screen: {p.screen_width}x{p.screen_height}")
+            except Exception as e:
+                print(f"   [WARN] Device metrics: {self._fmt_err(e)}")
+        else:
+            results['device_metrics'] = 'skipped'
 
         # Permission override через CDP (для Notification.permission)
         try:
