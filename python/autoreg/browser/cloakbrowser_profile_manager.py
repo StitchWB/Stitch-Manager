@@ -397,8 +397,8 @@ class CloakBrowserProfileManager:
             storage_dir = str(get_paths().browser_profiles_dir.parent / "spoof_profiles")
             storage = ProfileStorage(storage_dir)
             profile = storage.get_or_create(self.profile_id)
-            apply_pre_navigation_spoofing(self._page, profile)
-            logger.info("Anti-detection spoofing applied")
+            apply_pre_navigation_spoofing(self._page, profile, skip_device_metrics=self.maximize_on_start)
+            logger.info("Anti-detection spoofing applied (device metrics: %s)", "skipped" if self.maximize_on_start else "applied")
         except Exception as e:
             logger.warning(f"Anti-detection spoofing failed: {e}")
 
