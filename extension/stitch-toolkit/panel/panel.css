@@ -129,8 +129,8 @@
   position: fixed;
   bottom: 28px;
   right: 28px;
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--tk-accent) 0%, #4f46e5 50%, #4338ca 100%);
   color: #fff;
@@ -138,7 +138,7 @@
   cursor: pointer;
   display: grid;
   place-items: center;
-  font-size: 22px;
+  font-size: 18px;
   z-index: 2147483647;
   box-shadow: 
     0 4px 20px rgba(99, 102, 241, 0.5),
@@ -285,8 +285,8 @@
 
 .tk-panel {
   position: fixed;
-  width: 340px;
-  max-height: 560px;
+  width: 300px;
+  max-height: 480px;
   font-family: var(--tk-font);
   font-size: var(--tk-text-md);
   color: var(--tk-text);
@@ -331,8 +331,8 @@
 .tk-panel-header {
   display: flex;
   align-items: center;
-  gap: var(--tk-space-md);
-  padding: var(--tk-space-lg);
+  gap: var(--tk-space-sm);
+  padding: var(--tk-space-md) var(--tk-space-lg);
   background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%);
   border-bottom: 1px solid var(--tk-border);
   cursor: grab;
@@ -345,14 +345,14 @@
 }
 
 .tk-panel-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--tk-radius-md);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--tk-radius-sm);
   display: grid;
   place-items: center;
   background: linear-gradient(135deg, var(--tk-accent), #4f46e5);
   color: #fff;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
   box-shadow: 0 2px 12px rgba(99, 102, 241, 0.35);
   flex-shrink: 0;
@@ -366,17 +366,17 @@
 
 .tk-panel-title {
   font-weight: 700;
-  font-size: var(--tk-text-lg);
+  font-size: var(--tk-text-md);
   line-height: 1.3;
   letter-spacing: -0.02em;
   color: var(--tk-text);
 }
 
 .tk-panel-subtitle {
-  font-size: var(--tk-text-sm);
+  font-size: var(--tk-text-xs);
   color: var(--tk-text-muted);
   font-weight: 500;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .tk-panel-actions {
@@ -532,7 +532,7 @@
 .tk-tool-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--tk-space-lg);
+  padding: var(--tk-space-md);
   scrollbar-width: thin;
   scrollbar-color: var(--tk-border) transparent;
 }
@@ -565,7 +565,7 @@
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--tk-text-dim);
-  margin-bottom: var(--tk-space-md);
+  margin-bottom: var(--tk-space-sm);
   display: flex;
   align-items: center;
   gap: var(--tk-space-sm);
@@ -588,8 +588,8 @@
   background: rgba(0, 0, 0, 0.25);
   color: var(--tk-text);
   border-radius: var(--tk-radius-md);
-  padding: 12px 14px;
-  font-size: var(--tk-text-md);
+  padding: 8px 10px;
+  font-size: var(--tk-text-sm);
   font-weight: 500;
   font-family: var(--tk-font-mono);
   outline: none;
@@ -598,7 +598,7 @@
     box-shadow 0.2s ease,
     background 0.2s ease;
   box-sizing: border-box;
-  margin-bottom: var(--tk-space-md);
+  margin-bottom: var(--tk-space-sm);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
@@ -751,13 +751,31 @@ button.tk-mini:hover {
 /* Row */
 .tk-row {
   display: flex;
-  gap: var(--tk-space-md);
-  margin-bottom: var(--tk-space-md);
+  gap: var(--tk-space-sm);
+  margin-bottom: var(--tk-space-sm);
   align-items: center;
 }
 
 .tk-row > * { 
   flex: 1; 
+}
+
+/* Compact action row for buttons */
+.tk-row.tk-actions {
+  gap: 6px;
+}
+
+.tk-row.tk-actions .tk-btn {
+  padding: 6px 8px;
+  font-size: 11px;
+  min-height: 32px;
+}
+
+.tk-row.tk-actions .tk-btn.tk-compact {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -771,8 +789,8 @@ button.tk-mini:hover {
   background: rgba(255, 255, 255, 0.04);
   color: var(--tk-text-secondary);
   border-radius: var(--tk-radius-md);
-  padding: 10px 14px;
-  font-size: var(--tk-text-sm);
+  padding: 7px 10px;
+  font-size: var(--tk-text-xs);
   font-weight: 600;
   font-family: var(--tk-font);
   cursor: pointer;
@@ -945,8 +963,8 @@ button.tk-mini:hover {
 
 .tk-status {
   font-size: var(--tk-text-sm);
-  margin-top: var(--tk-space-md);
-  padding: 10px 14px;
+  margin-top: var(--tk-space-sm);
+  padding: 8px 10px;
   border-radius: var(--tk-radius-md);
   border: 1px solid transparent;
   line-height: 1.5;

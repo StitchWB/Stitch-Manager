@@ -38,11 +38,11 @@ export const StripeFillerTool = {
       <div class="tk-row" style="margin-top:6px;">
         <input id="tk-stripe-postal" class="tk-input" type="text" placeholder="Postal code" style="margin-bottom:0;width:50%;" />
       </div>
-      <div class="tk-row" style="margin-top:10px;">
-        <button id="tk-stripe-fill" class="tk-btn tk-accent">Fill Stripe</button>
-        <button id="tk-stripe-detect" class="tk-btn">Detect</button>
-        <button id="tk-stripe-preset" class="tk-btn" style="margin-left:auto;font-size:11px;">US Preset</button>
-      </div>
+<div class="tk-row tk-actions" style="margin-top:8px;">
+      <button id="tk-stripe-fill" class="tk-btn tk-accent">Fill</button>
+      <button id="tk-stripe-detect" class="tk-btn">Detect</button>
+      <button id="tk-stripe-preset" class="tk-btn tk-compact">US</button>
+    </div>
       <div id="tk-stripe-status" class="tk-status tk-info" style="display:none"></div>
       <div class="tk-hint">
         Uses language-agnostic selectors (id / autocomplete) — works on checkout.stripe.com in any language.
