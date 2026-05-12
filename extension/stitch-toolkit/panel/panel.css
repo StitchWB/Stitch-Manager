@@ -286,8 +286,8 @@
 
 .tk-panel {
   position: fixed;
-  width: 300px;
-  max-height: 480px;
+  width: 280px;
+  max-height: 420px;
   font-family: var(--tk-font);
   font-size: var(--tk-text-md);
   color: var(--tk-text);
@@ -332,9 +332,9 @@
 .tk-panel-header {
   display: flex;
   align-items: center;
-  gap: var(--tk-space-sm);
-  padding: var(--tk-space-md) var(--tk-space-lg);
-  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%);
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
   border-bottom: 1px solid var(--tk-border);
   cursor: grab;
   user-select: none;
@@ -346,16 +346,15 @@
 }
 
 .tk-panel-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--tk-radius-sm);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--tk-accent), #4f46e5);
+  background: var(--tk-accent);
   color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.35);
+  font-size: 12px;
+  font-weight: 600;
   flex-shrink: 0;
   font-family: var(--tk-font);
 }
@@ -366,17 +365,16 @@
 }
 
 .tk-panel-title {
-  font-weight: 700;
-  font-size: var(--tk-text-md);
+  font-weight: 600;
+  font-size: 13px;
   line-height: 1.3;
-  letter-spacing: -0.02em;
   color: var(--tk-text);
 }
 
 .tk-panel-subtitle {
-  font-size: var(--tk-text-xs);
+  font-size: 10px;
   color: var(--tk-text-muted);
-  font-weight: 500;
+  font-weight: 400;
   margin-top: 1px;
 }
 
@@ -388,32 +386,30 @@
 }
 
 .tk-action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--tk-radius-sm);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   border: 1px solid var(--tk-border);
-  background: rgba(255,255,255,0.03);
+  background: transparent;
   color: var(--tk-text-muted);
   cursor: pointer;
   display: grid;
   place-items: center;
-  font-size: 14px;
-  transition: all 0.2s ease;
+  font-size: 12px;
+  transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
 .tk-action-btn:hover {
-  background: var(--tk-accent-soft);
+  background: rgba(255,255,255,0.05);
   border-color: var(--tk-border-hover);
   color: var(--tk-text-secondary);
-  transform: translateY(-1px);
 }
 
 .tk-action-btn.active {
-  background: linear-gradient(135deg, var(--tk-accent), #4f46e5);
-  border-color: transparent;
+  background: var(--tk-accent);
+  border-color: var(--tk-accent);
   color: #fff;
-  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
 }
 
 .tk-action-btn.danger:hover {
@@ -423,9 +419,9 @@
 }
 
 .tk-close-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--tk-radius-sm);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   border: 1px solid var(--tk-border);
   background: transparent;
   color: var(--tk-text-muted);
@@ -450,12 +446,11 @@
 
 .tk-tabs {
   display: flex;
-  padding: var(--tk-space-sm) var(--tk-space-lg);
-  gap: var(--tk-space-xs);
-  background: rgba(0, 0, 0, 0.15);
+  padding: 4px 10px;
+  gap: 4px;
+  background: transparent;
   border-bottom: 1px solid var(--tk-border);
   flex-shrink: 0;
-  position: relative;
 }
 
 .tk-tab {
@@ -463,42 +458,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: var(--tk-radius-pill);
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--tk-text-muted);
-  font-size: var(--tk-text-sm);
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.15s ease;
   white-space: nowrap;
-  position: relative;
-  overflow: hidden;
-}
-
-.tk-tab::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, var(--tk-accent-soft), rgba(79,70,229,0.08));
-  opacity: 0;
-  transition: opacity 0.2s ease;
 }
 
 .tk-tab:hover {
   color: var(--tk-text-secondary);
-  background: rgba(255,255,255,0.03);
-}
-
-.tk-tab:hover::before {
-  opacity: 0.5;
+  background: rgba(255,255,255,0.05);
 }
 
 .tk-tab.tk-active {
-  background: linear-gradient(135deg, var(--tk-accent-soft), rgba(79,70,229,0.1));
+  background: rgba(99, 102, 241, 0.15);
   border-color: rgba(99, 102, 241, 0.25);
   color: var(--tk-text);
   box-shadow: 0 0 16px rgba(99, 102, 241, 0.1);
@@ -522,7 +501,7 @@
 .tk-tool-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--tk-space-md);
+  padding: 10px;
   scrollbar-width: thin;
   scrollbar-color: var(--tk-border) transparent;
 }
@@ -550,22 +529,22 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 .tk-section-title {
-  font-size: var(--tk-text-xs);
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--tk-text-dim);
-  margin-bottom: var(--tk-space-sm);
+  letter-spacing: 0.08em;
+  color: var(--tk-text-muted);
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
-  gap: var(--tk-space-sm);
+  gap: 6px;
 }
 
 .tk-section-title::after {
   content: '';
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, var(--tk-border), transparent);
+  background: var(--tk-border);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -575,21 +554,17 @@
 .tk-input {
   width: 100%;
   border: 1px solid var(--tk-border);
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.2);
   color: var(--tk-text);
-  border-radius: var(--tk-radius-md);
-  padding: 8px 10px;
-  font-size: var(--tk-text-sm);
-  font-weight: 500;
+  border-radius: var(--tk-radius-sm);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 400;
   font-family: var(--tk-font-mono);
   outline: none;
-  transition: 
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    background 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
   margin-bottom: var(--tk-space-sm);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .tk-input::placeholder {
@@ -770,30 +745,60 @@ button.tk-mini:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   BUTTONS — 3D Premium
+   BUTTONS — Flat Compact
    ═══════════════════════════════════════════════════════════════════════ */
 
 .tk-btn {
   flex: 1 1 auto;
   min-width: 0;
   border: 1px solid var(--tk-border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--tk-text-secondary);
-  border-radius: var(--tk-radius-md);
-  padding: 7px 10px;
-  font-size: var(--tk-text-xs);
-  font-weight: 600;
+  border-radius: var(--tk-radius-sm);
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 500;
   font-family: var(--tk-font);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: background 0.15s ease, border-color 0.15s ease;
   text-align: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   position: relative;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.tk-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--tk-border-hover);
+}
+
+.tk-btn:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tk-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Primary (Accent) */
+.tk-btn.tk-accent {
+  background: var(--tk-accent);
+  border-color: var(--tk-accent);
+  color: #fff;
+}
+
+.tk-btn.tk-accent:hover {
+  background: var(--tk-accent-bright);
+  border-color: var(--tk-accent-bright);
+}
+
+.tk-btn.tk-accent:active {
+  background: #4f46e5;
 }
 
 .tk-btn::before {
@@ -954,19 +959,20 @@ button.tk-mini:hover {
 
 .tk-status {
   font-size: var(--tk-text-sm);
-  margin-top: var(--tk-space-sm);
-  padding: 8px 10px;
-  border-radius: var(--tk-radius-md);
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
   border: 1px solid transparent;
-  line-height: 1.5;
+  line-height: 1.4;
   word-break: break-word;
   white-space: pre-wrap;
   display: flex;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 6px;
+  font-size: 11px;
   font-weight: 500;
-  animation: tk-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: tk-slide-up 0.2s ease;
 }
 
 @keyframes tk-slide-up {
