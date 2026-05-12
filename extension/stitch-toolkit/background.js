@@ -781,9 +781,11 @@ if (el && setValue(el, postalCode)) filled.push('postalCode');
   // 8. City
   if (city) {
     const el = findField([
+      { by: 'id', val: 'billingLocality' },
       { by: 'id', val: 'billingCity' },
       { by: 'id', val: 'city' },
       { by: 'autocomplete', val: 'address-level2' },
+      { by: 'name', val: 'billingLocality' },
       { by: 'name', val: 'billingCity' },
       { by: 'name', val: 'city' },
       { by: 'aria-label', val: 'city' },
@@ -797,12 +799,14 @@ if (el && setValue(el, postalCode)) filled.push('postalCode');
   // 9. State / Region
   if (state) {
     const el = findField([
+      { by: 'id', val: 'billingAdministrativeArea' },
       { by: 'id', val: 'billingState' },
       { by: 'id', val: 'state' },
       { by: 'autocomplete', val: 'address-level1' },
+      { by: 'name', val: 'billingAdministrativeArea' },
+      { by: 'name', val: 'billingState' },
       { by: 'name', val: 'state' },
       { by: 'name', val: 'address_state' },
-      { by: 'name', val: 'billingState' },
       { by: 'aria-label', val: 'state' },
       { by: 'aria-label', val: 'region' },
       { by: 'data-testid', val: 'state' },
@@ -928,24 +932,26 @@ function detectStripeFields() {
       { by: 'label', val: 'address' },
     ],
     city: [
+      { by: 'id', val: 'billingLocality' },
       { by: 'id', val: 'billingCity' },
       { by: 'id', val: 'city' },
       { by: 'autocomplete', val: 'address-level2' },
+      { by: 'name', val: 'billingLocality' },
       { by: 'name', val: 'billingCity' },
       { by: 'name', val: 'city' },
-      { by: 'name', val: 'address_city' },
       { by: 'aria-label', val: 'city' },
       { by: 'data-testid', val: 'city' },
       { by: 'placeholder', val: 'city' },
       { by: 'label', val: 'city' },
     ],
     state: [
+      { by: 'id', val: 'billingAdministrativeArea' },
       { by: 'id', val: 'billingState' },
       { by: 'id', val: 'state' },
       { by: 'autocomplete', val: 'address-level1' },
+      { by: 'name', val: 'billingAdministrativeArea' },
       { by: 'name', val: 'billingState' },
       { by: 'name', val: 'state' },
-      { by: 'name', val: 'address_state' },
       { by: 'aria-label', val: 'state' },
       { by: 'aria-label', val: 'region' },
       { by: 'data-testid', val: 'state' },
@@ -953,10 +959,6 @@ function detectStripeFields() {
       { by: 'label', val: 'state' },
       { by: 'label', val: 'region' },
     ],
-    city: [
-      { by: 'id', val: 'billingCity' },
-      { by: 'id', val: 'city' },
-      { by: 'autocomplete', val: 'address-level2' },
       { by: 'name', val: 'billingCity' },
       { by: 'name', val: 'city' },
       { by: 'name', val: 'address_city' },
