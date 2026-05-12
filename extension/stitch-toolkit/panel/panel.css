@@ -127,8 +127,8 @@
 
 .tk-float-btn {
   position: fixed;
-  bottom: 28px;
-  right: 28px;
+  bottom: 20px;
+  right: 20px;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -512,17 +512,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Tab indicator slide */
-.tk-tab-indicator {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--tk-accent), var(--tk-accent-bright));
-  border-radius: 2px;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.3s ease;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1034,10 +1023,6 @@ button.tk-mini:hover {
   50% { box-shadow: 0 4px 30px rgba(34,197,94,0.6), 0 0 0 4px rgba(34,197,94,0.08); }
 }
 
-.tk-success-anim {
-  animation: tk-success-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    TOAST NOTIFICATIONS — Premium
    ═══════════════════════════════════════════════════════════════════════ */
@@ -1342,18 +1327,6 @@ button.tk-mini:hover {
 
 .tk-settings-group {
   margin-bottom: var(--tk-space-xl);
-}
-
-.tk-settings-label {
-  font-size: var(--tk-text-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--tk-text-dim);
-  margin-bottom: var(--tk-space-sm);
-  display: flex;
-  align-items: center;
-  gap: var(--tk-space-sm);
 }
 
 .tk-settings-row {
