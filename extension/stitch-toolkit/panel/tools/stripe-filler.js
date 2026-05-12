@@ -10,49 +10,45 @@ export const StripeFillerTool = {
 
   mount(container) {
     container.innerHTML = `
-      <div class="tk-section-title">Stripe Card Filler</div>
-      <div class="tk-hint">Card: number|MM|YYYY|CVC</div>
-      <input
-        id="tk-stripe-input"
-        class="tk-input"
-        type="text"
-        placeholder="5154620021123771|01|2030|635"
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <div class="tk-row" style="align-items:center;margin-top:4px;">
-        <input id="tk-stripe-billing" type="checkbox" checked style="accent-color:#6366f1;width:14px;height:14px;" />
-        <label for="tk-stripe-billing" style="font-size:11px;color:#8ea2d6;cursor:pointer;">Auto-fill billing fields</label>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <input id="tk-stripe-input" class="tk-input" type="text" placeholder="5154...|MM|YYYY|CVC" autocomplete="off" spellcheck="false" style="flex:1;margin:0;font-size:12px;padding:6px 8px;" />
+        <button id="tk-stripe-fill-mini" class="tk-btn tk-accent" style="flex:0 0 auto;padding:6px 10px;font-size:11px;" title="Fill">⚡</button>
       </div>
-      <div class="tk-row" style="margin-top:8px;">
-        <input id="tk-stripe-name" class="tk-input" type="text" placeholder="Cardholder name" style="margin-bottom:0;" />
+
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:var(--tk-text-muted);">
+        <input id="tk-stripe-billing" type="checkbox" checked style="accent-color:var(--tk-accent);width:12px;height:12px;margin:0;" />
+        <label for="tk-stripe-billing" style="cursor:pointer;">Billing</label>
+        <span style="flex:1"></span>
+        <button id="tk-stripe-preset" class="tk-btn" style="padding:2px 6px;font-size:10px;flex:0 0 auto;">US</button>
       </div>
-      <div class="tk-row" style="margin-top:6px;">
-        <input id="tk-stripe-country" class="tk-input" type="text" placeholder="Country code (e.g. US)" style="margin-bottom:0;width:40%;" />
-        <input id="tk-stripe-address" class="tk-input" type="text" placeholder="Address" style="margin-bottom:0;flex:1;" />
+
+      <div id="tk-billing-fields">
+        <input id="tk-stripe-name" class="tk-input" type="text" placeholder="Name" style="margin-bottom:4px;padding:5px 8px;font-size:11px;" />
+        <div style="display:flex;gap:4px;margin-bottom:4px;">
+          <input id="tk-stripe-country" class="tk-input" type="text" placeholder="US" style="margin:0;flex:0 0 45px;padding:5px 8px;font-size:11px;" />
+          <input id="tk-stripe-address" class="tk-input" type="text" placeholder="Address" style="margin:0;flex:1;padding:5px 8px;font-size:11px;" />
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:4px;">
+          <input id="tk-stripe-city" class="tk-input" type="text" placeholder="City" autocomplete="address-level2" style="margin:0;flex:1;padding:5px 8px;font-size:11px;" />
+          <input id="tk-stripe-state" class="tk-input" type="text" placeholder="ST" autocomplete="address-level1" style="margin:0;flex:0 0 45px;padding:5px 8px;font-size:11px;" />
+        </div>
+        <input id="tk-stripe-postal" class="tk-input" type="text" placeholder="ZIP" style="margin-bottom:6px;width:60px;padding:5px 8px;font-size:11px;" />
       </div>
-      <div class="tk-row" style="margin-top:6px;">
-        <input id="tk-stripe-city" class="tk-input" type="text" placeholder="City" autocomplete="address-level2" style="margin-bottom:0;flex:1;" />
-        <input id="tk-stripe-state" class="tk-input" type="text" placeholder="State / Province" autocomplete="address-level1" style="margin-bottom:0;width:40%;" />
+
+      <div style="display:flex;gap:4px;">
+        <button id="tk-stripe-fill" class="tk-btn tk-accent" style="flex:1;padding:6px;font-size:11px;">Fill Card</button>
+        <button id="tk-stripe-detect" class="tk-btn" style="flex:0 0 auto;padding:6px 8px;font-size:11px;" title="Detect fields">🔍</button>
       </div>
-      <div class="tk-row" style="margin-top:6px;">
-        <input id="tk-stripe-postal" class="tk-input" type="text" placeholder="Postal code" style="margin-bottom:0;width:50%;" />
-      </div>
-<div class="tk-row tk-actions" style="margin-top:8px;">
-      <button id="tk-stripe-fill" class="tk-btn tk-accent">Fill</button>
-      <button id="tk-stripe-detect" class="tk-btn">Detect</button>
-      <button id="tk-stripe-preset" class="tk-btn tk-compact">US</button>
-    </div>
-      <div id="tk-stripe-status" class="tk-status tk-info" style="display:none"></div>
-      <div class="tk-hint">
-        Uses language-agnostic selectors (id / autocomplete) — works on checkout.stripe.com in any language.
-      </div>
+
+      <div id="tk-stripe-status" class="tk-status tk-info" style="display:none;margin-top:6px;padding:6px 8px;font-size:11px;"></div>
     `;
 
     const input = container.querySelector('#tk-stripe-input');
     const fillBtn = container.querySelector('#tk-stripe-fill');
+    const fillMiniBtn = container.querySelector('#tk-stripe-fill-mini');
     const detectBtn = container.querySelector('#tk-stripe-detect');
     const presetBtn = container.querySelector('#tk-stripe-preset');
+    const billingFields = container.querySelector('#tk-billing-fields');
     const status = container.querySelector('#tk-stripe-status');
     const billingCb = container.querySelector('#tk-stripe-billing');
     const nameIn = container.querySelector('#tk-stripe-name');
@@ -135,7 +131,35 @@ export const StripeFillerTool = {
         showStatus(e instanceof Error ? e.message : String(e), 'err');
       } finally {
         fillBtn.disabled = false;
-        fillBtn.textContent = 'Fill Stripe';
+        fillBtn.textContent = 'Fill Card';
+      }
+    });
+
+    // Toggle billing fields visibility
+    billingCb.addEventListener('change', () => {
+      billingFields.style.display = billingCb.checked ? '' : 'none';
+    });
+
+    // Mini fill button (next to input)
+    fillMiniBtn.addEventListener('click', async () => {
+      hideStatus();
+      const data = gatherCardData();
+      if (!data) {
+        showStatus('Invalid format: number|MM|YYYY|CVC', 'err');
+        return;
+      }
+      try {
+        const resp = await chrome.runtime.sendMessage({
+          type: 'tk:stripe-fill',
+          payload: { cardData: data },
+        });
+        if (resp?.ok) {
+          showStatus(`Filled ${resp.filledFrames ?? '?'} frame(s)`, 'ok');
+        } else {
+          showStatus(resp?.error || 'Fill failed', 'err');
+        }
+      } catch (e) {
+        showStatus(e instanceof Error ? e.message : String(e), 'err');
       }
     });
 
@@ -147,7 +171,8 @@ export const StripeFillerTool = {
       stateIn.value = 'NY';
       postalIn.value = '10001';
       billingCb.checked = true;
-      showStatus('US billing preset applied.', 'ok');
+      billingFields.style.display = '';
+      showStatus('US preset applied', 'ok');
     });
 
     detectBtn.addEventListener('click', async () => {
@@ -179,7 +204,7 @@ export const StripeFillerTool = {
         showStatus(e instanceof Error ? e.message : String(e), 'err');
       } finally {
         detectBtn.disabled = false;
-        detectBtn.textContent = 'Detect';
+        detectBtn.textContent = '🔍';
       }
     });
 
