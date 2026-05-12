@@ -94,8 +94,6 @@ export type AuthFile = { provider: string; path: string; token: string; expiresA
 
 export type AiProxyQuotaInfo = { provider: string; totalQuota: number; usedQuota: number; remainingQuota: number; resetAt: number | null }
 
-export type KiroAccountQuota = { accountId: number; accountName: string; email: string | null; subscriptionType: string | null; used: number; limit: number; percentUsed: number; daysUntilReset: number | null; fetchedAt: number; error: string | null }
-
 export type DailyStats = { totalRequests: number; successfulRequests: number; failedRequests: number; totalTokens: number; avgDurationMs: number }
 
 export type DailyStatsPoint = { date: string; requests: number; successful: number; failed: number }

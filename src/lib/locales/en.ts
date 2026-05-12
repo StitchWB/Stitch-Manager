@@ -687,6 +687,9 @@ export const en: Translations = {
     expiredWarning: '{count} accounts require re-authentication.',
     refreshAllExpired: 'Refresh All Expired',
     noAccountsFoundDesc: 'Try adjusting your filters or add a new account.',
+    openingBrowser: 'Opening browser...',
+    browserOpened: 'Browser opened',
+    browserOpenFailed: 'Failed to open browser: {{message}}',
   },
   accountsTable: {
     account: 'Account',
