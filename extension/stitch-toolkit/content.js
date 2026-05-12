@@ -269,6 +269,35 @@
 
       floatBtn.addEventListener('contextmenu', function (e) { e.preventDefault(); showContextMenu(e.clientX, e.clientY); });
       document.addEventListener('click', function (e) { if (!e.target.closest('#tk-shadow-host')) hideContextMenu(); });
+
+      window.addEventListener('resize', function () {
+        // Clamp float button inside viewport
+        var r = floatBtn.getBoundingClientRect();
+        var x = parseFloat(floatBtn.style.left) || r.left;
+        var y = parseFloat(floatBtn.style.top) || r.top;
+        if (x + r.width > window.innerWidth - 10) {
+          floatBtn.style.left = Math.max(10, window.innerWidth - r.width - 10) + 'px';
+          floatBtn.style.right = 'auto';
+        }
+        if (y + r.height > window.innerHeight - 10) {
+          floatBtn.style.top = Math.max(10, window.innerHeight - r.height - 10) + 'px';
+          floatBtn.style.bottom = 'auto';
+        }
+        // Clamp panel inside viewport
+        if (panel.classList.contains('tk-open')) {
+          var pr = panel.getBoundingClientRect();
+          var px = parseFloat(panel.style.left) || pr.left;
+          var py = parseFloat(panel.style.top) || pr.top;
+          if (px + pr.width > window.innerWidth - 10) {
+            panel.style.left = Math.max(10, window.innerWidth - pr.width - 10) + 'px';
+            panel.style.right = 'auto';
+          }
+          if (py + pr.height > window.innerHeight - 10) {
+            panel.style.top = Math.max(10, window.innerHeight - pr.height - 10) + 'px';
+            panel.style.bottom = 'auto';
+          }
+        }
+      });
     }
 
     function startDrag(e) {
