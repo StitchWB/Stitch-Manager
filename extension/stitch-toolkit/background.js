@@ -422,7 +422,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: fillStripeFields, args: [cardData] })
       .then(results => {
         const anyOk = results.some(r => r.result?.ok);
-        sendResponse({ ok: anyOk, filledFrames: results.filter(r => r.result?.filled).length });
+        // Aggregate what was filled across all frames for diagnostics
+        const perFrame = results.map(r => ({
+          host: r.result?.frameHost || '?',
+          filled: r.result?.filled || [],
+          isStripe: !!r.result?.isStripe,
+          errors: r.result?.errors || undefined,
+        }));
+        sendResponse({
+          ok: anyOk,
+          filledFrames: results.filter(r => r.result?.filled?.length).length,
+          perFrame,
+        });
+      }).catch(err => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+    return true;
+  }
+
+  if (type === 'tk:stripe-detect') {
+    const tabId = sender?.tab?.id;
+    if (!tabId) { sendResponse({ ok: false, error: 'No tab context' }); return true; }
+    chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: detectStripeFields })
+      .then(results => {
+        const anyOk = results.some(r => r.result?.ok);
+        const perFrame = results.map(r => ({
+          host: r.result?.frameHost || '?',
+          detected: r.result?.detected || {},
+          isStripe: !!r.result?.isStripe,
+        }));
+        sendResponse({
+          ok: anyOk,
+          detectedFrames: results.filter(r => r.result?.ok).length,
+          perFrame,
+        });
       }).catch(err => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
     return true;
   }
@@ -519,15 +550,49 @@ function fillStripeFields(cardData) {
   const filled = [];
   const errors = [];
 
-  // Priority order: id (fastest & unambiguous) → name → autocomplete
+  // Priority order: id → name → autocomplete → aria-label → data-testid →
+  // placeholder (partial) → inputmode → label text (fuzzy, last resort)
   function findField(priority) {
     for (const { by, val } of priority) {
       try {
-        const el =
-          by === 'id' ? document.getElementById(val) :
-          by === 'name' ? document.querySelector(`[name="${val}"]`) :
-          by === 'autocomplete' ? document.querySelector(`[autocomplete="${val}"]`) :
-          by === 'inputmode' ? document.querySelector(`input[inputmode="${val}"]`) : null;
+        let el = null;
+        if (by === 'id') {
+          el = document.getElementById(val);
+        } else if (by === 'name') {
+          el = document.querySelector(`[name="${CSS.escape(val)}"]`);
+        } else if (by === 'autocomplete') {
+          el = document.querySelector(`[autocomplete="${CSS.escape(val)}"]`);
+        } else if (by === 'inputmode') {
+          el = document.querySelector(`input[inputmode="${CSS.escape(val)}"]`);
+        } else if (by === 'aria-label') {
+          // Case-insensitive partial match on aria-label
+          const all = document.querySelectorAll('[aria-label]');
+          const vLow = val.toLowerCase();
+          for (const a of all) {
+            if ((a.getAttribute('aria-label') || '').toLowerCase().includes(vLow)) { el = a; break; }
+          }
+        } else if (by === 'data-testid') {
+          el = document.querySelector(`[data-testid="${CSS.escape(val)}"]`);
+        } else if (by === 'placeholder') {
+          // Case-insensitive partial match on placeholder
+          const all = document.querySelectorAll('input, textarea, select');
+          const vLow = val.toLowerCase();
+          for (const a of all) {
+            if ((a.placeholder || '').toLowerCase().includes(vLow)) { el = a; break; }
+          }
+        } else if (by === 'label') {
+          // Find a <label> whose text contains val, then return its control
+          const labels = document.querySelectorAll('label');
+          const vLow = val.toLowerCase();
+          for (const lab of labels) {
+            if ((lab.textContent || '').toLowerCase().includes(vLow)) {
+              const forId = lab.getAttribute('for');
+              if (forId) { el = document.getElementById(forId); if (el) break; }
+              const child = lab.querySelector('input, select, textarea');
+              if (child) { el = child; break; }
+            }
+          }
+        }
         if (el) return el;
       } catch { continue; }
     }
@@ -540,7 +605,32 @@ function fillStripeFields(cardData) {
       el.focus();
       const tag = el.tagName?.toLowerCase();
       if (tag === 'select') {
-        el.value = value;
+        const v = String(value || '').trim();
+        // 1) Try direct value match
+        el.value = v;
+        // 2) If not selected, search option by value or text (case-insensitive)
+        if (el.value !== v && el.options) {
+          const vLow = v.toLowerCase();
+          for (const opt of el.options) {
+            if ((opt.value || '').toLowerCase() === vLow ||
+                (opt.text || '').toLowerCase() === vLow) {
+              el.value = opt.value;
+              break;
+            }
+          }
+        }
+        // 3) For country codes, also try common variations (US → United States)
+        if (el.value !== v && el.options && v.length === 2) {
+          const vLow = v.toLowerCase();
+          for (const opt of el.options) {
+            const optVal = (opt.value || '').toLowerCase();
+            const optText = (opt.text || '').toLowerCase();
+            if (optVal === vLow || optText.startsWith(vLow) || optText.includes(vLow)) {
+              el.value = opt.value;
+              break;
+            }
+          }
+        }
         el.dispatchEvent(new Event('change', { bubbles: true }));
         return true;
       }
@@ -556,7 +646,7 @@ function fillStripeFields(cardData) {
     }
   }
 
-  const { number, month, year, cvc, expiry, name, country, address, postalCode } = cardData;
+  const { number, month, year, cvc, expiry, name, country, address, city, state, postalCode } = cardData;
 
   // 1. Card number
   if (number) {
@@ -610,7 +700,14 @@ function fillStripeFields(cardData) {
     const el = findField([
       { by: 'id', val: 'billingName' },
       { by: 'autocomplete', val: 'cc-name' },
+      { by: 'autocomplete', val: 'name' },
       { by: 'name', val: 'billingName' },
+      { by: 'name', val: 'name' },
+      { by: 'aria-label', val: 'name' },
+      { by: 'aria-label', val: 'full name' },
+      { by: 'placeholder', val: 'name' },
+      { by: 'data-testid', val: 'name' },
+      { by: 'label', val: 'name' },
     ]);
     if (el && setValue(el, name)) filled.push('name');
   }
@@ -619,8 +716,16 @@ function fillStripeFields(cardData) {
   if (country) {
     const el = findField([
       { by: 'id', val: 'billingCountry' },
+      { by: 'id', val: 'country' },
       { by: 'autocomplete', val: 'billing country' },
+      { by: 'autocomplete', val: 'country' },
+      { by: 'autocomplete', val: 'country-name' },
       { by: 'name', val: 'billingCountry' },
+      { by: 'name', val: 'country' },
+      { by: 'name', val: 'country_code' },
+      { by: 'aria-label', val: 'country' },
+      { by: 'data-testid', val: 'country' },
+      { by: 'label', val: 'country' },
     ]);
     if (el && setValue(el, country)) filled.push('country');
   }
@@ -629,8 +734,19 @@ function fillStripeFields(cardData) {
   if (address) {
     const el = findField([
       { by: 'id', val: 'billingAddressLine1' },
+      { by: 'id', val: 'address' },
+      { by: 'id', val: 'address_line1' },
       { by: 'autocomplete', val: 'billing address-line1' },
+      { by: 'autocomplete', val: 'address-line1' },
+      { by: 'autocomplete', val: 'street-address' },
+      { by: 'autocomplete', val: 'address' },
       { by: 'name', val: 'billingAddressLine1' },
+      { by: 'name', val: 'address' },
+      { by: 'name', val: 'address_line1' },
+      { by: 'aria-label', val: 'address' },
+      { by: 'data-testid', val: 'address' },
+      { by: 'placeholder', val: 'address' },
+      { by: 'label', val: 'address' },
     ]);
     if (el && setValue(el, address)) filled.push('address');
   }
@@ -639,16 +755,283 @@ function fillStripeFields(cardData) {
   if (postalCode) {
     const el = findField([
       { by: 'id', val: 'billingPostalCode' },
+      { by: 'id', val: 'postalCode' },
+      { by: 'id', val: 'postal_code' },
+      { by: 'id', val: 'zip' },
       { by: 'autocomplete', val: 'billing postal-code' },
+      { by: 'autocomplete', val: 'postal-code' },
+      { by: 'autocomplete', val: 'zip' },
       { by: 'name', val: 'billingPostalCode' },
+      { by: 'name', val: 'postal_code' },
+      { by: 'name', val: 'postalCode' },
+      { by: 'name', val: 'zip' },
+      { by: 'name', val: 'zip_code' },
+      { by: 'aria-label', val: 'zip' },
+      { by: 'aria-label', val: 'postal' },
+      { by: 'data-testid', val: 'postal' },
+      { by: 'data-testid', val: 'zip' },
+      { by: 'placeholder', val: 'zip' },
+      { by: 'placeholder', val: 'postal' },
+      { by: 'label', val: 'zip' },
+      { by: 'label', val: 'postal' },
     ]);
-    if (el && setValue(el, postalCode)) filled.push('postalCode');
+if (el && setValue(el, postalCode)) filled.push('postalCode');
+  }
+
+  // 8. City
+  if (city) {
+    const el = findField([
+      { by: 'id', val: 'billingCity' },
+      { by: 'id', val: 'city' },
+      { by: 'autocomplete', val: 'address-level2' },
+      { by: 'name', val: 'billingCity' },
+      { by: 'name', val: 'city' },
+      { by: 'aria-label', val: 'city' },
+      { by: 'data-testid', val: 'city' },
+      { by: 'placeholder', val: 'city' },
+      { by: 'label', val: 'city' },
+    ]);
+    if (el && setValue(el, city)) filled.push('city');
+  }
+
+  // 9. State / Region
+  if (state) {
+    const el = findField([
+      { by: 'id', val: 'billingState' },
+      { by: 'id', val: 'state' },
+      { by: 'autocomplete', val: 'address-level1' },
+      { by: 'name', val: 'state' },
+      { by: 'name', val: 'address_state' },
+      { by: 'name', val: 'billingState' },
+      { by: 'aria-label', val: 'state' },
+      { by: 'aria-label', val: 'region' },
+      { by: 'data-testid', val: 'state' },
+      { by: 'placeholder', val: 'state' },
+      { by: 'label', val: 'state' },
+      { by: 'label', val: 'region' },
+    ]);
+    if (el && setValue(el, state)) filled.push('state');
   }
 
   return {
     ok: filled.length > 0,
     filled,
     errors: errors.length ? errors : undefined,
+    frameHost: location.hostname,
+    isStripe: location.hostname.includes('stripe') || location.hostname.includes('js.stripe.com'),
+  };
+}
+
+// ── Stripe Field Detector — diagnostics for VPN/locale changes ────────────
+// Returns which fields are present on the page without filling them.
+function detectStripeFields() {
+  // Reuse the same findField logic from fillStripeFields (inlined for executeScript)
+  function findField(priority) {
+    for (const { by, val } of priority) {
+      try {
+        let el = null;
+        if (by === 'id') {
+          el = document.getElementById(val);
+        } else if (by === 'name') {
+          el = document.querySelector(`[name="${CSS.escape(val)}"]`);
+        } else if (by === 'autocomplete') {
+          el = document.querySelector(`[autocomplete="${CSS.escape(val)}"]`);
+        } else if (by === 'inputmode') {
+          el = document.querySelector(`input[inputmode="${CSS.escape(val)}"]`);
+        } else if (by === 'aria-label') {
+          const all = document.querySelectorAll('[aria-label]');
+          const vLow = val.toLowerCase();
+          for (const a of all) {
+            if ((a.getAttribute('aria-label') || '').toLowerCase().includes(vLow)) { el = a; break; }
+          }
+        } else if (by === 'data-testid') {
+          el = document.querySelector(`[data-testid="${CSS.escape(val)}"]`);
+        } else if (by === 'placeholder') {
+          const all = document.querySelectorAll('input, textarea, select');
+          const vLow = val.toLowerCase();
+          for (const a of all) {
+            if ((a.placeholder || '').toLowerCase().includes(vLow)) { el = a; break; }
+          }
+        } else if (by === 'label') {
+          const labels = document.querySelectorAll('label');
+          const vLow = val.toLowerCase();
+          for (const lab of labels) {
+            if ((lab.textContent || '').toLowerCase().includes(vLow)) {
+              const forId = lab.getAttribute('for');
+              if (forId) { el = document.getElementById(forId); if (el) break; }
+              const child = lab.querySelector('input, select, textarea');
+              if (child) { el = child; break; }
+            }
+          }
+        }
+        if (el) return el;
+      } catch { continue; }
+    }
+    return null;
+  }
+
+  const checks = {
+    number: [
+      { by: 'id', val: 'cardNumber' },
+      { by: 'autocomplete', val: 'cc-number' },
+      { by: 'name', val: 'cardNumber' },
+    ],
+    expiry: [
+      { by: 'id', val: 'cardExpiry' },
+      { by: 'autocomplete', val: 'cc-exp' },
+      { by: 'name', val: 'cardExpiry' },
+    ],
+    cvc: [
+      { by: 'id', val: 'cardCvc' },
+      { by: 'autocomplete', val: 'cc-csc' },
+      { by: 'name', val: 'cardCvc' },
+    ],
+    name: [
+      { by: 'id', val: 'billingName' },
+      { by: 'autocomplete', val: 'cc-name' },
+      { by: 'autocomplete', val: 'name' },
+      { by: 'name', val: 'billingName' },
+      { by: 'name', val: 'name' },
+      { by: 'aria-label', val: 'name' },
+      { by: 'aria-label', val: 'full name' },
+      { by: 'placeholder', val: 'name' },
+      { by: 'data-testid', val: 'name' },
+      { by: 'label', val: 'name' },
+    ],
+    country: [
+      { by: 'id', val: 'billingCountry' },
+      { by: 'id', val: 'country' },
+      { by: 'autocomplete', val: 'billing country' },
+      { by: 'autocomplete', val: 'country' },
+      { by: 'autocomplete', val: 'country-name' },
+      { by: 'name', val: 'billingCountry' },
+      { by: 'name', val: 'country' },
+      { by: 'name', val: 'country_code' },
+      { by: 'aria-label', val: 'country' },
+      { by: 'data-testid', val: 'country' },
+      { by: 'label', val: 'country' },
+    ],
+    address: [
+      { by: 'id', val: 'billingAddressLine1' },
+      { by: 'id', val: 'address' },
+      { by: 'id', val: 'address_line1' },
+      { by: 'autocomplete', val: 'billing address-line1' },
+      { by: 'autocomplete', val: 'address-line1' },
+      { by: 'autocomplete', val: 'street-address' },
+      { by: 'autocomplete', val: 'address' },
+      { by: 'name', val: 'billingAddressLine1' },
+      { by: 'name', val: 'address' },
+      { by: 'name', val: 'address_line1' },
+      { by: 'aria-label', val: 'address' },
+      { by: 'data-testid', val: 'address' },
+      { by: 'placeholder', val: 'address' },
+      { by: 'label', val: 'address' },
+    ],
+    city: [
+      { by: 'id', val: 'billingCity' },
+      { by: 'id', val: 'city' },
+      { by: 'autocomplete', val: 'address-level2' },
+      { by: 'name', val: 'billingCity' },
+      { by: 'name', val: 'city' },
+      { by: 'name', val: 'address_city' },
+      { by: 'aria-label', val: 'city' },
+      { by: 'data-testid', val: 'city' },
+      { by: 'placeholder', val: 'city' },
+      { by: 'label', val: 'city' },
+    ],
+    state: [
+      { by: 'id', val: 'billingState' },
+      { by: 'id', val: 'state' },
+      { by: 'autocomplete', val: 'address-level1' },
+      { by: 'name', val: 'billingState' },
+      { by: 'name', val: 'state' },
+      { by: 'name', val: 'address_state' },
+      { by: 'aria-label', val: 'state' },
+      { by: 'aria-label', val: 'region' },
+      { by: 'data-testid', val: 'state' },
+      { by: 'placeholder', val: 'state' },
+      { by: 'label', val: 'state' },
+      { by: 'label', val: 'region' },
+    ],
+    city: [
+      { by: 'id', val: 'billingCity' },
+      { by: 'id', val: 'city' },
+      { by: 'autocomplete', val: 'address-level2' },
+      { by: 'name', val: 'billingCity' },
+      { by: 'name', val: 'city' },
+      { by: 'name', val: 'address_city' },
+      { by: 'aria-label', val: 'city' },
+      { by: 'data-testid', val: 'city' },
+      { by: 'placeholder', val: 'city' },
+      { by: 'label', val: 'city' },
+    ],
+    state: [
+      { by: 'id', val: 'billingState' },
+      { by: 'id', val: 'state' },
+      { by: 'autocomplete', val: 'address-level1' },
+      { by: 'name', val: 'billingState' },
+      { by: 'name', val: 'state' },
+      { by: 'name', val: 'address_state' },
+      { by: 'aria-label', val: 'state' },
+      { by: 'aria-label', val: 'region' },
+      { by: 'data-testid', val: 'state' },
+      { by: 'placeholder', val: 'state' },
+      { by: 'label', val: 'state' },
+      { by: 'label', val: 'region' },
+    ],
+    postalCode: [
+      { by: 'id', val: 'billingPostalCode' },
+      { by: 'id', val: 'postalCode' },
+      { by: 'id', val: 'postal_code' },
+      { by: 'id', val: 'zip' },
+      { by: 'autocomplete', val: 'billing postal-code' },
+      { by: 'autocomplete', val: 'postal-code' },
+      { by: 'autocomplete', val: 'zip' },
+      { by: 'name', val: 'billingPostalCode' },
+      { by: 'name', val: 'postal_code' },
+      { by: 'name', val: 'postalCode' },
+      { by: 'name', val: 'zip' },
+      { by: 'name', val: 'zip_code' },
+      { by: 'aria-label', val: 'zip' },
+      { by: 'aria-label', val: 'postal' },
+      { by: 'data-testid', val: 'postal' },
+      { by: 'data-testid', val: 'zip' },
+      { by: 'placeholder', val: 'zip' },
+      { by: 'placeholder', val: 'postal' },
+      { by: 'label', val: 'zip' },
+      { by: 'label', val: 'postal' },
+    ],
+  };
+
+  const detected = {};
+  for (const [field, priority] of Object.entries(checks)) {
+    const el = findField(priority);
+    if (el) {
+      detected[field] = {
+        tag: el.tagName.toLowerCase(),
+        type: el.type || undefined,
+        id: el.id || undefined,
+        name: el.getAttribute('name') || undefined,
+        autocomplete: el.getAttribute('autocomplete') || undefined,
+        ariaLabel: el.getAttribute('aria-label') || undefined,
+        placeholder: el.placeholder || undefined,
+        dataTestid: el.getAttribute('data-testid') || undefined,
+        labelText: (() => {
+          const forId = el.id;
+          if (forId) {
+            const lab = document.querySelector(`label[for="${CSS.escape(forId)}"]`);
+            if (lab) return lab.textContent.trim().slice(0, 80);
+          }
+          const parentLab = el.closest('label');
+          if (parentLab) return parentLab.textContent.trim().slice(0, 80);
+          return undefined;
+        })(),
+      };
+    }
+  }
+  return {
+    ok: Object.keys(detected).length > 0,
+    detected,
     frameHost: location.hostname,
     isStripe: location.hostname.includes('stripe') || location.hostname.includes('js.stripe.com'),
   };
