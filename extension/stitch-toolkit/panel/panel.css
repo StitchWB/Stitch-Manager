@@ -951,8 +951,10 @@ button.tk-mini:hover {
   border: 1px solid transparent;
   line-height: 1.5;
   word-break: break-word;
+  white-space: pre-wrap;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 10px;
   font-weight: 500;
   animation: tk-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);

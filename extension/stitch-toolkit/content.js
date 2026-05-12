@@ -1208,6 +1208,131 @@
   })();
 
   // ─────────────────────────────────────────────────────────────────────
+  // PasteInterceptor — auto-fill on Ctrl+V for Stripe checkout pages
+  // Parses checker formats: 5154620021124134|12|2031|982 or with flags
+  // ─────────────────────────────────────────────────────────────────────
+  const PasteInterceptor = (function () {
+    var _enabled = true;
+    var _countryMap = {
+      '\ud83c\uddfa\ud83c\uddf8': 'US', '\ud83c\udde6\ud83c\uddfa': 'AU', '\ud83c\udde7\ud83c\udded': 'CH',
+      '\ud83c\udde8\ud83c\udde6': 'CA', '\ud83c\udde9\ud83c\uddea': 'DE', '\ud83c\uddec\ud83c\udde7': 'GB',
+      '\ud83c\uddee\ud83c\uddf9': 'IT', '\ud83c\uddf3\ud83c\uddf1': 'NL', '\ud83c\uddf5\ud83c\uddf1': 'PL',
+      '\ud83c\uddf7\ud83c\uddfa': 'RU', '\ud83c\uddf8\ud83c\udde6': 'SE', '\ud83c\uddf9\ud83c\udded': 'TH',
+      '\ud83c\uddf0\ud83c\uddf7': 'KR', '\ud83c\udde6\ud83c\uddf1': 'AL', '\ud83c\udde6\ud83c\uddf7': 'AR',
+      '\ud83c\udde9\ud83c\uddf0': 'DK', '\ud83c\uddea\ud83c\uddf8': 'ES', '\ud83c\uddeb\ud83c\uddf7': 'FR',
+      '\ud83c\uddec\ud83c\uddf1': 'GL', '\ud83c\udded\ud83c\uddf9': 'HU', '\ud83c\uddee\ud83c\uddf4': 'IO',
+      '\ud83c\uddef\ud83c\uddf5': 'JP', '\ud83c\uddf1\ud83c\uddfb': 'LV', '\ud83c\uddf2\ud83c\uddf4': 'MO',
+      '\ud83c\uddf2\ud83c\uddfd': 'MX', '\ud83c\uddf3\ud83c\uddec': 'NG', '\ud83c\uddf5\ud83c\uddf9': 'PT',
+      '\ud83c\uddf7\ud83c\uddf4': 'RO', '\ud83c\uddf9\ud83c\uddfc': 'TW', '\ud83c\uddfa\ud83c\uddf8': 'US',
+      '\ud83c\uddfb\ud83c\udde6': 'VE', '\ud83c\uddf8\ud83c\uddff': 'ZA', '\ud83c\uddf9\ud83c\uddf3': 'TR',
+      '\ud83c\uddf8\ud83c\uddea': 'SG', '\ud83c\udde8\ud83c\uddff': 'CZ', '\ud83c\uddee\ud83c\uddf3': 'IN',
+      '\ud83c\uddf3\ud83c\uddfe': 'UA', '\ud83c\uddf2\ud83c\udde9': 'ID', '\ud83c\uddf0\ud83c\uddff': 'KZ',
+    };
+
+    function isStripeCheckout() {
+      return location.hostname.includes('checkout.stripe.com') ||
+        location.hostname.includes('pay.stripe.com') ||
+        document.querySelector('iframe[src*="stripe"], iframe[src*="js.stripe.com"]') !== null;
+    }
+
+    function parseCheckerOutput(text) {
+      var t = String(text || '').trim();
+      if (!t) return null;
+
+      // Remove common prefixes/suffixes
+      t = t.replace(/^Live\s*\|?\s*/i, '').replace(/\|?\s*Charge\s+OK\.?\s*\[.*?\]\s*$/i, '');
+      t = t.replace(/\[BIN:\s*.*?\]\s*\|?/gi, '');
+      t = t.replace(/^\|?\s*|\s*\|?$/g, '');
+
+      var parts = t.split('|');
+      if (parts.length >= 4) {
+        var number = parts[0].trim().replace(/\D/g, '');
+        var month = parts[1].trim().replace(/\D/g, '').padStart(2, '0');
+        var year = parts[2].trim().replace(/\D/g, '');
+        var cvc = parts[3].trim().replace(/\D/g, '');
+
+        // Validate
+        if (number.length < 13 || number.length > 19) return null;
+        if (month.length > 2) return null;
+        if (year.length !== 2 && year.length !== 4) return null;
+        if (cvc.length < 3 || cvc.length > 4) return null;
+
+        // Extract country from emoji flag
+        var country = null;
+        for (var flag in _countryMap) {
+          if (text.indexOf(flag) !== -1) { country = _countryMap[flag]; break; }
+        }
+
+        return { number: number, month: month, year: year.length === 2 ? '20' + year : year, cvc: cvc, country: country || 'US' };
+      }
+
+      // Fallback regex for space/comma separated
+      var m = t.match(/(\d{13,19})\D+(\d{1,2})\D+(\d{2,4})\D+(\d{3,4})/);
+      if (m) {
+        var y = m[3];
+        return { number: m[1], month: m[2].padStart(2, '0'), year: y.length === 2 ? '20' + y : y, cvc: m[4], country: 'US' };
+      }
+
+      return null;
+    }
+
+    function autoFill(data) {
+      if (!data) return;
+      var cardData = {
+        number: data.number,
+        month: data.month,
+        year: data.year,
+        cvc: data.cvc,
+        name: 'John Doe',
+        country: data.country || 'US',
+        address: '123 Main St',
+        city: 'New York',
+        state: 'NY',
+        postalCode: '10001',
+      };
+
+      chrome.runtime.sendMessage({
+        type: 'tk:stripe-fill',
+        payload: { cardData: cardData, billing: true }
+      }).then(function (resp) {
+        if (resp && resp.ok) {
+          NotificationService.success('Card auto-filled from clipboard (' + (resp.filledFrames || '?') + ' frame(s))');
+        }
+      }).catch(function (e) {
+        console.warn('[TK PasteInterceptor] Fill failed:', e);
+      });
+    }
+
+    function onPaste(e) {
+      if (!_enabled || !isStripeCheckout()) return;
+      var clipboard = e.clipboardData || window.clipboardData;
+      if (!clipboard) return;
+
+      var text = clipboard.getData('text');
+      if (!text || text.indexOf('|') === -1) return;
+
+      var data = parseCheckerOutput(text);
+      if (!data) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      autoFill(data);
+
+      // Also save as last card
+      StateManager.set('lastCard', data.number + '|' + data.month + '|' + data.year + '|' + data.cvc);
+    }
+
+    function init() {
+      document.addEventListener('paste', onPaste, true);
+    }
+
+    function setEnabled(v) { _enabled = Boolean(v); }
+
+    return { init: init, setEnabled: setEnabled };
+  })();
+
+  // ─────────────────────────────────────────────────────────────────────
   // Subscriptions — ALL EventBus.on happen HERE, after all modules defined
   // This prevents TDZ (Temporal Dead Zone) issues
   // ─────────────────────────────────────────────────────────────────────
@@ -1304,6 +1429,7 @@
     ShortcutManager.init();
     AutoDetector.init();
     ClipboardWatcher.init();
+    PasteInterceptor.init();
 
     // Mount initial tool
     var activeTab = StateManager.get('activeTab');

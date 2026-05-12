@@ -32,11 +32,16 @@ export const StripeFillerTool = {
         <input id="tk-stripe-address" class="tk-input" type="text" placeholder="Address" style="margin-bottom:0;flex:1;" />
       </div>
       <div class="tk-row" style="margin-top:6px;">
+        <input id="tk-stripe-city" class="tk-input" type="text" placeholder="City" autocomplete="address-level2" style="margin-bottom:0;flex:1;" />
+        <input id="tk-stripe-state" class="tk-input" type="text" placeholder="State / Province" autocomplete="address-level1" style="margin-bottom:0;width:40%;" />
+      </div>
+      <div class="tk-row" style="margin-top:6px;">
         <input id="tk-stripe-postal" class="tk-input" type="text" placeholder="Postal code" style="margin-bottom:0;width:50%;" />
       </div>
       <div class="tk-row" style="margin-top:10px;">
         <button id="tk-stripe-fill" class="tk-btn tk-accent">Fill Stripe</button>
         <button id="tk-stripe-detect" class="tk-btn">Detect</button>
+        <button id="tk-stripe-preset" class="tk-btn" style="margin-left:auto;font-size:11px;">US Preset</button>
       </div>
       <div id="tk-stripe-status" class="tk-status tk-info" style="display:none"></div>
       <div class="tk-hint">
@@ -47,11 +52,14 @@ export const StripeFillerTool = {
     const input = container.querySelector('#tk-stripe-input');
     const fillBtn = container.querySelector('#tk-stripe-fill');
     const detectBtn = container.querySelector('#tk-stripe-detect');
+    const presetBtn = container.querySelector('#tk-stripe-preset');
     const status = container.querySelector('#tk-stripe-status');
     const billingCb = container.querySelector('#tk-stripe-billing');
     const nameIn = container.querySelector('#tk-stripe-name');
     const countryIn = container.querySelector('#tk-stripe-country');
     const addressIn = container.querySelector('#tk-stripe-address');
+    const cityIn = container.querySelector('#tk-stripe-city');
+    const stateIn = container.querySelector('#tk-stripe-state');
     const postalIn = container.querySelector('#tk-stripe-postal');
 
     const showStatus = (text, type = 'info') => {
@@ -93,6 +101,8 @@ export const StripeFillerTool = {
         if (nameIn.value.trim()) data.name = nameIn.value.trim();
         if (countryIn.value.trim()) data.country = countryIn.value.trim().toUpperCase();
         if (addressIn.value.trim()) data.address = addressIn.value.trim();
+        if (cityIn.value.trim()) data.city = cityIn.value.trim();
+        if (stateIn.value.trim()) data.state = stateIn.value.trim();
         if (postalIn.value.trim()) data.postalCode = postalIn.value.trim();
       }
       return data;
@@ -129,6 +139,17 @@ export const StripeFillerTool = {
       }
     });
 
+    presetBtn.addEventListener('click', () => {
+      nameIn.value = 'John Doe';
+      countryIn.value = 'US';
+      addressIn.value = '123 Main St';
+      cityIn.value = 'New York';
+      stateIn.value = 'NY';
+      postalIn.value = '10001';
+      billingCb.checked = true;
+      showStatus('US billing preset applied.', 'ok');
+    });
+
     detectBtn.addEventListener('click', async () => {
       hideStatus();
       detectBtn.disabled = true;
@@ -136,13 +157,21 @@ export const StripeFillerTool = {
 
       try {
         const resp = await chrome.runtime.sendMessage({
-          type: 'tk:stripe-fill',
-          payload: {
-            cardData: { number: '4111111111111111', month: '12', year: '2030', cvc: '123' },
-          },
+          type: 'tk:stripe-detect',
         });
         if (resp?.ok) {
-          showStatus(`Stripe detected in ${resp.filledFrames ?? '?'} frame(s).`, 'ok');
+          // Build a human-readable summary of detected fields per frame
+          const parts = [];
+          for (const fr of resp.perFrame || []) {
+            const fields = Object.keys(fr.detected || {});
+            if (fields.length) {
+              parts.push(`${fr.host}: ${fields.join(', ')}`);
+            }
+          }
+          const summary = parts.length
+            ? `Detected fields:\n${parts.join('\n')}`
+            : `No Stripe fields detected in ${resp.detectedFrames ?? '?'} frame(s).`;
+          showStatus(summary, 'ok');
         } else {
           showStatus('Stripe fields not detected on this page.', 'err');
         }
