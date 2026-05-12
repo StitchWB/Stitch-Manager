@@ -532,6 +532,9 @@ export interface Translations {
     expiredWarning: string;
     refreshAllExpired: string;
     noAccountsFoundDesc: string;
+    openingBrowser: string;
+    browserOpened: string;
+    browserOpenFailed: string;
   };
 
   accountsTable: {

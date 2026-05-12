@@ -699,6 +699,9 @@ export const ru: Translations = {
       '{count} {count, plural, one{аккаунту требуется} other{аккаунтам требуются}} повторная авторизация. Токены обновления истекли.',
     refreshAllExpired: 'Обновить все истекшие',
     noAccountsFoundDesc: 'Попробуйте изменить фильтры или добавьте новый аккаунт.',
+    openingBrowser: 'Открываю браузер...',
+    browserOpened: 'Браузер открыт',
+    browserOpenFailed: 'Не удалось открыть браузер: {{message}}',
   },
   accountsTable: {
     account: 'Аккаунт',

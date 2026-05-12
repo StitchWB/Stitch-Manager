@@ -20,9 +20,7 @@
     en: {
       // General
       'app.title': 'Stitch Toolkit',
-      'app.version': 'v{version} · Stitch Toolkit',
       'app.ready': 'Ready',
-      'app.loading': 'Loading...',
 
       // Tabs
       'tab.stripe': 'Stripe',
@@ -31,61 +29,43 @@
 
       // Stripe Filler
       'stripe.cardDetails': 'Card Details',
-      'stripe.cardNumber': 'Card number|MM|YYYY|CVC',
-      'stripe.recentCards': '— recent —',
       'stripe.saveCard': 'Save card',
-      'stripe.billingInfo': 'Billing Info',
-      'stripe.autoFillBilling': 'Auto-fill billing',
-      'stripe.profile': '— profile —',
-      'stripe.cardholderName': 'Cardholder name',
-      'stripe.country': 'US',
       'stripe.address': 'Address',
-      'stripe.postalCode': 'Postal code',
       'stripe.fillCard': 'Fill Card',
-      'stripe.detect': 'Detect',
       'stripe.formatHint': 'Format: number|MM|YYYY|CVC',
       'stripe.saved': 'Saved!',
       'stripe.invalidFormat': 'Invalid format',
       'stripe.enterCardFirst': 'Enter a card first',
       'stripe.filledFrames': 'Filled {count} frame(s)',
-      'stripe.detectedFrames': 'Stripe detected in {count} frame(s)',
-      'stripe.notDetected': 'Stripe fields not detected',
       'stripe.fillFailed': 'Fill failed',
       'stripe.noLastCard': 'No last card',
       'stripe.invalidLastCard': 'Invalid last card',
       'stripe.filledLastCard': 'Filled last card ({count} frame(s))',
       'stripe.shortcuts': '⌘⇧F — quick fill · ⌘⇧S — toggle panel',
+      'stripe.billing': 'Billing',
+      'stripe.name': 'Name',
+      'stripe.city': 'City',
+      'stripe.state': 'State',
+      'stripe.postal': 'ZIP',
+      'stripe.history': '— history —',
 
       // Recorder
       'recorder.title': 'Scenario Recorder',
-      'recorder.noSteps': 'No steps recorded yet.\nPress Start to begin.',
       'recorder.start': '▶ Start',
-      'recorder.pause': '⏸ Pause',
-      'recorder.resume': '▶ Resume',
-      'recorder.clear': '🗑 Clear',
-      'recorder.import': '📥 Import',
       'recorder.export': '📤 Export',
-      'recorder.stepsCount': 'Steps: {count}',
-      'recorder.shortcuts': '⌘⇧R toggle · ⌘⇧E export',
-      'recorder.cleared': 'Steps cleared',
-      'recorder.confirmClear': 'Clear all recorded steps?',
-      'recorder.exported': 'Exported as {format}',
       'recorder.imported': 'Imported {count} steps',
       'recorder.noStepsToExport': 'No steps to export',
-      'recorder.invalidJson': 'Invalid JSON file',
-
-      // Export modal
-      'export.title': '📤 Export Scenario',
-      'export.json': '📄 JSON (raw data)',
-      'export.playwright': '🎭 Playwright script',
-      'export.puppeteer': '🎪 Puppeteer script',
-      'export.curl': '🌐 cURL commands',
-      'export.cancel': 'Cancel',
-
-      'settings.language': 'Language',
-      'settings.languageDesc': 'Interface language',
+      'recorder.idle': 'Idle — not recording.',
+      'recorder.importFailed': 'Import failed',
+      'recorder.stopFailed': 'Failed to stop recording',
+      'recorder.startFailed': 'Failed to start recording',
+      'recorder.namePlaceholder': 'Scenario name (optional)',
+      'recorder.stop': '■ Stop',
+      'recorder.hint': 'Click Start, then interact with the page. Click Stop to save.',
 
       // Settings
+      'settings.language': 'Language',
+      'settings.languageDesc': 'Interface language',
       'settings.general': 'General',
       'settings.autoDetectStripe': 'Auto-detect Stripe',
       'settings.autoDetectStripeDesc': 'Switch to Stripe tab when Stripe form detected',
@@ -117,11 +97,6 @@
       // Notifications
       'notif.cardDetected': 'Card detected',
       'notif.fillNow': 'Fill now',
-      'notif.noStepsToExport': 'No steps to export',
-      'notif.stepsCleared': 'Steps cleared',
-      'notif.configExported': 'Config exported',
-      'notif.allDataCleared': 'All data cleared',
-      'notif.profileSaved': 'Profile saved',
 
       // Context menu
       'ctx.quickFill': '⚡ Quick Fill',
@@ -136,19 +111,15 @@
       'tooltip.toggleTheme': 'Toggle theme',
       'tooltip.settings': 'Settings',
       'tooltip.close': 'Collapse (⌘⇧S)',
-      'tooltip.floatBtn': 'Stitch Toolkit (⌘⇧S)',
 
       // Status
       'status.filling': '⏳ Filling...',
-      'status.done': '✅ Done!',
     },
 
     ru: {
       // General
       'app.title': 'Stitch Toolkit',
-      'app.version': 'v{version} · Stitch Toolkit',
       'app.ready': 'Готов',
-      'app.loading': 'Загрузка...',
 
       // Tabs
       'tab.stripe': 'Stripe',
@@ -157,61 +128,43 @@
 
       // Stripe Filler
       'stripe.cardDetails': 'Данные карты',
-      'stripe.cardNumber': 'номер|ММ|ГГГГ|CVC',
-      'stripe.recentCards': '— недавние —',
       'stripe.saveCard': 'Сохранить карту',
-      'stripe.billingInfo': 'Платёжные данные',
-      'stripe.autoFillBilling': 'Автозаполнение данных',
-      'stripe.profile': '— профиль —',
-      'stripe.cardholderName': 'Имя держателя карты',
-      'stripe.country': 'RU',
       'stripe.address': 'Адрес',
-      'stripe.postalCode': 'Индекс',
       'stripe.fillCard': '⚡ Заполнить',
-      'stripe.detect': 'Найти',
       'stripe.formatHint': 'Формат: номер|ММ|ГГГГ|CVC',
       'stripe.saved': 'Сохранено!',
       'stripe.invalidFormat': 'Неверный формат',
       'stripe.enterCardFirst': 'Сначала введите карту',
       'stripe.filledFrames': 'Заполнено {count} фрейм(ов)',
-      'stripe.detectedFrames': 'Stripe найден в {count} фрейм(ах)',
-      'stripe.notDetected': 'Поля Stripe не найдены',
       'stripe.fillFailed': 'Ошибка заполнения',
       'stripe.noLastCard': 'Нет последней карты',
       'stripe.invalidLastCard': 'Неверная последняя карта',
       'stripe.filledLastCard': 'Заполнена последняя карта ({count} фрейм(ов))',
       'stripe.shortcuts': '⌘⇧F — быстрое заполнение · ⌘⇧S — свернуть/развернуть',
+      'stripe.billing': 'Биллинг',
+      'stripe.name': 'Имя',
+      'stripe.city': 'Город',
+      'stripe.state': 'Область',
+      'stripe.postal': 'Индекс',
+      'stripe.history': '— история —',
 
       // Recorder
       'recorder.title': 'Запись сценария',
-      'recorder.noSteps': 'Нет записанных шагов.\nНажмите Старт для начала.',
       'recorder.start': '▶ Старт',
-      'recorder.pause': '⏸ Пауза',
-      'recorder.resume': '▶ Продолжить',
-      'recorder.clear': '🗑 Очистить',
-      'recorder.import': '📥 Импорт',
       'recorder.export': '📤 Экспорт',
-      'recorder.stepsCount': 'Шагов: {count}',
-      'recorder.shortcuts': '⌘⇧R старт/пауза · ⌘⇧E экспорт',
-      'recorder.cleared': 'Шаги очищены',
-      'recorder.confirmClear': 'Очистить все записанные шаги?',
-      'recorder.exported': 'Экспортировано как {format}',
       'recorder.imported': 'Импортировано {count} шагов',
       'recorder.noStepsToExport': 'Нет шагов для экспорта',
-      'recorder.invalidJson': 'Неверный JSON файл',
-
-      // Export modal
-      'export.title': '📤 Экспорт сценария',
-      'export.json': '📄 JSON (сырые данные)',
-      'export.playwright': '🎭 Playwright скрипт',
-      'export.puppeteer': '🎪 Puppeteer скрипт',
-      'export.curl': '🌐 cURL команды',
-      'export.cancel': 'Отмена',
-
-      'settings.language': 'Язык',
-      'settings.languageDesc': 'Язык интерфейса',
+      'recorder.idle': 'Простой — запись не ведётся.',
+      'recorder.importFailed': 'Ошибка импорта',
+      'recorder.stopFailed': 'Ошибка остановки записи',
+      'recorder.startFailed': 'Ошибка начала записи',
+      'recorder.namePlaceholder': 'Название сценария (необязательно)',
+      'recorder.stop': '■ Стоп',
+      'recorder.hint': 'Нажмите Старт, затем взаимодействуйте со страницей. Нажмите Стоп для сохранения.',
 
       // Settings
+      'settings.language': 'Язык',
+      'settings.languageDesc': 'Язык интерфейса',
       'settings.general': 'Основные',
       'settings.autoDetectStripe': 'Автодетект Stripe',
       'settings.autoDetectStripeDesc': 'Переключаться на вкладку Stripe при обнаружении формы',
@@ -243,11 +196,6 @@
       // Notifications
       'notif.cardDetected': 'Карта обнаружена',
       'notif.fillNow': 'Заполнить',
-      'notif.noStepsToExport': 'Нет шагов для экспорта',
-      'notif.stepsCleared': 'Шаги очищены',
-      'notif.configExported': 'Настройки экспортированы',
-      'notif.allDataCleared': 'Все данные очищены',
-      'notif.profileSaved': 'Профиль сохранён',
 
       // Context menu
       'ctx.quickFill': '⚡ Быстрое заполнение',
@@ -262,11 +210,9 @@
       'tooltip.toggleTheme': 'Переключить тему',
       'tooltip.settings': 'Настройки',
       'tooltip.close': 'Свернуть (⌘⇧S)',
-      'tooltip.floatBtn': 'Stitch Toolkit (⌘⇧S)',
 
       // Status
       'status.filling': '⏳ Заполнение...',
-      'status.done': '✅ Готово!',
     }
   };
 
@@ -297,19 +243,10 @@
     setLocale: function (lang) {
       _locale = lang === 'ru' ? 'ru' : 'en';
       try { localStorage.setItem('tk:locale', _locale); } catch (e) {}
-      // Emit event for UI refresh
-      if (typeof window !== 'undefined' && window.StitchI18nEventBus) {
-        window.StitchI18nEventBus.emit('locale:changed', _locale);
-      }
     },
 
     getLocale: function () { return _locale; },
 
-    getAvailableLocales: function () { return Object.keys(TRANSLATIONS); },
-
-    getLocaleNames: function () {
-      return { en: 'English', ru: 'Русский' };
-    }
+    getLocaleNames: function () { return { en: 'English', ru: 'Русский' }; },
   };
-
 })();

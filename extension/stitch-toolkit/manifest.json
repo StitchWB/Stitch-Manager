@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["i18n.js", "content.js"],
+      "js": ["i18n.js", "content.js", "panel/tools/stripe-filler.js", "panel/tools/recorder-tool.js", "panel/tools/settings-tool.js"],
       "css": ["panel/panel.css"],
       "run_at": "document_idle",
       "all_frames": false
