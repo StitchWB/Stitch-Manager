@@ -30,6 +30,8 @@
       expanded: false,
       posX: null,
       posY: null,
+      panelPosX: null,
+      panelPosY: null,
       activeTab: 'stripe',
       theme: 'auto',
       autoExpand: true,
@@ -317,19 +319,34 @@
         var rect = floatBtn.getBoundingClientRect();
         StateManager.save('posX', Math.round(rect.left));
         StateManager.save('posY', Math.round(rect.top));
+        StateManager.save('panelPosX', null);
+        StateManager.save('panelPosY', null);
         floatBtn.classList.remove('dragging');
+      } else if (dragMode === 'panel') {
+        var rect = panel.getBoundingClientRect();
+        StateManager.save('panelPosX', Math.round(rect.left));
+        StateManager.save('panelPosY', Math.round(rect.top));
       }
       dragMode = null;
     }
 
     function positionPanel() {
+      var savedPanelX = StateManager.get('panelPosX');
+      var savedPanelY = StateManager.get('panelPosY');
+      if (savedPanelX !== null && savedPanelY !== null) {
+        panel.style.top = savedPanelY + 'px';
+        panel.style.left = savedPanelX + 'px';
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+        return;
+      }
       var rect = floatBtn.getBoundingClientRect();
       var panelH = 480;
       var top = rect.top - panelH - 12;
       if (top < 10) top = rect.bottom + 12;
-      var left = rect.left + rect.width / 2 - 160;
+      var left = rect.left + rect.width / 2 - 150;
       if (left < 10) left = 10;
-      if (left + 320 > window.innerWidth - 10) left = window.innerWidth - 330;
+      if (left + 300 > window.innerWidth - 10) left = window.innerWidth - 310;
       panel.style.top = top + 'px';
       panel.style.left = left + 'px';
       panel.style.right = 'auto';
