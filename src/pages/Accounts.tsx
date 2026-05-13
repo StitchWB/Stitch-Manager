@@ -246,6 +246,7 @@ export default function Accounts() {
     handleRefreshAll,
     handleRefreshExpired,
     handleRemoveSelectedAccounts,
+    handleToggleAutoRefreshQuota,
   } = useAccountsActions({
     selectedIds,
     filteredAccountIds,
@@ -509,7 +510,7 @@ export default function Accounts() {
           ) : null}
 
           {/* Table */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-auto">
             <AccountsMainPanels
               resolvedViewMode={resolvedViewMode}
               entityFilter={entityFilter}
@@ -551,6 +552,7 @@ export default function Accounts() {
                 onCheckStatus: handleCheckStatus,
                 isAccountRefreshing,
                 onOpenBrowser: handleOpenBrowser,
+                onToggleAutoRefreshQuota: handleToggleAutoRefreshQuota,
                 onOpenProfileSession: handleOpenProfileSession,
                 onConfirmProfileSession: handleConfirmProfileSession,
                 onClearProfileSession: handleClearProfileSession,

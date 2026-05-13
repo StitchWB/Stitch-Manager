@@ -40,6 +40,7 @@ import {
   EmailServicesSection,
   GoogleSheetsSettingsSection,
   ExtensionSettingsSection,
+  BackgroundManagerSettingsSection,
 } from '../components/settings';
 
 const SETTINGS_SECRET_MASK = '********';
@@ -142,6 +143,7 @@ export default function Settings() {
   const [thirtyThreeMailEnabled, setThirtyThreeMailEnabled] = useState(false);
   const [thirtyThreeMailUsername, setThirtyThreeMailUsername] = useState('');
   const [thirtyThreeMailDomain, setThirtyThreeMailDomain] = useState('33mail.com');
+  const [thirtyThreeMailTemplate, setThirtyThreeMailTemplate] = useState('{rnd12}');
 
   // Mail.tm settings
   const [mailtmEnabled, setMailtmEnabled] = useState(false);
@@ -225,6 +227,7 @@ export default function Settings() {
       setThirtyThreeMailEnabled(data.thirtyThreeMailEnabled || false);
       setThirtyThreeMailUsername(data.thirtyThreeMailUsername || '');
       setThirtyThreeMailDomain(data.thirtyThreeMailDomain || '33mail.com');
+      setThirtyThreeMailTemplate(data.thirtyThreeMailTemplate || '{rnd12}');
 
       // Load Mail.tm settings
       setMailtmEnabled(data.mailtmEnabled || false);
@@ -469,6 +472,7 @@ export default function Settings() {
         thirtyThreeMailEnabled: thirtyThreeMailEnabled,
         thirtyThreeMailUsername: thirtyThreeMailUsername,
         thirtyThreeMailDomain: thirtyThreeMailDomain,
+        thirtyThreeMailTemplate: thirtyThreeMailTemplate,
         mailtmEnabled: mailtmEnabled,
         customIdePaths: customIdePaths,
         googleSheetsSpreadsheetId: normalizedGoogleSheetsSpreadsheetId,
@@ -607,6 +611,8 @@ export default function Settings() {
       />
 
       <DatabaseSection dbPath={dbPath} onCopy={copy} />
+
+      <BackgroundManagerSettingsSection />
     </div>
   );
 
@@ -723,6 +729,11 @@ export default function Settings() {
         thirtyThreeMailDomain={thirtyThreeMailDomain}
         onThirtyThreeMailDomainChange={domain => {
           setThirtyThreeMailDomain(domain);
+          debouncedAutoSave();
+        }}
+        thirtyThreeMailTemplate={thirtyThreeMailTemplate}
+        onThirtyThreeMailTemplateChange={template => {
+          setThirtyThreeMailTemplate(template);
           debouncedAutoSave();
         }}
         mailtmEnabled={mailtmEnabled}

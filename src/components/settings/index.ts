@@ -10,3 +10,4 @@ export { EmailCounterSection } from './EmailCounterSection';
 export { EmailServicesSection } from './EmailServicesSection';
 export { GoogleSheetsSettingsSection } from './GoogleSheetsSettingsSection';
 export { ExtensionSettingsSection } from './ExtensionSettingsSection';
+export { BackgroundManagerSettingsSection } from './BackgroundManagerSettingsSection';

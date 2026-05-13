@@ -13,6 +13,7 @@ import {
   updateAccountNotesTags,
   checkAccountStatus,
   checkFireworksApiKey,
+  updateAccountMetadata,
 } from '@/lib/tauri/modules/accounts';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
@@ -337,6 +338,39 @@ export function useAccountsActions({
     [selectedIds, deleteAccounts, clearSelection, fetchAccounts]
   );
 
+  const handleToggleAutoRefreshQuota = useCallback(
+    async (account: Account) => {
+      try {
+        let meta: Record<string, unknown> = {};
+        if (account.metadata) {
+          try {
+            meta = JSON.parse(account.metadata);
+          } catch {
+            meta = {};
+          }
+        }
+        const newValue = !meta.autoRefreshQuota;
+        meta.autoRefreshQuota = newValue;
+        await updateAccountMetadata({
+          accountId: account.id,
+          metadata: JSON.stringify(meta),
+        });
+        toast.success(
+          newValue
+            ? t('accounts.autoRefreshEnabled')
+            : t('accounts.autoRefreshDisabled')
+        );
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to toggle auto refresh:', error);
+        toast.error(
+          `Failed to toggle auto refresh: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
+
   return {
     handleCheckStatus,
     handleOpenBrowser,
@@ -349,5 +383,6 @@ export function useAccountsActions({
     handleRefreshAll,
     handleRefreshExpired,
     handleRemoveSelectedAccounts,
+    handleToggleAutoRefreshQuota,
   };
 }
