@@ -101,6 +101,16 @@ export function useAccountsActions({
         await fetchAccounts();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const account = store.accounts.find(a => a.id === id);
+        // For Fireworks: even on API error, show 0/0 instead of "Failed"
+        if (account?.provider?.toLowerCase() === 'fireworks') {
+          store.setProviderQuota(id, {
+            limit: 0,
+            used: 0,
+            remaining: 0,
+            checkedAt: Date.now(),
+          });
+        }
         store.setQuotaCheckError(id, message);
         console.error(`[QuotaCheck] Account ${id}: ${message}`);
       } finally {
