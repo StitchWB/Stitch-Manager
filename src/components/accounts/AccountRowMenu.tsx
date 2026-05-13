@@ -1,8 +1,18 @@
-import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2 } from 'lucide-react';
+import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff } from 'lucide-react';
 import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import type { Account } from '@/types/generated';
+
+function isAutoRefreshEnabled(account: Account): boolean {
+  if (!account.metadata) return false;
+  try {
+    const meta = JSON.parse(account.metadata);
+    return meta.autoRefreshQuota === true;
+  } catch {
+    return false;
+  }
+}
 
 interface AccountRowMenuProps {
   account: Account;
@@ -15,6 +25,7 @@ interface AccountRowMenuProps {
   onCheckStatus: (id: number) => Promise<void>;
   onOpenBrowser?: (accountId: number) => Promise<void>;
   onToggleActive: (account: Account) => Promise<void>;
+  onToggleAutoRefreshQuota?: (account: Account) => Promise<void>;
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
@@ -35,6 +46,7 @@ export function AccountRowMenu({
   onCheckStatus,
   onOpenBrowser,
   onToggleActive,
+  onToggleAutoRefreshQuota,
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
@@ -43,6 +55,7 @@ export function AccountRowMenu({
   onDelete,
   onCloseMenu,
 }: AccountRowMenuProps) {
+  const autoRefreshEnabled = isAutoRefreshEnabled(account);
   if (!isMenuOpen) return null;
 
   return (
@@ -141,6 +154,20 @@ export function AccountRowMenu({
         >
           <Copy size={12} />
           {t('accounts.copyToken')}
+        </ButtonBase>
+      ) : null}
+
+      {onToggleAutoRefreshQuota ? (
+        <ButtonBase
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
+          onClick={() => {
+            void onToggleAutoRefreshQuota(account);
+            onCloseMenu();
+          }}
+        >
+          {autoRefreshEnabled ? <ZapOff size={12} className="text-amber-400" /> : <Zap size={12} className="text-emerald-400" />}
+          {autoRefreshEnabled ? 'Отключить автообновление квоты' : 'Включить автообновление квоты'}
         </ButtonBase>
       ) : null}
 

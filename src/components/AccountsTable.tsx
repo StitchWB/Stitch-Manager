@@ -35,6 +35,7 @@ export interface AccountsTableProps {
   onCheckStatus: (accountId: number) => Promise<void>;
   isAccountRefreshing: (accountId: number) => boolean;
   onOpenBrowser?: (accountId: number) => Promise<void>;
+  onToggleAutoRefreshQuota?: (account: Account) => Promise<void>;
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
@@ -65,6 +66,7 @@ export default function AccountsTable({
   onCheckStatus,
   isAccountRefreshing,
   onOpenBrowser,
+  onToggleAutoRefreshQuota,
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
@@ -260,6 +262,7 @@ export default function AccountsTable({
                 onToggleActive={handleToggleActive}
                 onCheckStatus={onCheckStatus}
                 onOpenBrowser={onOpenBrowser}
+                onToggleAutoRefreshQuota={onToggleAutoRefreshQuota}
                 onCopyToken={token =>
                   copy(token, {
                     sensitive: true,
