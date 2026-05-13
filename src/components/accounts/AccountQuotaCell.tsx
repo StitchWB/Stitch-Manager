@@ -45,6 +45,8 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
   const textColor =
     percent > 90 ? 'text-red-400' : percent > 75 ? 'text-amber-400' : 'text-emerald-400';
 
+  const isFireworks = account.provider?.toLowerCase() === 'fireworks';
+
   const canRefresh = Boolean(account.token);
 
   const handleDoubleClick = () => {
@@ -72,7 +74,9 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
             <span className={cn('text-xs font-bold tabular-nums', textColor)}>{percent}%</span>
-            <span className="text-[9px] text-slate-500 tabular-nums">{used}/{limit}</span>
+            <span className="text-[9px] text-slate-500 tabular-nums">
+              {isFireworks ? `$${used.toFixed(2)}/$${limit.toFixed(2)}` : `${used}/${limit}`}
+            </span>
           </div>
           <div className="h-[2px] w-full rounded-full bg-white/[0.04] overflow-hidden mt-0.5">
             <div className={cn('h-full rounded-full', barColor)} style={{ width: `${percent}%` }} />
