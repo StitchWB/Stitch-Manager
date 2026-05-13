@@ -72,6 +72,16 @@ export function useAccountsActions({
           const apiKey = getFireworksApiKey(account);
           if (apiKey) {
             const status = await checkFireworksApiKey({ apiKey });
+            if (!status.valid) {
+              // Key expired or invalid — show as exhausted
+              store.setProviderQuota(id, {
+                limit: 0,
+                used: 0,
+                remaining: 0,
+                checkedAt: Date.now(),
+              });
+              return;
+            }
             if (typeof status.monthlySpendLimit === 'number' && typeof status.monthlySpendUsed === 'number') {
               const limit = status.monthlySpendLimit;
               const used = status.monthlySpendUsed;

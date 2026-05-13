@@ -24,7 +24,8 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
   );
 
   const hasBackendQuota = account.quota && (account.quota.limit > 0 || account.quota.used > 0);
-  const hasProviderQuota = providerQuota && (providerQuota.limit > 0 || providerQuota.used > 0);
+  // Provider quota exists in cache even if 0/0 — means "checked, key expired/exhausted"
+  const hasProviderQuota = providerQuota !== undefined && providerQuota !== null;
   const hasQuota = hasBackendQuota || hasProviderQuota;
 
   const used = hasBackendQuota
