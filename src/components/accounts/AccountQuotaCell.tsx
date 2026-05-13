@@ -68,11 +68,6 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
           <Loader2 size={11} className="animate-spin" />
           <span className="text-[10px]">Checking…</span>
         </div>
-      ) : checkError ? (
-        <div className="flex items-center gap-1 text-red-400">
-          <RefreshCw size={11} />
-          <span className="text-[10px] truncate" title={checkError}>Failed</span>
-        </div>
       ) : hasQuota ? (
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
@@ -82,6 +77,11 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
           <div className="h-[2px] w-full rounded-full bg-white/[0.04] overflow-hidden mt-0.5">
             <div className={cn('h-full rounded-full', barColor)} style={{ width: `${percent}%` }} />
           </div>
+        </div>
+      ) : checkError ? (
+        <div className="flex items-center gap-1 text-red-400">
+          <RefreshCw size={11} />
+          <span className="text-[10px] truncate" title={checkError}>Failed</span>
         </div>
       ) : canRefresh ? (
         <div className={cn('flex items-center gap-1', canRefresh && !isChecking && 'text-slate-500')}>
