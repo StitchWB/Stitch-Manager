@@ -16,8 +16,7 @@ import { ButtonBase, Checkbox } from '@/components/ui';
 
 export interface AccountsVisibleColumns {
   lastLogin: boolean;
-  proxy: boolean;
-  tags: boolean;
+  apiKey: boolean;
   quota: boolean;
 }
 
@@ -149,18 +148,9 @@ export function AccountsColumnsMenu({
 
               <div className="rounded-lg px-1 py-0.5 hover:bg-white/5">
                 <Checkbox
-                  checked={visibleColumns.proxy}
-                  onChange={event => onToggleColumn('proxy', event.target.checked)}
-                  label={t('accounts.columnProxy')}
-                  className="!py-1"
-                />
-              </div>
-
-              <div className="rounded-lg px-1 py-0.5 hover:bg-white/5">
-                <Checkbox
-                  checked={visibleColumns.tags}
-                  onChange={event => onToggleColumn('tags', event.target.checked)}
-                  label={t('accounts.columnTags')}
+                  checked={visibleColumns.apiKey}
+                  onChange={event => onToggleColumn('apiKey', event.target.checked)}
+                  label={t('accounts.columnApiKey')}
                   className="!py-1"
                 />
               </div>

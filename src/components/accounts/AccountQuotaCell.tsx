@@ -40,12 +40,36 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
       : 0;
 
   const percent = limit > 0 ? Math.min(Math.round((used / limit) * 100), 100) : 0;
-  const barColor =
-    percent > 90 ? 'bg-red-500' : percent > 75 ? 'bg-amber-500' : 'bg-emerald-500';
-  const textColor =
-    percent > 90 ? 'text-red-400' : percent > 75 ? 'text-amber-400' : 'text-emerald-400';
 
   const isFireworks = account.provider?.toLowerCase() === 'fireworks';
+  const suspendState = isFireworks ? providerQuota?.status : undefined;
+
+  // Determine display based on Fireworks suspend state
+  const isCreditDepleted = suspendState === 'CREDIT_DEPLETED';
+  const isLimitExceeded = suspendState === 'MONTHLY_SPEND_LIMIT_EXCEEDED';
+  const isPaymentFailed = suspendState === 'FAILED_PAYMENTS';
+  const isBlocked = suspendState === 'BLOCKED_BY_ABUSE_RULE';
+  const isFrozen = isCreditDepleted || isLimitExceeded || isPaymentFailed || isBlocked;
+
+  const displayPercent = isFrozen ? 100 : percent;
+  const barColor = isCreditDepleted || isPaymentFailed || isBlocked
+    ? 'bg-red-500'
+    : isLimitExceeded
+      ? 'bg-amber-500'
+      : percent > 90
+        ? 'bg-red-500'
+        : percent > 75
+          ? 'bg-amber-500'
+          : 'bg-emerald-500';
+  const textColor = isCreditDepleted || isPaymentFailed || isBlocked
+    ? 'text-red-400'
+    : isLimitExceeded
+      ? 'text-amber-400'
+      : percent > 90
+        ? 'text-red-400'
+        : percent > 75
+          ? 'text-amber-400'
+          : 'text-emerald-400';
 
   const canRefresh = Boolean(account.token);
 
@@ -53,6 +77,16 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
     if (canRefresh && !isChecking) {
       onCheckStatus(account.id);
     }
+  };
+
+  // Text label for Fireworks status
+  const getFireworksLabel = () => {
+    if (isCreditDepleted) return 'Кредиты кончились';
+    if (isLimitExceeded) return 'Лимит месяца';
+    if (isPaymentFailed) return 'Платёж провален';
+    if (isBlocked) return 'Блокировка';
+    if (limit === 0) return 'Нет квоты';
+    return `$${used.toFixed(2)}/$${limit.toFixed(2)}`;
   };
 
   return (
@@ -73,13 +107,13 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
       ) : hasQuota ? (
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className={cn('text-xs font-bold tabular-nums', textColor)}>{percent}%</span>
+            <span className={cn('text-xs font-bold tabular-nums', textColor)}>{displayPercent}%</span>
             <span className="text-[9px] text-slate-500 tabular-nums">
-              {isFireworks ? `$${used.toFixed(2)}/$${limit.toFixed(2)}` : `${used}/${limit}`}
+              {isFireworks ? getFireworksLabel() : `${used}/${limit}`}
             </span>
           </div>
           <div className="h-[2px] w-full rounded-full bg-white/[0.04] overflow-hidden mt-0.5">
-            <div className={cn('h-full rounded-full', barColor)} style={{ width: `${percent}%` }} />
+            <div className={cn('h-full rounded-full', barColor)} style={{ width: `${displayPercent}%` }} />
           </div>
         </div>
       ) : checkError ? (

@@ -79,6 +79,7 @@ export function useAccountsActions({
                 used: 0,
                 remaining: 0,
                 checkedAt: Date.now(),
+                status: status.suspendState || status.accountState || undefined,
               });
               return;
             }
@@ -91,6 +92,7 @@ export function useAccountsActions({
                 used,
                 remaining,
                 checkedAt: Date.now(),
+                status: status.suspendState || status.accountState || undefined,
               });
             }
             return;
@@ -101,16 +103,7 @@ export function useAccountsActions({
         await fetchAccounts();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const account = store.accounts.find(a => a.id === id);
-        // For Fireworks: even on API error, show 0/0 instead of "Failed"
-        if (account?.provider?.toLowerCase() === 'fireworks') {
-          store.setProviderQuota(id, {
-            limit: 0,
-            used: 0,
-            remaining: 0,
-            checkedAt: Date.now(),
-          });
-        }
+        // Do NOT set quota on API error — let it show "Failed" for retry
         store.setQuotaCheckError(id, message);
         console.error(`[QuotaCheck] Account ${id}: ${message}`);
       } finally {

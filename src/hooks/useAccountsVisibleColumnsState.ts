@@ -14,8 +14,7 @@ type UseAccountsVisibleColumnsStateResult = {
 
 const defaultVisibleColumns: AccountsVisibleColumns = {
   lastLogin: true,
-  proxy: true,
-  tags: true,
+  apiKey: true,
   quota: true,
 };
 
@@ -24,7 +23,7 @@ export function useAccountsVisibleColumnsState({
   onPersist,
 }: UseAccountsVisibleColumnsStateArgs): UseAccountsVisibleColumnsStateResult {
   const [visibleColumns, setVisibleColumns] = useState<AccountsVisibleColumns>(
-    initial ?? defaultVisibleColumns
+    initial ? { ...defaultVisibleColumns, ...initial } : defaultVisibleColumns
   );
 
   const handleToggleVisibleColumn = useCallback(

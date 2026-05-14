@@ -275,7 +275,7 @@ export interface Translations {
     viewGraph: string;
     viewSheets: string;
     allProviders: string;
-    proxyLabel: string;
+    apiKeyLabel: string;
     selectedCountLabel: string;
     tokenCopiedAutoClear: string;
     tokenCopyFailed: string;
@@ -292,8 +292,7 @@ export interface Translations {
     columnsMenuLabel: string;
     columnsMenuTitle: string;
     columnLastLogin: string;
-    columnProxy: string;
-    columnTags: string;
+    columnApiKey: string;
     columnQuota: string;
     columnsReset: string;
     noAccounts: string;

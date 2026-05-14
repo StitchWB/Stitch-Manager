@@ -1,4 +1,4 @@
-import { Play, MoreHorizontal } from 'lucide-react';
+import { Play, MoreHorizontal, Key } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -51,7 +51,7 @@ export function AccountRow({
   isActive,
   isRefreshing,
   isMenuOpen,
-  visibleColumns = { lastLogin: true, proxy: true, tags: true, quota: true },
+  visibleColumns = { lastLogin: true, apiKey: true, quota: true },
   relationHints,
   relationEdges,
   onToggleSelection,
@@ -181,42 +181,28 @@ export function AccountRow({
         {data.lastLoginFormatted}
       </TableCell>
 
-      {/* Proxy */}
+      {/* API Key */}
       <TableCell
         className={cn(
-          visibleColumns.proxy ? 'w-[70px] min-w-[70px] px-2 py-2 align-middle' : 'hidden'
+          visibleColumns.apiKey ? 'w-[50px] min-w-[50px] px-2 py-2 align-middle' : 'hidden'
         )}
       >
-        <Tooltip content={data.proxyValue} side="top">
-          <span className="block truncate font-mono text-[11px] text-slate-200">{data.proxyValue}</span>
-        </Tooltip>
-      </TableCell>
-
-      {/* Tags */}
-      <TableCell
-        className={cn(
-          visibleColumns.tags ? 'w-[60px] min-w-[60px] px-2 py-2 align-middle' : 'hidden'
+        {account.provider?.toLowerCase() === 'fireworks' && account.token ? (
+          <Tooltip content="Click to copy API key" side="top">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (account.token) onCopyToken(account.token);
+              }}
+              className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
+            >
+              <Key size={14} className="text-slate-400 hover:text-indigo-400" />
+            </button>
+          </Tooltip>
+        ) : (
+          <span className="text-xs text-slate-600">—</span>
         )}
-      >
-        <div className="flex items-center gap-1">
-          {data.visibleTags.length > 0 ? (
-            data.visibleTags.map(tag => (
-              <Badge
-                key={`${account.id}-${tag}`}
-                variant="outline"
-                size="sm"
-                className="max-w-[60px] truncate border-white/10 bg-white/[0.02] normal-case tracking-normal"
-              >
-                {tag}
-              </Badge>
-            ))
-          ) : (
-            <span className="text-xs text-slate-500">—</span>
-          )}
-          {data.remainingTagsCount > 0 ? (
-            <span className="text-xs text-slate-500">+{data.remainingTagsCount}</span>
-          ) : null}
-        </div>
       </TableCell>
 
       {/* Quota */}
