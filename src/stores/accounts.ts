@@ -23,6 +23,7 @@ export interface ProviderQuotaInfo {
   used: number;
   remaining: number;
   checkedAt: number; // timestamp
+  status?: string; // e.g. suspendState for Fireworks
 }
 
 interface AccountsState {

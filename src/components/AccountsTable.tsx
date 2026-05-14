@@ -56,7 +56,7 @@ export default function AccountsTable({
   selectedIds,
   activeAccountIds,
   isLoading = false,
-  visibleColumns = { lastLogin: true, proxy: true, tags: true, quota: true },
+  visibleColumns = { lastLogin: true, apiKey: true, quota: true },
   onToggleSelection,
   onSelectAll,
   onClearSelection,
@@ -211,21 +211,12 @@ export default function AccountsTable({
               </TableHead>
               <TableHead
                 className={
-                  visibleColumns.proxy
-                    ? 'w-[70px] min-w-[70px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap'
+                  visibleColumns.apiKey
+                    ? 'w-[50px] min-w-[50px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap'
                     : 'hidden'
                 }
               >
-                {t('accounts.proxyLabel')}
-              </TableHead>
-              <TableHead
-                className={
-                  visibleColumns.tags
-                    ? 'w-[60px] min-w-[60px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap'
-                    : 'hidden'
-                }
-              >
-                {t('accounts.tags')}
+                {t('accounts.apiKeyLabel')}
               </TableHead>
               <TableHead
                 className={

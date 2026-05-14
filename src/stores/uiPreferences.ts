@@ -20,8 +20,7 @@ interface AccountsPagePreferences {
 
 export interface AccountsTableVisibleColumns {
   lastLogin: boolean;
-  proxy: boolean;
-  tags: boolean;
+  apiKey: boolean;
   quota: boolean;
 }
 
@@ -126,8 +125,7 @@ const defaultAccountsPreferences: AccountsPagePreferences = {
   entityFilter: 'accounts',
   tableVisibleColumns: {
     lastLogin: true,
-    proxy: true,
-    tags: true,
+    apiKey: true,
     quota: true,
   },
   sortField: 'email',
@@ -390,16 +388,20 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
     }),
     {
       name: 'ui-preferences-storage',
-      version: 4,
+      version: 5,
       migrate: (persistedState: unknown) => {
         const state = persistedState as Record<string, unknown>;
         if (state.accountsPage) {
           const accountsPage = state.accountsPage as Record<string, unknown>;
           if (accountsPage.tableVisibleColumns) {
             const cols = accountsPage.tableVisibleColumns as Record<string, boolean>;
-            if (!('quota' in cols)) {
-              accountsPage.tableVisibleColumns = { ...cols, quota: true };
-            }
+            // Migrate old columns (proxy, tags) to new (apiKey)
+            const { proxy: _proxy, tags: _tags, ...rest } = cols;
+            accountsPage.tableVisibleColumns = {
+              lastLogin: rest.lastLogin ?? true,
+              apiKey: rest.apiKey ?? true,
+              quota: rest.quota ?? true,
+            };
           }
         }
         return state as unknown as UIPreferencesState;
