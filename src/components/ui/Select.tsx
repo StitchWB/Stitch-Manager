@@ -65,11 +65,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             aria-invalid={error ? true : props['aria-invalid']}
             aria-describedby={a11y.describedBy}
             className={cn(
-              'w-full bg-transparent px-3 py-2 text-sm text-slate-200 transition-all duration-200 outline-none appearance-none cursor-pointer',
+              'w-full px-3 py-2 text-sm text-slate-200 transition-all duration-200 outline-none appearance-none cursor-pointer border-0',
               "bg-[url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E\")] bg-[length:1.25rem] bg-[right_0.5rem_center] bg-no-repeat pr-10",
               className
             )}
-            style={{ colorScheme: 'dark' }}
+            style={{ backgroundColor: '#1e293b' }}
             {...props}
           >
             {options

@@ -430,9 +430,12 @@
 
     function applyTheme() {
       var theme = StateManager.get('theme');
-      document.documentElement.classList.remove('tk-light', 'tk-dark');
-      if (theme === 'light') document.documentElement.classList.add('tk-light');
-      else if (theme === 'dark') document.documentElement.classList.add('tk-dark');
+      var shadowHost = document.getElementById('tk-shadow-host');
+      if (shadowHost) {
+        shadowHost.classList.remove('tk-light', 'tk-dark');
+        if (theme === 'light') shadowHost.classList.add('tk-light');
+        else if (theme === 'dark') shadowHost.classList.add('tk-dark');
+      }
       var btn = panel && panel.querySelector('#tk-btn-theme');
       if (btn) btn.innerHTML = theme === 'light' ? ICONS.moon : ICONS.sun;
     }

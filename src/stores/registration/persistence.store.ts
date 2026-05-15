@@ -7,6 +7,10 @@ import { create } from 'zustand';
 import { getSettings, updateSettings } from '../../lib/tauri';
 import type { SettingsData } from '../../types/generated';
 import type { ProviderName } from '../../types/ui';
+
+type ExtendedSettingsData = SettingsData & {
+  captchaSoundFile?: string;
+};
 import type { LogVerbosity } from '../../constants/logging';
 import type {
   RegistrationConfig,
@@ -47,11 +51,21 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
   loadSettings: async () => {
     console.log('[PERSISTENCE_STORE] loadSettings: starting');
     try {
-      const settings: SettingsData = await getSettings();
+      const settings: ExtendedSettingsData = await getSettings();
       console.log('[PERSISTENCE_STORE] loadSettings: got settings from DB:', settings);
 
       // Load provider-specific email strategies from localStorage with migration
       const providerEmailStrategies = loadProviderStrategies();
+
+      // captchaSoundFile is stored in localStorage because the Rust DB schema
+      // doesn't know this field. It would get dropped on every SETTINGS_UPDATED
+      // event otherwise.
+      let captchaSoundFile: string | null = null;
+      try {
+        captchaSoundFile = localStorage.getItem('stitch:captchaSoundFile');
+      } catch {
+        // ignore localStorage errors
+      }
 
       // Check if passwords are masked (meaning they exist in DB)
       const imapPasswordMasked = settings.imapPassword === '********';
@@ -83,6 +97,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         thirtyThreeMailEnabled: settings.thirtyThreeMailEnabled || false,
         thirtyThreeMailUsername: settings.thirtyThreeMailUsername || '',
         thirtyThreeMailDomain: settings.thirtyThreeMailDomain || '33mail.com',
+        thirtyThreeMailTemplate: settings.thirtyThreeMailTemplate || '{rnd12}',
         // Load Mail.tm settings (global)
         mailtmEnabled: settings.mailtmEnabled || false,
         emailGenerationDomain: loadEmailGenerationDomain(),
@@ -150,6 +165,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
           screenshotsOnError: settings.screenshotsOnError !== false,
           captchaTimeout: settings.captchaTimeout || 5,
           captchaSoundEnabled: settings.captchaSoundEnabled !== false,
+          captchaSoundFile: captchaSoundFile || settings.captchaSoundFile || 'taksi.mp3',
           cardsText: settings.cardsText || '',
         },
         count: settings.count || 1,
@@ -259,6 +275,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled || false,
         thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername || '',
         thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain || '33mail.com',
+        thirtyThreeMailTemplate: config.imap.thirtyThreeMailTemplate || '{rnd12}',
         // Save Mail.tm settings (global)
         mailtmEnabled: config.imap.mailtmEnabled || false,
 
@@ -279,6 +296,16 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
 
       if (config.advanced.googleSheetsServiceAccountJson) {
         updateData.googleSheetsServiceAccountJson = config.advanced.googleSheetsServiceAccountJson;
+      }
+
+      // Persist captchaSoundFile in localStorage because Rust DB doesn't know this field
+      try {
+        localStorage.setItem(
+          'stitch:captchaSoundFile',
+          config.advanced.captchaSoundFile || 'taksi.mp3'
+        );
+      } catch {
+        // ignore localStorage errors
       }
 
       console.log(

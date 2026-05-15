@@ -47,6 +47,8 @@ interface EmailServicesSectionProps {
   onThirtyThreeMailUsernameChange: (username: string) => void;
   thirtyThreeMailDomain: string;
   onThirtyThreeMailDomainChange: (domain: string) => void;
+  thirtyThreeMailTemplate: string;
+  onThirtyThreeMailTemplateChange: (template: string) => void;
 
   // Mail.tm props
   mailtmEnabled: boolean;
@@ -88,6 +90,8 @@ export function EmailServicesSection({
   onThirtyThreeMailUsernameChange,
   thirtyThreeMailDomain,
   onThirtyThreeMailDomainChange,
+  thirtyThreeMailTemplate,
+  onThirtyThreeMailTemplateChange,
   mailtmEnabled,
   onMailtmEnabledChange,
 }: EmailServicesSectionProps) {
@@ -346,6 +350,16 @@ export function EmailServicesSection({
                   placeholder="33mail.com"
                 />
               </div>
+              <Input
+                type="text"
+                label="Email Template"
+                value={thirtyThreeMailTemplate}
+                onChange={e => onThirtyThreeMailTemplateChange(e.target.value)}
+                placeholder="{rnd12}"
+              />
+              <p className="text-xs text-slate-400">
+                Placeholders: {'{rndN}'} N random chars, {'{counter}'}, {'{time}'}, {'{name}'}, {'{uuid4}'}, {'{uuid4_8}'}
+              </p>
             </div>
           )}
         </div>

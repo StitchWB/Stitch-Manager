@@ -19,6 +19,7 @@ class AddyIoConfig:
     alias_format: str = "uuid"  # Alias format: uuid, random_words, random_characters
     auto_delete: bool = False   # Auto-delete aliases after use
     domain: str = ""            # Default domain for aliases
+    template: str | None = None  # Optional template for description (e.g. "{name}-{rnd8}")
 
 
 class AddyIoService:

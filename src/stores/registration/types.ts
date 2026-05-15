@@ -40,6 +40,7 @@ export interface IMAPConfig {
   thirtyThreeMailEnabled?: boolean;
   thirtyThreeMailUsername?: string;
   thirtyThreeMailDomain?: string;
+  thirtyThreeMailTemplate?: string;
   // Mail.tm fields (GLOBAL - shared across providers)
   mailtmEnabled?: boolean;
   // CF-to-IMAP: explicit email generation domain (overrides imap.email domain)
@@ -127,6 +128,7 @@ export interface AdvancedSettings {
   screenshotsOnError: boolean;
   captchaTimeout: number; // in minutes
   captchaSoundEnabled: boolean;
+  captchaSoundFile: string; // e.g. 'alert1.mp3' from /sounds/
 
   // Card pool (pipe/CSV/space format, one per line)
   cardsText?: string;
@@ -242,6 +244,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     screenshotsOnError: true,
     captchaTimeout: 5,
     captchaSoundEnabled: true,
+    captchaSoundFile: 'taksi.mp3',
     cardsText: '',
 
     // Google Sheets Identity Graph (plaintext; encryption deferred)

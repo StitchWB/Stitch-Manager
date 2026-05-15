@@ -4,8 +4,7 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Design Tokens ──────────────────────────────────────────────────────── */
-:root {
-  color-scheme: dark;
+:host {
   /* Backgrounds */
   --tk-bg-deep: #070810;
   --tk-surface: rgba(14, 16, 28, 0.97);
@@ -73,7 +72,7 @@
 
 /* Light theme override */
 @media (prefers-color-scheme: light) {
-  :root:not(.tk-dark) {
+  :host(:not(.tk-dark)) {
     --tk-bg-deep: #f1f5f9;
     --tk-surface: rgba(255, 255, 255, 0.96);
     --tk-surface-elevated: rgba(248, 250, 252, 0.98);
@@ -93,7 +92,7 @@
 }
 
 /* Force dark */
-:root.tk-dark {
+:host(.tk-dark) {
   --tk-bg-deep: #070810;
   --tk-surface: rgba(12, 14, 24, 0.92);
   --tk-surface-elevated: rgba(20, 22, 36, 0.96);
@@ -108,7 +107,7 @@
 }
 
 /* Force light */
-:root.tk-light {
+:host(.tk-light) {
   --tk-bg-deep: #f1f5f9;
   --tk-surface: rgba(255, 255, 255, 0.96);
   --tk-surface-elevated: rgba(248, 250, 252, 0.98);
@@ -296,6 +295,7 @@
   background-color: var(--tk-surface);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: var(--tk-radius-xl);
+  color-scheme: dark;
   box-shadow: 
     0 0 0 1px rgba(0,0,0,0.4),
     0 16px 48px rgba(0, 0, 0, 0.6),

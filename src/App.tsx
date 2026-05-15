@@ -23,6 +23,7 @@ const Logs = lazy(() => import('./pages/Logs'));
 const Chat = lazy(() => import('./pages/Chat'));
 const ApiKeys = lazy(() => import('./pages/ApiKeys'));
 const Scenarios = lazy(() => import('./pages/Scenarios'));
+const Tools = lazy(() => import('./pages/Tools'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -89,6 +90,7 @@ function RouteTracker() {
         '/logs',
         '/chat',
         '/scenarios',
+        '/tools',
       ];
       // Simple check - if it starts with a known route base
       const isValid = validRoutes.some(
@@ -254,6 +256,7 @@ function App() {
             <Route path="/logs" element={<Logs />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/scenarios" element={<Scenarios />} />
+            <Route path="/tools" element={<Tools />} />
             <Route path="/api-keys" element={<Navigate to="/ai/api-keys" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

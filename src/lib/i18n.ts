@@ -105,6 +105,7 @@ export interface Translations {
     mail: string;
     chat: string;
     scenarios: string;
+    tools: string;
     system: string;
     settings: string;
     logs: string;
@@ -665,6 +666,7 @@ export interface Translations {
     pipelineSteps: string;
     stepEnabled: string;
     stepDisabled: string;
+    disabled: string;
     speed: string;
     slow: string;
     fast: string;

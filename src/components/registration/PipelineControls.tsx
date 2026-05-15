@@ -3,6 +3,8 @@ import { registrationControl, type PipelineControlAction } from '../../lib/tauri
 import { Button, Badge } from '@/components/ui';
 import { Play, SkipForward, Hand, X } from 'lucide-react';
 import { t } from '../../lib/i18n';
+import { useRegistrationStore } from '../../stores/registration';
+import { playCaptchaAlert, stopCaptchaAlert } from '../../lib/audio/captchaAlert';
 import type {
   PipelineStepConfig,
   PipelineStepStatus,
@@ -64,6 +66,31 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
   const [runFinished, setRunFinished] = useState(false);
   const listenersRef = useRef<(() => void)[]>([]);
   const jobIdRef = useRef<string | null>(null);
+  const alertIntervalRef = useRef<number | null>(null);
+
+  // Sound alert config
+  const { captchaSoundEnabled, captchaSoundFile } = useRegistrationStore(
+    state => ({
+      captchaSoundEnabled: state.config.advanced.captchaSoundEnabled,
+      captchaSoundFile: state.config.advanced.captchaSoundFile,
+    })
+  );
+
+  const startRepeatingAlert = useCallback(() => {
+    if (!captchaSoundEnabled || alertIntervalRef.current !== null) return;
+    playCaptchaAlert(captchaSoundFile);
+    alertIntervalRef.current = window.setInterval(() => {
+      playCaptchaAlert(captchaSoundFile);
+    }, 3000);
+  }, [captchaSoundEnabled, captchaSoundFile]);
+
+  const stopRepeatingAlert = useCallback(() => {
+    if (alertIntervalRef.current !== null) {
+      window.clearInterval(alertIntervalRef.current);
+      alertIntervalRef.current = null;
+    }
+    stopCaptchaAlert();
+  }, []);
 
   // Reset state when jobId changes (new run starts)
   useEffect(() => {
@@ -167,6 +194,9 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
                 s.id === normalized.stepId ? { ...s, status: 'waiting' as PipelineStepStatus } : s
               )
             );
+            if (normalized.reason === 'manual' && captchaSoundEnabled) {
+              startRepeatingAlert();
+            }
           }
         }
       });
@@ -174,21 +204,27 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
       await register('registration:pipeline_resumed', () => {
         setWaitingStep(null);
         setManualMode(false);
+        stopRepeatingAlert();
       });
 
       await register('registration:manual_mode_entered', () => {
         setManualMode(true);
+        if (captchaSoundEnabled) {
+          startRepeatingAlert();
+        }
       });
 
       await register('registration:manual_mode_exited', () => {
         setManualMode(false);
         setWaitingStep(null);
+        stopRepeatingAlert();
       });
 
       await register('registration:pipeline_aborted', () => {
         setWaitingStep(null);
         setManualMode(false);
         setRunFinished(true);
+        stopRepeatingAlert();
       });
 
       listenersRef.current = listeners;
@@ -197,6 +233,7 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
     return () => {
       cancelled = true;
       listeners.forEach((unlisten) => unlisten());
+      stopRepeatingAlert();
     };
   }, [jobId]);
 

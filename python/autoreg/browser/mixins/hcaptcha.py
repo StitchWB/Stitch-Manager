@@ -392,6 +392,14 @@ class HCaptchaMixin:
         - HCaptcha-container div (older Stripe integrations)
         - data-react-aria-top-layer overlay (newer Stripe)
         """
+        # If hCaptcha iframe disappeared entirely, it is solved/removed
+        try:
+            if not self._find_hcaptcha_iframe(page, timeout=1):
+                logger.debug("is_hcaptcha_solved: no hCaptcha iframe found — treating as solved")
+                return True
+        except Exception:
+            pass
+
         try:
             result = page.run_js("""
                 // Check HCaptcha-container textareas (Stripe hosted checkout)

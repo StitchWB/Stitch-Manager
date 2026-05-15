@@ -565,6 +565,16 @@ export default function AutoRegNext() {
         }
         cardsText={config.advanced.cardsText || ''}
         onCardsTextChange={cardsText => stableSetAdvancedSettings({ cardsText })}
+        captchaSoundEnabled={config.advanced.captchaSoundEnabled}
+        onCaptchaSoundEnabledChange={captchaSoundEnabled =>
+          stableSetAdvancedSettings({ captchaSoundEnabled })
+        }
+        captchaSoundFile={config.advanced.captchaSoundFile}
+        onCaptchaSoundFileChange={captchaSoundFile =>
+          stableSetAdvancedSettings({ captchaSoundFile })
+        }
+        captchaTimeout={config.advanced.captchaTimeout}
+        onCaptchaTimeoutChange={captchaTimeout => stableSetAdvancedSettings({ captchaTimeout })}
         networkConfig={networkConfig}
         onNetworkConfigChange={stableSetProxyConfig}
         pipelineSteps={currentPipelineSteps}
