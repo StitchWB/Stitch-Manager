@@ -85,6 +85,11 @@ interface RegistrationState {
   stageProgress: Map<string, StageProgressData>;
   stageTimers: Map<string, number>;
 
+  // Job tracking (survives page navigation)
+  pipelineJobId: string | null;
+  activeThreads: number;
+  isStopping: boolean;
+
   // Actions - Config (all trigger auto-save)
   setProvider: (provider: ProviderName) => void;
   setIMAPConfig: (imap: Partial<IMAPConfig>) => void;
@@ -121,6 +126,11 @@ interface RegistrationState {
 
   // Actions - WebSocket
   setWsConnected: (connected: boolean) => void;
+
+  // Actions - Job tracking (survive page navigation)
+  setPipelineJobId: (jobId: string | null) => void;
+  setActiveThreads: (threads: number) => void;
+  setIsStopping: (stopping: boolean) => void;
 }
 
 /**
@@ -258,8 +268,9 @@ export const useRegistrationStore = <T = RegistrationState>(
     currentStage: runtimeStore.currentStage,
     stageProgress: runtimeStore.stageProgress,
     stageTimers: runtimeStore.stageTimers,
-
-    // Persistence state
+    pipelineJobId: runtimeStore.pipelineJobId,
+    activeThreads: runtimeStore.activeThreads,
+    isStopping: runtimeStore.isStopping,
     settingsLoaded: persistenceStore.settingsLoaded,
     saveStatus: persistenceStore.saveStatus,
     imapPasswordSet: persistenceStore.imapPasswordSet,
@@ -291,6 +302,11 @@ export const useRegistrationStore = <T = RegistrationState>(
     addResult: runtimeStore.addResult,
     addHistoryEntry: runtimeStore.addHistoryEntry,
     setWsConnected: runtimeStore.setWsConnected,
+
+    // Job tracking actions (survive page navigation)
+    setPipelineJobId: runtimeStore.setPipelineJobId,
+    setActiveThreads: runtimeStore.setActiveThreads,
+    setIsStopping: runtimeStore.setIsStopping,
   };
 
   // Apply selector if provided
@@ -323,6 +339,9 @@ useRegistrationStore.getState = (): RegistrationState => {
     currentStage: runtimeStore.currentStage,
     stageProgress: runtimeStore.stageProgress,
     stageTimers: runtimeStore.stageTimers,
+    pipelineJobId: runtimeStore.pipelineJobId,
+    activeThreads: runtimeStore.activeThreads,
+    isStopping: runtimeStore.isStopping,
     settingsLoaded: persistenceStore.settingsLoaded,
     saveStatus: persistenceStore.saveStatus,
     imapPasswordSet: persistenceStore.imapPasswordSet,
@@ -397,5 +416,8 @@ useRegistrationStore.getState = (): RegistrationState => {
     addResult: runtimeStore.addResult,
     addHistoryEntry: runtimeStore.addHistoryEntry,
     setWsConnected: runtimeStore.setWsConnected,
+    setPipelineJobId: runtimeStore.setPipelineJobId,
+    setActiveThreads: runtimeStore.setActiveThreads,
+    setIsStopping: runtimeStore.setIsStopping,
   };
 };

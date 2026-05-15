@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useRegistrationStore } from '../../../stores/registration';
 import { listAccounts, updateAccountNotesTags } from '../../../lib/tauri';
@@ -6,7 +6,6 @@ import type { ObsEvent } from '@/lib/observability/types';
 import { remapLogLevel } from '../../../lib/logTransform';
 
 interface UseEventListenersProps {
-  onThreadsChange: (threads: number) => void;
   launchContext?: {
     source?: 'profile';
     profileAlias?: string;
@@ -14,12 +13,7 @@ interface UseEventListenersProps {
   } | null;
 }
 
-export const useEventListeners = ({ onThreadsChange, launchContext }: UseEventListenersProps) => {
-  const onThreadsChangeRef = useRef(onThreadsChange);
-
-  useEffect(() => {
-    onThreadsChangeRef.current = onThreadsChange;
-  }, [onThreadsChange]);
+export const useEventListeners = ({ launchContext }: UseEventListenersProps) => {
 
   useEffect(() => {
     const { addLog, addResult, loadSettings } = useRegistrationStore.getState();
@@ -64,13 +58,15 @@ export const useEventListeners = ({ onThreadsChange, launchContext }: UseEventLi
         addLog({ level: 'success', message: 'Registration completed successfully!' });
       }
       // Reset active threads when registration completes
-      onThreadsChangeRef.current(0);
+      const { setActiveThreads } = useRegistrationStore.getState();
+      setActiveThreads(0);
     });
 
     const unlistenError = listen<{ error: string }>('REGISTRATION_ERROR', event => {
       addLog({ level: 'error', message: `Registration error: ${event.payload.error}` });
       // Reset active threads on error
-      onThreadsChangeRef.current(0);
+      const { setActiveThreads } = useRegistrationStore.getState();
+      setActiveThreads(0);
     });
 
     // Listen for Registration V2 progress events

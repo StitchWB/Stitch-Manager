@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { useRegistrationStore } from '../../../stores/registration';
 import { useAppStore } from '../../../stores/app';
 import { stopRegistration } from '../../../lib/tauri';
@@ -20,7 +20,6 @@ interface UseRegistrationFlowProps {
     launchMode?: string;
   };
   pipelineStepOverrides?: PipelineStepOverride[];
-  onThreadsChange: (threads: number) => void;
 }
 
 export const useRegistrationFlow = ({
@@ -30,22 +29,17 @@ export const useRegistrationFlow = ({
   canStart,
   launchContext,
   pipelineStepOverrides,
-  onThreadsChange,
 }: UseRegistrationFlowProps) => {
   const { addNotification } = useAppStore();
-  const { addLog, addHistoryEntry } = useRegistrationStore();
-
-  const [activeThreads, setActiveThreads] = useState(0);
-  const [isStopping, setIsStopping] = useState(false);
+  const { addLog, addHistoryEntry, setActiveThreads, setIsStopping } = useRegistrationStore();
   const cancelledRef = useRef(false);
 
-  // Wrapper to sync threads with parent
+  // Writes directly to store — survives page navigation
   const handleSetActiveThreads = useCallback(
     (threads: number) => {
       setActiveThreads(threads);
-      onThreadsChange(threads);
     },
-    [onThreadsChange]
+    [setActiveThreads]
   );
 
   const handleStart = useCallback(async () => {
@@ -199,7 +193,8 @@ export const useRegistrationFlow = ({
   }, [config.imap, addLog, addNotification]);
 
   const handleStop = useCallback(async () => {
-    if (isStopping) return;
+    const currentIsStopping = useRegistrationStore.getState().isStopping;
+    if (currentIsStopping) return;
 
     setIsStopping(true);
     addLog({ level: 'warn', message: 'Stop requested - killing active processes...' });
@@ -218,11 +213,15 @@ export const useRegistrationFlow = ({
       handleSetActiveThreads(0);
       setIsStopping(false);
     }
-  }, [addLog, addNotification, isStopping, handleSetActiveThreads]);
+  }, [addLog, addNotification, handleSetActiveThreads]);
+
+  // Read from store so values survive page navigation
+  const activeThreadsFromStore = useRegistrationStore(state => state.activeThreads);
+  const isStoppingFromStore = useRegistrationStore(state => state.isStopping);
 
   return {
-    activeThreads,
-    isStopping,
+    activeThreads: activeThreadsFromStore,
+    isStopping: isStoppingFromStore,
     cancelledRef,
     handleStart,
     handleTestImap,
