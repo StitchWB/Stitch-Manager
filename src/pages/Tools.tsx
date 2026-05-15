@@ -123,8 +123,7 @@ export default function Tools() {
 
   /* ── Bulk-check progress ── */
   const [checkingProgress, setCheckingProgress] = useState<{ current: number; total: number } | null>(null);
-  const [batchInfo, setBatchInfo] = useState<{ current: number; total: number } | null>(null);
-  const [batchSize, setBatchSize] = useState(5);
+
 
   /* ── Presets ── */
   const presets = useBinPresetsStore(s => s.presets);
@@ -280,47 +279,69 @@ export default function Tools() {
     );
   }, []);
 
-  /* ── Check multiple in batches (parallel within batch, sequential between batches) ── */
-  const BATCH_DELAY_MS = 10000; // 10s = rate limit window
+  /* ── Check multiple with sliding window (max concurrent, refill immediately) ── */
+  const MAX_CONCURRENT = 5;
+  const WINDOW_RESET_MS = 10000; // 10s = rate limit window
 
   const checkMultiple = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
 
     setCheckingProgress({ current: 0, total: ids.length });
-    const totalBatches = Math.ceil(ids.length / batchSize);
-    setBatchInfo({ current: 0, total: totalBatches });
-    addDebugLog(`Starting bulk check: ${ids.length} cards, batch size: ${batchSize}, batches: ${totalBatches}`);
+    addDebugLog(`Starting sliding window: ${ids.length} cards, max concurrent: ${MAX_CONCURRENT}`);
 
-    for (let batchStart = 0; batchStart < ids.length; batchStart += batchSize) {
-      const batchNum = Math.floor(batchStart / batchSize) + 1;
-      const batch = ids.slice(batchStart, batchStart + batchSize);
-      setBatchInfo({ current: batchNum, total: totalBatches });
-      addDebugLog(`Batch ${batchNum}/${totalBatches}: cards ${batchStart + 1}-${Math.min(batchStart + batch.length, ids.length)}`);
+    let completed = 0;
+    let nextIndex = 0;
+    const running = new Map<string, Promise<void>>();
+    const startTimes = new Map<string, number>();
 
-      // Process batch in parallel
-      const batchResults = await Promise.all(
-        batch.map(async (id, idx) => {
-          await checkCard(id);
-          return batchStart + idx + 1;
-        })
-      );
+    const startNext = async () => {
+      if (nextIndex >= ids.length) return;
+      const id = ids[nextIndex++];
+      startTimes.set(id, Date.now());
+      
+      const promise = checkCard(id).then(() => {
+        completed++;
+        setCheckingProgress({ current: completed, total: ids.length });
+        running.delete(id);
+        // Immediately start next if window allows
+        if (running.size < MAX_CONCURRENT && nextIndex < ids.length) {
+          startNext();
+        }
+      });
+      
+      running.set(id, promise);
+    };
 
-      const processed = batchResults[batchResults.length - 1];
-      setCheckingProgress({ current: processed, total: ids.length });
-      addDebugLog(`Batch ${batchNum} done, processed: ${processed}/${ids.length}`);
+    // Start initial window
+    const initialCount = Math.min(MAX_CONCURRENT, ids.length);
+    addDebugLog(`Starting initial window: ${initialCount} cards`);
+    for (let i = 0; i < initialCount; i++) {
+      startNext();
+    }
 
-      // Wait between batches (except after last batch)
-      const nextBatchStart = batchStart + batchSize;
-      if (nextBatchStart < ids.length) {
-        addDebugLog(`Waiting ${BATCH_DELAY_MS / 1000}s before batch ${batchNum + 1}...`);
-        await sleep(BATCH_DELAY_MS);
+    // Wait for all to complete, refilling window as slots open
+    while (running.size > 0 || nextIndex < ids.length) {
+      if (running.size === 0 && nextIndex < ids.length) {
+        // Window empty but more cards remain - rate limit hit, wait for window reset
+        addDebugLog(`Window empty, waiting ${WINDOW_RESET_MS / 1000}s for rate limit reset...`);
+        await sleep(WINDOW_RESET_MS);
+        // Refill window
+        const refillCount = Math.min(MAX_CONCURRENT, ids.length - nextIndex);
+        addDebugLog(`Refilling window: ${refillCount} cards`);
+        for (let i = 0; i < refillCount; i++) {
+          startNext();
+        }
+      } else if (running.size > 0) {
+        // Wait for any to complete
+        await Promise.race(running.values());
+      } else {
+        break;
       }
     }
 
     setCheckingProgress(null);
-    setBatchInfo(null);
     toast.success(`Проверено ${ids.length} карт`);
-  }, [checkCard, batchSize]);
+  }, [checkCard]);
 
   const checkAll = useCallback(() => {
     const ids = cards.filter(c => !c.checkResult && !c.checking && !c.checkError).map(c => c.id);
@@ -530,9 +551,6 @@ export default function Tools() {
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-medium">
               <Loader2 size={12} className="animate-spin" />
               Checking {checkingProgress?.current ?? 0}/{checkingProgress?.total ?? stats.checking}
-              {batchInfo && (
-                <span className="text-indigo-300/70 ml-0.5">(batch {batchInfo.current}/{batchInfo.total})</span>
-              )}
             </span>
           )}
           <StatBadge count={stats.live} label="Live" color="emerald" />
@@ -604,19 +622,7 @@ export default function Tools() {
               {cards.length > 0 && (
                 <>
                   <Button size="sm" variant="secondary" onClick={() => void copyAll()} leftIcon={<Copy size={14} />}>Copy All</Button>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="secondary" onClick={() => void checkAll()} leftIcon={<CreditCard size={14} />}>Check All</Button>
-                    <select
-                      value={batchSize}
-                      onChange={e => setBatchSize(Number(e.target.value))}
-                      className="h-7 px-1.5 text-[11px] rounded bg-white/[0.03] border border-white/10 text-slate-300 focus:outline-none focus:border-indigo-500/30"
-                      title="Batch size (parallel requests)"
-                    >
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => void checkAll()} leftIcon={<CreditCard size={14} />}>Check All</Button>
                   <Button size="sm" variant="secondary" onClick={exportResults} leftIcon={<Download size={14} />}>Export</Button>
                   <Button size="sm" variant="ghost" onClick={() => useCardToolsStore.getState().clearCards()} leftIcon={<Trash2 size={14} />}>Clear</Button>
                 </>
