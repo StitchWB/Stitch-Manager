@@ -344,7 +344,7 @@ export default function Tools() {
   }, [checkCard]);
 
   const checkAll = useCallback(() => {
-    const ids = cards.filter(c => !c.checkResult && !c.checking && !c.checkError).map(c => c.id);
+    const ids = cards.filter(c => !c.checking && !c.checkError).map(c => c.id);
     if (ids.length === 0) {
       toast.info('Нет карт для проверки');
       return;
@@ -353,7 +353,7 @@ export default function Tools() {
   }, [cards, checkMultiple]);
 
   const checkSelected = useCallback(() => {
-    const ids = cards.filter(c => c.selected && !c.checkResult && !c.checking && !c.checkError).map(c => c.id);
+    const ids = cards.filter(c => c.selected && !c.checking && !c.checkError).map(c => c.id);
     if (ids.length === 0) {
       toast.info('Нет выбранных карт для проверки');
       return;
