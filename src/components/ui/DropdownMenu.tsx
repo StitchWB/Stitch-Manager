@@ -40,6 +40,7 @@ export function DropdownMenu<TValue = string>({
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const selectedOption = useMemo(() => options.find(opt => opt.value === value), [options, value]);
   const selectedIndex = useMemo(
@@ -96,7 +97,10 @@ export function DropdownMenu<TValue = string>({
   useEffect(() => {
     if (!isOpen) return;
     const onOutsideClick = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideRoot = rootRef.current?.contains(target) ?? false;
+      const insideMenu = menuRef.current?.contains(target) ?? false;
+      if (!insideRoot && !insideMenu) {
         setIsOpen(false);
       }
     };
@@ -142,6 +146,7 @@ export function DropdownMenu<TValue = string>({
 
   const menu = isOpen ? (
     <div
+      ref={menuRef}
       className={cn(
         'z-50 bg-ds-surface-elevated/95 backdrop-blur-xl border border-ds-border rounded-lg shadow-2xl overflow-hidden animate-fade-in max-w-full',
         menuClassName
