@@ -10,6 +10,7 @@ import type { ProviderName } from '../../types/ui';
 
 type ExtendedSettingsData = SettingsData & {
   captchaSoundFile?: string;
+  cardBin?: string;
 };
 import type { LogVerbosity } from '../../constants/logging';
 import type {
@@ -167,6 +168,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
           captchaSoundEnabled: settings.captchaSoundEnabled !== false,
           captchaSoundFile: captchaSoundFile || settings.captchaSoundFile || 'taksi.mp3',
           cardsText: settings.cardsText || '',
+          cardBin: settings.cardBin || '',
         },
         count: settings.count || 1,
         timeout: 60000,
@@ -261,6 +263,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         captchaTimeout: config.advanced.captchaTimeout,
         captchaSoundEnabled: config.advanced.captchaSoundEnabled,
         cardsText: config.advanced.cardsText || '',
+        cardBin: config.advanced.cardBin || '',
 
         // Save addy.io settings (global)
         addyioEnabled: config.imap.addyioEnabled || false,

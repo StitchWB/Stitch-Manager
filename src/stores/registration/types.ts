@@ -132,6 +132,7 @@ export interface AdvancedSettings {
 
   // Card pool (pipe/CSV/space format, one per line)
   cardsText?: string;
+  cardBin?: string; // BIN for auto-generating Live cards
 
   // Google Sheets Identity Graph (NO encryption in this phase)
   googleSheetsSpreadsheetId?: string;
@@ -246,6 +247,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     captchaSoundEnabled: true,
     captchaSoundFile: 'taksi.mp3',
     cardsText: '',
+    cardBin: '',
 
     // Google Sheets Identity Graph (plaintext; encryption deferred)
     googleSheetsSpreadsheetId: '',
