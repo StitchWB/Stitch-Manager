@@ -4,7 +4,12 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  CreditCard,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
+import { findLiveCard } from '../../lib/cardGenerator';
+import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';
 import type { ProviderName } from '../../types/ui';
@@ -49,6 +54,8 @@ interface EngineTabProps {
   onScreenshotsOnErrorChange: (enabled: boolean) => void;
   cardsText?: string;
   onCardsTextChange?: (text: string) => void;
+  cardBin?: string;
+  onCardBinChange?: (text: string) => void;
   disabled?: boolean;
 }
 
@@ -173,8 +180,41 @@ export function EngineTab({
   onScreenshotsOnErrorChange,
   cardsText,
   onCardsTextChange,
+  cardBin,
+  onCardBinChange,
   disabled,
 }: EngineTabProps) {
+  const [cardMode, setCardMode] = useState<'manual' | 'auto'>(cardsText ? 'manual' : 'auto');
+  const [findingLive, setFindingLive] = useState(false);
+  const [findProgress, setFindProgress] = useState({ current: 0, total: 0 });
+  const [lastFoundCard, setLastFoundCard] = useState<string | null>(null);
+
+  const handleFindLive = async () => {
+    if (!cardBin || findingLive) return;
+    setFindingLive(true);
+    setLastFoundCard(null);
+    
+    const result = await findLiveCard({
+      bin: cardBin,
+      maxAttempts: 20,
+      onProgress: (current, total) => setFindProgress({ current, total }),
+      onCardChecked: (card, checkResult) => {
+        if (checkResult.success && checkResult.status === 'Live') {
+          setLastFoundCard(card);
+        }
+      },
+    });
+    
+    setFindingLive(false);
+    
+    if (result.success && result.card) {
+      onCardsTextChange?.(result.card);
+      toast.success(`Live карта найдена за ${result.attempts} попыток!`);
+    } else {
+      toast.error(result.message || 'Не удалось найти Live карту');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2">
       {/* ===== CRITICAL SETTINGS — always visible, compact, single card ===== */}
@@ -364,19 +404,92 @@ export function EngineTab({
           </div>
         </CompactGroup>
 
-        {provider === 'fireworks' && onCardsTextChange && (
+        {provider === 'fireworks' && (onCardsTextChange || onCardBinChange) && (
           <CompactGroup title="Карты">
-            <Textarea
-              value={cardsText || ''}
-              onChange={e => onCardsTextChange(e.target.value)}
-              placeholder={`4242424242424242|12|2026|123\n5555555555554444|01|2027|456`}
-              rows={2}
-              disabled={disabled}
-              className="font-mono text-xs min-h-[60px]"
-            />
-            {cardsText && (
-              <div className="mt-1 text-[11px] text-slate-500">
-                {cardsText.split('\n').filter(l => l.trim()).length} карт загружено
+            {/* Mode toggle */}
+            <div className="flex gap-1 mb-2">
+              <button
+                onClick={() => setCardMode('manual')}
+                className={cn(
+                  'px-2 py-0.5 text-[11px] rounded transition-colors',
+                  cardMode === 'manual' ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-500 hover:text-slate-300'
+                )}
+              >
+                Manual
+              </button>
+              <button
+                onClick={() => setCardMode('auto')}
+                className={cn(
+                  'px-2 py-0.5 text-[11px] rounded transition-colors',
+                  cardMode === 'auto' ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-500 hover:text-slate-300'
+                )}
+              >
+                Auto
+              </button>
+            </div>
+
+            {cardMode === 'manual' ? (
+              <>
+                <Textarea
+                  value={cardsText || ''}
+                  onChange={e => onCardsTextChange?.(e.target.value)}
+                  placeholder={`4242424242424242|12|2026|123\n5555555555554444|01|2027|456`}
+                  rows={2}
+                  disabled={disabled}
+                  className="font-mono text-xs min-h-[60px]"
+                />
+                {cardsText && (
+                  <div className="mt-1 text-[11px] text-slate-500">
+                    {cardsText.split('\n').filter(l => l.trim()).length} карт загружено
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    value={cardBin || ''}
+                    onChange={e => onCardBinChange?.(e.target.value)}
+                    placeholder="515462002112xxxx"
+                    disabled={disabled || findingLive}
+                    className="flex-1 px-2 py-1 text-xs font-mono rounded bg-white/[0.03] border border-white/10 text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/30"
+                  />
+                  <button
+                    onClick={handleFindLive}
+                    disabled={disabled || findingLive || !cardBin}
+                    className={cn(
+                      'px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1 transition-colors',
+                      findingLive || !cardBin
+                        ? 'bg-white/[0.03] text-slate-600 cursor-not-allowed'
+                        : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20'
+                    )}
+                  >
+                    {findingLive ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        {findProgress.current}/{findProgress.total}
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={12} />
+                        Find Live
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                {lastFoundCard && (
+                  <div className="text-[11px] text-emerald-400 flex items-center gap-1">
+                    <CreditCard size={12} />
+                    Live: {lastFoundCard}
+                  </div>
+                )}
+                
+                {cardsText && !lastFoundCard && (
+                  <div className="text-[11px] text-slate-500">
+                    Сохранено: {cardsText.split('\n').filter(l => l.trim()).length} карт
+                  </div>
+                )}
               </div>
             )}
           </CompactGroup>

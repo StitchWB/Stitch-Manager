@@ -562,6 +562,8 @@ export default function AutoRegNext() {
         }
         cardsText={config.advanced.cardsText || ''}
         onCardsTextChange={cardsText => stableSetAdvancedSettings({ cardsText })}
+        cardBin={config.advanced.cardBin || ''}
+        onCardBinChange={(cardBin: string) => stableSetAdvancedSettings({ cardBin })}
         captchaSoundEnabled={config.advanced.captchaSoundEnabled}
         onCaptchaSoundEnabledChange={captchaSoundEnabled =>
           stableSetAdvancedSettings({ captchaSoundEnabled })

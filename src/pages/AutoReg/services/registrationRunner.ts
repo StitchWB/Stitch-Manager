@@ -615,6 +615,7 @@ async function runProviderRegistration(params: {
       correlationId: createCorrelationId(),
       cardsFile: null,
       cardsText: config.advanced.cardsText?.trim() || null,
+      cardBin: config.advanced.cardBin?.trim() || null,
       captchaTimeout: config.advanced.captchaTimeout,
       captchaSoundEnabled: config.advanced.captchaSoundEnabled,
       debug: config.logVerbosity === 'debug',

@@ -138,6 +138,7 @@ export interface FireworksAutoregConfig {
   correlationId: string | null;
   cardsFile: string | null;
   cardsText: string | null;
+  cardBin: string | null;
   captchaTimeout: number;
   captchaSoundEnabled: boolean;
   debug?: boolean;

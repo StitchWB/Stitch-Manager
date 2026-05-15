@@ -84,6 +84,10 @@ interface CommandCenterProps {
   captchaTimeout: number;
   onCaptchaTimeoutChange: (timeout: number) => void;
 
+  // Cards
+  cardBin?: string;
+  onCardBinChange?: (text: string) => void;
+
   // Network
   networkConfig: NetworkConfig;
   onNetworkConfigChange: (updates: any) => void;
@@ -158,6 +162,8 @@ export const CommandCenter = ({
   onScreenshotsOnErrorChange,
   cardsText,
   onCardsTextChange,
+  cardBin,
+  onCardBinChange,
   captchaSoundEnabled,
   onCaptchaSoundEnabledChange,
   captchaSoundFile,
@@ -274,6 +280,8 @@ export const CommandCenter = ({
             onScreenshotsOnErrorChange={onScreenshotsOnErrorChange}
             cardsText={cardsText}
             onCardsTextChange={onCardsTextChange}
+            cardBin={cardBin}
+            onCardBinChange={onCardBinChange}
             disabled={disabled}
           />
         )}
