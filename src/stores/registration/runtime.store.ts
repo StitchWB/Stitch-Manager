@@ -98,6 +98,14 @@ interface RuntimeState {
   // Actions - Status
   setIsRunning: (running: boolean) => void;
   setStatus: (status: RegistrationStatus) => void;
+
+  // Job tracking (survives page navigation)
+  pipelineJobId: string | null;
+  activeThreads: number;
+  isStopping: boolean;
+  setPipelineJobId: (jobId: string | null) => void;
+  setActiveThreads: (threads: number) => void;
+  setIsStopping: (stopping: boolean) => void;
 }
 
 export const useRuntimeStore = create<RuntimeState>((set, get) => ({
@@ -112,6 +120,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   failedCount: 0,
   history: [],
   wsConnected: false,
+
+  // Job tracking (survives page navigation)
+  pipelineJobId: null,
+  activeThreads: 0,
+  isStopping: false,
 
   // Stage progress tracking
   currentStage: null,
@@ -277,4 +290,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // Status actions
   setIsRunning: (running: boolean) => set({ isRunning: running }),
   setStatus: (status: RegistrationStatus) => set({ status }),
+
+  // Job tracking actions (survive page navigation)
+  setPipelineJobId: (pipelineJobId: string | null) => set({ pipelineJobId }),
+  setActiveThreads: (activeThreads: number) => set({ activeThreads }),
+  setIsStopping: (isStopping: boolean) => set({ isStopping }),
 }));
