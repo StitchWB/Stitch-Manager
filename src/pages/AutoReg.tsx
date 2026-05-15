@@ -83,10 +83,13 @@ export default function AutoRegNext() {
   }, [config.provider, autoRegSupportedProviders, stableSetProvider]);
 
   // Use UI preferences for persistent state
-  const { autoRegPage, setAutoRegTab, setAutoRegV2, setAutoRegRunning } = useUIPreferencesStore();
+  const { autoRegPage, setAutoRegTab, setAutoRegV2 } = useUIPreferencesStore();
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
-  const [pipelineJobId, setPipelineJobId] = useState<string | null>(null);
+
+  // Job tracking — read from global store so it survives page navigation
+  const pipelineJobId = useRegistrationStore(state => state.pipelineJobId);
+  const setPipelineJobId = useRegistrationStore(state => state.setPipelineJobId);
   const [showDebugLogs, setShowDebugLogs] = useUIState('autoreg-show-debug-logs', false, 'session');
   const [launchContext, setLaunchContext] = useUIState(
     'autoreg-launch-context',
@@ -140,11 +143,6 @@ export default function AutoRegNext() {
 
   const handleSetUseRegistrationV2 = (enabled: boolean) => {
     setAutoRegV2(enabled);
-  };
-
-  // Sync activeThreads with isRunning preference
-  const handleSetActiveThreads = (threads: number) => {
-    setAutoRegRunning(threads > 0);
   };
 
   // Get email domain for pattern generation
@@ -221,10 +219,9 @@ export default function AutoRegNext() {
       canStart,
       launchContext: launchContext || undefined,
       pipelineStepOverrides: currentPipelineSteps,
-      onThreadsChange: handleSetActiveThreads,
     });
 
-  useEventListeners({ onThreadsChange: handleSetActiveThreads, launchContext });
+  useEventListeners({ launchContext });
 
   const isRunning = activeThreads > 0 || isStopping;
 
