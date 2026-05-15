@@ -6,6 +6,7 @@ import {
   EngineTab,
   NetworkTab,
   AutomationTab,
+  SoundsTab,
   LaunchPad,
 } from '../../../components/registration';
 import type { PipelineStepOverride } from '../../../components/registration/PipelineStepConfigPanel';
@@ -74,6 +75,14 @@ interface CommandCenterProps {
   onScreenshotsOnErrorChange: (enabled: boolean) => void;
   cardsText?: string;
   onCardsTextChange?: (text: string) => void;
+
+  // Sounds
+  captchaSoundEnabled: boolean;
+  onCaptchaSoundEnabledChange: (enabled: boolean) => void;
+  captchaSoundFile: string;
+  onCaptchaSoundFileChange: (file: string) => void;
+  captchaTimeout: number;
+  onCaptchaTimeoutChange: (timeout: number) => void;
 
   // Network
   networkConfig: NetworkConfig;
@@ -149,6 +158,12 @@ export const CommandCenter = ({
   onScreenshotsOnErrorChange,
   cardsText,
   onCardsTextChange,
+  captchaSoundEnabled,
+  onCaptchaSoundEnabledChange,
+  captchaSoundFile,
+  onCaptchaSoundFileChange,
+  captchaTimeout,
+  onCaptchaTimeoutChange,
   networkConfig,
   onNetworkConfigChange,
   pipelineSteps,
@@ -268,6 +283,18 @@ export const CommandCenter = ({
         )}
 
         {activeTab === 'automation' && <AutomationTab disabled={disabled} />}
+
+        {activeTab === 'sounds' && (
+          <SoundsTab
+            captchaSoundEnabled={captchaSoundEnabled}
+            onCaptchaSoundEnabledChange={onCaptchaSoundEnabledChange}
+            captchaSoundFile={captchaSoundFile}
+            onCaptchaSoundFileChange={onCaptchaSoundFileChange}
+            captchaTimeout={captchaTimeout}
+            onCaptchaTimeoutChange={onCaptchaTimeoutChange}
+            disabled={disabled}
+          />
+        )}
 
         {/* Tab 'inbox' removed — inbox settings merged into identity tab */}
       </div>

@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class StaticEmailGenerator(IEmailGenerator):
-    """Generator that returns the same email every time"""
+    """Generator that returns the same email every time."""
     
     def __init__(self, email: str):
         """

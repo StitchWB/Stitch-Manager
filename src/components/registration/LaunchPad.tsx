@@ -118,7 +118,7 @@ export function LaunchPad({
             onClick={() => setShowStepConfig(!showStepConfig)}
             className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-white/[0.02] transition-colors"
           >
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[11px] text-slate-200 font-semibold tracking-wide uppercase">
               {t('autoReg.pipelineSteps')}
             </span>
             <ChevronDown

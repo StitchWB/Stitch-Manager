@@ -35,7 +35,7 @@ interface LogsPagePreferences {
 }
 
 interface AutoRegPagePreferences {
-  activeTab: 'identity' | 'engine' | 'network' | 'automation' | 'inbox';
+  activeTab: 'identity' | 'engine' | 'network' | 'automation' | 'inbox' | 'sounds';
   useRegistrationV2: boolean;
 
   isRunning: boolean; // Track if registration is in progress
@@ -88,7 +88,7 @@ interface UIPreferencesState {
   resetLogsFilters: () => void;
 
   // Actions for AutoReg page
-  setAutoRegTab: (tab: 'identity' | 'engine' | 'network' | 'automation' | 'inbox') => void;
+  setAutoRegTab: (tab: 'identity' | 'engine' | 'network' | 'automation' | 'inbox' | 'sounds') => void;
   setAutoRegV2: (enabled: boolean) => void;
 
   setAutoRegRunning: (running: boolean) => void;

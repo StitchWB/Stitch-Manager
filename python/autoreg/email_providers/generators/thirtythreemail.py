@@ -1,24 +1,33 @@
-"""33mail.com email generator"""
+"""33mail.com email generator with template support"""
 import logging
 import random
 import string
 from ..base import IEmailGenerator, EmailContext
+from .template_utils import render_template, TemplateState
 
 logger = logging.getLogger(__name__)
 
 
 class ThirtyThreeMailGenerator(IEmailGenerator):
-    """Generator for 33mail.com addresses"""
+    """Generator for 33mail.com addresses with template support."""
     
-    def __init__(self, username: str):
+    def __init__(
+        self,
+        username: str,
+        template: str | None = None,
+    ):
         """
         Initialize 33mail generator
         
         Args:
             username: 33mail username (e.g., "myusername")
+            template: Optional template for local part (default "{rnd12}")
+                Supported: {rndN}, {counter}, {time}, {name}, {uuid4}, {uuid4_8}
         """
         self.username = username
         self.domain = f"{username}.33mail.com"
+        self.template = template or "{rnd12}"
+        self._state = TemplateState()
     
     def _generate_random_prefix(self, length: int = 8) -> str:
         """Generate random alphanumeric prefix"""
@@ -29,20 +38,16 @@ class ThirtyThreeMailGenerator(IEmailGenerator):
         Generate 33mail address
         
         Args:
-            description: Optional description (used as prefix if provided)
+            description: Optional description (used by {name} placeholder)
             
         Returns:
             EmailContext with 33mail address
         """
-        # Use description as prefix if provided, otherwise random
-        if description:
-            # Sanitize description for email
-            clean_desc = description.lower().replace(' ', '-')[:20]
-            # Add random suffix to make each email unique
-            random_suffix = self._generate_random_prefix(length=8)
-            prefix = f"{clean_desc}-{random_suffix}"
-        else:
-            prefix = self._generate_random_prefix()
+        prefix = render_template(
+            self.template,
+            state=self._state,
+            description=description,
+        )
         
         email = f"{prefix}@{self.domain}"
         
@@ -62,7 +67,8 @@ class ThirtyThreeMailGenerator(IEmailGenerator):
             metadata={
                 'type': '33mail',
                 'prefix': prefix,
-                'description': description
+                'template': self.template,
+                'description': description,
             }
         )
     

@@ -5,12 +5,13 @@ from ..base import IEmailGenerator, EmailContext
 from ..utils.retry import retry_with_backoff
 from ..utils.rate_limiter import handle_rate_limit
 from ...services.addyio import AddyIoService, AddyIoConfig
+from .template_utils import render_template, TemplateState
 
 logger = logging.getLogger(__name__)
 
 
 class AddyIoEmailGenerator(IEmailGenerator):
-    """Generator that creates Addy.io aliases"""
+    """Generator that creates Addy.io aliases with optional template support."""
     
     def __init__(self, addyio_config: AddyIoConfig):
         """
@@ -21,6 +22,8 @@ class AddyIoEmailGenerator(IEmailGenerator):
         """
         self.config = addyio_config
         self.service = AddyIoService(addyio_config)
+        self._template = getattr(addyio_config, 'template', None)
+        self._state = TemplateState()
     
     @handle_rate_limit(max_retries=3)
     def _create_alias_with_retry(self, description: str) -> dict:
@@ -51,7 +54,7 @@ class AddyIoEmailGenerator(IEmailGenerator):
         Generate Addy.io alias
         
         Args:
-            description: Description for the alias
+            description: Optional description for the alias (supports templates)
             
         Returns:
             EmailContext with Addy.io alias
@@ -60,7 +63,15 @@ class AddyIoEmailGenerator(IEmailGenerator):
             requests.HTTPError: If API request fails
             RateLimitError: If rate limit persists
         """
-        desc = description or "Auto-registration"
+        if self._template:
+            desc = render_template(
+                self._template,
+                state=self._state,
+                description=description,
+            )
+        else:
+            desc = description or "Auto-registration"
+        
         logger.info(f"Creating Addy.io alias: {desc}")
         
         try:
@@ -75,8 +86,10 @@ class AddyIoEmailGenerator(IEmailGenerator):
                 metadata={
                     'type': 'addyio',
                     'description': desc,
+                    'template': self._template,
                     'alias_data': alias_data
                 }
+             
             )
         except Exception as e:
             logger.error(f"Failed to create Addy.io alias: {e}")
