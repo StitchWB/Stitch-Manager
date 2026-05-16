@@ -2,7 +2,7 @@ import { LayoutGrid } from 'lucide-react';
 import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
 import { QuotaDashboard } from '../QuotaDashboard';
 import { cn } from '../../../lib/utils';
-import { t } from '../../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { ButtonBase } from '@/components/ui';
 
 

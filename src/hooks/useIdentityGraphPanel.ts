@@ -382,7 +382,7 @@ export function useIdentityGraphPanel({
   const resolvedDataset = dataset ?? emptyDataset;
   const graph = resolvedDataset.identityGraph ?? emptyDataset.identityGraph;
   const services = useMemo(() => extractServiceAccounts(resolvedDataset), [resolvedDataset]);
-  const linksRaw = resolvedDataset.raw?.links ?? [];
+  const linksRaw = useMemo(() => resolvedDataset.raw?.links ?? [], [resolvedDataset.raw?.links]);
   const parsedLinks = useMemo(() => linksRaw.map(parseLinkRow), [linksRaw]);
   const schemaIssues = resolvedDataset.raw?.schemaIssues ?? [];
   const invalidRows = resolvedDataset.invalidRows ?? [];
@@ -392,7 +392,7 @@ export function useIdentityGraphPanel({
     (state: { accountsPage: { providerFilter?: string } }) =>
       state.accountsPage.providerFilter || 'all'
   );
-  const localProfiles = localProfilesProp ?? [];
+  const localProfiles = useMemo(() => localProfilesProp ?? [], [localProfilesProp]);
 
   const accountOptions = useMemo(() => {
     return localAccounts

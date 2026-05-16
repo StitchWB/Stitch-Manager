@@ -2,7 +2,7 @@ import { Copy, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import type { AuthFile } from '../../../types/generated';
-import { t } from '../../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { Button, Checkbox, ConfirmDialog, Modal, Select, Textarea } from '@/components/ui';
 
 interface ImportValidationState {

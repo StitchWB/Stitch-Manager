@@ -9,20 +9,20 @@ export const createDebouncedSave = (
   delay: number = 500
 ) => {
   return (settingsLoaded: boolean) => {
-    console.log('[DEBOUNCE] triggerSave called, settingsLoaded:', settingsLoaded);
+    console.warn('[DEBOUNCE] triggerSave called, settingsLoaded:', settingsLoaded);
     if (!settingsLoaded) {
-      console.log('[DEBOUNCE] settings not loaded yet, skipping');
+      console.warn('[DEBOUNCE] settings not loaded yet, skipping');
       return;
     }
 
     if (saveTimeout) {
-      console.log('[DEBOUNCE] clearing existing timeout');
+      console.warn('[DEBOUNCE] clearing existing timeout');
       clearTimeout(saveTimeout);
     }
 
-    console.log('[DEBOUNCE] setting timeout for', delay, 'ms');
+    console.warn('[DEBOUNCE] setting timeout for', delay, 'ms');
     saveTimeout = setTimeout(async () => {
-      console.log('[DEBOUNCE] timeout fired, calling saveCallback');
+      console.warn('[DEBOUNCE] timeout fired, calling saveCallback');
       await saveCallback();
     }, delay);
   };

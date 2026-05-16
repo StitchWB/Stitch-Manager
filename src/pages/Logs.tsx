@@ -350,7 +350,7 @@ export default function Logs() {
     } catch (err) {
       console.error('Failed to clear logs:', err);
     }
-  }, [clearLogs, setLogsSelectedLogId]);
+  }, [clearLogs, setLogsSelectedLogId, setShowClearConfirm]);
 
   const handleExport = useCallback(async () => {
     try {
@@ -467,7 +467,7 @@ export default function Logs() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [isResizingPane, setLogsDetailsPaneWidth]);
+  }, [isResizingPane, setLogsDetailsPaneWidth, setIsResizingPane]);
 
   useEffect(() => {
     if (!selectedLogId) return;
@@ -614,7 +614,7 @@ export default function Logs() {
         actions={
           <div className="flex items-center gap-2">
             <Badge variant="info" size="sm">
-              Verbosity: {logVerbosity}
+              {t('logs.verbosityLabel')}: {logVerbosity}
             </Badge>
             <Button
               size="xs"
@@ -885,10 +885,10 @@ export default function Logs() {
 
           <div className="ml-auto flex items-center gap-2">
             <Badge variant="outline" size="sm">
-              F: Search
+              {t('logs.keyboardSearch')}
             </Badge>
             <Badge variant="outline" size="sm">
-              [ / ]: Tabs
+              {t('logs.keyboardTabs')}
             </Badge>
           </div>
         </div>
@@ -985,24 +985,24 @@ export default function Logs() {
           className="hidden xl:flex border-l border-white/5 bg-ds-surface-base p-4 flex-col gap-3"
           style={{ width: `${detailsPaneWidth}px` }}
         >
-          <div className="text-xs uppercase tracking-wider text-slate-500">Details</div>
+          <div className="text-xs uppercase tracking-wider text-slate-500">{t('logs.detailsPanel')}</div>
           {!selectedLog ? (
-            <div className="text-sm text-slate-500">Select a log row to inspect details</div>
+            <div className="text-sm text-slate-500">{t('logs.selectLogHint')}</div>
           ) : (
             <>
               <div className="flex items-center justify-between gap-2">
-                <div className="text-[11px] text-slate-500">Error navigation</div>
+                <div className="text-[11px] text-slate-500">{t('logs.errorNavigation')}</div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" size="sm">
                     {errorLogIds.length === 0
-                      ? 'Error 0/0'
-                      : `Error ${selectedErrorIndex >= 0 ? selectedErrorIndex + 1 : 1}/${errorLogIds.length}`}
+                      ? `${t('logs.error')} 0/0`
+                      : `${t('logs.error')} ${selectedErrorIndex >= 0 ? selectedErrorIndex + 1 : 1}/${errorLogIds.length}`}
                   </Badge>
                   <Button size="xs" variant="ghost" onClick={() => jumpToError('prev')}>
-                    Prev error
+                    {t('logs.prevError')}
                   </Button>
                   <Button size="xs" variant="ghost" onClick={() => jumpToError('next')}>
-                    Next error
+                    {t('logs.nextError')}
                   </Button>
                 </div>
               </div>
@@ -1025,15 +1025,15 @@ export default function Logs() {
                 </span>
               </div>
 
-              <div className="text-xs text-slate-400">Source</div>
+              <div className="text-xs text-slate-400">{t('logs.sourceLabel')}</div>
               <div className="text-sm text-slate-200">{selectedLog.source}</div>
 
-              <div className="text-xs text-slate-400">Channel</div>
+              <div className="text-xs text-slate-400">{t('logs.channelLabel')}</div>
               <div className="text-sm text-slate-200">{selectedLog.channel || 'app'}</div>
 
               {selectedLog.correlationId ? (
                 <>
-                  <div className="text-xs text-slate-400">Correlation ID</div>
+                  <div className="text-xs text-slate-400">{t('logs.correlationIdLabel')}</div>
                   <div className="text-[11px] font-mono text-slate-300 break-all">
                     {selectedLog.correlationId}
                   </div>
@@ -1042,21 +1042,21 @@ export default function Logs() {
 
               {selectedLog.sessionId ? (
                 <>
-                  <div className="text-xs text-slate-400">Session ID</div>
+                  <div className="text-xs text-slate-400">{t('logs.sessionIdLabel')}</div>
                   <div className="text-[11px] font-mono text-slate-300 break-all">
                     {selectedLog.sessionId}
                   </div>
                 </>
               ) : null}
 
-              <div className="text-xs text-slate-400">Message</div>
+              <div className="text-xs text-slate-400">{t('logs.messageLabel')}</div>
               <div className="text-sm text-slate-200 whitespace-pre-wrap break-words">
                 {selectedLog.message}
               </div>
 
               {selectedLog.context ? (
                 <>
-                  <div className="text-xs text-slate-400">Context</div>
+                  <div className="text-xs text-slate-400">{t('logs.contextLabel')}</div>
                   <pre className="text-[11px] font-mono text-slate-300 bg-black/30 border border-white/10 rounded-md p-2 overflow-auto max-h-56">
                     {JSON.stringify(selectedLog.context, null, 2)}
                   </pre>
@@ -1071,7 +1071,7 @@ export default function Logs() {
                     void copyMessage(selectedLog.message, selectedLog.id);
                   }}
                 >
-                  Copy message
+                  {t('logs.copyMessage')}
                 </Button>
                 <Button
                   size="xs"
@@ -1081,7 +1081,7 @@ export default function Logs() {
                     void copyTextToClipboard({ text: payload });
                   }}
                 >
-                  Copy JSON
+                  {t('logs.copyJson')}
                 </Button>
               </div>
             </>

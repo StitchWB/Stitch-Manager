@@ -10,7 +10,7 @@ import {
 
 import { createPortal } from 'react-dom';
 import { Columns3, RotateCcw } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { ButtonBase, Checkbox } from '@/components/ui';
 
 

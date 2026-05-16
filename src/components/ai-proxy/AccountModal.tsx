@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { t } from "@/lib/i18n";import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { createAiProxyAccount, updateAiProxyAccount } from '../../lib/tauri/modules/aiProxy';
@@ -14,26 +14,26 @@ interface AccountModalProps {
 }
 
 const PROVIDERS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'claude', label: 'Claude' },
-  { value: 'gemini', label: 'Gemini' },
-  { value: 'kiro', label: 'Kiro' },
-  { value: 'antigravity', label: 'Antigravity' },
-  { value: 'fireworks', label: 'Fireworks AI' },
-];
+{ value: 'openai', label: 'OpenAI' },
+{ value: 'claude', label: 'Claude' },
+{ value: 'gemini', label: 'Gemini' },
+{ value: 'kiro', label: 'Kiro' },
+{ value: 'antigravity', label: 'Antigravity' },
+{ value: 'fireworks', label: 'Fireworks AI' }];
+
 
 const AUTH_METHODS = [
-  { value: 'oauth', label: 'OAuth Token' },
-  { value: 'api_key', label: 'API Key' },
-  { value: 'session', label: 'Session Token' },
-];
+{ value: 'oauth', label: 'OAuth Token' },
+{ value: 'api_key', label: 'API Key' },
+{ value: 'session', label: 'Session Token' }];
+
 
 const ACCOUNT_TYPES = [
-  { value: 'free', label: 'Free' },
-  { value: 'pro', label: 'Pro' },
-  { value: 'team', label: 'Team' },
-  { value: 'enterprise', label: 'Enterprise' },
-];
+{ value: 'free', label: 'Free' },
+{ value: 'pro', label: 'Pro' },
+{ value: 'team', label: 'Team' },
+{ value: 'enterprise', label: 'Enterprise' }];
+
 
 // Providers that support OAuth
 const OAUTH_PROVIDERS = ['openai', 'claude', 'gemini', 'kiro', 'antigravity', 'fireworks'];
@@ -49,18 +49,18 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
     accountType: 'free',
     enabled: true,
     softQuotaTokensDaily: '',
-    softQuotaRequestsDaily: '',
+    softQuotaRequestsDaily: ''
   });
   const [saving, setSaving] = useState(false);
   const [showOAuthModal, setShowOAuthModal] = useState(false);
 
   useEffect(() => {
     const accountWithQuotas = account as
-      | (AiProxyAccount & {
-          softQuotaTokensDaily?: number | null;
-          softQuotaRequestsDaily?: number | null;
-        })
-      | null;
+    (AiProxyAccount & {
+      softQuotaTokensDaily?: number | null;
+      softQuotaRequestsDaily?: number | null;
+    }) |
+    null;
 
     if (account) {
       const softQuotaTokensDaily = accountWithQuotas?.softQuotaTokensDaily;
@@ -75,9 +75,9 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         accountType: account.accountType || 'free',
         enabled: account.enabled,
         softQuotaTokensDaily:
-          typeof softQuotaTokensDaily === 'number' ? String(softQuotaTokensDaily) : '',
+        typeof softQuotaTokensDaily === 'number' ? String(softQuotaTokensDaily) : '',
         softQuotaRequestsDaily:
-          typeof softQuotaRequestsDaily === 'number' ? String(softQuotaRequestsDaily) : '',
+        typeof softQuotaRequestsDaily === 'number' ? String(softQuotaRequestsDaily) : ''
       });
     } else {
       setFormData({
@@ -90,7 +90,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         accountType: 'free',
         enabled: true,
         softQuotaTokensDaily: '',
-        softQuotaRequestsDaily: '',
+        softQuotaRequestsDaily: ''
       });
     }
   }, [account, isOpen]);
@@ -116,11 +116,11 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
     }
 
     const authValue =
-      formData.authMethod === 'oauth'
-        ? formData.oauthToken
-        : formData.authMethod === 'api_key'
-          ? formData.apiKey
-          : formData.sessionToken;
+    formData.authMethod === 'oauth' ?
+    formData.oauthToken :
+    formData.authMethod === 'api_key' ?
+    formData.apiKey :
+    formData.sessionToken;
 
     if (!authValue.trim()) {
       toast.error('Authentication credential is required');
@@ -160,7 +160,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         tokensUsed: account?.tokensUsed || 0,
         lastUsedAt: account?.lastUsedAt || null,
         createdAt: account?.createdAt || Math.floor(Date.now() / 1000),
-        updatedAt: Math.floor(Date.now() / 1000),
+        updatedAt: Math.floor(Date.now() / 1000)
       };
 
       if (account) {
@@ -195,119 +195,119 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         isOpen={isOpen}
         onClose={onClose}
         title={account ? 'Edit Account' : 'Add Account'}
-        size="md"
-      >
+        size="md">
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Provider */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Provider</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.provider")}</label>
             <Select
               value={formData.provider}
-              onChange={e => setFormData({ ...formData, provider: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
               options={PROVIDERS}
-              disabled={!!account}
-            />
+              disabled={!!account} />
+
           </div>
 
           {/* OAuth Button */}
-          {!account && supportsOAuth && (
-            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          {!account && supportsOAuth &&
+          <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-white">Use OAuth Login</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Authenticate via browser (recommended)
-                  </p>
+                  <p className="text-sm font-medium text-white">{t("aiHub.account_modal.use_oauth_login")}</p>
+                  <p className="text-xs text-slate-400 mt-1">{t("aiHub.account_modal.authenticate_via_browser_recommended")}
+
+                </p>
                 </div>
                 <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setShowOAuthModal(true)}
-                >
-                  Login with OAuth
-                </Button>
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => setShowOAuthModal(true)}>{t("aiHub.account_modal.login_with_oauth")}
+
+
+              </Button>
               </div>
             </div>
-          )}
+          }
 
           {/* Account Name */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Account Name</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.account_name")}</label>
             <Input
               value={formData.name}
-              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="My OpenAI Account"
-              required
-            />
+              required />
+
           </div>
 
           {/* Auth Method */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Authentication Method
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.authentication_method")}
+
             </label>
             <Select
               value={formData.authMethod}
-              onChange={e => setFormData({ ...formData, authMethod: e.target.value as any })}
-              options={AUTH_METHODS}
-            />
+              onChange={(e) => setFormData({ ...formData, authMethod: e.target.value })}
+              options={AUTH_METHODS} />
+
           </div>
 
           {/* Conditional Auth Fields */}
-          {formData.authMethod === 'oauth' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">OAuth Token</label>
+          {formData.authMethod === 'oauth' &&
+          <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.oauth_token")}</label>
               <Input
-                type="password"
-                value={formData.oauthToken}
-                onChange={e => setFormData({ ...formData, oauthToken: e.target.value })}
-                placeholder="Enter OAuth token"
-                required
-              />
-            </div>
-          )}
+              type="password"
+              value={formData.oauthToken}
+              onChange={(e) => setFormData({ ...formData, oauthToken: e.target.value })}
+              placeholder="Enter OAuth token"
+              required />
 
-          {formData.authMethod === 'api_key' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">API Key</label>
-              <Input
-                type="password"
-                value={formData.apiKey}
-                onChange={e => setFormData({ ...formData, apiKey: e.target.value })}
-                placeholder="sk-..."
-                required
-              />
             </div>
-          )}
+          }
 
-          {formData.authMethod === 'session' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Session Token</label>
+          {formData.authMethod === 'api_key' &&
+          <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.api_key")}</label>
               <Input
-                type="password"
-                value={formData.sessionToken}
-                onChange={e => setFormData({ ...formData, sessionToken: e.target.value })}
-                placeholder="Enter session token"
-                required
-              />
+              type="password"
+              value={formData.apiKey}
+              onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+              placeholder="sk-..."
+              required />
+
             </div>
-          )}
+          }
+
+          {formData.authMethod === 'session' &&
+          <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.session_token")}</label>
+              <Input
+              type="password"
+              value={formData.sessionToken}
+              onChange={(e) => setFormData({ ...formData, sessionToken: e.target.value })}
+              placeholder="Enter session token"
+              required />
+
+            </div>
+          }
 
           {/* Account Type */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Account Type</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.account_type")}</label>
             <Select
               value={formData.accountType}
-              onChange={e => setFormData({ ...formData, accountType: e.target.value })}
-              options={ACCOUNT_TYPES}
-            />
+              onChange={(e) => setFormData({ ...formData, accountType: e.target.value })}
+              options={ACCOUNT_TYPES} />
+
           </div>
 
           {/* Soft Quotas */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Soft Daily Token Quota
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.soft_daily_token_quota")}
+
             </label>
             <Input
               type="number"
@@ -315,14 +315,14 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
               step={1}
               inputMode="numeric"
               value={formData.softQuotaTokensDaily}
-              onChange={e => setFormData({ ...formData, softQuotaTokensDaily: e.target.value })}
-              placeholder="Optional"
-            />
+              onChange={(e) => setFormData({ ...formData, softQuotaTokensDaily: e.target.value })}
+              placeholder="Optional" />
+
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Soft Daily Request Quota
+            <label className="block text-sm font-medium text-slate-300 mb-2">{t("aiHub.account_modal.soft_daily_request_quota")}
+
             </label>
             <Input
               type="number"
@@ -330,30 +330,30 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
               step={1}
               inputMode="numeric"
               value={formData.softQuotaRequestsDaily}
-              onChange={e => setFormData({ ...formData, softQuotaRequestsDaily: e.target.value })}
-              placeholder="Optional"
-            />
+              onChange={(e) => setFormData({ ...formData, softQuotaRequestsDaily: e.target.value })}
+              placeholder="Optional" />
+
           </div>
 
           {/* Enabled Toggle */}
           <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
             <div>
-              <div className="text-sm font-medium text-white">Enable Account</div>
-              <div className="text-xs text-slate-400 mt-0.5">
-                Account will be available for routing
+              <div className="text-sm font-medium text-white">{t("aiHub.account_modal.enable_account")}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{t("aiHub.account_modal.account_will_be_available_for_routing")}
+
               </div>
             </div>
             <Toggle
               label=""
               checked={formData.enabled}
-              onChange={checked => setFormData({ ...formData, enabled: checked })}
-            />
+              onChange={(checked) => setFormData({ ...formData, enabled: checked })} />
+
           </div>
 
           {/* Footer Buttons */}
           <div className="flex items-center justify-end gap-3 pt-4">
-            <Button onClick={onClose} variant="secondary" disabled={saving} type="button">
-              Cancel
+            <Button onClick={onClose} variant="secondary" disabled={saving} type="button">{t("aiHub.account_modal.cancel")}
+
             </Button>
             <Button type="submit" variant="primary" disabled={saving}>
               {saving ? 'Saving...' : account ? 'Update' : 'Create'}
@@ -367,11 +367,11 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         isOpen={showOAuthModal}
         provider={formData.provider}
         providerName={
-          PROVIDERS.find(p => p.value === formData.provider)?.label || formData.provider
+        PROVIDERS.find((p) => p.value === formData.provider)?.label || formData.provider
         }
         onClose={() => setShowOAuthModal(false)}
-        onSuccess={handleOAuthSuccess}
-      />
-    </>
-  );
+        onSuccess={handleOAuthSuccess} />
+
+    </>);
+
 }

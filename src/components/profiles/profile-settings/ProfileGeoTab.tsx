@@ -22,7 +22,7 @@ export function ProfileGeoTab({
   timezoneManual,
   onUpdate,
   onClearGeo,
-  onToggleAdvanced,
+  onToggleAdvanced
 }: ProfileGeoTabProps) {
   return (
     <section className="space-y-4">
@@ -34,86 +34,89 @@ export function ProfileGeoTab({
         <Select
           label={t('accounts.profileSettingsLocaleLabel') || 'Locale'}
           value={draft.geo.locale ?? ''}
-          onValueChange={value =>
-            onUpdate({ ...draft, geo: { ...draft.geo, locale: value || null } })
-          }
-        >
-          <option value="">Auto</option>
-          <option value="en-US">en-US</option>
-          <option value="en-GB">en-GB</option>
-          <option value="ru-RU">ru-RU</option>
-          <option value="de-DE">de-DE</option>
+          onValueChange={(value) =>
+          onUpdate({ ...draft, geo: { ...draft.geo, locale: value || null } })
+          }>
+
+          <option value="">{t("settings.profile_geo_tab.auto")}</option>
+          <option value="en-US">{t("settings.profile_geo_tab.enus")}</option>
+          <option value="en-GB">{t("settings.profile_geo_tab.engb")}</option>
+          <option value="ru-RU">{t("settings.profile_geo_tab.ruru")}</option>
+          <option value="de-DE">{t("settings.profile_geo_tab.dede")}</option>
         </Select>
 
         <div className="flex items-end">
-          <Button size="xs" variant="secondary" onClick={onClearGeo}>
-            Clear geo
+          <Button size="xs" variant="secondary" onClick={onClearGeo}>{t("settings.profile_geo_tab.clear_geo")}
+
           </Button>
         </div>
 
         <Input
           label={t('accounts.profileSettingsTimezoneLabel') || 'Timezone'}
           value={draft.geo.timezone ?? ''}
-          onChange={e =>
-            onUpdate({ ...draft, geo: { ...draft.geo, timezone: e.target.value || null } })
+          onChange={(e) =>
+          onUpdate({ ...draft, geo: { ...draft.geo, timezone: e.target.value || null } })
           }
-          placeholder="Auto"
-        />
+          placeholder="Auto" />
+
       </div>
 
       <div className="rounded-lg border border-white/10 bg-white/[0.02]">
-        <button
-          type="button"
+        <div
           onClick={onToggleAdvanced}
-          className="w-full flex items-center justify-between px-3 py-2 text-slate-200 text-sm font-semibold hover:bg-white/[0.03] transition-colors"
+          className="w-full flex items-center justify-between px-3 py-2 text-slate-200 text-sm font-semibold hover:bg-white/[0.03] transition-colors cursor-pointer"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleAdvanced(); }}}
         >
-          <span>Manual coordinates</span>
+
+          <span>{t("settings.profile_geo_tab.manual_coordinates")}</span>
           {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
+        </div>
 
-        {showAdvanced && (
-          <div className="px-3 pb-3 grid grid-cols-2 gap-3 pt-2">
+        {showAdvanced &&
+        <div className="px-3 pb-3 grid grid-cols-2 gap-3 pt-2">
             <Input
-              label={t('accounts.profileSettingsLatitudeLabel') || 'Latitude'}
-              type="number"
-              value={draft.geo.latitude ?? ''}
-              onChange={e => {
-                const next = e.target.value ? Number(e.target.value) : null;
-                onUpdate({
-                  ...draft,
-                  geo: {
-                    ...draft.geo,
-                    latitude: Number.isFinite(next as number) ? next : null,
-                  },
-                });
-              }}
-              placeholder="Auto"
-            />
+            label={t('accounts.profileSettingsLatitudeLabel') || 'Latitude'}
+            type="number"
+            value={draft.geo.latitude ?? ''}
+            onChange={(e) => {
+              const next = e.target.value ? Number(e.target.value) : null;
+              onUpdate({
+                ...draft,
+                geo: {
+                  ...draft.geo,
+                  latitude: Number.isFinite(next as number) ? next : null
+                }
+              });
+            }}
+            placeholder="Auto" />
+
             <Input
-              label={t('accounts.profileSettingsLongitudeLabel') || 'Longitude'}
-              type="number"
-              value={draft.geo.longitude ?? ''}
-              onChange={e => {
-                const next = e.target.value ? Number(e.target.value) : null;
-                onUpdate({
-                  ...draft,
-                  geo: {
-                    ...draft.geo,
-                    longitude: Number.isFinite(next as number) ? next : null,
-                  },
-                });
-              }}
-              placeholder="Auto"
-            />
+            label={t('accounts.profileSettingsLongitudeLabel') || 'Longitude'}
+            type="number"
+            value={draft.geo.longitude ?? ''}
+            onChange={(e) => {
+              const next = e.target.value ? Number(e.target.value) : null;
+              onUpdate({
+                ...draft,
+                geo: {
+                  ...draft.geo,
+                  longitude: Number.isFinite(next as number) ? next : null
+                }
+              });
+            }}
+            placeholder="Auto" />
+
           </div>
-        )}
+        }
       </div>
 
-      <div className="text-xs text-slate-500">
-        Current mode: {hasManualGeo ? 'Manual coordinates' : 'Auto geolocation'}
-        {' • '}Locale: {localeManual ? 'Manual' : 'Auto'}
-        {' • '}Timezone: {timezoneManual ? 'Manual' : 'Auto'}
+      <div className="text-xs text-slate-500">{t("settings.profile_geo_tab.current_mode")}
+        {hasManualGeo ? 'Manual coordinates' : 'Auto geolocation'}
+        {' • '}{t("settings.profile_geo_tab.locale")}{localeManual ? 'Manual' : 'Auto'}
+        {' • '}{t("settings.profile_geo_tab.timezone")}{timezoneManual ? 'Manual' : 'Auto'}
       </div>
-    </section>
-  );
+    </section>);
+
 }

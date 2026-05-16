@@ -1,4 +1,5 @@
 import { Input, Select } from '@/components/ui';
+import { t } from '@/lib/i18n';
 
 export interface SchedulerScheduleState {
   scheduleType: 'interval' | 'daily' | 'once';
@@ -37,9 +38,9 @@ export function SchedulerScheduleSection({
         value={value.scheduleType}
         onChange={e => set({ scheduleType: e.target.value as 'interval' | 'daily' | 'once' })}
       >
-        <option value="interval">Interval</option>
-        <option value="daily">Daily</option>
-        <option value="once">Once</option>
+        <option value="interval">{t('scheduler.scheduleInterval')}</option>
+        <option value="daily">{t('scheduler.scheduleDaily')}</option>
+        <option value="once">{t('scheduler.scheduleOnce')}</option>
       </Select>
 
       {value.scheduleType === 'interval' ? (

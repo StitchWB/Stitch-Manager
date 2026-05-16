@@ -4,6 +4,7 @@ import { GlassCard } from '../GlassCard';
 import { StatusBadge } from '../StatusBadge';
 import { ButtonBase } from '../ButtonBase';
 import { cn } from '@/lib/utils';
+import type { AccountStatusVariant } from '@/lib/accountStatus';
 import { SectionHeader } from '../SectionHeader';
 
 type ProfileSessionStatus = 'ready' | 'pending' | 'disabled';
@@ -58,7 +59,7 @@ export function AccountProfileSessionSection({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-wider text-slate-500">{t('common.status')}</span>
-        <StatusBadge variant={profileSessionVariant as any} size="sm">
+          <StatusBadge variant={profileSessionVariant as AccountStatusVariant} size="sm">
           {profileSessionLabel}
         </StatusBadge>
       </div>

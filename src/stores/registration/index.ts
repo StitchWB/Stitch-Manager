@@ -169,7 +169,7 @@ export const useRegistrationStore = <T = RegistrationState>(
   // Trigger save helper - always read latest from store, not from render closure
   const triggerSave = () => {
     const loaded = usePersistenceStore.getState().settingsLoaded;
-    console.log(
+    console.warn(
       '[REGISTRATION_STORE] triggerSave called, settingsLoaded:',
       loaded
     );
@@ -232,12 +232,12 @@ export const useRegistrationStore = <T = RegistrationState>(
 
   // Immediate save for critical moments
   const saveImmediately = async () => {
-    console.log(
+    console.warn(
       '[REGISTRATION_STORE] saveImmediately: called, settingsLoaded:',
       persistenceStore.settingsLoaded
     );
     if (!persistenceStore.settingsLoaded) {
-      console.log('[REGISTRATION_STORE] saveImmediately: settings not loaded, skipping');
+      console.warn('[REGISTRATION_STORE] saveImmediately: settings not loaded, skipping');
       return;
     }
 
@@ -245,7 +245,7 @@ export const useRegistrationStore = <T = RegistrationState>(
     clearSaveTimeout();
 
     // Save immediately without debounce
-    console.log('[REGISTRATION_STORE] saveImmediately: calling saveSettings directly');
+    console.warn('[REGISTRATION_STORE] saveImmediately: calling saveSettings directly');
     await saveSettings();
   };
 

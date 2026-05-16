@@ -1,7 +1,7 @@
 
 import type { ProviderModelMapping } from '../../../lib/tauri/modules/aiProxy';
 import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
-import { t } from '../../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { Button, Input, Modal, Select } from '@/components/ui';
 
 interface AiMappingsModalProps {

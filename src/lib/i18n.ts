@@ -8,2236 +8,2555 @@
 // ============================================
 
 export interface Translations {
-  common: {
-    save: string;
-    cancel: string;
-    close: string;
-    confirm: string;
-    delete: string;
-    add: string;
-    edit: string;
-    search: string;
-    refresh: string;
-    export: string;
-    import: string;
-    loading: string;
-    error: string;
-    success: string;
-    warning: string;
-    info: string;
-    yes: string;
-    no: string;
-    ok: string;
-    back: string;
-    next: string;
-    previous: string;
-    start: string;
-    stop: string;
-    restart: string;
-    retry: string;
-    saved: string;
-    browse: string;
-    select: string;
-    all: string;
-    none: string;
-    selected: string;
-    total: string;
-    actions: string;
-    status: string;
-    settings: string;
-    dismiss: string;
-    cleared: string;
-    clear: string;
-    copy: string;
-    preview: string;
-    record: string;
-    replay: string;
-    more: string;
-    installRuntime: string;
-    install: string;
-    name: string;
-    history: string;
-    rollback: string;
-    expand: string;
-    collapse: string;
-  };
-
-  status: {
-    active: string;
-    banned: string;
-    limitHit: string;
-    expired: string;
-    unknown: string;
-    online: string;
-    offline: string;
-    running: string;
-    stopped: string;
-    pending: string;
-    processing: string;
-    completed: string;
-    failed: string;
-    idle: string;
-    patched: string;
-    notPatched: string;
-    valid: string;
-    invalid: string;
-    notConfigured: string;
-    notFound: string;
-  };
-  header: {
-    systemOnline: string;
-    serverOffline: string;
-    notifications: string;
-    noNotifications: string;
-    clearAll: string;
-    changeLanguage: string;
-    notificationsList: string;
-    selectLanguage: string;
-  };
-  sidebar: {
-    dashboard: string;
-    accounts: string;
-    autoReg: string;
-    scheduler: string;
-    idePatch: string;
-    aiHub: string;
-    apiServer: string;
-    mail: string;
-    chat: string;
-    scenarios: string;
-    tools: string;
-    system: string;
-    settings: string;
-    logs: string;
-    adminUser: string;
-    localMode: string;
-  };
-
-  mail: {
-    title: string;
-    subtitle: string;
-    navigationTitle: string;
-    sourceLabel: string;
-    sourceImap: string;
-    sourceMailTm: string;
-    accountIdLabel: string;
-    mailboxLabel: string;
-    connect: string;
-    connecting: string;
-    disconnect: string;
-    sessionActive: string;
-    sessionIdle: string;
-    foldersTitle: string;
-    foldersDisconnectedHint: string;
-    folderInbox: string;
-    folderSent: string;
-    folderDrafts: string;
-    folderAllMail: string;
-    folderSpam: string;
-    folderTrash: string;
-    sourceExtensionsTitle: string;
-    sourceExtensionsPlaceholder: string;
-    profilesTitle: string;
-    profilesLoading: string;
-    noProfilesYet: string;
-    activeProfileLabel: string;
-    manualProfileMode: string;
-    renameProfileLabel: string;
-    renameProfileAction: string;
-    renameProfileDialogTitle: string;
-    renameProfileDialogDescription: string;
-    deleteProfileAction: string;
-    deleteProfileDialogTitle: string;
-    deleteProfileDialogDescription: string;
-    profileSyncUnknown: string;
-    profileSyncIdle: string;
-    profileSyncSyncing: string;
-    profileSyncError: string;
-    providerHost: string;
-    providerPort: string;
-    providerUsername: string;
-    providerPassword: string;
-    providerUseTls: string;
-    providerAddress: string;
-    providerBaseUrl: string;
-    manualConnectionAction: string;
-    manualConnectionTitle: string;
-    manualConnectionDescription: string;
-    readOnlyHint: string;
-    syncTitle: string;
-    syncExpand: string;
-    syncCollapse: string;
-    fromLabel: string;
-    toLabel: string;
-    subjectLabel: string;
-    bodyLabel: string;
-    unreadOnly: string;
-    sinceLabel: string;
-    limitLabel: string;
-    timeoutLabel: string;
-    pollIntervalLabel: string;
-    dedupeKeyLabel: string;
-    listAction: string;
-    waitAction: string;
-    waitingAction: string;
-    toolbarSearchPlaceholder: string;
-    keyboardHint: string;
-    lastSyncLabel: string;
-    capabilitiesTitle: string;
-    capabilityDelete: string;
-    capabilityMarkAsRead: string;
-    capabilitySearchBody: string;
-    capabilityAttachments: string;
-    selectedCountLabel: string;
-    selectAllLabel: string;
-    clearSelectionAction: string;
-    bulkMarkReadAction: string;
-    bulkDeleteAction: string;
-    messagesTitle: string;
-    noMessagesTitle: string;
-    noMessagesDescription: string;
-    readStateRead: string;
-    readStateUnread: string;
-    markReadAction: string;
-    deleteAction: string;
-    viewerTitle: string;
-    noSelectionTitle: string;
-    noSelectionDescription: string;
-    fromField: string;
-    toField: string;
-    ccField: string;
-    bccField: string;
-    receivedAtField: string;
-    plainTextLabel: string;
-    htmlLabel: string;
-    attachmentsLabel: string;
-    loadMessageAction: string;
-    rawSourceTitle: string;
-    rawSourceCollapsedHint: string;
-    secondaryLabel: string;
-    mailboxNotSelectedTitle: string;
-    mailboxNotSelectedHint: string;
-    openRawSourceAction: string;
-    accountsRailTitle: string;
-    currentSessionTitle: string;
-    currentSessionEmpty: string;
-    saveSessionAsProfileAction: string;
-    providersCatalogTitle: string;
-    providerAvailable: string;
-    providerUnavailable: string;
-  };
-
-  scenarios: {
-    title: string;
-    subtitle: string;
-    selectProfile: string;
-    noProfiles: string;
-    missingProfile: string;
-    profileHint: string;
-    emptyTitle: string;
-    emptyDescription: string;
-    libraryTitle: string;
-    librarySubtitle: string;
-    searchPlaceholder: string;
-    favoritesOnly: string;
-    tagsFilterLabel: string;
-    viewCards: string;
-    viewList: string;
-    noScenarios: string;
-    noScenariosHint: string;
-    missingFile: string;
-    stepsCount: string;
-    lastPlayed: string;
-    playCount: string;
-    healthScore: string;
-    lastRun: string;
-    lastStatus: string;
-    lastDuration: string;
-    editScenario: string;
-    duplicateScenario: string;
-    toggleFavorite: string;
-    openFolder: string;
-    copyPath: string;
-    update: string;
-    description: string;
-    tags: string;
-    tagsHint: string;
-    deleteArmedHint: string;
-    deleteArmedLabel: string;
-  };
   accounts: {
-    title: string;
-    addAccount: string;
-    searchPlaceholder: string;
-    refreshAll: string;
-    importAccounts: string;
-    exportCsv: string;
-    viewList: string;
-    viewGraph: string;
-    viewSheets: string;
-    allProviders: string;
-    apiKeyLabel: string;
-    selectedCountLabel: string;
-    tokenCopiedAutoClear: string;
-    tokenCopyFailed: string;
-    copyTokenSensitiveConfirm: string;
-    sheetsIntegration: string;
-    sheetsSpreadsheetId: string;
-    sheetsServiceAccountJson: string;
-    sheetsExplorerTitle: string;
-    loadAccountsErrorPrefix: string;
-    expiredCountLabel: string;
-    selectAccountAria: string;
-    actionsMenuAria: string;
-    profileIdLabel: string;
-    columnsMenuLabel: string;
-    columnsMenuTitle: string;
-    columnLastLogin: string;
-    columnApiKey: string;
-    columnQuota: string;
-    columnsReset: string;
-    noAccounts: string;
-    noAccountsSubtitle: string;
     account: string;
-    usage: string;
-    expires: string;
-    provider: string;
-    email: string;
-    password: string;
-    token: string;
-    tokenOptional: string;
-    tokenOptionalHint: string;
-    copyToken: string;
-    deleteConfirm: string;
-    addingAccount: string;
-    filterAll: string;
-    tokenCopied: string;
-    emailCopied: string;
-    jsonCopied: string;
-    accountsSelected: string;
-    noAccountsFound: string;
-    addFirstAccountToStart: string;
-    addFirstAccount: string;
-    syncComplete: string;
-    syncPartial: string;
-    syncing: string;
-    tagPlaceholder: string;
-    select: string;
-
-    deselect: string;
-    selectAll: string;
-    deselectAll: string;
-    activate: string;
-    deactivate: string;
-    moreActions: string;
-    tableRegion: string;
-    accountsTable: string;
-    accountActions: string;
-    pagination: string;
-    previousPage: string;
-    nextPage: string;
-    providers: string;
-    allAccounts: string;
-    awsBuilderId: string;
-    statusHeader: string;
-    // Account Drawer
-
     accountDetails: string;
-    inUse: string;
-    usageQuota: string;
-    liveStatus: string;
-    checkNow: string;
-    checking: string;
-    plan: string;
-    quotaUsage: string;
-    flowCredits: string;
-    rawData: string;
-    copyJson: string;
-    created: string;
-    authToken: string;
-    lastUsed: string;
-    importToken: string;
-    importing: string;
-    pasteTokenHere: string;
-    noToken: string;
-    clickCheckNow: string;
-    clearSelection: string;
-    // Machine ID Management
-    machineId: string;
-    machineIdCopied: string;
-    notAssigned: string;
+    accountRelations: {
+      noRows: string;
+      presets: string;
+      save: string;
+      title: string;
+    }
+    account_auth_links_section: {
+      account_auth_links_accountauthlinks: string;
+      no_accountauthlinks_rows_yet: string;
+      primary: string;
+      profile: string;
+      use_channelbrowser_for_codex_browser_auth: string;
+    }
+    account_quota_cell: {
+      checking: string;
+      failed: string;
+    }
+    accountsSelected: string;
+    accountsTable: string;
+    actionsMenuAria: string;
+    activate: string;
     activations: string;
-    logins: string;
-    successRate: string;
-    registrationInfo: string;
-    registrationMethod: string;
-    registrationDate: string;
-    registrationMetadata: string;
-    browserProfilePath: string;
-    sessionData: string;
-    profileSession: string;
-    profileSessionReady: string;
-    profileSessionPending: string;
-    profileSessionDisabled: string;
-    profileSessionOpen: string;
-    profileSessionConfirm: string;
-    profileSessionClear: string;
-    profileSessionsTitle: string;
-    profileSessionsSubtitle: string;
-    profileSessionsSelectionHint: string;
+    addAccount: string;
+    addFirstAccount: string;
+    addFirstAccountToStart: string;
+    addNotesPlaceholder: string;
+    addTagPlaceholder: string;
+    addingAccount: string;
+    advancedData: string;
+    allProviders: string;
+    apiKey: string;
+    apiKeyLabel: string;
+    authToken: string;
+    auth_methods_section: {
+      auth_methods_authmethods: string;
+      no_authmethods_rows_yet: string;
+      preset_codex_api: string;
+      preset_codex_browser: string;
+      quick_fill_from_selected_identity: string;
+      store_secret_references_only_never_raw_api_keys: string;
+    }
+    autoRefreshDisabled: string;
+    autoRefreshEnabled: string;
     batchResultSummary: string;
     batchResultWithErrors: string;
-    mobileTagFilterLabel: string;
-    relationLabel: string;
-    relationVia: string;
-    relationRegisteredFor: string;
+    browserOpenFailed: string;
+    browserOpened: string;
+    browserProfilePath: string;
+    checkBalance: string;
+    checkNow: string;
+    checking: string;
+    clearSelection: string;
+    clickCheckNow: string;
+    columnApiKey: string;
+    columnLastLogin: string;
+    columnQuota: string;
+    columnsMenuTitle: string;
+    columnsReset: string;
+    confirmDelete: string;
+    copyToken: string;
+    copyTokenSensitiveConfirm: string;
+    created: string;
+    deactivate: string;
+    deleteAccountMessage: string;
+    deleteAccountTitle: string;
+    deleteBulkMessage: string;
+    deleteBulkTitle: string;
+    deleteConfirm: string;
+    deleteProfile: string;
+    deleteProfileConfirm: string;
+    email: string;
+    entityAccounts: string;
+    entityBrowserProfiles: string;
+    entityProfiles: string;
+    errorCount: string;
+    errorsLabel: string;
+    expiredCountLabel: string;
+    expires: string;
+    exportCsv: string;
+    fireworks: string;
+    fireworksAi: string;
+    fireworksNote: string;
+    flowCredits: string;
+    hide: string;
+    identityGraph: {
+      links: string;
+      loading: string;
+      noIdentities: string;
+      noIdentitiesDesc: string;
+    }
+    identity_graph_active_identity_card: {
+      add_link: string;
+      edit: string;
+      no_links_for_this_identity_yet: string;
+      primary: string;
+      unified_edges: string;
+    }
+    identity_graph_alerts: {
+      invalid_rows: string;
+      row: string;
+      schema_issues: string;
+    }
+    identity_graph_diagnostics: {
+      graph_diagnostics: string;
+    }
+    identity_graph_header: {
+      identities: string;
+      identity_graph: string;
+      init_schema: string;
+      links: string;
+      new_link: string;
+      service_accounts: string;
+    }
+    identity_graph_identity_cards_list: {
+      linked_identities: string;
+      no_linked_service_accounts_yet: string;
+    }
+    identity_graph_link_editor_drawer: {
+      cancel: string;
+      links_writeback: string;
+    }
+    identity_graph_panel: {
+      accounttoauthmethod: string;
+      authaware_edges_in_graph_now_include: string;
+      authmethodtoprofile: string;
+      edges: string;
+      nodes: string;
+      showing: string;
+    }
+    importAccounts: string;
+    lastError: string;
+    lastLogin: string;
+    lastLoginAt: string;
+    lastUsed: string;
+    launchContextHintNoAwsSessionPath: string;
+    launchContextHintSelectAws: string;
+    liveStatus: string;
+    loadAccountsErrorPrefix: string;
+    logins: string;
+    machineId: string;
+    methodLabel: string;
+    monthlyRemaining: string;
+    monthlySpendLimit: string;
+    never: string;
+    noAccountsFound: string;
+    noAccountsFoundDesc: string;
+    noNotes: string;
+    noProfilesFound: string;
+    noProfilesFoundDesc: string;
+    noTags: string;
+    notAssigned: string;
+    notAvailable: string;
+    notes: string;
+    openProfileAt: string;
+    openingBrowser: string;
+    password: string;
+    pasteTokenHere: string;
+    plan: string;
+    profileAlias: string;
+    profileCreateFailed: string;
+    profileCreateSuccess: string;
+    profileDeleteFailed: string;
+    profileDeleteSuccess: string;
+    profileDestinationCustom: string;
+    profileDestinationLabel: string;
+    profileGeoTab: string;
+    profileIdLabel: string;
+    profileKind: string;
+    profileKindLinked: string;
+    profileKindStandalone: string;
+    profileOpenFailed: string;
+    profileOpenSuccess: string;
+    profileOpenUrlPlaceholder: string;
+    profileRelations: {
+      noRows: string;
+      presets: string;
+      save: string;
+      title: string;
+    }
+    profileSession: string;
+    profileSessionClear: string;
+    profileSessionConfirm: string;
+    profileSessionDisabled: string;
+    profileSessionOpen: string;
+    profileSessionPending: string;
+    profileSessionReady: string;
+    profileSessionsSelectionHint: string;
+    profileSessionsSubtitle: string;
+    profileSessionsTitle: string;
+    profileSettingsAliasMakeSafe: string;
+    profileSettingsAliasMakeSafeApplied: string;
+    profileSettingsAliasMakeSafeTooltip: string;
+    profileSettingsAliasPlaceholder: string;
+    profileSettingsAliasRequired: string;
+    profileSettingsCookiesLabel: string;
+    profileSettingsDeleteConfirmMessage: string;
+    profileSettingsDiscardConfirm: string;
+    profileSettingsDiscardMessage: string;
+    profileSettingsDiscardTitle: string;
+    profileSettingsExportDialogTitle: string;
+    profileSettingsExportFailed: string;
+    profileSettingsExportSuccess: string;
+    profileSettingsImportConfirm: string;
+    profileSettingsImportDialogTitle: string;
+    profileSettingsImportFailed: string;
+    profileSettingsImportFileLabel: string;
+    profileSettingsImportNewAliasLabel: string;
+    profileSettingsImportOverwriteLabel: string;
+    profileSettingsImportPickFailed: string;
+    profileSettingsImportSuccess: string;
+    profileSettingsImportTargetCurrent: string;
+    profileSettingsImportTargetLabel: string;
+    profileSettingsImportTargetNew: string;
+    profileSettingsLatitudeLabel: string;
+    profileSettingsLocaleLabel: string;
+    profileSettingsLongitudeLabel: string;
+    profileSettingsResetAllConfirm: string;
+    profileSettingsResetAllMessage: string;
+    profileSettingsResetAllTitle: string;
+    profileSettingsTimezoneLabel: string;
+    profilesCreateButton: string;
+    profilesFilterAll: string;
+    profilesFilterLabel: string;
+    profilesFilterLinked: string;
+    profilesFilterStandalone: string;
+    profilesFilterUsedForKiro: string;
+    profiles_table: {
+      open: string;
+      open_without_overlay: string;
+      overlay: string;
+      scenarios: string;
+    }
+    provider: string;
+    quotaUsage: string;
+    refreshAll: string;
+    refreshAllExpired: string;
+    refreshToken: string;
+    registeredLabel: string;
+    registrationDate: string;
+    registrationInfo: string;
+    registrationMethod: string;
     relationCanLoginTo: string;
-    relationLinkedTo: string;
-    relationNoLinks: string;
-    relationGraphTitle: string;
-    relationQuickActionsTitle: string;
-    relationLinkToKiro: string;
-    relationLinkToWindsurf: string;
-    relationLinkToTrae: string;
-    relationMarkRegisteredForKiro: string;
-    relationMarkRegisteredForWindsurf: string;
-    relationMarkRegisteredForTrae: string;
-    relationFilterLabel: string;
     relationFilterAll: string;
     relationFilterHasAny: string;
     relationFilterLinkedOnly: string;
     relationFilterOauthCapable: string;
-    relationTagApplied: string;
-    relationTagAlreadyExists: string;
-    relationExistingLinksTitle: string;
-    relationTagRemove: string;
-    relationTagRemoved: string;
-    profilesCreateButton: string;
-    profileCreateSuccess: string;
-    profileCreateFailed: string;
-    entityFilterLabel: string;
-    entityAccounts: string;
-    entityProfiles: string;
-    entityBrowserProfiles: string;
-    entityAll: string;
-    noProfilesFound: string;
-    noProfilesFoundDesc: string;
-    profileAlias: string;
-    profileKind: string;
-    profileKindStandalone: string;
-    profileKindLinked: string;
-    deleteProfile: string;
-    deleteProfileConfirm: string;
-    profileDeleteSuccess: string;
-    profileDeleteFailed: string;
-    openProfile: string;
-    openProfileAt: string;
-    profileOpenSuccess: string;
-    profileOpenFailed: string;
-    profileOpenTarget: string;
-    profileOpenTargetCustom: string;
-    profileOpenUrlPlaceholder: string;
-    startAutoregFromProfile: string;
-    startAutoregFromProfileDesc: string;
-    startAutoregKiroViaAws: string;
-    profilesFilterLabel: string;
-    profilesFilterAll: string;
-    profilesFilterStandalone: string;
-    profilesFilterLinked: string;
-    profilesFilterUsedForKiro: string;
-    profileDestinationLabel: string;
-    profileDestinationCustom: string;
-    launchContextHintSelectAws: string;
-    launchContextHintNoAwsSessionPath: string;
-    profileHealthReady: string;
-    profileHealthNeedsAws: string;
-    profileHealthNeedsLink: string;
-    profileHealthNoSession: string;
-    profileSettingsTitle: string;
-    profileSummaryTitle: string;
-    profileHardwareTab: string;
-    profileGeoTab: string;
-    profileSettingsGenerateFingerprint: string;
-    profileSettingsHardwareTab: string;
-    profileSettingsGeoTab: string;
-    profileSettingsUserAgent: string;
-    profileSettingsUserAgentPlaceholder: string;
-    profileSettingsProxyUrlPlaceholder: string;
-    profileSettingsPlatformLabel: string;
-    profileSettingsHardwareConcurrency: string;
-    profileSettingsHardwareMemory: string;
-    profileSettingsScreenWidth: string;
-    profileSettingsScreenHeight: string;
-    profileSettingsLocaleLabel: string;
-    profileSettingsTimezoneLabel: string;
-    profileSettingsLatitudeLabel: string;
-    profileSettingsLongitudeLabel: string;
-    profileSettingsNotesLabel: string;
-    profileSettingsNotesPlaceholder: string;
-    profileSettingsCookiesLabel: string;
-    profileSettingsCookiesPlaceholder: string;
-    profileSettingsSummaryTitle: string;
-    profileSettingsSummaryUserAgent: string;
-    profileSettingsSummaryScreen: string;
-    profileSettingsUnsaved: string;
-    profileSettingsSaved: string;
-    profileSettingsAliasPlaceholder: string;
-    profileSettingsAliasRequired: string;
-    profileSettingsAliasTooLong: string;
-    profileSettingsAliasInvalidChars: string;
-    profileSettingsAliasInvalidNewlines: string;
-    profileSettingsAliasConflict: string;
-    profileSettingsDiscardTitle: string;
-    profileSettingsDiscardMessage: string;
-    profileSettingsDiscardConfirm: string;
-    profileSettingsDeleteConfirmMessage: string;
-    profileSettingsResetAllTitle: string;
-    profileSettingsResetAllMessage: string;
-    profileSettingsResetAllConfirm: string;
-    profileSettingsExportDialogTitle: string;
-    profileSettingsExportSuccess: string;
-    profileSettingsExportFailed: string;
-    profileSettingsImportDialogTitle: string;
-    profileSettingsImportFileLabel: string;
-    profileSettingsImportTargetLabel: string;
-    profileSettingsImportTargetCurrent: string;
-    profileSettingsImportTargetNew: string;
-    profileSettingsImportNewAliasLabel: string;
-    profileSettingsImportOverwriteLabel: string;
-    profileSettingsImportConfirm: string;
-    profileSettingsAliasMakeSafe: string;
-    profileSettingsAliasMakeSafeTooltip: string;
-    profileSettingsAliasMakeSafeApplied: string;
-    profileSettingsImportPickFailed: string;
-    profileSettingsImportSuccess: string;
-    profileSettingsImportFailed: string;
-    notes: string;
+    relationGraphTitle: string;
+    relationLabel: string;
+    relationLinkedTo: string;
+    relationNoLinks: string;
+    relationRegisteredFor: string;
+    relationVia: string;
+    reveal: string;
+    searchPlaceholder: string;
+    selectAccountAria: string;
+    selectAll: string;
+    sessionData: string;
+    sessionDataHidden: string;
+    sheetsExplorerTitle: string;
+    sheetsIntegration: string;
+    sheetsServiceAccountJson: string;
+    sheetsSpreadsheetId: string;
+    sheets_explorer_panel: {
+      actions: string;
+      loading_sheets_preview: string;
+      of: string;
+      open_sheet: string;
+      retry: string;
+      rows: string;
+      sheets_explorer: string;
+      show_in_graph: string;
+      showing: string;
+      svc_sheets: string;
+      updated: string;
+    }
+    state: string;
+    statusHeader: string;
+    successRate: string;
+    suspendState: string;
+    syncComplete: string;
+    syncPartial: string;
+    syncing: string;
     tags: string;
-    lastLoginAt: string;
-    accountRegion: string;
-    lastError: string;
-    errorCount: string;
-    // Health status
-    healthGood: string;
-    healthFair: string;
-    healthPoor: string;
-    // Confirmation dialogs
-    deleteAccountTitle: string;
-    deleteAccountMessage: string;
-    deleteBulkTitle: string;
-    deleteBulkMessage: string;
-    deleteBulkPreview: string;
-    confirmDelete: string;
-    deleting: string;
-    expiredWarning: string;
-    refreshAllExpired: string;
-    noAccountsFoundDesc: string;
-    openingBrowser: string;
-    browserOpened: string;
-    browserOpenFailed: string;
-  };
-
+    tier: string;
+    title: string;
+    token: string;
+    tokenCopied: string;
+    tokenCopiedAutoClear: string;
+    tokenCopyFailed: string;
+    tokenOptional: string;
+    tokenOptionalHint: string;
+    totalSpent: string;
+    usage: string;
+    usageStatistics: string;
+    viewGraph: string;
+    viewList: string;
+    viewSheets: string;
+  }
   accountsTable: {
     account: string;
-    status: string;
-    usage: string;
-    expires: string;
-    registrationDate: string;
-    created: string;
-    refresh: string;
-    copyToken: string;
-    delete: string;
-    confirm: string;
     accounts: string;
-    activate: string;
-    deactivate: string;
-    active: string;
-    last: string;
     checkStatus: string;
-    loading: string;
-    noAccounts: string;
-    uses: string;
-    lastLogin: string;
-    success: string;
     openBrowser: string;
-    openingBrowser: string;
-    browserOpened: string;
-    browserOpenFailed: string;
-    openProfileSession: string;
-  };
-
-  autoReg: {
-    title: string;
-    subtitle: string;
-    config: string;
-    liveTerminal: string;
-    provider: string;
-    selectProvider: string;
-    emailStrategy: string;
-    mode: string;
-    imap: string;
-    imapSettings: string;
-    proxy: string;
-    proxySettings: string;
-    headless: string;
-    headlessDescription: string;
-    logVerbosity: string;
-    logVerbosityDescription: string;
-    logVerbosityTooltip: string;
-    accounts: string;
-    count: string;
-    identitySystem: string;
-    emailGeneration: string;
-    ready: string;
-    customDomain: string;
-    cfToImap: string;
-    emailGenerationDomain: string;
-    gmailAlias: string;
-    masterGmail: string;
-    aliasPattern: string;
-    counter: string;
-    rnd: string;
-    time: string;
-    name: string;
-    clickToRefresh: string;
-    appPassword: string;
-    testConnection: string;
-    appPasswordHint: string;
-    network: string;
-    networkSettings: string;
-    proxyEnabled: string;
-    proxyUrl: string;
-    proxyType: string;
-    proxyList: string;
-    proxyListFormat: string;
-    useProxy: string;
-    useProxyList: string;
-    username: string;
-    directConnection: string;
-    proxyUrlRequired: string;
-    imapCredentials: string;
-    host: string;
-    port: string;
-    emailPattern: string;
-    paymentMethod: string;
-    billingInformation: string;
-    phoneVerification: string;
-    smsService: string;
-    placeholders: {
-      gmailEmail: string;
-      gmailAlias: string;
-      prefix: string;
-      imapHost: string;
-      email: string;
-      proxyUrl: string;
-      optional: string;
-    };
-    staticAliasWarning: string;
-    saving: string;
-    saved: string;
-    saveFailed: string;
-    error: string;
-    testing: string;
-    connected: string;
-    connectionFailed: string;
-    success: string;
-    retry: string;
-    copyResults: string;
-    exportResults: string;
-    noLogs: string;
-    noLogsSubtitle: string;
-    filter: string;
-    entries: string;
-    progress: string;
-    startRegistration: string;
-    stopRegistration: string;
-    registrationHistory: string;
-    noHistory: string;
-    comingSoon: string;
-    step: string;
-    start: string;
-    stop: string;
-    pause: string;
-    resume: string;
-    readyToStart: string;
-    configureMailFirst: string;
-    consoleOutput: string;
-    liveRegistrationLogs: string;
-    pipelineSteps: string;
-    stepEnabled: string;
-    stepDisabled: string;
-    disabled: string;
-    speed: string;
-    slow: string;
-    fast: string;
-    delay: string;
-    timeouts: string;
-    verification: string;
-    oauth: string;
-    allowAccess: string;
-    pageLoad: string;
-    elementWait: string;
-    imapPoll: string;
-    behavior: string;
-    passwordLength: string;
-    realisticTyping: string;
-    humanDelays: string;
-    screenshots: string;
-    registrationModes: {
-      webview: string;
-      automated: string;
-      auto: string;
-    };
-    emailStrategies: {
-      single: string;
-      plusAlias: string;
-      catchAll: string;
-      pool: string;
-    };
-    strategies: {
-      single: string;
-      plusAlias: string;
-      catchAll: string;
-      pool: string;
-    };
-    results: {
-      total: string;
-      success: string;
-      failed: string;
-    };
-    tooltips: {
-      verification: string;
-      oauth: string;
-      allowAccess: string;
-      pageLoad: string;
-      elementWait: string;
-      imapPoll: string;
-      speed: string;
-      delay: string;
-      passwordLength: string;
-      realisticTyping: string;
-      humanDelays: string;
-      screenshots: string;
-    };
-    emailAliases: string;
-    configureAddyio: string;
-    configure33mail: string;
-
-    pipeline: {
-      resume: string;
-      skip: string;
-      abort: string;
-      takeOver: string;
-      done: string;
-      paused: string;
-      manual: string;
-      stepWaiting: string;
-      setPause: string;
-      unsetPause: string;
-    };
-
-    addyio: {
-      title: string;
-      subtitle: string;
-      testConnection: string;
-      testing: string;
-      connectionSuccess: string;
-      connectionError: string;
-      accountStatus: string;
-      subscription: string;
-      activeAliases: string;
-      recipients: string;
-      bandwidth: string;
-      domain: string;
-      domainPlaceholder: string;
-      domainHint: string;
-      domainHintLoaded: string;
-      recipient: string;
-      recipientPlaceholder: string;
-      recipientHint: string;
-      aliasFormat: string;
-      formatUuid: string;
-      formatWords: string;
-      formatChars: string;
-      descriptionTemplate: string;
-      descriptionPlaceholder: string;
-      descriptionHint: string;
-      fromName: string;
-      fromNamePlaceholder: string;
-      fromNameHint: string;
-      autoDelete: string;
-      howItWorks: string;
-    };
-  };
-  dashboard: {
-    title: string;
-    totalAccounts: string;
-    activeTokens: string;
-    quotaUsage: string;
-    llmServer: string;
-    accountsNearLimit: string;
-    clickToFilter: string;
-    allAccountsHealthy: string;
-    inactive: string;
-    clickToStart: string;
-    startRegistration: string;
-    refreshAllTokens: string;
-    openLlmServer: string;
-    startLlmServer: string;
-    selectProviderBelow: string;
-    recentActivity: string;
-    lastRegistrationAttempts: string;
-    viewFullActivityLog: string;
-    accountsByProvider: string;
-    noAccountsToDisplay: string;
-    noDataToDisplay: string;
-    providerSelection: string;
-    manageProviders: string;
-    systemReady: string;
-    noRecentActivity: string;
-    noProviderSelected: string;
-    selectProviderFirst: string;
-    registrationStarted: string;
-    registrationFailed: string;
-    across: string;
-    providers: string;
-    port: string;
-    activityCleared: string;
-    clearActivityLog: string;
-    failedToClearActivity: string;
-  };
-  server: {
-    title: string;
-    subtitle: string;
-    serverControl: string;
-    manageLocalServer: string;
-    endpoint: string;
-    copyUrl: string;
-    urlCopied: string;
-    openInBrowser: string;
-    configuration: string;
-    stopServerToEdit: string;
-    port: string;
-    host: string;
-    maxConnections: string;
-    timeout: string;
-    loadBalancing: string;
-    loadBalancingOptions: {
-      roundRobin: string;
-      leastConnections: string;
-      random: string;
-    };
-    stats: {
-      uptime: string;
-      requests: string;
-      connections: string;
-      latency: string;
-      status: string;
-    };
-    tabs: {
-      liveLogs: string;
-      apiUsage: string;
-      tokenPool: string;
-    };
-    logs: {
-      waitingForLogs: string;
-      startServerToSeeLogs: string;
-    };
-    api: {
-      chatCompletions: string;
-      streamingResponse: string;
-      pythonExample: string;
-    };
-    live: string;
-    poll: string;
-    // Coming Soon banner
-    comingSoon: string;
-    comingSoonDescription: string;
-    simulatedMode: string;
-    simulatedModeDescription: string;
-    notAvailable: string;
-    startFailed: string;
-    stopFailed: string;
-    restartFailed: string;
-    saveConfigFailed: string;
-  };
+  }
   aiHub: {
-    tabs: {
-      overview: string;
-      providers: string;
-      integrations: string;
-      usage: string;
-      diagnostics: string;
-      antigravity: string;
-      apiKeys: string;
-    };
-    sections: {
-      overview: {
-        title: string;
-        subtitle: string;
-      };
-      providers: {
-        title: string;
-        subtitle: string;
-      };
-      integrations: {
-        title: string;
-        subtitle: string;
-      };
-      usage: {
-        title: string;
-        subtitle: string;
-      };
-      diagnostics: {
-        title: string;
-        subtitle: string;
-      };
-      antigravity: {
-        title: string;
-        subtitle: string;
-      };
-      apiKeys: {
-        title: string;
-        subtitle: string;
-      };
-    };
-    analytics: {
-      title: string;
-      subtitle: string;
-      loading: string;
-      emptyTitle: string;
-      emptyDescription: string;
-      totalRequests: string;
-      tokensUsed: string;
-      avgDuration: string;
-      estCost: string;
-      weeklyActivity: string;
-      modelUsage: string;
-      requestsCount: string;
-      tokensCount: string;
-      durationMs: string;
-      costValue: string;
-    };
-    desktopOnly: {
-      actionUnavailable: string;
-      proxyControlsUnavailable: string;
-    };
-    authScan: {
-      found: string;
-      failed: string;
-    };
-    quota: {
-      title: string;
-      retry: string;
-      empty: string;
-      unavailableTauri: string;
-      usageUnavailable: string;
-      refreshUsage: string;
-      refreshQuotas: string;
-      detected: string;
-      exactLimitsUnavailable: string;
-      used: string;
-      left: string;
-      usageTitle: string;
-      totalRequests: string;
-      totalTokens: string;
-      topModel: string;
-      noModelBreakdown: string;
-      loadUsageHint: string;
-      refreshing: string;
-    };
-    search: {
-      placeholder: string;
-    };
-    proxy: {
-      title: string;
-      statusLabel: string;
-      running: string;
-      runningWithPort: string;
-      stopped: string;
-      summary: string;
-      modeLabel: string;
-      modeFull: string;
-      modeQuota: string;
-      routingLabel: string;
-      routingRoundRobin: string;
-      routingFillFirst: string;
-      portLabel: string;
-      portPlaceholder: string;
-      managementKey: string;
-      managementKeyPlaceholder: string;
-      autoStart: string;
-      baseUrl: string;
-      clientApiKey: string;
-      activePortLabel: string;
-      keyPreviewLabel: string;
-      error: string;
-      unsavedChanges: string;
-      errors: {
-        notLoaded: string;
-        invalidPort: string;
-        emptyManagementKey: string;
-      };
-      toasts: {
-        saved: string;
-        saveFailed: string;
-        started: string;
-        stopped: string;
-      };
-    };
+    accountCard: {
+      unknownReset: string;
+    }
+    accountTypes: {
+      enterprise: string;
+      free: string;
+      pro: string;
+      team: string;
+    }
+    account_card: {
+      internal_budget: string;
+      last_used: string;
+      openai_quota_windows: string;
+      primary_limit: string;
+      requests_today: string;
+      tokens_used: string;
+      total_requests: string;
+      used_resets_in: string;
+      weekly_limit: string;
+    }
+    account_modal: {
+      account_name: string;
+      account_type: string;
+      account_will_be_available_for_routing: string;
+      api_key: string;
+      authenticate_via_browser_recommended: string;
+      authentication_method: string;
+      cancel: string;
+      enable_account: string;
+      login_with_oauth: string;
+      oauth_token: string;
+      provider: string;
+      session_token: string;
+      soft_daily_request_quota: string;
+      soft_daily_token_quota: string;
+      use_oauth_login: string;
+    }
     actions: {
       addAccount: string;
+      addMapping: string;
       apiKeys: string;
+      cancel: string;
+      close: string;
       configureIde: string;
-      import: string;
+      copy: string;
+      download: string;
+      editMappings: string;
       export: string;
-      openDebugChat: string;
-      runMigration: string;
-      openProviders: string;
-      openIntegrations: string;
-      openUsage: string;
-      openDiagnostics: string;
+      generate: string;
+      generating: string;
+      import: string;
+      importAllFromScan: string;
+      importJson: string;
+      importing: string;
+      openAnalytics: string;
       openAntigravity: string;
       openApiKeys: string;
-      openAnalytics: string;
+      openDebugChat: string;
       openDetailedAnalytics: string;
-      openWizard: string;
-      openImport: string;
+      openDiagnostics: string;
       openExport: string;
+      openImport: string;
+      openIntegrations: string;
+      openProviders: string;
+      openUsage: string;
+      openWizard: string;
+      prepareFromScan: string;
+      refresh: string;
       reset: string;
+      runMigration: string;
+      save: string;
       saveSettings: string;
       saving: string;
+      scanAuthFiles: string;
+      scanningAuthFiles: string;
       startProxy: string;
       stopProxy: string;
       working: string;
+    }
+    ai_diagnostics_section: {
+      reachability: string;
+    }
+    ai_providers_grid: {
+      cooldown: string;
+      oauth_exp: string;
+      quota: string;
       refresh: string;
-      scanAuthFiles: string;
-      scanningAuthFiles: string;
-      prepareFromScan: string;
-      importJson: string;
-      importing: string;
-      importAllFromScan: string;
-      generate: string;
-      generating: string;
-      download: string;
-      copy: string;
-      addMapping: string;
-      cancel: string;
-      save: string;
-      close: string;
-      open: string;
-      editMappings: string;
-    };
-
+    }
+    ai_proxy_account_drawer: {
+      advanced: string;
+      connected: string;
+      connection_error: string;
+      cooldown: string;
+      disabled: string;
+      edit: string;
+      id: string;
+      left: string;
+      loading: string;
+      no_quota_fetched_yet: string;
+      no_requests_yet: string;
+      primary: string;
+      quota: string;
+      recent_requests: string;
+      refresh: string;
+      refresh_error: string;
+      resets: string;
+      test: string;
+      weekly: string;
+    }
+    ai_section_header_bar: {
+      external: string;
+    }
+    analytics: {
+      avgDuration: string;
+      costValue: string;
+      durationMs: string;
+      emptyDescription: string;
+      emptyTitle: string;
+      estCost: string;
+      loading: string;
+      modelUsage: string;
+      requestsCount: string;
+      subtitle: string;
+      title: string;
+      tokensCount: string;
+      tokensUsed: string;
+      totalRequests: string;
+      weeklyActivity: string;
+    }
     antigravity: {
       actions: {
-        loginOAuth: string;
-        refresh: string;
-        openUrl: string;
         checkStatus: string;
         checking: string;
-      };
+        loginOAuth: string;
+        openUrl: string;
+        refresh: string;
+      }
       empty: {
-        noCredentialsTitle: string;
         noCredentialsDescription: string;
-      };
+        noCredentialsTitle: string;
+      }
+      errors: {
+        oauthPollFailed: string;
+        scanAuthFilesFailed: string;
+        startLoginFailed: string;
+      }
       list: {
         detectedTitle: string;
         expiresLabel: string;
         unknownExpiry: string;
-      };
+      }
       modal: {
-        oauthTitle: string;
-        oauthInstructions: string;
         authUrlLabel: string;
-      };
+        oauthInstructions: string;
+        oauthTitle: string;
+      }
       toasts: {
         loginCompletedRefreshing: string;
         oauthFailedGeneric: string;
         oauthTimedOut: string;
-      };
-      errors: {
-        scanAuthFilesFailed: string;
-        startLoginFailed: string;
-        oauthPollFailed: string;
-      };
-    };
-
+      }
+    }
     apiKeys: {
-      loading: string;
-      providers: {
-        geminiDescription: string;
-        openaiDescription: string;
-        antigravityDescription: string;
-      };
-      empty: {
-        title: string;
-        description: string;
-      };
-      summary: {
-        noneConfigured: string;
-        configuredCount: string;
-      };
       actions: {
         addKey: string;
-        reveal: string;
-        hide: string;
+        cancel: string;
         createAccount: string;
         delete: string;
-        cancel: string;
         saveKey: string;
-      };
+      }
+      empty: {
+        description: string;
+        title: string;
+      }
+      errors: {
+        addFailed: string;
+        apiKeyRequired: string;
+        createAccountFailed: string;
+        deleteFailed: string;
+        loadFailed: string;
+      }
+      fireworks: {
+        account: string;
+        checkKey: string;
+        description: string;
+        email: string;
+        monthlyRemaining: string;
+        monthlySpendLimit: string;
+        prepaidCreditsNote: string;
+        prepaidNote: string;
+        result: string;
+        suspendState: string;
+        tier: string;
+        title: string;
+        totalSpent: string;
+      }
+      labels: {
+        baseUrl: string;
+        prefix: string;
+      }
+      loading: string;
       modals: {
         addTitle: string;
-        deleteTitle: string;
         deleteMessage: string;
         deleteMessageFallback: string;
+        deleteTitle: string;
         fields: {
           apiKeyLabel: string;
-          baseUrlLabel: string;
-          modelPrefixLabel: string;
           apiKeyPlaceholder: string;
+          baseUrlLabel: string;
           baseUrlPlaceholder: string;
+          modelPrefixLabel: string;
           modelPrefixPlaceholder: string;
-        };
-      };
+        }
+      }
+      providers: {
+        antigravityDescription: string;
+        geminiDescription: string;
+        openaiDescription: string;
+      }
+      summary: {
+        configuredCount: string;
+        noneConfigured: string;
+      }
       toasts: {
-        keyAdded: string;
-        keyDeleted: string;
         accountAlreadyExists: string;
         accountCreated: string;
         cannotDeleteLinkedAccount: string;
-      };
-      errors: {
-        loadFailed: string;
-        apiKeyRequired: string;
-        addFailed: string;
-        deleteFailed: string;
-        createAccountFailed: string;
-      };
-    };
+        keyAdded: string;
+        keyDeleted: string;
+      }
+    }
+    authScan: {
+      failed: string;
+      found: string;
+    }
     cards: {
-      accountCoverageTitle: string;
       accountCoverageHint: string;
-      modelInventoryTitle: string;
-      modelInventoryHint: string;
-      requestHistoryTitle: string;
-      requestHistoryHint: string;
-      providerCounts: string;
-      last20Requests: string;
+      accountCoverageTitle: string;
       errors: string;
-    };
-    readiness: {
-      enabled: string;
-      ready: string;
-      cooldown: string;
-      weeklyLimit: string;
-    };
-    empty: {
-      modelsProxyStopped: string;
-      modelsNoAccounts: string;
-      modelsUnavailable: string;
-      capabilities: string;
-      noMappings: string;
-      noAccountsFound: string;
-      noAccountsHint: string;
-      noAuthFiles: string;
-      noExportPayload: string;
-    };
-    table: {
-      provider: string;
-      account: string;
-      status: string;
-      quota: string;
-      today: string;
-      lastUsed: string;
-      actions: string;
-      requestsLine: string;
-      never: string;
-      testConnection: string;
-      edit: string;
-      delete: string;
-      badges: {
-        cooldown: string;
-        refreshError: string;
-        connectionError: string;
-        quotaError: string;
-      };
-      quotaPrimary: string;
-      quotaWeekly: string;
-      resetsIn: string;
-      emptyValue: string;
-    };
-    modals: {
-      transferImportTitle: string;
-      transferExportTitle: string;
-      transferFooter: string;
-      importTitle: string;
-      importDescription: string;
-      importPayloadLabel: string;
-      importPayloadPlaceholder: string;
-      importWarningTitle: string;
-      importWarningDescription: string;
-      scanResultsTitle: string;
-      scanReportLabel: string;
-      noExpiry: string;
-      expiresShort: string;
-      exportTitle: string;
-      exportDescription: string;
-      includeSecrets: string;
-      csvNoSecrets: string;
-      exportFormatJson: string;
-      exportFormatCsv: string;
-      exportPayloadLabel: string;
-      mappingsTitle: string;
-      mappingPatternPlaceholder: string;
-      mappingTargetPlaceholder: string;
-    };
-    warnings: {
-      includeSecretsConfirm: string;
-      copySensitiveConfirm: string;
-    };
-    copy: {
-      empty: string;
-      success: string;
-      fail: string;
-    };
-    diagnostics: {
-      toolsTitle: string;
-      toolsDescription: string;
-      healthTitle: string;
-      healthHint: string;
-      latestReason: string;
-      latestReasonHint: string;
-      noRecentReasons: string;
-    };
-    wizard: {
-      title: string;
-      detecting: string;
-      selectDescription: string;
-      proxyStoppedHint: string;
-      providerProfile: string;
-      noIdesTitle: string;
-      noIdesHint: string;
-      alreadyConfigured: string;
-      previewTitle: string;
-      previewHint: string;
-      applying: string;
-      runningAutoSmoke: string;
-      errors: {
-        detectFailed: string;
-        previewFailed: string;
-        configurationFailed: string;
-        autoSmokeFailed: string;
-        restoreFailed: string;
-        smokeFailed: string;
-        startProxyFailed: string;
-        autoImportFailed: string;
-      };
-      smoke: {
-        passed: string;
-        notConfigured: string;
-        proxyNotRunning: string;
-        noModels: string;
-      };
-      results: {
-        configuredVerified: string;
-        configuredPending: string;
-        restoredVerified: string;
-        restored: string;
-        smokeOk: string;
-        smokeAttention: string;
-      };
-      actions: {
-        runSmoke: string;
-        restoreBackup: string;
-        next: string;
-        back: string;
-        applyConfiguration: string;
-        done: string;
-      };
-      nextSteps: {
-        title: string;
-        restartIde: string;
-        ensureProxy: string;
-        runSmoke: string;
-        testRequest: string;
-      };
-      manual: {
-        title: string;
-        copyButton: string;
-        hint: string;
-        copied: string;
-        copyFailed: string;
-      };
-      autoImport: {
-        title: string;
-        dryRun: string;
-        importNow: string;
-        hint: string;
-        modeLabel: string;
-        modeDryRun: string;
-        modeWrite: string;
-        scanned: string;
-        imported: string;
-        skipped: string;
-        noDiscovered: string;
-      };
-    };
-    integrations: {
-      title: string;
-      description: string;
-      mappingsTitle: string;
-      mappingsHint: string;
-    };
-    usage: {
-      summaryTitle: string;
-      summaryHint: string;
-    };
-    labels: {
-      providers: string;
-      providersHint: string;
-    };
+      last20Requests: string;
+      modelInventoryHint: string;
+      modelInventoryTitle: string;
+      providerCounts: string;
+      requestHistoryHint: string;
+      requestHistoryTitle: string;
+    }
     controller: {
-      importValidation: {
-        payloadMustBeObject: string;
-        payloadVersionRequired: string;
-        payloadAccountsRequired: string;
-        invalidJson: string;
-      };
       confirm: {
         deleteAccount: string;
+        importAllFromScan: string;
         importPayload: string;
         prepareFromScan: string;
-        importAllFromScan: string;
-      };
+      }
+      errors: {
+        connectionTestFailed: string;
+        deleteAccountFailed: string;
+        downloadFailed: string;
+        exportFailed: string;
+        importFailed: string;
+        importPayloadRequired: string;
+        invalidImportPayload: string;
+        loadAccountsFailed: string;
+        migrationFailed: string;
+        noScanResultsToImport: string;
+        saveMappingsFailed: string;
+        updateAccountFailed: string;
+      }
+      importValidation: {
+        invalidJson: string;
+        payloadAccountsRequired: string;
+        payloadMustBeObject: string;
+        payloadVersionRequired: string;
+      }
       toasts: {
         accountDeleted: string;
-        accountEnabled: string;
         accountDisabled: string;
-        migrationRunning: string;
-        migrationCompleted: string;
+        accountEnabled: string;
         connectionOk: string;
-        mappingsSaved: string;
         downloadStarted: string;
         exportGenerated: string;
         importedAccounts: string;
         importedAccountsWithSkipped: string;
+        mappingsSaved: string;
+        migrationCompleted: string;
+        migrationRunning: string;
         preparedImportFromScan: string;
-      };
+      }
+    }
+    copy: {
+      empty: string;
+      fail: string;
+      success: string;
+    }
+    desktopOnly: {
+      actionUnavailable: string;
+      proxyControlsUnavailable: string;
+    }
+    diagnostics: {
+      healthHint: string;
+      healthTitle: string;
+      latestReason: string;
+      latestReasonHint: string;
+      noRecentReasons: string;
+      toolsDescription: string;
+      toolsTitle: string;
+    }
+    empty: {
+      capabilities: string;
+      modelsNoAccounts: string;
+      modelsProxyStopped: string;
+      modelsUnavailable: string;
+      noAccountsFound: string;
+      noAccountsHint: string;
+      noAuthFiles: string;
+      noExportPayload: string;
+      noMappings: string;
+    }
+    integrations: {
+      description: string;
+      mappingsHint: string;
+      mappingsTitle: string;
+      title: string;
+    }
+    labels: {
+      providers: string;
+      providersHint: string;
+    }
+    modals: {
+      csvNoSecrets: string;
+      expiresShort: string;
+      exportDescription: string;
+      exportFormatCsv: string;
+      exportFormatJson: string;
+      exportPayloadLabel: string;
+      exportTitle: string;
+      importDescription: string;
+      importPayloadLabel: string;
+      importPayloadPlaceholder: string;
+      importTitle: string;
+      importWarningDescription: string;
+      importWarningTitle: string;
+      includeSecrets: string;
+      mappingPatternPlaceholder: string;
+      mappingTargetPlaceholder: string;
+      mappingsTitle: string;
+      noExpiry: string;
+      scanReportLabel: string;
+      scanResultsTitle: string;
+      transferExportTitle: string;
+      transferFooter: string;
+      transferImportTitle: string;
+    }
+    o_auth_modal: {
+      click_the_button_below_to_open_the_authorization_p: string;
+      device_code_authorization: string;
+      enter_the_user_code_shown_above: string;
+      enter_this_code_on_the_verification_page: string;
+      open_the_verification_page_using_the_button_below: string;
+      return_here_authorization_completes_automatically: string;
+      sign_in_with_your_aws_builder_id: string;
+      waiting_for_authorization: string;
+    }
+    proxy: {
+      activePortLabel: string;
+      autoStart: string;
+      baseUrl: string;
+      clientApiKey: string;
+      error: string;
       errors: {
-        loadAccountsFailed: string;
-        deleteAccountFailed: string;
-        updateAccountFailed: string;
-        migrationFailed: string;
-        connectionTestFailed: string;
-        saveMappingsFailed: string;
-        downloadFailed: string;
-        exportFailed: string;
-        importPayloadRequired: string;
-        invalidImportPayload: string;
-        importFailed: string;
-        noScanResultsToImport: string;
-      };
-    };
-  };
-  patcher: {
-    title: string;
+        emptyManagementKey: string;
+        invalidPort: string;
+        notLoaded: string;
+      }
+      keyPreviewLabel: string;
+      managementKey: string;
+      managementKeyPlaceholder: string;
+      modeFull: string;
+      modeLabel: string;
+      modeQuota: string;
+      portLabel: string;
+      portPlaceholder: string;
+      reachabilityLabel: string;
+      reachable: string;
+      routingFillFirst: string;
+      routingLabel: string;
+      routingRoundRobin: string;
+      running: string;
+      runningWithPort: string;
+      statusLabel: string;
+      stopped: string;
+      summary: string;
+      title: string;
+      toasts: {
+        saveFailed: string;
+        saved: string;
+        started: string;
+        stopped: string;
+      }
+      unreachable: string;
+      unsavedChanges: string;
+    }
+    quota: {
+      detected: string;
+      empty: string;
+      exactLimitsUnavailable: string;
+      left: string;
+      loadUsageHint: string;
+      noModelBreakdown: string;
+      refreshQuotas: string;
+      refreshUsage: string;
+      refreshing: string;
+      retry: string;
+      title: string;
+      topModel: string;
+      totalRequests: string;
+      totalTokens: string;
+      unavailableTauri: string;
+      usageTitle: string;
+      usageUnavailable: string;
+      used: string;
+    }
+    readiness: {
+      cooldown: string;
+      enabled: string;
+      ready: string;
+      weeklyLimit: string;
+    }
+    request_history: {
+      clear_history: string;
+      duration: string;
+      loading_request_history: string;
+      model: string;
+      next: string;
+      page: string;
+      previous: string;
+      request_history: string;
+      status: string;
+      time: string;
+      tokens: string;
+    }
+    search: {
+      placeholder: string;
+    }
+    sections: {
+      antigravity: {
+        subtitle: string;
+        title: string;
+      }
+      apiKeys: {
+        subtitle: string;
+        title: string;
+      }
+      diagnostics: {
+        subtitle: string;
+        title: string;
+      }
+      integrations: {
+        subtitle: string;
+        title: string;
+      }
+      overview: {
+        subtitle: string;
+        title: string;
+      }
+      providers: {
+        subtitle: string;
+        title: string;
+      }
+      usage: {
+        subtitle: string;
+        title: string;
+      }
+    }
+    table: {
+      account: string;
+      actions: string;
+      badges: {
+        connectionError: string;
+        cooldown: string;
+        quotaError: string;
+        refreshError: string;
+      }
+      delete: string;
+      edit: string;
+      emptyValue: string;
+      lastUsed: string;
+      never: string;
+      provider: string;
+      quota: string;
+      quotaPrimary: string;
+      quotaWeekly: string;
+      requestsLine: string;
+      resetsIn: string;
+      status: string;
+      testConnection: string;
+      today: string;
+    }
+    tabs: {
+      antigravity: string;
+      apiKeys: string;
+      diagnostics: string;
+      integrations: string;
+      providers: string;
+      usage: string;
+    }
+    timeFormat: {
+      daysHours: string;
+      hoursMinutes: string;
+      minutes: string;
+    }
+    usage: {
+      summaryHint: string;
+      summaryTitle: string;
+    }
+    warnings: {
+      copySensitiveConfirm: string;
+      includeSecretsConfirm: string;
+    }
+    wizard: {
+      actions: {
+        applyConfiguration: string;
+        back: string;
+        done: string;
+        next: string;
+        restoreBackup: string;
+        runSmoke: string;
+      }
+      alreadyConfigured: string;
+      applying: string;
+      autoImport: {
+        dryRun: string;
+        hint: string;
+        importNow: string;
+        imported: string;
+        modeDryRun: string;
+        modeLabel: string;
+        modeWrite: string;
+        noDiscovered: string;
+        scanned: string;
+        skipped: string;
+        title: string;
+      }
+      detecting: string;
+      errors: {
+        autoImportFailed: string;
+        autoSmokeFailed: string;
+        configurationFailed: string;
+        detectFailed: string;
+        previewFailed: string;
+        restoreFailed: string;
+        smokeFailed: string;
+        startProxyFailed: string;
+      }
+      manual: {
+        copied: string;
+        copyButton: string;
+        copyFailed: string;
+        hint: string;
+        openaiApiKey: string;
+        openaiBaseUrl: string;
+        title: string;
+      }
+      nextSteps: {
+        ensureProxy: string;
+        restartIde: string;
+        runSmoke: string;
+        testRequest: string;
+        title: string;
+      }
+      noIdesHint: string;
+      noIdesTitle: string;
+      opencodeLabel: string;
+      previewHint: string;
+      previewTitle: string;
+      providerProfile: string;
+      proxyStoppedHint: string;
+      results: {
+        configuredPending: string;
+        configuredVerified: string;
+        restored: string;
+        restoredVerified: string;
+        smokeAttention: string;
+        smokeOk: string;
+      }
+      runningAutoSmoke: string;
+      selectDescription: string;
+      smoke: {
+        noModels: string;
+        notConfigured: string;
+        passed: string;
+        proxyNotRunning: string;
+      }
+      title: string;
+    }
+  }
+  aiProxy: {
+    oAuthModal: {
+      loading: string;
+      openAuthorizationPage: string;
+      openVerificationPage: string;
+      waitingForAuthorization: string;
+    }
+  }
+  autoReg: {
+    addyio: {
+      apiToken: string;
+      connectionError: string;
+      connectionSuccess: string;
+      testConnection: string;
+    }
+    aliasPattern: string;
+    appPassword: string;
+    automationHeaderCard: {
+      statusLabel: string;
+      title: string;
+      toggleTooltip: string;
+    }
+    automation_tab: {
+      accounts: string;
+      api: string;
+      running: string;
+      v304: string;
+      waiting: string;
+    }
+    awsAccount: string;
+    awsBootstrap: string;
+    awsBootstrapExistingSession: string;
+    awsBootstrapNewAccount: string;
+    cfToImap: string;
+    clearContext: string;
+    configure33mail: string;
+    configureAddyio: string;
+    configureMailFirst: string;
+    consoleOutput: string;
+    customDomain: string;
+    disabled: string;
+    emailAliases: string;
+    emailGeneration: string;
+    emailGenerationDomain: string;
+    emailPattern: string;
+    engineTab: {
+      auto: string;
+      cardsLoaded: string;
+      debugTooltip: string;
+      findLive: string;
+      live: string;
+      logsLabel: string;
+      manual: string;
+      openai_captcha: string;
+      passwordLengthTooltip: string;
+      rust: string;
+      savedCards: string;
+      symbolUnit: string;
+      v2: string;
+    }
+    gmailAlias: string;
+    host: string;
+    identitySystem: string;
+    identity_tab: {
+      aws_builder_id: string;
+      headless: string;
+      ready: string;
+      recommended: string;
+    }
+    imapCredentials: string;
+    inboxFiltersSection: {
+      listButton: string;
+    }
+    inboxMessagesSection: {
+      deleteButton: string;
+      deleteTooltip: string;
+      emptyDescription: string;
+      emptyTitle: string;
+      from: string;
+      markAsReadTooltip: string;
+      noSubject: string;
+      readButton: string;
+    }
+    inboxProviderSection: {
+      connectButton: string;
+      disconnectButton: string;
+      sessionLabel: string;
+    }
+    launchContextProfile: string;
+    launchContextTarget: string;
+    launchContextTitle: string;
+    launch_pad: {
+      python: string;
+      python_drissionpage: string;
+    }
+    liveRegistrationLogs: string;
+    masterGmail: string;
+    pause: string;
+    pipeline: {
+      abort: string;
+      done: string;
+      manual: string;
+      paused: string;
+      resume: string;
+      setPause: string;
+      skip: string;
+      takeOver: string;
+      unsetPause: string;
+    }
+    pipelineSteps: string;
+    placeholders: {
+      email: string;
+    }
+    port: string;
+    providerReplenishmentSection: {
+      accountUnit: string;
+      activeSummary: string;
+      description: string;
+      minReserveLabel: string;
+      minTooltip: string;
+      strategyLabel: string;
+      strategyTooltip: string;
+    }
+    proxy: string;
+    ready: string;
+    readyToStart: string;
+    resume: string;
+    rotationRulesSection: {
+      limitTrigger: string;
+    }
+    rotation_rules_section: {
+      "429": string;
+    }
+    saveError: string;
+    saved: string;
+    saving: string;
+    selectAwsAccount: string;
+    soundsTab: {
+      alertSoundLabel: string;
+      captchaSoundTooltip: string;
+      enableCaptchaSound: string;
+      minUnit: string;
+      selectSoundPlaceholder: string;
+      testButton: string;
+      timeoutLabel: string;
+      timeoutTitle: string;
+      timeoutTooltip: string;
+      title: string;
+    }
+    start: string;
+    stepDisabled: string;
+    stepEnabled: string;
+    stop: string;
+    testConnection: string;
+  }
+  automation: {
+    checkInterval: string;
+    cooldown: string;
+    maxErrors: string;
+    replenishment: string;
+    rotationRules: string;
+    switchThreshold: string;
+  }
+  aws: {
+    bulk_aws_registration_modal: {
+      aws_builder_id_account: string;
+      cancel: string;
+      create_persistent_browser_profiles_for_each_accoun: string;
+      register: string;
+      save_accounts_with: string;
+      status: string;
+      this_will: string;
+      use_catchall_email_domain_from_env: string;
+    }
+  }
+  cards: {
+    card_item: {
+      autoreg: string;
+      check: string;
+      checking: string;
+      copy: string;
+      cvv: string;
+      delete: string;
+    }
+  }
+  chat: {
+    accountIdPlaceholder: string;
+    apiKeys: string;
+    apiUrl: string;
+    assistant: string;
+    attachImages: string;
+    availableModels: string;
+    chat_input: {
+      press_enter_to_send_shiftenter_for_new_line: string;
+    }
+    clear: string;
+    copyJson: string;
+    debugProfilesTitle: string;
+    deleteProfile: string;
+    emptyDescription: string;
+    emptyTitle: string;
+    error: string;
+    forceRouting: string;
+    forced: string;
+    inspectorTitle: string;
+    latest: string;
+    maxTokensLabel: string;
+    model: string;
+    modelIdPlaceholder: string;
+    modelsCount: string;
+    ms: string;
+    noModels: string;
+    placeholder: string;
+    profileLabel: string;
+    providerPlaceholder: string;
+    providers: string;
+    proxySettings: string;
+    reset: string;
+    retry: string;
+    routed: string;
+    routedWithModel: string;
+    sendMessage: string;
+    settings: string;
+    setupApiKeys: string;
+    setupEstimatedCost: string;
+    setupModelMappings: string;
+    setupProviderAccounts: string;
+    setupProxyMode: string;
+    setupRequestsToday: string;
+    startProxy: string;
+    stopGeneration: string;
     subtitle: string;
-    detectedIdes: string;
-    scanDescription: string;
-    backupOnPatch: string;
-    restoreOnUnpatch: string;
-    scanForIdes: string;
-    scanning: string;
-    scanningForIdes: string;
-    noIdesDetected: string;
+    suggestionExplainCode: string;
+    suggestionHelpDebug: string;
+    suggestionWriteFunction: string;
+    systemPromptLabel: string;
+    temperatureLabel: string;
+    thinking: string;
+    title: string;
+    unknownProvider: string;
+    you: string;
+  }
+  commandPalette: {
+    actions: string;
+    apiKeys: string;
+    navigation: string;
+    noResults: string;
+    placeholder: string;
+    refreshAllAccounts: string;
+  }
+  common: {
+    actions: string;
+    all: string;
+    bullet: string;
+    cancel: string;
+    check: string;
+    clear: string;
+    cleared: string;
+    close: string;
+    confirm: string;
+    copy: string;
+    copyToClipboard: string;
+    creatingTask: string;
+    cross: string;
+    cvv: string;
+    delete: string;
+    deleting: string;
+    dismiss: string;
+    dot: string;
+    edit: string;
+    error: string;
+    export: string;
+    history: string;
+    info: string;
+    install: string;
+    installRuntime: string;
+    loading: string;
+    more: string;
+    name: string;
+    no: string;
+    none: string;
+    notAvailable: string;
+    o_auth_provider_selector: {
+      not_configured: string;
+      select_oauth_provider: string;
+    }
+    preview: string;
+    prompt_editor: {
+      characters: string;
+      lines: string;
+      loading_prompt: string;
+      modified: string;
+      reset_to_default: string;
+      save: string;
+      unsaved_changes: string;
+      using_kiro_default: string;
+    }
+    record: string;
+    refresh: string;
+    replay: string;
+    retry: string;
+    rollback: string;
+    save: string;
+    saveChanges: string;
+    saved: string;
+    saving: string;
+    scrollToBottom: string;
+    search: string;
+    settings: string;
+    sidebar: {
+      manager_v: string;
+      stitch: string;
+    }
+    skipToMainContent: string;
+    star: string;
+    start: string;
+    status: string;
+    stop: string;
+    success: string;
+    total: string;
+    versionPrefix: string;
+    yes: string;
+  }
+  dashboard: {
+    accountsByProvider: string;
+    accountsNearLimit: string;
+    across: string;
+    activeTokens: string;
+    activityCleared: string;
+    allAccountsHealthy: string;
+    clickToFilter: string;
+    failedToClearActivity: string;
+    inactive: string;
+    lastRegistrationAttempts: string;
+    manageProviders: string;
+    noAccountsToRefresh: string;
+    noDataToDisplay: string;
+    noRecentActivity: string;
+    providerSelection: string;
+    providers: string;
+    quick_actions_panel: {
+      ai_hub: string;
+    }
+    quotaUsage: string;
+    recentActivity: string;
+    refreshAllTokens: string;
+    selectProviderBelow: string;
+    startRegistration: string;
+    systemReady: string;
+    title: string;
+    totalAccounts: string;
+    viewFullActivityLog: string;
+  }
+  emailCounter: {
+    counterAfterLabel: string;
+    counterBeforeLabel: string;
+    counterIncrementSuccess: string;
+    counterLabel: string;
+    counterRecords: string;
+    counterResetSuccess: string;
+    counterSetSuccess: string;
+    counterSuccess: string;
+    counterUsedLabel: string;
+    counterWarning: string;
+    createdAtLabel: string;
+    currentStrategyLabel: string;
+    databaseStatus: string;
+    diagnosticsTitle: string;
+    emailLabel: string;
+    emergencyControls: string;
+    existsLabel: string;
+    generatedEmailLabel: string;
+    imapUserLabel: string;
+    incrementOne: string;
+    lastGeneratedEmails: string;
+    loadDiagnostics: string;
+    never: string;
+    noCounterRecords: string;
+    noEmailsGenerated: string;
+    pathLabel: string;
+    providerLabel: string;
+    resetToZero: string;
+    setCounter: string;
+    strategyLabel: string;
+    testEmailGeneration: string;
+    testResultTitle: string;
+    updatedAtLabel: string;
+    valueLabel: string;
+    writableLabel: string;
+  }
+  filters: {
+    active: string;
+    any: string;
+    anyStatus: string;
+    banned: string;
+    empty: string;
+    full: string;
+    hasQuota: string;
+    limitHit: string;
+    lowQuota: string;
+    quota: string;
+    status: string;
+  }
+  header: {
+    changeLanguage: string;
+    clearAll: string;
+    noNotifications: string;
+    notifications: string;
+    notificationsList: string;
+    selectLanguage: string;
+    serverOffline: string;
+    systemOnline: string;
+  }
+  identity: {
+    activeLabel: string;
+    autoGeneratedAddresses: string;
+    imapOk: string;
+    mailtmDescription: string;
+    noImapConfigNeeded: string;
+    perfectForOneTimeRegistrations: string;
+    planLabel: string;
+    temporaryEmailService: string;
+  }
+  kiroPatch: {
+    advancedSubtitle: string;
+    advancedTitle: string;
+    bindError: string;
+    bindModalAccountId: string;
+    bindModalAccountIdPlaceholder: string;
+    bindModalBind: string;
+    bindModalCancel: string;
+    bindModalGenerate: string;
+    bindModalMachineId: string;
+    bindModalMachineIdPlaceholder: string;
+    bindModalTitle: string;
+    bindNewAccount: string;
+    bindSuccess: string;
+    bindingsDescription: string;
+    bindingsEmpty: string;
+    bindingsTitle: string;
+    collapse: string;
+    constantsTitle: string;
+    copyDefaults: string;
+    copyId: string;
+    expand: string;
+    generateNew: string;
+    generateSuccess: string;
+    idCopied: string;
+    loadError: string;
+    logLevelTitle: string;
+    machineIdDescription: string;
+    machineIdTitle: string;
+    maxTokens: string;
+    modulesTitle: string;
+    promptEditorTitle: string;
+    saveConfig: string;
+    saveError: string;
+    saveSuccess: string;
+    unbind: string;
+    unbindError: string;
+    unbindSuccess: string;
+    writeLimit: string;
+  }
+  liveStatus: {
+    connecting: string;
+    error: string;
+    gettingToken: string;
+    idle: string;
+    launchingBrowser: string;
+    navigating: string;
+    processing: string;
+    scanningInbox: string;
+    success: string;
+    typingCode: string;
+    typingEmail: string;
+    typingPassword: string;
+    verifying: string;
+    waitingCode: string;
+    warning: string;
+  }
+  logFeed: {
+    activityLog: string;
+    debug: string;
+    debugView: string;
+    tokenReceived: string;
+    waitingForActivity: string;
+  }
+  logs: {
+    allChannels: string;
+    allLevels: string;
+    allSources: string;
+    autoCollapseSuccess: string;
+    channel: string;
+    channelLabel: string;
+    clear: string;
+    clearConfirmMessage: string;
+    clearConfirmTitle: string;
+    clearLogs: string;
+    collapseAll: string;
+    contextLabel: string;
+    copyJson: string;
+    copyMessage: string;
+    correlationIdLabel: string;
+    debug: string;
+    detailsPanel: string;
+    error: string;
+    errorNavigation: string;
+    expandAll: string;
+    export: string;
+    filtersApplied: string;
+    groupByStage: string;
+    info: string;
+    keyboardSearch: string;
+    keyboardTabs: string;
+    lastUpdated: string;
+    level: string;
+    loadMore: string;
+    messageLabel: string;
+    nextError: string;
+    noLogs: string;
+    presetOnlyErrors: string;
+    presetPythonRunner: string;
+    presetRegistration: string;
+    prevError: string;
+    refresh: string;
+    resetFilters: string;
+    searchPlaceholder: string;
+    selectAllSources: string;
+    selectLogHint: string;
+    sessionIdLabel: string;
+    source: string;
+    sourceCountSelected: string;
+    sourceLabel: string;
+    subtitle: string;
+    success: string;
+    title: string;
+    verbosityLabel: string;
+    warning: string;
+  }
+  mail: {
+    accountIdLabel: string;
+    accountsRailTitle: string;
+    activeProfileLabel: string;
+    attachmentsLabel: string;
+    bccField: string;
+    bodyLabel: string;
+    bulkDeleteAction: string;
+    bulkMarkReadAction: string;
+    capabilitiesTitle: string;
+    capabilityAttachments: string;
+    capabilityDelete: string;
+    capabilityMarkAsRead: string;
+    capabilitySearchBody: string;
+    ccField: string;
+    clearSelectionAction: string;
+    connect: string;
+    connecting: string;
+    currentSessionEmpty: string;
+    currentSessionTitle: string;
+    dedupeKeyLabel: string;
+    deleteAction: string;
+    deleteProfileAction: string;
+    deleteProfileDialogDescription: string;
+    deleteProfileDialogTitle: string;
+    disconnect: string;
+    email_counter_diagnostics: {
+      text: string;
+    }
+    folderAllMail: string;
+    folderDrafts: string;
+    folderInbox: string;
+    folderSent: string;
+    folderSpam: string;
+    folderTrash: string;
+    foldersDisconnectedHint: string;
+    foldersTitle: string;
+    fromField: string;
+    fromLabel: string;
+    google_sheets_raw_mailbox_import: {
+      configure_google_sheets_credentials_in_settingsreg: string;
+      detected_mailboxes: string;
+      google_sheets_raw: string;
+      refresh: string;
+      row_issues: string;
+    }
+    htmlLabel: string;
+    keyboardHint: string;
+    lastSyncLabel: string;
+    limitLabel: string;
+    listAction: string;
+    loadMessageAction: string;
+    mailboxLabel: string;
+    mailboxNotSelectedHint: string;
+    mailboxNotSelectedTitle: string;
+    manualConnectionAction: string;
+    manualConnectionDescription: string;
+    manualConnectionTitle: string;
+    manualProfileMode: string;
+    markReadAction: string;
+    messagesTitle: string;
+    navigationTitle: string;
+    noMessagesDescription: string;
+    noMessagesTitle: string;
+    noProfilesYet: string;
+    noSelectionDescription: string;
+    noSelectionTitle: string;
+    openRawSourceAction: string;
+    plainTextLabel: string;
+    pollIntervalLabel: string;
+    profileSyncError: string;
+    profileSyncIdle: string;
+    profileSyncSyncing: string;
+    profileSyncUnknown: string;
+    profilesLoading: string;
+    profilesTitle: string;
+    providerAddress: string;
+    providerAvailable: string;
+    providerBaseUrl: string;
+    providerHost: string;
+    providerPassword: string;
+    providerPort: string;
+    providerUnavailable: string;
+    providerUseTls: string;
+    providerUsername: string;
+    providersCatalogTitle: string;
+    rawSourceTitle: string;
+    readOnlyHint: string;
+    readStateRead: string;
+    readStateUnread: string;
+    receivedAtField: string;
+    renameProfileAction: string;
+    renameProfileDialogDescription: string;
+    renameProfileDialogTitle: string;
+    renameProfileLabel: string;
+    saveSessionAsProfileAction: string;
+    selectAllLabel: string;
+    selectedCountLabel: string;
+    sessionActive: string;
+    sessionIdle: string;
+    sinceLabel: string;
+    sourceExtensionsPlaceholder: string;
+    sourceExtensionsTitle: string;
+    sourceImap: string;
+    sourceLabel: string;
+    sourceMailTm: string;
+    subjectLabel: string;
+    subtitle: string;
+    syncCollapse: string;
+    syncExpand: string;
+    syncTitle: string;
+    timeoutLabel: string;
+    title: string;
+    toField: string;
+    toLabel: string;
+    toolbarSearchPlaceholder: string;
+    unreadOnly: string;
+    viewerTitle: string;
+    waitAction: string;
+    waitingAction: string;
+  }
+  missionControl: {
+    browserStatus: string;
+  }
+  network: {
+    configureProxy: string;
+    currentProxy: string;
+    directConnection: string;
+    notConfigured: string;
+    proxyEnabled: string;
+    proxyLabel: string;
+    proxyNotConfigured: string;
+    proxySettingsHint: string;
+    title: string;
+    useProxy: string;
+  }
+  notFoundPage: {
+    description: string;
+    goHome: string;
+    title: string;
+  }
+  notifications: {
+    copied: string;
+  }
+  patcher: {
+    advancedSettings: string;
     applyPatch: string;
-    removePatch: string;
     backups: string;
-    backup: string;
-    allIdes: string;
+    deleteFailed: string;
+    detectedIdes: string;
+    i_d_e_info_panel: {
+      path: string;
+      status: string;
+      version: string;
+    }
+    information: string;
     loadingBackups: string;
     noBackups: string;
-    noBackupsForIde: string;
-    backupsCreatedWhenPatching: string;
-    restore: string;
-    patchInformation: string;
-    information: string;
-    patchSettings: string;
-    currentVersion: string;
-    patchedIdes: string;
-    totalBackups: string;
-    ideNotDetected: string;
-    configurePathInSettings: string;
-    patching: string;
-    unpatching: string;
-    restoring: string;
-    settings: string;
-    settingsMenu: string;
-    advancedSettings: string;
-    strategy: string;
+    noIdesDetected: string;
+    noIdesDetectedDescription: string;
     patchFailed: string;
-    patchTraeFailed: string;
-    unpatchFailed: string;
-    restoreFailed: string;
-    deleteFailed: string;
-    // Patch options
     patchOptions: string;
-    patchVersion: string;
-    globalSettings: string;
-    machineIdSpoofing: string;
-    machineIdSpoofingDesc: string;
-    blockTelemetry: string;
-    blockTelemetryDesc: string;
-    bypassRateLimits: string;
-    bypassRateLimitsDesc: string;
-    osSpoofing: string;
-    osSpoofingDesc: string;
-    commandSpoofing: string;
-    commandSpoofingDesc: string;
-    constantPatching: string;
-    constantPatchingDesc: string;
-    authWatcher: string;
-    authWatcherDesc: string;
-    customPrompts: string;
-    customPromptsDesc: string;
-    requestSpy: string;
-    requestSpyDesc: string;
-    errorSuppression: string;
-    errorSuppressionDesc: string;
-    unlockPro: string;
-    unlockProDesc: string;
-    removeWatermark: string;
-    removeWatermarkDesc: string;
-    // Trae
-    traeProPatch: string;
-    traeProFull: string;
-    traeProDescription: string;
-    traeNotInstalled: string;
-    traeFullPatch: string;
-    traeStorage: string;
-    traeExtension: string;
-    traeWorkbench: string;
-    traePro: string;
-    traeFree: string;
-    traePatched: string;
-    traeOriginal: string;
-  };
-  settings: {
-    title: string;
+    patch_options_panel: {
+      all: string;
+      none: string;
+    }
+    patching: string;
+    removePatch: string;
+    restore: string;
+    restoreFailed: string;
+    restoring: string;
+    scanDescription: string;
+    scanForIdes: string;
+    scanning: string;
+    settings: string;
     subtitle: string;
-    categories: {
-      general: string;
-      automation: string;
-      connectivity: string;
-      googleSheets: string;
-      extension: string;
-      patcher: string;
-      tokenPool: string;
-      imap: string;
+    title: string;
+    unpatchFailed: string;
+    unpatching: string;
+  }
+  profileProxy: {
+    addProxyButton: string;
+    addProxyInputLabel: string;
+    addProxyInputPlaceholder: string;
+    addProxyLockHint: string;
+    addProxyModalTitle: string;
+    addProxyParse: string;
+    addProxyParseError: string;
+    addProxyParsing: string;
+    addProxySaveError: string;
+    addProxySaveUse: string;
+    addProxySuccess: string;
+    addProxyTest: string;
+    addProxyTestError: string;
+    addProxyTestRequiredLabel: string;
+    addProxyTestRequiredMessage: string;
+    addProxyTesting: string;
+    disabledHint: string;
+    enabledToggle: string;
+    libraryProxy: string;
+    loading: string;
+    noEnabledProxies: string;
+    selectProxy: string;
+    source: string;
+    sourceDisabled: string;
+    sourceLibrary: string;
+    testFail: string;
+    testOk: string;
+    using: string;
+  }
+  profiles: {
+    profile_settings_modal: {
+      duplicate: string;
+      export: string;
+      import: string;
+      locale: string;
       proxy: string;
-      idePaths: string;
-      database: string;
-      aiProxy: string;
-    };
+      reset_all: string;
+      reset_tab: string;
+      timezone: string;
+      window: string;
+    }
+  }
+  proxyLibrary: {
+    addOrLinkProxy: string;
+    andMore: string;
+    batchDelete: string;
+    batchDisable: string;
+    batchEnable: string;
+    bulkPreview: string;
+    cancel: string;
+    createError: string;
+    defaultType: string;
+    deleteError: string;
+    description: string;
+    edit: string;
+    enabled: string;
+    entries: string;
+    forceDeleteConfirm: string;
+    forceDeletePrompt: string;
+    hidePasswords: string;
+    host: string;
+    import: string;
+    importBulk: string;
+    importError: string;
+    importedEnabled: string;
+    importedStat: string;
+    importing: string;
+    label: string;
+    loadError: string;
+    loading: string;
+    noEntries: string;
+    notes: string;
+    parseError: string;
+    password: string;
+    pasteProxies: string;
+    port: string;
+    quickAddTitle: string;
+    quickInputLabel: string;
+    quickInputPlaceholder: string;
+    quickParse: string;
+    ready: string;
+    referencesProfiles: string;
+    referencesScenarios: string;
+    save: string;
+    saving: string;
+    showPasswords: string;
+    skippedStat: string;
+    statusDisabled: string;
+    statusEnabled: string;
+    stepRestartBoundary: string;
+    testDraft: string;
+    testEntry: string;
+    testError: string;
+    testStatusFail: string;
+    testStatusNone: string;
+    testStatusOk: string;
+    testingDraft: string;
+    testingEntry: string;
+    title: string;
+    totalLinesStat: string;
+    type: string;
+    updateError: string;
+    username: string;
+  }
+  proxyListManager: {
+    activeCount: string;
+    addButton: string;
+    bulkPasteHint: string;
+    loginLabel: string;
+    noProxies: string;
+    passwordLabel: string;
+    pasteButton: string;
+    proxyAddedAndSaved: string;
+    proxyCount: string;
+    statusError: string;
+    statusNotTested: string;
+    statusWorking: string;
+  }
+  quickSwitch: {
+    activationFailed: string;
+    active: string;
+    activeAccountsPerProvider: string;
+    clickProviderTab: string;
+    deactivate: string;
+    noActiveAccount: string;
+    noActiveAccounts: string;
+    title: string;
+  }
+  recorder: {
+    browser_runtime_install_modal: {
+      downloading_exact_progress_not_available: string;
+      elapsed: string;
+      elapsedSeconds: string;
+      install_path: string;
+      logs: string;
+      no_logs_yet: string;
+      runtime: string;
+      stage: string;
+      status: string;
+    }
+    composed_flow_modal: {
+      loading: string;
+      select_profile_alias_first: string;
+    }
+    composer_flow_tab: {
+      add_auth_node: string;
+      add_context_node: string;
+      clear_branch: string;
+      duplicate: string;
+      selected_branch: string;
+      set_as_start: string;
+      start_by_adding_your_first_step: string;
+      use_starter_template: string;
+    }
+    composer_footer: {
+      close: string;
+      create_scheduler_task: string;
+      delete: string;
+      run_flow: string;
+      save: string;
+    }
+    composer_node_editor: {
+      add_binding: string;
+      bindings: string;
+      no_bindings: string;
+      remove_binding: string;
+    }
+    composer_run_tab: {
+      last_run_trace: string;
+      running_now: string;
+    }
+    composer_setup_tab: {
+      add_input: string;
+      configure_google_sheets_credentials_in_autoreg_set: string;
+      flow_input_defaults: string;
+      import: string;
+      import_emails_from_google_sheets: string;
+      no_flow_inputs_yet: string;
+      refresh_sheets: string;
+      remove: string;
+    }
+    extensionBridgeChecking: string;
+    extensionBridgeConnected: string;
+    extensionBridgeDisconnected: string;
+    extensionBridgeRefresh: string;
+    extensionBridgeStatusLabel: string;
+    extensionRunnerBridgeHint: string;
+    fieldCapturePrivacyNote: string;
+    flow_actions_bar: {
+      context_step: string;
+      next_scenario: string;
+      scenario_step: string;
+    }
+    flow_graph_node: {
+      executed: string;
+      running: string;
+      step: string;
+    }
+    flow_inspector_header: {
+      move_down: string;
+      move_up: string;
+      remove: string;
+    }
+    flow_validation_banner: {
+      go_to_first_issue: string;
+      issues: string;
+    }
+    profile_scenarios_panel: {
+      flow_composer: string;
+    }
+    proxySwitchRestartWarningRecord: string;
+    proxySwitchRestartWarningReplay: string;
+    recordWithoutOverlayDescription: string;
+    recordWithoutOverlayLabel: string;
+    replay: {
+      abort: string;
+      advancedToggle: string;
+      cannotParseScenario: string;
+      compactDisabled: string;
+      compactEnabled: string;
+      continueOnError: string;
+      copyReportPath: string;
+      correlationId: string;
+      currentAdded: string;
+      defaultScenarioName: string;
+      droppedLabel: string;
+      emptySaved: string;
+      failureDetails: string;
+      failureError: string;
+      failureReport: string;
+      failureRunner: string;
+      failureSelector: string;
+      failureStep: string;
+      failureUrl: string;
+      fromProfile: string;
+      healthFilterAll: string;
+      healthFilterErrors: string;
+      healthFilterValid: string;
+      healthScoreLabel: string;
+      healthShort: string;
+      indexLoadFailed: string;
+      invalidScenarioFile: string;
+      issuesLabel: string;
+      jobId: string;
+      lastEvent: string;
+      loadingSettings: string;
+      manualPause: string;
+      manualPauseNeedsAction: string;
+      manualPauseReason: string;
+      missingFile: string;
+      noMatches: string;
+      noScenarioLoaded: string;
+      openReportFolder: string;
+      openReportFolderFailed: string;
+      openRunDetails: string;
+      pickScenario: string;
+      presetApplyAction: string;
+      presetApplyRunAction: string;
+      presetDefaultName: string;
+      presetDeleteMessage: string;
+      presetDeleteTitle: string;
+      presetLastUsed: string;
+      presetNamePlaceholder: string;
+      presetRenameAction: string;
+      presetSaveAction: string;
+      presetSaveFailed: string;
+      presetSaved: string;
+      presetsEmpty: string;
+      presetsTitle: string;
+      profile: string;
+      progressEmpty: string;
+      progressLabel: string;
+      pythonStderr: string;
+      quickRunAction: string;
+      quickRunTitle: string;
+      reasonAlreadyRunning: string;
+      reasonInvalidPreflight: string;
+      reasonMissingProfile: string;
+      reasonMissingScenario: string;
+      reasonRuntimeMissing: string;
+      recentRunsEmpty: string;
+      recentRunsError: string;
+      recentRunsTitle: string;
+      recentScenarios: string;
+      refreshing: string;
+      reindex: string;
+      reindexFailed: string;
+      reindexSuccess: string;
+      reindexing: string;
+      reportPathCopied: string;
+      reportPathCopyFailed: string;
+      resume: string;
+      retryFromFailedStep: string;
+      retryFromStepAction: string;
+      retryFromStepSelected: string;
+      retryFromStepUnavailable: string;
+      runDurationLabel: string;
+      runHealth: string;
+      runnerConfig: string;
+      runsFilterAll: string;
+      runsFilterErrors: string;
+      runtimeChecking: string;
+      runtimeInstalled: string;
+      runtimeLabel: string;
+      runtimeMissing: string;
+      runtimeMissingNote: string;
+      runtimeNotInstalled: string;
+      runtimeReady: string;
+      runtimeSection: string;
+      runtimeUnknown: string;
+      savedScenarios: string;
+      scenarioLabel: string;
+      scenarioPath: string;
+      scenarioPathPlaceholder: string;
+      searchPlaceholder: string;
+      seedCurrent: string;
+      seedFailed: string;
+      selectRecent: string;
+      selectedPinnedHint: string;
+      selectedScenario: string;
+      sortHealth: string;
+      sortRecent: string;
+      sortSteps: string;
+      startHotkeyHint: string;
+      startUrl: string;
+      statusDone: string;
+      statusError: string;
+      statusIdle: string;
+      statusLabel: string;
+      statusManualPause: string;
+      statusRunning: string;
+      statusStarting: string;
+      statusStopping: string;
+      steps: string;
+      stepsLabel: string;
+      tabDetails: string;
+      tabDiagnostics: string;
+      tabOverview: string;
+      tagsFilterLabel: string;
+      timelineEmpty: string;
+      timelineTitle: string;
+      validLabel: string;
+      validating: string;
+      versionCurrent: string;
+      versionLoadError: string;
+      versionPrefix: string;
+      versionRollbackAction: string;
+      versionRunAction: string;
+      versionSelect: string;
+      versionSelected: string;
+      versionTitle: string;
+    }
+    replay_runtime_badge: {
+      runner_extension: string;
+    }
+    replay_version_panel: {
+      v: string;
+    }
+    run_diagnostics_panel: {
+      compile_preview: string;
+      executed_nodes: string;
+      go_to_flow_tab: string;
+      no_diagnostics: string;
+      no_runnable_steps_yet_add_your_first_node_in_flow_: string;
+      segments: string;
+    }
+    scenario_record_modal: {
+      advanced_diagnostics: string;
+      browser_runtime: string;
+      correlation: string;
+      engine_cloakbrowser: string;
+      job: string;
+      profile: string;
+      python_stderr: string;
+      recorder_runtime_missing_install_it_to_start_recor: string;
+      runner_config_json: string;
+      scenario_path: string;
+    }
+    scenario_replay_modal: {
+      engine_cloakbrowser: string;
+    }
+  }
+  scenarios: {
+    copyPath: string;
+    deleteArmedHint: string;
+    deleteArmedLabel: string;
+    description: string;
+    duplicateScenario: string;
+    editScenario: string;
+    emptyDescription: string;
+    emptyTitle: string;
+    favoritesOnly: string;
+    healthScore: string;
+    lastDurationValue: string;
+    lastPlayed: string;
+    lastStatus: string;
+    librarySubtitle: string;
+    libraryTitle: string;
+    missingFile: string;
+    missingProfile: string;
+    noProfiles: string;
+    noScenarios: string;
+    openFolder: string;
+    playCount: string;
+    profileHint: string;
+    searchPlaceholder: string;
+    selectProfile: string;
+    stepsCount: string;
+    subtitle: string;
+    tags: string;
+    tagsFilterLabel: string;
+    tagsHint: string;
+    title: string;
+    toggleFavorite: string;
+    update: string;
+    viewCards: string;
+    viewList: string;
+  }
+  scheduler: {
+    add: string;
+    addTask: string;
+    additionalConfigJsonMustBeObject: string;
+    additionalConfigJsonMustBeValid: string;
+    column: string;
+    compiledPlanPath: string;
+    composedFlowPreview: string;
+    composedFlowTarget: string;
+    configureGoogleSheets: string;
+    confirmDeleteTask: string;
+    createButton: string;
+    createTask: string;
+    createTaskFromTemplateTooltip: string;
+    currentEmailSourcePolicy: string;
+    detectedKeysCannotBeRemoved: string;
+    diagnostics: string;
+    duration: string;
+    editTask: string;
+    editTemplateTitle: string;
+    editTemplateTooltip: string;
+    emailListEmpty: string;
+    emailSourceOverride: string;
+    enabled: string;
+    errorMark: string;
+    executionHistory: string;
+    expertMode: string;
+    failedToLoadFlows: string;
+    failedToLoadScenarios: string;
+    failedToSaveTemplate: string;
+    fallbackToPool: string;
+    flowInputVariables: string;
+    flowJsonHelpText: string;
+    flowJsonInvalid: string;
+    flowJsonMustBeObject: string;
+    flowJsonMustBeValid: string;
+    flowName: string;
+    flowNodes: string;
+    flowVarsJsonMustBeObject: string;
+    flowVarsJsonMustBeValid: string;
+    googleSheetsColumn: string;
+    googleSheetsRequiresColumn: string;
+    googleSheetsRequiresSheet: string;
+    hideExpertMode: string;
+    lastRunLabel: string;
+    loadingFlows: string;
+    loadingHistory: string;
+    loadingProfiles: string;
+    loadingScenarios: string;
+    loadingSheets: string;
+    loadingShort: string;
+    loadingTasks: string;
+    loadingTemplates: string;
+    manualList: string;
+    newFromTemplateButton: string;
+    newKey: string;
+    newTemplateButton: string;
+    newTemplateTitle: string;
+    newValue: string;
+    nextRunLabel: string;
+    nextRunValueLabel: string;
+    noExecutionHistory: string;
+    noExecutionHistoryDesc: string;
+    noInputKeysDetected: string;
+    noNextRun: string;
+    noRunnableSegments: string;
+    noSavedFlowSelected: string;
+    noSavedScenarios: string;
+    noScheduledTasks: string;
+    noScheduledTasksDescription: string;
+    noTemplatesYet: string;
+    none: string;
+    openInComposer: string;
+    pageDescription: string;
+    pageTitle: string;
+    pending: string;
+    preferPool: string;
+    profileLabel: string;
+    profileRequired: string;
+    profileRequiredForFlow: string;
+    provideValidFlowJson: string;
+    provideValidFlowJsonPreview: string;
+    quietHours: string;
+    refresh: string;
+    refreshFlows: string;
+    refreshSheets: string;
+    remove: string;
+    removeVariable: string;
+    retryPolicy: string;
+    runnableSegments: string;
+    saveButton: string;
+    savedScenarios: string;
+    scenarioPathLabel: string;
+    scenarioPathPlaceholder: string;
+    scenarioPathRequired: string;
+    scenarioTarget: string;
+    scenarioTemplatesDescription: string;
+    scenarioTemplatesSection: string;
+    scheduleDaily: string;
+    scheduleInterval: string;
+    scheduleInvalid: string;
+    scheduleLabel: string;
+    scheduleOnce: string;
+    schedulerStatusLabel: string;
+    scriptPathRequired: string;
+    searchScenarios: string;
+    selectColumn: string;
+    selectFlow: string;
+    selectProfile: string;
+    selectProfileToLoad: string;
+    selectSavedFlow: string;
+    selectSheet: string;
+    sheet: string;
+    showExpertMode: string;
+    startScheduler: string;
+    started: string;
+    statusRunning: string;
+    statusStopped: string;
+    steps: string;
+    stopScheduler: string;
+    strict: string;
+    successMark: string;
+    successRateLabel: string;
+    taskEnabled: string;
+    taskNameRequired: string;
+    taskTypeComposedFlow: string;
+    taskTypeLabel: string;
+    taskTypeManual: string;
+    taskTypeScenario: string;
+    taskTypeScript: string;
+    taskTypeTemplate: string;
+    templateFormInvalid: string;
+    testCompile: string;
+    totalRuns: string;
+    totalTasksLabel: string;
+    unknown: string;
+    unnamed: string;
+    useCurrentFromComposer: string;
+  }
+  settings: {
+    ai_proxy_settings: {
+      ai_proxy: string;
+      ai_proxy_port: string;
+      ai_proxy_status: string;
+      ai_proxy_will_be_stopped_in_quotaonly_mode: string;
+      auto_start: string;
+      clear: string;
+      configure_ai_proxy_to_distribute_models_to_idecli_: string;
+      configure_idecli: string;
+      enabled_changes_apply_to_opencode_config_previews: string;
+      fill_first: string;
+      full_mode_ai_proxy_quota: string;
+      idecli_clients_connect_to_this_port_through_the_ai: string;
+      loading: string;
+      loading_model_toggles: string;
+      mode: string;
+      opencode_model_access: string;
+      quotaonly_mode: string;
+      round_robin: string;
+      routing_strategy: string;
+      running_on_port: string;
+      save_settings: string;
+      saved: string;
+      select_all: string;
+      start: string;
+      start_ai_proxy_automatically_to_keep_idecli_client: string;
+      stop: string;
+      stopped: string;
+      toggle_which_model_ids_are_exposed_in_the_opencode: string;
+    }
+    background_manager_settings_section: {
+      auto_refresh_quota: string;
+      automatically_refresh_account_quotas_in_the_backgr: string;
+      errors: string;
+      last: string;
+      loading: string;
+      next: string;
+      refresh_interval: string;
+      saved: string;
+      tracked: string;
+    }
+    categories: {
+      automation: string;
+    }
+    database: {
+      location: string;
+      title: string;
+    }
+    domain: string;
+    emailCounter: {
+      counterValue: string;
+      description: string;
+      nextRegistration: string;
+      title: string;
+    }
+    email_counter_section: {
+      domaincom: string;
+      user: string;
+    }
+    email_services_section: {
+      account_status: string;
+      autodelete_aliases: string;
+      bandwidth: string;
+      default_recipient: string;
+      domain: string;
+      enable_mailtm_temporary_email: string;
+      format: string;
+      mailtm_provides_free_temporary_email_addresses_no_: string;
+      mb: string;
+      n_random_chars: string;
+      not_saved_yet: string;
+      placeholders: string;
+      save_token: string;
+      subscription: string;
+      token_is_sensitive_and_is_not_saved_until_you_clic: string;
+    }
+    extension: {
+      bridgeHint: string;
+      checklistCopied: string;
+      copyChecklist: string;
+      copyPath: string;
+      description: string;
+      extensionPath: string;
+      installStep1: string;
+      installStep2: string;
+      installStep3: string;
+      installStep4: string;
+      installTitle: string;
+      lastPingLabel: string;
+      latencyLabel: string;
+      openChromeExtensions: string;
+      openExtensionFolder: string;
+      pathHint: string;
+      title: string;
+    }
+    failedToSave: string;
+    formatLabel: string;
     general: {
       appearance: string;
       appearanceDescription: string;
-      light: string;
-      dark: string;
-      system: string;
       language: string;
       languageDescription: string;
-      uiScale: string;
-      uiScaleDescription: string;
       scale: string;
-      scaleSmall: string;
       scaleLarge: string;
       scaleReset: string;
-      on: string;
-      off: string;
-    };
-
-    imap: {
-      title: string;
-      description: string;
-      server: string;
-      port: string;
-      emailAddress: string;
-      password: string;
-      emailGenerationDomain: string;
-    };
-    proxy: {
-      title: string;
-      description: string;
-      enableProxy: string;
-      proxyUrl: string;
-      proxyUrlHint: string;
-    };
-    emailCounter: {
-      title: string;
-      description: string;
-      counterValue: string;
-      nextRegistration: string;
-    };
-    idePaths: {
-      title: string;
-      description: string;
-      pathExample: string;
-    };
-    database: {
-      title: string;
-      description: string;
-      location: string;
-      type: string;
-      sqliteDescription: string;
-      exportData: string;
-      importData: string;
-    };
+      scaleSmall: string;
+      uiScale: string;
+      uiScaleDescription: string;
+    }
     googleSheets: {
-      title: string;
+      connectionOk: string;
+      connectionOkWithWarnings: string;
+      datasetLoaded: string;
       description: string;
-      spreadsheetId: string;
-      spreadsheetIdHint: string;
-      serviceAccountJson: string;
-      testConnection: string;
-      testing: string;
       initSchema: string;
       initializing: string;
       refreshDataset: string;
       refreshing: string;
       required: string;
-      connectionOk: string;
-      connectionOkWithWarnings: string;
       schemaInited: string;
       schemaInitedWithWarnings: string;
-      datasetLoaded: string;
       securityHint: string;
-    };
-    extension: {
+      serviceAccountJson: string;
+      spreadsheetId: string;
+      spreadsheetIdHint: string;
+      testConnection: string;
+      testing: string;
       title: string;
+    }
+    idePaths: {
       description: string;
-      installTitle: string;
-      installStep1: string;
-      installStep2: string;
-      installStep3: string;
-      installStep4: string;
-      extensionPath: string;
-      pathHint: string;
-      openChromeExtensions: string;
-      openExtensionFolder: string;
-      copyPath: string;
-      copyChecklist: string;
-      checklistCopied: string;
-      lastPingLabel: string;
-      latencyLabel: string;
-      bridgeHint: string;
-    };
-    loadingSettings: string;
-    saveSettings: string;
-    settingsSaved: string;
-    failedToSave: string;
+      title: string;
+    }
+    imap: {
+      description: string;
+      emailAddress: string;
+      emailGenerationDomain: string;
+      password: string;
+      port: string;
+      server: string;
+      title: string;
+    }
     loadFailed: string;
-    folderDialogFailed: string;
+    loadingSettings: string;
     patcher: {
-      title: string;
-      description: string;
       autoRotate: string;
       autoRotateDescription: string;
+      description: string;
       spoofMachineId: string;
       spoofMachineIdDescription: string;
-      note: string;
-      noteDescription: string;
-    };
-  };
-  logs: {
+      title: string;
+    }
+    pool_settings_panel: {
+      enabled: string;
+      status: string;
+      total: string;
+    }
+    profile_add_proxy_modal: {
+      http: string;
+      socks5: string;
+    }
+    profile_data_tab: {
+      clear_data: string;
+      cookies: string;
+      cookies_storage: string;
+      import_file: string;
+    }
+    profile_geo_tab: {
+      auto: string;
+      clear_geo: string;
+      current_mode: string;
+      dede: string;
+      engb: string;
+      enus: string;
+      locale: string;
+      manual_coordinates: string;
+      ruru: string;
+      timezone: string;
+    }
+    profile_main_tab: {
+      clear_main: string;
+      defaults: string;
+      main_defaults: string;
+      maximize: string;
+      pick_preset: string;
+      used_when_mode_is_fixed_size: string;
+      window: string;
+    }
+    proxy: {
+      description: string;
+      enableProxy: string;
+      title: string;
+    }
+    proxySettingsSection: {
+      example: string;
+      hostLabel: string;
+      loginLabel: string;
+      passwordLabel: string;
+      portLabel: string;
+      proxyReady: string;
+      proxyRecognizedSuccess: string;
+      proxyTypeLabel: string;
+      proxyUrlLabel: string;
+      proxyUrlPlaceholder: string;
+      statusLabel: string;
+      supportedFormats: string;
+      typeLabel: string;
+      useProxyListLabel: string;
+      withAuth: string;
+      withoutAuth: string;
+    }
+    proxy_library_section: {
+      http: string;
+      line: string;
+      socks5: string;
+    }
+    proxy_settings_section: {
+      http: string;
+      socks5: string;
+    }
+    proxy_settings_section_v2: {
+      description: string;
+      enableProxy: string;
+      example: string;
+      http: string;
+      legacy_proxy_config: string;
+      proxyType: string;
+      proxy_library: string;
+      saved: string;
+      saving: string;
+      socks5: string;
+      supportedFormats: string;
+      title: string;
+      withAuth: string;
+      withoutAuth: string;
+    }
+    settingsSaved: string;
     title: string;
-    subtitle: string;
-    refresh: string;
-    export: string;
-    clear: string;
-    allLevels: string;
-    info: string;
-    warning: string;
-    error: string;
-    debug: string;
-    success: string;
-    searchPlaceholder: string;
-    time: string;
-    level: string;
-    channel: string;
-    source: string;
-    message: string;
-    noLogs: string;
-    showing: string;
-    of: string;
-    entries: string;
-    lastUpdated: string;
-    allSources: string;
-    allChannels: string;
-    selectAllSources: string;
-    sourceCountSelected: string;
-    filtersApplied: string;
-    presetOnlyErrors: string;
-    presetPythonRunner: string;
-    presetRegistration: string;
-    groupByStage: string;
-    autoCollapseSuccess: string;
-    expandAll: string;
-    collapseAll: string;
-    resetFilters: string;
-    loadMore: string;
-    scrollHint: string;
-    clearConfirmTitle: string;
-    clearConfirmMessage: string;
-    clearLogs: string;
-  };
-  notifications: {
-    registrationComplete: string;
-    registrationFailed: string;
-    copied: string;
-    resultsCopiedToClipboard: string;
-    accountActivated: string;
-    accountDeactivated: string;
-    activationFailed: string;
-    tokenWritten: string;
-    accountAdded: string;
-    addFailed: string;
-    refreshFailed: string;
-    refreshComplete: string;
-    deleteFailed: string;
-  };
+  }
+  sidebar: {
+    accounts: string;
+    aiHub: string;
+    autoReg: string;
+    chat: string;
+    dashboard: string;
+    idePatch: string;
+    localMode: string;
+    logs: string;
+    mail: string;
+    scenarios: string;
+    scheduler: string;
+    settings: string;
+    system: string;
+    tools: string;
+  }
+  status: {
+    active: string;
+    banned: string;
+    expired: string;
+    limitHit: string;
+    notConfigured: string;
+    notPatched: string;
+    offline: string;
+    patched: string;
+    unknown: string;
+    valid: string;
+  }
+  system: {
+    app_error_boundary: {
+      a_runtime_error_occurred_the_event_has_been_logged: string;
+      reload_app: string;
+      ui_crashed: string;
+    }
+  }
+  terminal: {
+    debugDetails: string;
+    liveFeed: string;
+    logsWillAppear: string;
+    readyToLaunch: string;
+  }
   time: {
+    daysAgo: string;
+    hoursAgo: string;
     justNow: string;
     minutesAgo: string;
-    hoursAgo: string;
-    daysAgo: string;
-    monthsAgo: string;
-    inMinutes: string;
-    inHours: string;
-    inDays: string;
-    inMonths: string;
-    soon: string;
     now: string;
-    never: string;
-  };
-  validation: {
-    required: string;
-    invalidEmail: string;
-    invalidUrl: string;
-    invalidPort: string;
-    invalidHostname: string;
-    testConnection: string;
-    testing: string;
-    connectionSuccess: string;
-    connectionFailed: string;
-  };
-  quickSwitch: {
-    title: string;
-    active: string;
-    noActiveAccounts: string;
-    deactivate: string;
-    noActiveAccount: string;
-    clickProviderTab: string;
-    activeAccountsPerProvider: string;
-    activationFailed: string;
-  };
-  tokenPool: {
-    // Tab and titles
-    title: string;
+  }
+  tools: {
+    bankLabel: string;
+    binLabel: string;
+    mmLabel: string;
+    yyLabel: string;
+    check: string;
+    checkAll: string;
+    checkError: string;
+    checking: string;
+    checkingProgress: string;
+    copy: string;
+    copyAll: string;
+    countryLabel: string;
+    debugLabel: string;
+    deselect: string;
+    errorCopyFailed: string;
+    errorGeneration: string;
+    apiRateLimit: string;
+    apiTimeout: string;
+    apiNetworkError: string;
+    filterAll: string;
+    filterDie: string;
+    filterLive: string;
+    filterUnchecked: string;
+    filterUnknown: string;
+    generate: string;
+    generatorTitle: string;
+    manualCheckTitle: string;
+    noFilterResults: string;
+    noPresets: string;
+    placeholderBin: string;
+    placeholderCvv: string;
+    placeholderManualCheck: string;
+    placeholderMonth: string;
+    placeholderSearch: string;
+    placeholderYear: string;
+    presetNamePlaceholder: string;
+    presetsTitle: string;
+    quantityLabel: string;
+    resultsTitle: string;
+    saveCurrentPreset: string;
+    selectFiltered: string;
+    selectedCount: string;
+    statusDie: string;
+    statusLive: string;
+    statusUnknown: string;
     subtitle: string;
-
-    // Stats
-    totalTokens: string;
-    available: string;
-    banned: string;
-    quotaLeft: string;
-
-    // Current token section
-    currentToken: string;
-    noActiveToken: string;
-    forceSwitch: string;
-
-    // Token list
-    allTokens: string;
-    noTokensInPool: string;
-    active: string;
-    refreshToken: string;
-    refreshAll: string;
-    reloadPool: string;
-
-    // Token status
-    statusAvailable: string;
-    statusBanned: string;
-    statusExpired: string;
-    statusLowQuota: string;
-    statusWarning: string;
-
-    // Events
-    recentEvents: string;
-    noRecentEvents: string;
-    clearEvents: string;
-
-    // Event types
-    eventSwitched: string;
-    eventQuotaLow: string;
-    eventTokenError: string;
-    eventTokenBanned: string;
-    eventRefreshed: string;
-    eventTokenUsed: string;
-
-    // Token details
-    quota: string;
-    reset: string;
-    requests: string;
-    errors: string;
-    region: string;
-    unknown: string;
-    expired: string;
-    lowQuota: string;
-    warning: string;
-
-    // Tooltips
-    forceSwitchTooltip: string;
-    refreshTokenTooltip: string;
-    refreshAllTooltip: string;
-    reloadPoolTooltip: string;
-    clearEventsTooltip: string;
-  };
-  liveStatus: {
-    idle: string;
-    processing: string;
-    connecting: string;
-    scanningInbox: string;
-    launchingBrowser: string;
-    navigating: string;
-    typingEmail: string;
-    typingPassword: string;
-    typingCode: string;
-    waitingCode: string;
-    verifying: string;
-    gettingToken: string;
-    success: string;
-    warning: string;
-    error: string;
-    clickToStart: string;
-    configureFirst: string;
-  };
-  successCard: {
-    accountCreated: string;
-    token: string;
-    copyEmail: string;
-    copyToken: string;
-  };
-  logFeed: {
-    activityLog: string;
-    waitingForActivity: string;
-    debug: string;
-    authTokenData: string;
-    copied: string;
-  };
-  terminal: {
-    liveFeed: string;
-    readyToLaunch: string;
-    logsWillAppear: string;
-    debugDetails: string;
-  };
-  settingsTokenPool: {
-    changesWillBeSaved: string;
-    switchStrategy: string;
-    switchStrategyDescription: string;
-    strategyThresholds: string;
-    strategyThresholdsDescription: string;
-    behavior: string;
-    behaviorDescription: string;
-    autoRefresh: string;
-    autoRefreshDescription: string;
-    strategies: {
-      aggressive: string;
-      aggressiveDescription: string;
-      balanced: string;
-      balancedDescription: string;
-      conservative: string;
-      conservativeDescription: string;
-      custom: string;
-      customDescription: string;
-    };
-    customThreshold: string;
-    tokensRemaining: string;
-    tokens: string;
-    switchOnError: string;
-    switchOnErrorDescription: string;
-    switchOnRateLimit: string;
-    switchOnRateLimitDescription: string;
-    maxErrorsBeforeBan: string;
-    maxErrorsBeforeBanDescription: string;
-    cooldownPeriod: string;
-    cooldownPeriodDescription: string;
-    minutes: string;
-    enableAutoRefresh: string;
-    enableAutoRefreshDescription: string;
-    refreshBeforeExpiry: string;
-    refreshBeforeExpiryDescription: string;
-    currentStrategy: string;
-    activeTokens: string;
-    totalQuotaRemaining: string;
-    requestsUnit: string;
-    unsavedChanges: string;
-    saveNow: string;
-    default: string;
-    saveFailed: string;
-  };
-  timeline: {
-    init: string;
-    mail: string;
-    browser: string;
-    auth: string;
-    verify: string;
-    token: string;
-    done: string;
-  };
-  commandPalette: {
-    placeholder: string;
-    noResults: string;
-    navigation: string;
-    actions: string;
-    refreshAllAccounts: string;
-  };
-  notFoundPage: {
+    tableActions: string;
+    tableDetails: string;
+    tableNumber: string;
+    tableStatus: string;
     title: string;
-    description: string;
-    goHome: string;
-  };
-  filters: {
-    any: string;
-    anyStatus: string;
-    active: string;
-    banned: string;
-    limitHit: string;
-    anyQuota: string;
-    hasQuota: string;
-    empty: string;
-    full: string;
-    lowQuota: string;
-    status: string;
-    quota: string;
-    minRemaining: string;
-    reset: string;
-    done: string;
-    pcs: string;
-    registrationMethod: string;
-    all: string;
-    manual: string;
-    auto: string;
-    oauth: string;
-    unknown: string;
-    health: string;
-    good: string;
-    fair: string;
-    poor: string;
-  };
-
+    titleCheck: string;
+    titleCopy: string;
+    titleDelete: string;
+    toastBinTooShort: string;
+    toastCardStatus: string;
+    toastChecked: string;
+    toastCopied: string;
+    toastDeleted: string;
+    toastExported: string;
+    toastNoCards: string;
+    toastNoSelectedCards: string;
+    toastPresetLoaded: string;
+    toastPresetSaved: string;
+    toastPresetDeleted: string;
+    typeLabel: string;
+  }
   usageBar: {
     errorBanned: string;
+    infinity: string;
+    unknown: string;
     unlimited: string;
     used: string;
-  };
-  chat: {
-    title: string;
-    subtitle: string;
-    placeholder: string;
-    clear: string;
-    settings: string;
-    error: string;
-    retry: string;
-    apiUrl: string;
-    model: string;
-    emptyTitle: string;
-    emptyDescription: string;
-    you: string;
-    assistant: string;
-    thinking: string;
-    typing: string;
-  };
-  kiroPatch: {
-    title: string;
-    subtitle: string;
-    statusTitle: string;
-    statusDescription: string;
-    statusInstalled: string;
-    statusNotInstalled: string;
-    statusChecking: string;
-    machineIdTitle: string;
-    machineIdDescription: string;
-    currentMachineId: string;
-    defaultMachineId: string;
-    accountSpecificId: string;
-    generateNew: string;
-    importFromFile: string;
-    copyId: string;
-    idCopied: string;
-    bindingsTitle: string;
-    bindingsDescription: string;
-    bindingsEmpty: string;
-    bindingsEmptyHint: string;
-    accountId: string;
-    machineId: string;
-    bindNewAccount: string;
-    unbind: string;
-    currentAccount: string;
-    bindModalTitle: string;
-    bindModalAccountId: string;
-    bindModalAccountIdPlaceholder: string;
-    bindModalMachineId: string;
-    bindModalMachineIdPlaceholder: string;
-    bindModalGenerate: string;
-    bindModalBind: string;
-    bindModalCancel: string;
-    modulesTitle: string;
-    modulesDescription: string;
-    machineIdSpoofing: string;
-    machineIdSpoofingDesc: string;
-    telemetryBlocking: string;
-    telemetryBlockingDesc: string;
-    rateLimitBypass: string;
-    rateLimitBypassDesc: string;
-    errorSuppression: string;
-    errorSuppressionDesc: string;
-    osSpoofing: string;
-    osSpoofingDesc: string;
-    commandSpoofing: string;
-    commandSpoofingDesc: string;
-    authWatcher: string;
-    authWatcherDesc: string;
-    constantPatching: string;
-    constantPatchingDesc: string;
-    customPrompts: string;
-    customPromptsDesc: string;
-    requestSpy: string;
-    requestSpyDesc: string;
-    logLevelTitle: string;
-    logLevelDescription: string;
-    logLevelDebug: string;
-    logLevelInfo: string;
-    logLevelWarn: string;
-    logLevelError: string;
-    applyPatch: string;
-    applyPatchDesc: string;
-    saveConfig: string;
-    saveConfigDesc: string;
-    removePatch: string;
-    removePatchDesc: string;
-    resetDefaults: string;
-    resetDefaultsDesc: string;
-    applySuccess: string;
-    applyError: string;
-    saveSuccess: string;
-    saveError: string;
-    removeSuccess: string;
-    removeError: string;
-    resetSuccess: string;
-    bindSuccess: string;
-    bindError: string;
-    unbindSuccess: string;
-    unbindError: string;
-    generateSuccess: string;
-    confirmRemove: string;
-    confirmReset: string;
-    confirmUnbind: string;
-    advancedTitle: string;
-    advancedSubtitle: string;
-    constantsTitle: string;
-    writeLimit: string;
-    maxTokens: string;
-    promptEditorTitle: string;
-    copyDefaults: string;
-    collapse: string;
-    expand: string;
-    loadError: string;
-  };
-
-  automation: {
-    title: string;
-    healthReplenishment: string;
-    healthReplenishmentDesc: string;
-    enableReplenishment: string;
-    enableReplenishmentDesc: string;
-    minActiveAccounts: string;
-    minActiveAccountsTooltip: string;
-    registrationStrategies: string;
-    registrationStrategiesDesc: string;
-    kiroStrategy: string;
-    windsurfStrategy: string;
-    traeStrategy: string;
-    rotationRules: string;
-    rotationRulesDesc: string;
-    legacySettings: string;
-    legacyAutoSwitching: string;
-    checkInterval: string;
-    proxyPort: string;
-    switchThreshold: string;
-    maxErrors: string;
-    cooldown: string;
-    rateLimitTrigger: string;
-    rateLimitTriggerDesc: string;
-    minSpareAccounts: string;
-    replenishment: string;
-    providerConfig: string;
-  };
-
-  recorder: {
-    started: string;
-    stopping: string;
-    saved: string;
-    runtimeMissing: string;
-    failed: string;
-    noSavedScenarioPath: string;
-    proxySwitchRestartWarningRecord: string;
-    proxySwitchRestartWarningReplay: string;
-    recordWithoutOverlayLabel: string;
-    recordWithoutOverlayDescription: string;
-    fieldCapturePrivacyNote: string;
-    extensionRunnerBridgeHint: string;
-    extensionBridgeStatusLabel: string;
-    extensionBridgeConnected: string;
-    extensionBridgeDisconnected: string;
-    extensionBridgeChecking: string;
-    extensionBridgeRefresh: string;
-    replay: {
-      profile: string;
-      statusLabel: string;
-      statusIdle: string;
-      statusStarting: string;
-      statusRunning: string;
-      statusManualPause: string;
-      statusStopping: string;
-      statusDone: string;
-      statusError: string;
-      manualPauseNeedsAction: string;
-      manualPauseReason: string;
-      runtimeLabel: string;
-      runtimeReady: string;
-      runtimeMissing: string;
-      runtimeChecking: string;
-      runtimeMissingNote: string;
-      startHotkeyHint: string;
-      quickRunTitle: string;
-      quickRunAction: string;
-      reasonMissingProfile: string;
-      reasonMissingScenario: string;
-      reasonRuntimeMissing: string;
-      reasonInvalidPreflight: string;
-      reasonAlreadyRunning: string;
-      retryFromFailedStep: string;
-      retryFromStepAction: string;
-      retryFromStepUnavailable: string;
-      retryFromStepSelected: string;
-      versionTitle: string;
-      versionSelect: string;
-      versionCurrent: string;
-      versionSelected: string;
-      versionRunAction: string;
-      versionRollbackAction: string;
-      versionLoadError: string;
-      presetsTitle: string;
-      presetDefaultName: string;
-      presetNamePlaceholder: string;
-      presetSaveAction: string;
-      presetApplyAction: string;
-      presetApplyRunAction: string;
-      presetRenameAction: string;
-      presetLastUsed: string;
-      presetDeleteTitle: string;
-      presetDeleteMessage: string;
-      presetSaved: string;
-      presetSaveFailed: string;
-      presetsEmpty: string;
-      runtimeSection: string;
-      runtimeInstalled: string;
-      runtimeNotInstalled: string;
-      runtimeUnknown: string;
-      savedScenarios: string;
-      pickScenario: string;
-      searchPlaceholder: string;
-      sortRecent: string;
-      sortHealth: string;
-      sortSteps: string;
-      healthFilterAll: string;
-      healthFilterValid: string;
-      healthFilterErrors: string;
-      compactEnabled: string;
-      compactDisabled: string;
-      tagsFilterLabel: string;
-      noMatches: string;
-      emptySaved: string;
-      indexLoadFailed: string;
-      seedCurrent: string;
-      currentAdded: string;
-      seedFailed: string;
-      reindex: string;
-      reindexing: string;
-      reindexSuccess: string;
-      reindexFailed: string;
-      scenarioPath: string;
-      scenarioPathPlaceholder: string;
-      recentScenarios: string;
-      selectRecent: string;
-      runHealth: string;
-      validating: string;
-      validLabel: string;
-      stepsLabel: string;
-      droppedLabel: string;
-      healthScoreLabel: string;
-      issuesLabel: string;
-      noScenarioLoaded: string;
-      startUrl: string;
-      continueOnError: string;
-      runnerConfig: string;
-      loadingSettings: string;
-      fromProfile: string;
-      progressLabel: string;
-      progressEmpty: string;
-      manualPause: string;
-      resume: string;
-      abort: string;
-      steps: string;
-      healthShort: string;
-      missingFile: string;
-      defaultScenarioName: string;
-      scenarioLabel: string;
-      invalidScenarioFile: string;
-      cannotParseScenario: string;
-      tabOverview: string;
-      tabDetails: string;
-      tabDiagnostics: string;
-      selectedScenario: string;
-      selectedPinnedHint: string;
-      recentRunsTitle: string;
-      runsFilterAll: string;
-      runsFilterErrors: string;
-      recentRunsError: string;
-      recentRunsEmpty: string;
-      runDurationLabel: string;
-      openRunDetails: string;
-      lastEvent: string;
-      advancedToggle: string;
-      jobId: string;
-      correlationId: string;
-      pythonStderr: string;
-      failureDetails: string;
-      failureStep: string;
-      failureSelector: string;
-      failureUrl: string;
-      failureError: string;
-      failureRunner: string;
-      failureReport: string;
-      copyReportPath: string;
-      openReportFolder: string;
-      reportPathCopied: string;
-      reportPathCopyFailed: string;
-      openReportFolderFailed: string;
-      timelineTitle: string;
-      timelineEmpty: string;
-      refreshing: string;
-    };
-  };
-
-  proxyLibrary: {
-    title: string;
-    description: string;
-    importBulk: string;
-    showPasswords: string;
-    hidePasswords: string;
-    pasteProxies: string;
-    defaultType: string;
-    importedEnabled: string;
-    importing: string;
-    import: string;
-    importedStat: string;
-    skippedStat: string;
-    totalLinesStat: string;
-    andMore: string;
-    label: string;
-    type: string;
-    host: string;
-    port: string;
-    username: string;
-    password: string;
-    notes: string;
-    enabled: string;
-    cancel: string;
-    saving: string;
-    addProxy: string;
-    save: string;
-    entries: string;
-    loading: string;
-    noEntries: string;
-    statusEnabled: string;
-    statusDisabled: string;
-    edit: string;
-    ready: string;
-    loadError: string;
-    createError: string;
-    updateError: string;
-    deleteError: string;
-    importError: string;
-    batchEnable: string;
-    batchDisable: string;
-    batchDelete: string;
-    forceDeleteConfirm: string;
-    forceDeletePrompt: string;
-    referencesProfiles: string;
-    referencesScenarios: string;
-    stepRestartBoundary: string;
-    quickAddTitle: string;
-    quickInputLabel: string;
-    quickInputPlaceholder: string;
-    quickParse: string;
-    bulkPreview: string;
-    addOrLinkProxy: string;
-    testDraft: string;
-    testingDraft: string;
-    testEntry: string;
-    testingEntry: string;
-    testStatusOk: string;
-    testStatusFail: string;
-    testStatusNone: string;
-    parseError: string;
-    testError: string;
-  };
-
-  profileProxy: {
-    source: string;
-    sourceDisabled: string;
-    sourceLibrary: string;
-    libraryProxy: string;
-    loading: string;
-    selectProxy: string;
-    noEnabledProxies: string;
-    using: string;
-    disabledHint: string;
-    enabledToggle: string;
-    addProxyButton: string;
-    addProxyModalTitle: string;
-    addProxyInputLabel: string;
-    addProxyInputPlaceholder: string;
-    addProxyParse: string;
-    addProxyParsing: string;
-    addProxyParseError: string;
-    addProxyTest: string;
-    addProxyTesting: string;
-    addProxyTestError: string;
-    addProxySaveUse: string;
-    addProxySaveError: string;
-    addProxySuccess: string;
-    testOk: string;
-    testFail: string;
-    addProxyLockHint: string;
-    addProxyTestRequiredLabel: string;
-    addProxyTestRequiredMessage: string;
-    addProxyGuardFailed: string;
-  };
+  }
+  validation: {
+    connectionFailed: string;
+    connectionSuccess: string;
+    testConnection: string;
+  }
 }
 
 // ============================================

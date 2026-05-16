@@ -378,7 +378,7 @@ export default function PatcherV2() {
                 {t('patcher.noIdesDetected')}
               </h3>
               <p className="text-sm text-slate-500 mb-6">
-                Click {'"Scan for IDEs"'} to detect installed IDEs
+                {t('patcher.noIdesDetectedDescription')}
               </p>
               <Button onClick={handleScan} variant="primary" leftIcon={<Search size={16} />}>
                 {t('patcher.scanForIdes')}

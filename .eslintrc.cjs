@@ -19,19 +19,44 @@ module.exports = {
     ecmaVersion: 'latest',
     sourceType: 'module',
   },
-  plugins: ['react', '@typescript-eslint', 'react-hooks', 'ui-kit'],
+  plugins: ['react', '@typescript-eslint', 'react-hooks', 'ui-kit', 'i18next'],
   settings: {
     react: {
       version: 'detect',
     },
+    i18next: ['src/lib/i18n.ts'],
   },
   rules: {
     'react/react-in-jsx-scope': 'off',
     'react/prop-types': 'off',
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/no-explicit-any': 'warn',
-    'no-console': ['warn', { allow: ['warn', 'error'] }],
-    'ui-kit/no-hardcoded-ui': 'warn',
+    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    '@typescript-eslint/no-explicit-any': 'error',
+    'no-console': ['error', { allow: ['warn', 'error'] }],
+    'ui-kit/no-hardcoded-ui': 'error',
+    'i18next/no-literal-string': [
+      'error',
+      {
+        ignoredPaths: [
+          // Ignore for test files
+          '**/*.test.ts',
+          '**/*.test.tsx',
+          '**/*.spec.ts',
+          // Ignore common patterns that are not user-facing
+          '.toLowerCase()',
+          '.toUpperCase()',
+          'Math.',
+          'console.',
+          'process.',
+          // Ignore UI element props
+          'aria-label',
+          'aria-labelledby',
+          'placeholder',
+          'title=',
+        ],
+        onlyDetectingLocalFiles: true,
+        detectorType: 'jsf',
+      },
+    ],
     'no-restricted-imports': [
       'error',
       {
@@ -83,7 +108,7 @@ module.exports = {
           },
         ],
         'react/forbid-elements': [
-          'warn',
+          'error',
           {
             forbid: [
               {
@@ -126,6 +151,15 @@ module.exports = {
             ],
           },
         ],
+      },
+    },
+    {
+      files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx', 'src/__tests__/**/*.ts', 'src/__tests__/**/*.tsx'],
+      rules: {
+        'i18next/no-literal-string': 'off',
+        'no-restricted-syntax': 'off',
+        'react/forbid-elements': 'off',
+        '@typescript-eslint/no-explicit-any': 'off',
       },
     },
   ],

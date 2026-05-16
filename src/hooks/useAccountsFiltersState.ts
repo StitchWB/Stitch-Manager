@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Account } from '../types/generated';
-import type { AccountStatus } from '../types/ui';
+import type { AccountStatus, ProviderName } from '../types/ui';
 
 import { useUrlState } from './useUrlState';
 import { t } from '../lib/i18n';
@@ -32,7 +32,7 @@ type UseAccountsFiltersStateArgs = {
   setAccountsTagFilter: (tag: string) => void;
   setAccountsRelationFilter: (relation: string) => void;
   setAccountsEntityFilter: (entity: string) => void;
-  setSelectedProvider: (provider: any) => void;
+  setSelectedProvider: (provider: ProviderName | null) => void;
   setStoreStatusFilter: (status: AccountStatus | null) => void;
   setStoreQuotaFilter: (filter: 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota') => void;
   setStoreSearchQuery: (query: string) => void;
@@ -99,9 +99,9 @@ export function useAccountsFiltersState({
 
   // Keep store selection in sync with current visible set (so Select All works on derived filters)
   useEffect(() => {
-    setSelectedProvider(providerFilter === 'all' ? null : (providerFilter as any));
+    setSelectedProvider(providerFilter === 'all' ? null : (providerFilter as ProviderName));
     setStoreStatusFilter(statusFilter === 'all' ? null : (statusFilter as AccountStatus));
-    setStoreQuotaFilter(quotaFilter as any);
+    setStoreQuotaFilter(quotaFilter as 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota');
     setStoreSearchQuery(searchQuery);
   }, [
     providerFilter,
@@ -202,7 +202,7 @@ export function useAccountsFiltersState({
     (value: string) => {
       setProviderFilter(value);
       setAccountsProviderFilter(value);
-      setSelectedProvider(value === 'all' ? null : (value as any));
+      setSelectedProvider(value === 'all' ? null : (value as ProviderName));
     },
     [setProviderFilter, setAccountsProviderFilter, setSelectedProvider]
   );
@@ -220,7 +220,7 @@ export function useAccountsFiltersState({
     (value: string) => {
       setQuotaFilter(value);
       setAccountsQuotaFilter(value);
-      setStoreQuotaFilter(value as any);
+      setStoreQuotaFilter(value as 'any' | 'has_quota' | 'empty' | 'full' | 'low_quota');
     },
     [setAccountsQuotaFilter, setStoreQuotaFilter]
   );

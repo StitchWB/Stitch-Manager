@@ -137,7 +137,7 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
     try {
       const result = await invoke<string>('execute_task_now', { taskId });
       toast.success('Task executed successfully');
-      console.log('[Scheduler] Execution result:', result);
+      console.warn('[Scheduler] Execution result:', result);
       await get().fetchTasks();
     } catch (error) {
       console.error('[Scheduler] Failed to execute task:', error);

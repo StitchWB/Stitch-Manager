@@ -1,4 +1,4 @@
-import { Checkbox, Input, Textarea } from '@/components/ui';
+import { Button, Checkbox, Input, Textarea } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import type { ReplayPreflightResult } from '@/lib/tauri/modules/pythonJobs';
 import type { ScenarioReplayStatus } from '@/lib/scenarioRecorder/useScenarioReplay';
@@ -105,14 +105,15 @@ export function ReplayOverviewPanel({
                     : t('recorder.replay.runtimeUnknown')}
               </div>
             </div>
-            <button
-              type="button"
+            <Button
+              size="xs"
+              variant="ghost"
               onClick={onRefreshRuntime}
               disabled={runtimeChecking}
               className="text-xs text-slate-400 hover:text-slate-200"
             >
               {runtimeChecking ? t('common.loading') : t('common.refresh')}
-            </button>
+            </Button>
           </div>
           {runtimeCheckError ? (
             <div className="mt-2 text-xs text-red-300">{runtimeCheckError}</div>

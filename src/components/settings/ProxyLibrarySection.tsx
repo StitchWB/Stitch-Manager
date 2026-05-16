@@ -10,8 +10,8 @@ import {
   Select,
   StatusBadge,
   Textarea,
-  Toggle,
-} from '@/components/ui';
+  Toggle } from
+'@/components/ui';
 import { t } from '@/lib/i18n';
 import {
   createOrGetProxyLibraryEntry,
@@ -28,8 +28,8 @@ import {
   type ProxyLibraryEntry,
   type ProxyLibraryImportResult,
   type ProxyLibraryType,
-  type ProxyLibraryUsage,
-} from '@/lib/tauri/modules/proxyLibrary';
+  type ProxyLibraryUsage } from
+'@/lib/tauri/modules/proxyLibrary';
 
 interface ForceUpdateDialogState {
   isOpen: boolean;
@@ -54,7 +54,7 @@ const defaultDraft: ProxyLibraryDraft = {
   password: '',
   proxyType: 'http',
   enabled: true,
-  notes: '',
+  notes: ''
 };
 
 function toDraft(entry: ProxyLibraryEntry): ProxyLibraryDraft {
@@ -66,7 +66,7 @@ function toDraft(entry: ProxyLibraryEntry): ProxyLibraryDraft {
     password: entry.password ?? '',
     proxyType: entry.proxyType,
     enabled: entry.enabled,
-    notes: entry.notes ?? '',
+    notes: entry.notes ?? ''
   };
 }
 
@@ -78,7 +78,7 @@ function normalizeDraft(draft: ProxyLibraryDraft): ProxyLibraryDraft {
     username: draft.username?.trim() || null,
     password: draft.password?.trim() || null,
     notes: draft.notes?.trim() || null,
-    port: Number(draft.port),
+    port: Number(draft.port)
   };
 }
 
@@ -149,13 +149,13 @@ export function ProxyLibrarySection() {
     setError(null);
     try {
       const parsed = await parseProxyLibraryInput({ raw, defaultType: createDraft.proxyType });
-      setCreateDraft(prev => ({
+      setCreateDraft((prev) => ({
         ...prev,
         host: parsed.host || prev.host,
         port: parsed.port || prev.port,
         proxyType: parsed.proxyType || prev.proxyType,
         username: parsed.username ?? null,
-        password: parsed.password ?? null,
+        password: parsed.password ?? null
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('proxyLibrary.parseError'));
@@ -169,8 +169,8 @@ export function ProxyLibrarySection() {
     setError(null);
     try {
       const created = await createOrGetProxyLibraryEntry(normalizeDraft(createDraft));
-      setItems(prev => {
-        if (prev.some(it => it.id === created.id)) return prev;
+      setItems((prev) => {
+        if (prev.some((it) => it.id === created.id)) return prev;
         return [...prev, created];
       });
       setCreateDraft(defaultDraft);
@@ -189,13 +189,13 @@ export function ProxyLibrarySection() {
     try {
       const result = await testProxyLibraryDraft(normalizeDraft(createDraft));
       if (result.entry) {
-        setItems(prev => prev.map(it => (it.id === result.entry?.id ? result.entry : it)));
+        setItems((prev) => prev.map((it) => it.id === result.entry?.id ? result.entry : it));
       }
       if (result.success) {
         setTestResult(
           `OK${result.responseTimeMs != null ? ` • ${result.responseTimeMs}ms` : ''}${
-            result.ip ? ` • ${result.ip}` : ''
-          }${result.location ? ` • ${result.location}` : ''}`
+          result.ip ? ` • ${result.ip}` : ''}${
+          result.location ? ` • ${result.location}` : ''}`
         );
       } else {
         setTestResult(`FAIL${result.error ? ` • ${result.error}` : ''}`);
@@ -213,10 +213,10 @@ export function ProxyLibrarySection() {
     try {
       const result = await testProxyLibraryDraft(normalizeDraft(toDraft(entry)), {
         proxyLibraryId: entry.id,
-        persistResult: true,
+        persistResult: true
       });
       if (result.entry) {
-        setItems(prev => prev.map(it => (it.id === result.entry?.id ? result.entry : it)));
+        setItems((prev) => prev.map((it) => it.id === result.entry?.id ? result.entry : it));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : t('proxyLibrary.testError'));
@@ -232,9 +232,9 @@ export function ProxyLibrarySection() {
     try {
       const updated = await updateProxyLibraryEntry({
         id: editingId,
-        draft: normalizeDraft(editDraft),
+        draft: normalizeDraft(editDraft)
       });
-      setItems(prev => prev.map(it => (it.id === updated.id ? updated : it)));
+      setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
       cancelEdit();
     } catch (e) {
       if (e instanceof ProxyLibraryError && e.code === 'proxy_in_use' && editingId) {
@@ -245,7 +245,7 @@ export function ProxyLibrarySection() {
             id: editingId,
             draft: normalizeDraft(editDraft),
             errorMessage: e.message,
-            usage,
+            usage
           });
           setError(
             `${e.message}\n${t('proxyLibrary.referencesProfiles')}: ${usage.profileAliases.join(', ') || '-'}\n${t('proxyLibrary.referencesScenarios')}: ${usage.scenarioPaths.length}`
@@ -261,21 +261,21 @@ export function ProxyLibrarySection() {
 
   const handleDelete = async (id: string, force = false) => {
     setError(null);
-    console.log('[handleDelete] Starting delete for id:', id, 'force:', force);
+    console.warn('[handleDelete] Starting delete for id:', id, 'force:', force);
     try {
       const res = await deleteProxyLibraryEntry({ id, options: { force } });
-      console.log('[handleDelete] Delete result:', res);
+      console.warn('[handleDelete] Delete result:', res);
       if (res.changed) {
-        setItems(prev => {
-          const filtered = prev.filter(it => it.id !== id);
-          console.log('[handleDelete] Updated items, removed:', id, 'remaining:', filtered.length);
+        setItems((prev) => {
+          const filtered = prev.filter((it) => it.id !== id);
+          console.warn('[handleDelete] Updated items, removed:', id, 'remaining:', filtered.length);
           return filtered;
         });
       } else {
-        console.log('[handleDelete] Delete returned changed=false, item may not have been deleted');
+        console.warn('[handleDelete] Delete returned changed=false, item may not have been deleted');
       }
     } catch (e) {
-      console.log('[handleDelete] Error:', e);
+      console.warn('[handleDelete] Error:', e);
       if (e instanceof ProxyLibraryError && e.code === 'proxy_in_use') {
         // Always show force-delete dialog, even if usage lookup fails
         const usage = await getProxyLibraryUsage(id).catch(() => null);
@@ -283,7 +283,7 @@ export function ProxyLibrarySection() {
           isOpen: true,
           id,
           errorMessage: e.message,
-          usage: usage || { profileAliases: [], scenarioPaths: [] },
+          usage: usage || { profileAliases: [], scenarioPaths: [] }
         });
         return;
       }
@@ -295,7 +295,7 @@ export function ProxyLibrarySection() {
     if (selectedIds.length === 0) return;
     setError(null);
     for (const id of selectedIds) {
-      const item = items.find(it => it.id === id);
+      const item = items.find((it) => it.id === id);
       if (!item) continue;
       try {
         await updateProxyLibraryEntry({
@@ -308,9 +308,9 @@ export function ProxyLibrarySection() {
             password: item.password ?? null,
             proxyType: item.proxyType,
             enabled,
-            notes: item.notes ?? null,
+            notes: item.notes ?? null
           }),
-          options: { force: true },
+          options: { force: true }
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : t('proxyLibrary.updateError'));
@@ -348,7 +348,7 @@ export function ProxyLibrarySection() {
       const result = await importProxyLibraryBulk({
         text: bulkText,
         defaultType: bulkType,
-        defaultEnabled: bulkEnabled,
+        defaultEnabled: bulkEnabled
       });
       setBulkResult(result);
       setItems(result.items);
@@ -368,7 +368,7 @@ export function ProxyLibrarySection() {
       const result = await previewProxyLibraryBulk({
         text: bulkText,
         defaultType: bulkType,
-        defaultEnabled: bulkEnabled,
+        defaultEnabled: bulkEnabled
       });
       setBulkResult(result);
     } catch (e) {
@@ -379,29 +379,29 @@ export function ProxyLibrarySection() {
   };
 
   const renderDraftForm = (
-    draft: ProxyLibraryDraft,
-    setDraft: (value: ProxyLibraryDraft) => void,
-    submitLabel: string,
-    onSubmit: () => void,
-    submitBusy: boolean,
-    onCancel?: () => void
-  ) => {
+  draft: ProxyLibraryDraft,
+  setDraft: (value: ProxyLibraryDraft) => void,
+  submitLabel: string,
+  onSubmit: () => void,
+  submitBusy: boolean,
+  onCancel?: () => void) =>
+  {
     return (
       <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label={t('proxyLibrary.label')}
             value={draft.label ?? ''}
-            onChange={e => setDraft({ ...draft, label: e.target.value })}
-            placeholder="US-East #1"
-          />
+            onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+            placeholder="US-East #1" />
+
           <Select
             label={t('proxyLibrary.type')}
             value={draft.proxyType}
-            onValueChange={value => setDraft({ ...draft, proxyType: value as ProxyLibraryType })}
-          >
-            <option value="http">HTTP</option>
-            <option value="socks5">SOCKS5</option>
+            onValueChange={(value) => setDraft({ ...draft, proxyType: value as ProxyLibraryType })}>
+
+            <option value="http">{t("settings.proxy_library_section.http")}</option>
+            <option value="socks5">{t("settings.proxy_library_section.socks5")}</option>
           </Select>
         </div>
 
@@ -409,74 +409,74 @@ export function ProxyLibrarySection() {
           <Input
             label={t('proxyLibrary.host')}
             value={draft.host}
-            onChange={e => setDraft({ ...draft, host: e.target.value })}
-            placeholder="138.249.63.52"
-          />
+            onChange={(e) => setDraft({ ...draft, host: e.target.value })}
+            placeholder="138.249.63.52" />
+
           <Input
             label={t('proxyLibrary.port')}
             type="number"
             value={String(draft.port)}
-            onChange={e =>
-              setDraft({
-                ...draft,
-                port: Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : 0,
-              })
+            onChange={(e) =>
+            setDraft({
+              ...draft,
+              port: Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : 0
+            })
             }
-            placeholder="63942"
-          />
+            placeholder="63942" />
+
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label={t('proxyLibrary.username')}
             value={draft.username ?? ''}
-            onChange={e => setDraft({ ...draft, username: e.target.value })}
-            placeholder="NcyVVTzb"
-          />
+            onChange={(e) => setDraft({ ...draft, username: e.target.value })}
+            placeholder="NcyVVTzb" />
+
           <Input
             label={t('proxyLibrary.password')}
             type={showSecrets ? 'text' : 'password'}
             value={draft.password ?? ''}
-            onChange={e => setDraft({ ...draft, password: e.target.value })}
-            placeholder="fqQDvDLA"
-          />
+            onChange={(e) => setDraft({ ...draft, password: e.target.value })}
+            placeholder="fqQDvDLA" />
+
         </div>
 
         <Textarea
           label={t('proxyLibrary.notes')}
           value={draft.notes ?? ''}
-          onChange={e => setDraft({ ...draft, notes: e.target.value })}
-          className="min-h-[70px]"
-        />
+          onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+          className="min-h-[70px]" />
+
 
         <div className="flex items-center justify-between gap-3">
           <Toggle
             label={t('proxyLibrary.enabled')}
             checked={Boolean(draft.enabled)}
-            onChange={checked => setDraft({ ...draft, enabled: checked })}
-          />
+            onChange={(checked) => setDraft({ ...draft, enabled: checked })} />
+
 
           <div className="flex gap-2">
-            {onCancel ? (
-              <Button variant="secondary" onClick={onCancel}>
+            {onCancel ?
+            <Button variant="secondary" onClick={onCancel}>
                 {t('proxyLibrary.cancel')}
-              </Button>
-            ) : null}
+              </Button> :
+            null}
             <Button onClick={onSubmit} disabled={submitBusy}>
               {submitBusy ? t('proxyLibrary.saving') : submitLabel}
             </Button>
           </div>
         </div>
-      </div>
-    );
+      </div>);
+
   };
 
   return (
     <SectionHeader
       title={t('proxyLibrary.title')}
       description={t('proxyLibrary.description')}
-      icon={<Globe className="w-4 h-4 text-primary" />}
-    >
+      icon={<Globe className="w-4 h-4 text-primary" />}>
+
       <div className="space-y-4">
         <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
           <div className="text-sm font-medium text-slate-200 mb-3">
@@ -486,14 +486,14 @@ export function ProxyLibrarySection() {
             <Input
               label={t('proxyLibrary.quickInputLabel')}
               value={quickInput}
-              onChange={e => setQuickInput(e.target.value)}
-              placeholder={t('proxyLibrary.quickInputPlaceholder')}
-            />
+              onChange={(e) => setQuickInput(e.target.value)}
+              placeholder={t('proxyLibrary.quickInputPlaceholder')} />
+
             <div className="flex items-end">
               <Button
                 onClick={() => void handleQuickParse()}
-                disabled={quickBusy || !quickInput.trim()}
-              >
+                disabled={quickBusy || !quickInput.trim()}>
+
                 {t('proxyLibrary.quickParse')}
               </Button>
             </div>
@@ -504,12 +504,12 @@ export function ProxyLibrarySection() {
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                onClick={() => setShowSecrets(v => !v)}
+                onClick={() => setShowSecrets((v) => !v)}
                 className="h-8 px-2"
                 title={
-                  showSecrets ? t('proxyLibrary.hidePasswords') : t('proxyLibrary.showPasswords')
-                }
-              >
+                showSecrets ? t('proxyLibrary.hidePasswords') : t('proxyLibrary.showPasswords')
+                }>
+
                 {showSecrets ? <EyeOff size={14} /> : <Eye size={14} />}
               </Button>
             </div>
@@ -518,27 +518,27 @@ export function ProxyLibrarySection() {
           <Textarea
             label={t('proxyLibrary.pasteProxies')}
             value={bulkText}
-            onChange={e => setBulkText(e.target.value)}
+            onChange={(e) => setBulkText(e.target.value)}
             placeholder={'138.249.63.52:63942:NcyVVTzb:fqQDvDLA\n1.2.3.4:8080'}
-            className="min-h-[100px]"
-          />
+            className="min-h-[100px]" />
+
 
           <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
             <Select
               label={t('proxyLibrary.defaultType')}
               value={bulkType}
-              onValueChange={value => setBulkType(value as ProxyLibraryType)}
-            >
-              <option value="http">HTTP</option>
-              <option value="socks5">SOCKS5</option>
+              onValueChange={(value) => setBulkType(value as ProxyLibraryType)}>
+
+              <option value="http">{t("settings.proxy_library_section.http")}</option>
+              <option value="socks5">{t("settings.proxy_library_section.socks5")}</option>
             </Select>
 
             <div className="flex items-end">
               <Toggle
                 label={t('proxyLibrary.importedEnabled')}
                 checked={bulkEnabled}
-                onChange={setBulkEnabled}
-              />
+                onChange={setBulkEnabled} />
+
             </div>
 
             <div className="flex items-end justify-end">
@@ -546,14 +546,14 @@ export function ProxyLibrarySection() {
                 <Button
                   variant="secondary"
                   onClick={() => void handleBulkPreview()}
-                  disabled={bulkLoading || !bulkText.trim()}
-                >
+                  disabled={bulkLoading || !bulkText.trim()}>
+
                   {t('proxyLibrary.bulkPreview')}
                 </Button>
                 <Button
                   onClick={() => void handleBulkImport()}
-                  disabled={bulkLoading || !bulkText.trim()}
-                >
+                  disabled={bulkLoading || !bulkText.trim()}>
+
                   <Upload className="w-4 h-4 mr-1" />
                   {bulkLoading ? t('proxyLibrary.importing') : t('proxyLibrary.import')}
                 </Button>
@@ -561,27 +561,27 @@ export function ProxyLibrarySection() {
             </div>
           </div>
 
-          {bulkResult ? (
-            <div className="mt-3 text-xs text-slate-300">
+          {bulkResult ?
+          <div className="mt-3 text-xs text-slate-300">
               {t('proxyLibrary.importedStat')}: {bulkResult.imported} •{' '}
               {t('proxyLibrary.skippedStat')}: {bulkResult.skipped} •{' '}
               {t('proxyLibrary.totalLinesStat')}:{bulkResult.totalLines}
-              {bulkResult.issues.length > 0 ? (
-                <div className="mt-2 space-y-1 text-amber-200">
-                  {bulkResult.issues.slice(0, 5).map(issue => (
-                    <div key={`${issue.lineNo}-${issue.reason}`}>
-                      line {issue.lineNo}: {issue.reason} ({issue.linePreview})
+              {bulkResult.issues.length > 0 ?
+            <div className="mt-2 space-y-1 text-amber-200">
+                  {bulkResult.issues.slice(0, 5).map((issue) =>
+              <div key={`${issue.lineNo}-${issue.reason}`}>{t("settings.proxy_library_section.line")}
+                {issue.lineNo}: {issue.reason} ({issue.linePreview})
                     </div>
-                  ))}
-                  {bulkResult.issues.length > 5 ? (
-                    <div>
+              )}
+                  {bulkResult.issues.length > 5 ?
+              <div>
                       {t('proxyLibrary.andMore')}: {bulkResult.issues.length - 5}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+                    </div> :
+              null}
+                </div> :
+            null}
+            </div> :
+          null}
         </div>
 
         {renderDraftForm(
@@ -596,8 +596,8 @@ export function ProxyLibrarySection() {
             size="xs"
             variant="secondary"
             onClick={() => void handleTestCreateDraft()}
-            disabled={testBusy}
-          >
+            disabled={testBusy}>
+
             {testBusy ? t('proxyLibrary.testingDraft') : t('proxyLibrary.testDraft')}
           </Button>
           {testResult ? <div className="text-xs text-slate-300">{testResult}</div> : null}
@@ -610,55 +610,55 @@ export function ProxyLibrarySection() {
               size="xs"
               variant="secondary"
               disabled={selectedIds.length === 0}
-              onClick={() => void handleBatchToggle(true)}
-            >
+              onClick={() => void handleBatchToggle(true)}>
+
               {t('proxyLibrary.batchEnable')}
             </Button>
             <Button
               size="xs"
               variant="secondary"
               disabled={selectedIds.length === 0}
-              onClick={() => void handleBatchToggle(false)}
-            >
+              onClick={() => void handleBatchToggle(false)}>
+
               {t('proxyLibrary.batchDisable')}
             </Button>
             <Button
               size="xs"
               variant="danger"
               disabled={selectedIds.length === 0}
-              onClick={() => void handleBatchDelete()}
-            >
+              onClick={() => void handleBatchDelete()}>
+
               {t('proxyLibrary.batchDelete')}
             </Button>
           </div>
-          {loading ? (
-            <div className="text-sm text-slate-400">{t('proxyLibrary.loading')}</div>
-          ) : null}
-          {!loading && sortedItems.length === 0 ? (
-            <div className="text-sm text-slate-500">{t('proxyLibrary.noEntries')}</div>
-          ) : null}
+          {loading ?
+          <div className="text-sm text-slate-400">{t('proxyLibrary.loading')}</div> :
+          null}
+          {!loading && sortedItems.length === 0 ?
+          <div className="text-sm text-slate-500">{t('proxyLibrary.noEntries')}</div> :
+          null}
 
           <div className="space-y-3">
-            {sortedItems.map(entry => {
+            {sortedItems.map((entry) => {
               const isEditing = editingId === entry.id;
               return (
                 <div key={entry.id} className="rounded-lg border border-white/10 p-3">
-                  {!isEditing ? (
-                    <>
+                  {!isEditing ?
+                  <>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="mb-1">
                             <Checkbox
-                              checked={selectedIds.includes(entry.id)}
-                              onChange={e => {
-                                setSelectedIds(prev =>
-                                  e.target.checked
-                                    ? [...prev, entry.id]
-                                    : prev.filter(id => id !== entry.id)
-                                );
-                              }}
-                              className="py-0 px-0"
-                            />
+                            checked={selectedIds.includes(entry.id)}
+                            onChange={(e) => {
+                              setSelectedIds((prev) =>
+                              e.target.checked ?
+                              [...prev, entry.id] :
+                              prev.filter((id) => id !== entry.id)
+                              );
+                            }}
+                            className="py-0 px-0" />
+
                           </div>
                           <div className="text-sm text-slate-100 font-medium">{entry.label}</div>
                           <div className="text-xs text-slate-400 mt-1">
@@ -667,88 +667,88 @@ export function ProxyLibrarySection() {
                             {entry.password ? `:${showSecrets ? entry.password : '***'}` : ''}
                           </div>
                           <div className="text-[11px] text-slate-500 mt-1">
-                            {entry.lastTestOk === true
-                              ? `${t('proxyLibrary.testStatusOk')}${entry.lastTestLatencyMs != null ? ` • ${entry.lastTestLatencyMs}ms` : ''}${
-                                  entry.lastTestAt ? ` • ${entry.lastTestAt}` : ''
-                                }`
-                              : entry.lastTestOk === false
-                                ? `${t('proxyLibrary.testStatusFail')}${entry.lastTestError ? ` • ${entry.lastTestError}` : ''}${
-                                    entry.lastTestAt ? ` • ${entry.lastTestAt}` : ''
-                                  }`
-                                : t('proxyLibrary.testStatusNone')}
+                            {entry.lastTestOk === true ?
+                          `${t('proxyLibrary.testStatusOk')}${entry.lastTestLatencyMs != null ? ` • ${entry.lastTestLatencyMs}ms` : ''}${
+                          entry.lastTestAt ? ` • ${entry.lastTestAt}` : ''}` :
+
+                          entry.lastTestOk === false ?
+                          `${t('proxyLibrary.testStatusFail')}${entry.lastTestError ? ` • ${entry.lastTestError}` : ''}${
+                          entry.lastTestAt ? ` • ${entry.lastTestAt}` : ''}` :
+
+                          t('proxyLibrary.testStatusNone')}
                           </div>
-                          {entry.notes ? (
-                            <div className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">
+                          {entry.notes ?
+                        <div className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">
                               {entry.notes}
-                            </div>
-                          ) : null}
+                            </div> :
+                        null}
                         </div>
 
                         <div className="flex items-center gap-2">
                           <StatusBadge
-                            status={entry.enabled ? 'active' : 'inactive'}
-                            size="sm"
-                            className="text-[11px]"
-                          >
-                            {entry.enabled
-                              ? t('proxyLibrary.statusEnabled')
-                              : t('proxyLibrary.statusDisabled')}
+                          status={entry.enabled ? 'active' : 'inactive'}
+                          size="sm"
+                          className="text-[11px]">
+
+                            {entry.enabled ?
+                          t('proxyLibrary.statusEnabled') :
+                          t('proxyLibrary.statusDisabled')}
                           </StatusBadge>
                           <Button
-                            variant="secondary"
-                            className="h-8 px-2"
-                            onClick={() => void handleTestEntry(entry)}
-                            disabled={testingEntryId === entry.id}
-                          >
-                            {testingEntryId === entry.id
-                              ? t('proxyLibrary.testingEntry')
-                              : t('proxyLibrary.testEntry')}
+                          variant="secondary"
+                          className="h-8 px-2"
+                          onClick={() => void handleTestEntry(entry)}
+                          disabled={testingEntryId === entry.id}>
+
+                            {testingEntryId === entry.id ?
+                          t('proxyLibrary.testingEntry') :
+                          t('proxyLibrary.testEntry')}
                           </Button>
                           <Button
-                            variant="ghost"
-                            className="h-8 px-2"
-                            onClick={() => startEdit(entry)}
-                          >
+                          variant="ghost"
+                          className="h-8 px-2"
+                          onClick={() => startEdit(entry)}>
+
                             <Save className="w-4 h-4" />
                             {t('proxyLibrary.edit')}
                           </Button>
                           <Button
-                            variant="danger"
-                            className="h-8 px-2"
-                            onClick={() => void handleDelete(entry.id)}
-                          >
+                          variant="danger"
+                          className="h-8 px-2"
+                          onClick={() => void handleDelete(entry.id)}>
+
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </div>
-                    </>
-                  ) : (
-                    renderDraftForm(
-                      editDraft,
-                      setEditDraft,
-                      t('proxyLibrary.save'),
-                      () => void handleUpdate(),
-                      savingEdit,
-                      cancelEdit
-                    )
-                  )}
-                </div>
-              );
+                    </> :
+
+                  renderDraftForm(
+                    editDraft,
+                    setEditDraft,
+                    t('proxyLibrary.save'),
+                    () => void handleUpdate(),
+                    savingEdit,
+                    cancelEdit
+                  )
+                  }
+                </div>);
+
             })}
           </div>
         </div>
 
-        {error ? (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300 flex items-center gap-2">
+        {error ?
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300 flex items-center gap-2">
             <AlertCircle className="w-4 h-4" />
             {error}
-          </div>
-        ) : items.length > 0 ? (
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-300 flex items-center gap-2">
+          </div> :
+        items.length > 0 ?
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-300 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4" />
             {t('proxyLibrary.ready')}
-          </div>
-        ) : null}
+          </div> :
+        null}
 
         <ConfirmDialog
           isOpen={Boolean(forceUpdateDialog?.isOpen)}
@@ -760,9 +760,9 @@ export function ProxyLibrarySection() {
                 const updated = await updateProxyLibraryEntry({
                   id: forceUpdateDialog.id,
                   draft: forceUpdateDialog.draft,
-                  options: { force: true },
+                  options: { force: true }
                 });
-                setItems(prev => prev.map(it => (it.id === updated.id ? updated : it)));
+                setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
                 cancelEdit();
               } catch (forceErr) {
                 setError(
@@ -775,14 +775,14 @@ export function ProxyLibrarySection() {
           }}
           title={t('proxyLibrary.forceDeleteConfirm')}
           message={
-            forceUpdateDialog
-              ? `${forceUpdateDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceUpdateDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceUpdateDialog.usage.scenarioPaths.join('\n') || '-'}`
-              : ''
+          forceUpdateDialog ?
+          `${forceUpdateDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceUpdateDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceUpdateDialog.usage.scenarioPaths.join('\n') || '-'}` :
+          ''
           }
           confirmText={t('common.confirm')}
           cancelText={t('common.cancel')}
-          variant="warning"
-        />
+          variant="warning" />
+
 
         <ConfirmDialog
           isOpen={Boolean(forceDeleteDialog?.isOpen)}
@@ -799,14 +799,14 @@ export function ProxyLibrarySection() {
           }}
           title={t('proxyLibrary.forceDeleteConfirm')}
           message={
-            forceDeleteDialog
-              ? `${forceDeleteDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceDeleteDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceDeleteDialog.usage.scenarioPaths.join('\n') || '-'}`
-              : ''
+          forceDeleteDialog ?
+          `${forceDeleteDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceDeleteDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceDeleteDialog.usage.scenarioPaths.join('\n') || '-'}` :
+          ''
           }
           confirmText={t('common.delete')}
           cancelText={t('common.cancel')}
-          variant="danger"
-        />
+          variant="danger" />
+
 
         <ConfirmDialog
           isOpen={batchDeleteDialogOpen}
@@ -818,9 +818,9 @@ export function ProxyLibrarySection() {
           message={t('proxyLibrary.forceDeletePrompt', { count: selectedIds.length })}
           confirmText={t('common.delete')}
           cancelText={t('common.cancel')}
-          variant="danger"
-        />
+          variant="danger" />
+
       </div>
-    </SectionHeader>
-  );
+    </SectionHeader>);
+
 }

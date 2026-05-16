@@ -74,7 +74,7 @@ export default function Scenarios() {
     const params = new URLSearchParams(searchParams);
     params.delete('openCompose');
     setSearchParams(params, { replace: true });
-  }, [queryOpenCompose, queryAlias, searchParams, setSearchParams]);
+  }, [queryOpenCompose, queryAlias, searchParams, setSearchParams, setComposedFlowAlias]);
 
   const aliasOptions = useMemo(() => {
     const toLabel = (alias: string) => formatProfileAlias(alias);
@@ -121,7 +121,7 @@ export default function Scenarios() {
         startUrl: DEFAULT_START_URL,
       });
     },
-    [buildScenarioName]
+    [buildScenarioName, setActiveRecordAlias, setActiveRecordMeta, setReplayAlias, setReplayInitialScenarioPath]
   );
 
   const openReplayModal = useCallback((alias: string, scenarioPath?: string | null) => {
@@ -129,7 +129,7 @@ export default function Scenarios() {
     setActiveRecordMeta(null);
     setReplayInitialScenarioPath(scenarioPath?.trim() ? scenarioPath.trim() : null);
     setReplayAlias(alias);
-  }, []);
+  }, [setActiveRecordAlias, setActiveRecordMeta, setReplayInitialScenarioPath, setReplayAlias]);
 
   const openReplayForAlias = useCallback(
     async (alias: string) => {

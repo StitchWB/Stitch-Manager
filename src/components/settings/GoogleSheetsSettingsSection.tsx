@@ -1,7 +1,7 @@
 import { Database, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Input, SectionHeader, Textarea } from '@/components/ui';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import {
   fetchGoogleSheetsDataset,
   initGoogleSheetsSchema,

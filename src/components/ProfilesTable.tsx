@@ -1,7 +1,7 @@
+import { t } from "@/lib/i18n";
 import { Globe, Trash2, Settings, FolderKanban } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { t } from '../lib/i18n';
 
 import { LayoutGrid } from 'lucide-react';
 import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
@@ -38,7 +38,7 @@ export default function ProfilesTable({
   onEdit,
   onDelete,
   openTarget,
-  customUrl,
+  customUrl
 }: ProfilesTableProps) {
   const [activeRecordAlias, setActiveRecordAlias] = useState<string | null>(null);
   const [activeRecordMeta, setActiveRecordMeta] = useState<{
@@ -53,7 +53,7 @@ export default function ProfilesTable({
   const [openMenuAlias, setOpenMenuAlias] = useState<string | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLElement | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{top: number;left: number;} | null>(null);
   const portalRoot = typeof document !== 'undefined' ? document.body : null;
   const canEdit = typeof onEdit === 'function';
 
@@ -83,12 +83,12 @@ export default function ProfilesTable({
     const availableAbove = Math.max(0, rect.top - margin);
     const openUp = availableBelow < estimatedMenuHeight && availableAbove > availableBelow;
 
-    const top = openUp
-      ? Math.max(margin, rect.top - estimatedMenuHeight - margin)
-      : Math.min(
-          rect.bottom + margin,
-          Math.max(margin, viewportHeight - estimatedMenuHeight - margin)
-        );
+    const top = openUp ?
+    Math.max(margin, rect.top - estimatedMenuHeight - margin) :
+    Math.min(
+      rect.bottom + margin,
+      Math.max(margin, viewportHeight - estimatedMenuHeight - margin)
+    );
 
     return { top, left };
   }, []);
@@ -183,7 +183,7 @@ export default function ProfilesTable({
     return `rec_${safeAlias}_${ts}`;
   };
 
-  const openRecordModal = (alias: string, options?: { quickStart?: boolean }) => {
+  const openRecordModal = (alias: string, options?: {quickStart?: boolean;}) => {
     setReplayAlias(null);
     setReplayInitialScenarioPath(null);
     setActiveRecordQuickStart(Boolean(options?.quickStart));
@@ -191,7 +191,7 @@ export default function ProfilesTable({
     setActiveRecordMeta({
       alias,
       scenarioName: buildScenarioName(alias),
-      startUrl: resolveTargetUrl(openTarget, customUrl) || 'https://google.com',
+      startUrl: resolveTargetUrl(openTarget, customUrl) || 'https://google.com'
     });
   };
 
@@ -212,9 +212,9 @@ export default function ProfilesTable({
         initialPath = fromSettings;
       }
     } catch {
+
       // best effort
     }
-
     openReplayModal(alias, initialPath);
   };
 
@@ -223,9 +223,9 @@ export default function ProfilesTable({
       <EmptyState
         icon={LayoutGrid}
         title={t('accounts.noProfilesFound')}
-        description={t('accounts.noProfilesFoundDesc')}
-      />
-    );
+        description={t('accounts.noProfilesFoundDesc')} />);
+
+
   }
 
   return (
@@ -243,43 +243,43 @@ export default function ProfilesTable({
       </div>
 
       <div className="flex-1 overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10 pb-8 pt-2 space-y-1.5">
-        {profiles.map(profile => {
+        {profiles.map((profile) => {
           const isLinked = Boolean(profile.linkedAccountEmail);
 
           return (
             <div
               key={profile.alias}
-              className="relative rounded-xl border bg-ds-surface-elevated/60 border-white/[0.03] hover:border-white/[0.08] hover:bg-ds-surface-elevated transition-all duration-200 overflow-visible"
-            >
+              className="relative rounded-xl border bg-ds-surface-elevated/60 border-white/[0.03] hover:border-white/[0.08] hover:bg-ds-surface-elevated transition-all duration-200 overflow-visible">
+
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,1fr)_160px_minmax(300px,auto)] gap-4 items-start xl:items-center px-4 py-3">
                 <div className="flex flex-col min-w-0 xl:pr-2">
                   <span className="text-sm leading-5 font-bold text-slate-100 truncate">
                     {profile.displayName ?? profile.alias}
                   </span>
-                  {profile.displayName && profile.displayName !== profile.alias ? (
-                    <span className="text-[11px] text-slate-500 truncate font-mono">
+                  {profile.displayName && profile.displayName !== profile.alias ?
+                  <span className="text-[11px] text-slate-500 truncate font-mono">
                       {profile.alias}
-                    </span>
-                  ) : null}
-                  {profile.linkedAccountEmail ? (
-                    <span className="text-[11px] text-slate-500 truncate">
+                    </span> :
+                  null}
+                  {profile.linkedAccountEmail ?
+                  <span className="text-[11px] text-slate-500 truncate">
                       {profile.linkedAccountEmail}
-                    </span>
-                  ) : null}
+                    </span> :
+                  null}
                 </div>
 
                 <div className="flex xl:justify-center">
                   <div className="flex flex-col items-center gap-1">
                     <span
                       className={`px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide border ${
-                        isLinked
-                          ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
-                          : 'bg-white/5 text-slate-300 border-white/10'
-                      }`}
-                    >
-                      {isLinked
-                        ? t('accounts.profileKindLinked')
-                        : t('accounts.profileKindStandalone')}
+                      isLinked ?
+                      'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' :
+                      'bg-white/5 text-slate-300 border-white/10'}`
+                      }>
+
+                      {isLinked ?
+                      t('accounts.profileKindLinked') :
+                      t('accounts.profileKindStandalone')}
                     </span>
                   </div>
                 </div>
@@ -293,12 +293,12 @@ export default function ProfilesTable({
                       // Default open path now goes through recorder quick-start so
                       // browser opens with in-page recorder overlay immediately.
                       openRecordModal(profile.alias, { quickStart: true });
-                    }}
-                  >
+                    }}>
+
                     <span className="hidden sm:inline">
-                      {t('accounts.openProfileAt')} + overlay
+                      {t('accounts.openProfileAt')}{t("accounts.profiles_table.overlay")}
                     </span>
-                    <span className="sm:hidden">Open</span>
+                    <span className="sm:hidden">{t("accounts.profiles_table.open")}</span>
                   </Button>
                   <Button
                     size="xs"
@@ -316,25 +316,25 @@ export default function ProfilesTable({
                       setReplayAlias(null);
                       setReplayInitialScenarioPath(null);
                       setScenariosAlias(profile.alias);
-                    }}
-                  >
-                    Scenarios
+                    }}>{t("accounts.profiles_table.scenarios")}
+
+
                   </Button>
-                  {canEdit ? (
-                    <Button
-                      size="xs"
-                      variant="secondary"
-                      leftIcon={<Settings size={12} />}
-                      onClick={() => onEdit(profile.alias)}
-                    >
+                  {canEdit ?
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    leftIcon={<Settings size={12} />}
+                    onClick={() => onEdit(profile.alias)}>
+
                       {t('common.settings')}
-                    </Button>
-                  ) : null}
+                    </Button> :
+                  null}
                   <div className="relative">
                     <Button
                       size="xs"
                       variant="secondary"
-                      onClick={event => {
+                      onClick={(event) => {
                         event.stopPropagation();
                         const triggerEl = event.currentTarget as unknown as HTMLElement;
                         if (openMenuAlias === profile.alias) {
@@ -342,76 +342,76 @@ export default function ProfilesTable({
                         } else {
                           openMenu(profile.alias, triggerEl);
                         }
-                      }}
-                    >
+                      }}>
+
                       {t('common.more') || 'More'}
                     </Button>
                   </div>
                 </div>
               </div>
-            </div>
-          );
+            </div>);
+
         })}
       </div>
 
-      {openMenuAlias && menuPosition && portalRoot
-        ? createPortal(
-            <div
-              ref={menuContainerRef}
-              className="fixed z-[9999] w-52 rounded-lg border border-white/10 bg-ds-surface-sunken p-1 shadow-xl shadow-black/40"
-              style={{ top: menuPosition.top, left: menuPosition.left }}
-            >
+      {openMenuAlias && menuPosition && portalRoot ?
+      createPortal(
+        <div
+          ref={menuContainerRef}
+          className="fixed z-[9999] w-52 rounded-lg border border-white/10 bg-ds-surface-sunken p-1 shadow-xl shadow-black/40"
+          style={{ top: menuPosition.top, left: menuPosition.left }}>
+
               <Button
-                size="xs"
-                variant="secondary"
-                className="w-full justify-start"
-                onClick={() => {
-                  closeMenu();
-                  void onOpen(openMenuAlias, openTarget, customUrl);
-                }}
-              >
-                Open without overlay
-              </Button>
+            size="xs"
+            variant="secondary"
+            className="w-full justify-start"
+            onClick={() => {
+              closeMenu();
+              void onOpen(openMenuAlias, openTarget, customUrl);
+            }}>{t("accounts.profiles_table.open_without_overlay")}
+
+
+          </Button>
               <Button
-                size="xs"
-                variant="secondary"
-                className="w-full justify-start"
-                onClick={() => {
-                  closeMenu();
-                  openRecordModal(openMenuAlias, { quickStart: true });
-                }}
-              >
-                {t('common.record') || 'Record'} (overlay)
-              </Button>
+            size="xs"
+            variant="secondary"
+            className="w-full justify-start"
+            onClick={() => {
+              closeMenu();
+              openRecordModal(openMenuAlias, { quickStart: true });
+            }}>
+
+                {t('common.record') || 'Record'}{t("accounts.profiles_table.overlay")}
+          </Button>
               <Button
-                size="xs"
-                variant="secondary"
-                className="w-full justify-start"
-                onClick={() => {
-                  closeMenu();
-                  void openReplayForAlias(openMenuAlias);
-                }}
-              >
+            size="xs"
+            variant="secondary"
+            className="w-full justify-start"
+            onClick={() => {
+              closeMenu();
+              void openReplayForAlias(openMenuAlias);
+            }}>
+
                 {t('common.replay') || 'Replay'}
               </Button>
               <div className="my-1 border-t border-white/10" />
               <Button
-                size="xs"
-                variant="danger"
-                className="w-full justify-start"
-                leftIcon={<Trash2 size={12} />}
-                onClick={() => {
-                  const aliasToDelete = openMenuAlias;
-                  closeMenu();
-                  void onDelete(aliasToDelete);
-                }}
-              >
+            size="xs"
+            variant="danger"
+            className="w-full justify-start"
+            leftIcon={<Trash2 size={12} />}
+            onClick={() => {
+              const aliasToDelete = openMenuAlias;
+              closeMenu();
+              void onDelete(aliasToDelete);
+            }}>
+
                 {t('accounts.deleteProfile')}
               </Button>
             </div>,
-            portalRoot
-          )
-        : null}
+        portalRoot
+      ) :
+      null}
 
       <ProfileScenariosPanel
         alias={scenariosAlias}
@@ -424,8 +424,8 @@ export default function ProfilesTable({
         onReplay={(scenarioPath?: string) => {
           if (!scenariosAlias) return;
           openReplayModal(scenariosAlias, scenarioPath ?? null);
-        }}
-      />
+        }} />
+
 
       <ScenarioRecordModal
         alias={activeRecordAlias}
@@ -437,8 +437,8 @@ export default function ProfilesTable({
         }}
         defaultUrl={activeRecordMeta?.startUrl}
         defaultScenarioName={activeRecordMeta?.scenarioName}
-        quickStart={activeRecordQuickStart}
-      />
+        quickStart={activeRecordQuickStart} />
+
 
       <ScenarioReplayModal
         alias={replayAlias}
@@ -448,8 +448,8 @@ export default function ProfilesTable({
           setReplayInitialScenarioPath(null);
         }}
         defaultUrl={resolveTargetUrl(openTarget, customUrl)}
-        defaultScenarioPath={replayInitialScenarioPath ?? undefined}
-      />
-    </div>
-  );
+        defaultScenarioPath={replayInitialScenarioPath ?? undefined} />
+
+    </div>);
+
 }

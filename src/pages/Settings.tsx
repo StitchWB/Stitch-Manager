@@ -25,7 +25,7 @@ import {
   setEmailCounter,
 } from '@/lib/tauri';
 import { normalizeSpreadsheetId } from '@/lib/tauri/modules/googleSheets';
-import { SettingsData } from '../types/generated';
+import { SettingsData, AddyIoAccountDetails } from '../types/generated';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
 import { validatePort, validateHostname, validateEmail } from '../lib/validation';
@@ -153,7 +153,7 @@ export default function Settings() {
   const [addyioRecipients, setAddyioRecipients] = useState<
     Array<{ id: string; email: string; emailVerifiedAt: string | null }>
   >([]);
-  const [addyioAccountInfo, setAddyioAccountInfo] = useState<any>(null);
+  const [addyioAccountInfo, setAddyioAccountInfo] = useState<AddyIoAccountDetails | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [connectionMessage, setConnectionMessage] = useState('');
@@ -236,16 +236,16 @@ export default function Settings() {
       setEmailGenerationDomain(loadEmailGenerationDomain());
 
       setCustomIdePaths(data.customIdePaths || {});
-      setGoogleSheetsSpreadsheetId((data as any).googleSheetsSpreadsheetId || '');
+      setGoogleSheetsSpreadsheetId(data.googleSheetsSpreadsheetId || '');
       setGoogleSheetsServiceAccountJson(
-        (data as any).googleSheetsServiceAccountJson === '********'
+        data.googleSheetsServiceAccountJson === '********'
           ? ''
-          : (data as any).googleSheetsServiceAccountJson || ''
+          : data.googleSheetsServiceAccountJson || ''
       );
       setHasStoredGoogleSheetsServiceAccountJson(
         Boolean(
-          (data as any).googleSheetsServiceAccountJson &&
-          (data as any).googleSheetsServiceAccountJson === SETTINGS_SECRET_MASK
+          data.googleSheetsServiceAccountJson &&
+          data.googleSheetsServiceAccountJson === SETTINGS_SECRET_MASK
         )
       );
 
@@ -428,7 +428,7 @@ export default function Settings() {
       setSaveStatus('idle');
       setErrorMessage('');
 
-      await updateSettings({ addyioApiToken: addyioApiTokenDraft } as any);
+      await updateSettings({ addyioApiToken: addyioApiTokenDraft });
       setAddyioApiToken(addyioApiTokenDraft);
       setSaveStatus('success');
     } catch (error) {
@@ -453,7 +453,7 @@ export default function Settings() {
 
       const normalizedGoogleSheetsSpreadsheetId = normalizeSpreadsheetId(googleSheetsSpreadsheetId);
 
-      const settingsToSave = {
+      const settingsToSave: Partial<SettingsData> = {
         theme,
         imapServer: imapServer,
         imapPort: parseInt(imapPort, 10) || 993,
@@ -480,7 +480,7 @@ export default function Settings() {
       };
 
       if (googleSheetsServiceAccountJson.trim()) {
-        (settingsToSave as any).googleSheetsServiceAccountJson = googleSheetsServiceAccountJson;
+        settingsToSave.googleSheetsServiceAccountJson = googleSheetsServiceAccountJson;
       }
 
       await updateSettings(settingsToSave);
@@ -523,6 +523,7 @@ export default function Settings() {
     thirtyThreeMailEnabled,
     thirtyThreeMailUsername,
     thirtyThreeMailDomain,
+    thirtyThreeMailTemplate,
     mailtmEnabled,
     customIdePaths,
     googleSheetsSpreadsheetId,

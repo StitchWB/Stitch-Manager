@@ -317,9 +317,9 @@ export function useScenarioReplay() {
         if (payload.jobId !== jobId && payload.correlationId !== correlationId) return;
 
         const fields = payload.fields ?? {};
-        const runnerType = String((fields as any).runnerType ?? '');
+        const runnerType = String(fields.runnerType ?? '');
         const msg = String(payload.message ?? '');
-        const data = (fields as any).data;
+        const data = fields.data;
 
         setState(prev => {
           const nextEvents = [{ ts: payload.ts, message: msg, data }, ...prev.events].slice(0, 80);
@@ -429,11 +429,11 @@ export function useScenarioReplay() {
           }
 
           if (runnerType === 'result') {
-            const ok = Boolean((fields as any).ok);
+            const ok = Boolean(fields.ok);
             status = ok ? 'done' : 'error';
 
             if (!ok) {
-              const err = (fields as any).error as any;
+              const err = fields.error as Record<string, unknown> | undefined;
               const errMsg = String(err?.message ?? payload.message ?? '');
               error = errMsg || 'Replay failed';
               if (errMsg.toLowerCase().includes('playwright install')) {

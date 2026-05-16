@@ -1,4 +1,4 @@
-import { t } from '../../../lib/i18n';
+import { t } from '@/lib/i18n';
 import type { RegistrationLog } from '../../../types/ui';
 import { ButtonBase, MissionControlHUD, StatusBar } from '@/components/ui';
 import { PipelineControls } from '../../../components/registration/PipelineControls';

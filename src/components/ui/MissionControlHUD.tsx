@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '../../lib/utils';
+import { t } from '@/lib/i18n';
 import { ProcessTimeline, type ProcessStep } from './ProcessTimeline';
 import { LiveStatusCard, type LiveAction } from './LiveStatusCard';
 import { SuccessCard } from './SuccessCard';
@@ -270,7 +271,7 @@ function TelemetryBar({ logs }: { logs: LogEntry[] }) {
       {stats.browserStatus && (
         <div className="flex items-center gap-1.5">
           <Cpu className="w-3 h-3" />
-          <span>Browser: {stats.browserStatus}</span>
+          <span>{t('missionControl.browserStatus', { status: stats.browserStatus })}</span>
         </div>
       )}
       <div className="flex items-center gap-1.5 ml-auto">

@@ -50,10 +50,10 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
   gmailAppPasswordSet: false,
 
   loadSettings: async () => {
-    console.log('[PERSISTENCE_STORE] loadSettings: starting');
+    console.warn('[PERSISTENCE_STORE] loadSettings: starting');
     try {
       const settings: ExtendedSettingsData = await getSettings();
-      console.log('[PERSISTENCE_STORE] loadSettings: got settings from DB:', settings);
+      console.warn('[PERSISTENCE_STORE] loadSettings: got settings from DB:', settings);
 
       // Load provider-specific email strategies from localStorage with migration
       const providerEmailStrategies = loadProviderStrategies();
@@ -183,7 +183,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
           ? ''
           : settings.googleSheetsServiceAccountJson || '';
 
-      console.log(
+      console.warn(
         '[PERSISTENCE_STORE] loadSettings: loaded count from DB:',
         settings.count,
         '→ config.count:',
@@ -196,7 +196,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         gmailAppPasswordSet: gmailAppPasswordMasked || !!settings.gmailAppPassword,
       });
 
-      console.log('[PERSISTENCE_STORE] loadSettings: completed successfully');
+      console.warn('[PERSISTENCE_STORE] loadSettings: completed successfully');
       return config;
     } catch (error) {
       console.error('[PERSISTENCE_STORE] loadSettings: failed:', error);
@@ -206,7 +206,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
   },
 
   saveSettings: async (config: RegistrationConfig, logVerbosity: LogVerbosity) => {
-    console.log('[PERSISTENCE_STORE] saveSettings: starting with config:', config);
+    console.warn('[PERSISTENCE_STORE] saveSettings: starting with config:', config);
 
     // Save provider-specific email strategies to localStorage
     saveProviderStrategies(config.providerEmailStrategies);
@@ -311,16 +311,16 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         // ignore localStorage errors
       }
 
-      console.log(
+      console.warn(
         '[PERSISTENCE_STORE] saveSettings: calling updateSettings with data:',
         updateData
       );
       await updateSettings(updateData);
-      console.log('[PERSISTENCE_STORE] saveSettings: updateSettings completed successfully');
+      console.warn('[PERSISTENCE_STORE] saveSettings: updateSettings completed successfully');
 
       set({ saveStatus: 'saved' });
       setTimeout(() => set({ saveStatus: 'idle' }), 2000);
-      console.log('[PERSISTENCE_STORE] saveSettings: status set to saved');
+      console.warn('[PERSISTENCE_STORE] saveSettings: status set to saved');
     } catch (error) {
       console.error('[PERSISTENCE_STORE] saveSettings: failed:', error);
       set({ saveStatus: 'error' });

@@ -20,7 +20,7 @@ import {
   buildManualEnvPayload,
   getProviderProfile,
 } from '../../lib/providering';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { Button, ButtonBase, Select } from '@/components/ui';
 
 // Type definition for AI Proxy detected IDE
@@ -504,9 +504,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                             <div className="flex items-center gap-2">
                               <p className="text-vsc-text font-medium">{ide.displayName}</p>
                               {isOpenCodeIde(ide) && (
-                                <span className="text-2xs px-2 py-0.5 rounded border border-vsc-blue/40 bg-vsc-blue/10 text-vsc-blue">
-                                  OpenCode
-                                </span>
+                                <span className="text-2xs px-2 py-0.5 rounded border border-vsc-blue/40 bg-vsc-blue/10 text-vsc-blue">{t('aiHub.wizard.opencodeLabel')}</span>
                               )}
                             </div>
                             <p className="text-xs text-vsc-text-muted">{ide.configPath}</p>
@@ -667,8 +665,8 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                 </div>
                 <p className="text-xs text-vsc-text-muted mb-2">{t('aiHub.wizard.manual.hint')}</p>
                 <div className="text-xs font-mono text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 space-y-1">
-                  <div>OPENAI_BASE_URL={manualEndpoint}</div>
-                  <div>OPENAI_API_KEY={getProviderProfile(providerKey).defaultApiKey}</div>
+                  <div>{t('aiHub.wizard.manual.openaiBaseUrl')}={manualEndpoint}</div>
+                  <div>{t('aiHub.wizard.manual.openaiApiKey')}={getProviderProfile(providerKey).defaultApiKey}</div>
                 </div>
                 {copyStatus && <p className="text-2xs text-vsc-text-muted mt-2">{copyStatus}</p>}
               </div>

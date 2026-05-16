@@ -11,6 +11,7 @@ import {
   buildEffectiveConfig,
 } from './SchedulerTaskForm';
 import { Button, Modal } from '@/components/ui';
+import { t } from '@/lib/i18n';
 
 interface SchedulerPrefilledCreateModalProps {
   isOpen: boolean;
@@ -66,11 +67,11 @@ export function SchedulerPrefilledCreateModal({
       icon={<Plus className="text-vsc-blue" size={20} />}
       size="lg"
       isLoading={submitting}
-      loadingMessage="Creating task..."
+      loadingMessage={t('common.creatingTask')}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -81,7 +82,7 @@ export function SchedulerPrefilledCreateModal({
               form.requestSubmit();
             }}
           >
-            Create Task
+            {t('scheduler.createTask')}
           </Button>
         </div>
       }

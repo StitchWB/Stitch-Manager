@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Tooltip } from '@/components/Tooltip';
 import { Input, Button, Checkbox, FormGrid } from '@/components/ui';
 import { Filter, Search } from 'lucide-react';
@@ -93,7 +94,7 @@ export function InboxFiltersSection({
               onClick={onList}
               disabled={!session || disabled || isBusy}
             >
-              <Search className="w-4 h-4" /> Список
+              <Search className="w-4 h-4" /> {t('autoReg.inboxFiltersSection.listButton')}
             </Button>
           </Tooltip>
         </div>

@@ -15,7 +15,7 @@ import {
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 
 import PromptEditor from '../PromptEditor';
 import { AiProxySettings } from '../settings/AiProxySettings';
@@ -84,8 +84,8 @@ export default function PatcherSettingsDrawer({
         getSettings(),
         listAccounts(),
       ]);
-      setConfig(kiroCfg as any);
-      setGlobalSettings(globalCfg as any);
+      setConfig(kiroCfg);
+      setGlobalSettings(globalCfg);
       setAccounts(accts);
     } catch (error) {
       console.error('Failed to load config:', error);
@@ -120,7 +120,7 @@ export default function PatcherSettingsDrawer({
     try {
       setIsSaving(true);
       const newSettings = { ...globalSettings, ...updates };
-      await updateSettings(updates as any);
+      await updateSettings(updates);
       setGlobalSettings(newSettings);
     } catch (error) {
       console.error('Failed to save global settings:', error);
@@ -223,7 +223,7 @@ export default function PatcherSettingsDrawer({
               },
             ]}
             value={activeTab}
-            onChange={v => setActiveTab(v as any)}
+            onChange={v => setActiveTab(v as 'kiro' | 'automation')}
           />
         </div>
 

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Tooltip } from '@/components/Tooltip';
 import { Button, EmptyState, GlassCard } from '@/components/ui';
 import { Mail, Trash2, Eye, MessageSquare } from 'lucide-react';
@@ -37,14 +38,14 @@ export function InboxMessagesSection({
           <GlassCard key={message.id} className="p-3 space-y-2">
             <div className="text-xs text-slate-400">{message.receivedAt}</div>
             <div className="text-sm text-white font-medium truncate">
-              {message.subject || '(без темы)'}
+              {message.subject || t('autoReg.inboxMessagesSection.noSubject')}
             </div>
-            <div className="text-xs text-slate-300">от: {message.from?.email || '-'}</div>
+            <div className="text-xs text-slate-300">{t('autoReg.inboxMessagesSection.from')}{': '}{message.from?.email || '-'}</div>
             <div className="text-xs text-slate-400 line-clamp-2">
               {message.text || message.html || ''}
             </div>
             <div className="flex gap-2">
-              <Tooltip content="Пометить письмо как прочитанное">
+              <Tooltip content={t('autoReg.inboxMessagesSection.markAsReadTooltip')}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -52,10 +53,10 @@ export function InboxMessagesSection({
                   onClick={() => onMarkAsRead(message.id)}
                   disabled={!session || isBusy || message.isRead}
                 >
-                  Прочитано
+                  {t('autoReg.inboxMessagesSection.readButton')}
                 </Button>
               </Tooltip>
-              <Tooltip content="Удалить письмо">
+              <Tooltip content={t('autoReg.inboxMessagesSection.deleteTooltip')}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -63,7 +64,7 @@ export function InboxMessagesSection({
                   onClick={() => onDelete(message.id)}
                   disabled={!session || isBusy}
                 >
-                  Удалить
+                  {t('autoReg.inboxMessagesSection.deleteButton')}
                 </Button>
               </Tooltip>
             </div>
@@ -72,8 +73,8 @@ export function InboxMessagesSection({
         {messages.length === 0 && (
           <EmptyState
             icon={Mail}
-            title="Нет загруженных сообщений"
-            description="Нажмите 'Список' для загрузки."
+            title={t('autoReg.inboxMessagesSection.emptyTitle')}
+            description={t('autoReg.inboxMessagesSection.emptyDescription')}
           />
         )}
       </div>

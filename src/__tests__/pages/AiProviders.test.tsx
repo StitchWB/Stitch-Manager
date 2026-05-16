@@ -16,6 +16,7 @@ jest.mock('../../components/ai-proxy/AccountModal', () => ({
 }));
 
 jest.mock('../../components/ai-proxy/QuotaDashboard', () => ({
+  // eslint-disable-next-line i18next/no-literal-string
   QuotaDashboard: () => <div>QuotaDashboard</div>,
 }));
 

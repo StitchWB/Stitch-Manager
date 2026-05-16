@@ -5,8 +5,8 @@ import { t } from '@/lib/i18n';
 import {
   startPythonJob,
   cancelPythonJob,
-  type PythonJobStartResponse,
-} from '@/lib/tauri/modules/pythonJobs';
+  type PythonJobStartResponse } from
+'@/lib/tauri/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
 
 type BrowserRuntimeInstallModalProps = {
@@ -23,8 +23,8 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
   const [logs, setLogs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<
-    'idle' | 'starting' | 'downloading' | 'extracting' | 'done' | 'error'
-  >('idle');
+    'idle' | 'starting' | 'downloading' | 'extracting' | 'done' | 'error'>(
+    'idle');
   const [approxProgress, setApproxProgress] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [installed, setInstalled] = useState<boolean | null>(null);
@@ -54,10 +54,10 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
         const checkJob = await startPythonJob({
           scriptPath: 'python/check_browser_runtime.py',
           args: [],
-          timeoutMs: 30_000,
+          timeoutMs: 30_000
         });
 
-        const unlisten = await listen<ObsEvent>('obs:event', event => {
+        const unlisten = await listen<ObsEvent>('obs:event', (event) => {
           if (disposed) return;
           const payload = event.payload;
           if (!payload) return;
@@ -67,21 +67,22 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
           if (payload.jobId !== checkJob.jobId) return;
 
           const fields = payload.fields ?? {};
-          const runnerType = String((fields as any).runnerType ?? '');
+          const runnerType = String(fields.runnerType ?? '');
           const msg = String(payload.message ?? '');
-          const data = (fields as any).data;
+          const data = fields.data;
           if (
-            runnerType === 'event' &&
-            msg === 'browser.runtime.check' &&
-            data &&
-            typeof data === 'object'
-          ) {
-            const anyData = data as any;
-            if (typeof anyData.installed === 'boolean') {
-              setInstalled(anyData.installed);
+          runnerType === 'event' &&
+          msg === 'browser.runtime.check' &&
+          data &&
+          typeof data === 'object' &&
+          !Array.isArray(data))
+          {
+            const recordData = data as Record<string, unknown>;
+            if (typeof recordData.installed === 'boolean') {
+              setInstalled(recordData.installed);
             }
-            if (typeof anyData.browsersPath === 'string') {
-              setBrowsersPath(anyData.browsersPath);
+            if (typeof recordData.browsersPath === 'string') {
+              setBrowsersPath(recordData.browsersPath);
             }
           }
         });
@@ -91,9 +92,9 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
           if (!disposed) unlisten();
         }, 35_000);
       } catch {
+
         // ignore
-      }
-    };
+      }};
     void run();
     return () => {
       disposed = true;
@@ -113,7 +114,7 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
     if (!isOpen || !jobId) return;
 
     let disposed = false;
-    const unlistenPromise = listen<ObsEvent>('obs:event', event => {
+    const unlistenPromise = listen<ObsEvent>('obs:event', (event) => {
       if (disposed) return;
       const payload = event.payload;
       if (!payload) return;
@@ -123,14 +124,14 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
       if (payload.jobId !== jobId) return;
 
       const fields = payload.fields ?? {};
-      const runnerType = String((fields as any).runnerType ?? '');
+      const runnerType = String(fields.runnerType ?? '');
       const msg = String(payload.message ?? '');
-      const data = (fields as any).data;
+      const data = fields.data;
 
       if (runnerType === 'event') {
-        if (msg === 'browser.runtime.install.location' && data && typeof data === 'object') {
-          const anyData = data as any;
-          if (typeof anyData.browsersPath === 'string') setBrowsersPath(anyData.browsersPath);
+        if (msg === 'browser.runtime.install.location' && data && typeof data === 'object' && !Array.isArray(data)) {
+          const recordData = data as Record<string, unknown>;
+          if (typeof recordData.browsersPath === 'string') setBrowsersPath(recordData.browsersPath);
         }
         if (msg === 'browser.runtime.install.started') setStatus('installing');
         if (msg === 'browser.runtime.install.finished') setStatus('done');
@@ -143,20 +144,20 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
           setStage('done');
         }
 
-        if (msg === 'browser.runtime.install.heartbeat' && data && typeof data === 'object') {
-          const anyData = data as any;
+        if (msg === 'browser.runtime.install.heartbeat' && data && typeof data === 'object' && !Array.isArray(data)) {
+          const recordData = data as Record<string, unknown>;
           const sec =
-            typeof anyData.secondsSinceLastOutput === 'number'
-              ? anyData.secondsSinceLastOutput
-              : null;
+          typeof recordData.secondsSinceLastOutput === 'number' ?
+          recordData.secondsSinceLastOutput :
+          null;
           if (sec !== null) {
-            setLogs(prev => [`[heartbeat] no output for ${sec}s`, ...prev].slice(0, 200));
+            setLogs((prev) => [`[heartbeat] no output for ${sec}s`, ...prev].slice(0, 200));
           }
         }
       }
 
       if (runnerType === 'log') {
-        setLogs(prev => [String(payload.message ?? msg), ...prev].slice(0, 200));
+        setLogs((prev) => [String(payload.message ?? msg), ...prev].slice(0, 200));
 
         const text = String(payload.message ?? msg).toLowerCase();
         if (text.includes('downloading')) setStage('downloading');
@@ -175,16 +176,16 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
           };
           const cur = toBytes(parseFloat(m[1] ?? '0'), m[2] ?? '');
           const tot = toBytes(parseFloat(m[3] ?? '0'), m[4] ?? '');
-          if (tot > 0) setApproxProgress(Math.max(0, Math.min(100, (cur / tot) * 100)));
+          if (tot > 0) setApproxProgress(Math.max(0, Math.min(100, cur / tot * 100)));
         }
       }
 
       if (runnerType === 'result') {
-        const ok = Boolean((fields as any).ok);
+        const ok = Boolean(fields.ok);
         if (!ok) {
           setStatus('error');
           setStage('error');
-          const err = (fields as any).error as any;
+          const err = fields.error as Record<string, unknown> | undefined;
           setError(String(err?.message ?? 'Install failed'));
         } else {
           setStatus('done');
@@ -195,14 +196,14 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
       if (payload.name === 'python.stderr') {
         const line = String(payload.message ?? '').trim();
         if (line.length > 0) {
-          setLogs(prev => [`[stderr] ${line}`, ...prev].slice(0, 200));
+          setLogs((prev) => [`[stderr] ${line}`, ...prev].slice(0, 200));
         }
       }
     });
 
     return () => {
       disposed = true;
-      void unlistenPromise.then(unlisten => unlisten());
+      void unlistenPromise.then((unlisten) => unlisten());
     };
   }, [isOpen, jobId]);
 
@@ -218,7 +219,7 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
       job = await startPythonJob({
         scriptPath: 'python/install_browser_runtime.py',
         args: [],
-        timeoutMs: 3_600_000,
+        timeoutMs: 3_600_000
       });
     } catch (e) {
       setStatus('error');
@@ -249,12 +250,12 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
       isOpen={isOpen}
       onClose={onClose}
       title={t('common.installRuntime') || 'Install browser runtime'}
-      size="lg"
-    >
+      size="lg">
+
       <div className="space-y-3">
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
           <div className="flex items-center justify-between">
-            <div className="text-xs text-slate-400">Stage</div>
+            <div className="text-xs text-slate-400">{t("recorder.browser_runtime_install_modal.stage")}</div>
             <div className="text-xs text-slate-200">{stage}</div>
           </div>
           <div className="mt-2">
@@ -264,61 +265,61 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
               showLabel={approxProgress !== null || stage === 'done'}
               size="sm"
               variant={stage === 'error' ? 'danger' : stage === 'done' ? 'success' : 'default'}
-              label={approxProgress !== null ? 'Download progress (approx.)' : 'Progress'}
-            />
+              label={approxProgress !== null ? 'Download progress (approx.)' : 'Progress'} />
+
             {approxProgress === null &&
-              stage !== 'idle' &&
-              stage !== 'done' &&
-              stage !== 'error' && (
-                <div className="mt-1 text-[11px] text-slate-500">
-                  Downloading… (exact progress not available)
-                </div>
-              )}
-            {status === 'installing' && (
-              <div className="mt-1 text-[11px] text-slate-500">
-                Elapsed: {Math.floor(elapsedMs / 1000)}s
+            stage !== 'idle' &&
+            stage !== 'done' &&
+            stage !== 'error' &&
+            <div className="mt-1 text-[11px] text-slate-500">{t("recorder.browser_runtime_install_modal.downloading_exact_progress_not_available")}
+
+            </div>
+            }
+            {status === 'installing' &&
+            <div className="mt-1 text-[11px] text-slate-500">{t("recorder.browser_runtime_install_modal.elapsed")}
+              {t('recorder.browser_runtime_install_modal.elapsedSeconds', { seconds: Math.floor(elapsedMs / 1000) })}
               </div>
-            )}
+            }
           </div>
         </div>
 
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
           <div className="flex items-center justify-between">
-            <div className="text-xs text-slate-400">Status</div>
+            <div className="text-xs text-slate-400">{t("recorder.browser_runtime_install_modal.status")}</div>
             <div className="text-xs text-slate-200">{status}</div>
           </div>
-          {installed !== null && (
-            <div className="mt-2 text-xs">
-              <div className="text-slate-400">Runtime</div>
+          {installed !== null &&
+          <div className="mt-2 text-xs">
+              <div className="text-slate-400">{t("recorder.browser_runtime_install_modal.runtime")}</div>
               <div className={installed ? 'text-emerald-300' : 'text-amber-300'}>
                 {installed ? 'Installed' : 'Not installed'}
               </div>
             </div>
-          )}
-          {browsersPath && (
-            <div className="mt-2 text-xs">
-              <div className="text-slate-400">Install path</div>
+          }
+          {browsersPath &&
+          <div className="mt-2 text-xs">
+              <div className="text-slate-400">{t("recorder.browser_runtime_install_modal.install_path")}</div>
               <div className="text-slate-200 font-mono break-all">{browsersPath}</div>
             </div>
-          )}
+          }
           {error && <div className="mt-2 text-xs text-red-300">{error}</div>}
         </div>
 
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs text-slate-400 mb-2">Logs</div>
+          <div className="text-xs text-slate-400 mb-2">{t("recorder.browser_runtime_install_modal.logs")}</div>
           <div className="max-h-56 overflow-auto space-y-1">
-            {logs.length === 0 ? (
-              <div className="text-xs text-slate-500">No logs yet</div>
-            ) : (
-              logs.map((line, idx) => (
-                <div
-                  key={`${idx}-${line.slice(0, 12)}`}
-                  className="text-[11px] text-slate-200 font-mono"
-                >
+            {logs.length === 0 ?
+            <div className="text-xs text-slate-500">{t("recorder.browser_runtime_install_modal.no_logs_yet")}</div> :
+
+            logs.map((line, idx) =>
+            <div
+              key={`${idx}-${line.slice(0, 12)}`}
+              className="text-[11px] text-slate-200 font-mono">
+
                   {line}
                 </div>
-              ))
-            )}
+            )
+            }
           </div>
         </div>
 
@@ -329,8 +330,8 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
           <Button
             variant="danger"
             onClick={() => void cancelInstall()}
-            disabled={status !== 'installing'}
-          >
+            disabled={status !== 'installing'}>
+
             {t('common.cancel')}
           </Button>
           <Button onClick={() => void startInstall()} disabled={!canStart}>
@@ -338,6 +339,6 @@ export function BrowserRuntimeInstallModal({ isOpen, onClose }: BrowserRuntimeIn
           </Button>
         </div>
       </div>
-    </Modal>
-  );
+    </Modal>);
+
 }

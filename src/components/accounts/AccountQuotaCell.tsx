@@ -1,4 +1,4 @@
-import React from 'react';
+import { t } from "@/lib/i18n";import React from 'react';
 import { RefreshCw, Loader2 } from 'lucide-react';
 import type { Account } from '@/types/generated';
 import { useAccountsStore } from '@/stores/accounts';
@@ -11,16 +11,16 @@ interface AccountQuotaCellProps {
 
 export const AccountQuotaCell = React.memo(function AccountQuotaCell({
   account,
-  onCheckStatus,
+  onCheckStatus
 }: AccountQuotaCellProps) {
   const providerQuota = useAccountsStore(
-    state => state.providerQuotaCache[account.id]
+    (state) => state.providerQuotaCache[account.id]
   );
   const isChecking = useAccountsStore(
-    state => state.quotaCheckProgress[account.id] ?? false
+    (state) => state.quotaCheckProgress[account.id] ?? false
   );
   const checkError = useAccountsStore(
-    state => state.quotaCheckErrors[account.id] ?? null
+    (state) => state.quotaCheckErrors[account.id] ?? null
   );
 
   const hasBackendQuota = account.quota && (account.quota.limit > 0 || account.quota.used > 0);
@@ -28,18 +28,18 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
   const hasProviderQuota = providerQuota !== undefined && providerQuota !== null;
   const hasQuota = hasBackendQuota || hasProviderQuota;
 
-  const used = hasBackendQuota
-    ? account.quota.used
-    : hasProviderQuota
-      ? providerQuota!.used
-      : 0;
-  const limit = hasBackendQuota
-    ? account.quota.limit
-    : hasProviderQuota
-      ? providerQuota!.limit
-      : 0;
+  const used = hasBackendQuota ?
+  account.quota.used :
+  hasProviderQuota ?
+  providerQuota!.used :
+  0;
+  const limit = hasBackendQuota ?
+  account.quota.limit :
+  hasProviderQuota ?
+  providerQuota!.limit :
+  0;
 
-  const percent = limit > 0 ? Math.min(Math.round((used / limit) * 100), 100) : 0;
+  const percent = limit > 0 ? Math.min(Math.round(used / limit * 100), 100) : 0;
 
   const isFireworks = account.provider?.toLowerCase() === 'fireworks';
   const suspendState = isFireworks ? providerQuota?.status : undefined;
@@ -52,24 +52,24 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
   const isFrozen = isCreditDepleted || isLimitExceeded || isPaymentFailed || isBlocked;
 
   const displayPercent = isFrozen ? 100 : percent;
-  const barColor = isCreditDepleted || isPaymentFailed || isBlocked
-    ? 'bg-red-500'
-    : isLimitExceeded
-      ? 'bg-amber-500'
-      : percent > 90
-        ? 'bg-red-500'
-        : percent > 75
-          ? 'bg-amber-500'
-          : 'bg-emerald-500';
-  const textColor = isCreditDepleted || isPaymentFailed || isBlocked
-    ? 'text-red-400'
-    : isLimitExceeded
-      ? 'text-amber-400'
-      : percent > 90
-        ? 'text-red-400'
-        : percent > 75
-          ? 'text-amber-400'
-          : 'text-emerald-400';
+  const barColor = isCreditDepleted || isPaymentFailed || isBlocked ?
+  'bg-red-500' :
+  isLimitExceeded ?
+  'bg-amber-500' :
+  percent > 90 ?
+  'bg-red-500' :
+  percent > 75 ?
+  'bg-amber-500' :
+  'bg-emerald-500';
+  const textColor = isCreditDepleted || isPaymentFailed || isBlocked ?
+  'text-red-400' :
+  isLimitExceeded ?
+  'text-amber-400' :
+  percent > 90 ?
+  'text-red-400' :
+  percent > 75 ?
+  'text-amber-400' :
+  'text-emerald-400';
 
   const canRefresh = Boolean(account.token);
 
@@ -97,15 +97,15 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
       )}
       onClick={canRefresh && !isChecking && !hasQuota ? handleDoubleClick : undefined}
       onDoubleClick={canRefresh && !isChecking && hasQuota ? handleDoubleClick : undefined}
-      title={checkError ? `Error: ${checkError}` : canRefresh ? !hasQuota ? 'Click to check quota' : 'Double-click to refresh quota' : undefined}
-    >
-      {isChecking ? (
-        <div className="flex items-center gap-1.5 text-slate-400">
+      title={checkError ? `Error: ${checkError}` : canRefresh ? !hasQuota ? 'Click to check quota' : 'Double-click to refresh quota' : undefined}>
+
+      {isChecking ?
+      <div className="flex items-center gap-1.5 text-slate-400">
           <Loader2 size={11} className="animate-spin" />
-          <span className="text-[10px]">Checking…</span>
-        </div>
-      ) : hasQuota ? (
-        <div className="min-w-0">
+          <span className="text-[10px]">{t("accounts.account_quota_cell.checking")}</span>
+        </div> :
+      hasQuota ?
+      <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
             <span className={cn('text-xs font-bold tabular-nums', textColor)}>{displayPercent}%</span>
             <span className="text-[9px] text-slate-500 tabular-nums">
@@ -115,20 +115,20 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
           <div className="h-[2px] w-full rounded-full bg-white/[0.04] overflow-hidden mt-0.5">
             <div className={cn('h-full rounded-full', barColor)} style={{ width: `${displayPercent}%` }} />
           </div>
-        </div>
-      ) : checkError ? (
-        <div className="flex items-center gap-1 text-red-400">
+        </div> :
+      checkError ?
+      <div className="flex items-center gap-1 text-red-400">
           <RefreshCw size={11} />
-          <span className="text-[10px] truncate" title={checkError}>Failed</span>
-        </div>
-      ) : canRefresh ? (
-        <div className={cn('flex items-center gap-1', canRefresh && !isChecking && 'text-slate-500')}>
+          <span className="text-[10px] truncate" title={checkError}>{t("accounts.account_quota_cell.failed")}</span>
+        </div> :
+      canRefresh ?
+      <div className={cn('flex items-center gap-1', canRefresh && !isChecking && 'text-slate-500')}>
           <RefreshCw size={11} />
           <span className="text-[11px]">—</span>
-        </div>
-      ) : (
-        <span className="text-xs text-slate-500">—</span>
-      )}
-    </div>
-  );
+        </div> :
+
+      <span className="text-xs text-slate-500">—</span>
+      }
+    </div>);
+
 });

@@ -71,7 +71,7 @@ export function ProviderReplenishmentSection({
   return (
     <CollapsibleSection
       title={t('automation.replenishment')}
-      description="Стратегии регистрации провайдеров"
+      description={t('autoReg.providerReplenishmentSection.description')}
       icon={<RefreshCw className="w-5 h-5 text-cyan-400" />}
       defaultExpanded={allExpanded || true}
       disabled={disabled}
@@ -92,17 +92,17 @@ export function ProviderReplenishmentSection({
               status={getProviderStatus(p.id)}
               isExpanded={expandedProvider === p.id}
               onToggle={() => onToggleProvider(expandedProvider === p.id ? '' : p.id)}
-              summary={`${current} / ${minActive} активных`}
+              summary={`${current} / ${minActive} ${t('autoReg.providerReplenishmentSection.activeSummary')}`}
               disabled={disabled}
             >
               <div className="flex flex-col gap-2 p-1">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">
-                    Стратегия
+                    {t('autoReg.providerReplenishmentSection.strategyLabel')}
                   </span>
                   <div className="w-36">
                     <Tooltip
-                      content={`Стратегия регистрации через ${p.label}. ${current} / ${minActive} активных аккаунтов`}
+                      content={`${t('autoReg.providerReplenishmentSection.strategyTooltip', { label: p.label, current, minActive })}`}
                     >
                       <Select
                         value={strategy}
@@ -116,7 +116,7 @@ export function ProviderReplenishmentSection({
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">
-                    Мин. резерв
+                    {t('autoReg.providerReplenishmentSection.minReserveLabel')}
                   </span>
                   <div className="w-36">
                     <NumberInput
@@ -125,9 +125,9 @@ export function ProviderReplenishmentSection({
                       onChange={val => handleMinChange(p.minKey, val)}
                       min={1}
                       max={20}
-                      unit="акк"
+                      unit={t('autoReg.providerReplenishmentSection.accountUnit')}
                       className="w-full"
-                      tooltip={`Минимальное количество активных аккаунтов ${p.label}`}
+                      tooltip={`${t('autoReg.providerReplenishmentSection.minTooltip', { label: p.label })}`}
                     />
                   </div>
                 </div>

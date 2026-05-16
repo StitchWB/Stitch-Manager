@@ -1,5 +1,5 @@
 import { Archive, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { formatDate, formatSize } from '../../lib/patcher';
 
 import type { UIBackupInfo } from '../../types/ui';

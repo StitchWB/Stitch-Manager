@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Wifi } from 'lucide-react';
 
+import { t } from '@/lib/i18n';
 import { parseProxyString, validateProxyString } from '../../lib/proxyUtils';
 import { invoke } from '@tauri-apps/api/core';
 import { Button, ButtonBase, Checkbox, Input } from '@/components/ui';
@@ -190,7 +191,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
             className="flex-1"
           />
           <Button variant="secondary" onClick={handlePaste} className="px-3" type="button">
-            Вставить
+            {t('proxyListManager.pasteButton')}
           </Button>
           <Button
             variant="primary"
@@ -200,7 +201,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
             type="button"
           >
             <Plus className="w-4 h-4 mr-1" />
-            Добавить
+            {t('proxyListManager.addButton')}
           </Button>
         </div>
 
@@ -213,12 +214,12 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
         {showSaved && (
           <div className="text-xs text-green-400 bg-green-500/10 border border-green-500/30 rounded p-2 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4" />
-            <span>Прокси добавлен и сохранен</span>
+            <span>{t('proxyListManager.proxyAddedAndSaved')}</span>
           </div>
         )}
 
         <div className="text-xs text-slate-400">
-          Можно вставить несколько прокси (каждый с новой строки)
+          {t('proxyListManager.bulkPasteHint')}
         </div>
       </div>
 
@@ -226,8 +227,8 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
       {proxies.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm text-slate-400">
-            <span>Прокси ({proxies.length})</span>
-            <span className="text-xs">Активных: {proxies.filter(p => p.enabled).length}</span>
+            <span>{t('proxyListManager.proxyCount', { count: proxies.length })}</span>
+            <span className="text-xs">{t('proxyListManager.activeCount', { count: proxies.filter(p => p.enabled).length })}</span>
           </div>
 
           <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -264,28 +265,28 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
                       {proxy.status === 'active' && (
                         <div className="flex items-center gap-1 text-green-400 text-xs">
                           <CheckCircle2 className="w-4 h-4" />
-                          <span>Работает</span>
+                          <span>{t('proxyListManager.statusWorking')}</span>
                         </div>
                       )}
                       {proxy.status === 'error' && (
                         <div className="flex items-center gap-1 text-red-400 text-xs">
                           <XCircle className="w-4 h-4" />
-                          <span>Ошибка</span>
+                          <span>{t('proxyListManager.statusError')}</span>
                         </div>
                       )}
                       {proxy.status === 'untested' && (
                         <div className="flex items-center gap-1 text-slate-400 text-xs">
                           <RefreshCw className="w-4 h-4" />
-                          <span>Не проверен</span>
+                          <span>{t('proxyListManager.statusNotTested')}</span>
                         </div>
                       )}
                     </div>
 
                     {proxy.username && (
                       <div className="text-xs text-slate-400">
-                        <span className="text-slate-500">Логин:</span> {proxy.username}
+                        <span className="text-slate-500">{t('proxyListManager.loginLabel')}</span> {proxy.username}
                         {' • '}
-                        <span className="text-slate-500">Пароль:</span>{' '}
+                        <span className="text-slate-500">{t('proxyListManager.passwordLabel')}</span>{' '}
                         {'•'.repeat(proxy.password?.length || 0)}
                       </div>
                     )}
@@ -329,7 +330,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
       )}
 
       {proxies.length === 0 && (
-        <div className="text-center py-8 text-slate-400 text-sm">Нет добавленных прокси</div>
+        <div className="text-center py-8 text-slate-400 text-sm">{t('proxyListManager.noProxies')}</div>
       )}
     </div>
   );

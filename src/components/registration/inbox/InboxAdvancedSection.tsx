@@ -3,6 +3,7 @@ import { Input, Button, NumberInput, FormGrid } from '@/components/ui';
 import { Settings, Timer } from 'lucide-react';
 import { CollapsibleSection } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 export interface InboxAdvancedSectionProps {
   timeoutMs: number;
@@ -84,7 +85,7 @@ export function InboxAdvancedSection({
               onClick={onWait}
               disabled={!session || disabled || isBusy}
             >
-              <Timer className="w-4 h-4" /> Ждать письмо
+              <Timer className="w-4 h-4" /> {t('mail.waitAction')}
             </Button>
           </Tooltip>
         </div>

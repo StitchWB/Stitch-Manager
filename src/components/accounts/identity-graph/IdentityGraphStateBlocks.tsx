@@ -1,5 +1,6 @@
 import { AlertTriangle, User } from 'lucide-react';
 
+import { t } from '@/lib/i18n';
 import { ButtonBase, EmptyState } from '@/components/ui';
 
 interface IdentityGraphStateBlocksProps {
@@ -19,7 +20,7 @@ export function IdentityGraphStateBlocks({
     <>
       {isLoading ? (
         <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/70 p-6 text-sm text-slate-400">
-          Loading identity graph...
+          {t('accounts.identityGraph.loading')}
         </div>
       ) : null}
 
@@ -35,7 +36,7 @@ export function IdentityGraphStateBlocks({
               onClick={onRetry}
               className="text-xs font-semibold text-rose-200 hover:text-white"
             >
-              Retry
+              {t('common.retry')}
             </ButtonBase>
           )}
         </div>
@@ -44,8 +45,8 @@ export function IdentityGraphStateBlocks({
       {!isLoading && !error && !hasData ? (
         <EmptyState
           icon={User}
-          title="No identities found"
-          description="Try adjusting filters or loading another dataset."
+          title={t('accounts.identityGraph.noIdentities')}
+          description={t('accounts.identityGraph.noIdentitiesDesc')}
         />
       ) : null}
     </>

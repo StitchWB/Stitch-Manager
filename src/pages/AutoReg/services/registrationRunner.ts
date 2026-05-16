@@ -861,8 +861,16 @@ async function waitForJobResult<T extends { success: boolean; error?: string | n
 /**
  * Process registration result and save to database
  */
+interface RegistrationProcessResult {
+  success?: boolean;
+  email?: string | null;
+  apiKey?: string | null;
+  api_key?: string | null;
+  error?: string | null;
+}
+
 async function processRegistrationResult(params: {
-  result: any;
+  result: RegistrationProcessResult;
   provider: ProviderName;
   index: number;
   totalCount: number;

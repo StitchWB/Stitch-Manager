@@ -321,12 +321,12 @@ export default function Chat() {
             <div className="mb-3 p-3 bg-vsc-panel/50 rounded-lg border border-vsc-border">
               <div className="flex items-center gap-2 mb-2 text-xs font-medium text-vsc-text">
                 <ShieldCheck size={14} />
-                Debug Profiles & Force Routing
+                {t('chat.debugProfilesTitle')}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label htmlFor="chat-profile" className="block text-2xs text-vsc-text-muted mb-1">
-                    Profile
+                    {t('chat.profileLabel')}
                   </label>
                   <div className="flex gap-2">
                     <Select
@@ -354,7 +354,7 @@ export default function Chat() {
                         size="xs"
                         onClick={() => deleteProfile(activeProfileId)}
                       >
-                        Del
+                        {t('chat.deleteProfile')}
                       </Button>
                     )}
                   </div>
@@ -364,7 +364,7 @@ export default function Chat() {
                     htmlFor="chat-temperature"
                     className="block text-2xs text-vsc-text-muted mb-1"
                   >
-                    Temperature
+                    {t('chat.temperatureLabel')}
                   </label>
                   <Input
                     id="chat-temperature"
@@ -387,7 +387,7 @@ export default function Chat() {
                     htmlFor="chat-max-tokens"
                     className="block text-2xs text-vsc-text-muted mb-1"
                   >
-                    Max Tokens
+                    {t('chat.maxTokensLabel')}
                   </label>
                   <Input
                     id="chat-max-tokens"
@@ -410,7 +410,7 @@ export default function Chat() {
                   htmlFor="chat-system-prompt"
                   className="block text-2xs text-vsc-text-muted mb-1"
                 >
-                  System Prompt
+                  {t('chat.systemPromptLabel')}
                 </label>
                 <Textarea
                   id="chat-system-prompt"
@@ -426,13 +426,13 @@ export default function Chat() {
                 <Checkbox
                   checked={forceOverride.enabled}
                   onChange={e => setForceOverride({ enabled: e.target.checked })}
-                  label="Force routing"
+                  label={t('chat.forceRouting')}
                   className="px-0 py-0 hover:bg-transparent"
                 />
                 <Input
                   value={forceOverride.provider}
                   onChange={e => setForceOverride({ provider: e.target.value })}
-                  placeholder="provider"
+                  placeholder={t('chat.providerPlaceholder')}
                   disabled={!forceOverride.enabled}
                   className="bg-vsc-input border-vsc-border text-2xs text-vsc-text"
                   shellClassName="bg-vsc-input border-vsc-border"
@@ -440,7 +440,7 @@ export default function Chat() {
                 <Input
                   value={forceOverride.modelId}
                   onChange={e => setForceOverride({ modelId: e.target.value })}
-                  placeholder="model id"
+                  placeholder={t('chat.modelIdPlaceholder')}
                   disabled={!forceOverride.enabled}
                   className="bg-vsc-input border-vsc-border text-2xs text-vsc-text"
                   shellClassName="bg-vsc-input border-vsc-border"
@@ -449,13 +449,13 @@ export default function Chat() {
                   <Input
                     value={forceOverride.accountId}
                     onChange={e => setForceOverride({ accountId: e.target.value })}
-                    placeholder="account id"
+                    placeholder={t('chat.accountIdPlaceholder')}
                     disabled={!forceOverride.enabled}
                     className="bg-vsc-input border-vsc-border text-2xs text-vsc-text"
                     shellClassName="bg-vsc-input border-vsc-border"
                   />
                   <Button variant="ghost" size="xs" onClick={resetForceOverride} type="button">
-                    Reset
+                    {t('chat.reset')}
                   </Button>
                 </div>
               </div>
@@ -480,7 +480,7 @@ export default function Chat() {
                   {t('chat.availableModels') || 'AI Proxy Models'}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-vsc-text">{modelList.length} models</span>
+                  <span className="text-sm text-vsc-text">{t('chat.modelsCount', { count: modelList.length })}</span>
                   <Button
                     onClick={fetchSetup}
                     disabled={setupLoading}
@@ -492,23 +492,24 @@ export default function Chat() {
                 {setupError && <p className="text-2xs text-vsc-red mt-1">{setupError}</p>}
                 <div className="mt-2 text-2xs text-vsc-text-muted space-y-1">
                   <div>
-                    API keys: gemini {setup.geminiKeys}, openai {setup.openaiKeys}, antigravity{' '}
-                    {setup.antigravityKeys}
+                    {t('chat.setupApiKeys', { gemini: setup.geminiKeys, openai: setup.openaiKeys, antigravity: setup.antigravityKeys })}
                   </div>
                   <div>
-                    Provider accounts: {setup.enabledProviderAccounts} active /{' '}
-                    {setup.totalProviderAccounts} total
+                    {t('chat.setupProviderAccounts', { active: setup.enabledProviderAccounts, total: setup.totalProviderAccounts })}
                   </div>
-                  <div>Model mappings: {setup.mappingCount}</div>
-                  <div>AI Proxy mode: {proxyMode}</div>
+                  <div>{t('chat.setupModelMappings', { count: setup.mappingCount })}</div>
+                  <div>{t('chat.setupProxyMode', { mode: proxyMode })}</div>
                   {dailyStats && (
                     <div>
-                      Requests today: {dailyStats.totalRequests} (ok {dailyStats.successfulRequests}{' '}
-                      / fail {dailyStats.failedRequests}), avg{' '}
-                      {Math.round(dailyStats.avgDurationMs)} ms
+                      {t('chat.setupRequestsToday', {
+                        total: dailyStats.totalRequests,
+                        ok: dailyStats.successfulRequests,
+                        fail: dailyStats.failedRequests,
+                        avg: Math.round(dailyStats.avgDurationMs),
+                      })}
                     </div>
                   )}
-                  {costEstimate != null && <div>Estimated cost: ${costEstimate.toFixed(4)}</div>}
+                  {costEstimate != null && <div>{t('chat.setupEstimatedCost', { cost: costEstimate.toFixed(4) })}</div>}
                 </div>
               </div>
             </div>
@@ -520,17 +521,17 @@ export default function Chat() {
                   <div className="flex items-center gap-2">
                     {!proxyRunning && (
                       <Button variant="secondary" size="xs" onClick={handleStartProxy}>
-                        Start AI Proxy
+                        {t('chat.startProxy')}
                       </Button>
                     )}
                     <Button variant="secondary" size="xs" onClick={() => navigate('/settings')}>
-                      AI Proxy Settings
+                      {t('chat.proxySettings')}
                     </Button>
                     <Button variant="secondary" size="xs" onClick={() => navigate('/api-keys')}>
-                      API Keys
+                      {t('chat.apiKeys')}
                     </Button>
                     <Button variant="secondary" size="xs" onClick={() => navigate('/ai-providers')}>
-                      Providers
+                      {t('chat.providers')}
                     </Button>
                   </div>
                 </div>
@@ -585,7 +586,7 @@ export default function Chat() {
         <div className="border-t border-vsc-border bg-vsc-sidebar/40 px-4 py-3">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="text-xs font-medium text-vsc-text">Request / Response Inspector</div>
+              <div className="text-xs font-medium text-vsc-text">{t('chat.inspectorTitle')}</div>
               <div className="flex items-center gap-2">
                 <Select
                   value={inspectorMessageId || ''}
@@ -593,7 +594,7 @@ export default function Chat() {
                   className="px-2 py-1 bg-vsc-input border border-vsc-border rounded text-2xs text-vsc-text"
                   shellClassName="bg-vsc-input border-vsc-border"
                 >
-                  <option value="">Latest</option>
+                  <option value="">{t('chat.latest')}</option>
                   {[...messages]
                     .filter(m => m.role === 'assistant' && m.debug)
                     .slice()
@@ -601,7 +602,7 @@ export default function Chat() {
                     .map(m => (
                       <option key={m.id} value={m.id}>
                         {new Date(m.timestamp).toLocaleTimeString()} •{' '}
-                        {m.routedProvider || 'unknown'}
+                        {m.routedProvider || t('chat.unknownProvider')}
                       </option>
                     ))}
                 </Select>
@@ -617,7 +618,7 @@ export default function Chat() {
                     await navigator.clipboard.writeText(JSON.stringify(target.debug, null, 2));
                   }}
                 >
-                  Copy JSON
+                  {t('chat.copyJson')}
                 </Button>
               </div>
             </div>
@@ -737,7 +738,7 @@ export default function Chat() {
                   ))}
                   {modelList.length === 0 && (
                     <div className="px-3 py-4 text-center text-sm text-vsc-text-muted">
-                      No models available
+                      {t('chat.noModels')}
                     </div>
                   )}
                 </div>
@@ -751,8 +752,9 @@ export default function Chat() {
                 </span>
                 {lastRoutedProvider && (
                   <span className="text-xs text-vsc-text-muted px-2 py-0.5 bg-vsc-input rounded border border-vsc-border capitalize">
-                    routed: {lastRoutedProvider}
-                    {lastRoutedModel ? ` (${lastRoutedModel})` : ''}
+                    {lastRoutedModel
+                      ? t('chat.routedWithModel', { provider: lastRoutedProvider, model: lastRoutedModel })
+                      : t('chat.routed', { provider: lastRoutedProvider })}
                   </span>
                 )}
               </div>

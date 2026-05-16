@@ -1,4 +1,5 @@
 import { Input, Toggle } from '@/components/ui';
+import { t } from '@/lib/i18n';
 
 export interface SchedulerReliabilityState {
   retryEnabled: boolean;
@@ -24,7 +25,7 @@ export function SchedulerReliabilitySection({ value, onChange }: SchedulerReliab
   return (
     <>
       <div className="rounded-md border border-vsc-border bg-vsc-input/40 p-3 space-y-3">
-        <div className="text-sm font-medium text-vsc-text">Retry policy</div>
+        <div className="text-sm font-medium text-vsc-text">{t('scheduler.retryPolicy')}</div>
         <Toggle
           label="Enable retry on failure"
           checked={value.retryEnabled}
@@ -66,7 +67,7 @@ export function SchedulerReliabilitySection({ value, onChange }: SchedulerReliab
       </div>
 
       <div className="rounded-md border border-vsc-border bg-vsc-input/40 p-3 space-y-3">
-        <div className="text-sm font-medium text-vsc-text">Quiet hours</div>
+        <div className="text-sm font-medium text-vsc-text">{t('scheduler.quietHours')}</div>
         <Toggle
           label="Pause executions during quiet hours"
           checked={value.quietEnabled}

@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { Volume2, Play, AlertCircle } from 'lucide-react';
 import { GlassCard, DropdownMenu, Toggle, NumberInput, Button } from '@/components/ui';
 import { Tooltip } from '../Tooltip';
@@ -76,25 +77,25 @@ export function SoundsTab({
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
             <Volume2 className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-xs font-semibold text-slate-300">Звуковые оповещения</span>
+            <span className="text-xs font-semibold text-slate-300">{t("autoReg.soundsTab.title")}</span>
           </div>
 
           <InlineToggle
-            label="Включить звук при CAPTCHA"
-            tooltip="Проигрывать звук когда требуется ручное вмешательство (выбор картинок, капча)"
+            label={t("autoReg.soundsTab.enableCaptchaSound")}
+            tooltip={t("autoReg.soundsTab.captchaSoundTooltip")}
             checked={captchaSoundEnabled}
             onChange={onCaptchaSoundEnabledChange}
             disabled={disabled}
           />
 
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs text-slate-400">Звук алерта</span>
+            <span className="text-xs text-slate-400">{t("autoReg.soundsTab.alertSoundLabel")}</span>
             <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
               <DropdownMenu
                 value={captchaSoundFile}
                 onValueChange={onCaptchaSoundFileChange}
                 options={SOUND_OPTIONS}
-                placeholder="Выберите звук..."
+                placeholder={t("autoReg.soundsTab.selectSoundPlaceholder")}
                 disabled={disabled || !captchaSoundEnabled}
                 className="w-full relative z-20"
                 buttonClassName="w-full justify-between rounded-lg bg-black/40 border border-white/15 px-3 py-2 text-sm text-slate-200 hover:bg-white/5"
@@ -107,7 +108,7 @@ export function SoundsTab({
                 onClick={handleTestSound}
                 disabled={disabled || !captchaSoundEnabled}
               >
-                Тест
+                {t("autoReg.soundsTab.testButton")}
               </Button>
             </div>
           </div>
@@ -119,18 +120,18 @@ export function SoundsTab({
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
             <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-xs font-semibold text-slate-300">Таймаут ожидания</span>
+            <span className="text-xs font-semibold text-slate-300">{t("autoReg.soundsTab.timeoutTitle")}</span>
           </div>
 
-          <Tooltip content="Сколько минут ждать решения CAPTCHA перед отменой шага">
+          <Tooltip content={t("autoReg.soundsTab.timeoutTooltip")}>
             <NumberInput
-              label="Таймаут CAPTCHA"
+              label={t("autoReg.soundsTab.timeoutLabel")}
               value={captchaTimeout}
               onChange={onCaptchaTimeoutChange}
               min={1}
               max={30}
               step={1}
-              unit="мин"
+              unit={t("autoReg.soundsTab.minUnit")}
               className="w-full"
             />
           </Tooltip>

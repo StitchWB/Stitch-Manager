@@ -1,5 +1,5 @@
 import { Download, Trash2 } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 
 import PatchVersionSelector from './PatchVersionSelector';
 import PatchOptionsPanel from './PatchOptionsPanel';

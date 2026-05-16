@@ -9,21 +9,21 @@ type ReplayRuntimeBadgeProps = {
 export function ReplayRuntimeBadge({ runtimeInstalled, mode = 'native' }: ReplayRuntimeBadgeProps) {
   if (mode === 'extension') {
     return (
-      <Badge variant="info" size="sm" withDot className="uppercase tracking-wide">
-        Runner Extension
-      </Badge>
-    );
+      <Badge variant="info" size="sm" withDot className="uppercase tracking-wide">{t("recorder.replay_runtime_badge.runner_extension")}
+
+      </Badge>);
+
   }
 
   const statusLabel =
-    runtimeInstalled === true
-      ? t('recorder.replay.runtimeReady')
-      : runtimeInstalled === false
-        ? t('recorder.replay.runtimeMissing')
-        : t('recorder.replay.runtimeChecking');
+  runtimeInstalled === true ?
+  t('recorder.replay.runtimeReady') :
+  runtimeInstalled === false ?
+  t('recorder.replay.runtimeMissing') :
+  t('recorder.replay.runtimeChecking');
 
   const variant =
-    runtimeInstalled === true ? 'success' : runtimeInstalled === false ? 'warning' : 'outline';
+  runtimeInstalled === true ? 'success' : runtimeInstalled === false ? 'warning' : 'outline';
 
   return (
     <Badge
@@ -31,9 +31,9 @@ export function ReplayRuntimeBadge({ runtimeInstalled, mode = 'native' }: Replay
       size="sm"
       withDot
       withPulse={runtimeInstalled === null}
-      className="uppercase tracking-wide"
-    >
+      className="uppercase tracking-wide">
+
       {t('recorder.replay.runtimeLabel')} {statusLabel}
-    </Badge>
-  );
+    </Badge>);
+
 }

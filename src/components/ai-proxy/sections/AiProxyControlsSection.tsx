@@ -2,7 +2,7 @@ import { Copy, Power, RefreshCw } from 'lucide-react';
 
 import { cn } from '../../../lib/utils';
 import type { ProxySettings, ProxyStatus } from '../../../types/generated';
-import { t } from '../../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { Button, FormGrid, Input, Select, Toggle } from '@/components/ui';
 
 interface AiProxyControlsSectionProps {
@@ -216,11 +216,11 @@ export function AiProxyControlsSection({
             </span>
             <span className="text-slate-600">•</span>
             <span>
-              Reachability:{' '}
+              {t('aiHub.proxy.reachabilityLabel')}:{' '}
               <span
                 className={proxyStatus?.networkReachable ? 'text-emerald-300' : 'text-slate-400'}
               >
-                {proxyStatus?.networkReachable ? 'reachable' : 'unreachable'}
+                {proxyStatus?.networkReachable ? t('aiHub.proxy.reachable') : t('aiHub.proxy.unreachable')}
               </span>
             </span>
             {proxyDraft?.managementKey && (

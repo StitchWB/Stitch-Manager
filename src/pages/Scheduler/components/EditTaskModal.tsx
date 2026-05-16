@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { t } from '@/lib/i18n';
 import { useSchedulerStore } from '../../../stores/scheduler';
 import type { ScheduledTask } from '../../../types/generated';
 import {
@@ -152,11 +153,14 @@ export function EditTaskModal({ taskId, onClose }: EditTaskModalProps) {
     setError(null);
   }, [task]);
 
+  const formValidationError = useMemo(() => {
+    if (!task || !formState) return null;
+    return validateTaskFormState(formState);
+  }, [task, formState]);
+
   if (!task || !formState) {
     return null;
   }
-
-  const formValidationError = useMemo(() => validateTaskFormState(formState), [formState]);
 
   const canSave = formValidationError === null;
 
@@ -192,12 +196,12 @@ export function EditTaskModal({ taskId, onClose }: EditTaskModalProps) {
     <Modal
       isOpen={true}
       onClose={onClose}
-      title="Edit task"
+      title={t('scheduler.editTask')}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" type="button" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -205,7 +209,7 @@ export function EditTaskModal({ taskId, onClose }: EditTaskModalProps) {
             form="edit-task-form"
             disabled={submitting || !canSave}
           >
-            {submitting ? 'Saving...' : 'Save changes'}
+            {submitting ? t('common.saving') : t('common.saveChanges')}
           </Button>
         </div>
       }

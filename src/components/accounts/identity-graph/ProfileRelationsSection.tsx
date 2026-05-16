@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 
+import { t } from '@/lib/i18n';
 import { Button, FormGrid, Select } from '@/components/ui';
 import type { ProfileRelationEditorState } from '@/hooks/useIdentityGraphPanel';
 import type { GoogleSheetsProfileLinkEdge } from '@/types/googleSheets';
@@ -32,7 +33,7 @@ export function ProfileRelationsSection({
   return (
     <details className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 overflow-hidden" open={false}>
       <summary className="px-4 py-3 text-sm font-semibold text-white cursor-pointer hover:bg-white/[0.03] transition-colors list-none flex items-center justify-between">
-        <span>Profile Relations (PROFILE_LINKS)</span>
+        <span>{t('accounts.profileRelations.title')}</span>
         <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" />
       </summary>
       <div className="p-4 space-y-3">
@@ -85,11 +86,9 @@ export function ProfileRelationsSection({
             onClick={handleSaveProfileRelation}
             disabled={savingProfileRelation || !connectionReady}
           >
-            {savingProfileRelation ? 'Saving…' : 'Save profile relation'}
+            {savingProfileRelation ? t('common.saving') : t('accounts.profileRelations.save')}
           </Button>
-          <span className="text-[11px] text-slate-500">
-            Presets: login / signup / recovery
-          </span>
+          <span className="text-[11px] text-slate-500">{t('accounts.profileRelations.presets')}: {'login / signup / recovery'}</span>
         </div>
         <div className="space-y-1 max-h-44 overflow-auto pr-1">
           {profileLinks.length ? (
@@ -108,12 +107,12 @@ export function ProfileRelationsSection({
                   disabled={deletingProfileRelationId === link.id || !connectionReady}
                   onClick={() => handleDeleteProfileRelation(link.id)}
                 >
-                  {deletingProfileRelationId === link.id ? 'Deleting…' : 'Delete'}
+                  {deletingProfileRelationId === link.id ? t('common.deleting') : t('common.delete')}
                 </Button>
               </div>
             ))
           ) : (
-            <div className="text-[11px] text-slate-500">No PROFILE_LINKS rows yet.</div>
+            <div className="text-[11px] text-slate-500">{t('accounts.profileRelations.noRows')}</div>
           )}
         </div>
       </div>

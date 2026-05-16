@@ -2,7 +2,7 @@ import type { Account } from '../../types/generated';
 import AccountsTable from '../AccountsTable';
 import type { AccountsTableProps } from '../AccountsTable';
 
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { Users } from 'lucide-react';
 import type { AccountsVisibleColumns } from './AccountsColumnsMenu';
 import { EmptyState, SkeletonLoader } from '@/components/ui';

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { registrationControl, type PipelineControlAction } from '../../lib/tauri';
 import { Button, Badge } from '@/components/ui';
 import { Play, SkipForward, Hand, X } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { useRegistrationStore } from '../../stores/registration';
 import { playCaptchaAlert, stopCaptchaAlert } from '../../lib/audio/captchaAlert';
 import type {
@@ -11,28 +11,50 @@ import type {
   PipelineStepWaitingEvent,
 } from '../../types/pipeline';
 
-function normalizeStepConfig(raw: any): PipelineStepConfig {
+function getStr(raw: Record<string, unknown>, key: string): string {
+  const val = raw[key];
+  return typeof val === 'string' ? val : '';
+}
+
+function getBool(raw: Record<string, unknown>, key: string): boolean {
+  const val = raw[key];
+  return typeof val === 'boolean' ? val : false;
+}
+
+function getStringArray(val: unknown): string[] | undefined {
+  if (Array.isArray(val) && val.every((item) => typeof item === 'string')) {
+    return val as string[];
+  }
+  return undefined;
+}
+
+function normalizeStepConfig(raw: Record<string, unknown>): PipelineStepConfig {
   return {
-    id: raw.id ?? '',
-    label: raw.label ?? raw.id ?? 'Step',
-    enabled: raw.enabled ?? true,
-    required: raw.required ?? true,
-    skippable: raw.skippable ?? false,
-    pauseAfter: raw.pause_after ?? raw.pauseAfter ?? false,
-    allowManual: raw.allow_manual ?? raw.allowManual ?? false,
-    retryOnFail: raw.retry_on_fail ?? raw.retryOnFail ?? false,
-    status: (raw.status ?? 'pending') as PipelineStepStatus,
-    config: raw.config ?? {},
+    id: getStr(raw, 'id'),
+    label: getStr(raw, 'label') || getStr(raw, 'id') || 'Step',
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true,
+    required: typeof raw.required === 'boolean' ? raw.required : true,
+    skippable: getBool(raw, 'skippable'),
+    pauseAfter: typeof raw.pause_after === 'boolean' ? raw.pause_after : typeof raw.pauseAfter === 'boolean' ? raw.pauseAfter : false,
+    allowManual: typeof raw.allow_manual === 'boolean' ? raw.allow_manual : typeof raw.allowManual === 'boolean' ? raw.allowManual : false,
+    retryOnFail: typeof raw.retry_on_fail === 'boolean' ? raw.retry_on_fail : typeof raw.retryOnFail === 'boolean' ? raw.retryOnFail : false,
+    status: (getStr(raw, 'status') || 'pending') as PipelineStepStatus,
+    config: typeof raw.config === 'object' && raw.config !== null && !Array.isArray(raw.config) ? raw.config as Record<string, unknown> : {},
   };
 }
 
-function normalizeWaitingEvent(raw: any): PipelineStepWaitingEvent | null {
+function normalizeWaitingEvent(raw: Record<string, unknown>): PipelineStepWaitingEvent | null {
   if (!raw) return null;
+  const reasonVal = getStr(raw, 'reason');
+  const reason: PipelineStepWaitingEvent['reason'] =
+    reasonVal === 'manual' || reasonVal === 'failure_choose' || reasonVal === 'pause_after'
+      ? reasonVal
+      : 'pause_after';
   return {
-    jobId: raw.jobId ?? raw.job_id ?? '',
-    stepId: raw.stepId ?? raw.step_id ?? '',
-    reason: raw.reason ?? 'pause_after',
-    options: raw.options,
+    jobId: getStr(raw, 'jobId') || getStr(raw, 'job_id'),
+    stepId: getStr(raw, 'stepId') || getStr(raw, 'step_id'),
+    reason,
+    options: getStringArray(raw.options),
   };
 }
 
@@ -118,73 +140,86 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
       const { listen } = await import('@tauri-apps/api/event');
       if (cancelled) return;
 
-      const register = async (event: string, handler: (payload: any) => void) => {
-        const unlisten = await listen(event, (evt: any) => {
-          const payloadJobId = evt.payload?.jobId;
+      const register = async (event: string, handler: (payload: Record<string, unknown>) => void) => {
+        const unlisten = await listen(event, (evt) => {
+          const payload = evt.payload as Record<string, unknown>;
+          const payloadJobId = payload?.jobId;
           if (payloadJobId && payloadJobId !== jobId) return;
-          handler(evt.payload);
+          handler(payload);
         });
         listeners.push(unlisten);
       };
 
       await register('registration:pipeline_config', (payload) => {
-        const data = payload?.data;
-        if (data?.steps) {
-          setSteps(data.steps.map(normalizeStepConfig));
-          setRunFinished(false);
+        const data = typeof payload.data === 'object' && payload.data !== null && !Array.isArray(payload.data) ? payload.data as Record<string, unknown> : undefined;
+        if (data) {
+          const steps = Array.isArray(data.steps) ? data.steps as Record<string, unknown>[] : undefined;
+          if (steps) {
+            setSteps(steps.map(normalizeStepConfig));
+            setRunFinished(false);
+          }
         }
       });
 
       await register('registration:step_started', (payload) => {
-        const data = payload?.data;
-        if (data?.step) {
-          const normalized = normalizeStepConfig(data.step);
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === normalized.id ? { ...s, ...normalized } : s
-            )
-          );
+        const data = typeof payload.data === 'object' && payload.data !== null && !Array.isArray(payload.data) ? payload.data as Record<string, unknown> : undefined;
+        if (data) {
+          const step = typeof data.step === 'object' && data.step !== null && !Array.isArray(data.step) ? data.step as Record<string, unknown> : undefined;
+          if (step) {
+            const normalized = normalizeStepConfig(step);
+            setSteps((prev) =>
+              prev.map((s) =>
+                s.id === normalized.id ? { ...s, ...normalized } : s
+              )
+            );
+          }
         }
       });
 
       await register('registration:step_completed', (payload) => {
-        const data = payload?.data;
-        const stepId = data?.step_id ?? data?.stepId;
-        if (stepId) {
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === stepId ? { ...s, status: 'completed' as PipelineStepStatus } : s
-            )
-          );
+        const data = typeof payload.data === 'object' && payload.data !== null && !Array.isArray(payload.data) ? payload.data as Record<string, unknown> : undefined;
+        if (data) {
+          const stepId = typeof data.step_id === 'string' ? data.step_id : typeof data.stepId === 'string' ? data.stepId : undefined;
+          if (stepId) {
+            setSteps((prev) =>
+              prev.map((s) =>
+                s.id === stepId ? { ...s, status: 'completed' as PipelineStepStatus } : s
+              )
+            );
+          }
         }
       });
 
       await register('registration:step_failed', (payload) => {
-        const data = payload?.data;
-        const stepId = data?.step_id ?? data?.stepId;
-        if (stepId) {
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === stepId ? { ...s, status: 'failed' as PipelineStepStatus } : s
-            )
-          );
+        const data = typeof payload.data === 'object' && payload.data !== null && !Array.isArray(payload.data) ? payload.data as Record<string, unknown> : undefined;
+        if (data) {
+          const stepId = typeof data.step_id === 'string' ? data.step_id : typeof data.stepId === 'string' ? data.stepId : undefined;
+          if (stepId) {
+            setSteps((prev) =>
+              prev.map((s) =>
+                s.id === stepId ? { ...s, status: 'failed' as PipelineStepStatus } : s
+              )
+            );
+          }
         }
       });
 
       await register('registration:step_skipped', (payload) => {
-        const data = payload?.data;
-        const stepId = data?.step_id ?? data?.stepId;
-        if (stepId) {
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === stepId ? { ...s, status: 'skipped' as PipelineStepStatus } : s
-            )
-          );
+        const data = typeof payload.data === 'object' && payload.data !== null && !Array.isArray(payload.data) ? payload.data as Record<string, unknown> : undefined;
+        if (data) {
+          const stepId = typeof data.step_id === 'string' ? data.step_id : typeof data.stepId === 'string' ? data.stepId : undefined;
+          if (stepId) {
+            setSteps((prev) =>
+              prev.map((s) =>
+                s.id === stepId ? { ...s, status: 'skipped' as PipelineStepStatus } : s
+              )
+            );
+          }
         }
       });
 
       await register('registration:step_waiting', (payload) => {
-        const data = payload?.data;
+        const data = typeof payload.data === 'object' && payload.data !== null && !Array.isArray(payload.data) ? payload.data as Record<string, unknown> : undefined;
         if (data) {
           const normalized = normalizeWaitingEvent(data);
           if (normalized) {
@@ -235,7 +270,7 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
       listeners.forEach((unlisten) => unlisten());
       stopRepeatingAlert();
     };
-  }, [jobId]);
+  }, [jobId, captchaSoundEnabled, startRepeatingAlert, stopRepeatingAlert]);
 
   // Mark run finished when isRunning goes from true to false and we have steps
   useEffect(() => {
@@ -299,20 +334,24 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
                 {step.label}
               </span>
               {step.status === 'failed' && step.skippable && (
-                <button
+                <Button
+                  size="xs"
+                  variant="danger"
                   onClick={() => sendCommand('skip', step.id)}
                   className="text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
                 >
                   {t('autoReg.pipeline.skip').toLowerCase()}
-                </button>
+                </Button>
               )}
               {step.status === 'failed' && step.retryOnFail && (
-                <button
+                <Button
+                  size="xs"
+                  variant="secondary"
                   onClick={() => sendCommand('retry', step.id)}
                   className="text-[10px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
                 >
                   {t('common.retry')}
-                </button>
+                </Button>
               )}
             </div>
           </div>

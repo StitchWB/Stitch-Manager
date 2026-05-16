@@ -5,10 +5,11 @@ import { stopRegistration } from '../../../lib/tauri';
 import { testInboxConnection } from '../../../lib/tauri/modules/registration';
 import { runRegistration, cancelActiveRegistrationJob } from '../services';
 import type { ProviderName } from '../../../types/ui';
+import type { RegistrationConfig } from '../../../stores/registration/types';
 import type { PipelineStepOverride } from '../../../components/registration/PipelineStepConfigPanel';
 
 interface UseRegistrationFlowProps {
-  config: any;
+  config: RegistrationConfig;
   emailDomain: string;
   useRegistrationV2: boolean;
   canStart: boolean;
@@ -146,6 +147,7 @@ export const useRegistrationFlow = ({
     addHistoryEntry,
     handleSetActiveThreads,
     launchContext,
+    pipelineStepOverrides,
   ]);
 
   const handleTestImap = useCallback(async (): Promise<boolean> => {
@@ -213,7 +215,7 @@ export const useRegistrationFlow = ({
       handleSetActiveThreads(0);
       setIsStopping(false);
     }
-  }, [addLog, addNotification, handleSetActiveThreads]);
+  }, [addLog, addNotification, handleSetActiveThreads, setIsStopping]);
 
   // Read from store so values survive page navigation
   const activeThreadsFromStore = useRegistrationStore(state => state.activeThreads);

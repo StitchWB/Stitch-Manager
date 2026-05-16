@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { User, Bot } from 'lucide-react';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 import type { ContentBlock } from '../../types/generated';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { ButtonBase, LoadingSpinner } from '@/components/ui';
 
 
@@ -193,7 +193,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
           {message.isStreaming && <LoadingSpinner size="xs" color="primary" />}
           {!isUser && message.routedProvider && (
             <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-input text-vsc-text-muted border border-vsc-border capitalize">
-              routed: {message.routedProvider}
+              {t('chat.routed')}: {message.routedProvider}
             </span>
           )}
           {!isUser && message.routedModel && (
@@ -203,12 +203,12 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
           )}
           {!isUser && message.debug?.durationMs != null && (
             <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-input text-vsc-text-muted border border-vsc-border">
-              {message.debug.durationMs} ms
+              {message.debug.durationMs} {t('chat.ms')}
             </span>
           )}
           {!isUser && message.debug?.forceProvider && (
             <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-yellow/10 text-vsc-yellow border border-vsc-yellow/40 capitalize">
-              forced: {message.debug.forceProvider}
+              {t('chat.forced')}: {message.debug.forceProvider}
             </span>
           )}
         </div>

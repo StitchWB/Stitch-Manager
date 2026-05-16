@@ -108,6 +108,7 @@ export type { LogGroupProps } from './LogGroup';
 export { GlassCard } from './GlassCard';
 
 export { StatusBadge } from './StatusBadge';
+export type { BadgeVariant } from './StatusBadge';
 
 export { UsageBar } from './UsageBar';
 

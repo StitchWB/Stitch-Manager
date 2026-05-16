@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 
+import { t } from '@/lib/i18n';
 import { Button, FormGrid, Select } from '@/components/ui';
 import type { AccountRelationEditorState } from '@/hooks/useIdentityGraphPanel';
 import type { GoogleSheetsAccountLinkEdge } from '@/types/googleSheets';
@@ -30,7 +31,7 @@ export function AccountRelationsSection({
   return (
     <details className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 overflow-hidden" open={false}>
       <summary className="px-4 py-3 text-sm font-semibold text-white cursor-pointer hover:bg-white/[0.03] transition-colors list-none flex items-center justify-between">
-        <span>Account Relations (ACCOUNT_LINKS)</span>
+        <span>{t('accounts.accountRelations.title')}</span>
         <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" />
       </summary>
       <div className="p-4 space-y-3">
@@ -84,11 +85,9 @@ export function AccountRelationsSection({
             onClick={handleSaveAccountRelation}
             disabled={savingAccountRelation || !connectionReady}
           >
-            {savingAccountRelation ? 'Saving…' : 'Save account relation'}
+            {savingAccountRelation ? t('common.saving') : t('accounts.accountRelations.save')}
           </Button>
-          <span className="text-[11px] text-slate-500">
-            Presets: signup_email / oauth_authorizer
-          </span>
+          <span className="text-[11px] text-slate-500">{t('accounts.accountRelations.presets')}: {'signup_email / oauth_authorizer'}</span>
         </div>
         <div className="space-y-1 max-h-44 overflow-auto pr-1">
           {accountLinks.length ? (
@@ -107,12 +106,12 @@ export function AccountRelationsSection({
                   disabled={deletingAccountRelationId === link.id || !connectionReady}
                   onClick={() => handleDeleteAccountRelation(link.id)}
                 >
-                  {deletingAccountRelationId === link.id ? 'Deleting…' : 'Delete'}
+                  {deletingAccountRelationId === link.id ? t('common.deleting') : t('common.delete')}
                 </Button>
               </div>
             ))
           ) : (
-            <div className="text-[11px] text-slate-500">No ACCOUNT_LINKS rows yet.</div>
+            <div className="text-[11px] text-slate-500">{t('accounts.accountRelations.noRows')}</div>
           )}
         </div>
       </div>

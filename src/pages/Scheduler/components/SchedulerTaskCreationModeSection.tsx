@@ -1,4 +1,5 @@
 import { Input, Select } from '@/components/ui';
+import { t } from '@/lib/i18n';
 
 export type SchedulerTaskCreateMode = 'manual' | 'template';
 
@@ -35,8 +36,8 @@ export function SchedulerTaskCreationModeSection({
         value={mode}
         onChange={e => onModeChange(e.target.value as SchedulerTaskCreateMode)}
       >
-        <option value="manual">Manual task</option>
-        <option value="template">From template</option>
+        <option value="manual">{t('scheduler.taskTypeManual')}</option>
+        <option value="template">{t('scheduler.taskTypeTemplate')}</option>
       </Select>
 
       {mode === 'template' ? (

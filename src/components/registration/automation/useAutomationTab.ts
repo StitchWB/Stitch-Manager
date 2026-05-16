@@ -7,7 +7,7 @@ import {
   getProxySettings,
   updateProxySettings,
 } from '../../../lib/tauri/modules/aiProxy';
-import { RegistrationStatus, ProxySettings, AiProxyAccount } from '../../../types/generated';
+import { RegistrationStatus, ProxySettings, AiProxyAccount, SettingsData } from '../../../types/generated';
 
 export interface AutomationConfig {
   autoReplenishEnabled: boolean;
@@ -90,10 +90,10 @@ export function useAutomationTab() {
   );
 
   useEffect(() => {
-    let intervalId: any;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
     const checkStatus = async () => {
       try {
-        const status = (await getRegistrationStatus()) as any;
+        const status = await getRegistrationStatus();
         setReplenishmentStatus(status);
         if (!status.isRunning && replenishmentStatus?.isRunning) fetchAccounts();
       } catch (err) {
@@ -114,7 +114,9 @@ export function useAutomationTab() {
       const settings = await getSettings();
       setRegConfig({
         autoReplenishEnabled: settings.autoReplenishEnabled === true,
-        minActiveAccounts: (settings as any).minActiveAccounts || 2,
+        minActiveAccounts: typeof (settings as Record<string, unknown>).minActiveAccounts === 'number'
+          ? (settings as Record<string, unknown>).minActiveAccounts as number
+          : 2,
         minActiveKiro: settings.minActiveKiro || 2,
         minActiveWindsurf: settings.minActiveWindsurf || 2,
         minActiveTrae: settings.minActiveTrae || 2,
@@ -126,7 +128,9 @@ export function useAutomationTab() {
         minAccountsThreshold: 2,
         autoSwitchEnabled: false,
         switchOnZeroCredits: true,
-        checkCreditsIntervalSeconds: (settings as any).checkCreditsIntervalSeconds || 60,
+        checkCreditsIntervalSeconds: typeof (settings as Record<string, unknown>).checkCreditsIntervalSeconds === 'number'
+          ? (settings as Record<string, unknown>).checkCreditsIntervalSeconds as number
+          : 60,
       });
 
       try {
@@ -154,7 +158,7 @@ export function useAutomationTab() {
     const newConfig = { ...regConfig, ...updates };
     setRegConfig(newConfig);
     try {
-      await updateSettings(newConfig as any);
+      await updateSettings(newConfig as Partial<SettingsData>);
       addLog({ level: 'info', message: 'Настройки автоматизации обновлены' });
     } catch (error) {
       console.error(error);

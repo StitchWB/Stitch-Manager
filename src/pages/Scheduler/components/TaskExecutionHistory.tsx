@@ -5,6 +5,7 @@ import { useSchedulerStore } from '../../../stores/scheduler';
 import type { TaskExecution } from '../../../types/generated';
 import { formatDistanceToNow } from 'date-fns';
 import { Button, ButtonBase, EmptyState } from '@/components/ui';
+import { t } from '@/lib/i18n';
 
 interface TaskExecutionHistoryProps {
   taskId: number;
@@ -49,7 +50,7 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-vsc-sidebar border border-vsc-border rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
-          <h2 className="text-lg font-semibold text-vsc-text">Execution History</h2>
+          <h2 className="text-lg font-semibold text-vsc-text">{t('scheduler.executionHistory')}</h2>
           <ButtonBase
             type="button"
             onClick={onClose}
@@ -62,13 +63,13 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
         <div className="flex-1 overflow-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="text-vsc-text-muted">Loading history...</div>
+              <div className="text-vsc-text-muted">{t('scheduler.loadingHistory')}</div>
             </div>
           ) : executions.length === 0 ? (
             <EmptyState
               icon={Clock}
-              title="No execution history"
-              description="This task hasn't been executed yet"
+              title={t('scheduler.noExecutionHistory')}
+              description={t('scheduler.noExecutionHistoryDesc')}
             />
           ) : (
             <div className="space-y-2">
@@ -93,13 +94,13 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
 
                   <div className="grid grid-cols-2 gap-4 text-sm mb-2">
                     <div>
-                      <span className="text-vsc-text-muted">Started:</span>
+                      <span className="text-vsc-text-muted">{t('scheduler.started')}</span>
                       <span className="ml-2 text-vsc-text">
                         {new Date(execution.startedAt * 1000).toLocaleString()}
                       </span>
                     </div>
                     <div>
-                      <span className="text-vsc-text-muted">Duration:</span>
+                      <span className="text-vsc-text-muted">{t('scheduler.duration')}</span>
                       <span className="ml-2 text-vsc-text">
                         {formatDuration(execution.startedAt, execution.completedAt)}
                       </span>
@@ -125,7 +126,7 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
 
         <div className="flex justify-end p-4 border-t border-vsc-border">
           <Button variant="secondary" onClick={onClose}>
-            Close
+            {t('common.close')}
           </Button>
         </div>
       </div>

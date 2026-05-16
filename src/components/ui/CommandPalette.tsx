@@ -12,7 +12,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useAccountsStore } from '../../stores/accounts';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -91,7 +91,7 @@ export function CommandPalette() {
                 {t('sidebar.idePatch')}
               </CommandItem>
               <CommandItem icon={<Key />} onSelect={() => runCommand(() => navigate('/api-keys'))}>
-                API Keys
+                {t('commandPalette.apiKeys')}
               </CommandItem>
               <CommandItem
                 icon={<Settings />}
