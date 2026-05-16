@@ -1,9 +1,11 @@
 import { Play, MoreHorizontal, Key } from 'lucide-react';
 import {
   Badge,
+  type BadgeProps,
   Button,
   ButtonBase,
   Checkbox,
+  IconButton,
   TableCell,
   TableRow,
   Tooltip,
@@ -11,6 +13,7 @@ import {
 } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types/generated';
+import type { AccountStatus } from '@/types/ui';
 import type { AccountsTableVisibleColumns } from '@/stores/uiPreferences';
 import { getAccountStatusLabel } from '@/lib/accountStatus';
 import { t } from '@/lib/i18n';
@@ -160,13 +163,13 @@ export function AccountRow({
 
       {/* Status */}
       <TableCell className="w-[70px] min-w-[70px] px-2 py-2 align-middle">
-        <Badge
-          variant={data.statusVariant as any}
+          <Badge
+          variant={data.statusVariant as BadgeProps['variant']}
           size="sm"
           className="normal-case tracking-normal border-0 gap-1"
         >
           <span className={cn('w-1.5 h-1.5 rounded-full', data.statusDotColor)} />
-          {getAccountStatusLabel(account.status as any)}
+          {getAccountStatusLabel(account.status as AccountStatus)}
         </Badge>
       </TableCell>
 
@@ -189,16 +192,18 @@ export function AccountRow({
       >
         {account.provider?.toLowerCase() === 'fireworks' && account.token ? (
           <Tooltip content="Click to copy API key" side="top">
-            <button
+            <IconButton
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 if (account.token) onCopyToken(account.token);
               }}
+              size="sm"
+              variant="ghost"
               className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
             >
               <Key size={14} className="text-slate-400 hover:text-indigo-400" />
-            </button>
+            </IconButton>
           </Tooltip>
         ) : (
           <span className="text-xs text-slate-600">—</span>

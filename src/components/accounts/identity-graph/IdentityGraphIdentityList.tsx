@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { GoogleSheetsIdentityNode } from '@/types/googleSheets';
@@ -41,7 +42,7 @@ export function IdentityGraphIdentityList({
               {resolveIdentityName(node)}
             </div>
             <div className="text-[10px] text-slate-500 truncate mt-0.5">{node.id}</div>
-            <div className="mt-1 text-[10px] text-slate-400">{linksCount} links</div>
+            <div className="mt-1 text-[10px] text-slate-400">{linksCount} {t('accounts.identityGraph.links')}</div>
           </ButtonBase>
         );
       })}

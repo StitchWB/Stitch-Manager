@@ -1,7 +1,7 @@
 import { cn } from '../../lib/utils';
 import { STATUS_COLORS } from '../../constants/colors';
 
-type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'default' | 'neutral';
+export type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'default' | 'neutral';
 type StatusType = 'active' | 'inactive' | 'error' | 'warning' | 'success' | 'pending' | 'info' | 'idle';
 
 interface StatusBadgePropsOld {

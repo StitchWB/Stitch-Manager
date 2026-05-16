@@ -81,8 +81,8 @@ export const useEventListeners = ({ launchContext }: UseEventListenersProps) => 
     );
 
     // Sync settings when they are updated elsewhere (e.g., Settings page)
-    const unlistenSettings = listen<any>('SETTINGS_UPDATED', () => {
-      console.log('[AUTOREG] Received SETTINGS_UPDATED event, reloading...');
+    const unlistenSettings = listen<unknown>('SETTINGS_UPDATED', () => {
+      console.warn('[AUTOREG] Received SETTINGS_UPDATED event, reloading...');
       loadSettings();
     });
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { TrendingUp } from 'lucide-react';
+import { t } from '@/lib/i18n';
 import { Sparkline } from './Sparkline';
 
 interface StatCardProps {
@@ -23,7 +24,7 @@ export const StatCard = React.memo(function StatCard({
   // If value is 0, show "0"
   const isValuePresent =
     value !== null && value !== undefined && !(typeof value === 'number' && isNaN(value));
-  const displayValue = isValuePresent ? value : '—';
+  const displayValue = isValuePresent ? value : t('common.notAvailable');
   const isPlaceholder = !isValuePresent;
 
   return (

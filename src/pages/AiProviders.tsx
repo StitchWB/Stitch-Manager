@@ -18,7 +18,7 @@ import { AiDiagnosticsSection } from '../components/ai-proxy/sections/AiDiagnost
 import { AiTransferModal } from '../components/ai-proxy/modals/AiTransferModal';
 import { AiMappingsModal } from '../components/ai-proxy/modals/AiMappingsModal';
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
-import type { ProxySettings } from '../types/generated';
+import type { ProxySettings, AiProxyAccount } from '../types/generated';
 import { AI_PROXY_PROVIDER_FILTERS } from '../components/ai-proxy/providerMeta';
 import { t } from '../lib/i18n';
 
@@ -28,8 +28,8 @@ export default function AiProviders() {
   const navigate = useNavigate();
   const { section: sectionParam } = useParams<{ section?: string }>();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<any | null>(null);
-  const [drawerAccount, setDrawerAccount] = useState<any | null>(null);
+  const [editingAccount, setEditingAccount] = useState<AiProxyAccount | null>(null);
+  const [drawerAccount, setDrawerAccount] = useState<AiProxyAccount | null>(null);
   const [isMappingsModalOpen, setIsMappingsModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferMode, setTransferMode] = useState<'import' | 'export'>('import');
@@ -113,12 +113,12 @@ export default function AiProviders() {
     }
   }, []);
 
-  const handleEdit = useCallback((account: any) => {
+  const handleEdit = useCallback((account: AiProxyAccount) => {
     setEditingAccount(account);
     setIsModalOpen(true);
   }, []);
 
-  const handleOpenDrawer = useCallback((account: any) => {
+  const handleOpenDrawer = useCallback((account: AiProxyAccount) => {
     setDrawerAccount(account);
   }, []);
 

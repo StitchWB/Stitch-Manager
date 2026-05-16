@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
+import { t } from "@/lib/i18n";import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, Square, Paperclip, X } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 
@@ -31,7 +31,7 @@ export function ChatInput({
   isLoading = false,
   disabled = false,
   allowImageAttachments = true,
-  placeholder = 'Type a message...',
+  placeholder = t('chat.placeholder')
 }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -55,7 +55,7 @@ export function ChatInput({
     if ((trimmed || attachments.length > 0) && !isLoading && !disabled) {
       onSend(
         trimmed,
-        attachments.map(item => item.block)
+        attachments.map((item) => item.block)
       );
       setValue('');
       setAttachments([]);
@@ -87,18 +87,18 @@ export function ChatInput({
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
 
-      const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+      const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
       if (!allowImageAttachments) {
         return;
       }
 
       const readAsDataUrl = (file: File): Promise<string> =>
-        new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ''));
-          reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
-          reader.readAsDataURL(file);
-        });
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+        reader.readAsDataURL(file);
+      });
 
       const nextAttachments: PendingAttachment[] = [];
       for (const file of imageFiles) {
@@ -113,14 +113,14 @@ export function ChatInput({
             source: {
               sourceType: 'base64',
               mediaType: file.type || null,
-              data: base64Data,
-            },
-          },
+              data: base64Data
+            }
+          }
         });
       }
 
       if (nextAttachments.length > 0) {
-        setAttachments(prev => [...prev, ...nextAttachments]);
+        setAttachments((prev) => [...prev, ...nextAttachments]);
       }
     },
     [allowImageAttachments]
@@ -140,97 +140,102 @@ export function ChatInput({
   }, [allowImageAttachments, disabled, isLoading, handleFilesSelected]);
 
   const removeAttachment = useCallback((id: string) => {
-    setAttachments(prev => prev.filter(item => item.id !== id));
+    setAttachments((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
   return (
     <div className="border-t border-vsc-border bg-vsc-sidebar/50 p-4">
-      {attachments.length > 0 && (
-        <div className="max-w-4xl mx-auto mb-3 flex flex-wrap gap-2">
-          {attachments.map(item => (
-            <div
-              key={item.id}
-              className="relative group border border-vsc-border rounded-lg overflow-hidden bg-vsc-input"
-            >
+      {attachments.length > 0 &&
+      <div className="max-w-4xl mx-auto mb-3 flex flex-wrap gap-2">
+          {attachments.map((item) =>
+        <div
+          key={item.id}
+          className="relative group border border-vsc-border rounded-lg overflow-hidden bg-vsc-input">
+          
               <img src={item.previewDataUrl} alt={item.name} className="w-16 h-16 object-cover" />
               <ButtonBase
-                type="button"
-                onClick={() => removeAttachment(item.id)}
-                className="absolute -top-1 -right-1 p-1 rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                aria-label={`Remove ${item.name}`}
-              >
+            type="button"
+            onClick={() => removeAttachment(item.id)}
+            className="absolute -top-1 -right-1 p-1 rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label={`Remove ${item.name}`}>
+            
                 <X size={12} />
               </ButtonBase>
             </div>
-          ))}
+        )}
         </div>
-      )}
+      }
       <div className="flex items-end gap-3 max-w-4xl mx-auto">
         {/* Input area */}
         <div className="flex-1 relative">
           <Textarea
             ref={textareaRef}
             value={value}
-            onChange={e => setValue(e.target.value)}
+            onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
             className="px-4 py-3 bg-vsc-input border border-vsc-border text-sm text-vsc-text placeholder-vsc-text-muted focus:border-vsc-blue/50 focus:ring-1 focus:ring-vsc-blue/30 resize-none overflow-hidden transition-colors"
             shellClassName="bg-vsc-input border-vsc-border"
-            style={{ minHeight: '44px', maxHeight: '200px' }}
-          />
+            style={{ minHeight: '44px', maxHeight: '200px' }} />
+          
           <div className="absolute bottom-1.5 right-2 text-2xs text-vsc-text-muted">
-            {(value.length > 0 || attachments.length > 0) && (
-              <span>Press Enter to send, Shift+Enter for new line</span>
-            )}
+            {(value.length > 0 || attachments.length > 0) &&
+            <span>{t("chat.chat_input.press_enter_to_send_shiftenter_for_new_line")}</span>
+            }
           </div>
         </div>
 
-        {allowImageAttachments ? (
-          <Tooltip content="Attach images">
+        {allowImageAttachments ?
+        <Tooltip content={t('chat.attachImages')}>
             <ButtonBase
-              type="button"
-              onClick={handlePickFiles}
-              disabled={disabled || isLoading}
-              className="p-3 bg-vsc-input border border-vsc-border hover:border-vsc-blue/50 text-vsc-text-muted
+            type="button"
+            onClick={handlePickFiles}
+            disabled={disabled || isLoading}
+            className="p-3 bg-vsc-input border border-vsc-border hover:border-vsc-blue/50 text-vsc-text-muted
                          rounded-lg transition-colors flex items-center justify-center
-                         disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+                         disabled:opacity-50 disabled:cursor-not-allowed">
+
+
+            
               <Paperclip size={18} />
             </ButtonBase>
-          </Tooltip>
-        ) : null}
+          </Tooltip> :
+        null}
 
         {/* Send/Stop button */}
-        {isLoading ? (
-          <Tooltip content="Stop generation">
+        {isLoading ?
+        <Tooltip content={t('chat.stopGeneration')}>
             <ButtonBase
-              type="button"
-              onClick={handleStop}
-              className="p-3 bg-vsc-red/20 hover:bg-vsc-red/30 text-vsc-red 
-                         rounded-lg transition-colors flex items-center justify-center"
-            >
+            type="button"
+            onClick={handleStop}
+            className="p-3 bg-vsc-red/20 hover:bg-vsc-red/30 text-vsc-red 
+                         rounded-lg transition-colors flex items-center justify-center">
+
+            
               <Square size={18} fill="currentColor" />
             </ButtonBase>
-          </Tooltip>
-        ) : (
-          <Tooltip content="Send message">
+          </Tooltip> :
+
+        <Tooltip content={t('chat.sendMessage')}>
             <ButtonBase
-              type="button"
-              onClick={handleSend}
-              disabled={(!value.trim() && attachments.length === 0) || disabled}
-              className="p-3 bg-vsc-blue/20 hover:bg-vsc-blue/30 text-vsc-blue 
+            type="button"
+            onClick={handleSend}
+            disabled={!value.trim() && attachments.length === 0 || disabled}
+            className="p-3 bg-vsc-blue/20 hover:bg-vsc-blue/30 text-vsc-blue 
                          rounded-lg transition-colors flex items-center justify-center
-                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-vsc-blue/20"
-            >
+                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-vsc-blue/20">
+
+
+            
               {disabled ? <LoadingSpinner size="sm" color="primary" /> : <Send size={18} />}
             </ButtonBase>
           </Tooltip>
-        )}
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 }
 
 export default ChatInput;

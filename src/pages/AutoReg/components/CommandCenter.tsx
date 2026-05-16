@@ -15,7 +15,9 @@ import { type LogVerbosity } from '../../../constants/logging';
 import { type SaveStatus } from '../../../stores/registration/types';
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { t } from '@/lib/i18n';
 import { type IdentityConfig, type NetworkConfig, StatusBadge } from '@/components/ui';
+import type { AddyIoAccountDetails } from '../../../types/generated';
 
 interface CommandCenterProps {
   // Provider
@@ -29,7 +31,7 @@ interface CommandCenterProps {
 
   // Identity
   identityConfig: IdentityConfig;
-  onIdentityConfigChange: (updates: any) => void;
+  onIdentityConfigChange: (updates: Partial<IdentityConfig>) => void;
   onTestImap: () => Promise<boolean>;
   passwordSet: boolean;
   gmailAppPasswordSet: boolean;
@@ -37,7 +39,7 @@ interface CommandCenterProps {
   isTestingAddyio: boolean;
   addyioConnectionStatus: 'idle' | 'success' | 'error';
   addyioConnectionMessage: string;
-  addyioAccountInfo: any;
+  addyioAccountInfo: AddyIoAccountDetails | null;
   addyioDomains: string[];
 
   // Engine
@@ -90,7 +92,7 @@ interface CommandCenterProps {
 
   // Network
   networkConfig: NetworkConfig;
-  onNetworkConfigChange: (updates: any) => void;
+  onNetworkConfigChange: (updates: Partial<NetworkConfig>) => void;
 
   // Pipeline step config
   pipelineSteps?: PipelineStepOverride[];
@@ -188,15 +190,15 @@ export const CommandCenter = ({
   const savePill =
     saveStatus === 'saving' ? (
       <StatusBadge status="idle" size="sm" className="rounded-md border border-white/10">
-        <Loader2 className="w-3 h-3 animate-spin" /> Сохранение
+        <Loader2 className="w-3 h-3 animate-spin" /> {t('autoReg.saving')}
       </StatusBadge>
     ) : saveStatus === 'saved' ? (
       <StatusBadge status="success" size="sm" className="rounded-md border border-emerald-500/20">
-        <CheckCircle2 className="w-3 h-3" /> Сохранено
+        <CheckCircle2 className="w-3 h-3" /> {t('autoReg.saved')}
       </StatusBadge>
     ) : saveStatus === 'error' ? (
       <StatusBadge status="error" size="sm" className="rounded-md border border-red-500/20">
-        <XCircle className="w-3 h-3" /> Ошибка сохранения
+        <XCircle className="w-3 h-3" /> {t('autoReg.saveError')}
       </StatusBadge>
     ) : null;
 

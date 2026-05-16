@@ -5,7 +5,7 @@ import type { ScenarioRevisionItem } from '@/lib/tauri/modules/pythonJobs';
 type ReplayVersionPanelProps = {
   loading: boolean;
   error: string | null;
-  versions: Array<ScenarioRevisionItem & { isActive: boolean }>;
+  versions: Array<ScenarioRevisionItem & {isActive: boolean;}>;
   selectedVersionNo: number | null;
   onSelectedVersionNoChange: (value: number | null) => void;
   rollbackLoading: boolean;
@@ -25,7 +25,7 @@ export function ReplayVersionPanel({
   runSelectedLoading,
   selectedVersionHasRunnablePath,
   onRollbackSelected,
-  onRunSelected,
+  onRunSelected
 }: ReplayVersionPanelProps) {
   const hasVersions = versions.length > 0;
 
@@ -34,60 +34,60 @@ export function ReplayVersionPanel({
       <div className="text-xs text-slate-400">{t('recorder.replay.versionTitle')}</div>
 
       {loading ? <div className="text-xs text-slate-500">{t('common.loading')}</div> : null}
-      {!loading && error ? (
-        <div className="text-xs text-amber-300">
+      {!loading && error ?
+      <div className="text-xs text-amber-300">
           {t('recorder.replay.versionLoadError', { error })}
-        </div>
-      ) : null}
+        </div> :
+      null}
 
-      {!loading && !error ? (
-        <>
+      {!loading && !error ?
+      <>
           <Select
-            value={selectedVersionNo == null ? '' : String(selectedVersionNo)}
-            onValueChange={value => {
-              const next = Number(value);
-              onSelectedVersionNoChange(Number.isFinite(next) && next > 0 ? next : null);
-            }}
-            disabled={!hasVersions}
-          >
+          value={selectedVersionNo == null ? '' : String(selectedVersionNo)}
+          onValueChange={(value) => {
+            const next = Number(value);
+            onSelectedVersionNoChange(Number.isFinite(next) && next > 0 ? next : null);
+          }}
+          disabled={!hasVersions}>
+
             <option value="">{t('recorder.replay.versionSelect')}</option>
-            {versions.map(version => (
-              <option key={version.id} value={String(version.versionNo)}>
-                v{version.versionNo}
+            {versions.map((version) =>
+          <option key={version.id} value={String(version.versionNo)}>
+                {t('recorder.replay.versionPrefix')}{version.versionNo}
                 {version.isActive ? ` • ${t('recorder.replay.versionCurrent')}` : ''}
               </option>
-            ))}
+          )}
           </Select>
 
-          {selectedVersionNo != null ? (
-            <div className="text-[11px] text-slate-500">
-              {t('recorder.replay.versionSelected')}: v{selectedVersionNo}
-            </div>
-          ) : null}
+          {selectedVersionNo != null ?
+        <div className="text-[11px] text-slate-500">
+              {t('recorder.replay.versionSelected')}{t("recorder.replay_version_panel.v")}{selectedVersionNo}
+            </div> :
+        null}
 
           <div className="flex flex-wrap gap-2">
             <Button
-              size="xs"
-              disabled={
-                selectedVersionNo == null || !selectedVersionHasRunnablePath || runSelectedLoading
-              }
-              onClick={onRunSelected}
-              isLoading={runSelectedLoading}
-            >
+            size="xs"
+            disabled={
+            selectedVersionNo == null || !selectedVersionHasRunnablePath || runSelectedLoading
+            }
+            onClick={onRunSelected}
+            isLoading={runSelectedLoading}>
+
               {t('recorder.replay.versionRunAction')}
             </Button>
             <Button
-              size="xs"
-              variant="secondary"
-              disabled={selectedVersionNo == null || rollbackLoading}
-              onClick={onRollbackSelected}
-              isLoading={rollbackLoading}
-            >
+            size="xs"
+            variant="secondary"
+            disabled={selectedVersionNo == null || rollbackLoading}
+            onClick={onRollbackSelected}
+            isLoading={rollbackLoading}>
+
               {t('recorder.replay.versionRollbackAction')}
             </Button>
           </div>
-        </>
-      ) : null}
-    </div>
-  );
+        </> :
+      null}
+    </div>);
+
 }

@@ -5,7 +5,7 @@ import { ButtonBase, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
 import { useAiProxyStore } from '../../stores/aiProxy';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 
 type SortKey = 'provider' | 'name' | 'lastUsedAt' | 'requestsToday';
 

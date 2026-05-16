@@ -244,7 +244,7 @@ export function extractActionErrorMessage(error: unknown, fallback: string): str
   if (separatorIdx > 0) {
     const maybeCode = raw.slice(0, separatorIdx).trim();
     const maybeMessage = raw.slice(separatorIdx + 1).trim();
-    if (/^[a-z0-9_\-]+$/i.test(maybeCode)) {
+    if (/^[a-z0-9_-]+$/i.test(maybeCode)) {
       return maybeMessage || fallback;
     }
   }

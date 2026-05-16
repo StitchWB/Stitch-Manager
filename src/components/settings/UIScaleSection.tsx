@@ -2,7 +2,7 @@ import { RefreshCw } from 'lucide-react';
 
 
 
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { ButtonBase, RangeSlider, SectionHeader } from '@/components/ui';
 
 interface UIScaleSectionProps {

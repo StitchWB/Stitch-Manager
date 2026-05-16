@@ -72,7 +72,7 @@ export function ReplayScenarioListPanel({
   selectedPinned = false,
 }: ReplayScenarioListPanelProps) {
   const listViewportRef = useRef<HTMLDivElement | null>(null);
-  const selectedItemRef = useRef<HTMLButtonElement | null>(null);
+  const selectedItemRef = useRef<HTMLDivElement | null>(null);
 
   const isSortOption = (value: string): value is 'recent' | 'health' | 'steps' => {
     return value === 'recent' || value === 'health' || value === 'steps';
@@ -183,23 +183,25 @@ export function ReplayScenarioListPanel({
               filteredItems.map(item => {
                 const selected = selectedPath.trim() === item.scenarioPath;
                 return (
-                  <button
+                  <div
                     key={item.id}
                     ref={selected ? selectedItemRef : null}
-                    type="button"
-                    className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                    className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors cursor-pointer ${
                       selected
                         ? 'border-indigo-500/50 bg-indigo-500/10'
                         : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
                     }`}
                     onClick={() => onSelectPath(item.scenarioPath)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectPath(item.scenarioPath); }}}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
                           {item.favorite ? (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/20">
-                              ★
+                              {t('common.star')}
                             </span>
                           ) : null}
                           <div
@@ -242,7 +244,7 @@ export function ReplayScenarioListPanel({
                         {t('recorder.replay.missingFile')}
                       </div>
                     ) : null}
-                  </button>
+                  </div>
                 );
               })
             ) : (

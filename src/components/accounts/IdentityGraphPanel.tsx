@@ -1,9 +1,9 @@
-import { Select } from '@/components/ui';
+import { t } from "@/lib/i18n";import { Select } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import {
   useIdentityGraphPanel,
-  type UseIdentityGraphPanelProps,
-} from '@/hooks/useIdentityGraphPanel';
+  type UseIdentityGraphPanelProps } from
+'@/hooks/useIdentityGraphPanel';
 import {
   IdentityGraphHeader,
   IdentityGraphAlerts,
@@ -19,13 +19,13 @@ import {
   AuthMethodsSection,
   AccountAuthLinksSection,
   getServiceBadgeClass,
-  getLinkTypeBadgeClass,
-} from './identity-graph';
+  getLinkTypeBadgeClass } from
+'./identity-graph';
 import {
   normalizeSheetName,
   resolveIdentityName,
-  ensureServiceList,
-} from '@/hooks/useIdentityGraphPanel';
+  ensureServiceList } from
+'@/hooks/useIdentityGraphPanel';
 
 export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
   const p = useIdentityGraphPanel(props);
@@ -46,9 +46,9 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
         onInitSchema={p.handleInitSchema}
         onCreateLink={() => p.openCreateEditor(p.activeIdentity?.id)}
         onQueryChange={p.setQuery}
-        onServiceFilterChange={value => p.setServiceFilter(value)}
-        onStatusFilterChange={value => p.setStatusFilter(value)}
-      />
+        onServiceFilterChange={(value) => p.setServiceFilter(value)}
+        onStatusFilterChange={(value) => p.setStatusFilter(value)} />
+
 
       <div className="flex-1 overflow-auto px-4 py-4 space-y-3">
         <IdentityGraphAlerts schemaIssues={p.schemaIssues} invalidRows={p.invalidRows} />
@@ -58,8 +58,8 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
           isLoading={!!props.isLoading}
           error={props.error}
           hasData={p.hasData}
-          onRetry={props.onRetry}
-        />
+          onRetry={props.onRetry} />
+
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,360px)_1fr] gap-4">
           <IdentityGraphIdentityList
@@ -67,8 +67,8 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
             activeIdentityId={p.activeIdentity?.id ?? null}
             parsedLinks={p.parsedLinks}
             onSelectIdentity={p.setActiveIdentityId}
-            resolveIdentityName={resolveIdentityName}
-          />
+            resolveIdentityName={resolveIdentityName} />
+
 
           <div className="space-y-3">
             <IdentityGraphActiveIdentityCard
@@ -81,15 +81,15 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
               onEditLink={p.openEditEditor}
               resolveIdentityName={resolveIdentityName}
               normalizeSheetName={normalizeSheetName}
-              getLinkTypeBadgeClass={getLinkTypeBadgeClass}
-            />
+              getLinkTypeBadgeClass={getLinkTypeBadgeClass} />
+
             <IdentityGraphIdentityCardsList
               identities={p.filteredIdentities}
               resolvedDataset={p.resolvedDataset}
               ensureServiceList={ensureServiceList}
               resolveIdentityName={resolveIdentityName}
-              getServiceBadgeClass={getServiceBadgeClass}
-            />
+              getServiceBadgeClass={getServiceBadgeClass} />
+
 
             <AccountRelationsSection
               accountRelationState={p.accountRelationState}
@@ -100,8 +100,8 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
               accountLinks={p.accountLinks}
               deletingAccountRelationId={p.deletingAccountRelationId}
               savingAccountRelation={p.savingAccountRelation}
-              connectionReady={p.connectionReady}
-            />
+              connectionReady={p.connectionReady} />
+
 
             <ProfileRelationsSection
               profileRelationState={p.profileRelationState}
@@ -113,8 +113,8 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
               profileLinks={p.profileLinks}
               deletingProfileRelationId={p.deletingProfileRelationId}
               savingProfileRelation={p.savingProfileRelation}
-              connectionReady={p.connectionReady}
-            />
+              connectionReady={p.connectionReady} />
+
 
             <AuthMethodsSection
               authMethodState={p.authMethodState}
@@ -128,8 +128,8 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
               connectionReady={p.connectionReady}
               applyCodexApiPreset={p.applyCodexApiPreset}
               applyCodexBrowserPreset={p.applyCodexBrowserPreset}
-              applyQuickFillFromActiveIdentity={p.applyQuickFillFromActiveIdentity}
-            />
+              applyQuickFillFromActiveIdentity={p.applyQuickFillFromActiveIdentity} />
+
 
             <AccountAuthLinksSection
               accountAuthLinkState={p.accountAuthLinkState}
@@ -143,31 +143,31 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
               deletingAccountAuthLinkId={p.deletingAccountAuthLinkId}
               savingAccountAuthLink={p.savingAccountAuthLink}
               connectionReady={p.connectionReady}
-              authMethodById={p.authMethodById}
-            />
+              authMethodById={p.authMethodById} />
+
 
             <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 p-4 space-y-2">
-              <div className="text-xs text-slate-400">
-                Auth-aware edges in graph now include:
-                <span className="ml-2 text-slate-200">account_to_auth_method</span>
-                <span className="ml-2 text-slate-200">auth_method_to_profile</span>
+              <div className="text-xs text-slate-400">{t("accounts.identity_graph_panel.authaware_edges_in_graph_now_include")}
+
+                <span className="ml-2 text-slate-200">{t("accounts.identity_graph_panel.accounttoauthmethod")}</span>
+                <span className="ml-2 text-slate-200">{t("accounts.identity_graph_panel.authmethodtoprofile")}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Select
                   label="Graph auth edges"
                   value={p.authEdgeFilter}
-                  onValueChange={value =>
-                    p.setAuthEdgeFilter((value as 'all' | 'auth_only' | 'no_auth') || 'all')
+                  onValueChange={(value) =>
+                  p.setAuthEdgeFilter(value as 'all' | 'auth_only' | 'no_auth' || 'all')
                   }
                   options={[
-                    { value: 'all', label: 'all edges' },
-                    { value: 'auth_only', label: 'auth edges only' },
-                    { value: 'no_auth', label: 'without auth edges' },
-                  ]}
-                />
-                <div className="text-[11px] text-slate-500">
-                  Showing {p.filteredUnified.edges.length} edges / {p.filteredUnified.nodes.length}{' '}
-                  nodes
+                  { value: 'all', label: 'all edges' },
+                  { value: 'auth_only', label: 'auth edges only' },
+                  { value: 'no_auth', label: 'without auth edges' }]
+                  } />
+
+                <div className="text-[11px] text-slate-500">{t("accounts.identity_graph_panel.showing")}
+                  {p.filteredUnified.edges.length}{t("accounts.identity_graph_panel.edges")}{p.filteredUnified.nodes.length}{' '}{t("accounts.identity_graph_panel.nodes")}
+
                 </div>
               </div>
             </div>
@@ -184,25 +184,25 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
         savingLink={p.savingLink}
         deletingLink={p.deletingLink}
         onClose={() => p.setEditorOpen(false)}
-        onIdentityChange={value => p.setEditorState(prev => ({ ...prev, fromIdentityId: value }))}
-        onServiceSheetChange={sheet => {
+        onIdentityChange={(value) => p.setEditorState((prev) => ({ ...prev, fromIdentityId: value }))}
+        onServiceSheetChange={(sheet) => {
           const firstService = p.servicesBySheet.get(sheet)?.[0]?.id || '';
-          p.setEditorState(prev => ({
+          p.setEditorState((prev) => ({
             ...prev,
             toServiceSheet: sheet,
-            toServiceAccountId: firstService,
+            toServiceAccountId: firstService
           }));
         }}
-        onServiceAccountChange={value =>
-          p.setEditorState(prev => ({ ...prev, toServiceAccountId: value }))
+        onServiceAccountChange={(value) =>
+        p.setEditorState((prev) => ({ ...prev, toServiceAccountId: value }))
         }
-        onLinkTypeChange={value => p.setEditorState(prev => ({ ...prev, linkType: value }))}
-        onStatusChange={value => p.setEditorState(prev => ({ ...prev, status: value }))}
-        onNoteChange={value => p.setEditorState(prev => ({ ...prev, note: value }))}
-        onPrimaryChange={checked => p.setEditorState(prev => ({ ...prev, isPrimary: checked }))}
+        onLinkTypeChange={(value) => p.setEditorState((prev) => ({ ...prev, linkType: value }))}
+        onStatusChange={(value) => p.setEditorState((prev) => ({ ...prev, status: value }))}
+        onNoteChange={(value) => p.setEditorState((prev) => ({ ...prev, note: value }))}
+        onPrimaryChange={(checked) => p.setEditorState((prev) => ({ ...prev, isPrimary: checked }))}
         onDelete={p.handleDeleteLink}
-        onSave={p.handleSaveLink}
-      />
-    </div>
-  );
+        onSave={p.handleSaveLink} />
+
+    </div>);
+
 }

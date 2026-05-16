@@ -29,7 +29,7 @@ export function ScenarioRecordModal({
   onClose,
   defaultUrl = 'https://google.com',
   defaultScenarioName,
-  quickStart = false,
+  quickStart = false
 }: ScenarioRecordModalProps) {
   const recorder = useScenarioRecorder();
   const displayAlias = formatProfileAlias(alias);
@@ -64,7 +64,7 @@ export function ScenarioRecordModal({
   const isNativeRunner = runnerMode === 'native';
   const extensionBridge = useExtensionBridgeProbe({
     isOpen,
-    runnerMode,
+    runnerMode
   });
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export function ScenarioRecordModal({
         const built = await buildRunnerConfigFromProfileSettings(record, {
           defaultUrl,
           fallbackUrl: 'https://google.com',
-          engine,
+          engine
         });
         setConfigJson(built.configJson);
         setUrl(built.startUrl);
@@ -99,7 +99,7 @@ export function ScenarioRecordModal({
           } else {
             try {
               const items = await listProxyLibrary();
-              const selected = items.find(item => item.id === selectedProxyId);
+              const selected = items.find((item) => item.id === selectedProxyId);
               if (!selected) {
                 setProxyPreflightError(
                   `Selected proxy (${selectedProxyId}) is missing from Proxy Library.`
@@ -145,7 +145,7 @@ export function ScenarioRecordModal({
   useEffect(() => {
     if (!isOpen) return;
     // Keep URL resolved from profile settings; only fallback when empty.
-    setUrl(prev => (prev?.trim() ? prev : defaultUrl));
+    setUrl((prev) => prev?.trim() ? prev : defaultUrl);
   }, [defaultUrl, isOpen]);
 
   const refreshRuntime = useCallback(async () => {
@@ -180,9 +180,9 @@ export function ScenarioRecordModal({
     try {
       localStorage.setItem(noOverlayPrefKey, noOverlay ? '1' : '0');
     } catch {
+
       // best effort only
-    }
-  }, [isOpen, noOverlay, noOverlayPrefKey]);
+    }}, [isOpen, noOverlay, noOverlayPrefKey]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -207,9 +207,9 @@ export function ScenarioRecordModal({
     try {
       localStorage.setItem(runnerModePrefKey, runnerMode);
     } catch {
+
       // best effort only
-    }
-  }, [isOpen, runnerMode, runnerModePrefKey]);
+    }}, [isOpen, runnerMode, runnerModePrefKey]);
 
   // Engine preference (cloackbrowser only)
   useEffect(() => {
@@ -234,9 +234,9 @@ export function ScenarioRecordModal({
     try {
       localStorage.setItem(enginePrefKey, engine);
     } catch {
+
       // best effort only
-    }
-  }, [isOpen, engine, enginePrefKey]);
+    }}, [isOpen, engine, enginePrefKey]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -268,7 +268,7 @@ export function ScenarioRecordModal({
           network: {},
           geo: {},
           hardware: {},
-          storage: {},
+          storage: {}
         };
 
         await saveProfileSettings({
@@ -277,9 +277,9 @@ export function ScenarioRecordModal({
             ...current,
             storage: {
               ...(current.storage ?? {}),
-              lastScenarioPath: savedPath,
-            },
-          },
+              lastScenarioPath: savedPath
+            }
+          }
         });
 
         await upsertRecordedScenario({
@@ -287,21 +287,21 @@ export function ScenarioRecordModal({
           name: name.trim() || 'scenario',
           scenarioPath: savedPath,
           startedUrl: url,
-          stepsCount: recorder.state.stepCount,
+          stepsCount: recorder.state.stepCount
         });
       } catch {
+
         // best effort only
-      }
-    })();
+      }})();
   }, [
-    alias,
-    isOpen,
-    name,
-    recorder.state.scenarioPath,
-    recorder.state.status,
-    recorder.state.stepCount,
-    url,
-  ]);
+  alias,
+  isOpen,
+  name,
+  recorder.state.scenarioPath,
+  recorder.state.status,
+  recorder.state.stepCount,
+  url]
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -351,7 +351,7 @@ export function ScenarioRecordModal({
         network: {},
         geo: {},
         hardware: {},
-        storage: {},
+        storage: {}
       };
       await saveProfileSettings({
         alias,
@@ -359,14 +359,14 @@ export function ScenarioRecordModal({
           ...current,
           storage: {
             ...(current.storage ?? {}),
-            lastUrl: url,
-          },
-        },
+            lastUrl: url
+          }
+        }
       });
     } catch {
+
       // best-effort only
     }
-
     await recorder.start({
       alias,
       url,
@@ -374,20 +374,20 @@ export function ScenarioRecordModal({
       configJson,
       noOverlay,
       runnerMode,
-      engine,
+      engine
     });
   }, [
-    alias,
-    configJson,
-    engine,
-    isNativeRunner,
-    name,
-    noOverlay,
-    proxyPreflightError,
-    recorder,
-    runnerMode,
-    url,
-  ]);
+  alias,
+  configJson,
+  engine,
+  isNativeRunner,
+  name,
+  noOverlay,
+  proxyPreflightError,
+  recorder,
+  runnerMode,
+  url]
+  );
 
   useEffect(() => {
     if (!quickStart || autoStarted) return;
@@ -403,19 +403,19 @@ export function ScenarioRecordModal({
     setAutoStarted(true);
     void startRecording();
   }, [
-    quickStart,
-    autoStarted,
-    isOpen,
-    runnerModeHydrated,
-    engineHydrated,
-    canStart,
-    loadingSettings,
-    isNativeRunner,
-    extensionBridge.state.connected,
-    runtimeInstalled,
-    recorder.state.status,
-    startRecording,
-  ]);
+  quickStart,
+  autoStarted,
+  isOpen,
+  runnerModeHydrated,
+  engineHydrated,
+  canStart,
+  loadingSettings,
+  isNativeRunner,
+  extensionBridge.state.connected,
+  runtimeInstalled,
+  recorder.state.status,
+  startRecording]
+  );
 
   return (
     <Modal
@@ -424,82 +424,82 @@ export function ScenarioRecordModal({
       title={t('common.record') || 'Record scenario'}
       size="lg"
       footer={
-        <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-slate-400 flex items-center">{statusText}</div>
             <div className="flex flex-wrap justify-end gap-2">
               <Button variant="secondary" onClick={onClose}>
                 {t('common.close')}
               </Button>
-              {isNativeRunner ? (
-                <Button variant="secondary" onClick={() => setRuntimeModalOpen(true)}>
+              {isNativeRunner ?
+            <Button variant="secondary" onClick={() => setRuntimeModalOpen(true)}>
                   {t('common.installRuntime') || 'Install runtime'}
-                </Button>
-              ) : null}
+                </Button> :
+            null}
               <Button
-                variant="danger"
-                onClick={() => void recorder.stop()}
-                disabled={!recorder.state.jobId || recorder.state.status === 'stopping'}
-              >
+              variant="danger"
+              onClick={() => void recorder.stop()}
+              disabled={!recorder.state.jobId || recorder.state.status === 'stopping'}>
+
                 {t('common.stop')}
               </Button>
               <Button
-                onClick={() => {
-                  void startRecording();
-                }}
-                disabled={
-                  !canStart ||
-                  recorder.state.status === 'recording' ||
-                  recorder.state.status === 'starting' ||
-                  (isNativeRunner && runtimeInstalled === false) ||
-                  (!isNativeRunner && extensionBridge.state.connected !== true)
-                }
-              >
+              onClick={() => {
+                void startRecording();
+              }}
+              disabled={
+              !canStart ||
+              recorder.state.status === 'recording' ||
+              recorder.state.status === 'starting' ||
+              isNativeRunner && runtimeInstalled === false ||
+              !isNativeRunner && extensionBridge.state.connected !== true
+              }>
+
                 {t('common.start')}
               </Button>
             </div>
           </div>
-          {isNativeRunner && runtimeInstalled === false ? (
-            <div className="text-xs text-amber-300">
-              Recorder runtime missing. Install it to start recording.
-            </div>
-          ) : null}
-          {isNativeRunner && proxyPreflightError ? (
-            <div className="text-xs text-amber-300">{proxyPreflightError}</div>
-          ) : null}
-          {!isNativeRunner ? (
-            <div className="flex items-center justify-between gap-2 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs">
+          {isNativeRunner && runtimeInstalled === false ?
+        <div className="text-xs text-amber-300">{t("recorder.scenario_record_modal.recorder_runtime_missing_install_it_to_start_recor")}
+
+        </div> :
+        null}
+          {isNativeRunner && proxyPreflightError ?
+        <div className="text-xs text-amber-300">{proxyPreflightError}</div> :
+        null}
+          {!isNativeRunner ?
+        <div className="flex items-center justify-between gap-2 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs">
               <div className="text-cyan-100">
                 {t('recorder.extensionBridgeStatusLabel')}:&nbsp;
-                {extensionBridge.state.checking && extensionBridge.state.connected == null
-                  ? t('recorder.extensionBridgeChecking')
-                  : extensionBridge.state.connected
-                    ? t('recorder.extensionBridgeConnected')
-                    : t('recorder.extensionBridgeDisconnected')}
+                {extensionBridge.state.checking && extensionBridge.state.connected == null ?
+            t('recorder.extensionBridgeChecking') :
+            extensionBridge.state.connected ?
+            t('recorder.extensionBridgeConnected') :
+            t('recorder.extensionBridgeDisconnected')}
               </div>
               <div className="flex items-center gap-2">
-                {extensionBridge.state.error ? (
-                  <span
-                    className="text-[11px] text-red-200 max-w-[380px] truncate"
-                    title={extensionBridge.state.error}
-                  >
+                {extensionBridge.state.error ?
+            <span
+              className="text-[11px] text-red-200 max-w-[380px] truncate"
+              title={extensionBridge.state.error}>
+
                     {extensionBridge.state.error}
-                  </span>
-                ) : null}
+                  </span> :
+            null}
                 <Button
-                  size="xs"
-                  variant="secondary"
-                  onClick={() => void extensionBridge.refresh()}
-                  disabled={extensionBridge.state.checking}
-                >
+              size="xs"
+              variant="secondary"
+              onClick={() => void extensionBridge.refresh()}
+              disabled={extensionBridge.state.checking}>
+
                   {t('recorder.extensionBridgeRefresh')}
                 </Button>
               </div>
-            </div>
-          ) : null}
+            </div> :
+        null}
         </div>
-      }
-    >
+      }>
+
       <div className="space-y-4">
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
           {t('recorder.proxySwitchRestartWarningRecord')}
@@ -507,32 +507,32 @@ export function ScenarioRecordModal({
 
         <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
           <div>
-            <div className="text-xs text-slate-400">Profile</div>
+            <div className="text-xs text-slate-400">{t("recorder.scenario_record_modal.profile")}</div>
             <div className="text-sm text-slate-200 truncate">{displayAlias}</div>
-            {alias && displayAlias !== alias ? (
-              <div className="text-[11px] text-slate-500 truncate font-mono">{alias}</div>
-            ) : null}
+            {alias && displayAlias !== alias ?
+            <div className="text-[11px] text-slate-500 truncate font-mono">{alias}</div> :
+            null}
           </div>
           <div
             className={`text-[11px] px-2 py-1 rounded-md border ${
-              !isNativeRunner
-                ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-200'
-                : runtimeInstalled === true
-                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                  : runtimeInstalled === false
-                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
-                    : 'border-white/10 bg-black/30 text-slate-400'
-            }`}
-          >
-            {isNativeRunner
-              ? `Runtime ${
-                  runtimeInstalled === true
-                    ? 'ready'
-                    : runtimeInstalled === false
-                      ? 'missing'
-                      : 'checking'
-                }`
-              : 'Runner extension'}
+            !isNativeRunner ?
+            'border-cyan-500/20 bg-cyan-500/10 text-cyan-200' :
+            runtimeInstalled === true ?
+            'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' :
+            runtimeInstalled === false ?
+            'border-amber-500/20 bg-amber-500/10 text-amber-200' :
+            'border-white/10 bg-black/30 text-slate-400'}`
+            }>
+
+            {isNativeRunner ?
+            `Runtime ${
+            runtimeInstalled === true ?
+            'ready' :
+            runtimeInstalled === false ?
+            'missing' :
+            'checking'}` :
+
+            'Runner extension'}
           </div>
         </div>
 
@@ -540,85 +540,87 @@ export function ScenarioRecordModal({
           <Input
             label="Scenario name"
             value={name}
-            onChange={e => setName(e.target.value)}
-            className="h-9"
-          />
+            onChange={(e) => setName(e.target.value)}
+            className="h-9" />
+
           <Input
             label="Start URL"
             value={url}
-            onChange={e => setUrl(e.target.value)}
-            className="h-9"
-          />
+            onChange={(e) => setUrl(e.target.value)}
+            className="h-9" />
+
         </div>
 
         <div className="flex flex-col gap-2">
           <SegmentedControl
             size="sm"
             value={runnerMode}
-            onChange={value => setRunnerMode(value as ScenarioRunnerMode)}
+            onChange={(value) => setRunnerMode(value as ScenarioRunnerMode)}
             options={[
-              { label: 'Native runner', value: 'native' },
-              { label: 'Extension runner', value: 'extension' },
-            ]}
-          />
-          {runnerMode === 'native' ? (
-            <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">
-              Engine: CloakBrowser
-            </div>
-          ) : null}
+            { label: 'Native runner', value: 'native' },
+            { label: 'Extension runner', value: 'extension' }]
+            } />
+
+          {runnerMode === 'native' ?
+          <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">{t("recorder.scenario_record_modal.engine_cloakbrowser")}
+
+          </div> :
+          null}
         </div>
-        {runnerMode === 'extension' ? (
-          <div className="text-[11px] text-cyan-200/90 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
+        {runnerMode === 'extension' ?
+        <div className="text-[11px] text-cyan-200/90 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
             {t('recorder.extensionRunnerBridgeHint')}
-          </div>
-        ) : null}
+          </div> :
+        null}
 
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2">
           <Checkbox
             checked={noOverlay}
-            onChange={e => setNoOverlay(e.currentTarget.checked)}
+            onChange={(e) => setNoOverlay(e.currentTarget.checked)}
             label={t('recorder.recordWithoutOverlayLabel')}
             description={t('recorder.recordWithoutOverlayDescription')}
             className="-mx-1"
-            disabled={!isNativeRunner}
-          />
+            disabled={!isNativeRunner} />
+
           <div className="text-[11px] leading-relaxed text-slate-300/90 px-2">
             {t('recorder.fieldCapturePrivacyNote')}
           </div>
         </div>
 
-        {recorder.state.scenarioPath && (
-          <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs">
-            <div className="text-slate-400">Scenario path</div>
+        {recorder.state.scenarioPath &&
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs">
+            <div className="text-slate-400">{t("recorder.scenario_record_modal.scenario_path")}</div>
             <div className="text-slate-200 font-mono break-all mt-1">
               {recorder.state.scenarioPath}
             </div>
           </div>
-        )}
+        }
 
         {recorder.state.error && <div className="text-xs text-red-300">{recorder.state.error}</div>}
 
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(v => !v)}
-            className="w-full flex items-center justify-between text-xs text-slate-400"
-          >
-            <span>Advanced diagnostics</span>
-            {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+          <div
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="w-full flex items-center justify-between text-xs text-slate-400 cursor-pointer"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowAdvanced((v) => !v); }}}>
 
-          {showAdvanced && (
-            <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
+            <span>{t("recorder.scenario_record_modal.advanced_diagnostics")}</span>
+            {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </div>
+
+          {showAdvanced &&
+          <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <div className="text-slate-400">Job</div>
+                  <div className="text-slate-400">{t("recorder.scenario_record_modal.job")}</div>
                   <div className="text-slate-200 font-mono break-all">
                     {recorder.state.jobId ?? '—'}
                   </div>
                 </div>
                 <div>
-                  <div className="text-slate-400">Correlation</div>
+                  <div className="text-slate-400">{t("recorder.scenario_record_modal.correlation")}</div>
                   <div className="text-slate-200 font-mono break-all">
                     {recorder.state.correlationId}
                   </div>
@@ -626,76 +628,76 @@ export function ScenarioRecordModal({
               </div>
 
               <div
-                className={`rounded-lg border p-3 ${
-                  runtimeInstalled === true
-                    ? 'border-emerald-500/20 bg-emerald-500/5'
-                    : runtimeInstalled === false
-                      ? 'border-amber-500/20 bg-amber-500/5'
-                      : 'border-white/10 bg-black/20'
-                }`}
-              >
+              className={`rounded-lg border p-3 ${
+              runtimeInstalled === true ?
+              'border-emerald-500/20 bg-emerald-500/5' :
+              runtimeInstalled === false ?
+              'border-amber-500/20 bg-amber-500/5' :
+              'border-white/10 bg-black/20'}`
+              }>
+
                 <div className="flex items-center justify-between">
-                  <div className="text-xs text-slate-400">Browser runtime</div>
+                  <div className="text-xs text-slate-400">{t("recorder.scenario_record_modal.browser_runtime")}</div>
                   <Button
-                    size="xs"
-                    variant="secondary"
-                    onClick={() => void refreshRuntime()}
-                    disabled={runtimeChecking}
-                  >
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => void refreshRuntime()}
+                  disabled={runtimeChecking}>
+
                     {runtimeChecking ? t('common.loading') : t('common.refresh')}
                   </Button>
                 </div>
                 <div className="mt-2 text-sm text-slate-200">
-                  {runtimeInstalled === true
-                    ? 'Installed'
-                    : runtimeInstalled === false
-                      ? 'Not installed'
-                      : 'Unknown'}
+                  {runtimeInstalled === true ?
+                'Installed' :
+                runtimeInstalled === false ?
+                'Not installed' :
+                'Unknown'}
                 </div>
-                {runtimeCheckError && (
-                  <div className="mt-1 text-xs text-red-300">{runtimeCheckError}</div>
-                )}
+                {runtimeCheckError &&
+              <div className="mt-1 text-xs text-red-300">{runtimeCheckError}</div>
+              }
               </div>
 
-              {recorder.state.stderr.length > 0 && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-                  <div className="text-xs text-red-200 mb-2">Python stderr</div>
+              {recorder.state.stderr.length > 0 &&
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                  <div className="text-xs text-red-200 mb-2">{t("recorder.scenario_record_modal.python_stderr")}</div>
                   <div className="max-h-32 overflow-auto space-y-1">
-                    {recorder.state.stderr.slice(0, 30).map((e, idx) => (
-                      <div key={`${e.ts}-${idx}`} className="text-[11px] font-mono text-red-200/90">
+                    {recorder.state.stderr.slice(0, 30).map((e, idx) =>
+                <div key={`${e.ts}-${idx}`} className="text-[11px] font-mono text-red-200/90">
                         {e.line}
                       </div>
-                    ))}
+                )}
                   </div>
                 </div>
-              )}
+            }
 
               <div className="rounded-lg border border-white/10 bg-black/20 p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs text-slate-400">Runner config (JSON)</div>
+                  <div className="text-xs text-slate-400">{t("recorder.scenario_record_modal.runner_config_json")}</div>
                   <div className="text-[11px] text-slate-500">
                     {loadingSettings ? 'Loading…' : 'From profile settings'}
                   </div>
                 </div>
                 <Textarea
-                  containerClassName="mt-2"
-                  className="h-28 min-h-[112px] rounded-md px-2 py-1 text-xs font-mono resize-none"
-                  value={configJson}
-                  onChange={e => setConfigJson(e.target.value)}
-                  placeholder="{}"
-                />
+                containerClassName="mt-2"
+                className="h-28 min-h-[112px] rounded-md px-2 py-1 text-xs font-mono resize-none"
+                value={configJson}
+                onChange={(e) => setConfigJson(e.target.value)}
+                placeholder="{}" />
+
               </div>
             </div>
-          )}
+          }
         </div>
       </div>
 
-      {isNativeRunner ? (
-        <BrowserRuntimeInstallModal
-          isOpen={runtimeModalOpen}
-          onClose={() => setRuntimeModalOpen(false)}
-        />
-      ) : null}
-    </Modal>
-  );
+      {isNativeRunner ?
+      <BrowserRuntimeInstallModal
+        isOpen={runtimeModalOpen}
+        onClose={() => setRuntimeModalOpen(false)} /> :
+
+      null}
+    </Modal>);
+
 }

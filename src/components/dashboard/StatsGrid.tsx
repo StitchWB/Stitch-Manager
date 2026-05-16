@@ -2,7 +2,7 @@ import React from 'react';
 import { Users, Key, AlertCircle } from 'lucide-react';
 import { StatCard } from './StatCard';
 import { StatCardSkeleton } from './StatCardSkeleton';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { QuotaDisplay } from '@/components/ui';
 
 

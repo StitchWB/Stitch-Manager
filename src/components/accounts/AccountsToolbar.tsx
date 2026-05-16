@@ -13,7 +13,7 @@ import {
   Upload,
   UserPlus,
 } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
 import { getAccountStatusLabel } from '../../lib/accountStatus';
 import {
@@ -29,11 +29,11 @@ import {
   ToolbarSearchField,
   ToolbarActionsCluster,
   type FilterOption,
+  Tooltip,
 } from '@/components/ui';
 import type { AccountsEntityTab } from './AccountsEntityTabs';
 import { AccountsEntityTabs } from './AccountsEntityTabs';
 import { AccountsColumnsMenu, type AccountsVisibleColumns } from './AccountsColumnsMenu';
-import { Tooltip } from '@/components/ui/Tooltip';
 
 type ViewMode = 'list' | 'graph' | 'sheets';
 

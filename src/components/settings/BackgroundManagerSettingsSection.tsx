@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { t } from "@/lib/i18n";import { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, AlertCircle, CheckCircle, Activity, Clock, Hash, ShieldAlert } from 'lucide-react';
+import { Button, Toggle } from '@/components/ui';
 import { backgroundManager } from '@/lib/tauri';
 import type { BackgroundManagerConfig, BackgroundManagerStatus } from '@/lib/tauri/modules/backgroundManager';
 
@@ -36,24 +37,24 @@ export function BackgroundManagerSettingsSection() {
 
   useEffect(() => {
     Promise.all([
-      backgroundManager.getBackgroundManagerConfig(),
-      backgroundManager.getBackgroundManagerStatus(),
-    ])
-      .then(([cfg, st]) => {
-        setConfig(cfg);
-        setStatus(st);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError('Failed to load: ' + err);
-        setLoading(false);
-      });
+    backgroundManager.getBackgroundManagerConfig(),
+    backgroundManager.getBackgroundManagerStatus()]
+    ).
+    then(([cfg, st]) => {
+      setConfig(cfg);
+      setStatus(st);
+      setLoading(false);
+    }).
+    catch((err) => {
+      setError('Failed to load: ' + err);
+      setLoading(false);
+    });
 
     // Poll status every 5 seconds
     intervalRef.current = setInterval(() => {
-      backgroundManager.getBackgroundManagerStatus()
-        .then(st => setStatus(st))
-        .catch(() => {});
+      backgroundManager.getBackgroundManagerStatus().
+      then((st) => setStatus(st)).
+      catch(() => {});
     }, 5000);
 
     return () => {
@@ -97,9 +98,9 @@ export function BackgroundManagerSettingsSection() {
     return (
       <div className="flex items-center gap-2 text-slate-400">
         <RefreshCw size={16} className="animate-spin" />
-        <span>Loading...</span>
-      </div>
-    );
+        <span>{t("settings.background_manager_settings_section.loading")}</span>
+      </div>);
+
   }
 
   if (!config) {
@@ -107,17 +108,17 @@ export function BackgroundManagerSettingsSection() {
       <div className="flex items-center gap-2 text-red-400">
         <AlertCircle size={16} />
         <span>{error || 'Failed to load config'}</span>
-      </div>
-    );
+      </div>);
+
   }
 
   const intervals = [
-    { value: 60, label: '1 minute' },
-    { value: 300, label: '5 minutes' },
-    { value: 600, label: '10 minutes' },
-    { value: 1800, label: '30 minutes' },
-    { value: 3600, label: '1 hour' },
-  ];
+  { value: 60, label: '1 minute' },
+  { value: 300, label: '5 minutes' },
+  { value: 600, label: '10 minutes' },
+  { value: 1800, label: '30 minutes' },
+  { value: 3600, label: '1 hour' }];
+
 
   const isRunning = status?.isRefreshingQuota ?? false;
 
@@ -125,52 +126,45 @@ export function BackgroundManagerSettingsSection() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-slate-200">Auto Refresh Quota</h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Automatically refresh account quotas in the background
+          <h3 className="text-sm font-medium text-slate-200">{t("settings.background_manager_settings_section.auto_refresh_quota")}</h3>
+          <p className="text-xs text-slate-400 mt-0.5">{t("settings.background_manager_settings_section.automatically_refresh_account_quotas_in_the_backgr")}
+
           </p>
         </div>
-        <button
-          onClick={handleToggleQuotaRefresh}
+        <Toggle
+          label={t("settings.background_manager_settings_section.auto_refresh_quota")}
+          checked={config.autoRefreshQuotaEnabled}
+          onChange={handleToggleQuotaRefresh}
           disabled={saving}
-          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-            config.autoRefreshQuotaEnabled
-              ? 'bg-emerald-500'
-              : 'bg-slate-600'
-          }`}
-        >
-          <span
-            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-              config.autoRefreshQuotaEnabled ? 'translate-x-4.5' : 'translate-x-0.5'
-            }`}
-          />
-        </button>
+        />
       </div>
 
-      {config.autoRefreshQuotaEnabled && (
-        <div className="space-y-2">
-          <label className="text-xs text-slate-400">Refresh interval</label>
+      {config.autoRefreshQuotaEnabled &&
+      <div className="space-y-2">
+          <label className="text-xs text-slate-400">{t("settings.background_manager_settings_section.refresh_interval")}</label>
           <div className="flex gap-2 flex-wrap">
-            {intervals.map(interval => (
-              <button
-                key={interval.value}
-                onClick={() => handleIntervalChange(interval.value)}
-                disabled={saving}
-                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                  config.refreshQuotaIntervalSeconds === interval.value
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-slate-700 text-slate-300 border border-slate-600 hover:bg-slate-600'
-                }`}
-              >
+            {intervals.map((interval) =>
+          <Button
+            key={interval.value}
+            size="xs"
+            variant={config.refreshQuotaIntervalSeconds === interval.value ? 'primary' : 'secondary'}
+            onClick={() => handleIntervalChange(interval.value)}
+            disabled={saving}
+            className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+            config.refreshQuotaIntervalSeconds === interval.value ?
+            'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+            'bg-slate-700 text-slate-300 border border-slate-600 hover:bg-slate-600'}`
+            }>
+
                 {interval.label}
-              </button>
-            ))}
+              </Button>
+          )}
           </div>
         </div>
-      )}
+      }
 
-      {status && config.autoRefreshQuotaEnabled && (
-        <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-3 space-y-2">
+      {status && config.autoRefreshQuotaEnabled &&
+      <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-3 space-y-2">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
             <Activity size={12} className={isRunning ? 'text-emerald-400' : 'text-slate-500'} />
             <span>
@@ -180,39 +174,39 @@ export function BackgroundManagerSettingsSection() {
           <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
               <Clock size={10} />
-              <span>Last: {formatDuration(status.lastQuotaRefreshCheck)}</span>
+              <span>{t("settings.background_manager_settings_section.last")}{formatDuration(status.lastQuotaRefreshCheck)}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Clock size={10} />
-              <span>Next: {formatNextCheck(status.lastQuotaRefreshCheck, config.refreshQuotaIntervalSeconds)}</span>
+              <span>{t("settings.background_manager_settings_section.next")}{formatNextCheck(status.lastQuotaRefreshCheck, config.refreshQuotaIntervalSeconds)}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Hash size={10} />
-              <span>Tracked: {status.quotaTrackedAccounts}</span>
+              <span>{t("settings.background_manager_settings_section.tracked")}{status.quotaTrackedAccounts}</span>
             </div>
-            {status.quotaRefreshErrorCount > 0 && (
-              <div className="flex items-center gap-1.5 text-amber-400">
+            {status.quotaRefreshErrorCount > 0 &&
+          <div className="flex items-center gap-1.5 text-amber-400">
                 <ShieldAlert size={10} />
-                <span>Errors: {status.quotaRefreshErrorCount}</span>
+                <span>{t("settings.background_manager_settings_section.errors")}{status.quotaRefreshErrorCount}</span>
               </div>
-            )}
+          }
           </div>
         </div>
-      )}
+      }
 
-      {saved && (
-        <div className="flex items-center gap-1.5 text-emerald-400 text-xs">
+      {saved &&
+      <div className="flex items-center gap-1.5 text-emerald-400 text-xs">
           <CheckCircle size={14} />
-          <span>Saved</span>
+          <span>{t("settings.background_manager_settings_section.saved")}</span>
         </div>
-      )}
+      }
 
-      {error && (
-        <div className="flex items-center gap-1.5 text-red-400 text-xs">
+      {error &&
+      <div className="flex items-center gap-1.5 text-red-400 text-xs">
           <AlertCircle size={14} />
           <span>{error}</span>
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }

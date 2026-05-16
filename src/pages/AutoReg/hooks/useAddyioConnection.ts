@@ -5,13 +5,15 @@ import {
   getAddyioAccount,
   getAddyioDomains,
 } from '../../../lib/tauri';
-import { t } from '../../../lib/i18n';
+import { t } from '@/lib/i18n';
+import type { AddyIoAccountDetails } from '../../../types/generated';
+import type { IMAPConfig } from '../../../stores/registration/types';
 
 interface UseAddyioConnectionProps {
   addyioApiToken?: string;
   addyioDomain?: string;
   addyioDefaultRecipientId?: string;
-  onConfigUpdate: (updates: any) => void;
+  onConfigUpdate: (updates: Partial<IMAPConfig>) => void;
 }
 
 export const useAddyioConnection = ({
@@ -23,7 +25,7 @@ export const useAddyioConnection = ({
   const { addLog } = useRegistrationStore();
 
   const [addyioDomains, setAddyioDomains] = useState<string[]>([]);
-  const [addyioAccountInfo, setAddyioAccountInfo] = useState<any>(null);
+  const [addyioAccountInfo, setAddyioAccountInfo] = useState<AddyIoAccountDetails | null>(null);
   const [isTestingAddyio, setIsTestingAddyio] = useState(false);
   const [addyioConnectionStatus, setAddyioConnectionStatus] = useState<
     'idle' | 'success' | 'error'
@@ -31,8 +33,8 @@ export const useAddyioConnection = ({
   const [addyioConnectionMessage, setAddyioConnectionMessage] = useState('');
 
   const handleTestAddyioConnection = useCallback(async () => {
-    console.log('[ADDYIO] handleTestAddyioConnection called');
-    console.log('[ADDYIO] API token:', addyioApiToken ? '***set***' : 'empty');
+    console.warn('[ADDYIO] handleTestAddyioConnection called');
+    console.warn('[ADDYIO] API token:', addyioApiToken ? '***set***' : 'empty');
 
     if (!addyioApiToken) {
       console.error('[ADDYIO] No API token configured');
@@ -46,43 +48,43 @@ export const useAddyioConnection = ({
     setAddyioConnectionMessage('');
 
     try {
-      console.log('[ADDYIO] Testing token validity...');
+      console.warn('[ADDYIO] Testing token validity...');
       // Test token validity
       const tokenDetails = await testAddyioConnection(addyioApiToken);
-      console.log('[ADDYIO] Token valid:', tokenDetails.name);
+      console.warn('[ADDYIO] Token valid:', tokenDetails.name);
 
-      console.log('[ADDYIO] Fetching account, domains, recipients...');
+      console.warn('[ADDYIO] Fetching account, domains, recipients...');
       // Fetch account info and domains
       const [account, domains] = await Promise.all([
         getAddyioAccount(addyioApiToken),
         getAddyioDomains(addyioApiToken),
       ]);
 
-      console.log('[ADDYIO] ===== RAW API RESPONSE =====');
-      console.log('[ADDYIO] Received domains object:', domains);
-      console.log('[ADDYIO] domains.data:', domains.data);
-      console.log('[ADDYIO] domains.data type:', typeof domains.data);
-      console.log('[ADDYIO] domains.data is array:', Array.isArray(domains.data));
-      console.log('[ADDYIO] domains.data length:', domains.data?.length);
-      console.log('[ADDYIO] domains.sharedDomains:', domains.sharedDomains);
-      console.log('[ADDYIO] domains.defaultAliasDomain:', domains.defaultAliasDomain);
-      console.log('[ADDYIO] ===========================');
+      console.warn('[ADDYIO] ===== RAW API RESPONSE =====');
+      console.warn('[ADDYIO] Received domains object:', domains);
+      console.warn('[ADDYIO] domains.data:', domains.data);
+      console.warn('[ADDYIO] domains.data type:', typeof domains.data);
+      console.warn('[ADDYIO] domains.data is array:', Array.isArray(domains.data));
+      console.warn('[ADDYIO] domains.data length:', domains.data?.length);
+      console.warn('[ADDYIO] domains.sharedDomains:', domains.sharedDomains);
+      console.warn('[ADDYIO] domains.defaultAliasDomain:', domains.defaultAliasDomain);
+      console.warn('[ADDYIO] ===========================');
 
-      console.log('[ADDYIO] Setting state...');
+      console.warn('[ADDYIO] Setting state...');
 
       setAddyioAccountInfo(account);
 
       const domainsToSet = domains.data || [];
-      console.log('[ADDYIO] About to call setAddyioDomains with:', domainsToSet);
-      console.log('[ADDYIO] domainsToSet is array:', Array.isArray(domainsToSet));
-      console.log('[ADDYIO] domainsToSet length:', domainsToSet.length);
+      console.warn('[ADDYIO] About to call setAddyioDomains with:', domainsToSet);
+      console.warn('[ADDYIO] domainsToSet is array:', Array.isArray(domainsToSet));
+      console.warn('[ADDYIO] domainsToSet length:', domainsToSet.length);
 
       setAddyioDomains(domainsToSet);
 
-      console.log('[ADDYIO] setAddyioDomains called (state update is async)');
+      console.warn('[ADDYIO] setAddyioDomains called (state update is async)');
 
       // Update config with defaults if not set
-      const updates: any = {};
+      const updates: Partial<IMAPConfig> = {};
       if (!addyioDomain && domains.defaultAliasDomain) {
         updates.addyioDomain = domains.defaultAliasDomain;
       }
@@ -119,9 +121,9 @@ export const useAddyioConnection = ({
 
   // Monitor addyioDomains state changes for debugging
   useEffect(() => {
-    console.log('[ADDYIO] addyioDomains state changed:', addyioDomains);
-    console.log('[ADDYIO] addyioDomains.length:', addyioDomains.length);
-    console.log('[ADDYIO] Is array:', Array.isArray(addyioDomains));
+    console.warn('[ADDYIO] addyioDomains state changed:', addyioDomains);
+    console.warn('[ADDYIO] addyioDomains.length:', addyioDomains.length);
+    console.warn('[ADDYIO] Is array:', Array.isArray(addyioDomains));
   }, [addyioDomains]);
 
   return {

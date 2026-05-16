@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { IdentityTab } from '../../../components/registration/IdentityTab';
 
 jest.mock('../../../components/ui/IdentitySystemCard', () => ({
+  // eslint-disable-next-line i18next/no-literal-string
   IdentitySystemCard: () => <div>IdentitySystemCard</div>,
 }));
 

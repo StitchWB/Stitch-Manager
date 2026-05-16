@@ -1,5 +1,5 @@
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { Button } from '@/components/ui';
 
 

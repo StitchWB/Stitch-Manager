@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { t } from '@/lib/i18n';
 
 import type { Schedule, TaskType } from '../../../types/generated';
 import { SchedulerScenarioPicker } from './SchedulerScenarioPicker';
@@ -318,39 +319,39 @@ export function buildEffectiveConfig(state: SchedulerTaskFormState): Record<stri
 
 export function validateTaskFormState(state: SchedulerTaskFormState): string | null {
   if (!state.name.trim()) {
-    return 'Task name is required.';
+    return t('scheduler.taskNameRequired');
   }
 
   if (!isScheduleStateValid(state.schedule)) {
-    return 'Schedule is invalid.';
+    return t('scheduler.scheduleInvalid');
   }
 
   if (state.taskType === 'scenario') {
     if (!state.profileAlias.trim()) {
-      return 'Profile is required for scenario tasks.';
+      return t('scheduler.profileRequired');
     }
     if (!state.scenarioPath.trim()) {
-      return 'Scenario path is required for scenario tasks.';
+      return t('scheduler.scenarioPathRequired');
     }
   } else if (state.taskType === 'composedFlow') {
     if (!state.profileAlias.trim()) {
-      return 'Profile is required for composed flow tasks.';
+      return t('scheduler.profileRequiredForFlow');
     }
     if (
       !state.composedFlowId.trim() &&
       !state.composedFlowPath.trim() &&
       !state.composedFlowJson.trim()
     ) {
-      return 'Select a saved flow, or provide plan path / flow JSON.';
+      return t('scheduler.selectSavedFlow');
     }
     if (state.composedFlowJson.trim()) {
       try {
         const parsed = JSON.parse(state.composedFlowJson);
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          return 'Composed flow JSON must be an object.';
+          return t('scheduler.flowJsonMustBeObject');
         }
       } catch {
-        return 'Composed flow JSON must be valid JSON object.';
+        return t('scheduler.flowJsonMustBeValid');
       }
     }
 
@@ -358,38 +359,38 @@ export function validateTaskFormState(state: SchedulerTaskFormState): string | n
       try {
         const parsed = JSON.parse(state.flowVariablesJson);
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          return 'Flow variables JSON must be an object.';
+          return t('scheduler.flowVarsJsonMustBeObject');
         }
       } catch {
-        return 'Flow variables JSON must be valid JSON object.';
+        return t('scheduler.flowVarsJsonMustBeValid');
       }
     }
 
     if (state.emailSourceMode === 'manualList' && !state.emailListRaw.trim()) {
-      return 'Email list is empty.';
+      return t('scheduler.emailListEmpty');
     }
 
     if (state.emailSourceMode === 'googleSheets') {
       if (!state.emailSheetId.trim()) {
-        return 'Google Sheets email source requires sheet.';
+        return t('scheduler.googleSheetsRequiresSheet');
       }
       if (!state.emailSheetColumn.trim()) {
-        return 'Google Sheets email source requires column.';
+        return t('scheduler.googleSheetsRequiresColumn');
       }
     }
   }
 
   if (state.taskType === 'script' && !state.scriptPath.trim()) {
-    return 'Script path is required for script tasks.';
+    return t('scheduler.scriptPathRequired');
   }
 
   try {
     const parsed = JSON.parse(state.configRaw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return 'Additional config JSON must be an object.';
+      return t('scheduler.additionalConfigJsonMustBeObject');
     }
   } catch {
-    return 'Additional config JSON must be valid JSON object.';
+    return t('scheduler.additionalConfigJsonMustBeValid');
   }
 
   return null;
@@ -402,7 +403,12 @@ export function SchedulerTaskForm({
   showEnabled = false,
 }: SchedulerTaskFormProps) {
   const navigate = useNavigate();
-  const set = (patch: Partial<SchedulerTaskFormState>) => onChange({ ...state, ...patch });
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const set = useCallback(
+    (patch: Partial<SchedulerTaskFormState>) => onChange({ ...stateRef.current, ...patch }),
+    [onChange]
+  );
   const [composedFlowsLoading, setComposedFlowsLoading] = useState(false);
   const [composedFlowsError, setComposedFlowsError] = useState<string | null>(null);
   const [composedFlows, setComposedFlows] = useState<ComposedFlowItem[]>([]);
@@ -451,7 +457,7 @@ export function SchedulerTaskForm({
       setComposedFlows(items);
     } catch (error) {
       setComposedFlowsError(
-        error instanceof Error ? error.message : 'Failed to load composed flows'
+        error instanceof Error ? error.message : t('scheduler.failedToLoadFlows')
       );
       setComposedFlows([]);
     } finally {
@@ -467,7 +473,7 @@ export function SchedulerTaskForm({
     () => [
       {
         value: '',
-        label: composedFlowsLoading ? 'Loading flows...' : 'Select saved flow',
+        label: composedFlowsLoading ? t('scheduler.loadingFlows') : t('scheduler.selectFlow'),
       },
       ...composedFlows.map(flow => ({
         value: flow.id,
@@ -484,7 +490,7 @@ export function SchedulerTaskForm({
 
   const sheetOptions = useMemo(
     () => [
-      { value: '', label: sheetsLoading ? 'Loading sheets...' : 'Select sheet' },
+      { value: '', label: sheetsLoading ? t('scheduler.loadingSheets') : t('scheduler.selectSheet') },
       ...(sheetsDataset?.sheets ?? []).map(sheet => ({
         value: sheet.id,
         label: `${sheet.name} (${sheet.rowCount ?? sheet.rows.length})`,
@@ -497,7 +503,7 @@ export function SchedulerTaskForm({
     const selectedSheet = (sheetsDataset?.sheets ?? []).find(s => s.id === state.emailSheetId);
     const columns = selectedSheet?.columns ?? [];
     return [
-      { value: '', label: 'Select column' },
+      { value: '', label: t('scheduler.selectColumn') },
       ...columns.map(col => ({ value: col, label: col })),
     ];
   }, [sheetsDataset?.sheets, state.emailSheetId]);
@@ -569,9 +575,9 @@ export function SchedulerTaskForm({
     if (!parsedFlow) {
       setCompileCheck({
         ok: false,
-        message: 'Flow JSON is invalid.',
+        message: t('scheduler.flowJsonInvalid'),
         segments: [],
-        diagnostics: ['Provide valid Flow JSON first.'],
+        diagnostics: [t('scheduler.provideValidFlowJson')],
       });
       return;
     }
@@ -582,7 +588,7 @@ export function SchedulerTaskForm({
       message:
         compiled.segments.length > 0
           ? `Compiled ${compiled.segments.length} runnable segment(s)`
-          : 'No runnable segments',
+          : t('scheduler.noRunnableSegments'),
       segments: compiled.segments.map(seg => ({
         index: seg.index,
         alias: seg.alias,
@@ -662,9 +668,9 @@ export function SchedulerTaskForm({
 
       {showEnabled ? (
         <div>
-          <div className="block text-sm font-medium text-vsc-text mb-2">Enabled</div>
+          <div className="block text-sm font-medium text-vsc-text mb-2">{t('scheduler.enabled')}</div>
           <Toggle
-            label="Task enabled"
+            label={t('scheduler.taskEnabled')}
             checked={Boolean(state.enabled)}
             onChange={enabled => set({ enabled })}
           />
@@ -693,9 +699,9 @@ export function SchedulerTaskForm({
           set({ taskType: nextType });
         }}
       >
-        <option value="scenario">Scenario replay</option>
-        <option value="composedFlow">Composed flow</option>
-        <option value="script">Custom script</option>
+        <option value="scenario">{t('scheduler.taskTypeScenario')}</option>
+        <option value="composedFlow">{t('scheduler.taskTypeComposedFlow')}</option>
+        <option value="script">{t('scheduler.taskTypeScript')}</option>
       </Select>
 
       {state.taskType === 'script' ? (
@@ -718,7 +724,7 @@ export function SchedulerTaskForm({
 
       {state.taskType === 'composedFlow' ? (
         <div className="rounded-md border border-vsc-border bg-vsc-input/40 p-3 space-y-3">
-          <div className="text-sm font-medium text-vsc-text">Composed flow target</div>
+          <div className="text-sm font-medium text-vsc-text">{t('scheduler.composedFlowTarget')}</div>
           <Input
             label="Profile alias"
             value={state.profileAlias}
@@ -755,19 +761,19 @@ export function SchedulerTaskForm({
             />
             <div className="flex items-end">
               <Button variant="secondary" onClick={() => void refreshComposedFlows()}>
-                Refresh flows
+                {t('scheduler.refreshFlows')}
               </Button>
             </div>
             <div className="flex items-end gap-2">
               <Button variant="secondary" onClick={applyCachedFlowFromComposer}>
-                Use current from Composer
+                {t('scheduler.useCurrentFromComposer')}
               </Button>
               <Button
                 variant="secondary"
                 onClick={openInScenariosComposer}
                 disabled={!state.profileAlias.trim()}
               >
-                Open in Composer
+                {t('scheduler.openInComposer')}
               </Button>
               <div className="text-xs text-vsc-muted">{composedFlowsError ?? ''}</div>
             </div>
@@ -780,19 +786,18 @@ export function SchedulerTaskForm({
                   ? `Using saved flow: ${selectedComposedFlow.name}`
                   : state.composedFlowId
                     ? `Using flow id: ${state.composedFlowId}`
-                    : 'No saved flow selected'}
+                    : t('scheduler.noSavedFlowSelected')}
               </div>
               <Button variant="secondary" size="sm" onClick={() => setExpertMode(prev => !prev)}>
-                {expertMode ? 'Hide Expert Mode' : 'Show Expert Mode'}
+                {expertMode ? t('scheduler.hideExpertMode') : t('scheduler.showExpertMode')}
               </Button>
             </div>
             <div className="text-xs text-vsc-muted">
-              Default mode is no-JSON. Pick a saved flow or use current from Composer. Expert mode
-              is only needed for manual JSON / plan files.
+              {t('scheduler.flowJsonHelpText')}
             </div>
             {state.emailSourceMode === 'googleSheets' ? (
               <div className="text-xs text-vsc-muted">
-                Current email source policy:{' '}
+                {t('scheduler.currentEmailSourcePolicy')}{' '}
                 <span className="text-vsc-text">{state.emailSourcePolicy}</span>
               </div>
             ) : null}
@@ -800,9 +805,9 @@ export function SchedulerTaskForm({
 
           {expertMode ? (
             <div className="rounded-md border border-vsc-border bg-vsc-input/20 p-3 space-y-3">
-              <div className="text-xs text-vsc-text-muted">Expert mode</div>
+              <div className="text-xs text-vsc-text-muted">{t('scheduler.expertMode')}</div>
               <Input
-                label="Compiled plan path (optional)"
+                label={t('scheduler.compiledPlanPath')}
                 value={state.composedFlowPath}
                 onChange={e => set({ composedFlowPath: e.target.value })}
                 placeholder="C:\\...\\compiled-plan.json"
@@ -820,10 +825,10 @@ export function SchedulerTaskForm({
           ) : null}
 
           <div className="rounded-md border border-vsc-border bg-vsc-input/20 p-3 space-y-2">
-            <div className="text-xs text-vsc-text-muted">Flow input variables</div>
+            <div className="text-xs text-vsc-text-muted">{t('scheduler.flowInputVariables')}</div>
 
             {variableKeys.length === 0 ? (
-              <div className="text-xs text-vsc-muted">No input keys detected.</div>
+              <div className="text-xs text-vsc-muted">{t('scheduler.noInputKeysDetected')}</div>
             ) : (
               <div className="space-y-2">
                 {variableKeys.map(key => {
@@ -843,9 +848,9 @@ export function SchedulerTaskForm({
                           size="sm"
                           onClick={() => removeFlowVariable(key)}
                           disabled={detected}
-                          title={detected ? 'Detected keys cannot be removed' : 'Remove variable'}
+                          title={detected ? t('scheduler.detectedKeysCannotBeRemoved') : t('scheduler.removeVariable')}
                         >
-                          Remove
+                          {t('scheduler.remove')}
                         </Button>
                       </div>
                     </div>
@@ -856,14 +861,14 @@ export function SchedulerTaskForm({
 
             <div className="grid grid-cols-1 md:grid-cols-[1fr,2fr,auto] gap-2">
               <Input
-                label="New key"
+                label={t('scheduler.newKey')}
                 value={newVarKey}
                 onChange={e => setNewVarKey(e.target.value)}
                 className="h-9"
                 placeholder="customKey"
               />
               <Input
-                label="New value"
+                label={t('scheduler.newValue')}
                 value={newVarValue}
                 onChange={e => setNewVarValue(e.target.value)}
                 className="h-9"
@@ -871,19 +876,19 @@ export function SchedulerTaskForm({
               />
               <div className="flex items-end">
                 <Button variant="secondary" size="sm" onClick={addFlowVariable}>
-                  Add
+                  {t('scheduler.add')}
                 </Button>
               </div>
             </div>
           </div>
 
           <Select
-            label="Email source override"
+            label={t('scheduler.emailSourceOverride')}
             value={state.emailSourceMode}
             options={[
-              { value: 'none', label: 'None' },
-              { value: 'manualList', label: 'Manual list' },
-              { value: 'googleSheets', label: 'Google Sheets column' },
+              { value: 'none', label: t('scheduler.none') },
+              { value: 'manualList', label: t('scheduler.manualList') },
+              { value: 'googleSheets', label: t('scheduler.googleSheetsColumn') },
             ]}
             onValueChange={value =>
               set({
@@ -897,9 +902,9 @@ export function SchedulerTaskForm({
               label="Email source policy"
               value={state.emailSourcePolicy}
               options={[
-                { value: 'strict', label: 'Strict (fail if unavailable)' },
-                { value: 'fallback_to_pool', label: 'Fallback to emails_pool (recommended)' },
-                { value: 'prefer_pool', label: 'Prefer emails_pool, sheets fallback' },
+{ value: 'strict', label: t('scheduler.strict') },
+    { value: 'fallback_to_pool', label: t('scheduler.fallbackToPool') },
+    { value: 'prefer_pool', label: t('scheduler.preferPool') },
               ]}
               onValueChange={value =>
                 set({
@@ -925,14 +930,14 @@ export function SchedulerTaskForm({
             <div className="rounded-md border border-vsc-border bg-vsc-input/30 p-3 space-y-3">
               {!sheetsParams ? (
                 <div className="text-xs text-amber-300">
-                  Configure Google Sheets credentials in app settings first.
+                  {t('scheduler.configureGoogleSheets')}
                 </div>
               ) : (
                 <>
                   {sheetsError ? <div className="text-xs text-amber-300">{sheetsError}</div> : null}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <Select
-                      label="Sheet"
+                      label={t('scheduler.sheet')}
                       value={state.emailSheetId}
                       options={sheetOptions}
                       onValueChange={value =>
@@ -943,14 +948,14 @@ export function SchedulerTaskForm({
                       }
                     />
                     <Select
-                      label="Column"
+                      label={t('scheduler.column')}
                       value={state.emailSheetColumn}
                       options={sheetColumnOptions}
                       onValueChange={value => set({ emailSheetColumn: value })}
                     />
                     <div className="flex items-end">
                       <Button variant="secondary" onClick={() => void refreshSheets()}>
-                        Refresh sheets
+                        {t('scheduler.refreshSheets')}
                       </Button>
                     </div>
                   </div>
@@ -964,22 +969,22 @@ export function SchedulerTaskForm({
       {state.taskType === 'composedFlow' ? (
         <div className="rounded-md border border-vsc-border bg-vsc-input/20 p-3 text-xs space-y-1">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-vsc-text-muted">Composed flow preview</div>
+            <div className="text-vsc-text-muted">{t('scheduler.composedFlowPreview')}</div>
             <Button variant="secondary" size="sm" onClick={runCompileCheck}>
-              Test compile
+              {t('scheduler.testCompile')}
             </Button>
           </div>
           {parsedFlow ? (
             <>
-              <div>Name: {parsedFlow.name || '<unnamed>'}</div>
-              <div>Nodes: {parsedFlow.nodes.length}</div>
+              <div>{t('scheduler.flowName')} {parsedFlow.name || t('scheduler.unnamed')}</div>
+              <div>{t('scheduler.flowNodes')} {parsedFlow.nodes.length}</div>
               <div>
-                Runnable segments: {compiledFlowPreview?.segments.length ?? 0} • Diagnostics:{' '}
+                {t('scheduler.runnableSegments')} {compiledFlowPreview?.segments.length ?? 0} • {t('scheduler.diagnostics')}{' '}
                 {compiledFlowPreview?.diagnostics.length ?? 0}
               </div>
             </>
           ) : (
-            <div className="text-vsc-muted">Provide valid Flow JSON to see preview.</div>
+            <div className="text-vsc-muted">{t('scheduler.provideValidFlowJsonPreview')}</div>
           )}
 
           {compileCheck ? (

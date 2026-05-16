@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { t } from "@/lib/i18n";import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 
 import {
   providerAuthFlowStart,
   providerAuthFlowStatus,
-  openUrlInBrowser,
-} from '../../lib/tauri/modules/aiProxy';
+  openUrlInBrowser } from
+'../../lib/tauri/modules/aiProxy';
 import { ExternalLink, Loader2, Copy, Check } from 'lucide-react';
 import { Button, IconButton, Modal } from '@/components/ui';
 
@@ -25,7 +25,7 @@ export default function OAuthModal({
   provider,
   providerName,
   onClose,
-  onSuccess,
+  onSuccess
 }: OAuthModalProps) {
   const [oauthUrl, setOauthUrl] = useState('');
   const [sessionId, setSessionId] = useState('');
@@ -125,10 +125,10 @@ export default function OAuthModal({
           toast.success('OAuth completed successfully!');
           onSuccess();
         } else if (
-          status.phase === 'failed' ||
-          status.phase === 'expired' ||
-          status.phase === 'cancelled'
-        ) {
+        status.phase === 'failed' ||
+        status.phase === 'expired' ||
+        status.phase === 'cancelled')
+        {
           clearInterval(interval);
           setPolling(false);
           toast.error(`OAuth failed: ${status.error || 'Unknown error'}`);
@@ -174,56 +174,56 @@ export default function OAuthModal({
       title={`Connect ${providerName}`}
       size="sm"
       closeOnBackdrop={!polling}
-      closeOnEscape={!polling}
-    >
+      closeOnEscape={!polling}>
+      
       <div className="space-y-4">
         {/* Instructions */}
         <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-          {flowType === 'device_code' ? (
-            <div className="space-y-2">
-              <p className="text-sm text-slate-300 font-medium">Device Code Authorization</p>
+          {flowType === 'device_code' ?
+          <div className="space-y-2">
+              <p className="text-sm text-slate-300 font-medium">{t("aiHub.o_auth_modal.device_code_authorization")}</p>
               <ol className="text-sm text-slate-400 list-decimal list-inside space-y-1">
-                <li>Open the verification page using the button below</li>
-                <li>Enter the user code shown above</li>
-                <li>Sign in with your AWS Builder ID</li>
-                <li>Return here — authorization completes automatically</li>
+                <li>{t("aiHub.o_auth_modal.open_the_verification_page_using_the_button_below")}</li>
+                <li>{t("aiHub.o_auth_modal.enter_the_user_code_shown_above")}</li>
+                <li>{t("aiHub.o_auth_modal.sign_in_with_your_aws_builder_id")}</li>
+                <li>{t("aiHub.o_auth_modal.return_here_authorization_completes_automatically")}</li>
               </ol>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-300">
-              Click the button below to open the authorization page in your browser. Complete the
-              OAuth flow and return here.
-            </p>
-          )}
+            </div> :
+
+          <p className="text-sm text-slate-300">{t("aiHub.o_auth_modal.click_the_button_below_to_open_the_authorization_p")}
+
+
+          </p>
+          }
         </div>
 
         {/* Device Code Display */}
-        {flowType === 'device_code' && userCode && (
-          <div className="p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-            <p className="text-sm text-slate-300 mb-3">Enter this code on the verification page:</p>
+        {flowType === 'device_code' && userCode &&
+        <div className="p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+            <p className="text-sm text-slate-300 mb-3">{t("aiHub.o_auth_modal.enter_this_code_on_the_verification_page")}</p>
             <div className="flex items-center gap-3">
               <code className="text-2xl font-mono font-bold text-white tracking-widest bg-white/10 px-4 py-2 rounded flex-1 text-center">
                 {userCode}
               </code>
               <IconButton
-                variant="ghost"
-                size="sm"
-                onClick={handleCopyCode}
-                title="Copy Code"
-                className="flex-shrink-0"
-              >
-                {copiedCode ? (
-                  <Check className="w-4 h-4 text-green-500" />
-                ) : (
-                  <Copy className="w-4 h-4 text-slate-400" />
-                )}
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyCode}
+              title="Copy Code"
+              className="flex-shrink-0">
+              
+                {copiedCode ?
+              <Check className="w-4 h-4 text-green-500" /> :
+
+              <Copy className="w-4 h-4 text-slate-400" />
+              }
               </IconButton>
             </div>
-            {verificationUri && (
-              <p className="text-xs text-slate-500 mt-2 truncate">{verificationUri}</p>
-            )}
+            {verificationUri &&
+          <p className="text-xs text-slate-500 mt-2 truncate">{verificationUri}</p>
+          }
           </div>
-        )}
+        }
 
         {/* Start OAuth Button */}
         <Button
@@ -231,29 +231,29 @@ export default function OAuthModal({
           size="lg"
           className="w-full"
           onClick={handleStartOAuth}
-          disabled={loading || polling || !oauthUrl}
-        >
-          {loading ? (
-            <>
+          disabled={loading || polling || !oauthUrl}>
+          
+          {loading ?
+          <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Loading...
-            </>
-          ) : polling ? (
-            <>
+              {t("aiProxy.oAuthModal.loading")}
+            </> :
+          polling ?
+          <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Waiting for authorization... ({pollAttempts}/{MAX_POLL_ATTEMPTS})
-            </>
-          ) : (
-            <>
+              {t("aiProxy.oAuthModal.waitingForAuthorization", { pollAttempts, maxPollAttempts: MAX_POLL_ATTEMPTS })}<br/>({pollAttempts}/{MAX_POLL_ATTEMPTS})
+            </> :
+
+          <>
               <ExternalLink className="w-4 h-4 mr-2" />
-              {flowType === 'device_code' ? 'Open Verification Page' : 'Open Authorization Page'}
+              {flowType === 'device_code' ? t("aiProxy.oAuthModal.openVerificationPage") : t("aiProxy.oAuthModal.openAuthorizationPage")}
             </>
-          )}
+          }
         </Button>
 
         {/* Authorization URL */}
-        {oauthUrl && (
-          <div className="space-y-2">
+        {oauthUrl &&
+        <div className="space-y-2">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">
               {flowType === 'device_code' ? 'Verification URL' : 'Authorization URL'}
             </div>
@@ -262,38 +262,38 @@ export default function OAuthModal({
                 {truncateUrl(oauthUrl)}
               </span>
               <IconButton
-                variant="ghost"
-                size="sm"
-                onClick={handleCopy}
-                title="Copy URL"
-                className="flex-shrink-0"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-green-500" />
-                ) : (
-                  <Copy className="w-4 h-4 text-slate-400" />
-                )}
+              variant="ghost"
+              size="sm"
+              onClick={handleCopy}
+              title="Copy URL"
+              className="flex-shrink-0">
+              
+                {copied ?
+              <Check className="w-4 h-4 text-green-500" /> :
+
+              <Copy className="w-4 h-4 text-slate-400" />
+              }
               </IconButton>
             </div>
           </div>
-        )}
+        }
 
         {/* Polling Status */}
-        {polling && (
-          <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+        {polling &&
+        <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
             <div className="flex items-center gap-3">
               <Loader2 className="w-5 h-5 text-yellow-500 animate-spin" />
               <div>
-                <p className="text-sm font-medium text-white">Waiting for authorization...</p>
+                <p className="text-sm font-medium text-white">{t("aiHub.o_auth_modal.waiting_for_authorization")}</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  {flowType === 'device_code'
-                    ? 'Enter the code on the verification page and sign in'
-                    : 'Complete the OAuth flow in your browser'}
+                  {flowType === 'device_code' ?
+                'Enter the code on the verification page and sign in' :
+                'Complete the OAuth flow in your browser'}
                 </p>
               </div>
             </div>
           </div>
-        )}
+        }
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
@@ -302,6 +302,6 @@ export default function OAuthModal({
           </Button>
         </div>
       </div>
-    </Modal>
-  );
+    </Modal>);
+
 }

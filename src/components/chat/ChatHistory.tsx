@@ -3,7 +3,7 @@ import { MessageSquare } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 
 
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 import { EmptyState, LoadingSpinner } from '@/components/ui';
 
@@ -36,7 +36,7 @@ export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
           description={t('chat.emptyDescription')}
         />
         <div className="mt-6 flex flex-wrap gap-2 justify-center">
-          {['Explain this code', 'Help me debug', 'Write a function'].map((suggestion) => (
+          {[t('chat.suggestionExplainCode'), t('chat.suggestionHelpDebug'), t('chat.suggestionWriteFunction')].map((suggestion) => (
             <span
               key={suggestion}
               className="px-3 py-1.5 text-xs bg-vsc-input border border-vsc-border 

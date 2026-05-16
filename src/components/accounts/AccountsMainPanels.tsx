@@ -1,7 +1,7 @@
 import { FileSpreadsheet, Share2 } from 'lucide-react';
 import type { Account } from '../../types/generated';
 import type { ProfileItem } from '../ProfilesTable';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import {
   extractRelationEdges,
   extractRelationHints,

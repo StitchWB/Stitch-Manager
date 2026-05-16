@@ -36,7 +36,7 @@ export const useConfigStore = create<ConfigState>(set => ({
   logVerbosity: 'normal',
 
   setProvider: (provider: ProviderName) => {
-    console.log('[CONFIG_STORE] setProvider called:', provider);
+    console.warn('[CONFIG_STORE] setProvider called:', provider);
     set(state => {
       // Save current email strategy to current provider's slot
       const currentStrategy: ProviderEmailStrategy = {
@@ -83,10 +83,10 @@ export const useConfigStore = create<ConfigState>(set => ({
   },
 
   setIMAPConfig: (imap: Partial<IMAPConfig>) => {
-    console.log('[CONFIG_STORE] setIMAPConfig called with:', imap);
+    console.warn('[CONFIG_STORE] setIMAPConfig called with:', imap);
     set(state => {
       const newImap = { ...state.config.imap, ...imap };
-      console.log('[CONFIG_STORE] New IMAP config state:', newImap);
+      console.warn('[CONFIG_STORE] New IMAP config state:', newImap);
 
       // If strategy changed, update provider-specific strategy
       let updatedStrategies = state.config.providerEmailStrategies;
@@ -117,13 +117,13 @@ export const useConfigStore = create<ConfigState>(set => ({
         };
       }
 
-      console.log('[CONFIG_STORE] setIMAPConfig: new config updates:', updates);
+      console.warn('[CONFIG_STORE] setIMAPConfig: new config updates:', updates);
       return { config: { ...state.config, ...updates } };
     });
   },
 
   setProxyConfig: (proxy: Partial<ProxyConfig>) => {
-    console.log('[CONFIG_STORE] setProxyConfig called:', proxy);
+    console.warn('[CONFIG_STORE] setProxyConfig called:', proxy);
     set(state => ({
       config: {
         ...state.config,
@@ -133,7 +133,7 @@ export const useConfigStore = create<ConfigState>(set => ({
   },
 
   setAdvancedSettings: (settings: Partial<AdvancedSettings>) => {
-    console.log('[CONFIG_STORE] setAdvancedSettings called:', settings);
+    console.warn('[CONFIG_STORE] setAdvancedSettings called:', settings);
     set(state => ({
       config: {
         ...state.config,
@@ -144,31 +144,31 @@ export const useConfigStore = create<ConfigState>(set => ({
 
   setCount: (count: number) => {
     const clampedCount = Math.max(1, Math.min(100, count));
-    console.log('[CONFIG_STORE] setCount called:', count, '→ clamped:', clampedCount);
+    console.warn('[CONFIG_STORE] setCount called:', count, '→ clamped:', clampedCount);
     set(state => ({
       config: { ...state.config, count: clampedCount },
     }));
   },
 
   setUIScale: (uiScale: number) => {
-    console.log('[CONFIG_STORE] setUIScale called:', uiScale);
+    console.warn('[CONFIG_STORE] setUIScale called:', uiScale);
     set(state => ({
       config: { ...state.config, uiScale: Math.max(0.5, Math.min(1.5, uiScale)) },
     }));
   },
 
   setLogVerbosity: (level: LogVerbosity) => {
-    console.log('[CONFIG_STORE] setLogVerbosity called:', level);
+    console.warn('[CONFIG_STORE] setLogVerbosity called:', level);
     set({ logVerbosity: level });
   },
 
   setConfig: (config: RegistrationConfig) => {
-    console.log('[CONFIG_STORE] setConfig called');
+    console.warn('[CONFIG_STORE] setConfig called');
     set({ config });
   },
 
   updateConfig: (updates: Partial<RegistrationConfig>) => {
-    console.log('[CONFIG_STORE] updateConfig called with:', updates);
+    console.warn('[CONFIG_STORE] updateConfig called with:', updates);
     set(state => ({
       config: { ...state.config, ...updates },
     }));

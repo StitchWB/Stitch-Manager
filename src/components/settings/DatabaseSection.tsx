@@ -2,7 +2,7 @@ import { Database, Copy } from 'lucide-react';
 
 
 import { Tooltip } from '../Tooltip';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { ButtonBase, SectionHeader } from '@/components/ui';
 
 interface DatabaseSectionProps {

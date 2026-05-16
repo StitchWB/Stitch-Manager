@@ -21,36 +21,32 @@ export function useUIState<T>(
   defaultValue: T,
   scope: UIStateScope = 'session'
 ): [T, (value: T | ((prev: T) => T)) => void] {
-  if (scope === 'persist') {
-    // Persisted state via uiPreferences store
-    const value = useUIPreferencesStore(
-      useCallback(
-        state =>
-          key in state.componentPreferences
-            ? (state.componentPreferences[key] as T)
-            : defaultValue,
-        [key, defaultValue]
-      )
-    );
-
-    const setValue = useCallback(
-      (next: T | ((prev: T) => T)) => {
-        const store = useUIPreferencesStore.getState();
-        const prev =
-          key in store.componentPreferences
-            ? (store.componentPreferences[key] as T)
-            : defaultValue;
-        const resolved = typeof next === 'function' ? (next as (prev: T) => T)(prev) : next;
-        store.setComponentPreference(key, resolved);
-      },
+  // Persisted state hooks (always called to satisfy rules-of-hooks)
+  const persistValue = useUIPreferencesStore(
+    useCallback(
+      state =>
+        key in state.componentPreferences
+          ? (state.componentPreferences[key] as T)
+          : defaultValue,
       [key, defaultValue]
-    );
+    )
+  );
 
-    return [value, setValue];
-  }
+  const persistSetValue = useCallback(
+    (next: T | ((prev: T) => T)) => {
+      const store = useUIPreferencesStore.getState();
+      const prev =
+        key in store.componentPreferences
+          ? (store.componentPreferences[key] as T)
+          : defaultValue;
+      const resolved = typeof next === 'function' ? (next as (prev: T) => T)(prev) : next;
+      store.setComponentPreference(key, resolved);
+    },
+    [key, defaultValue]
+  );
 
-  // Session state via uiSession store (runtime-only)
-  const value = useUISessionStore(
+  // Session state hooks (always called to satisfy rules-of-hooks)
+  const sessionValue = useUISessionStore(
     useCallback(
       state =>
         key in state.componentStates
@@ -60,7 +56,7 @@ export function useUIState<T>(
     )
   );
 
-  const setValue = useCallback(
+  const sessionSetValue = useCallback(
     (next: T | ((prev: T) => T)) => {
       const store = useUISessionStore.getState();
       const prev =
@@ -73,7 +69,10 @@ export function useUIState<T>(
     [key, defaultValue]
   );
 
-  return [value, setValue];
+  if (scope === 'persist') {
+    return [persistValue, persistSetValue];
+  }
+  return [sessionValue, sessionSetValue];
 }
 
 /**

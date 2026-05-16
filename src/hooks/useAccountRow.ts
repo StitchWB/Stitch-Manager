@@ -50,7 +50,8 @@ function parseTags(tagsString: string | null): string[] {
 }
 
 function getAlias(account: Account): string {
-  return (account as any).alias || account.email;
+  const alias = (account as Record<string, unknown>).alias;
+  return typeof alias === 'string' && alias ? alias : account.email;
 }
 
 function getProfileId(account: Account): string {
@@ -136,8 +137,8 @@ export function useAccountRowData(
     account.provider === 'kiro' ||
     tags.includes('profile:manual') ||
     tags.includes('profile:antidetect');
-  const relationHintList = relationHints ?? [];
-  const relationEdgeList = relationEdges ?? [];
+  const relationHintList = useMemo(() => relationHints ?? [], [relationHints]);
+  const relationEdgeList = useMemo(() => relationEdges ?? [], [relationEdges]);
 
   const relationProviderEntries = useMemo(
     () =>

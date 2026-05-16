@@ -1,5 +1,5 @@
 import { Info } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { truncateMiddle } from '../../lib/patcher';
 import type { DetectedIDE } from '../../types/ui';
 import PatchStatusBadge from './PatchStatusBadge';
@@ -19,19 +19,19 @@ export default function IDEInfoPanel({ ide, isOperating, operation }: IDEInfoPan
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/5 rounded-xl p-4 shadow-sm group hover:border-white/10 transition-colors">
-          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5 group-hover:text-slate-400 transition-colors">
-            Status
+          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5 group-hover:text-slate-400 transition-colors">{t("patcher.i_d_e_info_panel.status")}
+
           </p>
           <PatchStatusBadge
             isPatched={ide.isPatched}
             isOperating={isOperating}
-            operation={operation}
-          />
+            operation={operation} />
+          
         </div>
 
         <div className="bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/5 rounded-xl p-4 shadow-sm group hover:border-white/10 transition-colors">
-          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5 group-hover:text-slate-400 transition-colors">
-            Version
+          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5 group-hover:text-slate-400 transition-colors">{t("patcher.i_d_e_info_panel.version")}
+
           </p>
           <p className="text-sm font-medium text-white font-mono">
             {ide.patchVersion || ide.version || 'N/A'}
@@ -39,14 +39,14 @@ export default function IDEInfoPanel({ ide, isOperating, operation }: IDEInfoPan
         </div>
 
         <div className="bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/5 rounded-xl p-4 shadow-sm group hover:border-white/10 transition-colors">
-          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5 group-hover:text-slate-400 transition-colors">
-            Path
+          <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5 group-hover:text-slate-400 transition-colors">{t("patcher.i_d_e_info_panel.path")}
+
           </p>
           <p className="text-sm font-medium text-white font-mono truncate" title={ide.path}>
             {ide.path ? truncateMiddle(ide.path) : 'Not found'}
           </p>
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 }

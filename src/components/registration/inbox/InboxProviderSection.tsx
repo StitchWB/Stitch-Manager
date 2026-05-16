@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Tooltip } from '@/components/Tooltip';
 import { Input, Select, Button } from '@/components/ui';
 import { Mail, Info } from 'lucide-react';
@@ -108,7 +109,7 @@ export function InboxProviderSection({
               onClick={onConnect}
               disabled={!canConnect || disabled || isBusy || Boolean(session)}
             >
-              Подключить
+              {t('autoReg.inboxProviderSection.connectButton')}
             </Button>
           </Tooltip>
           <Tooltip content="Отключиться от почтового сервиса">
@@ -118,14 +119,14 @@ export function InboxProviderSection({
               onClick={onDisconnect}
               disabled={!session || isBusy || disabled}
             >
-              Отключить
+              {t('autoReg.inboxProviderSection.disconnectButton')}
             </Button>
           </Tooltip>
         </div>
 
         {session && (
           <div className="text-xs text-slate-400">
-            сессия: <span className="text-slate-200">{session.sessionId}</span>
+            {t('autoReg.inboxProviderSection.sessionLabel')}{': '}<span className="text-slate-200">{session.sessionId}</span>
           </div>
         )}
       </div>

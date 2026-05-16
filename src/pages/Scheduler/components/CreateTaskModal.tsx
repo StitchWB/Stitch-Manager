@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { t } from '@/lib/i18n';
 
 import { useSchedulerStore } from '../../../stores/scheduler';
 import {
@@ -136,11 +137,11 @@ export function CreateTaskModal({
       icon={<Plus className="text-vsc-blue" size={20} />}
       size="lg"
       isLoading={submitting}
-      loadingMessage="Creating task..."
+      loadingMessage={t('common.creatingTask')}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -151,7 +152,7 @@ export function CreateTaskModal({
               form.requestSubmit();
             }}
           >
-            Create Task
+            {t('scheduler.createTask')}
           </Button>
         </div>
       }

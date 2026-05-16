@@ -2,7 +2,7 @@ import { Code, FolderOpen, X } from 'lucide-react';
 
 
 
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Button, Input, SectionHeader } from '@/components/ui';
 

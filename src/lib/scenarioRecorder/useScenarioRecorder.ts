@@ -287,9 +287,9 @@ export function useScenarioRecorder() {
         if (payload.name !== 'python.protocol') return;
 
         const fields = payload.fields ?? {};
-        const runnerType = String((fields as any).runnerType ?? '');
+        const runnerType = String(fields.runnerType ?? '');
         const msg = String(payload.message ?? '');
-        const data = (fields as any).data;
+        const data = fields.data;
 
         // Record UI events list
         setState(prev => {
@@ -316,17 +316,17 @@ export function useScenarioRecorder() {
             if (msg === 'scenario.record.started') {
               status = 'recording';
             }
-            if (msg === 'scenario.record.location' && data && typeof data === 'object') {
-              const anyData = data as any;
-              if (typeof anyData.scenarioPath === 'string') scenarioPath = anyData.scenarioPath;
-              if (typeof anyData.sessionDir === 'string') sessionDir = anyData.sessionDir;
-              if (typeof anyData.commandFilePath === 'string') {
-                commandFilePath = anyData.commandFilePath;
+            if (msg === 'scenario.record.location' && data && typeof data === 'object' && !Array.isArray(data)) {
+              const recordData = data as Record<string, unknown>;
+              if (typeof recordData.scenarioPath === 'string') scenarioPath = recordData.scenarioPath;
+              if (typeof recordData.sessionDir === 'string') sessionDir = recordData.sessionDir;
+              if (typeof recordData.commandFilePath === 'string') {
+                commandFilePath = recordData.commandFilePath;
               }
             }
-            if (msg === 'scenario.record.saved' && data && typeof data === 'object') {
-              const anyData = data as any;
-              if (typeof anyData.path === 'string') scenarioPath = anyData.path;
+            if (msg === 'scenario.record.saved' && data && typeof data === 'object' && !Array.isArray(data)) {
+              const recordData = data as Record<string, unknown>;
+              if (typeof recordData.path === 'string') scenarioPath = recordData.path;
               status = 'done';
             }
             if (msg === 'scenario.record.control.stop') {
@@ -336,14 +336,14 @@ export function useScenarioRecorder() {
 
           if (runnerType === 'result') {
             // A result line means the job finished by itself.
-            const ok = Boolean((fields as any).ok);
+            const ok = Boolean(fields.ok);
             status = ok ? 'done' : 'error';
 
             // Heuristic: if browser runtime is missing, Playwright usually errors with
             // messages suggesting to run "playwright install".
             if (!ok) {
-              const fieldErr = (fields as any).error as any;
-              const payloadErr = (payload as any).error as any;
+              const fieldErr = fields.error as Record<string, unknown> | undefined;
+              const payloadErr = payload.error as Record<string, unknown> | undefined;
               const errMsg = String(
                 payloadErr?.message ?? fieldErr?.message ?? payload.message ?? 'Recording failed'
               );

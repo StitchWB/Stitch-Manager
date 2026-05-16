@@ -16,7 +16,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { Tooltip } from '../Tooltip';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { EmptyState } from './EmptyState';
@@ -269,7 +269,7 @@ function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (tex
           {formatTime(log.timestamp)}
         </span>
         <span className="text-[11px] text-slate-300 flex-1">
-          Token received successfully <JsonArtifact message={log.message} onCopy={onCopy} />
+          {t('logFeed.tokenReceived')} <JsonArtifact message={log.message} onCopy={onCopy} />
         </span>
       </div>
     );
@@ -424,7 +424,7 @@ export function CompactLogFeed({
               )}
             >
               <Shield className={cn('w-3.5 h-3.5', effectiveShowDebug && 'animate-pulse')} />
-              <span className="text-[9px] font-bold uppercase tracking-tight">Debug view</span>
+              <span className="text-[9px] font-bold uppercase tracking-tight">{t('logFeed.debugView')}</span>
             </button>
           </Tooltip>
           {onClear && (

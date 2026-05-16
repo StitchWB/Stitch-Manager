@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bell, Globe, X, Info, CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { useAiProxyStore } from '../../stores/aiProxy';
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { ButtonBase, IconButton } from '@/components/ui';
 
 

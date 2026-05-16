@@ -1,7 +1,7 @@
 import { Server, Eye, EyeOff } from 'lucide-react';
 
 
-import { t } from '../../lib/i18n';
+import { t } from '@/lib/i18n';
 import { ButtonBase, Input, SectionHeader } from '@/components/ui';
 
 interface IMAPSettingsSectionProps {

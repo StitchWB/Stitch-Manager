@@ -1,12 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Pause, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react';
-import { t } from '../../lib/i18n';
+import { IconButton } from '@/components/ui';
+import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
 
 const STORAGE_KEY = 'pipeline-steps-panel-expanded';
-const STORAGE_KEY_ENABLED = 'pipeline-steps-enabled';
+export const STORAGE_KEY_ENABLED = 'pipeline-steps-enabled';
+export const STORAGE_KEY_PAUSE = 'pipeline-steps-pause';
 
-function loadEnabledOverrides(): Record<string, boolean> {
+export function loadEnabledOverrides(): Record<string, boolean> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ENABLED);
     return raw ? JSON.parse(raw) : {};
@@ -15,9 +17,26 @@ function loadEnabledOverrides(): Record<string, boolean> {
   }
 }
 
-function saveEnabledOverrides(map: Record<string, boolean>) {
+export function saveEnabledOverrides(map: Record<string, boolean>) {
   try {
     localStorage.setItem(STORAGE_KEY_ENABLED, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function loadPauseOverrides(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PAUSE);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function savePauseOverrides(map: Record<string, boolean>) {
+  try {
+    localStorage.setItem(STORAGE_KEY_PAUSE, JSON.stringify(map));
   } catch {
     // ignore
   }
@@ -52,19 +71,23 @@ export function PipelineStepConfigPanel({
 
   const appliedStepsRef = useRef<string>('');
 
-  // Apply persisted enabled overrides when steps change (first mount or new pipeline)
+  // Apply persisted enabled and pause overrides when steps change (first mount or new pipeline)
   useEffect(() => {
     if (steps.length === 0) return;
     const stepsKey = steps.map(s => s.id).join(',');
     if (appliedStepsRef.current === stepsKey) return;
     appliedStepsRef.current = stepsKey;
 
-    const overrides = loadEnabledOverrides();
-    const hasOverrides = steps.some(s => overrides[s.id] !== undefined && overrides[s.id] !== s.enabled);
-    if (hasOverrides) {
-      const next = steps.map(s =>
-        overrides[s.id] !== undefined ? { ...s, enabled: overrides[s.id] } : s
-      );
+    const enabledOverrides = loadEnabledOverrides();
+    const pauseOverrides = loadPauseOverrides();
+    const hasEnabledOverrides = steps.some(s => enabledOverrides[s.id] !== undefined && enabledOverrides[s.id] !== s.enabled);
+    const hasPauseOverrides = steps.some(s => pauseOverrides[s.id] !== undefined && pauseOverrides[s.id] !== s.pauseAfter);
+    if (hasEnabledOverrides || hasPauseOverrides) {
+      const next = steps.map(s => ({
+        ...s,
+        enabled: enabledOverrides[s.id] !== undefined ? enabledOverrides[s.id] : s.enabled,
+        pauseAfter: pauseOverrides[s.id] !== undefined ? pauseOverrides[s.id] : s.pauseAfter,
+      }));
       onChange(next);
     }
   }, [steps, onChange]);
@@ -94,6 +117,12 @@ export function PipelineStepConfigPanel({
   const togglePause = useCallback(
     (id: string) => {
       const next = steps.map(s => (s.id === id ? { ...s, pauseAfter: !s.pauseAfter } : s));
+      const step = next.find(s => s.id === id);
+      if (step) {
+        const overrides = loadPauseOverrides();
+        overrides[id] = step.pauseAfter;
+        savePauseOverrides(overrides);
+      }
       onChange(next);
     },
     [steps, onChange]
@@ -107,9 +136,12 @@ export function PipelineStepConfigPanel({
   return (
     <div className={cn('border-t border-white/5', disabled && 'opacity-50 pointer-events-none')}>
       {/* Collapsible header — always visible, one line */}
-      <button
+      <div
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 hover:bg-white/[0.04] transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2 hover:bg-white/[0.04] transition-colors cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); }}}
       >
         <div className="flex items-center gap-2">
           <span className="text-sm text-white font-bold uppercase tracking-wide drop-shadow-sm">
@@ -132,7 +164,7 @@ export function PipelineStepConfigPanel({
             expanded && 'rotate-180'
           )}
         />
-      </button>
+      </div>
 
       {expanded && (
         <div className="px-4 pb-3 space-y-0.5">
@@ -170,7 +202,9 @@ export function PipelineStepConfigPanel({
               {/* Controls */}
               <div className="flex items-center gap-1 shrink-0">
                 {/* Enable/disable */}
-                <button
+                <IconButton
+                  size="sm"
+                  variant="ghost"
                   onClick={() => toggleEnabled(step.id)}
                   className={cn(
                     'p-1 rounded transition-colors',
@@ -185,10 +219,12 @@ export function PipelineStepConfigPanel({
                   ) : (
                     <ToggleLeft className="w-4 h-4" />
                   )}
-                </button>
+                </IconButton>
 
                 {/* Pause after */}
-                <button
+                <IconButton
+                  size="sm"
+                  variant="ghost"
                   onClick={() => togglePause(step.id)}
                   className={cn(
                     'p-1 rounded transition-colors',
@@ -203,7 +239,7 @@ export function PipelineStepConfigPanel({
                   }
                 >
                   <Pause className="w-3.5 h-3.5" />
-                </button>
+                </IconButton>
               </div>
             </div>
           ))}

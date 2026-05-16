@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Activity, ArrowRight, Loader2 } from 'lucide-react';
 import { GlassCard, StatusBadge, Toggle } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -40,7 +41,7 @@ export function AutomationHeaderCard({
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-white tracking-tight leading-none">
-              Автоматизация
+              {t('autoReg.automationHeaderCard.title')}
             </h3>
             <StatusBadge
               status={autoReplenishEnabled ? 'active' : 'inactive'}
@@ -50,7 +51,7 @@ export function AutomationHeaderCard({
           </div>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide leading-none">
-              Статус:
+              {t('autoReg.automationHeaderCard.statusLabel')}{': '}
             </span>
             <Tooltip content={`Текущее количество активных аккаунтов / целевое количество`}>
               <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-black/30 border border-white/5 font-mono">
@@ -84,7 +85,7 @@ export function AutomationHeaderCard({
           checked={autoReplenishEnabled}
           onChange={val => onToggle(val)}
           disabled={disabled}
-          tooltip="Автоматическое пополнение аккаунтов при нехватке"
+          tooltip={t('autoReg.automationHeaderCard.toggleTooltip')}
         />
       </div>
     </GlassCard>

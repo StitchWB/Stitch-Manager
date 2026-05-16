@@ -8,6 +8,7 @@ import AddAccountModal from '../components/AddAccountModal';
 import { ProfileSettingsModal } from '../components/profiles/ProfileSettingsModal';
 
 import { useAccountsStore } from '../stores/accounts';
+import type { ProviderName } from '../types/ui';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { useUIState } from '../hooks/useUIState';
 import {
@@ -226,7 +227,7 @@ export default function Accounts() {
     setSelectedIds,
   });
 
-  const handleAddAccount = async (d: any) => {
+  const handleAddAccount = async (d: { provider: ProviderName; email: string; password: string }) => {
     try {
       await useAccountsStore.getState().addAccount(d.provider, d.email, d.password);
       fetchAccounts();
@@ -399,15 +400,15 @@ export default function Accounts() {
 
   const handleAddAccountOpen = useCallback(() => {
     setIsModalOpen(true);
-  }, []);
+  }, [setIsModalOpen]);
 
   const handleEditProfile = useCallback((alias: string) => {
     setProfileSettingsAlias(alias);
-  }, []);
+  }, [setProfileSettingsAlias]);
 
   const handleNavigateToGraphFromSheets = useCallback(
     (payload: { sheetName: string; serviceAccountId?: string; login?: string }) => {
-      console.log('[Accounts] Navigate to graph target:', payload);
+      console.warn('[Accounts] Navigate to graph target:', payload);
       handleViewModeChange('graph');
     },
     [handleViewModeChange]

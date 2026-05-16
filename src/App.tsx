@@ -3,6 +3,7 @@ import { useEffect, useRef, lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import Layout from './components/layout/Layout';
 
+import { t } from '@/lib/i18n';
 import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
@@ -127,7 +128,7 @@ function App() {
     const baseSize = 16; // Standard base size
     const scaledSize = baseSize * uiScale;
     document.documentElement.style.setProperty('--app-font-size', `${scaledSize}px`);
-    console.log(`[APP] UI Scale applied: ${uiScale} (font-size: ${scaledSize}px)`);
+    console.warn(`[APP] UI Scale applied: ${uiScale} (font-size: ${scaledSize}px)`);
   }, [uiScale]);
 
   // Apply theme on mount and when it changes
@@ -233,7 +234,7 @@ function App() {
     <>
       {/* Skip to main content link for keyboard navigation */}
       <Link to="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('common.skipToMainContent')}
       </Link>
 
       <Layout>

@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { t } from '@/lib/i18n';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
@@ -235,7 +236,7 @@ export default function Scheduler() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchTasks, fetchTemplates, getSchedulerStatus]);
 
   const handleToggleScheduler = async () => {
     if (isRunning) {
@@ -250,7 +251,7 @@ export default function Scheduler() {
   };
 
   const handleDeleteTask = async (taskId: number) => {
-    if (confirm('Are you sure you want to delete this task?')) {
+    if (confirm(t('scheduler.confirmDeleteTask'))) {
       await deleteTask(taskId);
     }
   };
@@ -272,7 +273,7 @@ export default function Scheduler() {
     if ('customScript' in taskType) {
       return `Script: ${taskType.customScript.script_path}`;
     }
-    return 'Unknown';
+    return t('scheduler.unknown');
   };
 
   const getScheduleLabel = (schedule: Schedule): string => {
@@ -293,7 +294,7 @@ export default function Scheduler() {
     if ('afterTask' in schedule) {
       return `After task #${schedule.afterTask.task_id} + ${schedule.afterTask.delay_seconds}s`;
     }
-    return 'Unknown';
+    return t('scheduler.unknown');
   };
 
   const getNextRunLabel = (timestamp: number): string => {
@@ -301,7 +302,7 @@ export default function Scheduler() {
     const now = new Date();
 
     if (date < now) {
-      return 'Pending';
+      return t('scheduler.pending');
     }
 
     return formatDistanceToNow(date, { addSuffix: true });
@@ -436,7 +437,7 @@ export default function Scheduler() {
     setTemplateError(null);
     try {
       if (!templateFormValid) {
-        throw new Error(templateValidationError ?? 'Template form is invalid.');
+        throw new Error(templateValidationError ?? t('scheduler.templateFormInvalid'));
       }
 
       if (templateEditing) {
@@ -466,7 +467,7 @@ export default function Scheduler() {
       setTemplateModalOpen(false);
       setTemplateEditing(null);
     } catch (error) {
-      setTemplateError(error instanceof Error ? error.message : 'Failed to save template');
+      setTemplateError(error instanceof Error ? error.message : t('scheduler.failedToSaveTemplate'));
     } finally {
       setTemplateSaving(false);
     }
@@ -497,10 +498,10 @@ export default function Scheduler() {
           <div>
             <h1 className="text-2xl font-semibold text-vsc-text flex items-center gap-2">
               <Clock className="text-vsc-blue" size={28} />
-              Scheduler & Automation
+              {t('scheduler.pageTitle')}
             </h1>
             <p className="text-sm text-vsc-text-muted mt-1">
-              Automate registration, logins, and token refreshes
+              {t('scheduler.pageDescription')}
             </p>
           </div>
 
@@ -509,19 +510,19 @@ export default function Scheduler() {
               {isRunning ? (
                 <>
                   <Pause size={16} />
-                  Stop Scheduler
+                  {t('scheduler.stopScheduler')}
                 </>
               ) : (
                 <>
                   <Play size={16} />
-                  Start Scheduler
+                  {t('scheduler.startScheduler')}
                 </>
               )}
             </Button>
 
             <Button variant="primary" onClick={() => openCreateTaskModal('manual', null)}>
               <Plus size={16} />
-              New Task
+              {t('scheduler.addTask')}
             </Button>
           </div>
         </div>
@@ -530,13 +531,13 @@ export default function Scheduler() {
         <div className="grid grid-cols-4 gap-4">
           <StatCard
             icon={<Calendar size={20} />}
-            label="Total Tasks"
+            label={t('scheduler.totalTasksLabel')}
             value={tasks.length.toString()}
           />
           <StatCard
             icon={<Zap size={20} />}
-            label="Scheduler Status"
-            value={isRunning ? 'Running' : 'Stopped'}
+            label={t('scheduler.schedulerStatusLabel')}
+            value={isRunning ? t('scheduler.statusRunning') : t('scheduler.statusStopped')}
           />
           <StatCard
             icon={<TrendingUp size={20} />}
@@ -544,9 +545,9 @@ export default function Scheduler() {
             value={
               tasks.length > 0
                 ? `${Math.round(
-                    (tasks.reduce((sum: number, t: any) => sum + t.successCount, 0) /
+                    (tasks.reduce((sum: number, t) => sum + t.successCount, 0) /
                       Math.max(
-                        tasks.reduce((sum: number, t: any) => sum + t.runCount, 0),
+                        tasks.reduce((sum: number, t) => sum + t.runCount, 0),
                         1
                       )) *
                       100
@@ -556,13 +557,13 @@ export default function Scheduler() {
           />
           <StatCard
             icon={<Clock size={20} />}
-            label="Next Run"
+            label={t('scheduler.nextRunLabel')}
             value={
-              tasks.filter((t: any) => t.enabled).length > 0
+              tasks.filter((t) => t.enabled).length > 0
                 ? getNextRunLabel(
-                    Math.min(...tasks.filter((t: any) => t.enabled).map((t: any) => t.nextRun))
+                    Math.min(...tasks.filter((t) => t.enabled).map((t) => t.nextRun))
                   )
-                : 'None'
+                : t('scheduler.noNextRun')
             }
           />
         </div>
@@ -573,28 +574,28 @@ export default function Scheduler() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="text-sm font-semibold text-vsc-text">Scenario templates</div>
+              <div className="text-sm font-semibold text-vsc-text">{t('scheduler.scenarioTemplatesSection')}</div>
               <div className="text-xs text-vsc-text-muted">
-                Create tasks from reusable templates (schedule + config).
+                {t('scheduler.scenarioTemplatesDescription')}
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={openCreateTemplate}>
                 <Plus size={16} />
-                New template
+{t('scheduler.newTemplateButton')}
               </Button>
               <Button variant="secondary" onClick={() => openCreateTaskModal('template', null)}>
                 <Plus size={16} />
-                New from template
+                {t('scheduler.newFromTemplateButton')}
               </Button>
             </div>
           </div>
 
           <div className="rounded-xl border border-vsc-border bg-vsc-sidebar/40 p-4">
             {templatesLoading ? (
-              <div className="text-vsc-text-muted text-sm">Loading templates…</div>
+              <div className="text-vsc-text-muted text-sm">{t('scheduler.loadingTemplates')}</div>
             ) : templates.length === 0 ? (
-              <div className="text-vsc-text-muted text-sm">No templates yet.</div>
+              <div className="text-vsc-text-muted text-sm">{t('scheduler.noTemplatesYet')}</div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {templates.map(tpl => (
@@ -613,12 +614,12 @@ export default function Scheduler() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <IconButton
-                          title="Create task from template"
+                          title={t('scheduler.createTaskFromTemplateTooltip')}
                           onClick={() => openCreateTaskModal('template', tpl.id)}
                         >
                           <CopyPlus size={16} />
                         </IconButton>
-                        <IconButton title="Edit template" onClick={() => openEditTemplate(tpl)}>
+                        <IconButton title={t('scheduler.editTemplateTooltip')} onClick={() => openEditTemplate(tpl)}>
                           <Pencil size={16} />
                         </IconButton>
                         <IconButton
@@ -639,17 +640,17 @@ export default function Scheduler() {
 
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-vsc-text-muted">Loading tasks...</div>
+            <div className="text-vsc-text-muted">{t('scheduler.loadingTasks')}</div>
           </div>
         ) : tasks.length === 0 ? (
           <EmptyState
             icon={Clock}
-            title="No scheduled tasks"
-            description="Create your first automated task to get started"
+            title={t('scheduler.noScheduledTasks')}
+            description={t('scheduler.noScheduledTasksDescription')}
           />
         ) : (
           <div className="space-y-4">
-            {tasks.map((task: any) => {
+            {tasks.map((task) => {
               const successRate = task.runCount > 0 ? (task.successCount / task.runCount) * 100 : 0;
 
               return (
@@ -669,19 +670,19 @@ export default function Scheduler() {
 
                       <div className="grid grid-cols-3 gap-4 text-sm mb-3">
                         <div>
-                          <span className="text-vsc-text-muted">Type:</span>
+                          <span className="text-vsc-text-muted">{t('scheduler.taskTypeLabel')}</span>
                           <span className="ml-2 text-vsc-text font-medium">
                             {getTaskTypeLabel(task.taskType)}
                           </span>
                         </div>
                         <div>
-                          <span className="text-vsc-text-muted">Schedule:</span>
+                          <span className="text-vsc-text-muted">{t('scheduler.scheduleLabel')}</span>
                           <span className="ml-2 text-vsc-text font-medium">
                             {getScheduleLabel(task.schedule)}
                           </span>
                         </div>
                         <div>
-                          <span className="text-vsc-text-muted">Next Run:</span>
+                          <span className="text-vsc-text-muted">{t('scheduler.nextRunValueLabel')}</span>
                           <span className="ml-2 text-vsc-blue font-medium">
                             {getNextRunLabel(task.nextRun)}
                           </span>
@@ -697,7 +698,7 @@ export default function Scheduler() {
                               successRate > 80 ? 'success' : successRate > 50 ? 'warning' : 'danger'
                             }
                             showLabel
-                            label="Success Rate"
+label={t('scheduler.successRateLabel')}
                           />
                         </div>
                       )}
@@ -705,18 +706,18 @@ export default function Scheduler() {
                       {/* Stats */}
                       <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-1">
-                          <span className="text-vsc-green">✓ {task.successCount}</span>
+                          <span className="text-vsc-green">{t('scheduler.successMark')} {task.successCount}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <span className="text-vsc-red">✗ {task.errorCount}</span>
+                          <span className="text-vsc-red">{t('scheduler.errorMark')} {task.errorCount}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <span className="text-vsc-text-muted">Total: {task.runCount}</span>
+                          <span className="text-vsc-text-muted">{t('scheduler.totalRuns')}: {task.runCount}</span>
                         </div>
                         {task.lastRun && (
                           <div className="flex items-center gap-1">
                             <span className="text-vsc-text-muted">
-                              Last:{' '}
+                              {t('scheduler.lastRunLabel')}:{' '}
                               {formatDistanceToNow(new Date(task.lastRun * 1000), {
                                 addSuffix: true,
                               })}
@@ -786,12 +787,12 @@ export default function Scheduler() {
       <Modal
         isOpen={templateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
-        title={templateEditing ? 'Edit template' : 'New template'}
+        title={templateEditing ? t('scheduler.editTemplateTitle') : t('scheduler.newTemplateTitle')}
         size="lg"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setTemplateModalOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant="primary"
@@ -799,7 +800,7 @@ export default function Scheduler() {
               isLoading={templateSaving}
               disabled={!templateFormState.name.trim() || !templateFormValid}
             >
-              {templateEditing ? 'Save' : 'Create'}
+              {templateEditing ? t('scheduler.saveButton') : t('scheduler.createButton')}
             </Button>
           </div>
         }

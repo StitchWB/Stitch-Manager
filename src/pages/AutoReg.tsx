@@ -148,7 +148,7 @@ export default function AutoRegNext() {
   // Get email domain for pattern generation
   const emailDomain = useMemo(
     () => computeEmailDomain(config.imap),
-    [config.imap.strategy, config.imap.emailGenerationDomain, config.imap.email]
+    [config.imap]
   );
 
   // Check if mail configuration is ready
@@ -234,7 +234,7 @@ export default function AutoRegNext() {
       setPipelineJobId(getActivePythonJobId());
     }, 1000);
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, setPipelineJobId]);
 
   const {
     addyioDomains,
@@ -252,7 +252,7 @@ export default function AutoRegNext() {
 
   // Initialize on mount
   useEffect(() => {
-    console.log('[AUTOREG] useEffect: initializing, calling loadSettings');
+    console.warn('[AUTOREG] useEffect: initializing, calling loadSettings');
     // NOTE: useRegistrationStore returns new function references on each render.
     // This effect must run only once; otherwise, it can repeatedly reload DB settings
     // and overwrite user edits (e.g. count snapping back to previous value).
@@ -263,37 +263,37 @@ export default function AutoRegNext() {
 
     // Save settings when user leaves the page or switches tabs
     const handleBeforeUnload = () => {
-      console.log('[AUTOREG] beforeunload event fired');
+      console.warn('[AUTOREG] beforeunload event fired');
       const settingsLoaded = useRegistrationStore.getState().settingsLoaded;
-      console.log('[AUTOREG] beforeunload: settingsLoaded =', settingsLoaded);
+      console.warn('[AUTOREG] beforeunload: settingsLoaded =', settingsLoaded);
       if (settingsLoaded) {
-        console.log('[AUTOREG] beforeunload: calling saveImmediately');
+        console.warn('[AUTOREG] beforeunload: calling saveImmediately');
         useRegistrationStore.getState().saveImmediately();
       }
     };
 
     const handleVisibilityChange = () => {
-      console.log(
+      console.warn(
         '[AUTOREG] visibilitychange event fired, document.visibilityState =',
         document.visibilityState
       );
       if (document.visibilityState === 'hidden') {
-        console.log('[AUTOREG] tab became hidden, attempting to save');
+        console.warn('[AUTOREG] tab became hidden, attempting to save');
         const settingsLoaded = useRegistrationStore.getState().settingsLoaded;
-        console.log('[AUTOREG] visibilitychange: settingsLoaded =', settingsLoaded);
+        console.warn('[AUTOREG] visibilitychange: settingsLoaded =', settingsLoaded);
         if (settingsLoaded) {
-          console.log('[AUTOREG] visibilitychange: calling saveImmediately');
+          console.warn('[AUTOREG] visibilitychange: calling saveImmediately');
           useRegistrationStore.getState().saveImmediately();
         }
       }
     };
 
-    console.log('[AUTOREG] adding event listeners for beforeunload and visibilitychange');
+    console.warn('[AUTOREG] adding event listeners for beforeunload and visibilitychange');
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      console.log('[AUTOREG] cleaning up event listeners');
+      console.warn('[AUTOREG] cleaning up event listeners');
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -325,7 +325,7 @@ export default function AutoRegNext() {
       setSelectedAwsBootstrapAccountId(candidate.id);
       setLaunchContext(prev => (prev ? { ...prev, awsBootstrapAccountId: candidate.id } : prev));
     }
-  }, [launchContext?.profileAlias, selectedAwsBootstrapAccountId, awsBootstrapCandidates]);
+  }, [launchContext?.profileAlias, selectedAwsBootstrapAccountId, awsBootstrapCandidates, setLaunchContext, setSelectedAwsBootstrapAccountId]);
 
   // Launch context: start from profile
   useEffect(() => {
@@ -362,7 +362,7 @@ export default function AutoRegNext() {
         stableSetProvider((target || 'kiro') as ProviderName);
       }
     }
-  }, [location.search, config.provider, stableSetProvider]);
+  }, [location.search, config.provider, stableSetProvider, addLog, setKiroBootstrapMode, setLaunchContext, setSelectedAwsBootstrapAccountId]);
 
   // Identity config adapter for IdentitySystemCard
   const identityConfig: IdentityConfig = {
@@ -407,13 +407,13 @@ export default function AutoRegNext() {
             <div className="flex flex-wrap items-end gap-3 justify-between">
               <div className="min-w-[240px]">
                 <div className="text-xs uppercase tracking-widest text-cyan-300/80">
-                  Контекст запуска
+                  {t('autoReg.launchContextTitle')}
                 </div>
                 <div className="text-sm text-white font-semibold mt-1 truncate">
-                  Профиль: {launchContext.profileAlias}
+                  {t('autoReg.launchContextProfile', { alias: launchContext.profileAlias ?? '' })}
                 </div>
                 <div className="text-xs text-slate-300 mt-1">
-                  Цель: {launchContext.targetProvider || config.provider}
+                  {t('autoReg.launchContextTarget', { provider: launchContext.targetProvider || config.provider })}
                 </div>
               </div>
 
@@ -421,7 +421,7 @@ export default function AutoRegNext() {
                 <div className="flex flex-wrap items-end gap-3">
                   <div>
                     <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">
-                      AWS Bootstrap
+                      {t('autoReg.awsBootstrap')}
                     </div>
                     <Select
                       value={kiroBootstrapMode}
@@ -442,15 +442,15 @@ export default function AutoRegNext() {
                       }}
                       className="h-9 py-1 text-xs min-w-[220px]"
                     >
-                      <option value="existing_aws_session">Use existing AWS session</option>
-                      <option value="new_aws">Create new AWS account (legacy flow)</option>
+                      <option value="existing_aws_session">{t('autoReg.awsBootstrapExistingSession')}</option>
+                      <option value="new_aws">{t('autoReg.awsBootstrapNewAccount')}</option>
                     </Select>
                   </div>
 
                   {kiroBootstrapMode === 'existing_aws_session' && (
                     <div>
                         <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">
-                        AWS Account
+                        {t('autoReg.awsAccount')}
                       </div>
                       <Select
                         value={selectedAwsBootstrapAccountId?.toString() ?? ''}
@@ -468,7 +468,7 @@ export default function AutoRegNext() {
                         }}
                         className="h-9 py-1 text-xs min-w-[260px]"
                       >
-                        <option value="">Select AWS account</option>
+                        <option value="">{t('autoReg.selectAwsAccount')}</option>
                         {awsBootstrapCandidates.map(acc => (
                           <option key={acc.id} value={acc.id}>
                             #{acc.id} · {acc.email}
@@ -491,7 +491,7 @@ export default function AutoRegNext() {
               )}
 
               <Button size="xs" variant="ghost" onClick={() => setLaunchContext(null)}>
-                Очистить контекст
+                {t('autoReg.clearContext')}
               </Button>
             </div>
           </GlassCard>

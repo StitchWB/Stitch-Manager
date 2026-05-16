@@ -1,4 +1,5 @@
-import type { ProviderName } from '../../types/ui';
+import { t } from "@/lib/i18n";import type { ProviderName } from '../../types/ui';
+import type { AddyIoAccountDetails } from '../../types/generated';
 import type { SaveStatus } from '../../stores/registration';
 import { AlertTriangle, EyeOff, Shield } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -19,7 +20,7 @@ interface IdentityTabProps {
   isTestingAddyio: boolean;
   addyioConnectionStatus: 'idle' | 'success' | 'error';
   addyioConnectionMessage: string;
-  addyioAccountInfo: any;
+  addyioAccountInfo: AddyIoAccountDetails | null;
   addyioDomains: string[];
 }
 
@@ -37,7 +38,7 @@ export function IdentityTab({
   addyioConnectionStatus,
   addyioConnectionMessage,
   addyioAccountInfo,
-  addyioDomains,
+  addyioDomains
 }: IdentityTabProps) {
   // AWS doesn't need IMAP configuration
   if (provider === 'aws') {
@@ -46,22 +47,22 @@ export function IdentityTab({
         <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
           <Shield className="w-8 h-8 text-orange-400" />
         </div>
-        <h3 className="text-lg font-semibold text-white mb-2">AWS Builder ID</h3>
-        <p className="text-sm text-slate-400 mb-4">
-          Настройте количество и режим headless во вкладке Движок, затем нажмите СТАРТ
+        <h3 className="text-lg font-semibold text-white mb-2">{t("autoReg.identity_tab.aws_builder_id")}</h3>
+        <p className="text-sm text-slate-400 mb-4">{t("autoReg.identity_tab.headless")}
+
         </p>
         <Badge variant="warning" size="lg" withDot withPulse>
-          Готов
+          {t("autoReg.identity_tab.ready")}
         </Badge>
-      </GlassCard>
-    );
+      </GlassCard>);
+
   }
 
   // IDE/Git Mode - Show IMAP Card
   return (
     <div className="space-y-4">
-      {provider === 'openai' && PROVIDER_REQUIREMENT_HINTS.openai && (
-        <div className={cn('rounded-lg p-3 border', 'bg-amber-500/5 border-amber-500/20')}>
+      {provider === 'openai' && PROVIDER_REQUIREMENT_HINTS.openai &&
+      <div className={cn('rounded-lg p-3 border', 'bg-amber-500/5 border-amber-500/20')}>
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -75,26 +76,26 @@ export function IdentityTab({
                 <li>
                   • {PROVIDER_REQUIREMENT_HINTS.openai.points[1]} —{' '}
                   <span className="text-amber-300 font-semibold inline-flex items-center gap-1">
-                    <EyeOff className="w-3 h-3" /> headless ВЫКЛ
-                  </span>{' '}
-                  рекомендуется
+                    <EyeOff className="w-3 h-3" />{t("autoReg.identity_tab.headless")}
+                </span>{' '}
+                  {t("autoReg.identity_tab.recommended")}
                 </li>
                 <li>• {PROVIDER_REQUIREMENT_HINTS.openai.points[2]}</li>
               </ul>
             </div>
           </div>
         </div>
-      )}
+      }
 
       <IdentitySystemCard
         config={identityConfig}
-        onChange={updates => {
+        onChange={(updates) => {
           // Map emailPattern to emailCustomPrefix for storage
           if ('emailPattern' in updates) {
             const { emailPattern, ...rest } = updates;
             onConfigChange({
               ...rest,
-              emailCustomPrefix: emailPattern,
+              emailCustomPrefix: emailPattern
             });
           } else {
             onConfigChange(updates);
@@ -111,8 +112,8 @@ export function IdentityTab({
         addyioConnectionStatus={addyioConnectionStatus}
         addyioConnectionMessage={addyioConnectionMessage}
         addyioAccountInfo={addyioAccountInfo}
-        addyioDomains={addyioDomains}
-      />
-    </div>
-  );
+        addyioDomains={addyioDomains} />
+      
+    </div>);
+
 }

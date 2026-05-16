@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react';
+import { t } from "@/lib/i18n";import { ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button, FormGrid, Select } from '@/components/ui';
@@ -8,8 +8,8 @@ import type { GoogleSheetsAccountAuthLink, GoogleSheetsAuthMethod } from '@/type
 interface AccountAuthLinksSectionProps {
   accountAuthLinkState: AccountAuthLinkEditorState;
   setAccountAuthLinkState: React.Dispatch<React.SetStateAction<AccountAuthLinkEditorState>>;
-  accountOptions: { value: string; label: string }[];
-  profileOptions: { value: string; label: string }[];
+  accountOptions: {value: string;label: string;}[];
+  profileOptions: {value: string;label: string;}[];
   authMethods: GoogleSheetsAuthMethod[];
   handleSaveAccountAuthLink: () => Promise<void>;
   handleDeleteAccountAuthLink: (accountAuthLinkId: string) => Promise<void>;
@@ -32,12 +32,12 @@ export function AccountAuthLinksSection({
   deletingAccountAuthLinkId,
   savingAccountAuthLink,
   connectionReady,
-  authMethodById,
+  authMethodById
 }: AccountAuthLinksSectionProps) {
   return (
     <details className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 overflow-hidden" open={false}>
       <summary className="px-4 py-3 text-sm font-semibold text-white cursor-pointer hover:bg-white/[0.03] transition-colors list-none flex items-center justify-between">
-        <span>Account Auth Links (ACCOUNT_AUTH_LINKS)</span>
+        <span>{t("accounts.account_auth_links_section.account_auth_links_accountauthlinks")}</span>
         <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" />
       </summary>
       <div className="p-4 space-y-3">
@@ -45,74 +45,74 @@ export function AccountAuthLinksSection({
           <Select
             label="Account"
             value={accountAuthLinkState.account}
-            onValueChange={value =>
-              setAccountAuthLinkState(prev => ({ ...prev, account: value }))
+            onValueChange={(value) =>
+            setAccountAuthLinkState((prev) => ({ ...prev, account: value }))
             }
-            options={accountOptions}
-          />
+            options={accountOptions} />
+
           <Select
             label="Auth method"
             value={accountAuthLinkState.authMethodId}
-            onValueChange={value =>
-              setAccountAuthLinkState(prev => ({ ...prev, authMethodId: value }))
+            onValueChange={(value) =>
+            setAccountAuthLinkState((prev) => ({ ...prev, authMethodId: value }))
             }
-            options={authMethods.map(method => ({
+            options={authMethods.map((method) => ({
               value: method.id,
-              label: `${method.authType}:${method.provider}:${method.clientName || 'client'}`,
-            }))}
-          />
+              label: `${method.authType}:${method.provider}:${method.clientName || 'client'}`
+            }))} />
+
           <Select
             label="Channel"
             value={accountAuthLinkState.channel}
-            onValueChange={value =>
-              setAccountAuthLinkState(prev => ({ ...prev, channel: value }))
+            onValueChange={(value) =>
+            setAccountAuthLinkState((prev) => ({ ...prev, channel: value }))
             }
             options={[
-              { value: 'api', label: 'api' },
-              { value: 'browser', label: 'browser' },
-              { value: 'cli', label: 'cli' },
-            ]}
-          />
+            { value: 'api', label: 'api' },
+            { value: 'browser', label: 'browser' },
+            { value: 'cli', label: 'cli' }]
+            } />
+
           <Select
             label="Profile"
             value={accountAuthLinkState.profileAlias}
-            onValueChange={value =>
-              setAccountAuthLinkState(prev => ({ ...prev, profileAlias: value }))
+            onValueChange={(value) =>
+            setAccountAuthLinkState((prev) => ({ ...prev, profileAlias: value }))
             }
-            options={[{ value: '', label: '(none)' }, ...profileOptions]}
-          />
+            options={[{ value: '', label: '(none)' }, ...profileOptions]} />
+
           <Select
             label="Primary"
             value={accountAuthLinkState.isPrimary ? 'yes' : 'no'}
-            onValueChange={value =>
-              setAccountAuthLinkState(prev => ({ ...prev, isPrimary: value === 'yes' }))
+            onValueChange={(value) =>
+            setAccountAuthLinkState((prev) => ({ ...prev, isPrimary: value === 'yes' }))
             }
             options={[
-              { value: 'yes', label: 'yes' },
-              { value: 'no', label: 'no' },
-            ]}
-          />
+            { value: 'yes', label: 'yes' },
+            { value: 'no', label: 'no' }]
+            } />
+
         </FormGrid>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="primary"
             onClick={handleSaveAccountAuthLink}
-            disabled={savingAccountAuthLink || !connectionReady}
-          >
+            disabled={savingAccountAuthLink || !connectionReady}>
+
             {savingAccountAuthLink ? 'Saving…' : 'Save account auth link'}
           </Button>
-          <span className="text-[11px] text-slate-500">
-            Use channel=browser for CODEX browser auth.
+          <span className="text-[11px] text-slate-500">{t("accounts.account_auth_links_section.use_channelbrowser_for_codex_browser_auth")}
+
           </span>
         </div>
         <div className="space-y-1 max-h-44 overflow-auto pr-1">
-          {accountAuthLinks.length ? (
-            accountAuthLinks.map(link => (
-              <div
-                key={link.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-white/10 px-2 py-1.5"
-              >
+          {accountAuthLinks.length ?
+          accountAuthLinks.map((link) =>
+          <div
+            key={link.id}
+            className="flex items-center justify-between gap-2 rounded-md border border-white/10 px-2 py-1.5">
+
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] text-slate-300 truncate">
                     {link.accountProvider}:{link.accountLogin} →{' '}
@@ -121,49 +121,49 @@ export function AccountAuthLinksSection({
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span
-                      className={cn(
-                        'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium',
-                        link.channel === 'browser'
-                          ? 'bg-blue-500/20 text-blue-200 border border-blue-500/40'
-                          : link.channel === 'api'
-                            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
-                            : 'bg-slate-500/20 text-slate-200 border border-slate-500/40'
-                      )}
-                    >
+                  className={cn(
+                    'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium',
+                    link.channel === 'browser' ?
+                    'bg-blue-500/20 text-blue-200 border border-blue-500/40' :
+                    link.channel === 'api' ?
+                    'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40' :
+                    'bg-slate-500/20 text-slate-200 border border-slate-500/40'
+                  )}>
+
                       {link.channel || 'channel'}
                     </span>
-                    {link.isPrimary ? (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-500/40">
-                        PRIMARY
-                      </span>
-                    ) : null}
-                    {link.profileAlias ? (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] text-violet-200 bg-violet-500/20 border border-violet-500/40">
-                        profile:{link.profileAlias}
-                      </span>
-                    ) : null}
-                    {link.clientName ? (
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] text-slate-300 bg-slate-500/20 border border-slate-500/30">
+                    {link.isPrimary ?
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-500/40">{t("accounts.account_auth_links_section.primary")}
+
+                </span> :
+                null}
+                    {link.profileAlias ?
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] text-violet-200 bg-violet-500/20 border border-violet-500/40">{t("accounts.account_auth_links_section.profile")}
+                  {link.profileAlias}
+                      </span> :
+                null}
+                    {link.clientName ?
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] text-slate-300 bg-slate-500/20 border border-slate-500/30">
                         {link.clientName}
-                      </span>
-                    ) : null}
+                      </span> :
+                null}
                   </div>
                 </div>
                 <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled={deletingAccountAuthLinkId === link.id || !connectionReady}
-                  onClick={() => handleDeleteAccountAuthLink(link.id)}
-                >
+              size="xs"
+              variant="ghost"
+              disabled={deletingAccountAuthLinkId === link.id || !connectionReady}
+              onClick={() => handleDeleteAccountAuthLink(link.id)}>
+
                   {deletingAccountAuthLinkId === link.id ? 'Deleting…' : 'Delete'}
                 </Button>
               </div>
-            ))
-          ) : (
-            <div className="text-[11px] text-slate-500">No ACCOUNT_AUTH_LINKS rows yet.</div>
-          )}
+          ) :
+
+          <div className="text-[11px] text-slate-500">{t("accounts.account_auth_links_section.no_accountauthlinks_rows_yet")}</div>
+          }
         </div>
       </div>
-    </details>
-  );
+    </details>);
+
 }
