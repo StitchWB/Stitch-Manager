@@ -379,7 +379,7 @@ async function runProviderRegistration(params: {
       email,
       password: null,
       name: null,
-      headless: false,
+      headless: config.advanced.headless,
       loginOnly: false,
       proxyUrl: config.proxy.enabled ? config.proxy.url : null,
       imapServer,

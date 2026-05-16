@@ -15,7 +15,11 @@ import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
 import { getActivePythonJobId } from './AutoReg/services';
-import type { PipelineStepOverride } from '../components/registration/PipelineStepConfigPanel';
+import {
+  type PipelineStepOverride,
+  loadEnabledOverrides,
+  loadPauseOverrides,
+} from '../components/registration/PipelineStepConfigPanel';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIState } from '../hooks/useUIState';
 import {
@@ -115,15 +119,32 @@ export default function AutoRegNext() {
 
   // Pipeline step overrides per provider (persisted per session)
   // All pauseAfter=false by default — user opts in to pauses explicitly
-  const [pipelineStepOverrides, setPipelineStepOverrides] = useState<Record<string, PipelineStepOverride[]>>({
-    fireworks: [
-      { id: 'signup', label: 'Sign Up', enabled: true, pauseAfter: false, skippable: false },
-      { id: 'confirm_email', label: 'Confirm Email', enabled: true, pauseAfter: false, skippable: false },
-      { id: 'onboarding', label: 'Onboarding', enabled: true, pauseAfter: false, skippable: true },
-      { id: 'api_key', label: 'Create API Key', enabled: true, pauseAfter: false, skippable: true },
-      { id: 'billing', label: 'Add Billing', enabled: true, pauseAfter: false, skippable: true },
-    ],
-  });
+  const [pipelineStepOverrides, setPipelineStepOverrides] = useState<Record<string, PipelineStepOverride[]>>(
+    () => {
+      const enabledOverrides = loadEnabledOverrides();
+      const pauseOverrides = loadPauseOverrides();
+
+      const defaults: Record<string, PipelineStepOverride[]> = {
+        fireworks: [
+          { id: 'signup', label: 'Sign Up', enabled: true, pauseAfter: false, skippable: false },
+          { id: 'confirm_email', label: 'Confirm Email', enabled: true, pauseAfter: false, skippable: false },
+          { id: 'onboarding', label: 'Onboarding', enabled: true, pauseAfter: false, skippable: true },
+          { id: 'api_key', label: 'Create API Key', enabled: true, pauseAfter: false, skippable: true },
+          { id: 'billing', label: 'Add Billing', enabled: true, pauseAfter: false, skippable: true },
+        ],
+      };
+
+      const result: Record<string, PipelineStepOverride[]> = {};
+      for (const [provider, steps] of Object.entries(defaults)) {
+        result[provider] = steps.map(step => ({
+          ...step,
+          enabled: enabledOverrides[step.id] !== undefined ? enabledOverrides[step.id] : step.enabled,
+          pauseAfter: pauseOverrides[step.id] !== undefined ? pauseOverrides[step.id] : step.pauseAfter,
+        }));
+      }
+      return result;
+    }
+  );
 
   const currentPipelineSteps = useMemo(
     () => pipelineStepOverrides[config.provider] || [],
