@@ -109,7 +109,7 @@ const SCHEDULER_FLOW_CACHE_KEY = 'scheduler:currentComposedFlow';
 
 function defaultCreateFormState(): SchedulerTaskFormState {
   return {
-    name: 'Composed flow task',
+    name: t('scheduler.composedFlowTask'),
     taskType: 'composedFlow',
     scriptPath: 'python/run_composed_flow.py',
     profileAlias: '',
@@ -160,12 +160,12 @@ function getPrefilledStateFromCache(): SchedulerTaskFormState | null {
     const alias = typeof parsed.alias === 'string' ? parsed.alias : '';
     const flowId = typeof parsed.flowId === 'string' ? parsed.flowId : '';
     const flowJson = typeof parsed.flowJson === 'string' ? parsed.flowJson : '';
-    const flowName = typeof parsed.flowName === 'string' ? parsed.flowName : 'Composed flow task';
+    const flowName = typeof parsed.flowName === 'string' ? parsed.flowName : t('scheduler.composedFlowTask');
     if (!alias || !flowJson) return null;
 
     return {
       ...defaultCreateFormState(),
-      name: `${flowName} • scheduled`,
+      name: `${flowName} • ${t('scheduler.scheduledSuffix')}`,
       profileAlias: alias,
       composedFlowId: flowId,
       composedFlowJson: flowJson,
@@ -262,37 +262,37 @@ export default function Scheduler() {
 
   const getTaskTypeLabel = (taskType: TaskType): string => {
     if ('registerProvider' in taskType) {
-      return `Register ${taskType.registerProvider.provider}`;
+      return t('scheduler.taskTypeRegister', { provider: taskType.registerProvider.provider });
     }
     if ('loginAccount' in taskType) {
-      return `Login Account #${taskType.loginAccount.account_id}`;
+      return t('scheduler.taskTypeLoginAccount', { account_id: taskType.loginAccount.account_id });
     }
     if ('refreshToken' in taskType) {
-      return `Refresh Token #${taskType.refreshToken.account_id}`;
+      return t('scheduler.taskTypeRefreshToken', { account_id: taskType.refreshToken.account_id });
     }
     if ('customScript' in taskType) {
-      return `Script: ${taskType.customScript.script_path}`;
+      return t('scheduler.taskTypeCustomScript', { script_path: taskType.customScript.script_path });
     }
     return t('scheduler.unknown');
   };
 
   const getScheduleLabel = (schedule: Schedule): string => {
     if ('once' in schedule) {
-      return `Once at ${new Date(schedule.once.timestamp * 1000).toLocaleString()}`;
+      return t('scheduler.scheduleOnceAt', { time: new Date(schedule.once.timestamp * 1000).toLocaleString() });
     }
     if ('interval' in schedule) {
       const hours = Math.floor(schedule.interval.seconds / 3600);
       const minutes = Math.floor((schedule.interval.seconds % 3600) / 60);
       if (hours > 0) {
-        return `Every ${hours}h ${minutes}m`;
+        return t('scheduler.scheduleEvery', { hours, minutes });
       }
-      return `Every ${minutes}m`;
+      return t('scheduler.scheduleEveryShort', { minutes });
     }
     if ('daily' in schedule) {
-      return `Daily at ${schedule.daily.hour.toString().padStart(2, '0')}:${schedule.daily.minute.toString().padStart(2, '0')}`;
+      return t('scheduler.scheduleDailyAt', { time: `${schedule.daily.hour.toString().padStart(2, '0')}:${schedule.daily.minute.toString().padStart(2, '0')}` });
     }
     if ('afterTask' in schedule) {
-      return `After task #${schedule.afterTask.task_id} + ${schedule.afterTask.delay_seconds}s`;
+      return t('scheduler.scheduleAfterTask', { task_id: schedule.afterTask.task_id, delay: schedule.afterTask.delay_seconds });
     }
     return t('scheduler.unknown');
   };
@@ -541,7 +541,7 @@ export default function Scheduler() {
           />
           <StatCard
             icon={<TrendingUp size={20} />}
-            label="Success Rate"
+            label={t('scheduler.labelSuccessRate')}
             value={
               tasks.length > 0
                 ? `${Math.round(
@@ -623,7 +623,7 @@ export default function Scheduler() {
                           <Pencil size={16} />
                         </IconButton>
                         <IconButton
-                          title="Delete template"
+                          title={t('scheduler.titleDeleteTemplate')}
                           variant="danger"
                           onClick={() => openDeleteTemplate(tpl)}
                         >
@@ -734,18 +734,18 @@ label={t('scheduler.successRateLabel')}
                     </div>
 
                     <div className="flex items-center gap-2 ml-4">
-                      <IconButton onClick={() => handleExecuteNow(task.id)} title="Run now">
+                      <IconButton onClick={() => handleExecuteNow(task.id)} title={t('scheduler.titleRunNow')}>
                         <Play size={16} />
                       </IconButton>
-                      <IconButton onClick={() => setViewingHistory(task.id)} title="View history">
+                      <IconButton onClick={() => setViewingHistory(task.id)} title={t('scheduler.titleViewHistory')}>
                         <Clock size={16} />
                       </IconButton>
-                      <IconButton onClick={() => setEditingTask(task.id)} title="Edit">
+                      <IconButton onClick={() => setEditingTask(task.id)} title={t('scheduler.titleEdit')}>
                         <Edit size={16} />
                       </IconButton>
                       <IconButton
                         onClick={() => handleDeleteTask(task.id)}
-                        title="Delete"
+                        title={t('scheduler.titleDelete')}
                         variant="danger"
                       >
                         <Trash2 size={16} />

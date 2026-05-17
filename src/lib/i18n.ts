@@ -2212,6 +2212,27 @@ export interface Translations {
     unknown: string;
     unnamed: string;
     useCurrentFromComposer: string;
+    // Task type templates
+    taskTypeRegister: string;
+    taskTypeLoginAccount: string;
+    taskTypeRefreshToken: string;
+    taskTypeCustomScript: string;
+    // Schedule templates
+    scheduleOnceAt: string;
+    scheduleEvery: string;
+    scheduleEveryShort: string;
+    scheduleDailyAt: string;
+    scheduleAfterTask: string;
+    // Title attributes
+    titleRunNow: string;
+    titleViewHistory: string;
+    titleEdit: string;
+    titleDelete: string;
+    titleDeleteTemplate: string;
+    // Misc
+    composedFlowTask: string;
+    scheduledSuffix: string;
+    labelSuccessRate: string;
   }
   settings: {
     ai_proxy_settings: {
