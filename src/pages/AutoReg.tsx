@@ -582,9 +582,9 @@ export default function AutoRegNext() {
           stableSetAdvancedSettings({ screenshotsOnError })
         }
         cardsText={config.advanced.cardsText || ''}
-        onCardsTextChange={cardsText => stableSetAdvancedSettings({ cardsText })}
+        onCardsTextChange={cardsText => useRegistrationStore.getState().setAdvancedSettings({ cardsText })}
         cardBin={config.advanced.cardBin || ''}
-        onCardBinChange={(cardBin: string) => stableSetAdvancedSettings({ cardBin })}
+        onCardBinChange={(cardBin: string) => useRegistrationStore.getState().setAdvancedSettings({ cardBin })}
         captchaSoundEnabled={config.advanced.captchaSoundEnabled}
         onCaptchaSoundEnabledChange={captchaSoundEnabled =>
           stableSetAdvancedSettings({ captchaSoundEnabled })

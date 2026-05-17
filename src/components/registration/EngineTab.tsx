@@ -1,4 +1,4 @@
-import { t } from "@/lib/i18n";import { useState } from 'react';
+import { t } from "@/lib/i18n";import { useState, useEffect } from 'react';
 import {
   Settings2,
   ChevronDown,
@@ -187,9 +187,17 @@ export function EngineTab({
   onCardBinChange,
   disabled
 }: EngineTabProps) {
-  const [cardMode, setCardMode] = useState<'manual' | 'auto'>(cardsText ? 'manual' : 'auto');
+  const [cardMode, setCardMode] = useState<'manual' | 'auto'>('auto');
   const [findingLive, setFindingLive] = useState(false);
   const [lastFoundCard, setLastFoundCard] = useState<string | null>(null);
+
+  // Sync cardMode when cardsText changes - preserve user's manual choice if they have cards
+  // but default to auto when cardsText is empty
+  useEffect(() => {
+    if (!cardsText && cardMode === 'manual') {
+      setCardMode('auto');
+    }
+  }, [cardsText, cardMode]);
 
   const handleFindLive = async () => {
     if (!cardBin || findingLive) return;
