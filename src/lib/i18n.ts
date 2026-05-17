@@ -1579,13 +1579,26 @@ export interface Translations {
     configureProxy: string;
     currentProxy: string;
     directConnection: string;
+    example: string;
+    hostLabel: string;
+    loginLabel: string;
     notConfigured: string;
+    passwordLabel: string;
+    portLabel: string;
     proxyEnabled: string;
     proxyLabel: string;
+    proxyListSummary: string;
     proxyNotConfigured: string;
+    proxyRecognized: string;
     proxySettingsHint: string;
+    proxyTypeLabel: string;
+    proxyUrlLabel: string;
+    supportedFormats: string;
     title: string;
     useProxy: string;
+    useProxyListLabel: string;
+    withAuth: string;
+    withoutAuth: string;
   }
   notFoundPage: {
     description: string;
