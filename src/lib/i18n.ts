@@ -1630,6 +1630,30 @@ export interface Translations {
     title: string;
     unpatchFailed: string;
     unpatching: string;
+    machineIdSpoofing: string;
+    machineIdSpoofingDesc: string;
+    blockTelemetry: string;
+    blockTelemetryDesc: string;
+    bypassRateLimits: string;
+    bypassRateLimitsDesc: string;
+    osSpoofing: string;
+    osSpoofingDesc: string;
+    commandSpoofing: string;
+    commandSpoofingDesc: string;
+    constantPatching: string;
+    constantPatchingDesc: string;
+    authWatcher: string;
+    authWatcherDesc: string;
+    customPrompts: string;
+    customPromptsDesc: string;
+    requestSpy: string;
+    requestSpyDesc: string;
+    errorSuppression: string;
+    errorSuppressionDesc: string;
+    unlockPro: string;
+    unlockProDesc: string;
+    removeWatermark: string;
+    removeWatermarkDesc: string;
   }
   profileProxy: {
     addProxyButton: string;
@@ -2233,6 +2257,11 @@ export interface Translations {
     }
     categories: {
       automation: string;
+      general: string;
+      connectivity: string;
+      googleSheets: string;
+      aiProxy: string;
+      extension: string;
     }
     database: {
       location: string;
@@ -2292,6 +2321,9 @@ export interface Translations {
       appearanceDescription: string;
       language: string;
       languageDescription: string;
+      light: string;
+      dark: string;
+      system: string;
       scale: string;
       scaleLarge: string;
       scaleReset: string;
@@ -2469,6 +2501,15 @@ export interface Translations {
     liveFeed: string;
     logsWillAppear: string;
     readyToLaunch: string;
+  }
+  timeline: {
+    init: string;
+    browser: string;
+    mail: string;
+    auth: string;
+    verify: string;
+    token: string;
+    done: string;
   }
   time: {
     daysAgo: string;

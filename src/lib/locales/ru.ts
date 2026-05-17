@@ -1622,7 +1622,31 @@ export const ru: Translations = {
     subtitle: "Быстрое применение патчей для всех IDE",
     title: "Быстрый патчинг",
     unpatchFailed: "Ошибка удаления патча",
-    unpatching: "Удаление патча"
+    unpatching: "Удаление патча",
+    machineIdSpoofing: "Подмена Machine ID",
+    machineIdSpoofingDesc: "Подмена идентификатора машины для приватности",
+    blockTelemetry: "Блокировка телеметрии",
+    blockTelemetryDesc: "Запретить IDE отправлять данные телеметрии",
+    bypassRateLimits: "Обход лимитов",
+    bypassRateLimitsDesc: "Снять ограничения на частоту API-запросов",
+    osSpoofing: "Подмена ОС",
+    osSpoofingDesc: "Фальсификация информации об операционной системе",
+    commandSpoofing: "Подмена команд",
+    commandSpoofingDesc: "Перехват и модификация команд IDE",
+    constantPatching: "Постоянный патчинг",
+    constantPatchingDesc: "Сохранять патчи активными после обновлений",
+    authWatcher: "Мониторинг авторизации",
+    authWatcherDesc: "Отслеживать изменения состояния авторизации",
+    customPrompts: "Пользовательские промпты",
+    customPromptsDesc: "Внедрять пользовательские системные промпты",
+    requestSpy: "Шпион запросов",
+    requestSpyDesc: "Перехватывать и анализировать сетевые запросы",
+    errorSuppression: "Подавление ошибок",
+    errorSuppressionDesc: "Скрывать сообщения об ошибках и диалоги",
+    unlockPro: "Разблокировка Pro",
+    unlockProDesc: "Активировать Pro-функции без лицензии",
+    removeWatermark: "Удаление водяных знаков",
+    removeWatermarkDesc: "Убрать водяные знаки пробной/бета-версии"
   },
   profileProxy: {
     addProxyButton: "Добавить прокси",
@@ -2225,7 +2249,12 @@ export const ru: Translations = {
       tracked: "Tracked"
     },
     categories: {
-      automation: "Автоматизация"
+      automation: "Автоматизация",
+      general: "Общие",
+      connectivity: "Подключение",
+      googleSheets: "Google Таблицы",
+      aiProxy: "AI Прокси",
+      extension: "Расширение"
     },
     database: {
       location: "Расположение",
@@ -2285,6 +2314,9 @@ export const ru: Translations = {
       appearanceDescription: "Выберите предпочитаемую тему оформления.",
       language: "Язык",
       languageDescription: "Выберите язык.",
+      light: "Светлая",
+      dark: "Тёмная",
+      system: "Системная",
       scale: "Масштаб",
       scaleLarge: "Крупный (130%)",
       scaleReset: "Сброс (100%)",
@@ -2462,6 +2494,15 @@ export const ru: Translations = {
     liveFeed: "Live",
     logsWillAppear: "...",
     readyToLaunch: "Ready"
+  },
+  timeline: {
+    init: "Инициализация",
+    browser: "Браузер",
+    mail: "Почта",
+    auth: "Авторизация",
+    verify: "Верификация",
+    token: "Токен",
+    done: "Готово"
   },
   time: {
     daysAgo: "{count}д назад",
