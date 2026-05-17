@@ -1622,7 +1622,31 @@ export const en: Translations = {
     subtitle: "Patch IDEs",
     title: "Patcher",
     unpatchFailed: "Failed",
-    unpatching: "Unpatching"
+    unpatching: "Unpatching",
+    machineIdSpoofing: "Machine ID spoofing",
+    machineIdSpoofingDesc: "Spoof machine ID for privacy",
+    blockTelemetry: "Block telemetry",
+    blockTelemetryDesc: "Prevent IDE from sending telemetry data",
+    bypassRateLimits: "Bypass rate limits",
+    bypassRateLimitsDesc: "Remove API rate limiting restrictions",
+    osSpoofing: "OS spoofing",
+    osSpoofingDesc: "Fake operating system information",
+    commandSpoofing: "Command spoofing",
+    commandSpoofingDesc: "Intercept and modify IDE commands",
+    constantPatching: "Constant patching",
+    constantPatchingDesc: "Keep patches active across updates",
+    authWatcher: "Auth watcher",
+    authWatcherDesc: "Monitor authentication state changes",
+    customPrompts: "Custom prompts",
+    customPromptsDesc: "Inject custom system prompts",
+    requestSpy: "Request spy",
+    requestSpyDesc: "Intercept and inspect network requests",
+    errorSuppression: "Error suppression",
+    errorSuppressionDesc: "Suppress error messages and dialogs",
+    unlockPro: "Unlock Pro",
+    unlockProDesc: "Enable Pro features without license",
+    removeWatermark: "Remove watermark",
+    removeWatermarkDesc: "Remove trial/beta watermarks"
   },
   profileProxy: {
     addProxyButton: "Add proxy",
@@ -2225,7 +2249,12 @@ export const en: Translations = {
       tracked: "Tracked"
     },
     categories: {
-      automation: "Automation"
+      automation: "Automation",
+      general: "General",
+      connectivity: "Connectivity",
+      googleSheets: "Google Sheets",
+      aiProxy: "AI Proxy",
+      extension: "Extension"
     },
     database: {
       location: "Location",
@@ -2285,6 +2314,9 @@ export const en: Translations = {
       appearanceDescription: "Choose theme.",
       language: "Language",
       languageDescription: "Choose language.",
+      light: "Light",
+      dark: "Dark",
+      system: "System",
       scale: "Scale",
       scaleLarge: "Large (130%)",
       scaleReset: "Reset (100%)",
@@ -2462,6 +2494,15 @@ export const en: Translations = {
     liveFeed: "Live",
     logsWillAppear: "Logs here",
     readyToLaunch: "Ready"
+  },
+  timeline: {
+    init: "Init",
+    browser: "Browser",
+    mail: "Mail",
+    auth: "Auth",
+    verify: "Verify",
+    token: "Token",
+    done: "Done"
   },
   time: {
     daysAgo: "{count}d",
