@@ -2204,7 +2204,24 @@ export const ru: Translations = {
     totalTasksLabel: "Total Tasks Label",
     unknown: "Unknown",
     unnamed: "Unnamed",
-    useCurrentFromComposer: "Use Current From Composer"
+    useCurrentFromComposer: "Use Current From Composer",
+    taskTypeRegister: "Регистрация {provider}",
+    taskTypeLoginAccount: "Вход в аккаунт #{account_id}",
+    taskTypeRefreshToken: "Обновление токена #{account_id}",
+    taskTypeCustomScript: "Скрипт: {script_path}",
+    scheduleOnceAt: "Один раз в {time}",
+    scheduleEvery: "Каждые {hours}ч {minutes}м",
+    scheduleEveryShort: "Каждые {minutes}м",
+    scheduleDailyAt: "Ежедневно в {time}",
+    scheduleAfterTask: "После задачи #{task_id} + {delay}с",
+    titleRunNow: "Запустить сейчас",
+    titleViewHistory: "Просмотр истории",
+    titleEdit: "Редактировать",
+    titleDelete: "Удалить",
+    titleDeleteTemplate: "Удалить шаблон",
+    composedFlowTask: "Задача составного потока",
+    scheduledSuffix: "по расписанию",
+    labelSuccessRate: "Успешность"
   },
   settings: {
     ai_proxy_settings: {

@@ -2204,7 +2204,28 @@ export const en: Translations = {
     totalTasksLabel: "Total Tasks Label",
     unknown: "Unknown",
     unnamed: "Unnamed",
-    useCurrentFromComposer: "Use Current From Composer"
+    useCurrentFromComposer: "Use Current From Composer",
+    // Task type templates
+    taskTypeRegister: "Register {provider}",
+    taskTypeLoginAccount: "Login Account #{account_id}",
+    taskTypeRefreshToken: "Refresh Token #{account_id}",
+    taskTypeCustomScript: "Script: {script_path}",
+    // Schedule templates
+    scheduleOnceAt: "Once at {time}",
+    scheduleEvery: "Every {hours}h {minutes}m",
+    scheduleEveryShort: "Every {minutes}m",
+    scheduleDailyAt: "Daily at {time}",
+    scheduleAfterTask: "After task #{task_id} + {delay}s",
+    // Title attributes
+    titleRunNow: "Run now",
+    titleViewHistory: "View history",
+    titleEdit: "Edit",
+    titleDelete: "Delete",
+    titleDeleteTemplate: "Delete template",
+    // Misc
+    composedFlowTask: "Composed flow task",
+    scheduledSuffix: "scheduled",
+    labelSuccessRate: "Success Rate"
   },
   settings: {
     ai_proxy_settings: {
