@@ -16,7 +16,11 @@ import { useUIState } from '../hooks/useUIState';
 const DEFAULT_START_URL = 'https://google.com';
 
 interface ScenariosProps {
-  /** When true, suppress the in-page header (parent provides its own) */
+  /**
+   * When true, the page-level Header is suppressed so the component can be
+   * embedded inside another shell (e.g. /automation tab strip). The default
+   * `false` preserves the standalone /scenarios behavior.
+   */
   embedded?: boolean;
 }
 

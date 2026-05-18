@@ -176,7 +176,11 @@ function getPrefilledStateFromCache(): SchedulerTaskFormState | null {
 }
 
 interface SchedulerProps {
-  /** When true, suppress the in-page header/stats block (parent provides its own) */
+  /**
+   * When true, the page-level header is suppressed so the component can be
+   * embedded inside another shell (e.g. /automation tab strip). The default
+   * `false` preserves the standalone /scheduler behavior.
+   */
   embedded?: boolean;
 }
 
@@ -497,85 +501,83 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
 
   return (
     <div className="h-full flex flex-col bg-vsc-bg">
+      {/* Header with Stats — suppressed when embedded inside another page (e.g. /automation) */}
       {!embedded && (
-        <>
-          {/* Header with Stats */}
-          <div className="p-6 border-b border-vsc-border">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-2xl font-semibold text-vsc-text flex items-center gap-2">
-                  <Clock className="text-vsc-blue" size={28} />
-                  {t('scheduler.pageTitle')}
-                </h1>
-                <p className="text-sm text-vsc-text-muted mt-1">
-                  {t('scheduler.pageDescription')}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Button variant={isRunning ? 'danger' : 'primary'} onClick={handleToggleScheduler}>
-                  {isRunning ? (
-                    <>
-                      <Pause size={16} />
-                      {t('scheduler.stopScheduler')}
-                    </>
-                  ) : (
-                    <>
-                      <Play size={16} />
-                      {t('scheduler.startScheduler')}
-                    </>
-                  )}
-                </Button>
-
-                <Button variant="primary" onClick={() => openCreateTaskModal('manual', null)}>
-                  <Plus size={16} />
-                  {t('scheduler.addTask')}
-                </Button>
-              </div>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-4 gap-4">
-              <StatCard
-                icon={<Calendar size={20} />}
-                label={t('scheduler.totalTasksLabel')}
-                value={tasks.length.toString()}
-              />
-              <StatCard
-                icon={<Zap size={20} />}
-                label={t('scheduler.schedulerStatusLabel')}
-                value={isRunning ? t('scheduler.statusRunning') : t('scheduler.statusStopped')}
-              />
-              <StatCard
-                icon={<TrendingUp size={20} />}
-                label={t('scheduler.labelSuccessRate')}
-                value={
-                  tasks.length > 0
-                    ? `${Math.round(
-                        (tasks.reduce((sum: number, t) => sum + t.successCount, 0) /
-                          Math.max(
-                            tasks.reduce((sum: number, t) => sum + t.runCount, 0),
-                            1
-                          )) *
-                          100
-                      )}%`
-                    : '0%'
-                }
-              />
-              <StatCard
-                icon={<Clock size={20} />}
-                label={t('scheduler.nextRunLabel')}
-                value={
-                  tasks.filter((t) => t.enabled).length > 0
-                    ? getNextRunLabel(
-                        Math.min(...tasks.filter((t) => t.enabled).map((t) => t.nextRun))
-                      )
-                    : t('scheduler.noNextRun')
-                }
-              />
-            </div>
+      <div className="p-6 border-b border-vsc-border">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-vsc-text flex items-center gap-2">
+              <Clock className="text-vsc-blue" size={28} />
+              {t('scheduler.pageTitle')}
+            </h1>
+            <p className="text-sm text-vsc-text-muted mt-1">
+              {t('scheduler.pageDescription')}
+            </p>
           </div>
-        </>
+
+          <div className="flex items-center gap-3">
+            <Button variant={isRunning ? 'danger' : 'primary'} onClick={handleToggleScheduler}>
+              {isRunning ? (
+                <>
+                  <Pause size={16} />
+                  {t('scheduler.stopScheduler')}
+                </>
+              ) : (
+                <>
+                  <Play size={16} />
+                  {t('scheduler.startScheduler')}
+                </>
+              )}
+            </Button>
+
+            <Button variant="primary" onClick={() => openCreateTaskModal('manual', null)}>
+              <Plus size={16} />
+              {t('scheduler.addTask')}
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-4 gap-4">
+          <StatCard
+            icon={<Calendar size={20} />}
+            label={t('scheduler.totalTasksLabel')}
+            value={tasks.length.toString()}
+          />
+          <StatCard
+            icon={<Zap size={20} />}
+            label={t('scheduler.schedulerStatusLabel')}
+            value={isRunning ? t('scheduler.statusRunning') : t('scheduler.statusStopped')}
+          />
+          <StatCard
+            icon={<TrendingUp size={20} />}
+            label={t('scheduler.labelSuccessRate')}
+            value={
+              tasks.length > 0
+                ? `${Math.round(
+                    (tasks.reduce((sum: number, t) => sum + t.successCount, 0) /
+                      Math.max(
+                        tasks.reduce((sum: number, t) => sum + t.runCount, 0),
+                        1
+                      )) *
+                      100
+                  )}%`
+                : '0%'
+            }
+          />
+          <StatCard
+            icon={<Clock size={20} />}
+            label={t('scheduler.nextRunLabel')}
+            value={
+              tasks.filter((t) => t.enabled).length > 0
+                ? getNextRunLabel(
+                    Math.min(...tasks.filter((t) => t.enabled).map((t) => t.nextRun))
+                  )
+                : t('scheduler.noNextRun')
+            }
+          />
+        </div>
+      </div>
       )}
 
       {/* Tasks List */}
