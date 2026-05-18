@@ -1756,6 +1756,8 @@ export interface Translations {
     sidebarAccountsComingSoon: string;
     sidebarAccountsEmpty: string;
     sidebarAccountsTitle: string;
+    sidebarAccountsCollapse: string;
+    sidebarAccountsShowMore: string;
     sidebarConnectingHint: string;
     sidebarMailboxesTitle: string;
     sidebarProfilesEmpty: string;

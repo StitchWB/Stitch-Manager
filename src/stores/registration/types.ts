@@ -61,6 +61,7 @@ export interface ProviderEmailStrategy {
 // Provider-specific configurations (email strategy only, IMAP is global)
 export interface ProviderEmailStrategies {
   kiro: ProviderEmailStrategy;
+  kiro_v2: ProviderEmailStrategy;
   windsurf: ProviderEmailStrategy;
   trae: ProviderEmailStrategy;
   github: ProviderEmailStrategy;
@@ -202,6 +203,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
   imap: { ...DEFAULT_IMAP_CONFIG },
   providerEmailStrategies: {
     kiro: { ...DEFAULT_EMAIL_STRATEGY },
+    kiro_v2: { ...DEFAULT_EMAIL_STRATEGY },
     windsurf: { ...DEFAULT_EMAIL_STRATEGY },
     trae: { ...DEFAULT_EMAIL_STRATEGY },
     github: { ...DEFAULT_EMAIL_STRATEGY },

@@ -15,6 +15,7 @@ const Accounts = lazy(() => import('./pages/Accounts'));
 const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProviders = lazy(() => import('./pages/AiProviders'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
+const AiAnalytics = lazy(() => import('./pages/AiAnalytics'));
 const Antigravity = lazy(() => import('./pages/Antigravity'));
 const Patcher = lazy(() => import('./pages/Patcher'));
 const Scheduler = lazy(() => import('./pages/Scheduler'));
@@ -25,6 +26,7 @@ const Chat = lazy(() => import('./pages/Chat'));
 const ApiKeys = lazy(() => import('./pages/ApiKeys'));
 const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Tools = lazy(() => import('./pages/Tools'));
+const Automation = lazy(() => import('./pages/Automation'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -84,8 +86,10 @@ function RouteTracker() {
         '/ai/antigravity',
         '/ai/api-keys',
         '/ai/:section',
+        '/ai-analytics',
         '/patcher',
         '/scheduler',
+        '/automation',
         '/mail',
         '/settings',
         '/logs',
@@ -245,13 +249,20 @@ function App() {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/autoreg" element={<AutoReg />} />
             <Route path="/ai" element={<AiOverview />} />
+            <Route path="/ai/overview" element={<Navigate to="/ai/providers" replace />} />
+            <Route path="/ai/integrations" element={<Navigate to="/ai/routing" replace />} />
+            <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
+            <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/antigravity" element={<Antigravity />} />
             <Route path="/ai/api-keys" element={<ApiKeys />} />
             <Route path="/ai/:section" element={<AiProviders />} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
+            <Route path="/ai-analytics" element={<AiAnalytics />} />
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
             <Route path="/patcher" element={<Patcher />} />
             <Route path="/scheduler" element={<Scheduler />} />
+            <Route path="/automation" element={<Automation />} />
+            <Route path="/automation/:tab" element={<Automation />} />
             <Route path="/mail" element={<Mail />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/logs" element={<Logs />} />

@@ -43,6 +43,7 @@ export interface MailQueryFilters {
   to: string;
   subjectContains: string;
   bodyContains: string;
+  search: string;
   unreadOnly: boolean;
   since: string;
   limit: number;
@@ -146,7 +147,8 @@ const DEFAULT_QUERY: MailQueryFilters = {
   to: '',
   subjectContains: '',
   bodyContains: '',
-  unreadOnly: true,
+  search: '',
+  unreadOnly: false,
   since: '',
   limit: 50,
 };

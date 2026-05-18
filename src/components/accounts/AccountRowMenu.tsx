@@ -1,9 +1,7 @@
-import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Inbox, Trash2, Zap, ZapOff } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff, KeyRound } from 'lucide-react';
 import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
-import { ACCOUNT_QUERY_PARAM } from '@/lib/mail/runtime';
 import type { Account } from '@/types/generated';
 
 function isAutoRefreshEnabled(account: Account): boolean {
@@ -14,6 +12,10 @@ function isAutoRefreshEnabled(account: Account): boolean {
   } catch {
     return false;
   }
+}
+
+function isKiroProvider(account: Account): boolean {
+  return account.provider === 'kiro' || account.provider === 'kiro_v2';
 }
 
 interface AccountRowMenuProps {
@@ -31,6 +33,7 @@ interface AccountRowMenuProps {
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
+  onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
   onCopyToken: (token: string) => Promise<void>;
   onShowDetails: (account: Account) => void;
   onDelete: (accountId: number) => void;
@@ -52,20 +55,14 @@ export function AccountRowMenu({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  onAuthorizeKiroAccount,
   onCopyToken,
   onShowDetails,
   onDelete,
   onCloseMenu,
 }: AccountRowMenuProps) {
   const autoRefreshEnabled = isAutoRefreshEnabled(account);
-  const navigate = useNavigate();
-
   if (!isMenuOpen) return null;
-
-  const handleOpenMail = () => {
-    navigate(`/mail?${ACCOUNT_QUERY_PARAM}=${account.id}`);
-    onCloseMenu();
-  };
 
   return (
     <div
@@ -166,15 +163,6 @@ export function AccountRowMenu({
         </ButtonBase>
       ) : null}
 
-      <ButtonBase
-        type="button"
-        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-        onClick={handleOpenMail}
-      >
-        <Inbox size={12} />
-        {t('mail.openInboxAction')}
-      </ButtonBase>
-
       {onToggleAutoRefreshQuota ? (
         <ButtonBase
           type="button"
@@ -186,6 +174,20 @@ export function AccountRowMenu({
         >
           {autoRefreshEnabled ? <ZapOff size={12} className="text-amber-400" /> : <Zap size={12} className="text-emerald-400" />}
           {autoRefreshEnabled ? 'Отключить автообновление квоты' : 'Включить автообновление квоты'}
+        </ButtonBase>
+      ) : null}
+
+      {onAuthorizeKiroAccount && isKiroProvider(account) ? (
+        <ButtonBase
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
+          onClick={() => {
+            void onAuthorizeKiroAccount(account.id);
+            onCloseMenu();
+          }}
+        >
+          <KeyRound size={12} className="text-amber-300" />
+          {t('accounts.authorizeInIdeMenu')}
         </ButtonBase>
       ) : null}
 

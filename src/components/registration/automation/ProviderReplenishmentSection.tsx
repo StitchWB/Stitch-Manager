@@ -70,7 +70,7 @@ export function ProviderReplenishmentSection({
 
   return (
     <CollapsibleSection
-      title={t('automation.replenishment')}
+      title={t('automation.replenishment.label')}
       description={t('autoReg.providerReplenishmentSection.description')}
       icon={<RefreshCw className="w-5 h-5 text-cyan-400" />}
       defaultExpanded={allExpanded || true}
