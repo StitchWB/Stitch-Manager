@@ -20,7 +20,8 @@ export type ProviderRegistryId =
   | 'openai'
   | 'claude'
   | 'gemini'
-  | 'antigravity';
+  | 'antigravity'
+  | 'fireworks';
 
 export type ProviderRegistryEntry = {
   id: ProviderRegistryId;
@@ -131,6 +132,17 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
     },
     aiProxy: { enabled: true },
   },
+  fireworks: {
+    id: 'fireworks',
+    label: 'Fireworks',
+    badge: {
+      bg: 'bg-rose-500/10',
+      text: 'text-rose-400',
+      border: 'border-rose-500/20',
+    },
+    accounts: { matchProviders: ['fireworks'] },
+    aiProxy: { enabled: true },
+  },
 };
 
 // =============================
@@ -175,6 +187,7 @@ export const AI_PROXY_PROVIDER_LIST = [
   'gemini',
   'kiro',
   'antigravity',
+  'fireworks',
 ] as const;
 
 export type AiProxyProviderName = (typeof AI_PROXY_PROVIDER_LIST)[number];

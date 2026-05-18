@@ -8,14 +8,11 @@ import {
   Settings,
   FileText,
   Terminal,
-  MessageSquare,
   Mail,
-  FolderKanban,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  ShieldCheck,
-  Wrench } from
+  Repeat,
+  ShieldCheck } from
 'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
@@ -140,12 +137,6 @@ export default function Sidebar() {
           collapsed={sidebarCollapsed} />
         
         <NavItem
-          to="/scheduler"
-          icon={<Clock size={20} />}
-          label={t('sidebar.scheduler')}
-          collapsed={sidebarCollapsed} />
-        
-        <NavItem
           to="/patcher"
           icon={<Code size={20} />}
           label={t('sidebar.idePatch')}
@@ -158,27 +149,15 @@ export default function Sidebar() {
           collapsed={sidebarCollapsed} />
         
         <NavItem
-          to="/chat"
-          icon={<MessageSquare size={20} />}
-          label={t('sidebar.chat')}
+          to="/automation"
+          icon={<Repeat size={20} />}
+          label={t('sidebar.automation')}
           collapsed={sidebarCollapsed} />
         
         <NavItem
           to="/mail"
           icon={<Mail size={20} />}
           label={t('sidebar.mail')}
-          collapsed={sidebarCollapsed} />
-        
-        <NavItem
-          to="/scenarios"
-          icon={<FolderKanban size={20} />}
-          label={t('sidebar.scenarios')}
-          collapsed={sidebarCollapsed} />
-        
-        <NavItem
-          to="/tools"
-          icon={<Wrench size={20} />}
-          label={t('sidebar.tools')}
           collapsed={sidebarCollapsed} />
         
 

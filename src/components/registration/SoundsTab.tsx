@@ -1,6 +1,7 @@
 import { t } from "@/lib/i18n";
 import { Volume2, Play, AlertCircle } from 'lucide-react';
-import { GlassCard, DropdownMenu, Toggle, NumberInput, Button } from '@/components/ui';
+import { GlassCard, DropdownMenu, Toggle, Button } from '@/components/ui';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { Tooltip } from '../Tooltip';
 
 export interface SoundsTabProps {

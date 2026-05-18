@@ -43,7 +43,7 @@ export function computeEmailDomain(imap: {
 export default function AutoRegNext() {
   const location = useLocation();
   const autoRegSupportedProviders = useMemo<ProviderName[]>(
-    () => ['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'bitbucket'],
+    () => ['kiro', 'kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'bitbucket'],
     []
   );
 

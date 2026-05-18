@@ -241,6 +241,7 @@ export default function Accounts() {
     handleOpenProfileSession,
     handleConfirmProfileSession,
     handleClearProfileSession,
+    handleAuthorizeKiroAccount,
     handleUpdateAccount,
     handleExportCSV,
     handleImportAccounts,
@@ -557,6 +558,7 @@ export default function Accounts() {
                 onOpenProfileSession: handleOpenProfileSession,
                 onConfirmProfileSession: handleConfirmProfileSession,
                 onClearProfileSession: handleClearProfileSession,
+                onAuthorizeKiroAccount: handleAuthorizeKiroAccount,
                 onUpdate: handleUpdateAccount,
                 selectedProvider: providerFilter === 'all' ? null : providerFilter,
               }}

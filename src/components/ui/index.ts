@@ -162,4 +162,4 @@ export { TwoColumnLayout } from './TwoColumnLayout';
 export type { TwoColumnLayoutProps } from './TwoColumnLayout';
 
 export { KeyValueList } from './KeyValueList';
-export type { KeyValueListProps } from './KeyValueList';
+export type { KeyValueListProps, KeyValueRow } from './KeyValueList';
