@@ -261,5 +261,9 @@ export function buildAccountInboxQuery(
   const trimmed = (account.email ?? '').trim();
   if (!trimmed) return {};
 
-  return { to: trimmed };
+  // Use `search` (full-text / IMAP TEXT) instead of strict `to` header match.
+  // This handles forwarded mail (33mail, plus-addressing, catch-all) where the
+  // original recipient address may appear in Delivered-To, X-Original-To, or
+  // envelope headers rather than the visible To: field.
+  return { search: trimmed };
 }
