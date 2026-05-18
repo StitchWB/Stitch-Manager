@@ -7,7 +7,7 @@ import { cn } from '../../lib/utils';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { t } from '@/lib/i18n';
 
-type SortKey = 'provider' | 'name' | 'lastUsedAt' | 'requestsToday';
+type SortKey = 'name' | 'lastUsedAt' | 'requestsToday';
 
 interface AiProxyAccountsTableProps {
   accounts: AiProxyAccount[];
@@ -83,7 +83,6 @@ export function AiProxyAccountsTable({
     const sorted = [...accounts];
     sorted.sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1;
-      if (sortKey === 'provider') return dir * a.provider.localeCompare(b.provider);
       if (sortKey === 'name') return dir * a.name.localeCompare(b.name);
       if (sortKey === 'requestsToday') return dir * (a.requestsToday - b.requestsToday);
       const av = a.lastUsedAt ?? 0;
@@ -99,52 +98,41 @@ export function AiProxyAccountsTable({
       return;
     }
     setSortKey(key);
-    setSortDir(key === 'name' || key === 'provider' ? 'asc' : 'desc');
+    setSortDir(key === 'name' ? 'asc' : 'desc');
   };
 
   return (
     <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 overflow-hidden">
-      <div className="hidden lg:grid grid-cols-[34px_minmax(220px,1fr)_140px_220px_140px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 bg-black/20 sticky top-0 z-20">
-        <ButtonBase
-          type="button"
-          className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left"
-          onClick={() => toggleSort('provider')}
-        >
-          {t('aiHub.table.provider')}
-        </ButtonBase>
-        <ButtonBase
-          type="button"
-          className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left"
-          onClick={() => toggleSort('name')}
-        >
-          {t('aiHub.table.account')}
-        </ButtonBase>
-        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          {t('aiHub.table.status')}
-        </div>
-        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          {t('aiHub.table.quota')}
-        </div>
-        <ButtonBase
-          type="button"
-          className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
-          onClick={() => toggleSort('requestsToday')}
-        >
-          {t('aiHub.table.today')}
-        </ButtonBase>
-        <ButtonBase
-          type="button"
-          className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
-          onClick={() => toggleSort('lastUsedAt')}
-        >
-          {t('aiHub.table.lastUsed')}
-        </ButtonBase>
-        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">
-          {t('aiHub.table.actions')}
-        </div>
-      </div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[860px]">
+          <div className="hidden lg:grid grid-cols-[34px_minmax(220px,1fr)_140px_220px_120px_120px] gap-4 px-4 py-3 border-b border-white/5 bg-black/20 sticky top-0 z-20">
+            <div aria-hidden="true" />
+            <ButtonBase
+              type="button"
+              className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left"
+              onClick={() => toggleSort('name')}
+            >
+              {t('aiHub.table.account')}
+            </ButtonBase>
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+              {t('aiHub.table.status')}
+            </div>
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+              {t('aiHub.table.quota')}
+            </div>
+            <ButtonBase
+              type="button"
+              className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
+              onClick={() => toggleSort('lastUsedAt')}
+            >
+              {t('aiHub.table.lastUsed')}
+            </ButtonBase>
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">
+              {t('aiHub.table.actions')}
+            </div>
+          </div>
 
-      <div className="max-h-[60vh] overflow-auto">
+          <div className="max-h-[60vh] overflow-y-auto">
         {rows.map(account => {
           const conn = account.id ? connectionState[account.id] : undefined;
 
@@ -220,7 +208,7 @@ export function AiProxyAccountsTable({
             <div
               key={account.id ?? `${account.provider}:${account.name}`}
               className={cn(
-                'relative grid grid-cols-1 lg:grid-cols-[34px_minmax(220px,1fr)_140px_220px_140px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 text-left',
+                'relative grid grid-cols-1 lg:grid-cols-[34px_minmax(220px,1fr)_140px_220px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 text-left',
                 'hover:bg-white/[0.03]'
               )}
             >
@@ -277,10 +265,6 @@ export function AiProxyAccountsTable({
 
               <div className="relative z-0">{quotaNode}</div>
 
-              <div className="relative z-0 text-xs text-slate-300 tabular-nums">
-                {account.requestsToday.toLocaleString()}
-              </div>
-
               <div className="relative z-0 text-xs text-slate-400 tabular-nums">
                 {account.lastUsedAt
                   ? new Date(account.lastUsedAt * 1000).toLocaleDateString()
@@ -329,6 +313,8 @@ export function AiProxyAccountsTable({
             <div className="text-xs text-slate-500 mt-1">{t('aiHub.empty.noAccountsHint')}</div>
           </div>
         ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );

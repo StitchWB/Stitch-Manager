@@ -58,6 +58,10 @@ export interface Translations {
     batchResultWithErrors: string;
     browserOpenFailed: string;
     browserOpened: string;
+    authorizingKiro: string;
+    authorizeKiroStarted: string;
+    authorizeKiroFailed: string;
+    authorizeInIdeMenu: string;
     browserProfilePath: string;
     checkBalance: string;
     checkNow: string;
@@ -437,18 +441,27 @@ export interface Translations {
       estCost: string;
       loading: string;
       modelUsage: string;
+      openMonitor: string;
+      recentRequestsTitle: string;
+      refreshTooltip: string;
       requestsCount: string;
       subtitle: string;
       title: string;
+      todayErrors: string;
+      todayRequests: string;
       tokensCount: string;
       tokensUsed: string;
+      topModelsTitle: string;
       totalRequests: string;
       weeklyActivity: string;
+      weeklyErrors: string;
+      weeklyRequests: string;
     }
     antigravity: {
       actions: {
         checkStatus: string;
         checking: string;
+        copyAuthUrl: string;
         loginOAuth: string;
         openUrl: string;
         refresh: string;
@@ -465,12 +478,22 @@ export interface Translations {
       list: {
         detectedTitle: string;
         expiresLabel: string;
+        expiryStatus: {
+          expired: string;
+          expiring: string;
+          valid: string;
+        }
         unknownExpiry: string;
       }
       modal: {
         authUrlLabel: string;
+        copyAuthUrlTooltip: string;
         oauthInstructions: string;
         oauthTitle: string;
+      }
+      status: {
+        credentials: string;
+        credentialsWithExpired: string;
       }
       toasts: {
         loginCompletedRefreshing: string;
@@ -487,6 +510,7 @@ export interface Translations {
         saveKey: string;
       }
       empty: {
+        action: string;
         description: string;
         title: string;
       }
@@ -500,13 +524,23 @@ export interface Translations {
       fireworks: {
         account: string;
         checkKey: string;
+        checkKeyRequired: string;
+        checkPlaceholder: string;
         description: string;
         email: string;
+        historyEmpty: string;
+        historyTitle: string;
+        keyTail: string;
         monthlyRemaining: string;
         monthlySpendLimit: string;
+        noResultYet: string;
         prepaidCreditsNote: string;
         prepaidNote: string;
         result: string;
+        statusActive: string;
+        statusFrozen: string;
+        statusInvalid: string;
+        statusLimit: string;
         suspendState: string;
         tier: string;
         title: string;
@@ -517,6 +551,11 @@ export interface Translations {
         prefix: string;
       }
       loading: string;
+      metrics: {
+        configuredKeys: string;
+        lastCheck: string;
+        linkedAccounts: string;
+      }
       modals: {
         addTitle: string;
         deleteMessage: string;
@@ -535,6 +574,11 @@ export interface Translations {
         antigravityDescription: string;
         geminiDescription: string;
         openaiDescription: string;
+      }
+      sections: {
+        checkerTitle: string;
+        descriptionTitle: string;
+        keysTitle: string;
       }
       summary: {
         configuredCount: string;
@@ -560,6 +604,7 @@ export interface Translations {
       modelInventoryHint: string;
       modelInventoryTitle: string;
       providerCounts: string;
+      providersTitle: string;
       requestHistoryHint: string;
       requestHistoryTitle: string;
     }
@@ -636,6 +681,7 @@ export interface Translations {
     }
     integrations: {
       description: string;
+      eyebrow: string;
       mappingsHint: string;
       mappingsTitle: string;
       title: string;
@@ -743,6 +789,7 @@ export interface Translations {
       enabled: string;
       ready: string;
       weeklyLimit: string;
+      weeklyLimitShort: string;
     }
     request_history: {
       clear_history: string;
@@ -756,6 +803,30 @@ export interface Translations {
       status: string;
       time: string;
       tokens: string;
+    }
+    routing: {
+      metrics: {
+        autoSwitchLabel: string;
+        autoSwitchOff: string;
+        autoSwitchOn: string;
+        mappingsLabel: string;
+        portLabel: string;
+        proxyLabel: string;
+      }
+    }
+    rotation: {
+      checkIntervalHint: string;
+      checkIntervalLabel: string;
+      eyebrow: string;
+      secondsUnit: string;
+      summary: string;
+      switchOnZeroHint: string;
+      switchOnZeroLabel: string;
+      title: string;
+      toasts: {
+        saveFailed: string;
+      }
+      toggleTooltip: string;
     }
     search: {
       placeholder: string;
@@ -777,11 +848,19 @@ export interface Translations {
         subtitle: string;
         title: string;
       }
+      monitor: {
+        subtitle: string;
+        title: string;
+      }
       overview: {
         subtitle: string;
         title: string;
       }
       providers: {
+        subtitle: string;
+        title: string;
+      }
+      routing: {
         subtitle: string;
         title: string;
       }
@@ -819,7 +898,9 @@ export interface Translations {
       apiKeys: string;
       diagnostics: string;
       integrations: string;
+      monitor: string;
       providers: string;
+      routing: string;
       usage: string;
     }
     timeFormat: {
@@ -1039,12 +1120,6 @@ export interface Translations {
     ready: string;
     readyToStart: string;
     resume: string;
-    rotationRulesSection: {
-      limitTrigger: string;
-    }
-    rotation_rules_section: {
-      "429": string;
-    }
     saveError: string;
     saved: string;
     saving: string;
@@ -1071,9 +1146,34 @@ export interface Translations {
     checkInterval: string;
     cooldown: string;
     maxErrors: string;
-    replenishment: string;
+    replenishment: {
+      label: string;
+      subtitle: string;
+    }
     rotationRules: string;
     switchThreshold: string;
+    title: string;
+    subtitle: string;
+    tabs: {
+      schedule: string;
+      scenarios: string;
+      replenishment: string;
+    }
+    schedule: {
+      subtitle: string;
+    }
+    scenarios: {
+      subtitle: string;
+    }
+    kpi: {
+      tasksRunning: string;
+      nextRun: string;
+      autoReplenish: string;
+      autoSwitch: string;
+      on: string;
+      off: string;
+      noNextRun: string;
+    }
   }
   aws: {
     bulk_aws_registration_modal: {
@@ -1241,9 +1341,47 @@ export interface Translations {
     across: string;
     activeTokens: string;
     activityCleared: string;
+    activity: {
+      title: string;
+      subtitle: string;
+      empty: string;
+      filters: {
+        all: string;
+        newAccounts: string;
+        registrations: string;
+        scheduler: string;
+        proxy: string;
+      }
+      newAccount: {
+        description: string;
+      }
+    }
     allAccountsHealthy: string;
     clickToFilter: string;
     failedToClearActivity: string;
+    fleet: {
+      title: string;
+      noTarget: string;
+      subtitleShort: string;
+      subtitleFull: string;
+    }
+    fleetGrid: {
+      activeOfTarget: string;
+      noAccountsToRefresh: string;
+      openAccounts: string;
+      quotaAverage: string;
+      quotaNoData: string;
+      refreshButton: string;
+      refreshTooltip: string;
+      startButton: string;
+      startTooltip: string;
+      statusManual: string;
+      statusOnTarget: string;
+      statusReplenish: string;
+      statusRunning: string;
+      totalAccounts: string;
+      unitAccounts: string;
+    }
     inactive: string;
     lastRegistrationAttempts: string;
     manageProviders: string;
@@ -1261,6 +1399,48 @@ export interface Translations {
     selectProviderBelow: string;
     startRegistration: string;
     systemReady: string;
+    systemStrip: {
+      ariaLabel: string;
+      stateOn: string;
+      stateOff: string;
+      proxy: {
+        label: string;
+        running: string;
+        runningAt: string;
+        stopped: string;
+        tooltipStart: string;
+        tooltipStop: string;
+        toggleFailed: string;
+      }
+      replenish: {
+        label: string;
+        tooltip: string;
+        toggleFailed: string;
+      }
+      autoSwitch: {
+        label: string;
+        tooltip: string;
+        tooltipDisabled: string;
+        toggleFailed: string;
+      }
+      scheduler: {
+        label: string;
+        runningWithNext: string;
+        runningNoNext: string;
+        stopped: string;
+        noNextRun: string;
+        due: string;
+        tooltipStart: string;
+        tooltipStop: string;
+        toggleFailed: string;
+      }
+      bridge: {
+        label: string;
+        online: string;
+        offline: string;
+        tooltip: string;
+      }
+    }
     title: string;
     totalAccounts: string;
     viewFullActivityLog: string;
@@ -1453,8 +1633,20 @@ export interface Translations {
   }
   mail: {
     accountIdLabel: string;
+    accountScopeBannerTitle: string;
+    accountScopeClear: string;
+    accountScopeMissingMailbox: string;
+    accountScopeNoMailbox: string;
+    accountScopeNotFound: string;
+    accountScopeViaMailbox: string;
     accountsRailTitle: string;
     activeProfileLabel: string;
+    addMailboxAction: string;
+    addMailboxFromAutoReg: string;
+    addMailboxFromSheets: string;
+    addMailboxImap: string;
+    addMailboxMailTm: string;
+    advancedFiltersTitle: string;
     attachmentsLabel: string;
     bccField: string;
     bodyLabel: string;
@@ -1497,9 +1689,15 @@ export interface Translations {
       refresh: string;
       row_issues: string;
     }
+    headerActiveMailbox: string;
+    headerNoActiveMailbox: string;
+    headerScopedToAccount: string;
+    hideRemoteImagesAction: string;
     htmlLabel: string;
     keyboardHint: string;
     lastSyncLabel: string;
+    lastSyncedAt: string;
+    lastSyncedNever: string;
     limitLabel: string;
     listAction: string;
     loadMessageAction: string;
@@ -1518,6 +1716,9 @@ export interface Translations {
     noProfilesYet: string;
     noSelectionDescription: string;
     noSelectionTitle: string;
+    openInboxAction: string;
+    openInboxTooltipMissing: string;
+    openInboxTooltipResolved: string;
     openRawSourceAction: string;
     plainTextLabel: string;
     pollIntervalLabel: string;
@@ -1551,6 +1752,14 @@ export interface Translations {
     selectedCountLabel: string;
     sessionActive: string;
     sessionIdle: string;
+    showRemoteImagesAction: string;
+    sidebarAccountsComingSoon: string;
+    sidebarAccountsEmpty: string;
+    sidebarAccountsTitle: string;
+    sidebarConnectingHint: string;
+    sidebarMailboxesTitle: string;
+    sidebarProfilesEmpty: string;
+    sidebarProfilesEmptyHint: string;
     sinceLabel: string;
     sourceExtensionsPlaceholder: string;
     sourceExtensionsTitle: string;
@@ -1566,8 +1775,19 @@ export interface Translations {
     title: string;
     toField: string;
     toLabel: string;
+    toolbarHideFilters: string;
+    toolbarMoreFilters: string;
+    toolbarRefresh: string;
     toolbarSearchPlaceholder: string;
     unreadOnly: string;
+    verificationCodeCopied: string;
+    verificationCodeFound: string;
+    verificationCopied: string;
+    verificationCopyAction: string;
+    verificationCopyFailed: string;
+    verificationLinkCopied: string;
+    verificationLinkFound: string;
+    verificationLinkOpen: string;
     viewerTitle: string;
     waitAction: string;
     waitingAction: string;
@@ -2498,6 +2718,7 @@ export interface Translations {
   sidebar: {
     accounts: string;
     aiHub: string;
+    automation: string;
     autoReg: string;
     chat: string;
     dashboard: string;

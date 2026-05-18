@@ -51,6 +51,10 @@ export const en: Translations = {
     batchResultWithErrors: "{summary} {errors}",
     browserOpenFailed: "Failed to open browser: {{message}}",
     browserOpened: "Browser opened",
+    authorizingKiro: "Starting Kiro IDE authorization...",
+    authorizeKiroStarted: "Kiro IDE authorization launched (running in background)",
+    authorizeKiroFailed: "Failed to authorize Kiro account: {{message}}",
+    authorizeInIdeMenu: "Authorize in Kiro IDE",
     browserProfilePath: "Browser Profile",
     checkBalance: "Check Balance",
     checkNow: "Check Now",
@@ -425,29 +429,38 @@ export const en: Translations = {
       avgDuration: "Avg Duration",
       costValue: "${value}",
       durationMs: "{count}ms",
-      emptyDescription: "Start using the AI Proxy to see analytics.",
+      emptyDescription: "No data yet — start the proxy and make some requests.",
       emptyTitle: "No analytics data available",
       estCost: "Est. Cost",
       loading: "Loading analytics…",
       modelUsage: "Model Usage",
+      openMonitor: "Open Monitor",
+      recentRequestsTitle: "Recent requests",
+      refreshTooltip: "Refresh analytics",
       requestsCount: "{count} requests",
-      subtitle: "Monitor AI API usage and performance.",
-      title: "AI Analytics",
+      subtitle: "Deep view of AI Proxy traffic, models, and recent calls.",
+      title: "Detailed Analytics",
+      todayErrors: "Today errors",
+      todayRequests: "Today requests",
       tokensCount: "{count} tokens",
       tokensUsed: "Tokens Used",
+      topModelsTitle: "Top models",
       totalRequests: "Total Requests",
-      weeklyActivity: "Weekly Activity"
+      weeklyActivity: "Weekly Activity",
+      weeklyErrors: "7d errors",
+      weeklyRequests: "7d requests"
     },
     antigravity: {
       actions: {
         checkStatus: "Check status",
         checking: "Checking…",
+        copyAuthUrl: "Copy auth URL",
         loginOAuth: "Login (OAuth)",
         openUrl: "Open URL",
         refresh: "Refresh"
       },
       empty: {
-        noCredentialsDescription: "Login via OAuth to generate an auth file, or refresh if you already logged in via sidecar.",
+        noCredentialsDescription: "Login via OAuth to generate an auth file, or refresh if you already logged in via browser.",
         noCredentialsTitle: "No Antigravity credentials found"
       },
       errors: {
@@ -458,12 +471,22 @@ export const en: Translations = {
       list: {
         detectedTitle: "Detected Antigravity auth files",
         expiresLabel: "Expires",
+        expiryStatus: {
+          expired: "Expired",
+          expiring: "Expires soon",
+          valid: "Valid"
+        },
         unknownExpiry: "Unknown"
       },
       modal: {
         authUrlLabel: "Auth URL",
+        copyAuthUrlTooltip: "Copy auth URL to clipboard",
         oauthInstructions: "Complete the login in your browser. Then click “Check status” until it completes.",
         oauthTitle: "Antigravity OAuth"
+      },
+      status: {
+        credentials: "{count} credential(s)",
+        credentialsWithExpired: "{count} credential(s) · {expired} expired"
       },
       toasts: {
         loginCompletedRefreshing: "Login completed. Refreshing auth files...",
@@ -480,6 +503,7 @@ export const en: Translations = {
         saveKey: "Save Key"
       },
       empty: {
+        action: "Add Key",
         description: "Add your first key to start using this provider",
         title: "No {provider} API keys"
       },
@@ -493,23 +517,38 @@ export const en: Translations = {
       fireworks: {
         account: "Account",
         checkKey: "Check Key",
-        description: "Description",
+        checkKeyRequired: "Please enter a Fireworks API key",
+        checkPlaceholder: "fw_...",
+        description: "Paste a Fireworks key (fw_...) and run a check — we show tier, balance and status.",
         email: "Email",
+        historyEmpty: "Run a check to see history.",
+        historyTitle: "Recent Checks",
+        keyTail: "…{tail}",
         monthlyRemaining: "Monthly Remaining",
         monthlySpendLimit: "Monthly Spend Limit",
-        prepaidCreditsNote: "Prepaid Credits Note",
-        prepaidNote: "Prepaid Note",
-        result: "Result",
+        noResultYet: "Run a check to see the result.",
+        prepaidCreditsNote: "Fireworks runs on prepaid credits: keep an eye on the balance.",
+        prepaidNote: "Prepaid account. Credits do not auto-renew.",
+        result: "Check Result",
+        statusActive: "Active",
+        statusFrozen: "Frozen",
+        statusInvalid: "Invalid",
+        statusLimit: "Limit Reached",
         suspendState: "Suspend State",
         tier: "Tier",
-        title: "Title",
-        totalSpent: "Total Spent"
+        title: "Fireworks Key Check",
+        totalSpent: "Spent This Month"
       },
       labels: {
         baseUrl: "Base Url",
         prefix: "Prefix"
       },
       loading: "Loading API keys…",
+      metrics: {
+        configuredKeys: "Configured Keys",
+        lastCheck: "Last Check",
+        linkedAccounts: "Linked Accounts"
+      },
       modals: {
         addTitle: "Add {provider} API Key",
         deleteMessage: "Delete {provider} key ending in {tail}?",
@@ -528,6 +567,11 @@ export const en: Translations = {
         antigravityDescription: "Manage your Antigravity API keys",
         geminiDescription: "Manage your Google Gemini API keys for AI model access",
         openaiDescription: "Manage your OpenAI API keys for GPT model access"
+      },
+      sections: {
+        checkerTitle: "Key Checker",
+        descriptionTitle: "Overview",
+        keysTitle: "Keys"
       },
       summary: {
         configuredCount: "{count} key(s) configured",
@@ -553,6 +597,7 @@ export const en: Translations = {
       modelInventoryHint: "Synced models from connected providers.",
       modelInventoryTitle: "Available Models",
       providerCounts: "{active} active / {total} acc / {keys} keys",
+      providersTitle: "Providers",
       requestHistoryHint: "Snapshot of last 20 proxied requests.",
       requestHistoryTitle: "Recent Request History"
     },
@@ -609,7 +654,7 @@ export const en: Translations = {
     },
     diagnostics: {
       healthHint: "Current proxy config and runtime signals.",
-      healthTitle: "Sidecar Health Snapshot",
+      healthTitle: "Proxy Health",
       latestReason: "Latest waiting/limit reason",
       latestReasonHint: "Most recent cooldown, limit, or retry message from proxy logs.",
       noRecentReasons: "No recent cooldown/limit messages.",
@@ -629,6 +674,7 @@ export const en: Translations = {
     },
     integrations: {
       description: "Use the wizard to configure OpenCode/Cursor/Cline/Continue to route via AI Proxy.",
+      eyebrow: "Integrations",
       mappingsHint: "Review which providers can fulfill model patterns.",
       mappingsTitle: "Provider Model Mappings",
       title: "IDE/CLI Integrations"
@@ -735,7 +781,8 @@ export const en: Translations = {
       cooldown: "In cooldown",
       enabled: "Enabled",
       ready: "Ready",
-      weeklyLimit: "Weekly limit hit"
+      weeklyLimit: "Weekly limit hit",
+      weeklyLimitShort: "Weekly limit"
     },
     request_history: {
       clear_history: "Clear history",
@@ -749,6 +796,30 @@ export const en: Translations = {
       status: "Status",
       time: "Time",
       tokens: "Tokens"
+    },
+    routing: {
+      metrics: {
+        autoSwitchLabel: "Auto-switch",
+        autoSwitchOff: "Off",
+        autoSwitchOn: "On",
+        mappingsLabel: "Mappings",
+        portLabel: "Port",
+        proxyLabel: "Proxy"
+      }
+    },
+    rotation: {
+      checkIntervalHint: "How often to poll active account credits",
+      checkIntervalLabel: "Check interval",
+      eyebrow: "Rotation",
+      secondsUnit: "sec",
+      summary: "Switch active AI account when credits run out",
+      switchOnZeroHint: "Pick the next account on zero credits",
+      switchOnZeroLabel: "Switch on zero credits",
+      title: "Account Rotation",
+      toasts: {
+        saveFailed: "Failed to save rotation settings"
+      },
+      toggleTooltip: "Enable automatic switching of the active account"
     },
     search: {
       placeholder: "Search accounts..."
@@ -770,6 +841,10 @@ export const en: Translations = {
         subtitle: "Connect IDEs/CLIs and coordinate account import/export.",
         title: "AI Integrations"
       },
+      monitor: {
+        subtitle: "Account coverage, proxy health, and request signals.",
+        title: "Monitoring"
+      },
       overview: {
         subtitle: "Unified navigation for providers, integrations, quotas, and diagnostics.",
         title: "AI Hub"
@@ -777,6 +852,10 @@ export const en: Translations = {
       providers: {
         subtitle: "Accounts, quota headroom, and proxy health in one place.",
         title: "AI Providers"
+      },
+      routing: {
+        subtitle: "Configure how IDE/CLI traffic reaches providers: proxy, mappings, IDE wizard.",
+        title: "Routing"
       },
       usage: {
         subtitle: "Recent request volume, error rates, and quota signals.",
@@ -812,7 +891,9 @@ export const en: Translations = {
       apiKeys: "API Keys",
       diagnostics: "Diagnostics",
       integrations: "Integrations",
+      monitor: "Monitor",
       providers: "Providers",
+      routing: "Routing",
       usage: "Usage"
     },
     timeFormat: {
@@ -1032,12 +1113,6 @@ export const en: Translations = {
     ready: "Ready",
     readyToStart: "Ready",
     resume: "RESUME",
-    rotationRulesSection: {
-      limitTrigger: "Limit Trigger"
-    },
-    rotation_rules_section: {
-      "429": "429"
-    },
     saveError: "Save Error",
     saved: "saved",
     saving: "Saving",
@@ -1064,9 +1139,34 @@ export const en: Translations = {
     checkInterval: "Check Interval",
     cooldown: "Cooldown",
     maxErrors: "Max Errors",
-    replenishment: "Replenishment",
+    replenishment: {
+      label: "Replenishment",
+      subtitle: "Maintain target number of active accounts per IDE."
+    },
     rotationRules: "Rotation Rules",
-    switchThreshold: "Switch After"
+    switchThreshold: "Switch After",
+    title: "Automation",
+    subtitle: "Everything that runs by itself: tasks, scenarios and auto-replenish.",
+    tabs: {
+      schedule: "Schedule",
+      scenarios: "Scenarios",
+      replenishment: "Replenishment"
+    },
+    schedule: {
+      subtitle: "Scheduled tasks: token refresh, registrations, custom scripts."
+    },
+    scenarios: {
+      subtitle: "Recorded browser scenarios for replay."
+    },
+    kpi: {
+      tasksRunning: "Tasks enabled",
+      nextRun: "Next",
+      autoReplenish: "Auto-Replenish",
+      autoSwitch: "Auto-Switch",
+      on: "On",
+      off: "Off",
+      noNextRun: "—"
+    }
   },
   aws: {
     bulk_aws_registration_modal: {
@@ -1234,9 +1334,47 @@ export const en: Translations = {
     across: "Across",
     activeTokens: "Active Tokens",
     activityCleared: "Cleared",
+    activity: {
+      title: "Activity",
+      subtitle: "New accounts, registration attempts, tasks and proxy issues",
+      empty: "No recent activity",
+      filters: {
+        all: "All",
+        newAccounts: "Accounts",
+        registrations: "Attempts",
+        scheduler: "Scheduler",
+        proxy: "Proxy / AI",
+      },
+      newAccount: {
+        description: "{provider} · {status}",
+      },
+    },
     allAccountsHealthy: "All healthy",
     clickToFilter: "Filter",
     failedToClearActivity: "Failed to clear",
+    fleet: {
+      title: "Fleet Coverage",
+      noTarget: "No target set",
+      subtitleShort: "Short by {gap}",
+      subtitleFull: "On target",
+    },
+    fleetGrid: {
+      activeOfTarget: "Active / target",
+      noAccountsToRefresh: "No {provider} accounts to refresh",
+      openAccounts: "Open accounts",
+      quotaAverage: "Avg quota",
+      quotaNoData: "—",
+      refreshButton: "Refresh",
+      refreshTooltip: "Refresh tokens for this provider",
+      startButton: "Register",
+      startTooltip: "Open Registration and start {count} new registrations",
+      statusManual: "Manual",
+      statusOnTarget: "On target",
+      statusReplenish: "Auto-replenish",
+      statusRunning: "Running",
+      totalAccounts: "Total: {count}",
+      unitAccounts: "acc",
+    },
     inactive: "inactive",
     lastRegistrationAttempts: "Attempts",
     manageProviders: "Manage",
@@ -1254,6 +1392,48 @@ export const en: Translations = {
     selectProviderBelow: "Select provider",
     startRegistration: "Start Registration",
     systemReady: "Ready",
+    systemStrip: {
+      ariaLabel: "System status",
+      stateOn: "On",
+      stateOff: "Off",
+      proxy: {
+        label: "AI Proxy",
+        running: "Running",
+        runningAt: "Running on :{port}",
+        stopped: "Stopped",
+        tooltipStart: "Start AI Proxy",
+        tooltipStop: "Stop AI Proxy",
+        toggleFailed: "Failed to toggle AI Proxy",
+      },
+      replenish: {
+        label: "Auto-Replenish",
+        tooltip: "Keep target number of active accounts per IDE",
+        toggleFailed: "Failed to toggle auto-replenish",
+      },
+      autoSwitch: {
+        label: "Auto-Switch",
+        tooltip: "Switch active AI account when credits run out",
+        tooltipDisabled: "Start AI Proxy to enable auto-switch",
+        toggleFailed: "Failed to toggle auto-switch",
+      },
+      scheduler: {
+        label: "Scheduler",
+        runningWithNext: "Running · {next}",
+        runningNoNext: "Running · idle",
+        stopped: "Stopped",
+        noNextRun: "no upcoming runs",
+        due: "due now",
+        tooltipStart: "Start scheduler",
+        tooltipStop: "Stop scheduler",
+        toggleFailed: "Failed to toggle scheduler",
+      },
+      bridge: {
+        label: "Bridge",
+        online: "Online",
+        offline: "Offline",
+        tooltip: "Tauri bridge connection",
+      },
+    },
     title: "Dashboard",
     totalAccounts: "Total Accounts",
     viewFullActivityLog: "Full Log"
@@ -1446,8 +1626,20 @@ export const en: Translations = {
   },
   mail: {
     accountIdLabel: "Account ID",
+    accountScopeBannerTitle: "Showing inbox for {email}",
+    accountScopeClear: "Show all mail",
+    accountScopeMissingMailbox: "No mailbox linked to this account",
+    accountScopeNoMailbox: "No mailbox linked to {email}",
+    accountScopeNotFound: "Account not found",
+    accountScopeViaMailbox: "via {label}",
     accountsRailTitle: "Accounts",
     activeProfileLabel: "Active Profile",
+    addMailboxAction: "Add mailbox",
+    addMailboxFromAutoReg: "From Registration settings",
+    addMailboxFromSheets: "Import from Google Sheets",
+    addMailboxImap: "IMAP manually",
+    addMailboxMailTm: "Mail.tm manually",
+    advancedFiltersTitle: "Advanced filters",
     attachmentsLabel: "Attachments",
     bccField: "BCC",
     bodyLabel: "Body Contains",
@@ -1480,7 +1672,11 @@ export const en: Translations = {
     folderSpam: "Spam",
     folderTrash: "Trash",
     foldersDisconnectedHint: "Connect to load folders",
-    foldersTitle: "Mailbox Folders",
+    foldersTitle: "Folders",
+    headerActiveMailbox: "Active mailbox",
+    headerNoActiveMailbox: "No mailbox connected",
+    headerScopedToAccount: "Account inbox",
+    hideRemoteImagesAction: "Hide images",
     fromField: "From",
     fromLabel: "From",
     google_sheets_raw_mailbox_import: {
@@ -1493,6 +1689,8 @@ export const en: Translations = {
     htmlLabel: "HTML",
     keyboardHint: "Keyboard: ↑ ↓ navigate • Enter open",
     lastSyncLabel: "Last Sync",
+    lastSyncedAt: "Synced {time}",
+    lastSyncedNever: "Not synced yet",
     limitLabel: "Limit",
     listAction: "List Messages",
     loadMessageAction: "Open",
@@ -1511,6 +1709,9 @@ export const en: Translations = {
     noProfilesYet: "No profiles yet",
     noSelectionDescription: "Choose a message from the list to inspect full content.",
     noSelectionTitle: "No message selected",
+    openInboxAction: "Open Mail",
+    openInboxTooltipMissing: "No mailbox linked",
+    openInboxTooltipResolved: "→ {label}",
     openRawSourceAction: "Open RAW source",
     plainTextLabel: "Plain Text",
     pollIntervalLabel: "Poll Interval (ms)",
@@ -1541,6 +1742,14 @@ export const en: Translations = {
     renameProfileLabel: "Rename profile",
     saveSessionAsProfileAction: "Save session as profile",
     selectAllLabel: "Select all",
+    showRemoteImagesAction: "Show images",
+    sidebarAccountsComingSoon: "Account ↔ mailbox linking is coming next",
+    sidebarAccountsEmpty: "Link an Auto-Reg account to a mailbox to see it here",
+    sidebarAccountsTitle: "Accounts",
+    sidebarConnectingHint: "Connecting to {label}…",
+    sidebarMailboxesTitle: "Mailboxes",
+    sidebarProfilesEmpty: "No mailboxes configured yet",
+    sidebarProfilesEmptyHint: "Add a mailbox using the button below",
     selectedCountLabel: "Selected",
     sessionActive: "Connected",
     sessionIdle: "Disconnected",
@@ -1559,8 +1768,19 @@ export const en: Translations = {
     title: "Mail",
     toField: "To",
     toLabel: "To",
-    toolbarSearchPlaceholder: "Search by subject…",
+    toolbarHideFilters: "Hide filters",
+    toolbarMoreFilters: "Filters",
+    toolbarRefresh: "Refresh",
+    toolbarSearchPlaceholder: "Search subject or sender…",
     unreadOnly: "Unread only",
+    verificationCodeCopied: "Code copied",
+    verificationCodeFound: "Verification code detected",
+    verificationCopied: "Copied",
+    verificationCopyAction: "Copy",
+    verificationCopyFailed: "Could not copy to clipboard",
+    verificationLinkCopied: "Link copied",
+    verificationLinkFound: "Magic link detected",
+    verificationLinkOpen: "Open in browser",
     viewerTitle: "Message Viewer",
     waitAction: "Wait for Message",
     waitingAction: "Waiting..."
@@ -2491,7 +2711,8 @@ export const en: Translations = {
   sidebar: {
     accounts: "Accounts",
     aiHub: "AI Hub",
-    autoReg: "Auto-Reg",
+    automation: "Automation",
+    autoReg: "Registration",
     chat: "Chat",
     dashboard: "Dashboard",
     idePatch: "IDE Patch",
