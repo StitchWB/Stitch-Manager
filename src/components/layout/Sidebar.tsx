@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Repeat,
+  Wrench,
   ShieldCheck } from
 'lucide-react';
 import { useAppStore } from '../../stores/app';
@@ -160,6 +161,11 @@ export default function Sidebar() {
           label={t('sidebar.mail')}
           collapsed={sidebarCollapsed} />
         
+        <NavItem
+          to="/tools"
+          icon={<Wrench size={20} />}
+          label={t('sidebar.tools')}
+          collapsed={sidebarCollapsed} />
 
         <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
           {!sidebarCollapsed &&
