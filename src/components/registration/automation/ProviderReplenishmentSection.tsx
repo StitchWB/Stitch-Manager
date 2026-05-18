@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { RefreshCw, Shield, PlayCircle, Cpu } from 'lucide-react';
-import { CollapsibleSection, ModuleCard, NumberInput, Select } from '@/components/ui';
+import { CollapsibleSection, ModuleCard, Select } from '@/components/ui';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { Tooltip } from '@/components/Tooltip';
 import { t } from '@/lib/i18n';
 import { ModuleStatus } from '@/components/ui';

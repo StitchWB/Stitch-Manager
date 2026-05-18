@@ -50,6 +50,7 @@ export const useRegistrationFlow = ({
     // registering Kiro.
     const supportedProviders: ProviderName[] = [
       'kiro',
+      'kiro_v2',
       'aws',
       'windsurf',
       'trae',

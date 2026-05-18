@@ -27,6 +27,16 @@ export const PROVIDERS: ProviderConfig[] = [
     category: 'ide',
   },
   {
+    id: 'kiro_v2',
+    name: 'Kiro v2',
+    icon: 'K2',
+    color: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+    gradient: 'from-violet-500/20 to-fuchsia-500/20 text-violet-400',
+    hexColor: '#8b5cf6',
+    disabled: false,
+    category: 'ide',
+  },
+  {
     id: 'windsurf',
     name: 'Windsurf',
     icon: 'W',

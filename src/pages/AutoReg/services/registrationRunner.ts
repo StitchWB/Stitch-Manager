@@ -13,6 +13,7 @@ import {
   startOpenAIAutoregJob,
   startFireworksAutoregJob,
   startBitbucketAutoregJob,
+  startKiroV2AutoregJob,
   startRegistrationV2,
   listAccounts,
   stopRegistration,
@@ -21,7 +22,7 @@ import {
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
 import { DEFAULT_IMAP_PORT } from '../../../constants/registration';
-import type { ProviderName, OpenAIAutoregResult, FireworksAutoregResult, BitbucketAutoregResult } from '../../../types/ui';
+import type { ProviderName, OpenAIAutoregResult, FireworksAutoregResult, BitbucketAutoregResult, KiroV2AutoregResult } from '../../../types/ui';
 import type { RegistrationConfig } from '../../../stores/registration/types';
 import type {
   PythonAutoregResult,
@@ -351,6 +352,7 @@ async function runProviderRegistration(params: {
   | OpenAIAutoregResult
   | FireworksAutoregResult
   | BitbucketAutoregResult
+  | KiroV2AutoregResult
 > {
   const {
     provider,
@@ -650,6 +652,68 @@ async function runProviderRegistration(params: {
         lastName: null,
         plan: null,
         error: 'Fireworks job failed',
+      }
+    );
+  }
+
+  if (provider === 'kiro_v2') {
+    const correlationId = createCorrelationId();
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? imapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? imapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
+    const startResponse = await startKiroV2AutoregJob({
+      email,
+      password: null,
+      name: null,
+      headless: config.advanced.headless,
+      proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+      imapServer,
+      imapPort: config.imap.port || DEFAULT_IMAP_PORT,
+      imapUser,
+      imapPassword,
+      addyioEnabled: config.imap.addyioEnabled ?? null,
+      addyioApiToken: config.imap.addyioApiToken ?? null,
+      addyioDomain: config.imap.addyioDomain ?? null,
+      addyioAliasFormat: config.imap.addyioAliasFormat ?? null,
+      addyioAutoDelete: config.imap.addyioAutoDelete ?? null,
+      thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled ?? null,
+      thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername ?? null,
+      thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
+      mailtmEnabled: config.imap.mailtmEnabled ?? null,
+      // Stripe billing fields are not yet wired into the AutoReg config UI;
+      // they default to null which causes the Python provider to skip billing.
+      // TODO: surface card / billing inputs in CommandCenter when we add a
+      // dedicated Kiro v2 sub-tab.
+      cardNumber: null,
+      cardExpiry: null,
+      cardCvc: null,
+      cardholderName: null,
+      billingCountry: null,
+      billingAddress: null,
+      billingCity: null,
+      billingState: null,
+      billingZip: null,
+      correlationId,
+      ...inboxBridgeFields,
+    });
+    activePythonJobId = startResponse.jobId;
+    return await waitForJobResult<KiroV2AutoregResult>(
+      startResponse.jobId,
+      REGISTRATION_TIMEOUT_MS,
+      onCancelled,
+      onLog,
+      {
+        success: false,
+        email,
+        password: null,
+        name: null,
+        billingAttached: null,
+        billingError: null,
+        error: 'Kiro v2 job failed',
       }
     );
   }

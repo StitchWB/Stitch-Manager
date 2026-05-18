@@ -39,6 +39,7 @@ export interface AccountsTableProps {
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
+  onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
   onUpdate?: (accountId: number, updates: { notes?: string; tags?: string }) => Promise<void>;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
   selectedProvider?: string | null;
@@ -70,6 +71,7 @@ export default function AccountsTable({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  onAuthorizeKiroAccount,
   onUpdate,
   onRelationEdgeClick,
 }: AccountsTableProps) {
@@ -267,6 +269,7 @@ export default function AccountsTable({
                 onOpenProfileSession={onOpenProfileSession}
                 onConfirmProfileSession={onConfirmProfileSession}
                 onClearProfileSession={onClearProfileSession}
+                onAuthorizeKiroAccount={onAuthorizeKiroAccount}
                 onRelationEdgeClick={onRelationEdgeClick}
               />
             ))}

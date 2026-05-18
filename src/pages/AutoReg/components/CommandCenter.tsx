@@ -5,7 +5,6 @@ import {
   IdentityTab,
   EngineTab,
   NetworkTab,
-  AutomationTab,
   SoundsTab,
   LaunchPad,
 } from '../../../components/registration';
@@ -291,8 +290,6 @@ export const CommandCenter = ({
         {activeTab === 'network' && (
           <NetworkTab config={networkConfig} onChange={onNetworkConfigChange} disabled={disabled} />
         )}
-
-        {activeTab === 'automation' && <AutomationTab disabled={disabled} />}
 
         {activeTab === 'sounds' && (
           <SoundsTab

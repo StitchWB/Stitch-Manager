@@ -35,7 +35,7 @@ interface LogsPagePreferences {
 }
 
 interface AutoRegPagePreferences {
-  activeTab: 'identity' | 'engine' | 'network' | 'automation' | 'inbox' | 'sounds';
+  activeTab: 'identity' | 'engine' | 'network' | 'inbox' | 'sounds';
   useRegistrationV2: boolean;
 
   isRunning: boolean; // Track if registration is in progress
@@ -88,7 +88,7 @@ interface UIPreferencesState {
   resetLogsFilters: () => void;
 
   // Actions for AutoReg page
-  setAutoRegTab: (tab: 'identity' | 'engine' | 'network' | 'automation' | 'inbox' | 'sounds') => void;
+  setAutoRegTab: (tab: 'identity' | 'engine' | 'network' | 'inbox' | 'sounds') => void;
   setAutoRegV2: (enabled: boolean) => void;
 
   setAutoRegRunning: (running: boolean) => void;
@@ -388,7 +388,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
     }),
     {
       name: 'ui-preferences-storage',
-      version: 5,
+      version: 6,
       migrate: (persistedState: unknown) => {
         const state = persistedState as Record<string, unknown>;
         if (state.accountsPage) {
@@ -402,6 +402,14 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
               apiKey: rest.apiKey ?? true,
               quota: rest.quota ?? true,
             };
+          }
+        }
+        // v6: AutoReg "automation" tab removed (moved to Settings → Automation
+        // and AI Hub → Rotation). Fall back to "identity" for legacy values.
+        if (state.autoRegPage) {
+          const autoRegPage = state.autoRegPage as Record<string, unknown>;
+          if (autoRegPage.activeTab === 'automation') {
+            autoRegPage.activeTab = 'identity';
           }
         }
         return state as unknown as UIPreferencesState;
