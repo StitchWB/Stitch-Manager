@@ -173,10 +173,12 @@ export function MailSidebar({
   return (
     <aside className="bg-white/[0.03] border border-white/[0.08] rounded-xl flex flex-col h-full min-h-0">
       {/* Accounts group */}
-      <MailSidebarAccounts
-        profiles={profiles}
-        activeAccountId={activeAccountId ?? null}
-      />
+      <div className="max-h-[45%] overflow-y-auto">
+        <MailSidebarAccounts
+          profiles={profiles}
+          activeAccountId={activeAccountId ?? null}
+        />
+      </div>
 
       {/* Mailboxes group */}
       <section className="p-3 flex-1 min-h-0 flex flex-col">
@@ -313,7 +315,7 @@ export function MailSidebar({
 
         {addMenuOpen ? (
           <div
-            className="absolute bottom-full left-3 right-3 mb-2 rounded-lg border border-white/10 bg-ds-surface-elevated shadow-xl py-1 z-30"
+            className="absolute bottom-full left-3 right-3 mb-2 rounded-lg border border-white/10 bg-ds-surface-elevated shadow-xl py-1 z-30 max-h-[200px] overflow-y-auto"
             role="menu"
           >
             <ButtonBase

@@ -1672,6 +1672,8 @@ export interface Translations {
     email_counter_diagnostics: {
       text: string;
     }
+    errorMessageNotFound: string;
+    errorNoActiveSession: string;
     folderAllMail: string;
     folderDrafts: string;
     folderInbox: string;
