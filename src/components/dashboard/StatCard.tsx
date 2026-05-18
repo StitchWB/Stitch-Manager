@@ -29,17 +29,17 @@ export const StatCard = React.memo(function StatCard({
 
   return (
     <div
-      className={`relative p-5 flex flex-col gap-4 rounded-xl transition-all duration-300 hover:shadow-glow-purple ${className}`}
+      className={`relative p-4 flex flex-col gap-3 rounded-xl transition-all duration-300 hover:shadow-glow-purple h-full ${className}`}
       style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.04), transparent)' }}
     >
       {/* Large faint icon in top-right */}
-      <div className="absolute top-3 right-3 opacity-[0.08]">
-        {React.cloneElement(icon as React.ReactElement, { size: 64 })}
+      <div className="absolute top-3 right-3 opacity-[0.08] pointer-events-none">
+        {React.cloneElement(icon as React.ReactElement, { size: 56 })}
       </div>
 
       <div className="flex items-center justify-between relative z-10">
         <span className="w-8 h-8 text-purple-400 flex items-center justify-center rounded-lg bg-purple-500/10">
-          {React.cloneElement(icon as React.ReactElement, { size: 20 })}
+          {React.cloneElement(icon as React.ReactElement, { size: 18 })}
         </span>
         {trend && !isPlaceholder && (
           <div className="flex items-center gap-2">
@@ -53,14 +53,16 @@ export const StatCard = React.memo(function StatCard({
           </div>
         )}
       </div>
-      <div className="relative z-10">
+      <div className="relative z-10 min-w-0">
         <p
-          className={`text-4xl font-bold tracking-tight tabular-nums ${isPlaceholder ? 'text-slate-600' : 'text-white'}`}
+          className={`text-3xl font-bold tracking-tight tabular-nums leading-none ${isPlaceholder ? 'text-slate-600' : 'text-white'}`}
         >
           {displayValue}
         </p>
-        <p className="text-xs uppercase text-slate-500 tracking-wider mt-1.5">{title}</p>
-        {subtitle && <p className="text-2xs text-slate-600 mt-1">{subtitle}</p>}
+        <p className="text-[10px] uppercase text-slate-500 tracking-wider mt-2 truncate">
+          {title}
+        </p>
+        {subtitle && <p className="text-2xs text-slate-600 mt-0.5 truncate">{subtitle}</p>}
       </div>
     </div>
   );
