@@ -1,9 +1,7 @@
-import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Inbox, Trash2, Zap, ZapOff, KeyRound } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff, KeyRound } from 'lucide-react';
 import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
-import { ACCOUNT_QUERY_PARAM } from '@/lib/mail/runtime';
 import type { Account } from '@/types/generated';
 
 function isAutoRefreshEnabled(account: Account): boolean {
@@ -64,14 +62,7 @@ export function AccountRowMenu({
   onCloseMenu,
 }: AccountRowMenuProps) {
   const autoRefreshEnabled = isAutoRefreshEnabled(account);
-  const navigate = useNavigate();
-
   if (!isMenuOpen) return null;
-
-  const handleOpenMail = () => {
-    navigate(`/mail?${ACCOUNT_QUERY_PARAM}=${account.id}`);
-    onCloseMenu();
-  };
 
   return (
     <div
@@ -171,15 +162,6 @@ export function AccountRowMenu({
           {t('accounts.copyToken')}
         </ButtonBase>
       ) : null}
-
-      <ButtonBase
-        type="button"
-        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
-        onClick={handleOpenMail}
-      >
-        <Inbox size={12} />
-        {t('mail.openInboxAction')}
-      </ButtonBase>
 
       {onToggleAutoRefreshQuota ? (
         <ButtonBase
