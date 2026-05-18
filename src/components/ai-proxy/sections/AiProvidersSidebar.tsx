@@ -1,6 +1,5 @@
 import { LayoutGrid } from 'lucide-react';
 import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
-import { QuotaDashboard } from '../QuotaDashboard';
 import { cn } from '../../../lib/utils';
 import { t } from '@/lib/i18n';
 import { ButtonBase } from '@/components/ui';
@@ -26,7 +25,7 @@ export function AiProvidersSidebar({
         <div className="text-[11px] text-slate-500 px-2 mb-3">
           {t('aiHub.labels.providersHint')}
         </div>
-        <div className="space-y-0.5 mb-6">
+        <div className="space-y-0.5">
           {AI_PROXY_PROVIDER_FILTERS.map(provider => (
             <ButtonBase
               key={provider.id}
@@ -51,10 +50,6 @@ export function AiProvidersSidebar({
               )}
             </ButtonBase>
           ))}
-        </div>
-
-        <div className="mt-auto pt-4 border-t border-white/5">
-          <QuotaDashboard />
         </div>
       </div>
     </aside>
