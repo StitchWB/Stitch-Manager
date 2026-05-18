@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react';
+import { Play, RefreshCw, AlertCircle } from 'lucide-react';
 
 import { t } from '@/lib/i18n';
 import { Button } from '@/components/ui';
@@ -7,7 +7,6 @@ import { Button } from '@/components/ui';
 interface QuickActionsPanelProps {
   onStartRegistration: () => void;
   onRefreshAllTokens: () => void;
-  onOpenAiHub: () => void;
   isRefreshing: boolean;
   showProviderWarning: boolean;
 }
@@ -15,18 +14,17 @@ interface QuickActionsPanelProps {
 export const QuickActionsPanel = React.memo(function QuickActionsPanel({
   onStartRegistration,
   onRefreshAllTokens,
-  onOpenAiHub,
   isRefreshing,
-  showProviderWarning
+  showProviderWarning,
 }: QuickActionsPanelProps) {
   return (
-    <section className="flex flex-wrap gap-3">
+    <section className="flex flex-wrap items-center gap-3">
       <Button
         onClick={onStartRegistration}
         variant="purple"
         size="md"
-        leftIcon={<Play size={16} />}>
-        
+        leftIcon={<Play size={16} />}
+      >
         {t('dashboard.startRegistration')}
       </Button>
       <Button
@@ -34,24 +32,16 @@ export const QuickActionsPanel = React.memo(function QuickActionsPanel({
         disabled={isRefreshing}
         variant="secondary"
         size="md"
-        leftIcon={<RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />}>
-        
+        leftIcon={<RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />}
+      >
         {t('dashboard.refreshAllTokens')}
       </Button>
-      <Button
-        onClick={onOpenAiHub}
-        variant="secondary"
-        size="md"
-        leftIcon={<ExternalLink size={16} />}>{t("dashboard.quick_actions_panel.ai_hub")}
-
-
-      </Button>
-      {showProviderWarning &&
-      <span className="flex items-center gap-1.5 text-xs text-amber-400 ml-2">
+      {showProviderWarning && (
+        <span className="flex items-center gap-1.5 text-xs text-amber-400 ml-2">
           <AlertCircle size={14} />
           {t('dashboard.selectProviderBelow')}
         </span>
-      }
-    </section>);
-
+      )}
+    </section>
+  );
 });
