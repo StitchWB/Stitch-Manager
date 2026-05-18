@@ -15,7 +15,12 @@ import { useUIState } from '../hooks/useUIState';
 
 const DEFAULT_START_URL = 'https://google.com';
 
-export default function Scenarios() {
+interface ScenariosProps {
+  /** When true, suppress the in-page header (parent provides its own) */
+  embedded?: boolean;
+}
+
+export default function Scenarios({ embedded = false }: ScenariosProps = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
@@ -181,11 +186,13 @@ export default function Scenarios() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
-      <Header
-        title={t('scenarios.title')}
-        subtitle={t('scenarios.subtitle')}
-        icon={<FolderKanban size={18} />}
-      />
+      {!embedded && (
+        <Header
+          title={t('scenarios.title')}
+          subtitle={t('scenarios.subtitle')}
+          icon={<FolderKanban size={18} />}
+        />
+      )}
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-[1200px] mx-auto space-y-6">

@@ -48,6 +48,7 @@ export { ProgressBar } from './ProgressBar';
 export type { ProgressBarProps } from './ProgressBar';
 
 export { EmptyState } from './EmptyState';
+export type { EmptyStateProps } from './EmptyState';
 
 export { FormField } from './FormField';
 export type { FormFieldProps } from './FormField';
@@ -147,3 +148,18 @@ export type {
   CollapsibleGroupProps,
   ExpandAllToggleProps,
 } from './CollapsibleSection';
+
+export { MetricStrip } from './MetricStrip';
+export type { MetricStripProps, MetricSegment, MetricTone } from './MetricStrip';
+
+export { OverflowMenu } from './OverflowMenu';
+export type { OverflowMenuProps, OverflowMenuItem } from './OverflowMenu';
+
+export { PageHeader } from './PageHeader';
+export type { PageHeaderProps } from './PageHeader';
+
+export { TwoColumnLayout } from './TwoColumnLayout';
+export type { TwoColumnLayoutProps } from './TwoColumnLayout';
+
+export { KeyValueList } from './KeyValueList';
+export type { KeyValueListProps } from './KeyValueList';

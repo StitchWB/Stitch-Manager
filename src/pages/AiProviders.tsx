@@ -1,28 +1,48 @@
-import { useState, useCallback, useMemo } from 'react';
-import { Zap } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Activity, Bug, MessageSquare, Plus, RefreshCw, Repeat, Search, Server, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
+
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
-import { AiSectionHeaderBar } from '../components/ai-proxy/sections/AiSectionHeaderBar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
-import { AiSummaryCards } from '../components/ai-proxy/sections/AiSummaryCards';
+import { AccountRotationCard } from '../components/ai-proxy/sections/AccountRotationCard';
+import { MappingsEditor } from '../components/ai-proxy/sections/MappingsEditor';
 import { AiProxyAccountsTable } from '../components/ai-proxy/AiProxyAccountsTable';
 import { AiProxyAccountDrawer } from '../components/ai-proxy/AiProxyAccountDrawer';
-import { AiIntegrationsSection } from '../components/ai-proxy/sections/AiIntegrationsSection';
-import { AiUsageSection } from '../components/ai-proxy/sections/AiUsageSection';
-import { AiDiagnosticsSection } from '../components/ai-proxy/sections/AiDiagnosticsSection';
 import { AiTransferModal } from '../components/ai-proxy/modals/AiTransferModal';
 import { AiMappingsModal } from '../components/ai-proxy/modals/AiMappingsModal';
+import { ProxyStatusBar } from '../components/ai-proxy/sections/ProxyStatusBar';
+import { MonitorOverview } from '../components/ai-proxy/sections/MonitorOverview';
+import { RoutingSidePanel } from '../components/ai-proxy/sections/RoutingSidePanel';
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
 import type { ProxySettings, AiProxyAccount } from '../types/generated';
-import { AI_PROXY_PROVIDER_FILTERS } from '../components/ai-proxy/providerMeta';
+import {
+  Button,
+  IconButton,
+  Input,
+  MetricStrip,
+  OverflowMenu,
+  PageHeader,
+  Tooltip,
+  TwoColumnLayout,
+} from '@/components/ui';
+import type { MetricSegment } from '@/components/ui';
+import { getBackgroundManagerConfig } from '../lib/tauri/modules/backgroundManager';
 import { t } from '../lib/i18n';
 
 const CLIENT_API_KEY = 'proxystitch-local';
+
+type AiSection = 'providers' | 'routing' | 'monitor';
+
+function resolveSection(param: string | undefined): AiSection {
+  if (param === 'routing' || param === 'integrations') return 'routing';
+  if (param === 'monitor' || param === 'usage' || param === 'diagnostics') return 'monitor';
+  return 'providers';
+}
 
 export default function AiProviders() {
   const navigate = useNavigate();
@@ -34,6 +54,7 @@ export default function AiProviders() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferMode, setTransferMode] = useState<'import' | 'export'>('import');
   const [isIdeWizardOpen, setIsIdeWizardOpen] = useState(false);
+  const [autoSwitchEnabled, setAutoSwitchEnabled] = useState<boolean | null>(null);
   const controller = useAiProvidersController();
 
   const {
@@ -93,25 +114,26 @@ export default function AiProviders() {
     handleImportAllFromScan,
   } = controller;
 
-  const handleCopy = useCallback(async (label: string, value: string, requireConfirm = false) => {
-    if (!value) {
-      toast.error(t('aiHub.copy.empty'));
-      return;
-    }
-
-    if (requireConfirm) {
-      const ok = window.confirm(t('aiHub.warnings.copySensitiveConfirm', { label }));
-      if (!ok) return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success(t('aiHub.copy.success', { label }));
-    } catch (e) {
-      console.error('[AiProviders] Copy failed:', e);
-      toast.error(t('aiHub.copy.fail', { label }));
-    }
-  }, []);
+  const handleCopy = useCallback(
+    async (label: string, value: string, requireConfirm = false) => {
+      if (!value) {
+        toast.error(t('aiHub.copy.empty'));
+        return;
+      }
+      if (requireConfirm) {
+        const ok = window.confirm(t('aiHub.warnings.copySensitiveConfirm', { label }));
+        if (!ok) return;
+      }
+      try {
+        await navigator.clipboard.writeText(value);
+        toast.success(t('aiHub.copy.success', { label }));
+      } catch (e) {
+        console.error('[AiProviders] Copy failed:', e);
+        toast.error(t('aiHub.copy.fail', { label }));
+      }
+    },
+    []
+  );
 
   const handleEdit = useCallback((account: AiProxyAccount) => {
     setEditingAccount(account);
@@ -141,26 +163,68 @@ export default function AiProviders() {
     handleModalClose();
   }, [fetchAccounts, handleModalClose]);
 
-  const aiSection = useMemo(() => {
-    if (sectionParam === 'integrations') return 'integrations';
-    if (sectionParam === 'usage') return 'usage';
-    if (sectionParam === 'diagnostics') return 'diagnostics';
-    return 'providers';
-  }, [sectionParam]);
+  const aiSection = useMemo<AiSection>(() => resolveSection(sectionParam), [sectionParam]);
 
-  const sectionTitle =
-    aiSection === 'integrations'
-      ? t('aiHub.sections.integrations.title')
-      : aiSection === 'usage'
-        ? t('aiHub.sections.usage.title')
-        : aiSection === 'diagnostics'
-          ? t('aiHub.sections.diagnostics.title')
-          : t('aiHub.sections.providers.title');
+  // Lightweight fetch of background-manager autoSwitch flag — used only by the
+  // Routing tab's MetricStrip. Re-fetches when entering the Routing tab.
+  useEffect(() => {
+    if (aiSection !== 'routing') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cfg = await getBackgroundManagerConfig();
+        if (!cancelled) setAutoSwitchEnabled(cfg.autoSwitchEnabled);
+      } catch (err) {
+        console.warn('[AiProviders] Failed to fetch background-manager config:', err);
+        if (!cancelled) setAutoSwitchEnabled(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [aiSection]);
 
-  const isProvidersSection = aiSection === 'providers';
-  const isIntegrationsSection = aiSection === 'integrations';
-  const isUsageSection = aiSection === 'usage';
-  const isDiagnosticsSection = aiSection === 'diagnostics';
+  const routingMetricSegments = useMemo<MetricSegment[]>(() => {
+    const running = Boolean(proxyStatus?.running);
+    const port = proxyStatus?.port;
+    const mappingsCount = modelMappings.length;
+
+    return [
+      {
+        id: 'proxy',
+        label: t('aiHub.routing.metrics.proxyLabel'),
+        value: running ? t('aiHub.proxy.running') : t('aiHub.proxy.stopped'),
+        icon: <Server size={11} />,
+        tone: running ? 'success' : 'neutral',
+      },
+      {
+        id: 'port',
+        label: t('aiHub.routing.metrics.portLabel'),
+        value: running && port ? port : t('aiHub.table.emptyValue'),
+        icon: <Activity size={11} />,
+        tone: running && port ? 'info' : 'neutral',
+      },
+      {
+        id: 'mappings',
+        label: t('aiHub.routing.metrics.mappingsLabel'),
+        value: mappingsCount,
+        icon: <Activity size={11} />,
+        tone: mappingsCount > 0 ? 'info' : 'neutral',
+      },
+      {
+        id: 'auto-switch',
+        label: t('aiHub.routing.metrics.autoSwitchLabel'),
+        value:
+          autoSwitchEnabled === null
+            ? t('aiHub.table.emptyValue')
+            : autoSwitchEnabled
+              ? t('aiHub.routing.metrics.autoSwitchOn')
+              : t('aiHub.routing.metrics.autoSwitchOff'),
+        icon: <Repeat size={11} />,
+        tone: autoSwitchEnabled ? 'success' : 'neutral',
+      },
+    ];
+  }, [proxyStatus, modelMappings.length, autoSwitchEnabled]);
 
   const setProxyDraftWithUpdater = useCallback(
     (updater: (prev: ProxySettings | null) => ProxySettings | null) => {
@@ -169,14 +233,96 @@ export default function AiProviders() {
     [setProxyDraft]
   );
 
+  // === Page header config per section ===
+  const headerForSection = (() => {
+    if (aiSection === 'routing') {
+      return {
+        eyebrow: t('sidebar.aiHub'),
+        title: t('aiHub.sections.routing.title'),
+        description: t('aiHub.sections.routing.subtitle'),
+        actions: null,
+      };
+    }
+    if (aiSection === 'monitor') {
+      return {
+        eyebrow: t('sidebar.aiHub'),
+        title: t('aiHub.sections.monitor.title'),
+        description: t('aiHub.sections.monitor.subtitle'),
+        actions: (
+          <>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate('/ai-analytics')}
+            >
+              {t('aiHub.actions.openDetailedAnalytics')}
+            </Button>
+            <Tooltip content={t('aiHub.actions.refresh')}>
+              <IconButton
+                size="md"
+                variant="ghost"
+                onClick={() => {
+                  void refreshProxyInfo();
+                }}
+                disabled={proxyBusy}
+                aria-label={t('aiHub.actions.refresh')}
+              >
+                <RefreshCw size={16} className={proxyBusy ? 'animate-spin' : undefined} />
+              </IconButton>
+            </Tooltip>
+            <OverflowMenu
+              triggerLabel={t('common.more')}
+              items={[
+                {
+                  id: 'debug-chat',
+                  label: t('aiHub.actions.openDebugChat'),
+                  icon: <MessageSquare size={14} />,
+                  onSelect: () => navigate('/chat'),
+                },
+                {
+                  id: 'run-migration',
+                  label: t('aiHub.actions.runMigration'),
+                  icon: <Bug size={14} />,
+                  onSelect: handleDebugMigration,
+                },
+              ]}
+            />
+          </>
+        ),
+      };
+    }
+    return {
+      eyebrow: t('sidebar.aiHub'),
+      title: t('aiHub.sections.providers.title'),
+      description: t('aiHub.sections.providers.subtitle'),
+      actions: (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleAddNew}
+          leftIcon={<Plus size={14} />}
+        >
+          {t('aiHub.actions.addAccount')}
+        </Button>
+      ),
+    };
+  })();
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-void-base">
-      <Header title={sectionTitle} icon={<Zap size={18} />} />
+      <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
       <AiTopTabs />
 
+      <PageHeader
+        eyebrow={headerForSection.eyebrow}
+        title={headerForSection.title}
+        description={headerForSection.description}
+        actions={headerForSection.actions}
+      />
+
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Filter Panel */}
-        {isProvidersSection && (
+        {/* Sidebar Filter Panel — only on Providers */}
+        {aiSection === 'providers' && (
           <AiProvidersSidebar
             providerFilter={providerFilter}
             providerCounts={providerCounts}
@@ -184,99 +330,34 @@ export default function AiProviders() {
           />
         )}
 
-        {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <AiSectionHeaderBar
-            isProvidersSection={isProvidersSection}
-            isIntegrationsSection={isIntegrationsSection}
-            isUsageSection={isUsageSection}
-            isDiagnosticsSection={isDiagnosticsSection}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            providerFilter={providerFilter}
-            onProviderFilterChange={setProviderFilter}
-            providerOptions={AI_PROXY_PROVIDER_FILTERS.map(p => ({
-              id: p.id,
-              label: p.label,
-              count: providerCounts[p.id] ?? 0,
-            }))}
-            proxyStatus={proxyStatus}
-            proxyBusy={proxyBusy}
-            proxySaving={proxySaving}
-            onStartStopProxy={() => {
-              void handleStartStopProxy();
-            }}
-            onRefreshProxyInfo={() => {
-              void refreshProxyInfo();
-            }}
-            onAddAccount={handleAddNew}
-            onOpenApiKeys={() => navigate('/ai/api-keys')}
-            onRunMigration={handleDebugMigration}
-            onOpenProviders={() => navigate('/ai/providers')}
-            onOpenIdeWizard={() => setIsIdeWizardOpen(true)}
-            onOpenImport={() => {
-              setTransferMode('import');
-              setIsTransferModalOpen(true);
-            }}
-            onOpenExport={() => {
-              setTransferMode('export');
-              setIsTransferModalOpen(true);
-            }}
-            onOpenMappings={() => setIsMappingsModalOpen(true)}
-            onOpenAnalytics={() => navigate('/ai-analytics')}
-            onOpenDetailedAnalytics={() => navigate('/ai-analytics')}
-            onOpenDebugChat={() => navigate('/chat')}
-          />
+          <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
+            {/* === PROVIDERS TAB === */}
+            {aiSection === 'providers' && (
+              <>
+                <ProxyStatusBar
+                  proxyStatus={proxyStatus}
+                  proxySettings={proxySettings}
+                  baseUrl={baseUrl}
+                  clientApiKey={CLIENT_API_KEY}
+                  proxyBusy={proxyBusy}
+                  proxySaving={proxySaving}
+                  onStartStopProxy={handleStartStopProxy}
+                  onRefreshProxyInfo={refreshProxyInfo}
+                  onCopy={handleCopy}
+                />
 
-          {/* Content */}
-          <div className="flex-1 overflow-auto p-4 md:p-6">
-            <AiProxyControlsSection
-              visible={isProvidersSection}
-              proxyStatus={proxyStatus}
-              proxySettings={proxySettings}
-              proxyDraft={proxyDraft}
-              proxyBusy={proxyBusy}
-              proxySaving={proxySaving}
-              proxyError={proxyError}
-              baseUrl={baseUrl}
-              clientApiKey={CLIENT_API_KEY}
-              isProxyDraftDirty={isProxyDraftDirty}
-              maskKey={maskKey}
-              onSetProxyDraft={setProxyDraftWithUpdater}
-              onCopy={(label, value, requireConfirm) => {
-                void handleCopy(label, value, requireConfirm);
-              }}
-              onOpenIdeWizard={() => setIsIdeWizardOpen(true)}
-              onResetDraft={handleResetProxyDraft}
-              onSaveSettings={() => {
-                void handleSaveProxySettings();
-              }}
-              onStartStopProxy={() => {
-                void handleStartStopProxy();
-              }}
-              onRefreshProxyInfo={() => {
-                void refreshProxyInfo();
-              }}
-              showIdeWizardAction={isProvidersSection}
-              showProxyActions={isProvidersSection}
-              showConfigActions
-              showRuntimeActions={false}
-            />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder={t('aiHub.search.placeholder')}
+                    leftIcon={<Search className="w-4 h-4" />}
+                    containerClassName="flex-1 max-w-md min-w-0"
+                  />
+                </div>
 
-            <AiSummaryCards
-              visible={isProvidersSection || isUsageSection}
-              availableModels={availableModels}
-              providerCapabilities={providerCapabilities}
-              historySummary={historySummary}
-              proxyStatus={proxyStatus}
-              hasAccounts={filteredAccounts.length > 0}
-              accountReadiness={accountReadiness}
-              onOpenMappings={() => setIsMappingsModalOpen(true)}
-              onOpenAnalytics={() => navigate('/ai-analytics')}
-            />
-
-            {isProvidersSection && (
-              <div className="mt-4">
                 <AiProxyAccountsTable
                   accounts={filteredAccounts}
                   loading={loading}
@@ -290,37 +371,87 @@ export default function AiProviders() {
                     void handleTestConnection(account);
                   }}
                 />
-              </div>
+              </>
             )}
 
-            <AiIntegrationsSection
-              visible={isIntegrationsSection}
-              providerCapabilities={providerCapabilities}
-              onOpenWizard={() => setIsIdeWizardOpen(true)}
-              onOpenImport={() => {
-                setTransferMode('import');
-                setIsTransferModalOpen(true);
-              }}
-              onOpenExport={() => {
-                setTransferMode('export');
-                setIsTransferModalOpen(true);
-              }}
-              onOpenMappings={() => setIsMappingsModalOpen(true)}
-            />
+            {/* === ROUTING TAB === */}
+            {aiSection === 'routing' && (
+              <>
+                <MetricStrip segments={routingMetricSegments} density="compact" />
+                <TwoColumnLayout
+                gap="md"
+                breakpoint="lg"
+                main={
+                  <div className="flex flex-col gap-4">
+                    <AiProxyControlsSection
+                      visible
+                      proxyStatus={proxyStatus}
+                      proxySettings={proxySettings}
+                      proxyDraft={proxyDraft}
+                      proxyBusy={proxyBusy}
+                      proxySaving={proxySaving}
+                      proxyError={proxyError}
+                      baseUrl={baseUrl}
+                      clientApiKey={CLIENT_API_KEY}
+                      isProxyDraftDirty={isProxyDraftDirty}
+                      maskKey={maskKey}
+                      onSetProxyDraft={setProxyDraftWithUpdater}
+                      onCopy={handleCopy}
+                      onOpenIdeWizard={() => setIsIdeWizardOpen(true)}
+                      onResetDraft={handleResetProxyDraft}
+                      onSaveSettings={handleSaveProxySettings}
+                      onStartStopProxy={handleStartStopProxy}
+                      onRefreshProxyInfo={refreshProxyInfo}
+                      showIdeWizardAction={false}
+                      showProxyActions
+                      showConfigActions
+                      showRuntimeActions
+                    />
 
-            <AiUsageSection
-              visible={isUsageSection}
-              historySummary={historySummary}
-              onOpenAnalytics={() => navigate('/ai-analytics')}
-            />
+                    <MappingsEditor
+                      modelMappings={modelMappings}
+                      onAddMapping={addMapping}
+                      onUpsertMapping={upsertMapping}
+                      onRemoveMapping={removeMapping}
+                      onSaveMappings={handleSaveMappings}
+                    />
+                  </div>
+                }
+                side={
+                  <div className="flex flex-col gap-3">
+                    <AccountRotationCard visible />
+                    <RoutingSidePanel
+                      onOpenIdeWizard={() => setIsIdeWizardOpen(true)}
+                      onOpenImport={() => {
+                        setTransferMode('import');
+                        setIsTransferModalOpen(true);
+                      }}
+                      onOpenExport={() => {
+                        setTransferMode('export');
+                        setIsTransferModalOpen(true);
+                      }}
+                    />
+                  </div>
+                }
+                sideWidth="w-full lg:w-[340px]"
+              />
+              </>
+            )}
 
-            <AiDiagnosticsSection
-              visible={isDiagnosticsSection}
-              proxyStatus={proxyStatus}
-              proxySettings={proxySettings}
-              onOpenDebugChat={() => navigate('/chat')}
-              onOpenAnalytics={() => navigate('/ai-analytics')}
-            />
+            {/* === MONITOR TAB === */}
+            {aiSection === 'monitor' && (
+              <MonitorOverview
+                proxyStatus={proxyStatus}
+                proxySettings={proxySettings}
+                providerCapabilities={providerCapabilities}
+                availableModels={availableModels}
+                historySummary={historySummary}
+                hasAccounts={filteredAccounts.length > 0}
+                accountReadiness={accountReadiness}
+                onOpenAnalytics={() => navigate('/ai-analytics')}
+                onOpenDebugChat={() => navigate('/chat')}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -349,9 +480,7 @@ export default function AiProviders() {
         onDownloadText={downloadText}
         buildExportFileName={buildExportFileName}
         effectiveExportIncludeSecrets={effectiveExportIncludeSecrets}
-        onCopy={(label, value, requireConfirm) => {
-          void handleCopy(label, value, requireConfirm);
-        }}
+        onCopy={handleCopy}
       />
 
       <AiMappingsModal
