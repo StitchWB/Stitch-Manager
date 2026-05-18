@@ -3,14 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { t } from '@/lib/i18n';
 import { TabButton } from '@/components/ui';
 
-type AiTabId =
-  | 'overview'
-  | 'providers'
-  | 'integrations'
-  | 'usage'
-  | 'diagnostics'
-  | 'antigravity'
-  | 'apiKeys';
+type AiTabId = 'providers' | 'routing' | 'monitor' | 'antigravity' | 'apiKeys';
 
 interface AiTab {
   id: AiTabId;
@@ -19,24 +12,20 @@ interface AiTab {
 }
 
 const AI_TABS: AiTab[] = [
-  { id: 'overview', label: 'aiHub.tabs.overview', to: '/ai' },
   { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers' },
-  { id: 'integrations', label: 'aiHub.tabs.integrations', to: '/ai/integrations' },
-  { id: 'usage', label: 'aiHub.tabs.usage', to: '/ai/usage' },
-  { id: 'diagnostics', label: 'aiHub.tabs.diagnostics', to: '/ai/diagnostics' },
+  { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing' },
+  { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor' },
   { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity' },
   { id: 'apiKeys', label: 'aiHub.tabs.apiKeys', to: '/ai/api-keys' },
 ];
 
 function activeTab(pathname: string): AiTabId {
-  if (pathname === '/ai' || pathname === '/ai/') return 'overview';
-  if (pathname.startsWith('/ai/providers')) return 'providers';
-  if (pathname.startsWith('/ai/integrations')) return 'integrations';
-  if (pathname.startsWith('/ai/usage')) return 'usage';
-  if (pathname.startsWith('/ai/diagnostics')) return 'diagnostics';
+  if (pathname.startsWith('/ai/routing')) return 'routing';
+  if (pathname.startsWith('/ai/monitor')) return 'monitor';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
   if (pathname.startsWith('/ai/api-keys')) return 'apiKeys';
-  return 'overview';
+  // Legacy redirects fall through to providers as the default landing tab.
+  return 'providers';
 }
 
 export function AiTopTabs() {
