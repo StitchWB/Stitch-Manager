@@ -1,9 +1,9 @@
-export { MailboxNavigation } from './MailboxNavigation';
-export { MailSyncControls } from './MailSyncControls';
-export { MailMessageList } from './MailMessageList';
-export { MailMessageToolbar } from './MailMessageToolbar';
-export { MailMessageViewer } from './MailMessageViewer';
-export { MailSourceExtensionsSlot } from './MailSourceExtensionsSlot';
 export { GoogleSheetsRawMailboxImport } from './GoogleSheetsRawMailboxImport';
-export { MailProfileManager } from './MailProfileManager';
-export { MailProfilesRail } from './MailProfilesRail';
+export { MailHtmlSandbox } from './MailHtmlSandbox';
+export { MailManualConnectModal } from './MailManualConnectModal';
+export { MailMessageList } from './MailMessageList';
+export { MailMessageViewer } from './MailMessageViewer';
+export { MailSidebar } from './MailSidebar';
+export type { AddMailboxAction } from './MailSidebar';
+export { MailToolbar } from './MailToolbar';
+export { VerificationCodeChip } from './VerificationCodeChip';

@@ -15,6 +15,7 @@ import {
   checkFireworksApiKey,
   updateAccountMetadata,
 } from '@/lib/tauri/modules/accounts';
+import { authorizeKiroAccount } from '@/lib/tauri';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
 import {
@@ -172,6 +173,18 @@ export function useAccountsActions({
     },
     [fetchAccounts]
   );
+
+  const handleAuthorizeKiroAccount = useCallback(async (id: number) => {
+    try {
+      toast.info(t('accounts.authorizingKiro'));
+      await authorizeKiroAccount(id);
+      toast.success(t('accounts.authorizeKiroStarted'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[Accounts] Failed to authorize Kiro account:', error);
+      toast.error(t('accounts.authorizeKiroFailed', { message }));
+    }
+  }, []);
 
   const handleUpdateAccount = useCallback(
     async (accountId: number, updates: { notes?: string; tags?: string }) => {
@@ -390,6 +403,7 @@ export function useAccountsActions({
     handleOpenProfileSession,
     handleConfirmProfileSession,
     handleClearProfileSession,
+    handleAuthorizeKiroAccount,
     handleUpdateAccount,
     handleExportCSV,
     handleImportAccounts,

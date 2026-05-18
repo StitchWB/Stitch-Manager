@@ -1,6 +1,6 @@
 import type { Account, DashboardStats, KiroPatchConfig, PatchResult } from './generated';
 
-export type ProviderName = 'kiro' | 'windsurf' | 'trae' | 'copilot' | 'github' | 'aws' | 'openai' | 'fireworks' | 'bitbucket';
+export type ProviderName = 'kiro' | 'kiro_v2' | 'windsurf' | 'trae' | 'copilot' | 'github' | 'aws' | 'openai' | 'fireworks' | 'bitbucket';
 
 export type Theme = 'dark' | 'light' | 'system';
 
@@ -189,6 +189,52 @@ export interface BitbucketAutoregResult {
   email: string | null;
   password: string | null;
   name: string | null;
+  error: string | null;
+}
+
+export interface KiroV2AutoregConfig {
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  headless: boolean;
+  proxyUrl: string | null;
+  imapServer: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+  mailtmEnabled: boolean | null;
+  inboxProvider: string | null;
+  inboxMailbox: string | null;
+  inboxMailtmAddress: string | null;
+  inboxMailtmPassword: string | null;
+  inboxMailtmBaseUrl: string | null;
+  cardNumber: string | null;
+  cardExpiry: string | null;
+  cardCvc: string | null;
+  cardholderName: string | null;
+  billingCountry: string | null;
+  billingAddress: string | null;
+  billingCity: string | null;
+  billingState: string | null;
+  billingZip: string | null;
+  correlationId: string | null;
+}
+
+export interface KiroV2AutoregResult {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  billingAttached: boolean | null;
+  billingError: string | null;
   error: string | null;
 }
 

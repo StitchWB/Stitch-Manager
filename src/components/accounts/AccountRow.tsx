@@ -45,6 +45,7 @@ interface AccountRowProps {
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
+  onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
 }
 
@@ -71,6 +72,7 @@ export function AccountRow({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  onAuthorizeKiroAccount,
   onRelationEdgeClick,
 }: AccountRowProps) {
   const data = useAccountRowData(account, relationHints, relationEdges);
@@ -269,6 +271,7 @@ export function AccountRow({
             onOpenProfileSession={onOpenProfileSession}
             onConfirmProfileSession={onConfirmProfileSession}
             onClearProfileSession={onClearProfileSession}
+            onAuthorizeKiroAccount={onAuthorizeKiroAccount}
             onCopyToken={onCopyToken}
             onShowDetails={onShowDetails}
             onDelete={onDelete}

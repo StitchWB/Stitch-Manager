@@ -70,6 +70,7 @@ export const loadProviderStrategies = (): ProviderEmailStrategies => {
   // Return defaults if no stored data
   return {
     kiro: { ...DEFAULT_EMAIL_STRATEGY },
+    kiro_v2: { ...DEFAULT_EMAIL_STRATEGY },
     windsurf: { ...DEFAULT_EMAIL_STRATEGY },
     trae: { ...DEFAULT_EMAIL_STRATEGY },
     github: { ...DEFAULT_EMAIL_STRATEGY },

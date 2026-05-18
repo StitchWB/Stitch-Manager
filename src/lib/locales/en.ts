@@ -1746,6 +1746,8 @@ export const en: Translations = {
     sidebarAccountsComingSoon: "Account ↔ mailbox linking is coming next",
     sidebarAccountsEmpty: "Link an Auto-Reg account to a mailbox to see it here",
     sidebarAccountsTitle: "Accounts",
+    sidebarAccountsCollapse: "Collapse",
+    sidebarAccountsShowMore: "Show more ({count})",
     sidebarConnectingHint: "Connecting to {label}…",
     sidebarMailboxesTitle: "Mailboxes",
     sidebarProfilesEmpty: "No mailboxes configured yet",

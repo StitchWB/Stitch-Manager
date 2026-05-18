@@ -75,6 +75,7 @@ export function buildEmailQuery(args: {
   to?: NullableString;
   subjectContains?: NullableString;
   bodyContains?: NullableString;
+  search?: NullableString;
   unreadOnly?: boolean;
   since?: NullableString;
   limit?: number;
@@ -84,6 +85,7 @@ export function buildEmailQuery(args: {
     to: toTrimmedOrNull(args.to),
     subjectContains: toTrimmedOrNull(args.subjectContains),
     bodyContains: toTrimmedOrNull(args.bodyContains),
+    search: toTrimmedOrNull(args.search),
     unreadOnly: typeof args.unreadOnly === 'boolean' ? args.unreadOnly : null,
     since: toTrimmedOrNull(args.since),
     limit: typeof args.limit === 'number' ? args.limit : null,

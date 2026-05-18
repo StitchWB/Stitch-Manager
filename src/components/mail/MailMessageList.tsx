@@ -1,12 +1,12 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MailOpen, Paperclip, Trash2 } from 'lucide-react';
 import { Badge, Button, Checkbox, EmptyState } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { EmailMessage, ProviderCapabilities } from '@/lib/tauri/modules/emailInbox';
 
-const VIRTUAL_ROW_HEIGHT = 164;
-const VIRTUAL_OVERSCAN = 6;
+const VIRTUAL_ROW_HEIGHT = 64;
+const VIRTUAL_OVERSCAN = 8;
 
 interface MailMessageListProps {
   messages: EmailMessage[];
@@ -16,6 +16,67 @@ interface MailMessageListProps {
   onSelectMessage: (messageId: string) => Promise<void>;
   onMarkRead: (messageId: string) => Promise<void>;
   onDelete: (messageId: string) => Promise<void>;
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.round(diffMs / 1000);
+
+  // Future or "just now": clamp to "now"
+  if (diffSec < 45) return 'now';
+  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m`;
+
+  const sameDay =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Yesterday
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear()
+  ) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  if (diffDays < 7) {
+    // Within a week: weekday short ("Mon", "Tue", ...)
+    return date.toLocaleDateString([], { weekday: 'short' });
+  }
+
+  const sameYear = date.getFullYear() === now.getFullYear();
+  if (sameYear) {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function getSenderLabel(message: EmailMessage): string {
+  if (message.from?.name && message.from.name.trim()) {
+    return message.from.name.trim();
+  }
+  if (message.from?.email) {
+    return message.from.email;
+  }
+  return '—';
+}
+
+function getMessagePreview(message: EmailMessage): string {
+  const source = message.text || message.html || '';
+  return source.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 export function MailMessageList({
@@ -33,6 +94,11 @@ export function MailMessageList({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const useVirtualizedList = messages.length > 80;
+
+  // Reset bulk selection when message set changes
+  useEffect(() => {
+    setSelectedIds(prev => prev.filter(id => messages.some(message => message.id === id)));
+  }, [messages]);
 
   const virtualSlice = useMemo(() => {
     if (!useVirtualizedList) {
@@ -134,42 +200,36 @@ export function MailMessageList({
     }
   };
 
-  const openSelected = () => {
-    if (!selectedMessageId) {
-      return;
-    }
-    void onSelectMessage(selectedMessageId);
-  };
-
   return (
-    <section className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 flex flex-col h-full min-h-[420px]">
-      <div className="sticky top-0 z-10 bg-ds-surface-sunken/95 backdrop-blur border-b border-white/10 pb-2 mb-2 px-1 pt-1">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-white tracking-wide">
+    <section className="bg-white/[0.03] border border-white/[0.08] rounded-xl flex flex-col h-full min-h-[420px] overflow-hidden">
+      <header className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2">
+          {messages.length > 0 ? (
+            <Checkbox
+              checked={allSelected}
+              onChange={event => selectAll(event.target.checked)}
+              className="py-0 px-0"
+            />
+          ) : null}
+          <h2 className="text-xs font-semibold text-white tracking-wide">
             {t('mail.messagesTitle')}
           </h2>
           <Badge size="sm" variant="outline">
             {messages.length}
           </Badge>
         </div>
-        <p className="text-[10px] text-slate-500 mt-1">{t('mail.keyboardHint')}</p>
-      </div>
+        <p className="text-[10px] text-slate-500 hidden md:block">{t('mail.keyboardHint')}</p>
+      </header>
 
-      {messages.length > 0 ? (
-        <div className="sticky top-[54px] z-10 rounded-lg border border-white/10 bg-black/35 p-2 mb-2 flex flex-wrap items-center gap-2">
-          <Checkbox
-            checked={allSelected}
-            onChange={event => selectAll(event.target.checked)}
-            label={t('mail.selectAllLabel')}
-            className="py-0 px-0"
-          />
-          <Badge size="sm" variant="outline">
+      {selectedCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-indigo-500/[0.05] border-b border-indigo-400/15">
+          <Badge size="sm" variant="info">
             {t('mail.selectedCountLabel')}: {selectedCount}
           </Badge>
           <Button
             size="xs"
             variant="ghost"
-            disabled={busy || selectedCount === 0}
+            disabled={busy || !capabilities?.canMarkAsRead}
             onClick={() => {
               void bulkMarkRead();
             }}
@@ -179,14 +239,14 @@ export function MailMessageList({
           <Button
             size="xs"
             variant="ghost"
-            disabled={busy || selectedCount === 0}
+            disabled={busy || !capabilities?.canDelete}
             onClick={() => {
               void bulkDelete();
             }}
           >
             {t('mail.bulkDeleteAction')}
           </Button>
-          <Button size="xs" variant="ghost" disabled={selectedCount === 0} onClick={clearSelection}>
+          <Button size="xs" variant="ghost" onClick={clearSelection}>
             {t('mail.clearSelectionAction')}
           </Button>
         </div>
@@ -197,7 +257,7 @@ export function MailMessageList({
           icon={MailOpen}
           title={t('mail.noMessagesTitle')}
           description={t('mail.noMessagesDescription')}
-          className="py-12"
+          className="py-12 flex-1"
         />
       ) : (
         <div
@@ -205,7 +265,7 @@ export function MailMessageList({
           tabIndex={0}
           role="listbox"
           aria-label={t('mail.messagesTitle')}
-          className="overflow-auto pr-1 min-h-0"
+          className="overflow-auto flex-1 min-h-0 outline-none"
           onScroll={event => {
             const target = event.currentTarget;
             setScrollTop(target.scrollTop);
@@ -224,14 +284,13 @@ export function MailMessageList({
               return;
             }
 
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && selectedMessageId) {
               event.preventDefault();
-              openSelected();
+              void onSelectMessage(selectedMessageId);
             }
           }}
         >
           <div
-            className="space-y-1.5"
             style={{
               paddingTop: virtualSlice.topSpacer,
               paddingBottom: virtualSlice.bottomSpacer,
@@ -240,91 +299,99 @@ export function MailMessageList({
             {virtualSlice.rows.map(message => {
               const selected = message.id === selectedMessageId;
               const checked = selectedIds.includes(message.id);
-              const excerpt = (message.text || message.html || '-').replace(/\s+/g, ' ').trim();
+              const sender = getSenderLabel(message);
+              const preview = getMessagePreview(message);
 
               return (
-                <article
+                <div
                   key={message.id}
+                  role="option"
+                  aria-selected={selected}
                   className={cn(
-                    'w-full rounded-lg border p-3 space-y-2 text-left transition-colors',
+                    'group flex items-start gap-2 px-3 py-2 border-b border-white/[0.04] cursor-pointer transition-colors',
                     selected
-                      ? 'border-indigo-400/70 bg-indigo-500/14 shadow-[0_0_0_1px_rgba(129,140,248,0.15)]'
-                      : 'border-white/10 bg-black/20 hover:border-white/20 hover:bg-black/25'
+                      ? 'bg-indigo-500/[0.12] border-l-2 border-l-indigo-400'
+                      : message.isRead
+                        ? 'hover:bg-white/[0.03]'
+                        : 'bg-white/[0.02] hover:bg-white/[0.05]'
                   )}
-                  style={
-                    useVirtualizedList ? { minHeight: `${VIRTUAL_ROW_HEIGHT - 10}px` } : undefined
-                  }
+                  onClick={() => {
+                    void onSelectMessage(message.id);
+                  }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <Checkbox
-                        checked={checked}
-                        onChange={event => toggleSelect(message.id, event.target.checked)}
-                        className="py-0 px-0 mt-0.5"
-                      />
-                      <p className="text-[13px] font-medium text-white truncate">
-                        {message.subject || '-'}
-                      </p>
-                    </div>
-                    <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                      {new Date(message.receivedAt).toLocaleTimeString()}
-                    </span>
-                  </div>
+                  <Checkbox
+                    checked={checked}
+                    onChange={event => toggleSelect(message.id, event.target.checked)}
+                    className="py-0 px-0 mt-0.5 shrink-0"
+                    onClick={event => event.stopPropagation()}
+                  />
 
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-slate-300 truncate">{message.from?.email || '-'}</p>
-                    {message.attachments.length > 0 ? (
-                      <span className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0">
-                        <Paperclip size={10} />
-                        {message.attachments.length}
-                      </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <p
+                        className={cn(
+                          'text-[12px] truncate',
+                          message.isRead ? 'text-slate-300' : 'text-white font-semibold'
+                        )}
+                      >
+                        {sender}
+                      </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {message.attachments.length > 0 ? (
+                          <Paperclip size={11} className="text-slate-500" />
+                        ) : null}
+                        <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                          {formatTimestamp(message.receivedAt)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p
+                      className={cn(
+                        'text-[12px] truncate mb-0.5',
+                        message.isRead ? 'text-slate-400' : 'text-slate-200 font-medium'
+                      )}
+                    >
+                      {message.subject || '—'}
+                    </p>
+
+                    {preview ? (
+                      <p className="text-[11px] text-slate-500 truncate">{preview}</p>
                     ) : null}
                   </div>
 
-                  <p className="text-xs text-slate-500 line-clamp-2 min-h-[32px]">{excerpt}</p>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-slate-500">
-                      {message.isRead ? t('mail.readStateRead') : t('mail.readStateUnread')}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        size="xs"
-                        variant="secondary"
+                  {/* Hover-only quick actions */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    {!message.isRead && capabilities?.canMarkAsRead ? (
+                      <button
+                        type="button"
+                        title={t('mail.markReadAction')}
                         disabled={busy}
-                        onClick={() => {
-                          void onSelectMessage(message.id);
-                        }}
-                      >
-                        {t('mail.loadMessageAction')}
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        disabled={!capabilities?.canMarkAsRead || busy || message.isRead}
                         onClick={event => {
                           event.stopPropagation();
                           void onMarkRead(message.id);
                         }}
-                        leftIcon={<MailOpen size={12} />}
+                        className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50"
                       >
-                        {t('mail.markReadAction')}
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        disabled={!capabilities?.canDelete || busy}
+                        <MailOpen size={12} />
+                      </button>
+                    ) : null}
+                    {capabilities?.canDelete ? (
+                      <button
+                        type="button"
+                        title={t('mail.deleteAction')}
+                        disabled={busy}
                         onClick={event => {
                           event.stopPropagation();
                           void onDelete(message.id);
                         }}
-                        leftIcon={<Trash2 size={12} />}
+                        className="p-1 rounded text-slate-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50"
                       >
-                        {t('mail.deleteAction')}
-                      </Button>
-                    </div>
+                        <Trash2 size={12} />
+                      </button>
+                    ) : null}
                   </div>
-                </article>
+                </div>
               );
             })}
           </div>

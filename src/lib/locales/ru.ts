@@ -1746,6 +1746,8 @@ export const ru: Translations = {
     sidebarAccountsComingSoon: "Привязка аккаунт ↔ ящик появится в следующем шаге",
     sidebarAccountsEmpty: "Привяжите аккаунт автореги к ящику, чтобы увидеть его здесь",
     sidebarAccountsTitle: "Аккаунты",
+    sidebarAccountsCollapse: "Свернуть",
+    sidebarAccountsShowMore: "Показать ещё ({count})",
     sidebarConnectingHint: "Подключаемся к {label}…",
     sidebarMailboxesTitle: "Ящики",
     sidebarProfilesEmpty: "Ящики ещё не настроены",
