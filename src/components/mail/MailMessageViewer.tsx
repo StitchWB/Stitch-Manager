@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileText, ImageOff, Images, MailOpen, MailSearch, Trash2 } from 'lucide-react';
-import { Badge, EmptyState, SegmentedControl } from '@/components/ui';
+import { Badge, EmptyState, LoadingSpinner, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import type { EmailMessage, ProviderCapabilities } from '@/lib/tauri/modules/emailInbox';
 import { MailHtmlSandbox } from './MailHtmlSandbox';
@@ -52,7 +52,11 @@ export function MailMessageViewer({
 
   return (
     <section className="bg-white/[0.03] border border-white/[0.08] rounded-xl flex flex-col h-full min-h-[420px] overflow-hidden">
-      {!message ? (
+      {!message && busy ? (
+        <div className="flex items-center justify-center h-full">
+          <LoadingSpinner size="lg" />
+        </div>
+      ) : !message ? (
         <EmptyState
           icon={MailSearch}
           title={t('mail.noSelectionTitle')}

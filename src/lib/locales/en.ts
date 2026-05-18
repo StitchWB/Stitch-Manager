@@ -1665,6 +1665,8 @@ export const en: Translations = {
     email_counter_diagnostics: {
       text: "Text"
     },
+    errorMessageNotFound: "Message not found on server. It may have been deleted.",
+    errorNoActiveSession: "No active session. Please connect to a mailbox first.",
     folderAllMail: "Archive",
     folderDrafts: "Drafts",
     folderInbox: "Inbox",

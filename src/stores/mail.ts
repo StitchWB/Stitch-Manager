@@ -37,6 +37,7 @@ import {
   removeMessageLocal,
   upsertMessageById,
 } from '@/lib/mail/runtime';
+import { t } from '@/lib/i18n';
 
 export interface MailQueryFilters {
   from: string;
@@ -494,6 +495,8 @@ export const useMailStore = create<MailState>((set, get) => ({
           availableFolders: [],
           selectedFolder: null,
           connectedMailbox: null,
+          messages: [],
+          selectedMessageId: null,
           isSyncing: false,
           isWaiting: false,
         };
@@ -503,6 +506,8 @@ export const useMailStore = create<MailState>((set, get) => ({
       if (!profile) {
         return {
           activeProfileId: profileId,
+          messages: [],
+          selectedMessageId: null,
           isSyncing: false,
           isWaiting: false,
         };
@@ -513,6 +518,8 @@ export const useMailStore = create<MailState>((set, get) => ({
         availableFolders: [],
         selectedFolder: null,
         connectedMailbox: null,
+        messages: [],
+        selectedMessageId: null,
         isSyncing: false,
         isWaiting: false,
         ...deriveStateFromConnectInput(profile.connectInput),
@@ -1076,6 +1083,7 @@ export const useMailStore = create<MailState>((set, get) => ({
   loadMessageById: async messageId => {
     const { session } = get();
     if (!session) {
+      set({ error: t('mail.errorNoActiveSession') });
       return;
     }
 
@@ -1084,6 +1092,7 @@ export const useMailStore = create<MailState>((set, get) => ({
     try {
       const loaded = await emailInboxGetById(session.sessionId, messageId);
       if (!loaded) {
+        set({ error: t('mail.errorMessageNotFound') });
         return;
       }
 

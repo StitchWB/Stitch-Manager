@@ -312,10 +312,11 @@ export function MailMessageList({
                     selected
                       ? 'bg-indigo-500/[0.12] border-l-2 border-l-indigo-400'
                       : message.isRead
-                        ? 'hover:bg-white/[0.03]'
-                        : 'bg-white/[0.02] hover:bg-white/[0.05]'
+                        ? 'border-l-2 border-l-transparent hover:bg-white/[0.03]'
+                        : 'border-l-2 border-l-transparent bg-white/[0.02] hover:bg-white/[0.05]'
                   )}
                   onClick={() => {
+                    if (busy) return;
                     void onSelectMessage(message.id);
                   }}
                 >

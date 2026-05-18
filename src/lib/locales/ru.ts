@@ -1665,6 +1665,8 @@ export const ru: Translations = {
     email_counter_diagnostics: {
       text: "Текст"
     },
+    errorMessageNotFound: "Письмо не найдено на сервере. Возможно, оно было удалено.",
+    errorNoActiveSession: "Нет активной сессии. Сначала подключитесь к ящику.",
     folderAllMail: "Архив",
     folderDrafts: "Черновики",
     folderInbox: "Входящие",

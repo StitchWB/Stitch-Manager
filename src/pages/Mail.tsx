@@ -113,7 +113,11 @@ export default function Mail() {
     if (autoListedFor.current === key) return;
 
     autoListedFor.current = key;
-    void listMessages();
+    // Small delay to let account-scope filter effect apply first
+    const timer = setTimeout(() => {
+      void listMessages();
+    }, 50);
+    return () => clearTimeout(timer);
   }, [connectedMailbox, listMessages, session]);
 
   // Account-scoped deep link: /mail?account=<id> resolves the appropriate
@@ -362,7 +366,7 @@ export default function Mail() {
             </div>
           ) : null}
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_minmax(360px,1fr)_minmax(420px,1.2fr)] gap-3">
+          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[240px_minmax(300px,1fr)_minmax(360px,1.2fr)] gap-3">
             {/* Left: sidebar with accounts/mailboxes */}
             <MailSidebar
               profiles={profiles}
