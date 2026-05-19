@@ -42,7 +42,7 @@ export function AutomationTopTabs() {
   const current = resolveAutomationTab(tab);
 
   return (
-    <div className="px-6 py-3 border-b border-white/5 bg-ds-surface-base/70 backdrop-blur-xl sticky top-0 z-20">
+    <div className="px-6 py-3 border-b border-white/5 bg-vsc-bg/70 backdrop-blur-xl sticky top-0 z-20">
       <div className="flex flex-wrap items-center gap-2">
         {AUTOMATION_TABS.map(item => (
           <TabButton

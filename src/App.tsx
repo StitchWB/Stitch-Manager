@@ -85,6 +85,7 @@ function RouteTracker() {
         '/ai',
         '/ai/antigravity',
         '/ai/api-keys',
+        '/ai/chat',
         '/ai/:section',
         '/ai-analytics',
         '/patcher',
@@ -255,6 +256,7 @@ function App() {
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/antigravity" element={<Antigravity />} />
             <Route path="/ai/api-keys" element={<ApiKeys />} />
+            <Route path="/ai/chat" element={<Chat />} />
             <Route path="/ai/:section" element={<AiProviders />} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<AiAnalytics />} />

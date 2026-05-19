@@ -178,6 +178,31 @@ class Paths:
         """Возвращает путь к файлу регистрации клиента"""
         return self.aws_sso_cache / f"{client_id_hash}.json"
 
+    def make_profile_path(self, identifier: str) -> Path:
+        """Build a deterministic browser profile path from an identifier.
+
+        Used to give the same email a stable persistent profile across
+        registration attempts.
+
+        Args:
+            identifier: Usually an email address. Special characters are
+                replaced so the result is filesystem-safe.
+
+        Returns:
+            Path under ``browser_profiles_dir`` for this identifier.
+        """
+        sanitized = (
+            (identifier or "default")
+            .replace("@", "_at_")
+            .replace(".", "_")
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace(":", "_")
+            .strip(" ._-")
+            or "default"
+        )
+        return self.browser_profiles_dir / sanitized
+
     def list_tokens(self) -> list[Path]:
         """Возвращает список всех файлов токенов"""
         return list(self.tokens_dir.glob("token-*.json"))

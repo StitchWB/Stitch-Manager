@@ -18,6 +18,7 @@ import {
   listAccounts,
   stopRegistration,
   registrationControl,
+  setAccountProxy,
 } from '../../../lib/tauri';
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
@@ -216,6 +217,7 @@ export async function runRegistration(options: RegistrationOptions): Promise<Reg
           totalCount,
           onLog,
           onHistoryEntry,
+          proxyLibraryId: config.proxy.enabled ? config.proxy.proxyLibraryId : undefined,
         });
 
         if (processResult === 'success') {
@@ -684,10 +686,9 @@ async function runProviderRegistration(params: {
       thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername ?? null,
       thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
       mailtmEnabled: config.imap.mailtmEnabled ?? null,
-      // Stripe billing fields are not yet wired into the AutoReg config UI;
-      // they default to null which causes the Python provider to skip billing.
-      // TODO: surface card / billing inputs in CommandCenter when we add a
-      // dedicated Kiro v2 sub-tab.
+      // Card / billing — use shared cardsText pool (same as Fireworks)
+      cardsText: config.advanced.cardsText?.trim() || null,
+      cardBin: config.advanced.cardBin?.trim() || null,
       cardNumber: null,
       cardExpiry: null,
       cardCvc: null,
@@ -701,6 +702,20 @@ async function runProviderRegistration(params: {
       ...inboxBridgeFields,
     });
     activePythonJobId = startResponse.jobId;
+
+    // Send initial step configuration overrides immediately after job starts
+    if (pipelineStepOverrides && pipelineStepOverrides.length > 0) {
+      for (const step of pipelineStepOverrides) {
+        await registrationControl(startResponse.jobId, 'configure', step.id, {
+          enabled: step.enabled,
+          pause_after: step.pauseAfter,
+          skippable: step.skippable,
+        }).catch((err: unknown) => {
+          onLog('warn', `Failed to configure step ${step.id}: ${String(err)}`);
+        });
+      }
+    }
+
     return await waitForJobResult<KiroV2AutoregResult>(
       startResponse.jobId,
       REGISTRATION_TIMEOUT_MS,
@@ -944,8 +959,9 @@ async function processRegistrationResult(params: {
     email: string;
     status: RegistrationStatus;
   }) => void;
+  proxyLibraryId?: string | null;
 }): Promise<'success' | 'skip' | 'fail'> {
-  const { result, provider, index, totalCount, onLog, onHistoryEntry } = params;
+  const { result, provider, index, totalCount, onLog, onHistoryEntry, proxyLibraryId } = params;
 
   // Account persistence is backend-owned (Rust commands emit ACCOUNT_ADDED).
   // Frontend runner only interprets success/failure and records history.
@@ -959,6 +975,23 @@ async function processRegistrationResult(params: {
       email: result.email as string,
       status: 'completed',
     });
+
+    // Bind proxy to newly created account (best-effort)
+    if (proxyLibraryId && result.email) {
+      try {
+        const accounts = await listAccounts({ provider });
+        const newAccount = accounts.find(
+          (a) => a.email.toLowerCase() === (result.email as string).toLowerCase()
+        );
+        if (newAccount) {
+          await setAccountProxy({ accountId: newAccount.id, proxyId: proxyLibraryId });
+          onLog('debug', `Proxy bound to account ${newAccount.id}`);
+        }
+      } catch {
+        // Non-critical — proxy binding failure shouldn't fail registration
+      }
+    }
+
     return 'success';
   } else {
     // Registration failed

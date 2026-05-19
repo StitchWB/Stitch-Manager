@@ -4,7 +4,7 @@
 
 export type BackupInfo = { path: string; originalPath: string; sha256Hash: string; createdAt: string; fileSize: number }
 
-export type Account = { id: number; provider: string; email: string; token: string | null; refreshToken: string | null; quota: SimpleQuotaInfo; status: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string; updatedAt: string | null; metadata: string | null; providerType: string | null; providerSubtype: string | null; providerMetadata: string | null; machineId: string | null; patchConfig: string | null; patchAppliedAt: string | null; registrationPassword: string | null; registrationDate: string | null; registrationMethod: string | null; registrationMetadata: string | null; browserProfilePath: string | null; cookies: string | null; sessionData: string | null; useCount: number; lastError: string | null; errorCount: number; successRate: number; notes: string | null; tags: string | null; lastLoginAt: string | null; loginCount: number; accountRegion: string | null }
+export type Account = { id: number; provider: string; email: string; token: string | null; refreshToken: string | null; quota: SimpleQuotaInfo; status: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string; updatedAt: string | null; metadata: string | null; providerType: string | null; providerSubtype: string | null; providerMetadata: string | null; machineId: string | null; patchConfig: string | null; patchAppliedAt: string | null; registrationPassword: string | null; registrationDate: string | null; registrationMethod: string | null; registrationMetadata: string | null; browserProfilePath: string | null; cookies: string | null; sessionData: string | null; useCount: number; lastError: string | null; errorCount: number; successRate: number; notes: string | null; tags: string | null; lastLoginAt: string | null; loginCount: number; accountRegion: string | null; proxyId: string | null }
 
 export type SimpleQuotaInfo = { used: number; limit: number; resetAt?: string | null }
 
@@ -155,4 +155,30 @@ export type GithubAutoregConfig = { email: string | null; password: string; user
 export type DeviceFlowClient = { clientId: string; clientSecret: string }
 
 export type DeviceFlowSession = { client: DeviceFlowClient; deviceCode: string; userCode: string; verificationUri: string; interval: number; expiresAt: number }
+
+export type SlotStatus = 
+/**
+ * Account is healthy and ready to take traffic.
+ */
+"ready" | 
+/**
+ * Account is healthy but its access token is expired / unknown — caller
+ * should refresh before sending the request.
+ */
+"needsRefresh" | 
+/**
+ * Account is in cooldown after consecutive failures. ``unblockAt`` is an
+ * RFC3339 timestamp.
+ */
+{ coolingDown: { unblockAt: string } } | 
+/**
+ * Account never had a usable access token.
+ */
+"uninitialized"
+
+export type AccountSlot = { accountId: number; email: string; provider: string; region: string; status: SlotStatus; failures: number; lastFailureAt: string | null; lastUsedAt: string | null; totalRequests: number; successfulRequests: number; failedRequests: number }
+
+export type PoolSnapshot = { slots: AccountSlot[]; currentIndex: number; healthyCount: number; coolingCount: number; uninitializedCount: number }
+
+export type KiroPoolProxyStatus = { running: boolean; address: string | null; snapshot: PoolSnapshot | null }
 

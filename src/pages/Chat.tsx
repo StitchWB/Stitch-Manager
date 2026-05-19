@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   MessageSquare,
   Trash2,
@@ -10,8 +10,10 @@ import {
   Plus,
   Copy,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
+import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { ChatHistory, ChatInput } from '../components/chat';
 import { useChat } from '../hooks/useChat';
 import { useChatStore } from '../stores/chat';
@@ -19,8 +21,6 @@ import { useAppStore } from '../stores/app';
 import type { ContentBlock } from '../types/generated';
 import { t } from '../lib/i18n';
 
-
-import { Tooltip } from '../components/Tooltip';
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
   getProxySettings,
@@ -37,7 +37,7 @@ import {
   getGeminiApiKeys,
   getOpenAIApiKeys,
 } from '@/lib/tauri/modules/apiKeys';
-import { Button, ButtonBase, Checkbox, Input, LoadingSpinner, Select, Textarea } from '@/components/ui';
+import { Button, ButtonBase, Checkbox, EmptyState, Input, LoadingSpinner, SegmentedControl, Select, StatusBadge, Textarea, Tooltip } from '@/components/ui';
 
 interface ModelInfo {
   id: string;
@@ -56,6 +56,9 @@ interface SetupSnapshot {
 }
 
 const CHAT_PROXY_API_KEY = 'proxypal-local';
+const KIRO_POOL_PORT = 9876;
+
+type ChatEndpoint = 'aiProxy' | 'kiroPool';
 
 /**
  * Chat page component for debugging the AI Proxy endpoint.
@@ -63,6 +66,7 @@ const CHAT_PROXY_API_KEY = 'proxypal-local';
  */
 export default function Chat() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { language } = useAppStore();
   const {
     model,
@@ -84,6 +88,9 @@ export default function Chat() {
   const [proxyRunning, setProxyRunning] = useState(false);
   const [proxyMode, setProxyMode] = useState('full');
   const [proxyPort, setProxyPort] = useState(8317);
+  const [endpoint, setEndpoint] = useState<ChatEndpoint>('kiroPool');
+  const [kiroPoolRunning, setKiroPoolRunning] = useState(false);
+  const [kiroPoolModels, setKiroPoolModels] = useState<ModelInfo[]>([]);
   const [setup, setSetup] = useState<SetupSnapshot>({
     geminiKeys: 0,
     openaiKeys: 0,
@@ -103,9 +110,12 @@ export default function Chat() {
   );
   const [costEstimate, setCostEstimate] = useState<number | null>(null);
   const [inspectorMessageId, setInspectorMessageId] = useState<string | null>(null);
+  const [errorDismissed, setErrorDismissed] = useState(false);
 
-  // Chat is a debug client for AI Proxy OpenAI-compatible endpoint
-  const apiUrl = `http://127.0.0.1:${proxyPort}/v1/chat/completions`;
+  // Resolve the active endpoint URL based on the selected backend.
+  const activePort = endpoint === 'kiroPool' ? KIRO_POOL_PORT : proxyPort;
+  const apiUrl = `http://127.0.0.1:${activePort}/v1/chat/completions`;
+  const apiKey = endpoint === 'kiroPool' ? '' : CHAT_PROXY_API_KEY;
 
   // Force re-render when language changes
   void language;
@@ -113,12 +123,39 @@ export default function Chat() {
   const { messages, isLoading, error, sendMessage, clearMessages, stopGeneration } = useChat({
     apiUrl,
     model,
-    apiKey: CHAT_PROXY_API_KEY,
+    apiKey,
   });
+
+  // Reset error dismissed state when a new error appears
+  useEffect(() => {
+    if (error) setErrorDismissed(false);
+  }, [error]);
 
   const fetchSetup = useCallback(async () => {
     setSetupLoading(true);
     setSetupError(null);
+
+    // Always try to fetch Kiro Pool status (it's independent of AI Proxy).
+    try {
+      const resp = await fetch(`http://127.0.0.1:${KIRO_POOL_PORT}/v1/models`);
+      if (resp.ok) {
+        setKiroPoolRunning(true);
+        const data = await resp.json();
+        const models = (data.data || []).map((m: { id: string; owned_by?: string }) => ({
+          id: m.id,
+          name: m.id,
+          provider: m.owned_by || 'kiro',
+          source: 'kiroPool',
+        }));
+        setKiroPoolModels(models);
+      } else {
+        setKiroPoolRunning(false);
+        setKiroPoolModels([]);
+      }
+    } catch {
+      setKiroPoolRunning(false);
+      setKiroPoolModels([]);
+    }
 
     try {
       const [proxyStatus, proxySettings] = await Promise.all([
@@ -192,21 +229,28 @@ export default function Chat() {
     }
   }, []);
 
-  const modelList = aiProxyModels;
+  const modelList = endpoint === 'kiroPool' ? kiroPoolModels : aiProxyModels;
 
   const totalApiKeys = setup.geminiKeys + setup.openaiKeys + setup.antigravityKeys;
   const hasProviderSetup = setup.enabledProviderAccounts > 0 || totalApiKeys > 0;
   const hasModels = modelList.length > 0;
 
-  const setupBlockReason = !proxyRunning
-    ? 'AI Proxy isn’t running. Start it in Settings to enable debug chat.'
-    : proxyMode === 'quota-only'
-      ? 'AI Proxy is in quota-only mode. Switch to Full mode to use debug chat.'
-      : !hasProviderSetup
-        ? 'Set up providers or API keys in AI Proxy → Providers/Keys to enable debug chat.'
+  // Block reason depends on which endpoint is selected.
+  const setupBlockReason = endpoint === 'kiroPool'
+    ? (!kiroPoolRunning
+        ? 'Kiro Pool Proxy is not running. It starts automatically with the app.'
         : !hasModels
-          ? 'No models available from the current AI Proxy setup.'
-          : null;
+          ? 'Kiro Pool has no accounts. Register or authorize Kiro accounts first.'
+          : null)
+    : (!proxyRunning
+        ? 'AI Proxy is not running. Start it in Settings to enable debug chat.'
+        : proxyMode === 'quota-only'
+          ? 'AI Proxy is in quota-only mode. Switch to Full mode to use debug chat.'
+          : !hasProviderSetup
+            ? 'Set up providers or API keys in AI Proxy to enable debug chat.'
+            : !hasModels
+              ? 'No models available from the current AI Proxy setup.'
+              : null);
 
   const handleStartProxy = useCallback(async () => {
     try {
@@ -299,23 +343,40 @@ export default function Chat() {
         }
       />
 
+      {/* AI Hub tabs — shown when accessed via /ai/chat */}
+      {location.pathname.startsWith('/ai/') && <AiTopTabs />}
+
       {/* Settings Panel */}
       {showSettings && (
         <div className="border-b border-vsc-border bg-vsc-sidebar/30 p-4">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-vsc-text">{'AI Proxy Debug Client'}</h3>
-              {!proxyRunning && (
+              <h3 className="text-sm font-medium text-vsc-text">
+                {endpoint === 'kiroPool' ? 'Kiro Pool Debug Chat' : 'AI Proxy Debug Client'}
+              </h3>
+              {endpoint === 'aiProxy' && !proxyRunning && (
                 <span className="text-xs text-vsc-yellow flex items-center gap-1">
                   <AlertCircle size={12} />
                   {'AI Proxy not running (debug chat disabled)'}
                 </span>
               )}
+              {endpoint === 'kiroPool' && (
+                <StatusBadge
+                  status={kiroPoolRunning ? 'active' : 'error'}
+                  withDot
+                  withPulse={kiroPoolRunning}
+                  size="sm"
+                >
+                  {kiroPoolRunning
+                    ? `Pool running · ${kiroPoolModels.length} model(s)`
+                    : 'Pool offline'}
+                </StatusBadge>
+              )}
             </div>
             <p className="text-2xs text-vsc-text-muted mb-3">
-              {
-                'Debug-only. Use this page to validate AI Proxy routing; configure providers and keys in AI Proxy settings for IDE/CLI usage.'
-              }
+              {endpoint === 'kiroPool'
+                ? 'Debug-only. Use this page to test Kiro Pool routing with registered accounts.'
+                : 'Debug-only. Use this page to validate AI Proxy routing; configure providers and keys in AI Proxy settings for IDE/CLI usage.'}
             </p>
 
             <div className="mb-3 p-3 bg-vsc-panel/50 rounded-lg border border-vsc-border">
@@ -460,79 +521,111 @@ export default function Chat() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="block text-xs font-medium text-vsc-text-muted mb-1.5">
-                  {t('chat.apiUrl') || 'AI Proxy Endpoint (Debug)'}
-                </div>
-                <div
-                  className="w-full px-3 py-2 bg-vsc-input border border-vsc-border rounded-lg 
-                               text-sm text-vsc-text font-mono"
-                >
-                  {apiUrl}
-                </div>
-                <p className="text-2xs text-vsc-text-muted mt-1">
-                  {'IDE/CLI clients should use the AI Proxy settings pages for setup.'}
-                </p>
-              </div>
-              <div>
-                <div className="block text-xs font-medium text-vsc-text-muted mb-1.5">
-                  {t('chat.availableModels') || 'AI Proxy Models'}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-vsc-text">{t('chat.modelsCount', { count: modelList.length })}</span>
-                  <Button
-                    onClick={fetchSetup}
-                    disabled={setupLoading}
-                    variant="secondary"
-                    size="xs"
-                    leftIcon={setupLoading ? <LoadingSpinner size="xs" /> : <RefreshCw size={12} />}
-                  />
-                </div>
-                {setupError && <p className="text-2xs text-vsc-red mt-1">{setupError}</p>}
-                <div className="mt-2 text-2xs text-vsc-text-muted space-y-1">
-                  <div>
-                    {t('chat.setupApiKeys', { gemini: setup.geminiKeys, openai: setup.openaiKeys, antigravity: setup.antigravityKeys })}
+
+            {/* AI Proxy-specific info — hidden for Kiro Pool */}
+            {endpoint === 'aiProxy' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="block text-xs font-medium text-vsc-text-muted mb-1.5">
+                    {t('chat.apiUrl') || 'AI Proxy Endpoint (Debug)'}
                   </div>
-                  <div>
-                    {t('chat.setupProviderAccounts', { active: setup.enabledProviderAccounts, total: setup.totalProviderAccounts })}
+                  <div
+                    className="w-full px-3 py-2 bg-vsc-input border border-vsc-border rounded-lg 
+                                 text-sm text-vsc-text font-mono"
+                  >
+                    {apiUrl}
                   </div>
-                  <div>{t('chat.setupModelMappings', { count: setup.mappingCount })}</div>
-                  <div>{t('chat.setupProxyMode', { mode: proxyMode })}</div>
-                  {dailyStats && (
+                  <p className="text-2xs text-vsc-text-muted mt-1">
+                    {'IDE/CLI clients should use the AI Proxy settings pages for setup.'}
+                  </p>
+                </div>
+                <div>
+                  <div className="block text-xs font-medium text-vsc-text-muted mb-1.5">
+                    {t('chat.availableModels') || 'AI Proxy Models'}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-vsc-text">{t('chat.modelsCount', { count: modelList.length })}</span>
+                    <Button
+                      onClick={fetchSetup}
+                      disabled={setupLoading}
+                      variant="secondary"
+                      size="xs"
+                      leftIcon={setupLoading ? <LoadingSpinner size="xs" /> : <RefreshCw size={12} />}
+                    />
+                  </div>
+                  {setupError && <p className="text-2xs text-vsc-red mt-1">{setupError}</p>}
+                  <div className="mt-2 text-2xs text-vsc-text-muted space-y-1">
                     <div>
-                      {t('chat.setupRequestsToday', {
-                        total: dailyStats.totalRequests,
-                        ok: dailyStats.successfulRequests,
-                        fail: dailyStats.failedRequests,
-                        avg: Math.round(dailyStats.avgDurationMs),
-                      })}
+                      {t('chat.setupApiKeys', { gemini: setup.geminiKeys, openai: setup.openaiKeys, antigravity: setup.antigravityKeys })}
                     </div>
-                  )}
-                  {costEstimate != null && <div>{t('chat.setupEstimatedCost', { cost: costEstimate.toFixed(4) })}</div>}
+                    <div>
+                      {t('chat.setupProviderAccounts', { active: setup.enabledProviderAccounts, total: setup.totalProviderAccounts })}
+                    </div>
+                    <div>{t('chat.setupModelMappings', { count: setup.mappingCount })}</div>
+                    <div>{t('chat.setupProxyMode', { mode: proxyMode })}</div>
+                    {dailyStats && (
+                      <div>
+                        {t('chat.setupRequestsToday', {
+                          total: dailyStats.totalRequests,
+                          ok: dailyStats.successfulRequests,
+                          fail: dailyStats.failedRequests,
+                          avg: Math.round(dailyStats.avgDurationMs),
+                        })}
+                      </div>
+                    )}
+                    {costEstimate != null && <div>{t('chat.setupEstimatedCost', { cost: costEstimate.toFixed(4) })}</div>}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Kiro Pool-specific info */}
+            {endpoint === 'kiroPool' && (
+              <div className="p-3 bg-vsc-panel/50 rounded-lg border border-vsc-border">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-vsc-text-muted">
+                    <span className="font-medium text-vsc-text">Pool address:</span>{' '}
+                    <span className="font-mono">127.0.0.1:{KIRO_POOL_PORT}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-vsc-text-muted">
+                      {kiroPoolModels.length} model(s) available
+                    </span>
+                    <Button
+                      onClick={fetchSetup}
+                      disabled={setupLoading}
+                      variant="secondary"
+                      size="xs"
+                      leftIcon={setupLoading ? <LoadingSpinner size="xs" /> : <RefreshCw size={12} />}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {setupBlockReason && (
               <div className="mt-3 rounded-lg border border-vsc-yellow/40 bg-vsc-yellow/10 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-xs text-vsc-yellow">{setupBlockReason}</div>
                   <div className="flex items-center gap-2">
-                    {!proxyRunning && (
+                    {endpoint === 'aiProxy' && !proxyRunning && (
                       <Button variant="secondary" size="xs" onClick={handleStartProxy}>
                         {t('chat.startProxy')}
                       </Button>
                     )}
-                    <Button variant="secondary" size="xs" onClick={() => navigate('/settings')}>
-                      {t('chat.proxySettings')}
-                    </Button>
-                    <Button variant="secondary" size="xs" onClick={() => navigate('/api-keys')}>
-                      {t('chat.apiKeys')}
-                    </Button>
-                    <Button variant="secondary" size="xs" onClick={() => navigate('/ai-providers')}>
-                      {t('chat.providers')}
-                    </Button>
+                    {endpoint === 'aiProxy' && (
+                      <>
+                        <Button variant="secondary" size="xs" onClick={() => navigate('/settings')}>
+                          {t('chat.proxySettings')}
+                        </Button>
+                        <Button variant="secondary" size="xs" onClick={() => navigate('/api-keys')}>
+                          {t('chat.apiKeys')}
+                        </Button>
+                        <Button variant="secondary" size="xs" onClick={() => navigate('/ai-providers')}>
+                          {t('chat.providers')}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -541,45 +634,18 @@ export default function Chat() {
         </div>
       )}
 
-      {/* Error Banner */}
-      {error && (
-        <div className="border-b border-vsc-red/30 bg-vsc-red/10 px-4 py-3">
-          <div className="max-w-4xl mx-auto flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-vsc-red shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-vsc-red font-medium">{t('chat.error') || 'Error'}</p>
-              <p className="text-xs text-vsc-red/80 truncate">{error}</p>
-            </div>
-            <Button
-              onClick={() => {
-                const previousContent = messages[messages.length - 2]?.content;
-                const retryText =
-                  typeof previousContent === 'string'
-                    ? previousContent
-                    : previousContent
-                        ?.filter(block => block.type === 'text')
-                        .map(block => block.text)
-                        .join('\n') || '';
-                const retryAttachments =
-                  typeof previousContent === 'string'
-                    ? []
-                    : (previousContent?.filter(
-                        (block): block is ContentBlock & { type: 'image' } => block.type === 'image'
-                      ) ?? []);
-                void sendMessage(retryText, retryAttachments);
-              }}
-              variant="danger"
-              size="xs"
-              leftIcon={<RefreshCw size={12} />}
-            >
-              {t('chat.retry') || 'Retry'}
-            </Button>
-          </div>
+      {/* Chat History or Empty State */}
+      {messages.length === 0 && !error ? (
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon={MessageSquare}
+            title={`Send a message to test the ${endpoint === 'kiroPool' ? 'Kiro Pool' : 'AI Proxy'} connection`}
+            description={selectedModel ? `Using ${selectedModel.name}` : undefined}
+          />
         </div>
+      ) : (
+        <ChatHistory messages={messages} isLoading={isLoading} />
       )}
-
-      {/* Chat History */}
-      <ChatHistory messages={messages} isLoading={isLoading} />
 
       {/* Inspector */}
       {messages.some(m => m.role === 'assistant' && m.debug) && (
@@ -673,11 +739,74 @@ export default function Chat() {
         </div>
       )}
 
+      {/* Compact Error Toast — shown inline near input */}
+      {error && !errorDismissed && (
+        <div className="px-4 py-2 border-t border-vsc-border">
+          <div className="max-w-4xl mx-auto flex items-center gap-2">
+            <StatusBadge status="error" withDot size="sm">
+              {t('chat.error') || 'Error'}
+            </StatusBadge>
+            <span className="text-xs text-vsc-text-muted truncate flex-1">{error}</span>
+            <Button
+              onClick={() => {
+                const previousContent = messages[messages.length - 2]?.content;
+                const retryText =
+                  typeof previousContent === 'string'
+                    ? previousContent
+                    : previousContent
+                        ?.filter(block => block.type === 'text')
+                        .map(block => block.text)
+                        .join('\n') || '';
+                const retryAttachments =
+                  typeof previousContent === 'string'
+                    ? []
+                    : (previousContent?.filter(
+                        (block): block is ContentBlock & { type: 'image' } => block.type === 'image'
+                      ) ?? []);
+                void sendMessage(retryText, retryAttachments);
+              }}
+              variant="secondary"
+              size="xs"
+              leftIcon={<RefreshCw size={12} />}
+            >
+              {t('chat.retry') || 'Retry'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setErrorDismissed(true)}
+              leftIcon={<X size={12} />}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Model Selector + Chat Input */}
       <div className="border-t border-vsc-border bg-vsc-sidebar/50">
-        {/* Model Selector Row */}
-        <div className="px-4 py-2 border-b border-vsc-border/50">
-          <div className="max-w-4xl mx-auto flex items-center gap-2">
+        {/* Endpoint + Model Selector Row */}
+        <div className="px-4 py-2 border-b border-white/5">
+          <div className="max-w-4xl mx-auto flex items-center gap-3">
+            <SegmentedControl
+              value={endpoint}
+              onChange={(v) => setEndpoint(v as ChatEndpoint)}
+              options={[
+                { value: 'kiroPool', label: 'Kiro Pool' },
+                { value: 'aiProxy', label: 'AI Proxy' },
+              ]}
+              size="sm"
+            />
+            <StatusBadge
+              status={
+                endpoint === 'kiroPool'
+                  ? kiroPoolRunning ? 'active' : 'error'
+                  : proxyRunning ? 'active' : 'error'
+              }
+              withDot
+              withPulse={endpoint === 'kiroPool' ? kiroPoolRunning : proxyRunning}
+              size="sm"
+            >
+              {(endpoint === 'kiroPool' ? kiroPoolRunning : proxyRunning) ? 'connected' : 'disconnected'}
+            </StatusBadge>
             <span className="text-xs text-vsc-text-muted">{t('chat.model') || 'Model'}:</span>
             <div className="relative">
               <ButtonBase

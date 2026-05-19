@@ -43,7 +43,7 @@ export function IdentityGraphActiveIdentityCard<TLink extends ActiveIdentityLink
   if (!activeIdentity) return null;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 p-4 space-y-3">
+    <div className="rounded-xl border border-white/10 bg-vsc-sidebar/80 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-semibold text-white">

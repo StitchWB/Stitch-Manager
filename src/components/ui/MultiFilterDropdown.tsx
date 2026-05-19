@@ -234,7 +234,7 @@ export function MultiFilterDropdown<T = string>({
               ref={menuRef}
               style={menuStyle}
               className={cn(
-                'z-[9999] overflow-hidden rounded-xl border border-white/10 bg-ds-surface-overlay shadow-2xl shadow-black/70 ring-1 ring-black/40 animate-fade-in',
+                'z-[9999] overflow-hidden rounded-xl border border-white/10 bg-vsc-sidebar shadow-2xl shadow-black/70 ring-1 ring-black/40 animate-fade-in',
                 menuPlacement === 'top' ? 'origin-bottom' : 'origin-top',
                 menuClassName
               )}

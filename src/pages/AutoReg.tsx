@@ -20,6 +20,7 @@ import {
   loadEnabledOverrides,
   loadPauseOverrides,
 } from '../components/registration/PipelineStepConfigPanel';
+import { PROVIDER_PIPELINES } from '../constants/providerPipelines';
 import { useAccountsStore } from '../stores/accounts';
 import { useUIState } from '../hooks/useUIState';
 import {
@@ -124,15 +125,10 @@ export default function AutoRegNext() {
       const enabledOverrides = loadEnabledOverrides();
       const pauseOverrides = loadPauseOverrides();
 
-      const defaults: Record<string, PipelineStepOverride[]> = {
-        fireworks: [
-          { id: 'signup', label: 'Sign Up', enabled: true, pauseAfter: false, skippable: false },
-          { id: 'confirm_email', label: 'Confirm Email', enabled: true, pauseAfter: false, skippable: false },
-          { id: 'onboarding', label: 'Onboarding', enabled: true, pauseAfter: false, skippable: true },
-          { id: 'api_key', label: 'Create API Key', enabled: true, pauseAfter: false, skippable: true },
-          { id: 'billing', label: 'Add Billing', enabled: true, pauseAfter: false, skippable: true },
-        ],
-      };
+      const defaults: Record<string, PipelineStepOverride[]> = {};
+      for (const [provider, pipelineConfig] of Object.entries(PROVIDER_PIPELINES)) {
+        defaults[provider] = pipelineConfig.steps.map(step => ({ ...step }));
+      }
 
       const result: Record<string, PipelineStepOverride[]> = {};
       for (const [provider, steps] of Object.entries(defaults)) {
@@ -421,7 +417,7 @@ export default function AutoRegNext() {
   };
 
   return (
-    <div className="h-full flex flex-col md:flex-row bg-[var(--ds-bg)]">
+    <div className="h-full flex flex-col md:flex-row bg-vsc-bg">
       {launchContext?.source === 'profile' && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-[min(960px,calc(100%-24px))]">
           <GlassCard className="p-3 border-cyan-500/20 bg-cyan-500/5">

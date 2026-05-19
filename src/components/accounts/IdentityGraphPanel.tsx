@@ -146,7 +146,7 @@ export function IdentityGraphPanel(props: UseIdentityGraphPanelProps) {
               authMethodById={p.authMethodById} />
 
 
-            <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 p-4 space-y-2">
+            <div className="rounded-xl border border-white/10 bg-vsc-sidebar/80 p-4 space-y-2">
               <div className="text-xs text-slate-400">{t("accounts.identity_graph_panel.authaware_edges_in_graph_now_include")}
 
                 <span className="ml-2 text-slate-200">{t("accounts.identity_graph_panel.accounttoauthmethod")}</span>

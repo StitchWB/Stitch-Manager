@@ -313,7 +313,7 @@ export default function Mail() {
       : t('mail.headerNoActiveMailbox');
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
+    <div className="flex flex-col h-full overflow-hidden bg-vsc-bg">
       <Header title={t('mail.title')} subtitle={headerSubtitle} icon={<MailIcon size={18} />} />
 
       <div className="flex-1 min-h-0 overflow-hidden px-4 pb-4 md:px-6 md:pb-6">

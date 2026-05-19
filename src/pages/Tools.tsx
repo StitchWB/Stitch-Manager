@@ -488,7 +488,7 @@ export default function Tools() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* ═══════ HEADER ═══════ */}
-      <div className="px-6 py-3 border-b border-white/5 bg-ds-surface-base/70 backdrop-blur-xl shrink-0 flex items-center justify-between">
+      <div className="px-6 py-3 border-b border-white/5 bg-vsc-bg/70 backdrop-blur-xl shrink-0 flex items-center justify-between">
         <div>
           <h1 className="text-base font-bold text-white tracking-tight">{t('tools.title')}</h1>
           <p className="text-[11px] text-slate-500 mt-0.5">{t('tools.subtitle')}</p>

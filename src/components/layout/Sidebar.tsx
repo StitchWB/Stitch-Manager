@@ -49,7 +49,7 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
         </span>
       }
       {collapsed &&
-      <div className="absolute left-full ml-4 px-2 py-1 bg-ds-surface-overlay text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap shadow-xl border border-white/10">
+      <div className="absolute left-full ml-4 px-2 py-1 bg-vsc-sidebar text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap shadow-xl border border-white/10">
           {label}
         </div>
       }
@@ -93,7 +93,7 @@ export default function Sidebar() {
       {/* Collapse Toggle Button — integrated into border-right */}
       <ButtonBase
         onClick={toggleSidebar}
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-8 rounded-full bg-ds-surface-overlay text-slate-400 flex items-center justify-center shadow-lg hover:text-white hover:bg-ds-surface-elevated transition-colors z-50 border border-white/20">
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-8 rounded-full bg-vsc-sidebar text-slate-400 flex items-center justify-center shadow-lg hover:text-white hover:bg-vsc-panel transition-colors z-50 border border-white/20">
         
         {sidebarCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
       </ButtonBase>

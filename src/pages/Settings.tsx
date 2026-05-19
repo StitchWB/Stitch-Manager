@@ -789,12 +789,12 @@ export default function Settings() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
+    <div className="flex flex-col h-full overflow-hidden bg-vsc-bg">
       <Header title={t('settings.title')} icon={<SettingsIcon size={18} />} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 border-r border-white/5 bg-ds-surface-elevated/50 flex flex-col p-4 gap-1 overflow-y-auto">
+        <div className="w-64 border-r border-white/5 bg-vsc-panel/50 flex flex-col p-4 gap-1 overflow-y-auto">
           {categories.map(cat => (
             <TabButton
               key={cat.id}
@@ -821,7 +821,7 @@ export default function Settings() {
       </div>
 
       {/* Footer / Status Bar (optional, for save status) */}
-      <div className="px-6 py-3 border-t border-white/5 bg-ds-surface-elevated flex justify-end items-center gap-4">
+      <div className="px-6 py-3 border-t border-white/5 bg-vsc-panel flex justify-end items-center gap-4">
         {isSaving && (
           <span className="text-xs text-slate-400 flex items-center gap-1.5 animate-pulse">
             <LoadingSpinner size="xs" color="muted" />

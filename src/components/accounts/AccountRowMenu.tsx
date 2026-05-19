@@ -66,7 +66,7 @@ export function AccountRowMenu({
 
   return (
     <div
-      className="absolute right-0 top-8 z-50 w-56 rounded-lg border border-white/10 bg-ds-surface-elevated p-1 shadow-xl shadow-black/50"
+      className="absolute right-0 top-8 z-50 w-56 rounded-lg border border-white/10 bg-vsc-panel p-1 shadow-xl shadow-black/50"
       data-row-actions-menu="true"
     >
       <ButtonBase

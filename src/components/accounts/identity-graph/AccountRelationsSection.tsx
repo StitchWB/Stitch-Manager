@@ -29,7 +29,7 @@ export function AccountRelationsSection({
   connectionReady,
 }: AccountRelationsSectionProps) {
   return (
-    <details className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 overflow-hidden" open={false}>
+    <details className="rounded-xl border border-white/10 bg-vsc-sidebar/80 overflow-hidden" open={false}>
       <summary className="px-4 py-3 text-sm font-semibold text-white cursor-pointer hover:bg-white/[0.03] transition-colors list-none flex items-center justify-between">
         <span>{t('accounts.accountRelations.title')}</span>
         <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" />

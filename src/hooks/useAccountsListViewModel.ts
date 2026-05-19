@@ -6,6 +6,7 @@ import {
   hasExplicitRelationLinks,
   isOAuthCapableIdentity,
 } from '../lib/accounts/relations';
+import { getAccountProviderMatchProviders, type AccountProviderFilterId } from '../constants/providerRegistry';
 
 type UseAccountsListViewModelArgs = {
   accounts: Account[];
@@ -61,7 +62,8 @@ export function useAccountsListViewModel({
       if (providerFilter === 'aws') {
         filtered = filtered.filter(a => a.provider === 'aws_builder_id');
       } else {
-        filtered = filtered.filter(a => a.provider === providerFilter);
+        const matchProviders = getAccountProviderMatchProviders(providerFilter as AccountProviderFilterId);
+        filtered = filtered.filter(a => matchProviders.includes(a.provider));
       }
     }
 

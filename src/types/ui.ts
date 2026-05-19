@@ -225,6 +225,8 @@ export interface KiroV2AutoregConfig {
   billingCity: string | null;
   billingState: string | null;
   billingZip: string | null;
+  cardsText: string | null;
+  cardBin: string | null;
   correlationId: string | null;
 }
 

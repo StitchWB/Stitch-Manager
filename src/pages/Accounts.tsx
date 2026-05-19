@@ -431,7 +431,7 @@ export default function Accounts() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base font-sans">
+    <div className="flex flex-col h-full overflow-hidden bg-vsc-bg font-sans">
       <Header title={t('accounts.title')} icon={<Users size={18} />} />
 
       <div className="flex-1 flex overflow-hidden">

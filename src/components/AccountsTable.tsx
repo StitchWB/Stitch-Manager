@@ -149,7 +149,7 @@ export default function AccountsTable({
   if (isLoading && accounts.length === 0) {
     return (
       <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
-        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-ds-border-subtle bg-ds-surface-sunken/80 p-4">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-vsc-border bg-vsc-terminal/80 p-4">
           <SkeletonLoader variant="table-row" count={6} />
         </div>
       </div>
@@ -173,16 +173,16 @@ export default function AccountsTable({
 
   return (
     <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-ds-border-subtle bg-ds-surface-sunken/80">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-vsc-border bg-vsc-terminal/80">
         <div className="w-full h-full">
           <Table
             containerClassName="h-full overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
             className="w-full table-fixed text-xs"
             aria-label={t('accounts.accountsTable')}
           >
-          <TableHeader className="sticky top-0 z-20 border-b border-ds-border-subtle bg-ds-surface-sunken">
+          <TableHeader className="sticky top-0 z-20 border-b border-vsc-border bg-vsc-terminal">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="sticky left-0 z-30 w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 text-xs text-slate-400 whitespace-nowrap bg-ds-surface-sunken">
+              <TableHead className="sticky left-0 z-30 w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 text-xs text-slate-400 whitespace-nowrap bg-vsc-terminal">
                 <Checkbox
                   checked={allSelected}
                   onChange={() => {
@@ -193,10 +193,10 @@ export default function AccountsTable({
                   aria-label={t('accounts.selectAll')}
                 />
               </TableHead>
-              <TableHead className="sticky left-[40px] z-30 w-[70px] min-w-[70px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap bg-ds-surface-sunken">
+              <TableHead className="sticky left-[40px] z-30 w-[70px] min-w-[70px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap bg-vsc-terminal">
                 {t('accounts.provider')}
               </TableHead>
-              <TableHead className="sticky left-[110px] z-30 w-[130px] min-w-[130px] max-w-[150px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap bg-ds-surface-sunken">
+              <TableHead className="sticky left-[110px] z-30 w-[130px] min-w-[130px] max-w-[150px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap bg-vsc-terminal">
                 {t('accounts.account')}
               </TableHead>
               <TableHead className="w-[70px] min-w-[70px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap">
@@ -287,6 +287,13 @@ export default function AccountsTable({
         onOpenProfileSession={onOpenProfileSession}
         onConfirmProfileSession={onConfirmProfileSession}
         onClearProfileSession={onClearProfileSession}
+        onAuthorizeKiroAccount={onAuthorizeKiroAccount}
+        isActiveInKiro={
+          detailsModalAccount
+            ? activeAccountIds.kiro === detailsModalAccount.id ||
+              activeAccountIds.kiro_v2 === detailsModalAccount.id
+            : false
+        }
       />
 
       <ConfirmDialog
