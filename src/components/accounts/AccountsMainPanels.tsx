@@ -109,7 +109,7 @@ export function AccountsMainPanels({
       {resolvedViewMode === 'graph' ? (
         <ServiceAccountsPanel
           header={
-            <div className="flex items-center justify-between border-b border-white/5 bg-ds-surface-base/60 px-6 py-3 text-xs text-slate-400">
+            <div className="flex items-center justify-between border-b border-white/5 bg-vsc-bg/60 px-6 py-3 text-xs text-slate-400">
               <div className="flex items-center gap-2">
                 <Share2 className="h-4 w-4 text-indigo-400" />
                 <span className="font-semibold text-white">{t('accounts.relationGraphTitle')}</span>
@@ -134,7 +134,7 @@ export function AccountsMainPanels({
       ) : resolvedViewMode === 'sheets' ? (
         <ServiceAccountsPanel
           header={
-            <div className="flex items-center justify-between border-b border-white/5 bg-ds-surface-base/60 px-6 py-3 text-xs text-slate-400">
+            <div className="flex items-center justify-between border-b border-white/5 bg-vsc-bg/60 px-6 py-3 text-xs text-slate-400">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
                 <span className="font-semibold text-white">

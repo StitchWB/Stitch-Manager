@@ -81,6 +81,7 @@ export interface ProxyConfig {
   type: 'http' | 'socks5';
   list: string;
   rotationEnabled: boolean;
+  proxyLibraryId?: string;
 }
 
 // Auto-registration credentials

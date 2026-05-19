@@ -10,19 +10,6 @@
   :root {
     --color-primary: 99 102 241;
     --color-accent: 6 182 212;
-    --ds-bg: #0a0a0c;
-
-    /* Design System Surface Tokens */
-    --ds-surface-base: #0a0a0c;
-    --ds-surface-elevated: #0f1115;
-    --ds-surface-overlay: #111116;
-    --ds-surface-sunken: #0b0b10;
-    --ds-surface-input: rgba(255,255,255,0.05);
-
-    /* Design System Border Tokens */
-    --ds-border-subtle: rgba(255,255,255,0.05);
-    --ds-border-default: rgba(255,255,255,0.10);
-    --ds-border-strong: rgba(255,255,255,0.15);
   }
 
   html {
@@ -32,7 +19,7 @@
 
   body {
     @apply antialiased;
-    background: var(--ds-bg);
+    background: #050508;
     color: #e2e8f0;
     font-family: 'Inter', 'Geist', 'Segoe UI', system-ui, sans-serif;
   }
@@ -42,19 +29,6 @@
     font-variant-numeric: tabular-nums;
   }
 }
-
-/* ============================================
-   Design System Token Utilities
-   ============================================ */
-.ds-surface-base { background-color: var(--ds-surface-base); }
-.ds-surface-elevated { background-color: var(--ds-surface-elevated); }
-.ds-surface-overlay { background-color: var(--ds-surface-overlay); }
-.ds-surface-sunken { background-color: var(--ds-surface-sunken); }
-.ds-surface-input { background-color: var(--ds-surface-input); }
-
-.ds-border-subtle { border-color: var(--ds-border-subtle); }
-.ds-border-default { border-color: var(--ds-border-default); }
-.ds-border-strong { border-color: var(--ds-border-strong); }
 
 /* ============================================
    Standard Design System Scrollbar

@@ -315,7 +315,7 @@ export function MailSidebar({
 
         {addMenuOpen ? (
           <div
-            className="absolute bottom-full left-3 right-3 mb-2 rounded-lg border border-white/10 bg-ds-surface-elevated shadow-xl py-1 z-30 max-h-[200px] overflow-y-auto"
+            className="absolute bottom-full left-3 right-3 mb-2 rounded-lg border border-white/10 bg-vsc-panel shadow-xl py-1 z-30 max-h-[200px] overflow-y-auto"
             role="menu"
           >
             <ButtonBase

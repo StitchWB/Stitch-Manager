@@ -129,6 +129,7 @@ export { IdentitySystemCard } from './IdentitySystemCard';
 export type { IdentityConfig } from './IdentitySystemCard';
 export { NetworkCard } from './NetworkCard';
 export type { NetworkConfig } from './NetworkCard';
+export { AccountProxySection } from './AccountProxySection';
 export { FloatingActionBar } from './FloatingActionBar';
 export { default as AccountDetailsModal } from './AccountDetailsModal';
 

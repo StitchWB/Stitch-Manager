@@ -131,7 +131,7 @@ export function AccountsColumnsMenu({
             <div
               ref={menuRef}
               style={menuStyle}
-              className="z-[9999] overflow-y-auto rounded-xl border border-white/10 bg-ds-surface-overlay p-2 shadow-2xl shadow-black/70 ring-1 ring-black/40"
+              className="z-[9999] overflow-y-auto rounded-xl border border-white/10 bg-vsc-sidebar p-2 shadow-2xl shadow-black/70 ring-1 ring-black/40"
             >
               <div className="px-2 py-1 text-[11px] uppercase tracking-wider text-slate-400">
                 {t('accounts.columnsMenuTitle')}

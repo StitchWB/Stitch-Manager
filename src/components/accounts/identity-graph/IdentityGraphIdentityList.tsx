@@ -19,7 +19,7 @@ export function IdentityGraphIdentityList({
   resolveIdentityName,
 }: IdentityGraphIdentityListProps) {
   return (
-    <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 p-3 space-y-2 max-h-[680px] overflow-auto">
+    <div className="rounded-xl border border-white/10 bg-vsc-sidebar/80 p-3 space-y-2 max-h-[680px] overflow-auto">
       {identities.map(node => {
         const selected = activeIdentityId === node.id;
         const linksCount = parsedLinks.filter(

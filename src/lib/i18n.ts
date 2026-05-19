@@ -62,6 +62,23 @@ export interface Translations {
     authorizeKiroStarted: string;
     authorizeKiroFailed: string;
     authorizeInIdeMenu: string;
+    kiroAuth: {
+      title: string;
+      token: string;
+      tokenMissing: string;
+      tokenExpired: string;
+      tokenExpiringSoon: string;
+      tokenValid: string;
+      tokenUnknown: string;
+      activeInIde: string;
+      activateInIde: string;
+      reactivate: string;
+      authorizeInIde: string;
+      refreshAndActivate: string;
+      authorizing: string;
+      fastPathHint: string;
+      slowPathHint: string;
+    };
     browserProfilePath: string;
     checkBalance: string;
     checkNow: string;
@@ -896,6 +913,7 @@ export interface Translations {
     tabs: {
       antigravity: string;
       apiKeys: string;
+      chat: string;
       diagnostics: string;
       integrations: string;
       monitor: string;
@@ -1514,6 +1532,48 @@ export interface Translations {
     perfectForOneTimeRegistrations: string;
     planLabel: string;
     temporaryEmailService: string;
+  }
+  kiroPool: {
+    title: string;
+    description: string;
+    stats: {
+      status: string;
+      running: string;
+      stopped: string;
+      healthy: string;
+      cooling: string;
+      address: string;
+    };
+    fields: {
+      port: string;
+      apiKey: string;
+      apiKeyPlaceholder: string;
+    };
+    actions: {
+      start: string;
+      stop: string;
+      reload: string;
+    };
+    slots: {
+      title: string;
+      email: string;
+      region: string;
+      status: string;
+      requests: string;
+      failures: string;
+    };
+    slotStatus: {
+      ready: string;
+      needsRefresh: string;
+      uninitialized: string;
+      coolingDownIn: string;
+      coolingDownExpired: string;
+    };
+    emptyPool: string;
+    curlTitle: string;
+    curlCopy: string;
+    curlCopied: string;
+    copyFailed: string;
   }
   kiroPatch: {
     advancedSubtitle: string;

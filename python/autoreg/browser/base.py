@@ -21,6 +21,10 @@ from DrissionPage import ChromiumOptions, ChromiumPage
 
 logger = logging.getLogger(__name__)
 
+# Launch method constants
+LAUNCH_DIRECT = "direct"          # Launch Chrome directly (standard DrissionPage)
+LAUNCH_CLOAKBROWSER = "cloakbrowser"  # Launch via CloakBrowser profile manager
+
 
 class BaseBrowser:
     """
@@ -57,6 +61,10 @@ class BaseBrowser:
         proxy_url: Optional[str] = None,
         proxy_username: Optional[str] = None,
         proxy_password: Optional[str] = None,
+        launch_method: str = LAUNCH_DIRECT,
+        cloakbrowser_required: bool = False,
+        cloakbrowser_auto_download: bool = True,
+        clear_origins: Optional[list] = None,
     ):
         """
         Initialize browser automation.
@@ -72,6 +80,10 @@ class BaseBrowser:
             proxy_url: Proxy URL (host:port)
             proxy_username: Proxy username
             proxy_password: Proxy password
+            launch_method: How to launch the browser (LAUNCH_DIRECT or LAUNCH_CLOAKBROWSER)
+            cloakbrowser_required: Whether CloakBrowser is required (fail if not found)
+            cloakbrowser_auto_download: Whether to auto-download CloakBrowser if missing
+            clear_origins: List of origin URLs to clear cookies/storage for
         """
         self.headless = headless
         self.page: Optional[ChromiumPage] = None
@@ -83,6 +95,10 @@ class BaseBrowser:
         self._proxy_url = proxy_url
         self._proxy_username = proxy_username
         self._proxy_password = proxy_password
+        self._launch_method = launch_method
+        self._cloakbrowser_required = cloakbrowser_required
+        self._cloakbrowser_auto_download = cloakbrowser_auto_download
+        self._clear_origins = clear_origins or []
         
         # Initialize browser
         self._init_browser()
@@ -362,6 +378,12 @@ class BaseBrowser:
             try:
                 self.page.run_cdp('Network.clearBrowserCookies')
                 self.page.run_cdp('Network.clearBrowserCache')
+                # Clear storage for specific origins if provided
+                for origin in self._clear_origins:
+                    try:
+                        self.page.run_cdp('Storage.clearDataForOrigin', origin=origin, storageTypes='all')
+                    except Exception:  # noqa: BLE001
+                        pass
                 logger.info("Cookies and storage cleared")
             except RuntimeError as e:
                 logger.warning(f"Failed to clear cookies: {e}")

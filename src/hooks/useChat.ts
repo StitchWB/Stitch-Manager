@@ -174,7 +174,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
             errorData.detail?.error?.message ||
-              errorData.error ||
+              errorData.error?.message ||
+              (typeof errorData.error === 'string' ? errorData.error : null) ||
+              errorData.message ||
               `HTTP ${response.status}: ${response.statusText}`
           );
         }

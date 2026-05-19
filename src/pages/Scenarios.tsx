@@ -189,7 +189,7 @@ export default function Scenarios({ embedded = false }: ScenariosProps = {}) {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
+    <div className="flex flex-col h-full overflow-hidden bg-vsc-bg">
       {!embedded && (
         <Header
           title={t('scenarios.title')}
@@ -200,7 +200,7 @@ export default function Scenarios({ embedded = false }: ScenariosProps = {}) {
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-[1200px] mx-auto space-y-6">
-          <div className="rounded-2xl border border-white/10 bg-ds-surface-elevated/70 px-5 py-5 shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
+          <div className="rounded-2xl border border-white/10 bg-vsc-panel/70 px-5 py-5 shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
             <div className="flex flex-col lg:flex-row lg:items-end gap-4">
               <div className="flex-1 min-w-0">
                 <Select
@@ -239,7 +239,7 @@ export default function Scenarios({ embedded = false }: ScenariosProps = {}) {
               variant="panel"
             />
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-ds-surface-elevated/70 p-6">
+            <div className="rounded-2xl border border-white/10 bg-vsc-panel/70 p-6">
               <EmptyState
                 icon={FolderKanban}
                 title={t('scenarios.emptyTitle')}

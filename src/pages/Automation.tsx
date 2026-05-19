@@ -146,7 +146,7 @@ export default function Automation() {
   }, [currentTab, navigate]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-ds-surface-base">
+    <div className="flex flex-col h-full overflow-hidden bg-vsc-bg">
       <Header title={t('sidebar.automation')} icon={<Repeat size={18} />} />
 
       <AutomationTopTabs />

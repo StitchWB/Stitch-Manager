@@ -23,12 +23,12 @@ export default {
         
         // VS Code / Deep Space Theme
         'vsc-bg': '#050508',
-        'vsc-sidebar': 'rgba(15, 23, 42, 0.5)',
-        'vsc-panel': 'rgba(30, 41, 59, 0.6)',
-        'vsc-input': 'rgba(51, 65, 85, 0.5)',
-        'vsc-hover': 'rgba(255, 255, 255, 0.03)',
-        'vsc-border': 'rgba(255, 255, 255, 0.05)',
-        'vsc-border-light': 'rgba(255, 255, 255, 0.1)',
+        'vsc-sidebar': 'rgba(10, 12, 20, 0.7)',
+        'vsc-panel': 'rgba(15, 18, 30, 0.7)',
+        'vsc-input': 'rgba(20, 25, 40, 0.6)',
+        'vsc-hover': 'rgba(255, 255, 255, 0.04)',
+        'vsc-border': 'rgba(255, 255, 255, 0.06)',
+        'vsc-border-light': 'rgba(255, 255, 255, 0.10)',
         'vsc-text': '#e2e8f0',
         'vsc-text-muted': '#64748b',
         'vsc-blue': '#818cf8',
@@ -47,21 +47,6 @@ export default {
         'glow': {
           'purple': 'rgba(139, 92, 246, 0.3)',
           'blue': 'rgba(59, 130, 246, 0.3)',
-        },
-        // Design System tokens — surfaces & borders
-        ds: {
-          surface: {
-            base: '#0a0a0c',
-            elevated: '#0f1115',
-            overlay: '#111116',
-            sunken: '#0b0b10',
-            input: 'rgba(255,255,255,0.05)',
-          },
-          border: {
-            subtle: 'rgba(255,255,255,0.05)',
-            DEFAULT: 'rgba(255,255,255,0.10)',
-            strong: 'rgba(255,255,255,0.15)',
-          }
         },
       },
       fontFamily: {

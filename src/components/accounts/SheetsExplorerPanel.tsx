@@ -110,7 +110,7 @@ export function SheetsExplorerPanel({
 
   return (
     <div className={cn('flex flex-col h-full overflow-hidden', className)}>
-      <div className="shrink-0 border-b border-white/5 bg-ds-surface-base/60 px-4 py-3">
+      <div className="shrink-0 border-b border-white/5 bg-vsc-bg/60 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
@@ -141,7 +141,7 @@ export function SheetsExplorerPanel({
 
       <div className="flex-1 overflow-auto px-4 py-4 space-y-4">
         {isLoading ?
-        <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/70 p-6 text-sm text-slate-400">{t("accounts.sheets_explorer_panel.loading_sheets_preview")}
+        <div className="rounded-xl border border-white/10 bg-vsc-sidebar/70 p-6 text-sm text-slate-400">{t("accounts.sheets_explorer_panel.loading_sheets_preview")}
 
         </div> :
         null}
@@ -173,7 +173,7 @@ export function SheetsExplorerPanel({
         null}
 
         {!isLoading && !error && selectedSheet ?
-        <div className="rounded-xl border border-white/10 bg-ds-surface-overlay/80 overflow-hidden">
+        <div className="rounded-xl border border-white/10 bg-vsc-sidebar/80 overflow-hidden">
             <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold text-white">

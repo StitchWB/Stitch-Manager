@@ -128,7 +128,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           </IconButton>
           {langOpen && (
             <div
-              className="absolute right-0 top-full mt-1 w-32 bg-ds-surface-elevated border border-ds-border rounded-sm shadow-xl z-50 py-1"
+              className="absolute right-0 top-full mt-1 w-32 bg-vsc-panel border border-vsc-border-light rounded-sm shadow-xl z-50 py-1"
               role="listbox"
               aria-label={t('header.selectLanguage')}
             >
@@ -176,7 +176,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           </IconButton>
 
           {notifOpen && (
-            <div className="absolute right-0 top-full mt-1 w-80 bg-ds-surface-elevated border border-ds-border rounded-sm shadow-xl z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 w-80 bg-vsc-panel border border-vsc-border-light rounded-sm shadow-xl z-50 overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
                 <span className="text-xs font-medium text-white">{t('header.notifications')}</span>

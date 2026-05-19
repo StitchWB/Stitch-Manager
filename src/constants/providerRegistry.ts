@@ -45,7 +45,7 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
       text: 'text-indigo-400',
       border: 'border-indigo-500/20',
     },
-    accounts: { matchProviders: ['kiro'] },
+    accounts: { matchProviders: ['kiro', 'kiro_v2'] },
     aiProxy: { enabled: true },
   },
   windsurf: {

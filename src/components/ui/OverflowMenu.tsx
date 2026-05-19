@@ -100,7 +100,7 @@ export function OverflowMenu({
       ref={menuRef}
       role="menu"
       style={menuStyle ?? {}}
-      className="z-50 bg-ds-surface-elevated/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in"
+      className="z-50 bg-vsc-panel/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-fade-in"
     >
       {items.map(item => (
         <button

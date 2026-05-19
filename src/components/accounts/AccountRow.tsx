@@ -86,7 +86,7 @@ export function AccountRow({
     >
       {/* Checkbox */}
       <TableCell
-        className="sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 align-middle bg-ds-surface-sunken group-hover/row:bg-white/[0.03]"
+        className="sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]"
         onClick={event => event.stopPropagation()}
       >
         <Checkbox
@@ -98,7 +98,7 @@ export function AccountRow({
       </TableCell>
 
       {/* Provider */}
-      <TableCell className="sticky left-[40px] z-10 w-[70px] min-w-[70px] px-2 py-2 align-middle bg-ds-surface-sunken group-hover/row:bg-white/[0.03]">
+      <TableCell className="sticky left-[40px] z-10 w-[70px] min-w-[70px] px-2 py-2 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
         <div className="flex items-center gap-1 overflow-hidden">
           <ProviderLogo provider={account.provider} size={14} className="shrink-0" />
           <span className="truncate whitespace-nowrap text-[11px] text-slate-300">{data.providerLabel}</span>
@@ -106,7 +106,7 @@ export function AccountRow({
       </TableCell>
 
       {/* Account */}
-      <TableCell className="sticky left-[110px] z-10 w-[130px] min-w-[130px] max-w-[150px] px-2 py-2 align-middle bg-ds-surface-sunken group-hover/row:bg-white/[0.03]">
+      <TableCell className="sticky left-[110px] z-10 w-[130px] min-w-[130px] max-w-[150px] px-2 py-2 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
         <ButtonBase
           type="button"
           onClick={() => onShowDetails(account)}

@@ -148,7 +148,7 @@ export function DropdownMenu<TValue = string>({
     <div
       ref={menuRef}
       className={cn(
-        'z-50 bg-ds-surface-elevated/95 backdrop-blur-xl border border-ds-border rounded-lg shadow-2xl overflow-hidden animate-fade-in max-w-full',
+        'z-50 bg-vsc-panel/95 backdrop-blur-xl border border-vsc-border-light rounded-lg shadow-2xl overflow-hidden animate-fade-in max-w-full',
         menuClassName
       )}
       style={menuStyle ?? {}}

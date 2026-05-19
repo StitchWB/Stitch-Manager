@@ -33,7 +33,7 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        'shrink-0 flex flex-wrap items-start gap-3 px-6 py-4 border-b border-white/5 bg-ds-surface-base/80 backdrop-blur-xl',
+        'shrink-0 flex flex-wrap items-start gap-3 px-6 py-4 border-b border-white/5 bg-vsc-bg/80 backdrop-blur-xl',
         className
       )}
     >
