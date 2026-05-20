@@ -127,13 +127,21 @@ class CDPSpoofer:
         """Безопасно форматирует ошибку для вывода (удаляет китайские символы)"""
         return str(e).encode('ascii', 'replace').decode('ascii')
 
-    def apply(self, page, skip_device_metrics: bool = False) -> dict[str, bool]:
+    def apply(self, page, skip_device_metrics: bool = True) -> dict[str, bool]:
         """
         Применяет все спуфинги к DrissionPage.
 
         Args:
             page: DrissionPage ChromiumPage instance
-            skip_device_metrics: Skip Emulation.setDeviceMetricsOverride (e.g. when window is maximized)
+            skip_device_metrics: Skip ``Emulation.setDeviceMetricsOverride``.
+
+                Defaults to ``True`` because that CDP override clamps the
+                viewport to the (often randomized) profile screen size, which
+                does not match the maximized browser window and results in a
+                visible gray letterbox around the page. Screen properties are
+                already spoofed at the JS layer via ``DisplaySpoofModule``,
+                so the CDP override is redundant. Pass ``False`` only if you
+                truly need device emulation (e.g. mobile mode).
 
         Returns:
             Dict с результатами применения
@@ -255,7 +263,7 @@ class CDPSpoofer:
 
         return results
 
-    def apply_pre_navigation(self, page, skip_device_metrics: bool = False) -> bool:
+    def apply_pre_navigation(self, page, skip_device_metrics: bool = True) -> bool:
         """
         Применяет спуфинг ДО навигации на страницу.
 
@@ -263,7 +271,9 @@ class CDPSpoofer:
 
         Args:
             page: DrissionPage ChromiumPage instance
-            skip_device_metrics: Skip Emulation.setDeviceMetricsOverride (e.g. when window is maximized)
+            skip_device_metrics: Skip ``Emulation.setDeviceMetricsOverride``.
+
+                Defaults to ``True`` — see :meth:`apply` for the rationale.
 
         Returns:
             True если успешно
@@ -343,8 +353,7 @@ class CDPSpoofer:
                 # OK: Screen: {p.screen_width}x{p.screen_height}")
             except Exception as e:
                 print(f"   [WARN] Device metrics: {self._fmt_err(e)}")
-        else:
-            results['device_metrics'] = 'skipped'
+        # else: device metrics override skipped — see method docstring.
 
         # Permission override через CDP (для Notification.permission)
         try:
@@ -393,7 +402,7 @@ def apply_cdp_spoofing(page, profile: SpoofProfile | None = None) -> dict[str, b
     return spoofer.apply(page)
 
 
-def apply_pre_navigation_spoofing(page, profile: SpoofProfile | None = None, skip_device_metrics: bool = False) -> CDPSpoofer:
+def apply_pre_navigation_spoofing(page, profile: SpoofProfile | None = None, skip_device_metrics: bool = True) -> CDPSpoofer:
     """
     Применяет спуфинг ДО навигации.
 
@@ -402,7 +411,12 @@ def apply_pre_navigation_spoofing(page, profile: SpoofProfile | None = None, ski
         page.get('https://...')
 
     Args:
-        skip_device_metrics: Skip Emulation.setDeviceMetricsOverride (e.g. when window is maximized)
+        skip_device_metrics: Skip ``Emulation.setDeviceMetricsOverride``.
+
+            Defaults to ``True`` because the override clamps the viewport
+            to the (randomized) profile screen size, which mismatches the
+            maximized window and produces a gray letterbox. JS-level
+            ``DisplaySpoofModule`` handles screen-property spoofing.
 
     Returns:
         CDPSpoofer instance
