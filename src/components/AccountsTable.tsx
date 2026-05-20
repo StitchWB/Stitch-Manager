@@ -6,7 +6,8 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
 import type { AccountsTableVisibleColumns } from '../stores/uiPreferences';
 import { AccountRow } from './accounts/AccountRow';
-import { AccountDetailsModal, ConfirmDialog } from '@/components/ui';
+import { AccountDrawer } from '@/components/ui/AccountDrawer';
+import { ConfirmDialog } from '@/components/ui';
 import {
   Checkbox,
   EmptyState,
@@ -72,7 +73,8 @@ export default function AccountsTable({
   onConfirmProfileSession,
   onClearProfileSession,
   onAuthorizeKiroAccount,
-  onUpdate,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onUpdate: _onUpdate,
   onRelationEdgeClick,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -280,22 +282,16 @@ export default function AccountsTable({
         </div>
       </div>
 
-      <AccountDetailsModal
+      <AccountDrawer
         account={detailsModalAccount}
         isOpen={Boolean(detailsModalAccount)}
         onClose={() => setDetailsModalAccount(null)}
-        onUpdate={onUpdate}
-        onDelete={onDelete}
-        onOpenProfileSession={onOpenProfileSession}
-        onConfirmProfileSession={onConfirmProfileSession}
-        onClearProfileSession={onClearProfileSession}
-        onAuthorizeKiroAccount={onAuthorizeKiroAccount}
-        isActiveInKiro={
-          detailsModalAccount
-            ? activeAccountIds.kiro === detailsModalAccount.id ||
-              activeAccountIds.kiro_v2 === detailsModalAccount.id
-            : false
-        }
+        onCopyToken={(token) => { navigator.clipboard.writeText(token); }}
+        onRefresh={() => { /* refresh handled by parent */ }}
+        onDelete={(accountId) => {
+          if (onDelete) onDelete(accountId);
+          setDetailsModalAccount(null);
+        }}
       />
 
       <ConfirmDialog
