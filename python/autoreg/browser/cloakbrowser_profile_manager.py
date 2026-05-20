@@ -227,6 +227,32 @@ class CloakBrowserProfileManager:
         sock.close()
         return port
 
+    def _ensure_restore_on_startup(self) -> None:
+        """Set Chrome preference to restore previous session tabs.
+
+        Writes session.restore_on_startup=1 into Default/Preferences so that
+        Chrome reopens the last active tabs when launched with this profile.
+        """
+        prefs_dir = self.profile_path / "Default"
+        prefs_dir.mkdir(parents=True, exist_ok=True)
+        prefs_file = prefs_dir / "Preferences"
+
+        prefs: dict = {}
+        if prefs_file.exists():
+            try:
+                prefs = json.loads(prefs_file.read_text(encoding="utf-8", errors="replace"))
+            except (json.JSONDecodeError, OSError):
+                prefs = {}
+
+        # Set restore_on_startup: 1 = "Continue where you left off"
+        session = prefs.setdefault("session", {})
+        if session.get("restore_on_startup") != 1:
+            session["restore_on_startup"] = 1
+            try:
+                prefs_file.write_text(json.dumps(prefs, ensure_ascii=False), encoding="utf-8")
+            except OSError as e:
+                logger.warning(f"Failed to write restore_on_startup preference: {e}")
+
     def _build_launch_cmd(self, debug_port: int) -> list[str]:
         chrome_path = _find_cloakbrowser()
         cmd = [
@@ -240,7 +266,8 @@ class CloakBrowserProfileManager:
             # "--disable-blink-features=AutomationControlled",  # CloakBrowser already anti-detect; flag causes warning bar
             f"--lang={self.locale}",
             f"--accept-lang={self.locale},en",
-            "about:blank",
+            # NOTE: Do NOT pass "about:blank" here — it prevents Chrome from
+            # restoring the previous session tabs on persistent profiles.
         ]
 
         if self.headless:
@@ -332,6 +359,9 @@ class CloakBrowserProfileManager:
             self._acquire_profile_lock()
         self._kill_stale_chrome()
 
+        # Ensure Chrome restores previous session tabs on persistent profiles.
+        self._ensure_restore_on_startup()
+
         debug_port = self._free_port()
         self._debug_port = debug_port
 
@@ -397,8 +427,12 @@ class CloakBrowserProfileManager:
             storage_dir = str(get_paths().browser_profiles_dir.parent / "spoof_profiles")
             storage = ProfileStorage(storage_dir)
             profile = storage.get_or_create(self.profile_id)
-            apply_pre_navigation_spoofing(self._page, profile, skip_device_metrics=self.maximize_on_start)
-            logger.info("Anti-detection spoofing applied (device metrics: %s)", "skipped" if self.maximize_on_start else "applied")
+            # Always skip CDP device-metrics override: it clamps the viewport
+            # to the profile's screen size, which mismatches the real window
+            # and produces a gray letterbox. JS-level DisplaySpoofModule
+            # already spoofs screen.* and window.outer/innerWidth.
+            apply_pre_navigation_spoofing(self._page, profile)
+            logger.info("Anti-detection spoofing applied (CDP device-metrics: skipped)")
         except Exception as e:
             logger.warning(f"Anti-detection spoofing failed: {e}")
 
