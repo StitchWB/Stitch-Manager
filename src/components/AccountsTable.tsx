@@ -199,6 +199,8 @@ export default function AccountsTable({
               <TableHead className="sticky left-[110px] z-30 w-[130px] min-w-[130px] max-w-[150px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap bg-vsc-terminal">
                 {t('accounts.account')}
               </TableHead>
+              <TableHead className="w-[90px] min-w-[90px] px-1 py-2 text-[10px] text-slate-400 whitespace-nowrap">
+              </TableHead>
               <TableHead className="w-[70px] min-w-[70px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap">
                 {t('accounts.statusHeader')}
               </TableHead>

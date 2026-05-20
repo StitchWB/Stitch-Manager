@@ -43,6 +43,30 @@ export interface Translations {
     allProviders: string;
     apiKey: string;
     apiKeyLabel: string;
+    drawer: {
+      registered: string;
+      credentials: string;
+      sessionProfile: string;
+      openFolder: string;
+      cookies: string;
+      noCookies: string;
+      session: string;
+      billing: string;
+      checkStatus: string;
+      tokenExpired: string;
+      proxy: string;
+      notesTags: string;
+      notes: string;
+      tags: string;
+    };
+    quickActions: {
+      copyEmail: string;
+      copyPassword: string;
+      openBrowser: string;
+      authorizeIde: string;
+      emailCopied: string;
+      passwordCopied: string;
+    };
     authToken: string;
     auth_methods_section: {
       auth_methods_authmethods: string;
