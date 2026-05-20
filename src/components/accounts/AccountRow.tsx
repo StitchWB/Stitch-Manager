@@ -19,8 +19,10 @@ import { getAccountStatusLabel } from '@/lib/accountStatus';
 import { t } from '@/lib/i18n';
 import type { AccountRelationEdge, RelationType } from '@/lib/accounts/relations';
 import { useAccountRowData } from '@/hooks/useAccountRow';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { AccountRowMenu } from './AccountRowMenu';
 import { AccountQuotaCell } from './AccountQuotaCell';
+import { AccountRowQuickActions } from './AccountRowQuickActions';
 
 interface AccountRowProps {
   account: Account;
@@ -76,6 +78,7 @@ export function AccountRow({
   onRelationEdgeClick,
 }: AccountRowProps) {
   const data = useAccountRowData(account, relationHints, relationEdges);
+  const { copy } = useCopyToClipboard();
 
   return (
     <TableRow
@@ -163,6 +166,18 @@ export function AccountRow({
         )}
       </TableCell>
 
+      {/* Quick Actions (visible on hover) */}
+      <TableCell
+        className="w-[90px] min-w-[90px] px-1 py-2 align-middle"
+        onClick={event => event.stopPropagation()}
+      >
+        <AccountRowQuickActions
+          account={account}
+          onOpenBrowser={onOpenBrowser}
+          onAuthorizeKiroAccount={onAuthorizeKiroAccount}
+        />
+      </TableCell>
+
       {/* Status */}
       <TableCell className="w-[70px] min-w-[70px] px-2 py-2 align-middle">
           <Badge
@@ -186,25 +201,29 @@ export function AccountRow({
         {data.lastLoginFormatted}
       </TableCell>
 
-      {/* API Key */}
+      {/* Password */}
       <TableCell
         className={cn(
           visibleColumns.apiKey ? 'w-[50px] min-w-[50px] px-2 py-2 align-middle' : 'hidden'
         )}
+        onClick={event => event.stopPropagation()}
       >
-        {account.provider?.toLowerCase() === 'fireworks' && account.token ? (
-          <Tooltip content="Click to copy API key" side="top">
+        {account.registrationPassword ? (
+          <Tooltip content={t('accounts.quickActions.copyPassword')} side="top">
             <IconButton
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                if (account.token) onCopyToken(account.token);
+                void copy(account.registrationPassword!, {
+                  sensitive: true,
+                  successMessage: t('accounts.quickActions.passwordCopied'),
+                });
               }}
               size="sm"
               variant="ghost"
               className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
             >
-              <Key size={14} className="text-slate-400 hover:text-indigo-400" />
+              <Key size={14} className="text-amber-400 hover:text-amber-300" />
             </IconButton>
           </Tooltip>
         ) : (
