@@ -24,6 +24,7 @@ import {
   parseCsvAccounts,
   readBlobText,
   validateImportRecords,
+  type ParsedAccountsResult,
 } from '../lib/accounts/importParser';
 
 interface UseAccountsActionsParams {
@@ -227,6 +228,69 @@ export function useAccountsActions({
     }
   }, [filteredAccountIds, selectedIds]);
 
+  /** Shared logic: parse text (JSON or CSV) and import accounts */
+  const importFromText = useCallback(async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      toast.info('No content to import');
+      return;
+    }
+
+    // Auto-detect format: JSON if starts with [ or {, otherwise CSV
+    const isJson = trimmed.startsWith('[') || trimmed.startsWith('{');
+    let parsed: ParsedAccountsResult;
+
+    if (isJson) {
+      // If user pasted a single object (not array), wrap it in an array
+      const jsonInput = trimmed.startsWith('[')
+        ? JSON.parse(trimmed)
+        : [JSON.parse(trimmed)];
+      parsed = normalizeJsonAccounts(jsonInput);
+    } else {
+      parsed = { payloads: parseCsvAccounts(trimmed), errors: [] };
+    }
+
+    const { valid, errors: validationErrors } = validateImportRecords(parsed.payloads);
+    const frontendErrors = [...parsed.errors, ...validationErrors];
+
+    if (parsed.payloads.length === 0) {
+      toast.info('No account records found');
+      return;
+    }
+
+    if (valid.length === 0) {
+      const detailSummary = frontendErrors.length
+        ? ` ${frontendErrors.slice(0, 3).join(' • ')}`
+        : '';
+      toast.error(`No valid account records found.${detailSummary}`);
+      return;
+    }
+
+    const skippedInvalid = parsed.payloads.length - valid.length;
+    const result = await importAccountsPayload(JSON.stringify(valid));
+
+    const combinedTotal = parsed.payloads.length;
+    const combinedSucceeded = result.succeeded;
+    const combinedFailed = result.failed + skippedInvalid;
+    const combinedErrors = [...frontendErrors, ...result.errors];
+
+    const baseSummary = `Imported ${combinedSucceeded}/${combinedTotal}. Failed ${combinedFailed}.`;
+    const skipSummary = skippedInvalid > 0 ? ` Skipped ${skippedInvalid} invalid.` : '';
+    const detailSummary = combinedErrors.length
+      ? ` ${combinedErrors.slice(0, 3).join(' • ')}`
+      : '';
+
+    if (combinedSucceeded > 0 && combinedFailed === 0) {
+      toast.success(`${baseSummary}${skipSummary}${detailSummary}`);
+    } else if (combinedSucceeded > 0) {
+      toast.info(`${baseSummary}${skipSummary}${detailSummary}`);
+    } else {
+      toast.error(`${baseSummary}${skipSummary}${detailSummary}`);
+    }
+
+    await fetchAccounts();
+  }, [fetchAccounts]);
+
   const handleImportAccounts = useCallback(async () => {
     if (isImporting) return;
     setIsImporting(true);
@@ -263,57 +327,33 @@ export function useAccountsActions({
             })()
           : await selected.text();
 
-      const parsed =
-        extension === 'json'
-          ? normalizeJsonAccounts(JSON.parse(fileText))
-          : { payloads: parseCsvAccounts(fileText), errors: [] };
-
-      const { valid, errors: validationErrors } = validateImportRecords(parsed.payloads);
-      const frontendErrors = [...parsed.errors, ...validationErrors];
-
-      if (parsed.payloads.length === 0) {
-        toast.info('No account records found in file');
-        return;
-      }
-
-      if (valid.length === 0) {
-        const detailSummary = frontendErrors.length
-          ? ` ${frontendErrors.slice(0, 3).join(' • ')}`
-          : '';
-        toast.error(`No valid account records found.${detailSummary}`);
-        return;
-      }
-
-      const skippedInvalid = parsed.payloads.length - valid.length;
-      const result = await importAccountsPayload(JSON.stringify(valid));
-
-      const combinedTotal = parsed.payloads.length;
-      const combinedSucceeded = result.succeeded;
-      const combinedFailed = result.failed + skippedInvalid;
-      const combinedErrors = [...frontendErrors, ...result.errors];
-
-      const baseSummary = `Imported ${combinedSucceeded}/${combinedTotal}. Failed ${combinedFailed}.`;
-      const skipSummary = skippedInvalid > 0 ? ` Skipped ${skippedInvalid} invalid.` : '';
-      const detailSummary = combinedErrors.length
-        ? ` ${combinedErrors.slice(0, 3).join(' • ')}`
-        : '';
-
-      if (combinedSucceeded > 0 && combinedFailed === 0) {
-        toast.success(`${baseSummary}${skipSummary}${detailSummary}`);
-      } else if (combinedSucceeded > 0) {
-        toast.info(`${baseSummary}${skipSummary}${detailSummary}`);
-      } else {
-        toast.error(`${baseSummary}${skipSummary}${detailSummary}`);
-      }
-
-      await fetchAccounts();
+      await importFromText(fileText);
     } catch (error) {
       console.error('[Accounts] Import failed:', error);
       toast.error(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsImporting(false);
     }
-  }, [fetchAccounts, isImporting, setIsImporting]);
+  }, [importFromText, isImporting, setIsImporting]);
+
+  const handleImportFromClipboard = useCallback(async () => {
+    if (isImporting) return;
+    setIsImporting(true);
+
+    try {
+      const text = await navigator.clipboard.readText();
+      await importFromText(text);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        toast.error('Clipboard access denied. Please allow clipboard permission.');
+      } else {
+        console.error('[Accounts] Clipboard import failed:', error);
+        toast.error(`Clipboard import failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }, [importFromText, isImporting, setIsImporting]);
 
   const handleRefreshAll = useCallback(async () => {
     try {
@@ -415,6 +455,7 @@ export function useAccountsActions({
     handleUpdateAccount,
     handleExportCSV,
     handleImportAccounts,
+    handleImportFromClipboard,
     handleRefreshAll,
     handleRefreshExpired,
     handleRemoveSelectedAccounts,

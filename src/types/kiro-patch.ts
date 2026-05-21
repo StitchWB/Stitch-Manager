@@ -6,6 +6,7 @@
  */
 
 export interface PatchModules {
+  tokenTypeStripping: boolean; // V4: Strip TokenType header (fixes "Too Many Requests")
   machineIdSpoofing: boolean;
   telemetryBlocking: boolean;
   rateLimitBypass: boolean;
@@ -20,11 +21,13 @@ export interface PatchModules {
 
 export interface PatchConstants {
   writeLimit: string;
-  graphTransitionLimit: number;
-  subAgentGraphTransitionLimit: number;
+  // V4: Renamed for Kiro V2+ compatibility
+  iterationLimit: number;
+  agentIterationLimit: number;
   defaultMaxTokens: number;
   defaultContextLength: number;
-  maxSnippetContentLength: number;
+  // V4: Replaced maxSnippetContentLength with percentage
+  maxSnippetPercentage: number;
 }
 
 export interface KiroPatchConfig {

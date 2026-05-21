@@ -25,7 +25,7 @@ export const PATCH_VERSIONS: Record<
   Array<{ id: string; label: string; description: string }>
 > = {
   kiro: [
-    { id: 'v3', label: 'v3', description: 'Enhanced spoofing with per-account Machine ID rotation' },
+    { id: 'v4', label: 'v4', description: 'TokenType stripping + per-account Machine ID rotation (fixes "Too Many Requests")' },
   ],
   windsurf: [{ id: 'v1', label: 'v1', description: 'Standard patch' }],
   trae: [{ id: 'v1', label: 'v1', description: 'Pro features unlock' }],
@@ -36,6 +36,12 @@ export const PATCH_OPTIONS: Record<
   Array<{ id: string; labelKey: string; descKey: string; defaultEnabled: boolean }>
 > = {
   kiro: [
+    {
+      id: 'tokenTypeStripping',
+      labelKey: 'patcher.tokenTypeStripping',
+      descKey: 'patcher.tokenTypeStrippingDesc',
+      defaultEnabled: true,
+    },
     {
       id: 'machineIdSpoofing',
       labelKey: 'patcher.machineIdSpoofing',
@@ -52,7 +58,7 @@ export const PATCH_OPTIONS: Record<
       id: 'rateLimitBypass',
       labelKey: 'patcher.bypassRateLimits',
       descKey: 'patcher.bypassRateLimitsDesc',
-      defaultEnabled: true,
+      defaultEnabled: false, // V4: Disabled by default - was harmful
     },
     {
       id: 'osSpoofing',

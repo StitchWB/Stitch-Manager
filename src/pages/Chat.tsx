@@ -11,12 +11,13 @@ import {
   Copy,
   ShieldCheck,
   X,
+  Pencil,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { ChatHistory, ChatInput } from '../components/chat';
 import { useChat } from '../hooks/useChat';
-import { useChatStore } from '../stores/chat';
+import { useChatStore, type ChatSession } from '../stores/chat';
 import { useAppStore } from '../stores/app';
 import type { ContentBlock } from '../types/generated';
 import { t } from '../lib/i18n';
@@ -68,19 +69,34 @@ export default function Chat() {
   const navigate = useNavigate();
   const location = useLocation();
   const { language } = useAppStore();
-  const {
-    model,
-    setModel,
-    profiles,
-    activeProfileId,
-    createProfile,
-    updateProfile,
-    deleteProfile,
-    setActiveProfile,
-    forceOverride,
-    setForceOverride,
-    resetForceOverride,
-  } = useChatStore();
+  // Individual selectors: Zustand guarantees function identity is stable,
+  // and primitive/string values are compared by Object.is. Only array/object
+  // selectors that compute a new value each call need special handling.
+  const sessions = useChatStore(state => state.sessions);
+  const activeSessionId = useChatStore(state => state.activeSessionId);
+  const model = useChatStore(
+    useCallback(
+      (state: { sessions: ChatSession[]; activeSessionId: string }) =>
+        state.sessions.find(s => s.id === state.activeSessionId)?.model ?? 'auto',
+      []
+    )
+  );
+  const inspectorOpen = useChatStore(state => state.inspectorOpen);
+  const setSessionModel = useChatStore(state => state.setSessionModel);
+  const createSession = useChatStore(state => state.createSession);
+  const switchSession = useChatStore(state => state.switchSession);
+  const deleteSession = useChatStore(state => state.deleteSession);
+  const renameSession = useChatStore(state => state.renameSession);
+  const setInspectorOpen = useChatStore(state => state.setInspectorOpen);
+  const profiles = useChatStore(state => state.profiles);
+  const activeProfileId = useChatStore(state => state.activeProfileId);
+  const createProfile = useChatStore(state => state.createProfile);
+  const updateProfile = useChatStore(state => state.updateProfile);
+  const deleteProfile = useChatStore(state => state.deleteProfile);
+  const setActiveProfile = useChatStore(state => state.setActiveProfile);
+  const forceOverride = useChatStore(state => state.forceOverride);
+  const setForceOverride = useChatStore(state => state.setForceOverride);
+  const resetForceOverride = useChatStore(state => state.resetForceOverride);
 
   const [showSettings, setShowSettings] = useState(false);
   const [setupLoading, setSetupLoading] = useState(false);
@@ -270,9 +286,9 @@ export default function Chat() {
   useEffect(() => {
     const modelExists = modelList.some(m => m.id === model);
     if ((!model || !modelExists) && modelList.length > 0) {
-      setModel(modelList[0].id);
+      setSessionModel(modelList[0].id);
     }
-  }, [model, modelList, setModel]);
+  }, [model, modelList, setSessionModel]);
 
   const handleClearChat = useCallback(() => {
     if (messages.length > 0) {
@@ -345,6 +361,60 @@ export default function Chat() {
 
       {/* AI Hub tabs — shown when accessed via /ai/chat */}
       {location.pathname.startsWith('/ai/') && <AiTopTabs />}
+
+      {/* Main content: session sidebar + chat area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Session sidebar */}
+        <div className="w-52 shrink-0 border-r border-vsc-border bg-vsc-sidebar/30 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-vsc-border">
+            <span className="text-xs font-medium text-vsc-text-muted">{t('chat.sessions')}</span>
+            <ButtonBase
+              type="button"
+              onClick={() => createSession()}
+              className="p-1 rounded hover:bg-vsc-hover text-vsc-text-muted hover:text-vsc-text transition-colors"
+              title={t('chat.newChat')}
+            >
+              <Plus size={14} />
+            </ButtonBase>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {sessions.map(s => (
+              <div
+                key={s.id}
+                onClick={() => switchSession(s.id)}
+                className={`group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-vsc-hover transition-colors ${
+                  s.id === activeSessionId ? 'bg-vsc-blue/10 border-l-2 border-vsc-blue' : ''
+                }`}
+              >
+                <MessageSquare size={12} className="shrink-0 text-vsc-text-muted" />
+                <span className="text-xs text-vsc-text truncate flex-1">{s.title}</span>
+                <div className="hidden group-hover:flex items-center gap-0.5">
+                  <ButtonBase
+                    type="button"
+                    onClick={e => { e.stopPropagation(); renameSession(s.id, prompt(t('chat.rename')) || s.title); }}
+                    className="p-0.5 rounded hover:bg-vsc-hover text-vsc-text-muted hover:text-vsc-text transition-colors"
+                    title={t('chat.rename')}
+                  >
+                    <Pencil size={10} />
+                  </ButtonBase>
+                  {sessions.length > 1 && (
+                    <ButtonBase
+                      type="button"
+                      onClick={e => { e.stopPropagation(); deleteSession(s.id); }}
+                      className="p-0.5 rounded hover:bg-vsc-hover text-vsc-text-muted hover:text-vsc-red transition-colors"
+                      title={t('chat.deleteSession')}
+                    >
+                      <Trash2 size={10} />
+                    </ButtonBase>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Chat area */}
+        <div className="flex flex-col flex-1 overflow-hidden">
 
       {/* Settings Panel */}
       {showSettings && (
@@ -647,95 +717,109 @@ export default function Chat() {
         <ChatHistory messages={messages} isLoading={isLoading} />
       )}
 
-      {/* Inspector */}
+      {/* Inspector — collapsible */}
       {messages.some(m => m.role === 'assistant' && m.debug) && (
-        <div className="border-t border-vsc-border bg-vsc-sidebar/40 px-4 py-3">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="text-xs font-medium text-vsc-text">{t('chat.inspectorTitle')}</div>
-              <div className="flex items-center gap-2">
-                <Select
-                  value={inspectorMessageId || ''}
-                  onChange={e => setInspectorMessageId(e.target.value || null)}
-                  className="px-2 py-1 bg-vsc-input border border-vsc-border rounded text-2xs text-vsc-text"
-                  shellClassName="bg-vsc-input border-vsc-border"
-                >
-                  <option value="">{t('chat.latest')}</option>
-                  {[...messages]
-                    .filter(m => m.role === 'assistant' && m.debug)
-                    .slice()
-                    .reverse()
-                    .map(m => (
-                      <option key={m.id} value={m.id}>
-                        {new Date(m.timestamp).toLocaleTimeString()} •{' '}
-                        {m.routedProvider || t('chat.unknownProvider')}
-                      </option>
-                    ))}
-                </Select>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  leftIcon={<Copy size={12} />}
-                  onClick={async () => {
-                    const target =
-                      messages.find(m => m.id === inspectorMessageId) ||
-                      [...messages].reverse().find(m => m.role === 'assistant' && m.debug);
-                    if (!target?.debug) return;
-                    await navigator.clipboard.writeText(JSON.stringify(target.debug, null, 2));
-                  }}
-                >
-                  {t('chat.copyJson')}
-                </Button>
-              </div>
-            </div>
-            {(() => {
-              const target =
-                messages.find(m => m.id === inspectorMessageId) ||
-                [...messages].reverse().find(m => m.role === 'assistant' && m.debug);
-              if (!target?.debug) return null;
-              const debug = target.debug;
-              const requestLog = requestLogs.find(
-                log => log.model === (target.routedModel || target.requestedModel)
-              );
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <pre className="text-2xs text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 overflow-auto max-h-48">
-                    {JSON.stringify(
-                      {
-                        apiUrl: debug.apiUrl,
-                        startedAt: debug.startedAt,
-                        durationMs: debug.durationMs,
-                        force: {
-                          provider: debug.forceProvider,
-                          modelId: debug.forceModelId,
-                          accountId: debug.forceAccountId,
-                        },
-                        requestHeaders: debug.requestHeaders,
-                        requestBody: debug.requestBody,
-                      },
-                      null,
-                      2
-                    )}
-                  </pre>
-                  <pre className="text-2xs text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 overflow-auto max-h-48">
-                    {JSON.stringify(
-                      {
-                        routedProvider: target.routedProvider,
-                        routedModel: target.routedModel,
-                        requestedModel: target.requestedModel,
-                        responseStatus: debug.responseStatus,
-                        responseHeaders: debug.responseHeaders,
-                        error: debug.error,
-                        requestLog,
-                      },
-                      null,
-                      2
-                    )}
-                  </pre>
+        <div className="border-t border-vsc-border bg-vsc-sidebar/40">
+          <button
+            type="button"
+            onClick={() => setInspectorOpen(!inspectorOpen)}
+            className="w-full flex items-center justify-between px-4 py-2 text-xs font-medium text-vsc-text hover:bg-vsc-hover transition-colors"
+          >
+            <span>{t('chat.inspectorToggle')}</span>
+            <span className="text-vsc-text-muted">{inspectorOpen ? '▲' : '▼'}</span>
+          </button>
+          {inspectorOpen && (
+            <div className="px-4 py-3 border-t border-vsc-border/50 max-w-4xl mx-auto">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="text-xs font-medium text-vsc-text">{t('chat.inspectorTitle')}</div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={inspectorMessageId || ''}
+                    onChange={e => setInspectorMessageId(e.target.value || null)}
+                    className="px-2 py-1 bg-vsc-input border border-vsc-border rounded text-2xs text-vsc-text"
+                    shellClassName="bg-vsc-input border-vsc-border"
+                  >
+                    <option value="">{t('chat.latest')}</option>
+                    {[...messages]
+                      .filter(m => m.role === 'assistant' && m.debug)
+                      .slice()
+                      .reverse()
+                      .map(m => (
+                        <option key={m.id} value={m.id}>
+                          {new Date(m.timestamp).toLocaleTimeString()} •{' '}
+                          {m.routedProvider || t('chat.unknownProvider')}
+                        </option>
+                      ))}
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    leftIcon={<Copy size={12} />}
+                    onClick={async () => {
+                      const target =
+                        messages.find(m => m.id === inspectorMessageId) ||
+                        [...messages].reverse().find(m => m.role === 'assistant' && m.debug);
+                      if (!target?.debug) return;
+                      await navigator.clipboard.writeText(JSON.stringify(target.debug, null, 2));
+                    }}
+                  >
+                    {t('chat.copyJson')}
+                  </Button>
                 </div>
-              );
-            })()}
-          </div>
+              </div>
+              {(() => {
+                const target =
+                  messages.find(m => m.id === inspectorMessageId) ||
+                  [...messages].reverse().find(m => m.role === 'assistant' && m.debug);
+                if (!target?.debug) return null;
+                const debug = target.debug;
+                const requestLog = requestLogs.find(
+                  log => log.model === (target.routedModel || target.requestedModel)
+                );
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <pre className="text-2xs text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 overflow-auto max-h-48">
+                      {JSON.stringify(
+                        {
+                          apiUrl: debug.apiUrl,
+                          startedAt: debug.startedAt,
+                          durationMs: debug.durationMs,
+                          promptTokens: debug.promptTokens,
+                          completionTokens: debug.completionTokens,
+                          totalTokens: debug.totalTokens,
+                          contextUsagePct: debug.contextUsagePct,
+                          force: {
+                            provider: debug.forceProvider,
+                            modelId: debug.forceModelId,
+                            accountId: debug.forceAccountId,
+                          },
+                          requestHeaders: debug.requestHeaders,
+                          requestBody: debug.requestBody,
+                        },
+                        null,
+                        2
+                      )}
+                    </pre>
+                    <pre className="text-2xs text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 overflow-auto max-h-48">
+                      {JSON.stringify(
+                        {
+                          routedProvider: target.routedProvider,
+                          routedModel: target.routedModel,
+                          requestedModel: target.requestedModel,
+                          responseStatus: debug.responseStatus,
+                          responseHeaders: debug.responseHeaders,
+                          error: debug.error,
+                          requestLog,
+                        },
+                        null,
+                        2
+                      )}
+                    </pre>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
       )}
 
@@ -851,7 +935,7 @@ export default function Chat() {
                           type="button"
                           key={m.id}
                           onClick={() => {
-                            setModel(m.id);
+                            setSessionModel(m.id);
                             setShowModelDropdown(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-vsc-hover transition-colors
@@ -900,7 +984,9 @@ export default function Chat() {
           allowImageAttachments={selectedModelSupportsVision}
           placeholder={t('chat.placeholder') || 'Type a message...'}
         />
-      </div>
+        </div>
+        </div>{/* end chat area */}
+      </div>{/* end flex-row (sidebar + chat) */}
     </div>
   );
 }
