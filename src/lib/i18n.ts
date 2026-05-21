@@ -186,6 +186,7 @@ export interface Translations {
       showing: string;
     }
     importAccounts: string;
+    importFromClipboard: string;
     lastError: string;
     lastLogin: string;
     lastLoginAt: string;
@@ -1251,30 +1252,39 @@ export interface Translations {
     }
     clear: string;
     copyJson: string;
+    copyMessage: string;
     debugProfilesTitle: string;
+    deleteMessage: string;
     deleteProfile: string;
+    deleteSession: string;
+    editMessage: string;
     emptyDescription: string;
     emptyTitle: string;
     error: string;
     forceRouting: string;
     forced: string;
     inspectorTitle: string;
+    inspectorToggle: string;
     latest: string;
     maxTokensLabel: string;
     model: string;
     modelIdPlaceholder: string;
     modelsCount: string;
     ms: string;
+    newChat: string;
     noModels: string;
     placeholder: string;
     profileLabel: string;
     providerPlaceholder: string;
     providers: string;
     proxySettings: string;
+    regenerate: string;
+    renameSession: string;
     reset: string;
     retry: string;
     routed: string;
     routedWithModel: string;
+    sessions: string;
     sendMessage: string;
     settings: string;
     setupApiKeys: string;
@@ -1290,11 +1300,19 @@ export interface Translations {
     suggestionHelpDebug: string;
     suggestionWriteFunction: string;
     systemPromptLabel: string;
+    systemPromptPlaceholder: string;
     temperatureLabel: string;
     thinking: string;
     title: string;
+    today: string;
     unknownProvider: string;
+    untitledChat: string;
     you: string;
+    yesterday: string;
+    rename: string;
+    inspector: string;
+    collapse: string;
+    expand: string;
   }
   commandPalette: {
     actions: string;
@@ -1951,6 +1969,8 @@ export interface Translations {
     title: string;
     unpatchFailed: string;
     unpatching: string;
+    tokenTypeStripping: string;
+    tokenTypeStrippingDesc: string;
     machineIdSpoofing: string;
     machineIdSpoofingDesc: string;
     blockTelemetry: string;
@@ -2076,10 +2096,6 @@ export interface Translations {
     testingDraft: string;
     testingEntry: string;
     title: string;
-    totalLinesStat: string;
-    type: string;
-    updateError: string;
-    username: string;
   }
   proxyListManager: {
     activeCount: string;

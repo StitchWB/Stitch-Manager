@@ -1,6 +1,7 @@
 import {
   Battery,
   Bot,
+  ClipboardPaste,
   Download,
   FileSpreadsheet,
   Globe,
@@ -77,6 +78,7 @@ interface AccountsToolbarProps {
   onProfileCustomUrlChange: (value: string) => void;
   onRefreshAll: () => void;
   onImportAccounts: () => void;
+  onImportFromClipboard: () => void;
   onExportCSV: () => void;
   onTestSheets: () => void;
   onRefreshSheets: () => void;
@@ -128,6 +130,7 @@ export function AccountsToolbar({
   onProfileCustomUrlChange,
   onRefreshAll,
   onImportAccounts,
+  onImportFromClipboard,
   onExportCSV,
   onTestSheets,
   onRefreshSheets,
@@ -195,6 +198,13 @@ export function AccountsToolbar({
                     icon: Upload,
                     label: t('accounts.importAccounts'),
                     onClick: onImportAccounts,
+                    disabled: isImporting,
+                    loading: isImporting,
+                  },
+                  {
+                    icon: ClipboardPaste,
+                    label: t('accounts.importFromClipboard'),
+                    onClick: onImportFromClipboard,
                     disabled: isImporting,
                     loading: isImporting,
                   },

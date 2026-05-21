@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { useChatStore, type ChatMessage } from '../stores/chat';
+import { useChatStore, type ChatMessage, type ChatSession } from '../stores/chat';
 import type { ContentBlock } from '../types/generated';
 
 interface UseChatOptions {
@@ -21,6 +21,9 @@ interface UseChatReturn {
 
 const DEFAULT_API_URL = 'http://localhost:8765/v1/chat/completions';
 
+/** Stable empty array to avoid creating a new [] on every selector call. */
+const EMPTY_MESSAGES: ChatMessage[] = [];
+
 /**
  * Hook for managing chat state and communication with the LLM API server.
  * Uses persistent store to preserve messages across page navigation.
@@ -35,20 +38,35 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     temperature = 1.0,
   } = options;
 
-  const {
-    messages,
-    model: storeModel,
-    isLoading,
-    error,
-    addMessage,
-    appendToMessage,
-    setMessageStreaming,
-    setMessageRouting,
-    removeMessage,
-    clearMessages,
-    setLoading,
-    setError,
-  } = useChatStore();
+  // Individual selectors with stable references.
+  // - Primitives (isLoading, error) are compared by Object.is — safe.
+  // - Functions from Zustand are stable by identity — safe.
+  // - Computed selectors use useCallback to keep the selector function
+  //   identity stable, which lets Zustand cache the result.
+  const messages = useChatStore(
+    useCallback(
+      (state: { sessions: ChatSession[]; activeSessionId: string }) =>
+        state.sessions.find(s => s.id === state.activeSessionId)?.messages ?? EMPTY_MESSAGES,
+      []
+    )
+  );
+  const storeModel = useChatStore(
+    useCallback(
+      (state: { sessions: ChatSession[]; activeSessionId: string }) =>
+        state.sessions.find(s => s.id === state.activeSessionId)?.model ?? 'auto',
+      []
+    )
+  );
+  const isLoading = useChatStore(state => state.isLoading);
+  const error = useChatStore(state => state.error);
+  const addMessage = useChatStore(state => state.addMessage);
+  const appendToMessage = useChatStore(state => state.appendToMessage);
+  const setMessageStreaming = useChatStore(state => state.setMessageStreaming);
+  const setMessageRouting = useChatStore(state => state.setMessageRouting);
+  const removeMessage = useChatStore(state => state.removeMessage);
+  const clearMessages = useChatStore(state => state.clearMessages);
+  const setLoading = useChatStore(state => state.setLoading);
+  const setError = useChatStore(state => state.setError);
 
   const model = optionModel || storeModel;
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -86,7 +104,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
       try {
         // Build messages array for API
-        const currentMessages = useChatStore.getState().messages;
+        const currentMessages = useChatStore.getState().messages();
         const apiMessages: Array<{ role: string; content: string | ContentBlock[] }> =
           currentMessages
             .filter(msg => msg.id !== assistantMessageId)
@@ -102,10 +120,15 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
         const forceOverride = storeState.forceOverride;
 
-        if (activeProfile?.systemPrompt.trim()) {
+        // Session-level system prompt takes precedence; fall back to profile.
+        const activeSession = storeState.activeSession();
+        const systemPrompt =
+          activeSession?.systemPrompt?.trim() || activeProfile?.systemPrompt?.trim() || '';
+
+        if (systemPrompt) {
           apiMessages.unshift({
             role: 'system',
-            content: activeProfile.systemPrompt.trim(),
+            content: systemPrompt,
           });
         }
 
@@ -246,6 +269,22 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 else if (event.type === 'messageStop' || event.type === 'message_stop') {
                   setMessageStreaming(assistantMessageId, false);
                 }
+                // Handle usage metadata in final chunk
+                if (event.usage || event['x-elapsed-ms'] != null) {
+                  const usagePatch: Record<string, unknown> = {};
+                  if (event.usage) {
+                    usagePatch.promptTokens = event.usage.prompt_tokens || event.usage.inputTokenCount || 0;
+                    usagePatch.completionTokens = event.usage.completion_tokens || event.usage.outputTokenCount || 0;
+                    usagePatch.totalTokens = event.usage.total_tokens || event.usage.totalTokenCount || 0;
+                  }
+                  if (event['x-elapsed-ms'] != null) {
+                    usagePatch.durationMs = event['x-elapsed-ms'];
+                  }
+                  if (event['x-context-usage-pct'] != null) {
+                    usagePatch.contextUsagePct = event['x-context-usage-pct'];
+                  }
+                  useChatStore.getState().setMessageDebug(assistantMessageId, usagePatch as Partial<import('../stores/chat').ChatDebugInfo>);
+                }
                 // Handle error
                 else if (event.type === 'error') {
                   throw new Error(event.error?.message || event.error || 'Stream error');
@@ -267,13 +306,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           completedAt,
           durationMs:
             completedAt -
-            (useChatStore.getState().messages.find(m => m.id === assistantMessageId)?.debug
+            (useChatStore.getState().messages().find(m => m.id === assistantMessageId)?.debug
               ?.startedAt || completedAt),
         });
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           // Request was cancelled
-          const msg = useChatStore.getState().messages.find(m => m.id === assistantMessageId);
+          const msg = useChatStore.getState().messages().find(m => m.id === assistantMessageId);
           if (msg && !msg.content) {
             removeMessage(assistantMessageId);
           } else {
@@ -288,12 +327,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             completedAt,
             durationMs:
               completedAt -
-              (useChatStore.getState().messages.find(m => m.id === assistantMessageId)?.debug
+              (useChatStore.getState().messages().find(m => m.id === assistantMessageId)?.debug
                 ?.startedAt || completedAt),
           });
 
           // Remove the empty assistant message on error
-          const msg = useChatStore.getState().messages.find(m => m.id === assistantMessageId);
+          const msg = useChatStore.getState().messages().find(m => m.id === assistantMessageId);
           if (!msg?.content) {
             removeMessage(assistantMessageId);
           }

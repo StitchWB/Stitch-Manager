@@ -245,6 +245,7 @@ export default function Accounts() {
     handleUpdateAccount,
     handleExportCSV,
     handleImportAccounts,
+    handleImportFromClipboard,
     handleRefreshAll,
     handleRefreshExpired,
     handleRemoveSelectedAccounts,
@@ -477,6 +478,7 @@ export default function Accounts() {
             onProfileCustomUrlChange={setProfileCustomUrl}
             onRefreshAll={handleRefreshAll}
             onImportAccounts={handleImportAccounts}
+            onImportFromClipboard={handleImportFromClipboard}
             onExportCSV={handleExportCSV}
             onTestSheets={handleTestSheets}
             onRefreshSheets={handleRefreshSheets}

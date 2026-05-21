@@ -9,6 +9,63 @@
   // Prevent double registration
   if (window.StripeFillerTool) return;
 
+  // ── Address presets by country ────────────────────────────────────────────
+  // Each entry: [displayName, country, state, city, postalCode, addressLine]
+  // Addresses are realistic-looking test data for form autofill.
+  var ADDRESS_PRESETS = {
+    US: ['🇺🇸 US', 'US', 'CA', 'San Francisco', '94105', '1 Market St'],
+    GB: ['🇬🇧 UK', 'GB', 'London', 'London', 'SW1A 1AA', '10 Downing Street'],
+    DE: ['🇩🇪 DE', 'DE', 'Bayern', 'München', '80331', 'Marienplatz 1'],
+    FR: ['🇫🇷 FR', 'FR', 'Île-de-France', 'Paris', '75001', '1 Rue de la Paix'],
+    KR: ['🇰🇷 KR', 'KR', 'Seoul', 'Seoul', '04524', '23 Teheran-ro'],
+    JP: ['🇯🇵 JP', 'JP', 'Tokyo', 'Shibuya-ku', '150-0002', '1-1-1 Dogenzaka'],
+    CA: ['🇨🇦 CA', 'CA', 'ON', 'Toronto', 'M5H 2N2', '100 King Street West'],
+    AU: ['🇦🇺 AU', 'AU', 'VIC', 'Melbourne', '3000', '1 Collins Street'],
+    BR: ['🇧🇷 BR', 'BR', 'SP', 'São Paulo', '01311-100', 'Av Paulista 1578'],
+    NL: ['🇳🇱 NL', 'NL', 'Noord-Holland', 'Amsterdam', '1012 AB', 'Dam 1'],
+    SG: ['🇸🇬 SG', 'SG', '', 'Singapore', '018956', '1 Raffles Place'],
+    HK: ['🇭🇰 HK', 'HK', '', 'Hong Kong', '999077', '1 Queen\'s Road Central'],
+    SE: ['🇸🇪 SE', 'SE', 'Stockholm', 'Stockholm', '111 22', 'Drottninggatan 1'],
+    CH: ['🇨🇭 CH', 'CH', 'ZH', 'Zürich', '8001', 'Bahnhofstrasse 1'],
+    IT: ['🇮🇹 IT', 'IT', 'Lazio', 'Roma', '00100', 'Via del Corso 1'],
+    ES: ['🇪🇸 ES', 'ES', 'Madrid', 'Madrid', '28001', 'Calle Gran Vía 1'],
+    PL: ['🇵🇱 PL', 'PL', 'Mazowieckie', 'Warszawa', '00-001', 'ul. Nowy Świat 1'],
+    CZ: ['🇨🇿 CZ', 'CZ', 'Hlavní město Praha', 'Praha', '110 00', 'Václavské náměstí 1'],
+    PT: ['🇵🇹 PT', 'PT', 'Lisboa', 'Lisboa', '1100-001', 'Rua Augusta 1'],
+    IE: ['🇮🇪 IE', 'IE', 'Dublin', 'Dublin', 'D02 AF30', '1 Grafton Street'],
+  };
+
+  // Surnames and given names per country for name generation
+  var NAME_DATA = {
+    US: { given: ['James','Mary','Robert','Patricia','John','Jennifer','Michael','Linda','David','Elizabeth'], surname: ['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez'] },
+    GB: { given: ['Oliver','Amelia','Harry','Emily','George','Isla','Noah','Ava','Jack','Mia'], surname: ['Smith','Jones','Williams','Taylor','Brown','Davies','Evans','Wilson','Thomas','Roberts'] },
+    DE: { given: ['Lukas','Anna','Maximilian','Sophie','Paul','Marie','Leon','Emma','Felix','Hannah'], surname: ['Müller','Schmidt','Schneider','Fischer','Weber','Meyer','Wagner','Becker','Schulz','Hoffmann'] },
+    FR: { given: ['Luc','Camille','Raphaël','Léa','Gabriel','Manon','Louis','Chloé','Arthur','Inès'], surname: ['Martin','Bernard','Dubois','Thomas','Robert','Richard','Petit','Durand','Leroy','Moreau'] },
+    KR: { given: ['Min-jun','Ji-woo','Do-yun','Seo-yun','Ye-jun','Ha-eun','Joo-won','So-yu','Si-woo','Yu-na'], surname: ['Kim','Lee','Park','Choi','Jung','Kang','Cho','Yoo','Lim','Han'] },
+    JP: { given: ['Haruto','Yui','Sota','Sakura','Ren','Hina','Yamato','Aoi','Sota','Hana'], surname: ['Sato','Suzuki','Takahashi','Tanaka','Watanabe','Ito','Yamamoto','Nakamura','Kobayashi','Kato'] },
+    CA: { given: ['Liam','Olivia','Noah','Emma','William','Sophia','Oliver','Ava','Benjamin','Isabella'], surname: ['Smith','Brown','Tremblay','Martin','Roy','Wilson','MacDonald','Gagnon','Johnson','Taylor'] },
+    AU: { given: ['Oliver','Charlotte','Jack','Mia','William','Amelia','Lucas','Harper','Thomas','Ella'], surname: ['Smith','Jones','Williams','Brown','Taylor','Wilson','Johnson','Martin','Anderson','Thompson'] },
+    BR: { given: ['Miguel','Ana','Arthur','Helena','Gael','Valentina','Heitor','Laura','Davi','Alice'], surname: ['Silva','Santos','Oliveira','Souza','Lima','Pereira','Costa','Ferreira','Rodrigues','Almeida'] },
+    NL: { given: ['Daan','Emma','Lucas','Sophie','Sem','Mila','Lars','Lotte','Bram','Saar'], surname: ['de Jong','Jansen','de Vries','van den Berg','van Dijk','Bakker','Janssen','Visser','Smit','Meijer'] },
+    SG: { given: ['Jian','Xin','Wei','Hui','Kai','Ling','Zhen','Yan','Jun','Mei'], surname: ['Tan','Lim','Lee','Ng','Ong','Wong','Goh','Chua','Chan','Koh'] },
+    HK: { given: ['Chi','Yan','Wai','Mei','Kwan','Ling','Fai','Siu','Ho','Wing'], surname: ['Chan','Lee','Cheung','Wong','Liu','Leung','Chow','Yeung','Tang','Cheng'] },
+    SE: { given: ['Liam','Alice','Noah','Maja','William','Ella','Lucas','Olivia','Oscar','Elsa'], surname: ['Andersson','Johansson','Karlsson','Nilsson','Eriksson','Larsson','Svensson','Persson','Gustafsson','Jönsson'] },
+    CH: { given: ['Luca','Mia','Leo','Lina','Nico','Anna','Fabio','Sara','Matteo','Noemi'], surname: ['Müller','Meier','Schmid','Keller','Weber','Huber','Schneider','Steiner','Fischer','Brunner'] },
+    IT: { given: ['Leonardo','Sofia','Francesco','Aurora','Lorenzo','Giulia','Andrea','Beatrice','Matteo','Alice'], surname: ['Rossi','Ferrari','Russo','Bianchi','Romano','Colombo','Ricci','Marino','Greco','Bruno'] },
+    ES: { given: ['Lucas','Sofía','Mateo','María','Daniel','Lucía','Pablo','Martina','Hugo','Paula'], surname: ['García','Fernández','López','Martínez','Sánchez','Pérez','Gómez','Martín','Jiménez','Ruiz'] },
+    PL: { given: ['Jan','Anna','Jakub','Zofia','Antoni','Hanna','Franciszek','Maria','Aleksander','Polonia'], surname: ['Nowak','Kowalska','Wiśniewski','Wójcik','Kamińska','Lewandowski','Zielińska','Szymańska','Woźniak','Dąbrowska'] },
+    CZ: { given: ['Jan','Ema','Jakub','Eliška','Tomáš','Anna','Matěj','Tereza','Lukáš','Natálie'], surname: ['Novák','Svobodová','Novotná','Dvořáková','Černý','Procházková','Kučerová','Veselá','Horáková','Němcová'] },
+    PT: { given: ['Francisco','Maria','João','Leonor','Santiago','Beatriz','Afonso','Inês','Duarte','Carolina'], surname: ['Silva','Santos','Ferreira','Pereira','Rodrigues','Costa','Martins','Sousa','Fernandes','Gonçalves'] },
+    IE: { given: ['Jack','Emily','Sean','Aoife','Conor','Niamh','Finn','Saoirse','Oscar','Caoimhe'], surname: ['Murphy','Kelly','O\'Sullivan','Walsh','Smith','O\'Brien','Byrne','Ryan','O\'Connor','O\'Neill'] },
+  };
+
+  function randomPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function generateName(countryCode) {
+    var data = NAME_DATA[countryCode] || NAME_DATA.US;
+    return randomPick(data.given) + ' ' + randomPick(data.surname);
+  }
+
   function luhn(card) {
     var n = card.replace(/\D/g, '');
     if (!n || n.length < 13) return false;
@@ -88,7 +145,12 @@
         '<input id="tk-use-billing" type="checkbox" checked style="accent-color:var(--tk-accent);width:12px;height:12px;margin:0;" />' +
         '<label for="tk-use-billing" style="cursor:pointer;">' + i18n('stripe.billing') + '</label>' +
         '<span style="flex:1"></span>' +
-        '<button id="tk-preset-us" class="tk-btn" style="padding:2px 6px;font-size:10px;flex:0 0 auto;">🇺🇸</button>' +
+        '<select id="tk-country-preset" class="tk-input" style="padding:1px 4px;font-size:10px;flex:0 0 auto;max-width:90px;cursor:pointer;">' +
+          Object.keys(ADDRESS_PRESETS).map(function (code) {
+            return '<option value="' + code + '">' + ADDRESS_PRESETS[code][0] + '</option>';
+          }).join('') +
+        '</select>' +
+        '<button id="tk-gen-addr" class="tk-btn" style="padding:2px 6px;font-size:10px;flex:0 0 auto;" title="Generate address">🎲</button>' +
       '</div>' +
       '<div id="tk-billing-fields" style="display:none;">' +
         '<input id="tk-name" class="tk-input" type="text" placeholder="' + i18n('stripe.name') + '" style="margin-bottom:4px;padding:5px 8px;font-size:11px;" />' +
@@ -132,15 +194,29 @@
     // Initialize billing fields visibility
     $('tk-billing-fields').style.display = $('tk-use-billing').checked ? 'block' : 'none';
 
-    // US Preset button
-    $('tk-preset-us').addEventListener('click', function () {
+    // Address generator: country preset + randomize
+    function applyAddressPreset() {
+      var code = $('tk-country-preset').value;
+      var preset = ADDRESS_PRESETS[code];
+      if (!preset) return;
       $('tk-use-billing').checked = true;
       $('tk-billing-fields').style.display = 'block';
-      $('tk-country').value = 'US';
-      $('tk-state').value = 'CA';
-      $('tk-city').value = 'San Francisco';
-      $('tk-postal').value = '94105';
-      $('tk-address').value = '1 Market St';
+      $('tk-name').value = generateName(code);
+      $('tk-country').value = preset[1]; // country code
+      $('tk-state').value = preset[2];   // administrative area
+      $('tk-city').value = preset[3];     // city
+      $('tk-postal').value = preset[4];   // postal code
+      $('tk-address').value = preset[5];  // address line
+    }
+
+    $('tk-country-preset').addEventListener('change', applyAddressPreset);
+
+    // Randomize button: re-roll name + slight address variation
+    $('tk-gen-addr').addEventListener('click', function () {
+      applyAddressPreset();
+      // Re-roll the name for variety
+      var code = $('tk-country-preset').value;
+      $('tk-name').value = generateName(code);
     });
 
     // Card input validation

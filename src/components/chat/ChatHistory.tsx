@@ -10,13 +10,24 @@ import { EmptyState, LoadingSpinner } from '@/components/ui';
 interface ChatHistoryProps {
   messages: ChatMessageType[];
   isLoading?: boolean;
+  onCopyMessage?: (id: string) => void;
+  onEditMessage?: (id: string) => void;
+  onRegenerateMessage?: (id: string) => void;
+  onDeleteMessage?: (id: string) => void;
 }
 
 /**
  * Scrollable chat message history component.
  * Auto-scrolls to bottom when new messages arrive.
  */
-export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
+export function ChatHistory({
+  messages,
+  isLoading,
+  onCopyMessage,
+  onEditMessage,
+  onRegenerateMessage,
+  onDeleteMessage,
+}: ChatHistoryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +68,14 @@ export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
     >
       <div className="max-w-4xl mx-auto">
         {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
+          <ChatMessage
+            key={message.id}
+            message={message}
+            onCopy={onCopyMessage}
+            onEdit={onEditMessage}
+            onRegenerate={onRegenerateMessage}
+            onDelete={onDeleteMessage}
+          />
         ))}
         
         {/* Typing indicator when loading and last message is not streaming */}
@@ -72,19 +90,11 @@ export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
                   {t('chat.assistant')}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-sm text-vsc-text-muted">
-                <span className="w-2 h-2 bg-vsc-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-vsc-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-vsc-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
             </div>
           </div>
         )}
-        
         <div ref={bottomRef} />
       </div>
     </div>
   );
 }
-
-export default ChatHistory;
