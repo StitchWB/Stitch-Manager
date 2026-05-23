@@ -77,7 +77,7 @@ def find_cloakbrowser(
             logger.debug("CloakBrowser found at %s", path)
             return str(path)
 
-    if auto_download and platform.system() == "Windows":
+    if auto_download:
         downloaded = _attempt_auto_download(project_root)
         if downloaded:
             return downloaded
