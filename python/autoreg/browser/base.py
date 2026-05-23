@@ -141,8 +141,8 @@ class BaseBrowser:
                 logger.info(f"Found CloakBrowser (bundled): {path}")
                 return str(path)
 
-        # Attempt auto-download on first run (Windows only)
-        if system == "Windows" and os.environ.get("AUTOREG_AUTO_DOWNLOAD_CLOAKBROWSER", "1") == "1":
+        # Attempt auto-download on first run if enabled
+        if os.environ.get("AUTOREG_AUTO_DOWNLOAD_CLOAKBROWSER", "1") == "1":
             download_script = project_root / "python" / "autoreg" / "browser" / "download_cloakbrowser.py"
             if download_script.exists():
                 logger.info("CloakBrowser not found — attempting auto-download...")
@@ -151,7 +151,7 @@ class BaseBrowser:
                         [sys.executable, str(download_script)],
                         capture_output=True, text=True, timeout=600,
                     )
-                    downloaded = project_root / "resources" / "cloakbrowser" / "chrome.exe"
+                    downloaded = project_root / "resources" / "cloakbrowser" / ("chrome.exe" if system == "Windows" else "chrome")
                     if result.returncode == 0 and downloaded.exists():
                         logger.info(f"CloakBrowser auto-downloaded: {downloaded}")
                         return str(downloaded)
