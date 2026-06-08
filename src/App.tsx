@@ -254,6 +254,7 @@ function App() {
             <Route path="/ai/integrations" element={<Navigate to="/ai/routing" replace />} />
             <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
+            <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai/antigravity" element={<Antigravity />} />
             <Route path="/ai/api-keys" element={<ApiKeys />} />
             <Route path="/ai/chat" element={<Chat />} />

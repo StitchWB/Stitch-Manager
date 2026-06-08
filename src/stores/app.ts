@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import type { ProviderName, Theme, Provider } from '../types/ui';
+import type { ProviderName, Theme, ProviderInfo } from '../types/ui';
 import { setLocale } from '../lib/i18n';
 
 export type Language = 'en' | 'ru' | 'zh';
@@ -45,8 +45,8 @@ interface AppState {
   setSelectedProvider: (provider: ProviderName | null) => void;
 
   // Providers list
-  providers: Provider[];
-  setProviders: (providers: Provider[]) => void;
+  providers: ProviderInfo[];
+  setProviders: (providers: ProviderInfo[]) => void;
 
   // UI State
   sidebarCollapsed: boolean;
@@ -67,7 +67,7 @@ interface AppNotification {
   timestamp: number;
 }
 
-const DEFAULT_PROVIDERS: Provider[] = [
+const DEFAULT_PROVIDERS: ProviderInfo[] = [
   {
     id: 'kiro',
     name: 'Kiro',

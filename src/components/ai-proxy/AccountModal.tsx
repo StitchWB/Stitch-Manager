@@ -16,6 +16,7 @@ interface AccountModalProps {
 const PROVIDERS = [
 { value: 'openai', label: 'OpenAI' },
 { value: 'claude', label: 'Claude' },
+{ value: 'anthropic', label: 'Anthropic' },
 { value: 'gemini', label: 'Gemini' },
 { value: 'kiro', label: 'Kiro' },
 { value: 'antigravity', label: 'Antigravity' },
@@ -36,7 +37,7 @@ const ACCOUNT_TYPES = [
 
 
 // Providers that support OAuth
-const OAUTH_PROVIDERS = ['openai', 'claude', 'gemini', 'kiro', 'antigravity', 'fireworks'];
+const OAUTH_PROVIDERS = ['openai', 'claude', 'anthropic', 'gemini', 'kiro', 'antigravity', 'fireworks'];
 
 export default function AccountModal({ isOpen, account, onClose, onSubmit }: AccountModalProps) {
   const [formData, setFormData] = useState({

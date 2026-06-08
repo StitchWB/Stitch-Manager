@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { PlugZap, Trash2, PenSquare, ChevronRight } from 'lucide-react';
-import { ButtonBase, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui';
+import { ButtonBase, ProviderLogo, StatusBadge, UsageBar, Checkbox } from '@/components/ui';
 
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
@@ -16,6 +16,11 @@ interface AiProxyAccountsTableProps {
     number,
     { status: 'idle' | 'loading' | 'ok' | 'error'; message?: string }
   >;
+  selectedIds: Set<number>;
+  onSelect: (id: number) => void;
+  onDeselect: (id: number) => void;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
   onRowClick: (account: AiProxyAccount) => void;
   onEdit: (account: AiProxyAccount) => void;
   onDelete: (id: number) => void;
@@ -68,6 +73,11 @@ export function AiProxyAccountsTable({
   accounts,
   loading,
   connectionState,
+  selectedIds,
+  onSelect,
+  onDeselect,
+  onSelectAll,
+  onDeselectAll,
   onRowClick,
   onEdit,
   onDelete,
@@ -78,6 +88,9 @@ export function AiProxyAccountsTable({
 
   const openAiQuotaMap = useAiProxyStore(state => state.openAiAccountQuotas);
   const kiroQuotaMap = useAiProxyStore(state => state.kiroAccountQuotas);
+
+  const allIds = useMemo(() => accounts.map(a => a.id).filter((id): id is number => id !== null), [accounts]);
+  const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
 
   const rows = useMemo(() => {
     const sorted = [...accounts];
@@ -105,7 +118,19 @@ export function AiProxyAccountsTable({
     <div className="rounded-xl border border-white/10 bg-vsc-sidebar/80 overflow-hidden">
       <div className="overflow-x-auto">
         <div className="min-w-[860px]">
-          <div className="hidden lg:grid grid-cols-[34px_minmax(220px,1fr)_140px_220px_120px_120px] gap-4 px-4 py-3 border-b border-white/5 bg-black/20 sticky top-0 z-20">
+          <div className="hidden lg:grid grid-cols-[40px_34px_minmax(220px,1fr)_140px_220px_120px_120px] gap-4 px-4 py-3 border-b border-white/5 bg-black/20 sticky top-0 z-20">
+            <div className="flex items-center justify-center">
+              <Checkbox
+                checked={allSelected}
+                onChange={() => {
+                  if (allSelected) {
+                    onDeselectAll();
+                  } else {
+                    onSelectAll();
+                  }
+                }}
+              />
+            </div>
             <div aria-hidden="true" />
             <ButtonBase
               type="button"
@@ -208,10 +233,24 @@ export function AiProxyAccountsTable({
             <div
               key={account.id ?? `${account.provider}:${account.name}`}
               className={cn(
-                'relative grid grid-cols-1 lg:grid-cols-[34px_minmax(220px,1fr)_140px_220px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 text-left',
+                'relative grid grid-cols-1 lg:grid-cols-[40px_34px_minmax(220px,1fr)_140px_220px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 text-left',
                 'hover:bg-white/[0.03]'
               )}
             >
+              <div className="relative z-20 flex items-center justify-center">
+                <Checkbox
+                  checked={account.id !== null && selectedIds.has(account.id)}
+                  onChange={() => {
+                    if (account.id !== null) {
+                      if (selectedIds.has(account.id)) {
+                        onDeselect(account.id);
+                      } else {
+                        onSelect(account.id);
+                      }
+                    }
+                  }}
+                />
+              </div>
               <ButtonBase
                 type="button"
                 className="absolute inset-0 z-10 focus:outline-none"

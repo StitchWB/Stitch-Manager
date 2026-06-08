@@ -1,4 +1,4 @@
-import { Play, MoreHorizontal, Key } from 'lucide-react';
+import { Play, MoreHorizontal, Key, Copy } from 'lucide-react';
 import {
   Badge,
   type BadgeProps,
@@ -201,34 +201,56 @@ export function AccountRow({
         {data.lastLoginFormatted}
       </TableCell>
 
-      {/* Password */}
+      {/* Password / Token */}
       <TableCell
         className={cn(
-          visibleColumns.apiKey ? 'w-[50px] min-w-[50px] px-2 py-2 align-middle' : 'hidden'
+          visibleColumns.apiKey ? 'w-[70px] min-w-[70px] px-2 py-2 align-middle' : 'hidden'
         )}
         onClick={event => event.stopPropagation()}
       >
-        {account.registrationPassword ? (
-          <Tooltip content={t('accounts.quickActions.copyPassword')} side="top">
-            <IconButton
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                void copy(account.registrationPassword!, {
-                  sensitive: true,
-                  successMessage: t('accounts.quickActions.passwordCopied'),
-                });
-              }}
-              size="sm"
-              variant="ghost"
-              className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
-            >
-              <Key size={14} className="text-amber-400 hover:text-amber-300" />
-            </IconButton>
-          </Tooltip>
-        ) : (
-          <span className="text-xs text-slate-600">—</span>
-        )}
+        <div className="flex items-center gap-1">
+          {account.registrationPassword ? (
+            <Tooltip content={t('accounts.quickActions.copyPassword')} side="top">
+              <IconButton
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void copy(account.registrationPassword!, {
+                    sensitive: true,
+                    successMessage: t('accounts.quickActions.passwordCopied'),
+                  });
+                }}
+                size="sm"
+                variant="ghost"
+                className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
+              >
+                <Key size={14} className="text-amber-400 hover:text-amber-300" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+          {account.token ? (
+            <Tooltip content={t('accounts.copyToken')} side="top">
+              <IconButton
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void copy(account.token!, {
+                    sensitive: true,
+                    successMessage: t('accounts.tokenCopied'),
+                  });
+                }}
+                size="sm"
+                variant="ghost"
+                className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
+              >
+                <Copy size={14} className="text-emerald-400 hover:text-emerald-300" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+          {!account.registrationPassword && !account.token ? (
+            <span className="text-xs text-slate-600">—</span>
+          ) : null}
+        </div>
       </TableCell>
 
       {/* Quota */}

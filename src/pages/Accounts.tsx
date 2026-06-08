@@ -44,6 +44,7 @@ export default function Accounts() {
     fetchAccounts,
     deleteAccount,
     deleteAccounts,
+    archiveAccounts,
     toggleSelection,
     selectAll,
     clearSelection,
@@ -55,6 +56,8 @@ export default function Accounts() {
     setSearchQuery: setStoreSearchQuery,
     setQuotaFilter: setStoreQuotaFilter,
     setStatusFilter: setStoreStatusFilter,
+    showArchived,
+    setShowArchived,
   } = useAccountsStore();
 
   const [isModalOpen, setIsModalOpen] = useUIState('accounts-modal-open', false, 'session');
@@ -306,6 +309,20 @@ export default function Accounts() {
     [handleClearProfileSession, handleConfirmProfileSession, handleOpenProfileSession, selectedIds]
   );
 
+  const handleArchiveSelected = useCallback(async () => {
+    const targets = Array.from(selectedIds);
+    if (!targets.length) return;
+    try {
+      await archiveAccounts(targets, true);
+      toast.success(t('accounts.archiveSuccess', { count: String(targets.length) }));
+      clearSelection();
+    } catch (error) {
+      toast.error(
+        `${t('accounts.archiveFailed')}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }, [selectedIds, archiveAccounts, clearSelection]);
+
   const handleCreateStandaloneProfile = useCallback(async () => {
     try {
       const profile = await getOrCreateFingerprintProfile({ email: null });
@@ -465,6 +482,8 @@ export default function Accounts() {
             hasSheetsParams={Boolean(sheetsParams)}
             showSheetsConfig={showSheetsConfig}
             visibleColumns={visibleColumns}
+            showArchived={showArchived}
+            onShowArchivedChange={setShowArchived}
             onEntityFilterChange={handleEntityFilterChange}
             onViewModeChange={handleViewModeChange}
             onSearchQueryChange={handleSearchQueryChange}
@@ -593,6 +612,7 @@ export default function Accounts() {
               selectedCount={selectedIds.size}
               onExport={handleExportCSV}
               onDelete={() => handleRemoveSelectedAccounts()}
+              onArchive={handleArchiveSelected}
               onClear={clearSelection}
               onRefreshAll={handleRefreshAll}
               isRefreshing={isBulkRefreshing}

@@ -5,7 +5,6 @@ import { safeInvoke } from '../../lib/tauri/core/invoke';
 import { getEnabledModels, setEnabledModels } from '../../lib/tauri/modules/aiProxy';
 import type { ProxyStatus, ProxySettings } from '../../types/generated';
 import { IdeConfigWizard } from '../ai-proxy/IdeConfigWizard';
-import { KiroPoolProxySection } from './KiroPoolProxySection';
 import { Button, Input, LoadingSpinner, Select, Toggle } from '@/components/ui';
 
 const OPENCODE_DEFAULT_MODEL_IDS = [
@@ -240,9 +239,6 @@ export function AiProxySettings() {
 
         </p>
       </div>
-
-      {/* Kiro Pool Proxy — single-endpoint OpenAI-compat gateway over multiple Kiro accounts */}
-      <KiroPoolProxySection />
 
       {/* Status */}
       <div className="flex items-center justify-between p-4 bg-vsc-sidebar rounded-lg border border-vsc-border">

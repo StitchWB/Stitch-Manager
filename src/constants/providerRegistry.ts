@@ -19,6 +19,7 @@ export type ProviderRegistryId =
   | 'aws'
   | 'openai'
   | 'claude'
+  | 'anthropic'
   | 'gemini'
   | 'antigravity'
   | 'fireworks';
@@ -112,6 +113,16 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
     },
     aiProxy: { enabled: true },
   },
+  anthropic: {
+    id: 'anthropic',
+    label: 'Anthropic',
+    badge: {
+      bg: 'bg-violet-500/10',
+      text: 'text-violet-400',
+      border: 'border-violet-500/20',
+    },
+    aiProxy: { enabled: true },
+  },
   gemini: {
     id: 'gemini',
     label: 'Gemini',
@@ -174,7 +185,7 @@ export function normalizeAccountProviderFilter(value: string): 'all' | AccountPr
 export function getAccountProviderMatchProviders(
   provider: AccountProviderFilterId
 ): readonly string[] {
-  return PROVIDER_REGISTRY[provider].accounts?.matchProviders ?? [provider];
+  return PROVIDER_REGISTRY[provider]?.accounts?.matchProviders ?? [provider];
 }
 
 // =============================
@@ -184,6 +195,7 @@ export function getAccountProviderMatchProviders(
 export const AI_PROXY_PROVIDER_LIST = [
   'openai',
   'claude',
+  'anthropic',
   'gemini',
   'kiro',
   'antigravity',

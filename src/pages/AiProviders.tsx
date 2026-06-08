@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Activity, Bug, MessageSquare, Plus, RefreshCw, Repeat, Search, Server, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useSelection } from '../hooks/useSelection';
 
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
@@ -17,6 +18,7 @@ import { AiTransferModal } from '../components/ai-proxy/modals/AiTransferModal';
 import { AiMappingsModal } from '../components/ai-proxy/modals/AiMappingsModal';
 import { ProxyStatusBar } from '../components/ai-proxy/sections/ProxyStatusBar';
 import { MonitorOverview } from '../components/ai-proxy/sections/MonitorOverview';
+import { ProxyDebugDrawer } from '../components/ai-proxy/ProxyDebugDrawer';
 import { RoutingSidePanel } from '../components/ai-proxy/sections/RoutingSidePanel';
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
 import type { ProxySettings, AiProxyAccount } from '../types/generated';
@@ -29,6 +31,7 @@ import {
   PageHeader,
   Tooltip,
   TwoColumnLayout,
+  FloatingActionBar,
 } from '@/components/ui';
 import type { MetricSegment } from '@/components/ui';
 import { getBackgroundManagerConfig } from '../lib/tauri/modules/backgroundManager';
@@ -54,8 +57,10 @@ export default function AiProviders() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferMode, setTransferMode] = useState<'import' | 'export'>('import');
   const [isIdeWizardOpen, setIsIdeWizardOpen] = useState(false);
+  const [showDebugDrawer, setShowDebugDrawer] = useState(false);
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState<boolean | null>(null);
   const controller = useAiProvidersController();
+  const selection = useSelection();
 
   const {
     loading,
@@ -243,6 +248,7 @@ export default function AiProviders() {
         actions: null,
       };
     }
+
     if (aiSection === 'monitor') {
       return {
         eyebrow: t('sidebar.aiHub'),
@@ -362,6 +368,11 @@ export default function AiProviders() {
                   accounts={filteredAccounts}
                   loading={loading}
                   connectionState={connectionState}
+                  selectedIds={selection.selectedIds}
+                  onSelect={selection.select}
+                  onDeselect={selection.deselect}
+                  onSelectAll={() => selection.selectAll(filteredAccounts.map(a => a.id).filter((id): id is number => id !== null))}
+                  onDeselectAll={selection.deselectAll}
                   onRowClick={handleOpenDrawer}
                   onEdit={handleEdit}
                   onDelete={id => {
@@ -371,6 +382,30 @@ export default function AiProviders() {
                     void handleTestConnection(account);
                   }}
                 />
+
+                {selection.selectedCount > 0 && (
+                  <FloatingActionBar
+                    selectedCount={selection.selectedCount}
+                    onDelete={async () => {
+                      if (!window.confirm(t('aiHub.controller.confirm.bulkDelete', { count: selection.selectedCount }))) return;
+                      try {
+                        const ids = Array.from(selection.selectedIds);
+                        await Promise.all(ids.map(id => controller.handleDelete(id)));
+                        toast.success(t('aiHub.controller.toasts.bulkDeleted', { count: ids.length }));
+                        selection.clear();
+                      } catch (e) {
+                        toast.error(t('aiHub.controller.errors.bulkDeleteFailed'));
+                      }
+                    }}
+                    onExport={() => {
+                      toast.info(t('aiHub.controller.toasts.exportNotImplemented'));
+                    }}
+                    onRefreshAll={() => {
+                      void controller.fetchAccounts();
+                    }}
+                    onClear={selection.clear}
+                  />
+                )}
               </>
             )}
 
@@ -449,7 +484,7 @@ export default function AiProviders() {
                 hasAccounts={filteredAccounts.length > 0}
                 accountReadiness={accountReadiness}
                 onOpenAnalytics={() => navigate('/ai-analytics')}
-                onOpenDebugChat={() => navigate('/chat')}
+                onOpenDebugChat={() => setShowDebugDrawer(true)}
               />
             )}
           </div>
@@ -515,6 +550,8 @@ export default function AiProviders() {
       />
 
       <IdeConfigWizard isOpen={isIdeWizardOpen} onClose={() => setIsIdeWizardOpen(false)} />
+
+      <ProxyDebugDrawer isOpen={showDebugDrawer} onClose={() => setShowDebugDrawer(false)} />
     </div>
   );
 }

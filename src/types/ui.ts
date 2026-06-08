@@ -1,10 +1,11 @@
-import type { Account, DashboardStats, KiroPatchConfig, PatchResult } from './generated';
+import type { Account, DashboardStats, KiroPatchConfig, PatchResult, Provider } from './generated';
 
-export type ProviderName = 'kiro' | 'kiro_v2' | 'windsurf' | 'trae' | 'copilot' | 'github' | 'aws' | 'openai' | 'fireworks' | 'bitbucket';
+// Re-export generated Provider type for backward compatibility
+export type ProviderName = Provider;
 
 export type Theme = 'dark' | 'light' | 'system';
 
-export interface Provider {
+export interface ProviderInfo {
   id: ProviderName;
   name: string;
   version: string;

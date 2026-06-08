@@ -80,7 +80,13 @@ export type ProxyType = "http" | "socks5"
 
 export type ProxyStatus = { running: boolean; port: number; uptimeSeconds: number | null; mode: string; managedByApp: boolean; networkReachable: boolean }
 
-export type ProxySettings = { appMode: string; proxyPort: number; autoStart: boolean; routingStrategy: string; managementKey: string }
+export type KiroEndpointStrategy = "auto" | "runtime" | "codeWhisperer"
+
+export type ProxySettings = { appMode: string; proxyPort: number; autoStart: boolean; routingStrategy: string; managementKey: string; kiroEndpointStrategy?: KiroEndpointStrategy; kiroFallbackOnError?: boolean }
+
+export type Provider = "kiro" | "kiro_v2" | "windsurf" | "trae" | "copilot" | "openai" | "claude" | "anthropic" | "gemini" | "antigravity" | "fireworks" | "aws" | "aws_builder_id" | "github" | "bitbucket"
+
+export type ProviderCategory = "ide" | "aiproxy" | "cloud"
 
 export type AiProxyAccount = { id: number | null; provider: string; name: string; oauthToken: string | null; apiKey: string | null; sessionToken: string | null; enabled: boolean; accountType: string | null; requestsToday: number; requestsTotal: number; tokensUsed: number; lastUsedAt: number | null; softQuotaTokensDaily?: number | null; softQuotaRequestsDaily?: number | null; createdAt: number; updatedAt: number; oauthRefreshToken?: string | null; oauthExpiresAt?: number | null; oauthScopes?: string | null; oauthTokenType?: string | null }
 
@@ -103,6 +109,8 @@ export type DailyStatsPoint = { date: string; requests: number; successful: numb
 export type GeminiApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
 
 export type OpenAIApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
+
+export type AnthropicApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null; customHeaders?: string | null }
 
 export type AntigravityApiKey = { apiKey: string; baseUrl?: string | null; prefix?: string | null }
 
@@ -130,7 +138,7 @@ export type RegistrationStatus = { isRunning: boolean; success: boolean | null; 
 
 export type TokenRefreshResult = { success: boolean; accessToken: string | null; refreshToken: string | null; expiresAt: string | null; message: string }
 
-export type ModelInfo = { id: string; provider: string; ownedBy: string }
+export type ModelInfo = { id: string; provider: string; ownedBy: string; source: string }
 
 export type DashboardStats = { totalAccounts: number; activeTokens: number; quotaUsage: number; quotaUsed: number; quotaLimit: number; accountsByProvider: { [key in string]: number } }
 
@@ -155,30 +163,4 @@ export type GithubAutoregConfig = { email: string | null; password: string; user
 export type DeviceFlowClient = { clientId: string; clientSecret: string }
 
 export type DeviceFlowSession = { client: DeviceFlowClient; deviceCode: string; userCode: string; verificationUri: string; interval: number; expiresAt: number }
-
-export type SlotStatus = 
-/**
- * Account is healthy and ready to take traffic.
- */
-"ready" | 
-/**
- * Account is healthy but its access token is expired / unknown — caller
- * should refresh before sending the request.
- */
-"needsRefresh" | 
-/**
- * Account is in cooldown after consecutive failures. ``unblockAt`` is an
- * RFC3339 timestamp.
- */
-{ coolingDown: { unblockAt: string } } | 
-/**
- * Account never had a usable access token.
- */
-"uninitialized"
-
-export type AccountSlot = { accountId: number; email: string; provider: string; region: string; status: SlotStatus; failures: number; lastFailureAt: string | null; lastUsedAt: string | null; totalRequests: number; successfulRequests: number; failedRequests: number }
-
-export type PoolSnapshot = { slots: AccountSlot[]; currentIndex: number; healthyCount: number; coolingCount: number; uninitializedCount: number }
-
-export type KiroPoolProxyStatus = { running: boolean; address: string | null; snapshot: PoolSnapshot | null }
 

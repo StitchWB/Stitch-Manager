@@ -86,7 +86,7 @@ export const AccountQuotaCell = React.memo(function AccountQuotaCell({
     if (isPaymentFailed) return 'Платёж провален';
     if (isBlocked) return 'Блокировка';
     if (limit === 0) return 'Нет квоты';
-    return `$${used.toFixed(2)}/$${limit.toFixed(2)}`;
+    return `~$${used.toFixed(2)}/$${limit.toFixed(2)}`;
   };
 
   return (

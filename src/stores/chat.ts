@@ -433,11 +433,23 @@ export const useChatStore = create<ChatState>()(
       },
       partialize: state => ({
         sessions: state.sessions,
+        activeSessionId: state.activeSessionId,
         profiles: state.profiles,
         activeProfileId: state.activeProfileId,
         forceOverride: state.forceOverride,
         inspectorOpen: state.inspectorOpen,
       }),
+      merge: (persisted, current) => {
+        const persistedState = (typeof persisted === 'object' && persisted !== null) ? persisted : {};
+        const merged = { ...current, ...persistedState } as ChatState;
+        // activeSessionId might point to a deleted session after
+        // partialization changes. Fall back to the first stored session.
+        const sessionExists = merged.sessions.some(s => s.id === merged.activeSessionId);
+        if (!sessionExists && merged.sessions.length > 0) {
+          merged.activeSessionId = merged.sessions[0].id;
+        }
+        return merged;
+      },
     }
   )
 );

@@ -3,9 +3,10 @@ import { devtools, persist } from 'zustand/middleware';
 import type { Account } from '../types/generated';
 import type { ProviderName, AccountStatus } from '../types/ui';
 import {
-  listAccounts,
+  getAccounts,
   addAccount,
   deleteAccount,
+  archiveAccount,
   refreshAccountQuota,
   validateAccount,
   setActiveAccount as setActiveAccountTauri,
@@ -67,6 +68,7 @@ interface AccountsState {
   fetchAccounts: (provider?: ProviderName) => Promise<void>;
   addAccount: (provider: ProviderName, email: string, password: string) => Promise<Account>;
   deleteAccount: (accountId: number) => Promise<void>;
+  archiveAccounts: (accountIds: number[], archived: boolean) => Promise<void>;
   deleteAccounts: (accountIds: number[]) => Promise<void>;
   refreshAccount: (accountId: number) => Promise<Account>;
   refreshAllAccounts: () => Promise<void>;
@@ -84,6 +86,8 @@ interface AccountsState {
   setSelectedIds: (accountIds: number[]) => void;
 
   // Filters
+  showArchived: boolean;
+  setShowArchived: (show: boolean) => void;
   setSelectedProvider: (provider: ProviderName | null) => void;
   setSearchQuery: (query: string) => void;
   setStatusFilter: (status: AccountStatus | null) => void;
@@ -139,6 +143,7 @@ export const useAccountsStore = create<AccountsState>()(
         searchQuery: '',
         statusFilter: null,
         quotaFilter: 'any',
+        showArchived: false,
         activeAccountIds: {},
         sortField: 'email',
         sortDirection: 'asc',
@@ -189,10 +194,11 @@ export const useAccountsStore = create<AccountsState>()(
         // Core Actions
         // ============================================
 
-        fetchAccounts: async provider => {
+        fetchAccounts: async _provider => {
           set({ loading: true, error: null });
           try {
-            const accounts = await listAccounts({ provider });
+            const showArchived = get().showArchived;
+            const accounts = await getAccounts({ showArchived });
             set({ accounts, loading: false });
             // Load active accounts after fetching
             await get().loadActiveAccounts();
@@ -258,6 +264,31 @@ export const useAccountsStore = create<AccountsState>()(
 
           try {
             await deleteAccount({ accountId });
+          } catch (error) {
+            // Rollback on error
+            set({ accounts: previousAccounts });
+            const message = error instanceof TauriError ? error.message : String(error);
+            set({ error: message });
+            throw error;
+          }
+        },
+
+        archiveAccounts: async (accountIds, archived) => {
+          const previousAccounts = get().accounts;
+
+          // Optimistic update
+          set(state => ({
+            accounts: state.accounts.map(a =>
+              accountIds.includes(a.id) ? { ...a, archived: archived ? 1 : 0 } : a
+            ),
+          }));
+
+          try {
+            await Promise.all(
+              accountIds.map(id => archiveAccount({ accountId: id, archived }))
+            );
+            // Refresh accounts from backend to ensure consistency
+            await get().fetchAccounts();
           } catch (error) {
             // Rollback on error
             set({ accounts: previousAccounts });
@@ -441,12 +472,17 @@ export const useAccountsStore = create<AccountsState>()(
           set({ quotaFilter: filter });
         },
 
+        setShowArchived: show => {
+          set({ showArchived: show });
+        },
+
         clearFilters: () => {
           set({
             selectedProvider: null,
             searchQuery: '',
             statusFilter: null,
             quotaFilter: 'any',
+            showArchived: false,
             selectedIds: new Set(),
           });
         },

@@ -35,6 +35,7 @@ import {
 import type { AccountsEntityTab } from './AccountsEntityTabs';
 import { AccountsEntityTabs } from './AccountsEntityTabs';
 import { AccountsColumnsMenu, type AccountsVisibleColumns } from './AccountsColumnsMenu';
+import { PROVIDERS } from '@/constants/providers';
 
 type ViewMode = 'list' | 'graph' | 'sheets';
 
@@ -65,6 +66,8 @@ interface AccountsToolbarProps {
   hasSheetsParams: boolean;
   showSheetsConfig: boolean;
   visibleColumns: AccountsVisibleColumns;
+  showArchived: boolean;
+  onShowArchivedChange: (value: boolean) => void;
   onEntityFilterChange: (value: AccountsEntityTab) => void;
   onViewModeChange: (value: string) => void;
   onSearchQueryChange: (value: string) => void;
@@ -117,6 +120,8 @@ export function AccountsToolbar({
   hasSheetsParams,
   showSheetsConfig,
   visibleColumns,
+  showArchived,
+  onShowArchivedChange,
   onEntityFilterChange,
   onViewModeChange,
   onSearchQueryChange,
@@ -377,12 +382,11 @@ export function AccountsToolbar({
                   icon={<LayoutGrid size={14} />}
                   options={[
                     { value: 'all', label: t('accounts.allProviders'), count: providerCounts.all ?? 0 },
-                    { value: 'kiro', label: 'Kiro', count: providerCounts.kiro ?? 0 },
-                    { value: 'windsurf', label: 'Windsurf', count: providerCounts.windsurf ?? 0 },
-                    { value: 'trae', label: 'Trae', count: providerCounts.trae ?? 0 },
-                    { value: 'aws_builder_id', label: 'AWS Builder ID', count: providerCounts.aws_builder_id ?? 0 },
-                    { value: 'github', label: 'GitHub', count: providerCounts.github ?? 0 },
-                    { value: 'fireworks', label: 'Fireworks AI', count: providerCounts.fireworks ?? 0 },
+                    ...PROVIDERS.map(p => ({
+                      value: p.id,
+                      label: p.name,
+                      count: providerCounts[p.id] ?? 0,
+                    })),
                   ]}
                   triggerClassName="h-8 min-w-[160px] px-2.5 text-xs"
                   menuClassName="min-w-[200px]"
@@ -450,6 +454,17 @@ export function AccountsToolbar({
                   menuClassName="min-w-[200px]"
                   showActiveState
                 />
+
+                {/* Show archived toggle */}
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    className="accent-slate-500 w-3.5 h-3.5"
+                    checked={showArchived}
+                    onChange={e => onShowArchivedChange(e.target.checked)}
+                  />
+                  {t('accounts.showArchived')}
+                </label>
               </ToolbarFiltersGroup>
             )}
           </div>

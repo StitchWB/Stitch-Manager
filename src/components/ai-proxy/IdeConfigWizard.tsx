@@ -70,7 +70,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   const [error, setError] = useState<string | null>(null);
   const [proxyRunning, setProxyRunning] = useState<boolean | null>(null);
   const [autoCheckInProgress, setAutoCheckInProgress] = useState(false);
-  const [manualEndpoint, setManualEndpoint] = useState('http://127.0.0.1:8317/v1');
+  const [manualEndpoint, setManualEndpoint] = useState('http://127.0.0.1:25583/v1');
   const [providerKey, setProviderKey] = useState<ProviderKey>(DEFAULT_PROVIDER_PROFILE_KEY);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [autoImportInProgress, setAutoImportInProgress] = useState(false);
@@ -401,7 +401,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-vsc-sidebar border border-vsc-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
+      <div className="bg-[#0a0c14] border border-vsc-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
           <h2 className="text-lg font-semibold text-vsc-text">{t('aiHub.wizard.title')}</h2>

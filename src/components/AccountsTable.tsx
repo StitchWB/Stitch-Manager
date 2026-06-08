@@ -218,7 +218,7 @@ export default function AccountsTable({
               <TableHead
                 className={
                   visibleColumns.apiKey
-                    ? 'w-[50px] min-w-[50px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap'
+                    ? 'w-[70px] min-w-[70px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap'
                     : 'hidden'
                 }
               >

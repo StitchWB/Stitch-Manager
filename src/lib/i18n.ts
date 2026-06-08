@@ -332,6 +332,7 @@ export interface Translations {
       svc_sheets: string;
       updated: string;
     }
+    showArchived: string;
     state: string;
     statusHeader: string;
     successRate: string;
@@ -940,6 +941,7 @@ export interface Translations {
       apiKeys: string;
       chat: string;
       diagnostics: string;
+      freemodel: string;
       integrations: string;
       monitor: string;
       providers: string;

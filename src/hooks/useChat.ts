@@ -19,7 +19,9 @@ interface UseChatReturn {
   stopGeneration: () => void;
 }
 
-const DEFAULT_API_URL = 'http://localhost:8765/v1/chat/completions';
+// AI Proxy default port - Chat.tsx overrides this with dynamic port from settings.
+// Unified Gateway: all models (sidecar, kiro-pool, freemodel-bridge) route through this endpoint.
+const DEFAULT_API_URL = 'http://localhost:25583/v1/chat/completions';
 
 /** Stable empty array to avoid creating a new [] on every selector call. */
 const EMPTY_MESSAGES: ChatMessage[] = [];
@@ -102,6 +104,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
 
+      // All models route through the unified gateway on port 25583.
+      // The gateway inspects the model field and forwards to the correct upstream.
+      const effectiveApiUrl = apiUrl;
+      const effectiveApiKey = apiKey;
+
       try {
         // Build messages array for API
         const currentMessages = useChatStore.getState().messages();
@@ -136,8 +143,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           'Content-Type': 'application/json',
         };
 
-        if (apiKey) {
-          headers.Authorization = `Bearer ${apiKey}`;
+        if (effectiveApiKey) {
+          headers.Authorization = `Bearer ${effectiveApiKey}`;
         }
 
         if (forceOverride.enabled) {
@@ -170,7 +177,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
 
         useChatStore.getState().setMessageDebug(assistantMessageId, {
-          apiUrl,
+          apiUrl: effectiveApiUrl,
           startedAt: Date.now(),
           requestHeaders: headers,
           requestBody,
@@ -179,7 +186,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           forceAccountId: forceOverride.enabled ? forceOverride.accountId || undefined : undefined,
         });
 
-        const response = await fetch(apiUrl, {
+        const response = await fetch(effectiveApiUrl, {
           method: 'POST',
           headers,
           body: JSON.stringify(requestBody),
