@@ -60,7 +60,7 @@ class ImapVerifier(IEmailVerifier):
             target_email=target_email,
             max_wait=max_wait,
             session_id=session_id,
-            log_callback=lambda msg: logger.info(f"{session_prefix}{msg}"),
+            log_callback=lambda msg: logger.info(msg),
         )
 
         if code:
@@ -101,7 +101,7 @@ class ImapVerifier(IEmailVerifier):
             max_wait=max_wait,
             session_id=session_id,
             url_pattern=url_pattern,
-            log_callback=lambda msg: logger.info(f"{session_prefix}{msg}"),
+            log_callback=lambda msg: logger.info(msg),
         )
 
         if url:

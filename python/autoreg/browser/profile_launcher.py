@@ -555,14 +555,21 @@ class ProfileLauncher:
         engine: str = "cloackbrowser",
     ) -> None:
         self.profile_id = _sanitize_profile_id(profile_id)
-        self.profiles_root = (
-            Path(profiles_root) if profiles_root is not None else get_paths().browser_profiles_dir
-        )
-        self.profile_path = self.profiles_root / self.profile_id
+        self._config: dict[str, Any] = config or {}
+
+        # Honor explicit profile_path from config (passed by Rust via --config-json)
+        explicit_profile_path = self._config.get("profile_path")
+        if explicit_profile_path:
+            self.profile_path = Path(explicit_profile_path)
+            self.profiles_root = self.profile_path.parent
+        else:
+            self.profiles_root = (
+                Path(profiles_root) if profiles_root is not None else get_paths().browser_profiles_dir
+            )
+            self.profile_path = self.profiles_root / self.profile_id
         self.headless = headless
         self.engine = engine.lower().strip()
 
-        self._config: dict[str, Any] = config or {}
         self._proxy = _parse_proxy_any(proxy if proxy is not None else self._config.get("proxy"))
         self._manager: Any | None = None
         self._lock = None
@@ -753,6 +760,7 @@ class ProfileLauncher:
         manager = CloakBrowserProfileManager(
             profile_id=self.profile_id,
             profiles_root=self.profiles_root,
+            profile_path=self.profile_path,
             headless=self.headless,
             proxy=proxy_url,
             locale=self._effective_locale(),

@@ -67,7 +67,7 @@ export const loadProviderStrategies = (): ProviderEmailStrategies => {
     return migrated;
   }
 
-  // Return defaults if no stored data
+// Return defaults if no stored data
   return {
     kiro: { ...DEFAULT_EMAIL_STRATEGY },
     kiro_v2: { ...DEFAULT_EMAIL_STRATEGY },
@@ -79,6 +79,10 @@ export const loadProviderStrategies = (): ProviderEmailStrategies => {
     openai: { ...DEFAULT_EMAIL_STRATEGY },
     fireworks: { ...DEFAULT_EMAIL_STRATEGY },
     bitbucket: { ...DEFAULT_EMAIL_STRATEGY },
+    claude: { ...DEFAULT_EMAIL_STRATEGY },
+    gemini: { ...DEFAULT_EMAIL_STRATEGY },
+    antigravity: { ...DEFAULT_EMAIL_STRATEGY },
+    aws_builder_id: { ...DEFAULT_EMAIL_STRATEGY },
   };
 };
 

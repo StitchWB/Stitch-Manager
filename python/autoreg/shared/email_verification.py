@@ -198,7 +198,27 @@ def extract_body_text(msg: Any) -> str:
         return plain
 
     if html:
-        return re.sub(r"<[^>]*>", " ", html)
+        # Decode common HTML entities so URLs with &amp; become &
+        html = html.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+
+        # Extract all href URLs from HTML before stripping tags,
+        # so confirmation links inside <a href="..."> are preserved.
+        hrefs = re.findall(r'href=["\'](https?://[^"\']+)["\']', html, re.IGNORECASE)
+        # Also extract from <a> text content
+        a_texts = re.findall(r'<a[^>]*>([^<]+)</a>', html, re.IGNORECASE)
+
+        stripped = re.sub(r"<[^>]*>", " ", html)
+
+        # Append extracted URLs and link texts after stripped content
+        extras = []
+        if hrefs:
+            extras.append(" ".join(hrefs))
+        if a_texts:
+            extras.append(" ".join(a_texts))
+        if extras:
+            stripped = stripped + "\n" + "\n".join(extras)
+
+        return stripped
 
     return ""
 
@@ -268,6 +288,7 @@ def get_verification_code_from_imap(
             log(f"[Email] Retry attempt {retry_attempt + 1}/{max_retries} after {delay}s delay")
             time.sleep(delay)
         
+        attempt_start = time.time()
         result = _get_verification_code_internal(
             imap_config=imap_config,
             sender_keywords=sender_keywords,
@@ -283,12 +304,11 @@ def get_verification_code_from_imap(
 
         if result.get("code"):
             if retry_attempt > 0:
-                log(f"[Email] Successfully retrieved result after {retry_attempt + 1} attempts")
+                log(f"[Email] Successfully retrieved result after {retry_attempt + 1} attempts (attempt took {int(time.time() - attempt_start)}s)")
             return result["code"]
 
         error_info = result.get("error", "unknown")
-        if retry_attempt < max_retries - 1:
-            log(f"[Email] No matching code found, will retry...")
+        log(f"[Email] Attempt {retry_attempt + 1}/{max_retries} returned no result after {int(time.time() - attempt_start)}s (error: {error_info})")
 
     log(f"[Email] Failed to retrieve verification code after {max_retries} attempts (last error: {error_info})")
     return None
@@ -338,6 +358,7 @@ def _get_verification_code_internal(
     
     start_time = time.time()
     cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=time_window)
+    log(f"[Email] Starting IMAP poll (max_wait={max_wait}s, time_window={time_window}s, cutoff={cutoff_time.strftime('%Y-%m-%d %H:%M:%S')} UTC, target_email={target_email})")
     last_error = None
     
     # Build search query for primary keyword
@@ -397,154 +418,173 @@ def _get_verification_code_internal(
 
             if messages and messages[0]:
                 email_ids = messages[0].split()
+                log(f"[Email] Checking {min(len(email_ids), 10)} of {len(email_ids)} emails (newest first, cutoff={cutoff_time.strftime('%H:%M:%S')})")
                 
+                new_email_count = 0
                 # Check only last 10 emails (newest first)
                 for num in reversed(email_ids[-10:]):
                     try:
                         _, msg_data = mail.fetch(num, '(RFC822)')
-                        if not msg_data[0]:
-                            continue
-                        
-                        payload_bytes = None
-                        first_item = msg_data[0]
-                        if isinstance(first_item, tuple) and len(first_item) > 1:
-                            maybe_bytes = first_item[1]
-                            if isinstance(maybe_bytes, (bytes, bytearray)):
-                                payload_bytes = bytes(maybe_bytes)
-                        if not payload_bytes:
-                            continue
-
-                        msg = email_lib.message_from_bytes(payload_bytes)
-
-                        # Get headers
-                        date_str = msg.get('Date', '')
-                        from_addr = decode_header_value(msg.get('From', '')).lower()
-                        subject = decode_header_value(msg.get('Subject', '')).strip()
-                        to_addr = decode_header_value(msg.get('To', '')).lower()
-                        delivered_to = decode_header_value(msg.get('Delivered-To', '')).lower()
-                        x_forwarded_to = decode_header_value(msg.get('X-Forwarded-To', '')).lower()
-                        x_original_to = decode_header_value(msg.get('X-Original-To', '')).lower()
-                        resent_to = decode_header_value(msg.get('Resent-To', '')).lower()
-                        envelope_to = decode_header_value(msg.get('Envelope-To', '')).lower()
-                        received_headers = [decode_header_value(h).lower() for h in msg.get_all('Received', [])]
-
-                        sender_match = any(keyword.lower() in from_addr for keyword in sender_keywords)
-                        if not sender_match and not used_fallback:
-                            log(f"[Email] Skipping email from={from_addr!r} subject={subject!r} — sender does not match keywords")
-                            continue
-                        if not sender_match and used_fallback:
-                            log(f"[Email/Fallback] Checking email from={from_addr!r} subject={subject!r} (sender mismatch but fallback active)")
-
-                        # Check email timestamp
-                        try:
-                            email_date = parsedate_to_datetime(date_str)
-                            if email_date.tzinfo is None:
-                                email_date = email_date.replace(tzinfo=datetime.timezone.utc)
-                            if email_date < cutoff_time:
-                                continue
-                        except Exception:
-                            pass
-
-                        body = extract_body_text(msg)
-
-                        # Email validation: Check if target_email is mentioned in body or headers
-                        # This prevents using codes from wrong emails in parallel or sequential registrations.
-                        if target_email:
-                            target_lower = target_email.lower()
-                            email_in_body = target_lower in body.lower()
-                            email_in_to = target_lower in to_addr
-                            email_in_delivered = target_lower in delivered_to
-                            email_in_forwarded = target_lower in x_forwarded_to
-                            email_in_x_original = target_lower in x_original_to
-                            email_in_resent = target_lower in resent_to
-                            email_in_envelope = target_lower in envelope_to
-                            email_in_received = any(target_lower in rh for rh in received_headers)
-
-                            match_details = {
-                                'body': email_in_body,
-                                'to_header': email_in_to,
-                                'delivered_to': email_in_delivered,
-                                'x_forwarded_to': email_in_forwarded,
-                                'x_original_to': email_in_x_original,
-                                'resent_to': email_in_resent,
-                                'envelope_to': email_in_envelope,
-                                'received': email_in_received,
-                            }
-                            found_any = any(match_details.values())
-
-                            if found_any:
-                                log(f"[Email] Target email {target_email} matched via {', '.join(k for k,v in match_details.items() if v)}. Processing email from={from_addr!r} subject={subject!r}")
-                            else:
-                                log(f'[Email] Target email {target_email} not found in headers or body. Skipping this email to avoid mismatch.')
-                                log(f'[Email/Debug] Checked: To={to_addr!r}, Delivered-To={delivered_to!r}, X-Forwarded-To={x_forwarded_to!r}, X-Original-To={x_original_to!r}, Resent-To={resent_to!r}, Envelope-To={envelope_to!r}, Received={len(received_headers)} header(s), Body snippet={body[:120]!r}')
-                                continue
-                        
-                        # Try to extract URL first (if url_pattern provided, e.g. for Fireworks confirm URL)
-                        if url_pattern:
-                            url_matches = re.findall(url_pattern, body)
-                            if url_matches:
-                                mail.logout()
-                                log(f"[Email] Found confirmation URL in body (email date: {date_str})")
-                                return {"code": url_matches[0], "error": None}
-
-                        if subject_pattern:
-                            subject_codes = re.findall(subject_pattern, subject)
-                            if subject_codes:
-                                mail.logout()
-                                log(f"[Email] Found code in subject: {subject_codes[0]} (email date: {date_str})")
-                                return {"code": subject_codes[0], "error": None}
-
-                        code_pattern = r'\b([A-Za-z0-9]{6})\b'
-                        alphanum_subject = re.search(code_pattern, subject)
-                        if alphanum_subject:
-                            mail.logout()
-                            log(f"[Email] Found alphanumeric code in subject: {alphanum_subject.group(1)} (email date: {date_str})")
-                            return {"code": alphanum_subject.group(1), "error": None}
-
-                        digit_subject = re.search(r'\b(\d{6})\b', subject)
-                        if digit_subject:
-                            mail.logout()
-                            log(f"[Email] Found digit code in subject: {digit_subject.group(1)} (email date: {date_str})")
-                            return {"code": digit_subject.group(1), "error": None}
-
-                        digit_body = re.search(r'\b(\d{6})\b', body)
-                        if digit_body:
-                            mail.logout()
-                            log(f"[Email] Found digit code in body: {digit_body.group(1)} (email date: {date_str})")
-                            return {"code": digit_body.group(1), "error": None}
-
-                        letter_subject = re.search(r'\b([A-Za-z]{6})\b', subject)
-                        if letter_subject:
-                            mail.logout()
-                            log(f"[Email] Found letter code in subject: {letter_subject.group(1)} (email date: {date_str})")
-                            return {"code": letter_subject.group(1), "error": None}
-
-                        body_normalized = re.sub(r'([A-Za-z0-9]{3})\s+([A-Za-z0-9]{3})', r'\1\2', body)
-                        alphanum_body = re.search(code_pattern, body_normalized)
-                        if alphanum_body:
-                            mail.logout()
-                            log(f"[Email] Found alphanumeric code in body: {alphanum_body.group(1)} (email date: {date_str})")
-                            return {"code": alphanum_body.group(1), "error": None}
-
-                        letter_body = re.search(r'\b([A-Za-z]{6})\b', body_normalized)
-                        if letter_body:
-                            mail.logout()
-                            log(f"[Email] Found letter code in body: {letter_body.group(1)} (email date: {date_str})")
-                            return {"code": letter_body.group(1), "error": None}
-
-                        log(f"[Email] Email passed all checks but no 6-char code found. from={from_addr!r} subject={subject!r} body_snippet={body[:250]!r}")
                     except Exception as e:
-                        log(f"[Email] Error processing email: {e}")
+                        log(f"[Email] fetch failed for {num}: {e}")
                         continue
-            
+
+                    if not msg_data[0]:
+                        log(f"[Email] Skipping email {num}: empty msg_data[0]")
+                        continue
+
+                    payload_bytes = None
+                    first_item = msg_data[0]
+                    if isinstance(first_item, tuple) and len(first_item) > 1:
+                        maybe_bytes = first_item[1]
+                        if isinstance(maybe_bytes, (bytes, bytearray)):
+                            payload_bytes = bytes(maybe_bytes)
+                    elif isinstance(first_item, (bytes, bytearray)):
+                        # Some IMAP servers return raw bytes directly
+                        payload_bytes = bytes(first_item)
+                    if not payload_bytes:
+                        log(f"[Email] Skipping email {num}: cannot parse IMAP response (type={type(first_item).__name__})")
+                        continue
+
+                    msg = email_lib.message_from_bytes(payload_bytes)
+
+                    # Get headers
+                    date_str = msg.get('Date', '')
+                    from_addr = decode_header_value(msg.get('From', '')).lower()
+                    subject = decode_header_value(msg.get('Subject', '')).strip()
+                    to_addr = decode_header_value(msg.get('To', '')).lower()
+                    delivered_to = decode_header_value(msg.get('Delivered-To', '')).lower()
+                    x_forwarded_to = decode_header_value(msg.get('X-Forwarded-To', '')).lower()
+                    x_original_to = decode_header_value(msg.get('X-Original-To', '')).lower()
+                    resent_to = decode_header_value(msg.get('Resent-To', '')).lower()
+                    envelope_to = decode_header_value(msg.get('Envelope-To', '')).lower()
+                    received_headers = [decode_header_value(h).lower() for h in msg.get_all('Received', [])]
+
+                    sender_match = any(keyword.lower() in from_addr for keyword in sender_keywords)
+                    if not sender_match and not used_fallback:
+                        log(f"[Email] Skipping email from={from_addr!r} subject={subject!r} — sender does not match keywords")
+                        continue
+                    if not sender_match and used_fallback:
+                        log(f"[Email/Fallback] Checking email from={from_addr!r} subject={subject!r} (sender mismatch but fallback active)")
+
+                    # Check email timestamp
+                    try:
+                        email_date = parsedate_to_datetime(date_str)
+                        if email_date.tzinfo is None:
+                            email_date = email_date.replace(tzinfo=datetime.timezone.utc)
+                        if email_date < cutoff_time:
+                            log(f"[Email] Skipping old email from={from_addr!r} subject={subject!r} date={date_str} (older than cutoff)")
+                            continue
+                    except Exception:
+                        pass
+
+                    new_email_count += 1
+
+                    body = extract_body_text(msg)
+
+                    # Email validation: Check if target_email is mentioned in body or headers
+                    # This prevents using codes from wrong emails in parallel or sequential registrations.
+                    if target_email:
+                        target_lower = target_email.lower()
+                        email_in_body = target_lower in body.lower()
+                        email_in_to = target_lower in to_addr
+                        email_in_delivered = target_lower in delivered_to
+                        email_in_forwarded = target_lower in x_forwarded_to
+                        email_in_x_original = target_lower in x_original_to
+                        email_in_resent = target_lower in resent_to
+                        email_in_envelope = target_lower in envelope_to
+                        email_in_received = any(target_lower in rh for rh in received_headers)
+
+                        match_details = {
+                            'body': email_in_body,
+                            'to_header': email_in_to,
+                            'delivered_to': email_in_delivered,
+                            'x_forwarded_to': email_in_forwarded,
+                            'x_original_to': email_in_x_original,
+                            'resent_to': email_in_resent,
+                            'envelope_to': email_in_envelope,
+                            'received': email_in_received,
+                        }
+                        found_any = any(match_details.values())
+
+                        if found_any:
+                            log(f"[Email] Target email {target_email} matched via {', '.join(k for k,v in match_details.items() if v)}. Processing email from={from_addr!r} subject={subject!r}")
+                        else:
+                            log(f'[Email] Target email {target_email} not found in headers or body. Skipping this email to avoid mismatch.')
+                            log(f'[Email/Debug] Checked: To={to_addr!r}, Delivered-To={delivered_to!r}, X-Forwarded-To={x_forwarded_to!r}, X-Original-To={x_original_to!r}, Resent-To={resent_to!r}, Envelope-To={envelope_to!r}, Received={len(received_headers)} header(s), Body snippet={body[:120]!r}')
+                            continue
+
+                    # Try to extract URL first (if url_pattern provided, e.g. for Fireworks confirm URL)
+                    if url_pattern:
+                        url_matches = re.findall(url_pattern, body)
+                        if url_matches:
+                            mail.logout()
+                            log(f"[Email] Found confirmation URL in body (email date: {date_str})")
+                            return {"code": url_matches[0], "error": None}
+                        else:
+                            log(f"[Email] URL pattern did not match in body (len={len(body)}). Body snippet: {body[:200]!r}")
+
+                    if subject_pattern:
+                        subject_codes = re.findall(subject_pattern, subject)
+                        if subject_codes:
+                            mail.logout()
+                            log(f"[Email] Found code in subject: {subject_codes[0]} (email date: {date_str})")
+                            return {"code": subject_codes[0], "error": None}
+
+                    code_pattern = r'\b([A-Za-z0-9]{6})\b'
+                    alphanum_subject = re.search(code_pattern, subject)
+                    if alphanum_subject:
+                        mail.logout()
+                        log(f"[Email] Found alphanumeric code in subject: {alphanum_subject.group(1)} (email date: {date_str})")
+                        return {"code": alphanum_subject.group(1), "error": None}
+
+                    digit_subject = re.search(r'\b(\d{6})\b', subject)
+                    if digit_subject:
+                        mail.logout()
+                        log(f"[Email] Found digit code in subject: {digit_subject.group(1)} (email date: {date_str})")
+                        return {"code": digit_subject.group(1), "error": None}
+
+                    digit_body = re.search(r'\b(\d{6})\b', body)
+                    if digit_body:
+                        mail.logout()
+                        log(f"[Email] Found digit code in body: {digit_body.group(1)} (email date: {date_str})")
+                        return {"code": digit_body.group(1), "error": None}
+
+                    letter_subject = re.search(r'\b([A-Za-z]{6})\b', subject)
+                    if letter_subject:
+                        mail.logout()
+                        log(f"[Email] Found letter code in subject: {letter_subject.group(1)} (email date: {date_str})")
+                        return {"code": letter_subject.group(1), "error": None}
+
+                    body_normalized = re.sub(r'([A-Za-z0-9]{3})\s+([A-Za-z0-9]{3})', r'\1\2', body)
+                    alphanum_body = re.search(code_pattern, body_normalized)
+                    if alphanum_body:
+                        mail.logout()
+                        log(f"[Email] Found alphanumeric code in body: {alphanum_body.group(1)} (email date: {date_str})")
+                        return {"code": alphanum_body.group(1), "error": None}
+
+                    letter_body = re.search(r'\b([A-Za-z]{6})\b', body_normalized)
+                    if letter_body:
+                        mail.logout()
+                        log(f"[Email] Found letter code in body: {letter_body.group(1)} (email date: {date_str})")
+                        return {"code": letter_body.group(1), "error": None}
+
+                    log(f"[Email] Email passed all checks but no 6-char code found. from={from_addr!r} subject={subject!r} body_snippet={body[:250]!r}")
+
+                if new_email_count == 0:
+                    log(f"[Email] No new emails yet — waiting for forwarded message to arrive...")
+
             mail.logout()
-        
+
         except Exception as e:
             last_error = str(e)
             log(f"[Email] IMAP error: {e}")
-        
+
         time.sleep(poll_interval_sec)
-    
+
+    elapsed = int(time.time() - start_time)
+    log(f"[Email] Poll ended after {elapsed}s without finding result")
+
     if last_error:
         log(f"[Email] Failed to get verification code: {last_error}")
         return {"code": None, "error": last_error}

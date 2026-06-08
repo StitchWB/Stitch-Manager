@@ -110,6 +110,26 @@ Schema reference: `docs/google-sheets-graph-schema.md`
 
 ---
 
+## 🤖 AI Providers
+
+### Supported Providers
+
+- **ProxyStitch** — Built-in AI proxy (default)
+- **FreeModel** — External provider with Claude & OpenAI models
+  - [Setup Guide](docs/freemodel-setup.md)
+  - Claude models via bridge (port 3456) — управляется через **AI Hub → FreeModel**
+  - OpenAI models directly
+
+### FreeModel Bridge
+
+Запускай Claude модели напрямую из Stitch через AI Hub → FreeModel таб:
+- Автоматический запуск bridge процесса
+- Управление портом и API ключом
+- Тестирование соединения
+- Поддержка моделей с префиксом `FM-*`
+
+---
+
 ## 🆕 Machine ID Management
 
 ### What is Machine ID?

@@ -16,7 +16,6 @@ import {
   updateAccountMetadata,
 } from '@/lib/tauri/modules/accounts';
 import { authorizeKiroAccount } from '@/lib/tauri';
-import { reloadKiroPoolProxyAccounts } from '@/lib/tauri/modules/kiroPoolProxy';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
 import {
@@ -181,13 +180,8 @@ export function useAccountsActions({
       toast.info(t('accounts.authorizingKiro'));
       await authorizeKiroAccount(id);
       toast.success(t('accounts.authorizeKiroStarted'));
-      // Surface the new token to the running pool proxy so it joins rotation
-      // immediately. Best-effort: silently ignore if the proxy isn't running.
-      try {
-        await reloadKiroPoolProxyAccounts();
-      } catch {
-        // Proxy may not be running — that's fine.
-      }
+      // Note: KiroPoolProxy removed. AI Proxy with sidecar handles Kiro natively
+      // and will pick up the new token automatically on next request.
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[Accounts] Failed to authorize Kiro account:', error);

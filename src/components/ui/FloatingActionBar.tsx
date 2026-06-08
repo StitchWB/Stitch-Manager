@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Trash2, X, RefreshCw, UserPlus, FolderOpen, CheckCircle, Eraser } from 'lucide-react';
+import { Download, Trash2, X, RefreshCw, UserPlus, FolderOpen, CheckCircle, Eraser, Archive } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -8,6 +8,7 @@ interface FloatingActionBarProps {
   selectedCount: number;
   onExport: () => void;
   onDelete: () => void;
+  onArchive?: () => void;
   onRefreshAll: () => void;
   onClear: () => void;
   className?: string;
@@ -25,6 +26,7 @@ export function FloatingActionBar({
   selectedCount,
   onExport,
   onDelete,
+  onArchive,
   onRefreshAll,
   onClear,
   className,
@@ -166,6 +168,18 @@ export function FloatingActionBar({
               <Download className="w-3.5 h-3.5" aria-hidden="true" />
               {t('common.export') || 'Export'}
             </button>
+
+            {onArchive && (
+              <button
+                onClick={onArchive}
+                disabled={isRefreshing}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label={`Archive ${selectedCount} selected accounts`}
+              >
+                <Archive className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('common.archive') || 'Archive'}
+              </button>
+            )}
 
             <button
               onClick={onDelete}

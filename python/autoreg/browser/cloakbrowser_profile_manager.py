@@ -29,6 +29,7 @@ from typing import Any, Optional
 from DrissionPage import ChromiumPage
 
 from ..core.paths import get_paths
+from ..core.auth_proxy_server import AuthProxyServer
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,7 @@ class CloakBrowserProfileManager:
         profile_id: str,
         *,
         profiles_root: str | Path | None = None,
+        profile_path: str | Path | None = None,
         headless: bool = False,
         proxy: Any = None,
         locale: str | None = None,
@@ -126,10 +128,14 @@ class CloakBrowserProfileManager:
         maximize_on_start: bool = False,
     ) -> None:
         self.profile_id = _sanitize_profile_id(profile_id)
-        self.profiles_root = (
-            Path(profiles_root) if profiles_root is not None else get_paths().browser_profiles_dir
-        )
-        self.profile_path = self.profiles_root / self.profile_id
+        if profile_path is not None:
+            self.profile_path = Path(profile_path)
+            self.profiles_root = self.profile_path.parent
+        else:
+            self.profiles_root = (
+                Path(profiles_root) if profiles_root is not None else get_paths().browser_profiles_dir
+            )
+            self.profile_path = self.profiles_root / self.profile_id
         self.headless = headless
         self.proxy = proxy
         self.locale = locale or DEFAULT_LOCALE
@@ -146,6 +152,7 @@ class CloakBrowserProfileManager:
         self._chrome_proc: sp.Popen | None = None
         self._debug_port: int | None = None
         self._lock: Any | None = None
+        self._auth_proxy_server: AuthProxyServer | None = None
 
     def __enter__(self) -> "CloakBrowserProfileManager":
         self.start()
@@ -297,8 +304,35 @@ class CloakBrowserProfileManager:
         if self.proxy:
             proxy_url = self._parse_proxy(self.proxy)
             if proxy_url:
-                cmd.append(f"--proxy-server={proxy_url}")
-                logger.info(f"Proxy: {proxy_url}")
+                # Check if proxy has credentials — Chrome doesn't support auth in --proxy-server
+                host, port, user, password = self._parse_proxy_auth(self.proxy)
+                if user and password and host and port:
+                    # Start local auth proxy server that forwards to upstream with auth
+                    try:
+                        self._auth_proxy_server = AuthProxyServer(
+                            upstream_host=host,
+                            upstream_port=port,
+                            upstream_user=user,
+                            upstream_pass=password,
+                            local_port=0,  # auto-assign
+                        )
+                        local_host, local_port = self._auth_proxy_server.start()
+                        local_proxy_url = f"http://{local_host}:{local_port}"
+                        cmd.append(f"--proxy-server={local_proxy_url}")
+                        logger.info(f"Proxy: local auth proxy {local_proxy_url} -> upstream {host}:{port}")
+                    except Exception as e:
+                        logger.warning(f"Failed to start local auth proxy: {e}. Falling back to direct proxy (no auth).")
+                        cmd.append(f"--proxy-server={proxy_url}")
+                        logger.info(f"Proxy: {proxy_url} (no auth)")
+                else:
+                    cmd.append(f"--proxy-server={proxy_url}")
+                    logger.info(f"Proxy: {proxy_url}")
+            else:
+                cmd.append("--no-proxy-server")
+                logger.info("Proxy: disabled (invalid proxy spec)")
+        else:
+            cmd.append("--no-proxy-server")
+            logger.info("Proxy: disabled (--no-proxy-server)")
 
         # Load Stitch Toolkit extension (auto-injected for every profile)
         # If Chrome fails to start, comment out the block below to test without extension.
@@ -319,20 +353,58 @@ class CloakBrowserProfileManager:
 
     @staticmethod
     def _parse_proxy(proxy: Any) -> str | None:
+        """Return proxy URL WITHOUT auth for Chrome --proxy-server.
+        Chrome does NOT support credentials in --proxy-server (ERR_NO_SUPPORTED_PROXIES).
+        Auth will be handled via local AuthProxyServer if needed.
+        """
+        import re as _re
         if isinstance(proxy, str) and proxy.strip():
-            return proxy.strip()
+            url = proxy.strip()
+            # Strip auth from scheme://user:pass@host:port
+            stripped = _re.sub(r"^(\w+://)[^@]+@", r"\1", url)
+            if stripped != url:
+                logger.info(f"Proxy auth stripped for Chrome compat: {_re.sub(r':[^@]+@', ':***@', url)}")
+            return stripped
         if isinstance(proxy, dict):
             scheme = proxy.get("scheme") or proxy.get("type") or "http"
             host = proxy.get("host", "")
             port = proxy.get("port", "")
-            user = proxy.get("username") or proxy.get("user", "")
-            password = proxy.get("password") or proxy.get("pass", "")
             if not host or not port:
                 return None
-            if user:
-                return f"{scheme}://{user}:{password}@{host}:{port}"
             return f"{scheme}://{host}:{port}"
         return None
+
+    @staticmethod
+    def _parse_proxy_auth(proxy: Any) -> tuple[str | None, int | None, str | None, str | None]:
+        """Parse proxy auth credentials from proxy spec.
+
+        Returns (host, port, username, password) or (None, None, None, None) if no auth.
+        """
+        import urllib.parse
+        if isinstance(proxy, str) and proxy.strip():
+            url = proxy.strip()
+            parsed = urllib.parse.urlparse(url)
+            if parsed.username or parsed.password:
+                return (
+                    parsed.hostname,
+                    parsed.port,
+                    parsed.username,
+                    parsed.password,
+                )
+            return (parsed.hostname, parsed.port, None, None)
+        if isinstance(proxy, dict):
+            host = proxy.get("host", "")
+            port_raw = proxy.get("port")
+            user = proxy.get("username") or proxy.get("user")
+            password = proxy.get("password") or proxy.get("pass")
+            if not host or not port_raw:
+                return (None, None, None, None)
+            try:
+                port = int(port_raw)
+            except (ValueError, TypeError):
+                return (None, None, None, None)
+            return (host, port, user, password)
+        return (None, None, None, None)
 
     def _wait_cdp_ready(self, debug_port: int, timeout: float = 30.0) -> bool:
         import urllib.request as urlreq
@@ -522,6 +594,13 @@ class CloakBrowserProfileManager:
                     proc.kill()
                 except Exception:
                     pass
+
+        if self._auth_proxy_server is not None:
+            try:
+                self._auth_proxy_server.stop()
+            except Exception as e:
+                logger.debug(f"Auth proxy server stop failed: {e}")
+            self._auth_proxy_server = None
 
         self._release_profile_lock()
 

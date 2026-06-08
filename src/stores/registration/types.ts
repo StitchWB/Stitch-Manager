@@ -70,6 +70,10 @@ export interface ProviderEmailStrategies {
   openai: ProviderEmailStrategy;
   fireworks: ProviderEmailStrategy;
   bitbucket: ProviderEmailStrategy;
+  claude: ProviderEmailStrategy;
+  gemini: ProviderEmailStrategy;
+  antigravity: ProviderEmailStrategy;
+  aws_builder_id: ProviderEmailStrategy;
 }
 
 // Proxy configuration
@@ -213,6 +217,10 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     openai: { ...DEFAULT_EMAIL_STRATEGY },
     fireworks: { ...DEFAULT_EMAIL_STRATEGY },
     bitbucket: { ...DEFAULT_EMAIL_STRATEGY },
+    claude: { ...DEFAULT_EMAIL_STRATEGY },
+    gemini: { ...DEFAULT_EMAIL_STRATEGY },
+    antigravity: { ...DEFAULT_EMAIL_STRATEGY },
+    aws_builder_id: { ...DEFAULT_EMAIL_STRATEGY },
   },
   proxy: {
     enabled: false,
