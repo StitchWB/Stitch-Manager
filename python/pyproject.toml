@@ -1,0 +1,79 @@
+[project]
+name = "stitch-backend"
+version = "0.2.0"
+description = "Stitch Manager v2 — Python backend (FastAPI + SQLAlchemy)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Stitch Team" }]
+
+dependencies = [
+    # ── Web framework ──────────────────────────────────────────────────────
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "websockets>=12.0",
+
+    # ── Database ───────────────────────────────────────────────────────────
+    "sqlalchemy[asyncio]>=2.0.0",
+    "aiosqlite>=0.20.0",
+    "alembic>=1.13.0",
+
+    # ── Validation & config ───────────────────────────────────────────────
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+
+    # ── HTTP client (OmniRoute sync) ──────────────────────────────────────
+    "httpx>=0.27.0",
+
+    # ── Utilities ──────────────────────────────────────────────────────────
+    "python-dotenv>=1.0.0",
+    "psutil>=5.9.0",
+    "keyring>=25.0.0",
+]
+
+[project.optional-dependencies]
+autoreg = [
+    "DrissionPage>=4.0.0",
+    "aioimaplib>=1.1.0",
+    "authlib>=1.3.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.27.0",       # TestClient async
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[project.scripts]
+stitch-backend = "stitch_backend.main:run"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["stitch_backend*"]
+
+# ── Tool config ──────────────────────────────────────────────────────────────
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
+ignore = ["E501", "E402"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
