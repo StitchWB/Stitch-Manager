@@ -301,34 +301,54 @@ def _tag_add_unique(tags: list[str], tag: str) -> None:
 
 # ── External API calls ────────────────────────────────────────────────────────
 
+def _safe_int(val: Any, default: int = 0) -> int:
+    """Safely convert a value to int, matching Rust's `.unwrap_or(0)`."""
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
 async def _check_windsurf_quota(api_key: str, installation_id: str) -> dict[str, Any]:
-    """Check Windsurf quota via their API."""
-    url = "https://api.windsurf.com/v1/me"
+    """Check Windsurf (Codeium) quota via GetUserStatus gRPC-web endpoint.
+
+    Matches Rust ``account_status_service.rs`` → ``check_windsurf_status``.
+    """
+    url = (
+        "https://server.codeium.com"
+        "/exa.seat_management_pb.SeatManagementService/GetUserStatus"
+    )
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "X-Installation-Id": installation_id,
+        "Content-Type": "application/json",
     }
+    body = {"metadata": {"installationId": installation_id}}
+
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-            resp = await client.get(url, headers=headers)
+            resp = await client.post(url, json=body, headers=headers)
             if resp.status_code >= 400:
                 return _status_info(
                     "windsurf", "", False, "Error",
-                    raw=f"Windsurf API returned {resp.status_code}",
+                    raw=f"Codeium API returned {resp.status_code}",
                 )
             data = resp.json()
     except httpx.TimeoutException:
-        return _status_info("windsurf", "", False, "Error", raw="Windsurf API timeout")
+        return _status_info("windsurf", "", False, "Error", raw="Codeium API timeout")
     except Exception as exc:
         return _status_info("windsurf", "", False, "Error", raw=str(exc))
 
-    email = data.get("email", "")
-    is_active = data.get("active", False) or data.get("isActive", False)
-    plan = data.get("plan", data.get("subscription", "Free"))
-    used = int(data.get("quotaUsed", data.get("usage", 0)))
-    limit = int(data.get("quotaLimit", data.get("limit", 500)))
-    banned = data.get("banned", False) or data.get("suspended", False)
+    # Parse nested Codeium response: userStatus / planStatus
+    user_status = data.get("userStatus", data)
+    plan_status = data.get("planStatus", data)
 
+    email = user_status.get("email", "")
+    is_active = user_status.get("isActive", False)
+    used = _safe_int(plan_status.get("usedPromptCredits", plan_status.get("usage", 0)))
+    limit = _safe_int(plan_status.get("availablePromptCredits", plan_status.get("limit", 500)))
+    banned = user_status.get("banned", False) or user_status.get("suspended", False)
+
+    plan = "Pro" if is_active else "Free"
     if banned:
         plan = "Banned"
         is_active = False
@@ -342,7 +362,6 @@ async def _check_windsurf_quota(api_key: str, installation_id: str) -> dict[str,
 
 async def _check_kiro_quota(token: str) -> dict[str, Any]:
     """Check Kiro quota via CodeWhisperer API."""
-    url = "https://oidc.us-east-1.amazonaws.com/token"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -365,6 +384,6 @@ async def _check_kiro_quota(token: str) -> dict[str, Any]:
     except Exception as exc:
         return {"error": str(exc)}
 
-    used = int(data.get("used", 0))
-    limit = int(data.get("limit", data.get("totalQuota", 0)))
+    used = _safe_int(data.get("used", 0))
+    limit = _safe_int(data.get("limit", data.get("totalQuota", 0)))
     return {"used": used, "limit": limit}

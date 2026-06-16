@@ -90,9 +90,9 @@ def verify_ide(ide_id: str) -> bool:
         if path.exists():
             return True
 
-    # Fallback: check if ide_id matches a detected IDE type
+    # Fallback: search all known IDE paths (handles aliases / custom IDs)
     for name, templates in _IDE_SEARCH_PATHS.items():
-        if ide_id_lower == name:
+        if name != ide_id_lower:
             for template in templates:
                 if _expand_path(template).exists():
                     return True
