@@ -315,3 +315,49 @@ async def cmd_restore_backup(params: dict) -> dict:
     shutil.copy2(backup_file, ext_path)
     logger.info("Restored %s from backup %s", ext_path, backup_file)
     return {"success": True, "message": f"Restored from {backup_file.name}"}
+
+
+# ── Trae stubs + IDE verification ─────────────────────────────────────────
+
+@register_command("verify_ide")
+async def cmd_verify_ide(params: dict) -> bool:
+    """Verify IDE installation is valid."""
+    from stitch_backend.domains.patcher.service import verify_ide
+    ide_id = str(params.get("ideId", params.get("ide_id", "")))
+    return verify_ide(ide_id)
+
+
+@register_command("patch_trae_storage")
+async def cmd_patch_trae_storage(params: dict) -> dict:
+    """Patch Trae storage.json to enable Pro features (stub)."""
+    from stitch_backend.domains.patcher.service import patch_trae_storage
+    return patch_trae_storage()
+
+
+@register_command("restore_trae_storage")
+async def cmd_restore_trae_storage(params: dict) -> dict:
+    """Restore Trae storage from backup (stub)."""
+    from stitch_backend.domains.patcher.service import restore_trae_storage
+    backup_path = str(params.get("backupPath", params.get("backup_path", "")))
+    return restore_trae_storage(backup_path)
+
+
+@register_command("patch_trae_extension")
+async def cmd_patch_trae_extension(params: dict) -> dict:
+    """Patch Trae extension.js (stub)."""
+    from stitch_backend.domains.patcher.service import patch_trae_extension
+    return patch_trae_extension()
+
+
+@register_command("patch_trae_workbench")
+async def cmd_patch_trae_workbench(params: dict) -> dict:
+    """Patch Trae workbench.desktop.main.js (stub)."""
+    from stitch_backend.domains.patcher.service import patch_trae_workbench
+    return patch_trae_workbench()
+
+
+@register_command("patch_trae_full")
+async def cmd_patch_trae_full(params: dict) -> dict:
+    """Patch all Trae files (storage + extension + workbench) (stub)."""
+    from stitch_backend.domains.patcher.service import patch_trae_full
+    return patch_trae_full()
