@@ -75,39 +75,43 @@ async def cmd_send_python_job_control(params: dict) -> bool:
 
 
 @register_command("run_python_script")
-async def cmd_run_python_script(params: dict) -> dict:
-    """Run a Python script and wait for completion."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+async def cmd_run_python_script(params: dict) -> str:
+    """Run a Python script and return stdout (matches Rust: String)."""
+    import os as _os
 
     script = params.get("scriptPath", params.get("script", ""))
     if not script:
-        return {"error": "scriptPath is required"}
+        return "error: scriptPath is required"
 
-    job = await get_job_manager().start(
-        script_path=script,
-        args=params.get("args"),
-        env=params.get("env"),
-        cwd=params.get("cwd"),
-        timeout_ms=params.get("timeoutMs", 120_000),
-        python_binary=params.get("pythonBinary", "python"),
-    )
+    python_binary = params.get("pythonBinary", "python")
+    args = params.get("args") or []
+    timeout_secs = params.get("timeoutMs", 120_000) / 1000.0
 
-    # Wait for the subprocess to finish before returning
-    proc = job._process
-    if proc:
-        try:
-            timeout_secs = params.get("timeoutMs", 120_000) / 1000.0
-            await asyncio.wait_for(proc.wait(), timeout=timeout_secs)
-        except asyncio.TimeoutError:
-            proc.kill()
+    env = dict(_os.environ)
+    if params.get("env"):
+        env.update(params["env"])
 
-    return {
-        "jobId": job.id,
-        "state": job.state,
-        "exitCode": job.exit_code,
-        "error": job.error,
-        "resultPayload": job.result_payload,
-    }
+    cmd = [python_binary, script] + args
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=params.get("cwd"),
+            env=env,
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout_secs
+        )
+        if proc.returncode != 0:
+            return stderr.decode("utf-8", errors="replace")[:2000]
+        return stdout.decode("utf-8", errors="replace")
+    except asyncio.TimeoutError:
+        return f"error: script timed out after {timeout_secs:.0f}s"
+    except FileNotFoundError:
+        return f"error: Python binary not found: {python_binary}"
+    except Exception as e:
+        return f"error: {e}"
 
 
 @register_command("start_composed_flow_job")

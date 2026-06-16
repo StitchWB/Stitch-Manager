@@ -153,7 +153,8 @@ async def cmd_export_profile_bundle(params: dict) -> dict:
 
 
 @register_command("import_profile_bundle_rust")
-async def cmd_import_profile_bundle(params: dict) -> dict:
+async def cmd_import_profile_bundle(params: dict) -> str:
+    """Import profile bundle and return alias (matches Rust: String)."""
     req = _parse(ImportBundleRequest, params)
 
     async def _op(session):
@@ -164,4 +165,4 @@ async def cmd_import_profile_bundle(params: dict) -> dict:
         return alias
 
     alias = await run_in_session(_op)
-    return {"alias": alias}
+    return alias
