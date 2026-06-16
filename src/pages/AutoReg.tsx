@@ -269,7 +269,7 @@ export default function AutoRegNext() {
 
   // Initialize on mount
   useEffect(() => {
-    console.warn('[AUTOREG] useEffect: initializing, calling loadSettings');
+    if (import.meta.env.DEV) console.debug('[AUTOREG] useEffect: initializing, calling loadSettings');
     // NOTE: useRegistrationStore returns new function references on each render.
     // This effect must run only once; otherwise, it can repeatedly reload DB settings
     // and overwrite user edits (e.g. count snapping back to previous value).
@@ -280,37 +280,26 @@ export default function AutoRegNext() {
 
     // Save settings when user leaves the page or switches tabs
     const handleBeforeUnload = () => {
-      console.warn('[AUTOREG] beforeunload event fired');
+      if (import.meta.env.DEV) console.debug('[AUTOREG] beforeunload event fired');
       const settingsLoaded = useRegistrationStore.getState().settingsLoaded;
-      console.warn('[AUTOREG] beforeunload: settingsLoaded =', settingsLoaded);
       if (settingsLoaded) {
-        console.warn('[AUTOREG] beforeunload: calling saveImmediately');
         useRegistrationStore.getState().saveImmediately();
       }
     };
 
     const handleVisibilityChange = () => {
-      console.warn(
-        '[AUTOREG] visibilitychange event fired, document.visibilityState =',
-        document.visibilityState
-      );
       if (document.visibilityState === 'hidden') {
-        console.warn('[AUTOREG] tab became hidden, attempting to save');
         const settingsLoaded = useRegistrationStore.getState().settingsLoaded;
-        console.warn('[AUTOREG] visibilitychange: settingsLoaded =', settingsLoaded);
         if (settingsLoaded) {
-          console.warn('[AUTOREG] visibilitychange: calling saveImmediately');
           useRegistrationStore.getState().saveImmediately();
         }
       }
     };
 
-    console.warn('[AUTOREG] adding event listeners for beforeunload and visibilitychange');
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      console.warn('[AUTOREG] cleaning up event listeners');
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };

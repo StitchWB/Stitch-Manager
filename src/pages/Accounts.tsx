@@ -427,7 +427,7 @@ export default function Accounts() {
 
   const handleNavigateToGraphFromSheets = useCallback(
     (payload: { sheetName: string; serviceAccountId?: string; login?: string }) => {
-      console.warn('[Accounts] Navigate to graph target:', payload);
+      if (import.meta.env.DEV) console.debug('[Accounts] Navigate to graph target:', payload);
       handleViewModeChange('graph');
     },
     [handleViewModeChange]

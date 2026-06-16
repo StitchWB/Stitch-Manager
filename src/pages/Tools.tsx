@@ -477,7 +477,7 @@ export default function Tools() {
 
   const addDebugLog = (msg: string) => {
     const time = new Date().toLocaleTimeString('ru-RU', { hour12: false });
-    console.warn(`[CardCheck ${time}] ${msg}`);
+    if (import.meta.env.DEV) console.debug(`[CardCheck ${time}] ${msg}`);
     setDebugLogs(prev => {
       const next = [{ time, msg }, ...prev].slice(0, 20);
       return next;

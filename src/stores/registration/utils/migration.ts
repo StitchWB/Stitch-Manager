@@ -19,18 +19,18 @@ export const migrateProviderStrategies = (): ProviderEmailStrategies | null => {
   try {
     const stored = localStorage.getItem('providerEmailStrategies');
     if (stored) {
-      console.warn('[MIGRATION] Found providerEmailStrategies, no migration needed');
+      if (import.meta.env.DEV) console.debug('[MIGRATION] Found providerEmailStrategies, no migration needed');
       return JSON.parse(stored);
     }
 
     // Check for old format
     const oldStored = localStorage.getItem('providerImapConfigs');
     if (!oldStored) {
-      console.warn('[MIGRATION] No old data found');
+      if (import.meta.env.DEV) console.debug('[MIGRATION] No old data found');
       return null;
     }
 
-    console.warn('[MIGRATION] Found old providerImapConfigs, migrating...');
+    if (import.meta.env.DEV) console.debug('[MIGRATION] Found old providerImapConfigs, migrating...');
     const oldConfigs = JSON.parse(oldStored);
     const providerEmailStrategies = {} as ProviderEmailStrategies;
 
@@ -49,7 +49,7 @@ export const migrateProviderStrategies = (): ProviderEmailStrategies | null => {
     localStorage.setItem('providerEmailStrategies', JSON.stringify(providerEmailStrategies));
     // Remove old format
     localStorage.removeItem('providerImapConfigs');
-    console.warn('[MIGRATION] Migration completed, old data removed');
+    if (import.meta.env.DEV) console.debug('[MIGRATION] Migration completed, old data removed');
 
     return providerEmailStrategies;
   } catch (error) {
@@ -92,7 +92,7 @@ export const loadProviderStrategies = (): ProviderEmailStrategies => {
 export const saveProviderStrategies = (strategies: ProviderEmailStrategies): void => {
   try {
     localStorage.setItem('providerEmailStrategies', JSON.stringify(strategies));
-    console.warn('[MIGRATION] Saved provider strategies to localStorage');
+    if (import.meta.env.DEV) console.debug('[MIGRATION] Saved provider strategies to localStorage');
   } catch (error) {
     console.warn('[MIGRATION] Failed to save provider strategies:', error);
   }
