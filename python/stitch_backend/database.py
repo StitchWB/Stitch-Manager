@@ -123,6 +123,7 @@ async def create_all_tables() -> None:
         import stitch_backend.domains.accounts.models  # noqa: F401
         import stitch_backend.domains.settings.models  # noqa: F401
         import stitch_backend.domains.profiles.models  # noqa: F401
+        import stitch_backend.domains.email_counter.models  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
 
 

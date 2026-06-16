@@ -78,3 +78,12 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cached singleton — safe to call from anywhere."""
     return Settings()
+
+
+def get_database_path() -> Path:
+    """Extract the SQLite database file path from database_url."""
+    url = get_settings().database_url
+    # sqlite+aiosqlite:///path/to/stitch.db → /path/to/stitch.db
+    if ":///" in url:
+        return Path(url.split(":///", 1)[1])
+    return REPO_ROOT / "stitch.db"
