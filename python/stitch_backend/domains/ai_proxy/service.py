@@ -450,21 +450,38 @@ class AuthFileScanner:
 
 # ── Settings K/V helpers ──────────────────────────────────────────────────────
 
+_SETTINGS_TABLE_READY = False
+
+
+async def _ensure_settings_table(session: Any) -> None:
+    """Create the ``ai_proxy_settings`` K/V table if it doesn't exist."""
+    global _SETTINGS_TABLE_READY  # noqa: PLW0603
+    if _SETTINGS_TABLE_READY:
+        return
+    await session.execute(text(
+        "CREATE TABLE IF NOT EXISTS ai_proxy_settings ("
+        "  key TEXT PRIMARY KEY,"
+        "  value TEXT,"
+        "  updated_at INTEGER"
+        ")"
+    ))
+    _SETTINGS_TABLE_READY = True
+
+
 async def get_settings_kv(session: Any, key: str) -> str | None:
     """Read a value from ``ai_proxy_settings`` K/V table."""
-    try:
-        result = await session.execute(
-            text("SELECT value FROM ai_proxy_settings WHERE key = :k"),
-            {"k": key},
-        )
-        row = result.fetchone()
-        return row.value if row else None
-    except Exception:
-        return None
+    await _ensure_settings_table(session)
+    result = await session.execute(
+        text("SELECT value FROM ai_proxy_settings WHERE key = :k"),
+        {"k": key},
+    )
+    row = result.fetchone()
+    return row.value if row else None
 
 
 async def set_settings_kv(session: Any, key: str, value: str) -> None:
     """Write a value to ``ai_proxy_settings`` K/V table."""
+    await _ensure_settings_table(session)
     await session.execute(text(
         "INSERT OR REPLACE INTO ai_proxy_settings (key, value, updated_at)"
         " VALUES (:k, :v, :ts)"

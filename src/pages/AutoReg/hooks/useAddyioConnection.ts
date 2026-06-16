@@ -33,8 +33,8 @@ export const useAddyioConnection = ({
   const [addyioConnectionMessage, setAddyioConnectionMessage] = useState('');
 
   const handleTestAddyioConnection = useCallback(async () => {
-    console.warn('[ADDYIO] handleTestAddyioConnection called');
-    console.warn('[ADDYIO] API token:', addyioApiToken ? '***set***' : 'empty');
+    if (import.meta.env.DEV) console.debug('[ADDYIO] handleTestAddyioConnection called');
+    if (import.meta.env.DEV) console.debug('[ADDYIO] API token:', addyioApiToken ? '***set***' : 'empty');
 
     if (!addyioApiToken) {
       console.error('[ADDYIO] No API token configured');

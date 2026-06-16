@@ -36,7 +36,7 @@ export const useConfigStore = create<ConfigState>(set => ({
   logVerbosity: 'normal',
 
   setProvider: (provider: ProviderName) => {
-    console.warn('[CONFIG_STORE] setProvider called:', provider);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setProvider called:', provider);
     set(state => {
       // Save current email strategy to current provider's slot
       const currentStrategy: ProviderEmailStrategy = {
@@ -83,10 +83,10 @@ export const useConfigStore = create<ConfigState>(set => ({
   },
 
   setIMAPConfig: (imap: Partial<IMAPConfig>) => {
-    console.warn('[CONFIG_STORE] setIMAPConfig called with:', imap);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setIMAPConfig called with:', imap);
     set(state => {
       const newImap = { ...state.config.imap, ...imap };
-      console.warn('[CONFIG_STORE] New IMAP config state:', newImap);
+      if (import.meta.env.DEV) console.debug('[CONFIG_STORE] New IMAP config state:', newImap);
 
       // If strategy changed, update provider-specific strategy
       let updatedStrategies = state.config.providerEmailStrategies;
@@ -117,13 +117,13 @@ export const useConfigStore = create<ConfigState>(set => ({
         };
       }
 
-      console.warn('[CONFIG_STORE] setIMAPConfig: new config updates:', updates);
+      if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setIMAPConfig: new config updates:', updates);
       return { config: { ...state.config, ...updates } };
     });
   },
 
   setProxyConfig: (proxy: Partial<ProxyConfig>) => {
-    console.warn('[CONFIG_STORE] setProxyConfig called:', proxy);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setProxyConfig called:', proxy);
     set(state => ({
       config: {
         ...state.config,
@@ -133,7 +133,7 @@ export const useConfigStore = create<ConfigState>(set => ({
   },
 
   setAdvancedSettings: (settings: Partial<AdvancedSettings>) => {
-    console.warn('[CONFIG_STORE] setAdvancedSettings called:', settings);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setAdvancedSettings called:', settings);
     set(state => ({
       config: {
         ...state.config,
@@ -144,31 +144,31 @@ export const useConfigStore = create<ConfigState>(set => ({
 
   setCount: (count: number) => {
     const clampedCount = Math.max(1, Math.min(100, count));
-    console.warn('[CONFIG_STORE] setCount called:', count, '→ clamped:', clampedCount);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setCount called:', count, '→ clamped:', clampedCount);
     set(state => ({
       config: { ...state.config, count: clampedCount },
     }));
   },
 
   setUIScale: (uiScale: number) => {
-    console.warn('[CONFIG_STORE] setUIScale called:', uiScale);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setUIScale called:', uiScale);
     set(state => ({
       config: { ...state.config, uiScale: Math.max(0.5, Math.min(1.5, uiScale)) },
     }));
   },
 
   setLogVerbosity: (level: LogVerbosity) => {
-    console.warn('[CONFIG_STORE] setLogVerbosity called:', level);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setLogVerbosity called:', level);
     set({ logVerbosity: level });
   },
 
   setConfig: (config: RegistrationConfig) => {
-    console.warn('[CONFIG_STORE] setConfig called');
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setConfig called');
     set({ config });
   },
 
   updateConfig: (updates: Partial<RegistrationConfig>) => {
-    console.warn('[CONFIG_STORE] updateConfig called with:', updates);
+    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] updateConfig called with:', updates);
     set(state => ({
       config: { ...state.config, ...updates },
     }));

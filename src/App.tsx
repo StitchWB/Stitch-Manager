@@ -133,7 +133,6 @@ function App() {
     const baseSize = 16; // Standard base size
     const scaledSize = baseSize * uiScale;
     document.documentElement.style.setProperty('--app-font-size', `${scaledSize}px`);
-    console.warn(`[APP] UI Scale applied: ${uiScale} (font-size: ${scaledSize}px)`);
   }, [uiScale]);
 
   // Apply theme on mount and when it changes

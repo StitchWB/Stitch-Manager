@@ -299,7 +299,7 @@ export const useAccountsStore = create<AccountsState>()(
         },
 
         deleteAccounts: async accountIds => {
-          console.warn('[Store] deleteAccounts called with:', accountIds);
+          if (import.meta.env.DEV) console.debug('[Store] deleteAccounts called with:', accountIds);
           const previousAccounts = get().accounts;
 
           // Optimistic update
@@ -307,20 +307,17 @@ export const useAccountsStore = create<AccountsState>()(
             accounts: state.accounts.filter(a => !accountIds.includes(a.id)),
             selectedIds: new Set([...state.selectedIds].filter(id => !accountIds.includes(id))),
           }));
-          console.warn('[Store] Optimistic update applied, calling bulkDeleteAccounts...');
 
           try {
             // Use bulk delete command
             const result = await bulkDeleteAccounts({ accountIds });
-            console.warn('[Store] bulkDeleteAccounts result:', result);
+            if (import.meta.env.DEV) console.debug('[Store] bulkDeleteAccounts result:', result);
 
             // If some deletions failed, show error but keep optimistic update for succeeded ones
             if (result.failed > 0) {
               const message = `Deleted ${result.succeeded}/${result.total} accounts. ${result.failed} failed.`;
               console.warn('[Store] Some deletions failed:', message);
               set({ error: message });
-            } else {
-              console.warn('[Store] All deletions succeeded');
             }
           } catch (error) {
             // Rollback on error

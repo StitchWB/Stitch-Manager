@@ -33,12 +33,18 @@ class ApiKeysService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
+    async def _ensure_table(self) -> None:
+        """Ensure ``ai_proxy_settings`` table exists."""
+        from stitch_backend.domains.ai_proxy.service import _ensure_settings_table
+        await _ensure_settings_table(self._db)
+
     async def get_keys(self, provider: str) -> list[dict[str, Any]]:
         """Load API keys for a provider. Returns [] if not found."""
         db_key = PROVIDER_DB_KEYS.get(provider)
         if not db_key:
             raise ValueError(f"Unknown provider: {provider}")
 
+        await self._ensure_table()
         result = await self._db.execute(
             text("SELECT value FROM ai_proxy_settings WHERE key = :k"),
             {"k": db_key},
@@ -58,6 +64,7 @@ class ApiKeysService:
 
         json_value = serialize_keys(provider, keys)
         now = int(time.time())
+        await self._ensure_table()
         await self._db.execute(
             text(
                 "INSERT OR REPLACE INTO ai_proxy_settings (key, value, updated_at) "
