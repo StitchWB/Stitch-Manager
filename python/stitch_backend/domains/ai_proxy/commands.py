@@ -459,24 +459,6 @@ async def cmd_test_provider_connection(params: dict) -> dict:
     }
 
 
-@register_command("start_ai_proxy")
-async def cmd_start_ai_proxy(params: dict) -> dict:
-    """Start the AI proxy sidecar process."""
-    return {
-        "running": False,
-        "managedByApp": False,
-        "networkReachable": False,
-        "proxyPort": 0,
-        "message": "AI proxy sidecar management not yet ported to Python backend",
-    }
-
-
-@register_command("stop_ai_proxy")
-async def cmd_stop_ai_proxy(params: dict) -> dict:
-    """Stop the AI proxy sidecar process."""
-    return {
-        "running": False,
-        "managedByApp": False,
-        "networkReachable": False,
-        "proxyPort": 0,
-    }
+# NOTE: start_ai_proxy / stop_ai_proxy are implemented in proxy_mgmt.commands
+# (delegating to omniroute). Do NOT add stubs here — the import order would
+# cause them to overwrite the real implementations.
