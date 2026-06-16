@@ -58,21 +58,27 @@ def _luhn_check_digit(partial: str) -> int:
 
 # ── Card generation ───────────────────────────────────────────────────────────
 
+_rng = random.SystemRandom()
+
+
 def _generate_card_number(bin_digits: str) -> str:
     """Generate a Luhn-valid card number from a BIN prefix."""
     clean = "".join(c for c in bin_digits if c.isdigit())
     if len(clean) < 6:
         raise ValueError("BIN must have at least 6 digits")
     target_len = 15 if clean.startswith("3") else 16
+    max_bin_len = target_len - 1  # reserve 1 digit for Luhn check digit
+    if len(clean) > max_bin_len:
+        raise ValueError(f"BIN too long: {len(clean)} digits (max {max_bin_len})")
     random_needed = target_len - len(clean) - 1
-    partial = clean + "".join(str(random.randint(0, 9)) for _ in range(random_needed))
+    partial = clean + "".join(str(_rng.randint(0, 9)) for _ in range(random_needed))
     check = _luhn_check_digit(partial)
     return partial + str(check)
 
 
 def _generate_cvv(card_number: str) -> str:
     length = 4 if card_number.startswith("3") else 3
-    return "".join(str(random.randint(0, 9)) for _ in range(length))
+    return "".join(str(_rng.randint(0, 9)) for _ in range(length))
 
 
 def generate_cards(
@@ -84,17 +90,15 @@ def generate_cards(
     """Generate *quantity* cards with valid Luhn check digits."""
     quantity = max(1, min(quantity, 1000))
     cards: list[dict[str, Any]] = []
-    seed_base = int(time.time() * 1000)
 
-    for i in range(quantity):
-        random.seed(seed_base + i)
+    for _ in range(quantity):
         number = _generate_card_number(bin_str)
-        m = month or f"{random.randint(1, 12):02d}"
-        y = year or str(random.randint(2026, 2030))
+        m = month or f"{_rng.randint(1, 12):02d}"
+        y = year or str(_rng.randint(2026, 2030))
         cvv = _generate_cvv(number)
         fmt = f"{number}|{m}|{y}|{cvv}"
         cards.append({
-            "id": f"card_{random.randint(0, 2**53)}",
+            "id": f"card_{_rng.randint(0, 2**53)}",
             "number": number,
             "month": m,
             "year": y,
@@ -102,8 +106,6 @@ def generate_cards(
             "format": fmt,
         })
 
-    # Reset seed to avoid affecting other random usage
-    random.seed()
     return cards
 
 
