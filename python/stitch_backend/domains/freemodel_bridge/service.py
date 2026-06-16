@@ -14,6 +14,8 @@ from typing import Any
 
 import httpx
 
+import os
+
 from stitch_backend.config import REPO_ROOT
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,25 @@ def _resolve_bridge_script() -> Path | None:
     return None
 
 
+async def _wait_for_ready(port: int, timeout: float = 15.0) -> bool:
+    """Poll the bridge health endpoint until it responds or timeout."""
+    url = f"http://127.0.0.1:{port}/v1/models"
+    deadline = time.time() + timeout
+    async with httpx.AsyncClient(timeout=2) as client:
+        while time.time() < deadline:
+            # Check if process died
+            if _process is not None and _process.returncode is not None:
+                return False
+            try:
+                resp = await client.get(url)
+                if resp.status_code < 500:
+                    return True
+            except (httpx.ConnectError, httpx.TimeoutException, OSError):
+                pass
+            await asyncio.sleep(0.5)
+    return False
+
+
 class FreemodelBridgeService:
     """Manages the FreeModel bridge subprocess lifecycle."""
 
@@ -44,6 +65,11 @@ class FreemodelBridgeService:
     async def start(settings: dict[str, Any]) -> dict[str, Any]:
         """Start the bridge subprocess."""
         global _process, _config, _start_time, _error
+
+        # Stop existing process if running (prevents orphan processes)
+        if _process is not None and _process.returncode is None:
+            await FreemodelBridgeService.stop()
+            await asyncio.sleep(0.5)
 
         port = int(settings.get("port", 8320))
         api_key = (settings.get("apiKey") or settings.get("api_key") or "").strip()
@@ -59,16 +85,22 @@ class FreemodelBridgeService:
             env = {
                 "FREEMODEL_PORT": str(port),
                 "FREEMODEL_API_KEY": api_key,
+                "FREEMODEL_HOST": "127.0.0.1",
             }
             _process = await asyncio.create_subprocess_exec(
                 "python", str(script),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env={**__import__("os").environ, **env},
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                env={**os.environ, **env},
             )
             _start_time = time.time()
             _error = None
             logger.info("[FreeBridge] Started on port %d (pid=%d)", port, _process.pid)
+
+            # Wait for the bridge to become ready (health-check gate)
+            ready = await _wait_for_ready(port, timeout=15.0)
+            if not ready:
+                logger.warning("[FreeBridge] Process started but not ready within 15s")
         except Exception as exc:
             _error = str(exc)
             logger.error("[FreeBridge] Failed to start: %s", exc)
@@ -101,7 +133,20 @@ class FreemodelBridgeService:
                 "status": "error", "port": None, "pid": None,
                 "uptimeSeconds": None, "error": _error,
             }
-        if _process is None or _process.returncode is not None:
+        if _process is None:
+            return {
+                "status": "stopped", "port": None, "pid": None,
+                "uptimeSeconds": None, "error": None,
+            }
+        if _process.returncode is not None:
+            rc = _process.returncode
+            # SIGTERM (-15) is a normal stop; anything else is an error
+            if rc != 0 and rc != -15:
+                return {
+                    "status": "error", "port": None, "pid": None,
+                    "uptimeSeconds": None,
+                    "error": f"Bridge process exited with code {rc}",
+                }
             return {
                 "status": "stopped", "port": None, "pid": None,
                 "uptimeSeconds": None, "error": None,
