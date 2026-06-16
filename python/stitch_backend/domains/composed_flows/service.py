@@ -60,7 +60,7 @@ class ComposedFlowService:
         if not flow_json:
             raise ValueError("flowJson is required")
 
-        fid = (flow_id or "").strip() or str(uuid.uuid4())
+        fid = (flow_id or "").strip() or f"flow_{uuid.uuid4()}"
         now = _now()
 
         stmt = sqlite_insert(ComposedFlow).values(

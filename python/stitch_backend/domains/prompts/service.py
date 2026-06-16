@@ -52,10 +52,18 @@ def _default_prompts_dir() -> Path:
 
 
 def _prompt_file_path(prompt_name: str) -> Path:
-    """Resolve a prompt file path inside the user prompts dir."""
+    """Resolve a prompt file path inside the user prompts dir.
+
+    Rust appends ``.txt`` for plain prompt names (no ``/``).
+    Names containing ``/`` are treated as sub-paths (e.g. ``tool-descriptions/fsWrite``).
+    """
     prompts_dir = _prompts_dir()
+    # Append .txt for simple names; keep sub-paths as-is
+    if "/" in prompt_name:
+        file_path = (prompts_dir / prompt_name).resolve()
+    else:
+        file_path = (prompts_dir / f"{prompt_name}.txt").resolve()
     # Prevent path traversal
-    file_path = (prompts_dir / prompt_name).resolve()
     if not str(file_path).startswith(str(prompts_dir.resolve())):
         raise ValueError("Invalid prompt name (path traversal detected)")
     return file_path
