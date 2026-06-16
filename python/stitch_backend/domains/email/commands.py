@@ -111,11 +111,12 @@ async def cmd_get_addyio_recipients(params: dict) -> list:
 
 
 @register_command("test_imap_connection")
-async def cmd_test_imap_connection(params: dict) -> dict:
+async def cmd_test_imap_connection(params: dict) -> str:
     """Test IMAP connection with provided credentials.
 
     Ported from Rust ``test_imap_connection`` in python_commands.rs.
-    Uses Python imaplib for the TLS connection test.
+    Returns a success string on success, raises on failure — matching
+    the Rust contract (frontend expects ``safeInvoke<string>``).
     """
     import imaplib
     import ssl
@@ -125,7 +126,7 @@ async def cmd_test_imap_connection(params: dict) -> dict:
     password = (params.get("imapPassword") or params.get("imap_password") or "").strip()
 
     if not server or not user:
-        return {"error": "imapServer and imapUser are required"}
+        raise ValueError("imapServer and imapUser are required")
 
     # Parse host:port
     host = server
@@ -138,13 +139,34 @@ async def cmd_test_imap_connection(params: dict) -> dict:
         except ValueError:
             port = 993
 
-    try:
-        ctx = ssl.create_default_context()
-        with imaplib.IMAP4_SSL(host, port, ssl_context=ctx) as mail:
-            mail.login(user, password)
-            return {"success": True, "message": f"Connected to {host}:{port}"}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    # Resolve password sentinel ("********") from settings table
+    is_gmail = "gmail.com" in server or "imap.google.com" in server
+    setting_key = "gmail_app_password" if is_gmail else "imap_password"
+    if password in ("••••••••", "********", ""):
+        from sqlalchemy import text as sql_text
+        from stitch_backend.database import run_in_session
+
+        async def _fetch_pwd(session):
+            r = await session.execute(
+                sql_text("SELECT value FROM settings WHERE key = :k"),
+                {"k": setting_key},
+            )
+            row = r.first()
+            return row[0] if row else ""
+
+        password = await run_in_session(_fetch_pwd)
+        if not password:
+            pwd_type = "Gmail App Password" if is_gmail else "IMAP password"
+            raise ValueError(f"{pwd_type} not configured")
+
+    ctx = ssl.create_default_context()
+    with imaplib.IMAP4_SSL(host, port, ssl_context=ctx) as mail:
+        mail.login(user, password)
+        status, data = mail.select("INBOX")
+        message_count = data[0].decode() if status == "OK" else "0"
+        mail.close()
+        mail.logout()
+        return f"Connected successfully! INBOX has {message_count} messages"
 
 
 @register_command("test_proxy")
