@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { listen } from '@/lib/events';
 import { Modal, Button, ProgressBar } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import {

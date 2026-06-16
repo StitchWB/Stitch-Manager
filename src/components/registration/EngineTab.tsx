@@ -8,7 +8,7 @@ import {
   Sparkles,
   Loader2 } from
 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke } from '../../lib/tauri/core';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';
@@ -205,7 +205,7 @@ export function EngineTab({
     setLastFoundCard(null);
 
     try {
-      const result = await invoke<{number: string;month: string;year: string;cvv: string;} | null>('find_live_card', {
+      const result = await safeInvoke<{number: string;month: string;year: string;cvv: string;} | null>('find_live_card', {
         bin: cardBin,
         maxAttempts: 20,
         month: null,

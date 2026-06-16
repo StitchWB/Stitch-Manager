@@ -122,6 +122,7 @@ async def create_all_tables() -> None:
         # Import all model modules so Base.metadata is populated
         import stitch_backend.domains.accounts.models  # noqa: F401
         import stitch_backend.domains.settings.models  # noqa: F401
+        import stitch_backend.domains.profiles.models  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
 
 

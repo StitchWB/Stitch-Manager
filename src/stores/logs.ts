@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { listen, UnlistenFn } from '@/lib/events';
 import { getLogs, clearAppLogs, exportAppLogs, getLogStats } from '../lib/tauri/modules/logs';
 import { TauriError } from '../lib/tauri/core/types';
 

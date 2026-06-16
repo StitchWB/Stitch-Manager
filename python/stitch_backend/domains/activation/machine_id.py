@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import platform
 import uuid
 from pathlib import Path
 from typing import Any
@@ -37,13 +36,13 @@ async def patch_machine_id(
     This is provider-specific.  Each IDE stores its machine binding
     in a different location.
     """
-    IDE_PATHS = {
+    ide_paths = {
         "kiro": Path.home() / ".kiro" / "machineId",
         "windsurf": Path.home() / ".windsurf" / "machineId",
         "cursor": Path.home() / ".cursor" / "machineId",
     }
 
-    path = IDE_PATHS.get(ide)
+    path = ide_paths.get(ide)
     if path is None:
         logger.warning("Unknown IDE '%s' — skipping machine ID patch", ide)
         return {"success": False, "error": f"Unknown IDE: {ide}"}
@@ -60,12 +59,12 @@ async def patch_machine_id(
 
 async def get_machine_id(account_id: str, ide: str = "kiro") -> str | None:
     """Read the current machine ID for an IDE."""
-    IDE_PATHS = {
+    ide_paths = {
         "kiro": Path.home() / ".kiro" / "machineId",
         "windsurf": Path.home() / ".windsurf" / "machineId",
         "cursor": Path.home() / ".cursor" / "machineId",
     }
-    path = IDE_PATHS.get(ide)
+    path = ide_paths.get(ide)
     if path and path.exists():
         return path.read_text(encoding="utf-8").strip()
     return None

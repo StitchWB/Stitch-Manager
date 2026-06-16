@@ -66,7 +66,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         raise HTTPException(
             status_code=404,
             detail=f"Unknown command: '{name}'",
-        )
+        ) from None
 
     # Execute
     try:

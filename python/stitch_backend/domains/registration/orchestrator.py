@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from stitch_backend.core.event_bus import event_bus

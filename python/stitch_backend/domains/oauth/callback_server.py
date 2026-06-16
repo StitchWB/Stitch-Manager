@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -57,7 +56,7 @@ class OAuthCallbackServer:
         try:
             await asyncio.wait_for(self._event.wait(), timeout=timeout)
         except asyncio.TimeoutError:
-            raise TimeoutError(f"OAuth callback not received within {timeout}s")
+            raise TimeoutError(f"OAuth callback not received within {timeout}s") from None
         finally:
             server.should_exit = True
             await task

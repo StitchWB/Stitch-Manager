@@ -68,8 +68,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetchAccounts();
-    loadDashboardStats();
+    Promise.resolve(fetchAccounts()).catch(() => {});
+    Promise.resolve(loadDashboardStats()).catch(() => {});
     loadFleetTarget();
   }, [fetchAccounts, loadDashboardStats, loadFleetTarget]);
 
@@ -77,7 +77,7 @@ export default function Dashboard() {
     if (dashboardStats) {
       const accountsByProvider = providers.map(p => ({
         provider: p.id,
-        count: dashboardStats.accountsByProvider[p.id] || 0,
+        count: dashboardStats.accountsByProvider?.[p.id] || 0,
         color: p.color,
       }));
 

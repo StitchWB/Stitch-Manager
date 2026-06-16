@@ -4,9 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "python python/run_gui.py",
-    "start:dev": "python python/run_gui.py --dev",
-    "dev:api": "uvicorn python.autoreg.app.main:app --reload --port 8420",
+    "dev": "vite --port 5174",
+    "build": "tsc && vite build",
+    "start": "cd python && python run_gui.py",
+    "start:dev": "cd python && python run_gui.py --dev",
+    "dev:api": "cd python && uvicorn stitch_backend.main:app --reload --port 25584",
     "dev:web": "vite --port 5174",
     "build:web": "tsc && vite build",
     "build:extension": "vite build -c vite.extension.config.ts",
@@ -60,5 +62,4 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
   }
-}
 }

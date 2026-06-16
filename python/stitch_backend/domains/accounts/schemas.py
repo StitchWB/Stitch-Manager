@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -95,13 +95,13 @@ class AccountResponse(BaseModel):
             return json.dumps(v) if not isinstance(v, str) else v
 
         # ORM attr → response field name (only mismatches need renaming)
-        _RENAME = {"profile_path": "browser_profile_path"}
+        _rename = {"profile_path": "browser_profile_path"}
 
         processed: dict[str, Any] = {}
         for attr in vars(data):
             if attr.startswith("_"):
                 continue
-            key = _RENAME.get(attr, attr)
+            key = _rename.get(attr, attr)
             val = getattr(data, attr)
             if isinstance(val, datetime):
                 processed[key] = _dt(val)

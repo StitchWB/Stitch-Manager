@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import { convertFileSrc } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
+import { openFileDialog, readFileText } from '@/lib/fileDialog';
 import type { Account } from '../types/generated';
 import {
   bulkExportAccounts,
@@ -21,7 +20,6 @@ import { t } from '../lib/i18n';
 import {
   normalizeJsonAccounts,
   parseCsvAccounts,
-  readBlobText,
   validateImportRecords,
   type ParsedAccountsResult,
 } from '../lib/accounts/importParser';
@@ -290,36 +288,22 @@ export function useAccountsActions({
     setIsImporting(true);
 
     try {
-      const selection = await open({
-        multiple: false,
+      const selected = await openFileDialog({
         filters: [{ name: 'Accounts', extensions: ['json', 'csv'] }],
       });
 
-      if (!selection) return;
-
-      const selected = Array.isArray(selection) ? selection[0] : selection;
       if (!selected) return;
 
-      const fileName = typeof selected === 'string' ? selected : selected.name;
-      const extension = fileName.split('.').pop()?.toLowerCase();
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return;
+
+      const extension = path.split('.').pop()?.toLowerCase();
       if (extension !== 'json' && extension !== 'csv') {
         toast.error('Unsupported file type. Please use .json or .csv');
         return;
       }
 
-      const fileText =
-        typeof selected === 'string'
-          ? await (async () => {
-              const fileUrl = convertFileSrc(selected);
-              const response = await fetch(fileUrl);
-              if (!response.ok) {
-                throw new Error('Failed to read selected file');
-              }
-
-              const blob = await response.blob();
-              return readBlobText(blob);
-            })()
-          : await selected.text();
+      const fileText = await readFileText(path);
 
       await importFromText(fileText);
     } catch (error) {
