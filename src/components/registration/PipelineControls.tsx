@@ -137,7 +137,7 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
     const listeners: (() => void)[] = [];
 
     (async () => {
-      const { listen } = await import('@tauri-apps/api/event');
+      const { listen } = await import('@/lib/events');
       if (cancelled) return;
 
       const register = async (event: string, handler: (payload: Record<string, unknown>) => void) => {

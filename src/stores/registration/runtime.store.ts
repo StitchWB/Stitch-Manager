@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke } from '../../lib/tauri/core';
 import type { RegistrationLog, RegistrationProgress, RegistrationStatus } from '../../types/ui';
 
 // Stage progress data
@@ -160,7 +160,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // Full per-line stream (especially Python stderr) can flood SQLite and
     // starve the small shared pool during batch registration.
     if (log.level === 'error' || log.level === 'warn' || log.level === 'success') {
-      invoke('add_log', {
+      safeInvoke('add_log', {
         level: log.level,
         source: 'registration',
         message: log.message,

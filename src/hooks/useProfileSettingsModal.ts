@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { open, save } from '@tauri-apps/plugin-dialog';
+import { openFileDialog, saveFileDialog } from '@/lib/fileDialog';
 import { toast } from 'sonner';
 
 import { useUIState } from './useUIState';
@@ -784,17 +784,18 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
       return;
     }
 
-    if (addProxyLastTestOk && addProxyDraft) {
-      const optimisticDraft = normalizeProxyDraft(addProxyDraft);
-      const optimistic = await testProxyLibraryDraft(optimisticDraft);
-      if (!optimistic.success) {
-        setAddProxyError(t('profileProxy.addProxyTestRequiredMessage'));
-        return;
-      }
-    }
     setAddProxySaving(true);
     setAddProxyError(null);
     try {
+      if (addProxyLastTestOk && addProxyDraft) {
+        const optimisticDraft = normalizeProxyDraft(addProxyDraft);
+        const optimistic = await testProxyLibraryDraft(optimisticDraft);
+        if (!optimistic.success) {
+          setAddProxyError(t('profileProxy.addProxyTestRequiredMessage'));
+          return;
+        }
+      }
+
       const entry = await createOrGetProxyLibraryEntry(normalizeProxyDraft(addProxyDraft));
 
       const testResult = await testProxyLibraryDraft(normalizeProxyDraft(addProxyDraft), {
@@ -1105,18 +1106,16 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
 
     try {
       const suggestedName = `${currentAlias.replace(/[^a-zA-Z0-9._-]+/g, '_')}.profile.bundle.json`;
-      const destination = await save({
+      const destination = await saveFileDialog({
         title: t('accounts.profileSettingsExportDialogTitle') || 'Export profile bundle',
         defaultPath: suggestedName,
         filters: [{ name: 'JSON', extensions: ['json'] }],
       });
 
       if (!destination) return;
-      const destinationPath = Array.isArray(destination) ? destination[0] : destination;
-      if (!destinationPath) return;
 
       setExportingBundle(true);
-      await exportFingerprintProfileBundle({ alias: currentAlias, destinationPath });
+      await exportFingerprintProfileBundle({ alias: currentAlias, destinationPath: destination });
       toast.success(t('accounts.profileSettingsExportSuccess') || 'Profile exported');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('accounts.profileSettingsExportFailed'));
@@ -1130,15 +1129,14 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
 
     try {
       setError(null);
-      const selected = await open({
+      const selected = await openFileDialog({
         title: t('accounts.profileSettingsImportDialogTitle') || 'Import profile bundle',
-        multiple: false,
         filters: [{ name: 'JSON', extensions: ['json'] }],
       });
       if (!selected) return;
 
       const sourcePath = Array.isArray(selected) ? selected[0] : selected;
-      if (!sourcePath || typeof sourcePath !== 'string') return;
+      if (!sourcePath) return;
 
       setImportSourcePath(sourcePath);
       setImportTargetMode('current');
@@ -1224,16 +1222,12 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
 
   const handlePickCookieFile = async () => {
     try {
-      const selection = await open({
-        multiple: false,
+      const selected = await openFileDialog({
         filters: [{ name: 'Cookie files', extensions: ['json', 'txt'] }],
       });
 
-      if (!selection) return;
-      const selected = Array.isArray(selection) ? selection[0] : selection;
       if (!selected) return;
-
-      const path = typeof selected === 'string' ? selected : selected.name;
+      const path = Array.isArray(selected) ? selected[0] : selected;
       if (!path) return;
 
       update({

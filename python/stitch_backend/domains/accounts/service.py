@@ -172,7 +172,7 @@ class AccountService:
         stmt = delete(Account).where(Account.id.in_(str_ids))
         result = await self._db.execute(stmt)
         await self._db.flush()
-        count = result.rowcount
+        count = int(result.rowcount)  # type: ignore[attr-defined]
         logger.info("Bulk deleted %d account(s)", count)
         return count
 

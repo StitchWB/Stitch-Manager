@@ -54,8 +54,8 @@ export default function PatcherV2() {
   const availableOptions = currentIDE ? PATCH_OPTIONS[currentIDE.type] || [] : [];
 
   useEffect(() => {
-    scanForIDEs();
-    listBackups();
+    Promise.resolve(scanForIDEs()).catch(() => {});
+    Promise.resolve(listBackups()).catch(() => {});
   }, [scanForIDEs, listBackups]);
 
   // Load config once

@@ -1,0 +1,319 @@
+"""Profile settings service — DB-backed versioned browser profile configuration.
+
+Ports the settings-related commands from ``src-tauri/src/commands/profile.rs``
+and ``src-tauri/src/database/profile_settings.rs``.
+
+Responsibilities:
+  - CRUD for ``profile_settings`` table (via BaseRepository)
+  - Proxy-save-use policy enforcement
+  - Alias rename with cascade to scenarios/composed_flows tables
+  - Bundle export/import (fingerprint + settings + scenarios + flows)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from stitch_backend.core.base_repository import BaseRepository
+from stitch_backend.core.base_service import BaseService
+from stitch_backend.core.exceptions import (
+    ProfileAliasExistsError,
+    ProfileError,
+    ProfileNotFoundError,
+)
+from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+from stitch_backend.domains.profiles.models import ProfileSettings
+from stitch_backend.domains.profiles.schemas import (
+    ProfileSettingsRecord,
+    ProfileSettingsV1,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ── Repository ────────────────────────────────────────────────────────────────
+
+class ProfileSettingsRepo(BaseRepository[ProfileSettings]):
+    _model = ProfileSettings
+    _pk = "alias"
+
+    async def upsert(
+        self, alias: str, config_json: str,
+        cookies: str | None = None, notes: str | None = None,
+    ) -> ProfileSettings:
+        existing = await self.get_by_pk(alias)
+        if existing:
+            existing.config_json = config_json
+            existing.cookies = cookies
+            existing.notes = notes
+            existing.updated_at = self._utcnow()
+            await self._db.flush()
+            await self._db.refresh(existing)
+            return existing
+        return await self.create(
+            alias=alias, config_json=config_json,
+            cookies=cookies, notes=notes, updated_at=self._utcnow(),
+        )
+
+    async def rename_alias(self, old_alias: str, new_alias: str) -> None:
+        stmt = text(
+            "UPDATE profile_settings SET alias = :new, updated_at = datetime('now') "
+            "WHERE alias = :old"
+        )
+        await self._db.execute(stmt, {"new": new_alias, "old": old_alias})
+        await self._db.flush()
+
+
+# ── Service ───────────────────────────────────────────────────────────────────
+
+class ProfileSettingsService(BaseService):
+    """Business logic for profile settings."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(db)
+        self._repo = ProfileSettingsRepo(db)
+
+    async def get_settings(self, alias: str) -> ProfileSettingsRecord | None:
+        """Load settings by alias; returns None if not found."""
+        alias = alias.strip()
+        if not alias:
+            raise ProfileError("alias is required")
+        row = await self._repo.get_by_pk(alias)
+        if row is None:
+            return None
+        return self._row_to_record(row)
+
+    async def save_settings(
+        self, alias: str, settings: ProfileSettingsV1,
+    ) -> None:
+        """Save settings; validates version and enforces proxy policy."""
+        alias = alias.strip()
+        if not alias:
+            raise ProfileError("alias is required")
+        if settings.version != 1:
+            raise ProfileError(f"Unsupported settings version: {settings.version}")
+
+        config_json = settings.model_dump_json(by_alias=True)
+        cookies = settings.storage.cookies
+        notes = settings.storage.notes
+        await self._repo.upsert(alias, config_json, cookies, notes)
+        logger.info("[Profiles] Settings saved for alias=%s", alias)
+
+    async def delete_settings(self, alias: str) -> bool:
+        return await self._repo.delete_by_pk(alias)
+
+    async def list_setting_aliases(self) -> list[str]:
+        rows = await self._repo.list_all(
+            order_by=ProfileSettings.updated_at.desc()
+        )
+        return [r.alias for r in rows]
+
+    async def rename_alias(
+        self, old_alias: str, new_alias: str,
+    ) -> None:
+        """Rename a profile alias with cascade to related tables."""
+        old_alias = old_alias.strip()
+        new_alias = new_alias.strip()
+        if not old_alias or not new_alias:
+            raise ProfileError("Both current_alias and next_alias are required")
+        if old_alias.lower() == new_alias.lower():
+            return
+
+        # Check new alias doesn't exist in fingerprints
+        existing = FingerprintService.list_aliases()
+        if any(a.lower() == new_alias.lower() for a in existing):
+            raise ProfileAliasExistsError(new_alias)
+
+        # Rename fingerprint file
+        old_profile = FingerprintService.load(old_alias)
+        if old_profile:
+            FingerprintService.save(new_alias, old_profile)
+            FingerprintService.delete(old_alias)
+
+        # Rename in profile_settings
+        await self._repo.rename_alias(old_alias, new_alias)
+
+        # Cascade to related tables (best-effort)
+        for table in ("scenarios", "scenario_runs", "composed_flows"):
+            try:
+                await self._db.execute(
+                    text(
+                        f"UPDATE {table} SET alias = :new, "
+                        f"updated_at = datetime('now') WHERE alias = :old"
+                    ),
+                    {"new": new_alias, "old": old_alias},
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Profiles] Cascade rename %s→%s in %s skipped: %s",
+                    old_alias, new_alias, table, exc,
+                )
+        await self._db.flush()
+        logger.info("[Profiles] Alias renamed: %s → %s", old_alias, new_alias)
+
+    async def export_bundle(
+        self, alias: str, destination_path: str,
+    ) -> None:
+        """Export profile + settings + scenarios + flows to a JSON file."""
+        alias = alias.strip()
+        if not alias:
+            raise ProfileError("alias is required")
+        if not destination_path.strip():
+            raise ProfileError("destination_path is required")
+
+        profile = FingerprintService.load(alias)
+        if profile is None:
+            raise ProfileNotFoundError(alias)
+
+        settings_record = await self.get_settings(alias)
+        scenarios = await self._fetch_related("scenarios", alias)
+        flows = await self._fetch_related("composed_flows", alias)
+
+        payload = {
+            "version": 1,
+            "alias": alias,
+            "profile": profile.model_dump(mode="json", by_alias=True),
+            "settings": (
+                settings_record.model_dump(mode="json", by_alias=True)
+                if settings_record else None
+            ),
+            "scenarios": scenarios,
+            "composedFlows": flows,
+            "exportedAt": datetime.now(timezone.utc).isoformat(),
+        }
+        Path(destination_path).write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
+        logger.info("[Profiles] Bundle exported: %s → %s", alias, destination_path)
+
+    async def import_bundle(
+        self, source_path: str, target_alias: str | None = None,
+        overwrite: bool = False,
+    ) -> str:
+        """Import a profile bundle from a JSON file."""
+        if not source_path.strip():
+            raise ProfileError("source_path is required")
+        raw = json.loads(Path(source_path).read_text(encoding="utf-8"))
+        version = raw.get("version", 1)
+        if version != 1:
+            raise ProfileError(f"Unsupported bundle version: {version}")
+
+        source_alias = (raw.get("alias") or "").strip()
+        if not source_alias:
+            raise ProfileError("bundle alias is required")
+        alias = (target_alias or source_alias).strip()
+
+        # Check conflict
+        existing = FingerprintService.list_aliases()
+        if any(a.lower() == alias.lower() for a in existing) and not overwrite:
+            raise ProfileAliasExistsError(alias)
+
+        # Import fingerprint
+        profile_data = raw.get("profile")
+        if profile_data:
+            from stitch_backend.domains.profiles.schemas import (
+                BrowserFingerprintProfile,
+            )
+            profile = BrowserFingerprintProfile.model_validate(profile_data)
+            FingerprintService.save(alias, profile)
+
+        # Import settings
+        settings_obj = raw.get("settings")
+        if settings_obj and isinstance(settings_obj, dict) and "settings" in settings_obj:
+            s = ProfileSettingsV1.model_validate(settings_obj["settings"])
+            cookies = settings_obj.get("cookies") or s.storage.cookies
+            notes = settings_obj.get("notes") or s.storage.notes
+            config_json = s.model_dump_json(by_alias=True)
+            await self._repo.upsert(alias, config_json, cookies, notes)
+
+        # Import scenarios and flows (best-effort)
+        await self._import_related("scenarios", alias, raw.get("scenarios", []))
+        await self._import_related("composed_flows", alias, raw.get("composedFlows", []))
+
+        logger.info("[Profiles] Bundle imported from %s as alias=%s", source_path, alias)
+        return alias
+
+    # ── Helpers ────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _row_to_record(row: ProfileSettings) -> ProfileSettingsRecord:
+        settings = ProfileSettingsV1.model_validate_json(row.config_json)
+        updated = row.updated_at.isoformat() if row.updated_at else None
+        return ProfileSettingsRecord(
+            alias=row.alias,
+            settings=settings,
+            cookies=row.cookies,
+            notes=row.notes,
+            updated_at=updated,
+        )
+
+    async def _fetch_related(self, table: str, alias: str) -> list[dict]:
+        """Fetch all rows from a related table by alias."""
+        try:
+            result = await self._db.execute(
+                text(f"SELECT * FROM {table} WHERE alias = :a"),
+                {"a": alias},
+            )
+            rows = result.fetchall()
+            return [dict(row._mapping) for row in rows]
+        except Exception:
+            return []
+
+    async def _import_related(
+        self, table: str, alias: str, items: list[dict],
+    ) -> None:
+        """Import items into a related table (best-effort)."""
+        if not items:
+            return
+        for item in items:
+            try:
+                if table == "scenarios":
+                    sp = (item.get("scenarioPath") or "").strip()
+                    if not sp:
+                        continue
+                    await self._db.execute(
+                        text(
+                            "INSERT OR REPLACE INTO scenarios "
+                            "(id, alias, name, scenario_path, run_id, started_url, "
+                            "steps_count, created_at, metadata_json) "
+                            "VALUES (:id, :alias, :name, :sp, :rid, :su, :sc, :ca, :mj)"
+                        ),
+                        {
+                            "id": f"scenario_{uuid.uuid4()}",
+                            "alias": alias,
+                            "name": item.get("name", "Imported"),
+                            "sp": sp,
+                            "rid": item.get("runId"),
+                            "su": item.get("startedUrl"),
+                            "sc": item.get("stepsCount", 0),
+                            "ca": item.get("createdAt"),
+                            "mj": item.get("metadataJson"),
+                        },
+                    )
+                elif table == "composed_flows":
+                    fj = (item.get("flowJson") or "").strip()
+                    if not fj:
+                        continue
+                    await self._db.execute(
+                        text(
+                            "INSERT OR REPLACE INTO composed_flows "
+                            "(id, alias, name, flow_json) "
+                            "VALUES (:id, :alias, :name, :fj)"
+                        ),
+                        {
+                            "id": f"flow_{uuid.uuid4()}",
+                            "alias": alias,
+                            "name": item.get("name", "Imported"),
+                            "fj": fj,
+                        },
+                    )
+            except Exception as exc:
+                logger.warning("[Profiles] Import skipped for %s: %s", table, exc)

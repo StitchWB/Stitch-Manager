@@ -83,3 +83,21 @@ class JobNotFoundError(JobError):
     def __init__(self, job_id: str) -> None:
         super().__init__(f"Job not found: {job_id}")
         self.job_id = job_id
+
+
+# ── Profile errors ────────────────────────────────────────────────────────────
+
+class ProfileError(StitchError):
+    """Generic profile-related error."""
+
+
+class ProfileNotFoundError(ProfileError):
+    def __init__(self, alias: str) -> None:
+        super().__init__(f"Profile not found: {alias}")
+        self.alias = alias
+
+
+class ProfileAliasExistsError(ProfileError):
+    def __init__(self, alias: str) -> None:
+        super().__init__(f"Alias already exists: {alias}")
+        self.alias = alias

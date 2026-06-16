@@ -19,6 +19,8 @@ export default defineConfig({
     },
   },
   build: {
+    outDir: 'dist',
+    emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
@@ -39,13 +41,6 @@ export default defineConfig({
               id.includes('sonner')
             ) {
               return 'vendor-ui';
-            }
-            if (
-              id.includes('@tauri-apps/api') ||
-              id.includes('@tauri-apps/plugin-dialog') ||
-              id.includes('@tauri-apps/plugin-clipboard-manager')
-            ) {
-              return 'vendor-tauri';
             }
             return undefined;
           }

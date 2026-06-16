@@ -22,7 +22,7 @@ import { cn } from '../lib/utils';
 import { useBinPresetsStore, type BinPreset } from '../stores/binPresets';
 import { useCardToolsStore, type PersistedCard } from '../stores/cardTools';
 import { toast } from 'sonner';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke } from '../lib/tauri/core';
 import { t } from '../lib/i18n';
 
 /* ═══════════════════════════════════════════════
@@ -140,7 +140,7 @@ export default function Tools() {
     const qty = Math.min(Math.max(parseInt(quantity, 10) || 1, 1), 1000);
     
     try {
-      const generated = await invoke<GeneratedCard[]>('generate_cards', {
+      const generated = await safeInvoke<GeneratedCard[]>('generate_cards', {
         req: {
           bin: cleanBin,
           quantity: qty,
@@ -195,7 +195,7 @@ export default function Tools() {
 
       try {
         addDebugLog(`→ check_card_rust: ${cardSnapshot.number.substring(0,6)}...`);
-        const data = await invoke<CardCheckResult>('check_card_rust', { cardData: payload });
+        const data = await safeInvoke<CardCheckResult>('check_card_rust', { cardData: payload });
         addDebugLog(`← ${data.success ? data.status : 'ERROR'}: ${data.message}`);
 
         if (!data.success) {
@@ -340,7 +340,7 @@ export default function Tools() {
       try {
         const cardNum = manualInput.trim().split('|')[0];
         addDebugLog(`→ manual check: ${cardNum.substring(0,6)}...`);
-        const data = await invoke<CardCheckResult>('check_card_rust', { cardData: manualInput.trim() });
+        const data = await safeInvoke<CardCheckResult>('check_card_rust', { cardData: manualInput.trim() });
         addDebugLog(`← ${data.success ? data.status : 'ERROR'}: ${data.message}`);
 
         if (!data.success) {

@@ -3,7 +3,7 @@ import { Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Wifi } from 'lucide-rea
 
 import { t } from '@/lib/i18n';
 import { parseProxyString, validateProxyString } from '../../lib/proxyUtils';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke } from '../../lib/tauri/core';
 import { Button, ButtonBase, Checkbox, Input } from '@/components/ui';
 
 interface ProxyItem {
@@ -44,7 +44,7 @@ export function ProxyListManager({ proxies, onProxiesChange, proxyType }: ProxyL
       }
 
       // Call Tauri command to test proxy
-      const result = await invoke<{
+      const result = await safeInvoke<{
         success: boolean;
         responseTimeMs?: number;
         ip?: string;

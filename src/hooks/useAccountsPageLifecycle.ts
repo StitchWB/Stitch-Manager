@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { listen } from '@/lib/events';
 import { useAccountsStore } from '@/stores/accounts';
 
 type UseAccountsPageLifecycleArgs = {
@@ -18,12 +18,12 @@ export function useAccountsPageLifecycle({ fetchAccounts }: UseAccountsPageLifec
   const clearQuotaCheckError = useAccountsStore(state => state.clearQuotaCheckError);
 
   useEffect(() => {
-    // Initial load
-    fetchAccounts();
+    // Initial load (catch to prevent unhandled rejection — store sets `error` state)
+    Promise.resolve(fetchAccounts()).catch(() => {});
 
     // Listen for account-created events from backend
     const unlistenCreated = listen('account-created', () => {
-      fetchAccounts();
+      Promise.resolve(fetchAccounts()).catch(() => {});
     });
 
     // Listen for quota-updated events from background manager
@@ -46,7 +46,7 @@ export function useAccountsPageLifecycle({ fetchAccounts }: UseAccountsPageLifec
     // Refresh on tab focus/visibility, not by a tight interval.
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchAccounts();
+        Promise.resolve(fetchAccounts()).catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);

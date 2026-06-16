@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from stitch_backend.core.event_bus import event_bus
-from stitch_backend.core.exceptions import JobCancelledError, JobNotFoundError
+from stitch_backend.core.exceptions import JobNotFoundError
 from stitch_backend.core.types import JobStatus, RegContext
 from stitch_backend.domains.registration.orchestrator import RegistrationOrchestrator
 

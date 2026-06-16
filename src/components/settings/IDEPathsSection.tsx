@@ -3,7 +3,7 @@ import { Code, FolderOpen, X } from 'lucide-react';
 
 
 import { t } from '@/lib/i18n';
-import { open } from '@tauri-apps/plugin-dialog';
+import { openFileDialog } from '@/lib/fileDialog';
 import { Button, Input, SectionHeader } from '@/components/ui';
 
 interface IDEPathsSectionProps {
@@ -27,12 +27,13 @@ export function IDEPathsSection({
 
   const handleBrowse = async (ide: string) => {
     try {
-      const selected = await open({
+      const selected = await openFileDialog({
         directory: true,
         title: `Select ${ide} extension folder`,
       });
       if (selected) {
-        handlePathChange(ide, selected as string);
+        const path = Array.isArray(selected) ? selected[0] : selected;
+        if (path) handlePathChange(ide, path);
       }
     } catch (e) {
       console.error('Failed to open folder dialog:', e);

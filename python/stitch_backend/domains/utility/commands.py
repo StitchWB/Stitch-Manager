@@ -12,7 +12,6 @@ import re
 import subprocess
 import sys
 import webbrowser
-from pathlib import Path
 
 from stitch_backend import __version__
 from stitch_backend.config import get_settings

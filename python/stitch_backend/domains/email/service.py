@@ -98,6 +98,6 @@ class EmailService:
 
     async def generate_email(self, strategy_id: str = "random") -> str:
         """Standalone email generation (not tied to a registration context)."""
-        from stitch_backend.core.types import RegContext as _RC
-        ctx = _RC(provider_id="manual")
+        from stitch_backend.core.types import RegContext
+        ctx = RegContext(provider_id="manual")
         return await self.acquire_email(ctx, strategy_id)

@@ -1,7 +1,7 @@
 // Hook for managing proxy configuration
 
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke } from '../lib/tauri/core';
 import type { ProxyConfig } from '../types/generated';
 
 const defaultProxyConfig: ProxyConfig = {
@@ -19,7 +19,7 @@ export function useProxyConfig() {
     try {
       setLoading(true);
       setError(null);
-      const data = await invoke<ProxyConfig>('get_proxy_config');
+      const data = await safeInvoke<ProxyConfig>('get_proxy_config');
       setConfig(data);
     } catch (err) {
       console.error('Failed to load proxy config:', err);
@@ -35,7 +35,7 @@ export function useProxyConfig() {
   const saveConfig = useCallback(async (newConfig: ProxyConfig) => {
     try {
       setError(null);
-      await invoke('save_proxy_config', { config: newConfig });
+      await safeInvoke('save_proxy_config', { config: newConfig });
       setConfig(newConfig);
       return true;
     } catch (err) {

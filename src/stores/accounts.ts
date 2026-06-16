@@ -206,7 +206,7 @@ export const useAccountsStore = create<AccountsState>()(
             // Auto-refresh quota for accounts that have a token but no quota info
             // This runs asynchronously and doesn't block the UI
             const accountsNeedingQuota = accounts.filter(
-              a => a.token && a.quota.limit === 0 && a.quota.used === 0
+              a => a.token && a.quota?.limit === 0 && a.quota?.used === 0
             );
             if (accountsNeedingQuota.length > 0) {
               // Fire and forget - update as results come in
@@ -531,6 +531,7 @@ export const useAccountsStore = create<AccountsState>()(
           // Quota filter (simplified logic)
           if (quotaFilter !== 'any') {
             result = result.filter(a => {
+              if (!a.quota) return quotaFilter === 'empty';
               const remaining = a.quota.limit - a.quota.used;
               const hasQuota = remaining > 0;
               const isEmpty = a.quota.used === 0;
@@ -562,7 +563,7 @@ export const useAccountsStore = create<AccountsState>()(
         // Get accounts with low quota (>80% used)
         getAccountsNearQuotaLimit: () => {
           return get().accounts.filter(a => {
-            if (a.quota.limit <= 0) return false; // Skip unlimited accounts
+            if (!a.quota || a.quota.limit <= 0) return false; // Skip unlimited/no-quota accounts
             const percentUsed = (a.quota.used / a.quota.limit) * 100;
             return percentUsed > 80;
           });

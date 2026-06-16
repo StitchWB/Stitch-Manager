@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { listen } from '@/lib/events';
 import { useRegistrationStore } from '../../../stores/registration';
 import { listAccounts, updateAccountNotesTags } from '../../../lib/tauri';
 import type { ObsEvent } from '@/lib/observability/types';

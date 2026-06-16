@@ -37,6 +37,9 @@ autoreg = [
     "aioimaplib>=1.1.0",
     "authlib>=1.3.0",
 ]
+desktop = [
+    "pywebview>=5.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -48,6 +51,7 @@ dev = [
 
 [project.scripts]
 stitch-backend = "stitch_backend.main:run"
+stitch-desktop = "stitch_backend.desktop:main"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
@@ -77,3 +81,5 @@ warn_unused_ignores = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+timeout = 10
+timeout_method = "thread"
