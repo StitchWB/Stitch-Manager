@@ -7,6 +7,7 @@ and IDE status queries to the frontend.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 from datetime import datetime, timezone
@@ -361,3 +362,125 @@ async def cmd_patch_trae_full(params: dict) -> dict:
     """Patch all Trae files (storage + extension + workbench) (stub)."""
     from stitch_backend.domains.patcher.service import patch_trae_full
     return patch_trae_full()
+
+
+# ── Additional patcher commands ──────────────────────────────────────────
+
+@register_command("delete_backup")
+async def cmd_delete_backup(params: dict) -> dict:
+    """Delete a specific backup file."""
+    backup_id = params.get("backupId", params.get("backupPath", ""))
+    if not backup_id:
+        return {"success": False, "message": "backupId is required"}
+
+    backup_file = Path(backup_id)
+    if not backup_file.exists():
+        return {"success": False, "message": f"Backup file not found: {backup_file}"}
+
+    try:
+        backup_file.unlink()
+        logger.info("Deleted backup: %s", backup_file)
+        return {"success": True, "message": f"Deleted {backup_file.name}"}
+    except OSError as e:
+        return {"success": False, "message": f"Failed to delete: {e}"}
+
+
+@register_command("is_trae_patched")
+async def cmd_is_trae_patched(params: dict) -> bool:
+    """Check if Trae storage.json has been patched."""
+    from stitch_backend.domains.patcher.service import patch_trae_storage
+    # Check storage.json for stitch marker
+    trae_paths = [
+        Path(os.path.expandvars(r"%APPDATA%\Trae\User\globalStorage\storage.json")),
+        Path(os.path.expandvars(r"%APPDATA%\Trae CN\User\globalStorage\storage.json")),
+    ]
+    marker = "STITCH_PATCHED"
+    for p in trae_paths:
+        if p.exists():
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")
+                if marker in content:
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+@register_command("is_trae_extension_patched")
+async def cmd_is_trae_extension_patched(params: dict) -> bool:
+    """Check if Trae extension.js has been patched."""
+    ext_paths = [
+        Path(os.path.expandvars(r"%LOCALAPPDATA%\Programs\Trae\resources\app\extensions\stitch\dist\extension.js")),
+        Path(os.path.expandvars(r"%LOCALAPPDATA%\Programs\Trae CN\resources\app\extensions\stitch\dist\extension.js")),
+    ]
+    marker = "STITCH_PATCH"
+    for p in ext_paths:
+        if p.exists():
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")
+                if marker in content:
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+@register_command("is_trae_workbench_patched")
+async def cmd_is_trae_workbench_patched(params: dict) -> bool:
+    """Check if Trae workbench.desktop.main.js has been patched."""
+    wb_paths = [
+        Path(os.path.expandvars(r"%LOCALAPPDATA%\Programs\Trae\resources\app\out\vs\workbench\workbench.desktop.main.js")),
+        Path(os.path.expandvars(r"%LOCALAPPDATA%\Programs\Trae CN\resources\app\out\vs\workbench\workbench.desktop.main.js")),
+    ]
+    marker = "STITCH_PATCH"
+    for p in wb_paths:
+        if p.exists():
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")
+                if marker in content:
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+@register_command("kill_ide")
+async def cmd_kill_ide(params: dict) -> dict:
+    """Kill a running IDE process by name."""
+    ide_id = str(params.get("ideId", params.get("ide_id", params.get("ide", "")))).lower()
+    if not ide_id:
+        return {"success": False, "message": "ideId is required"}
+
+    _PROCESS_NAMES: dict[str, list[str]] = {
+        "kiro": ["kiro", "Kiro"],
+        "windsurf": ["windsurf", "Windsurf"],
+        "cursor": ["cursor", "Cursor"],
+        "trae": ["trae", "Trae"],
+    }
+    names = _PROCESS_NAMES.get(ide_id, [ide_id])
+    killed = 0
+
+    try:
+        import psutil
+        for proc in psutil.process_iter(["name"]):
+            pname = (proc.info.get("name") or "").lower()
+            if any(n.lower() in pname for n in names):
+                try:
+                    proc.kill()
+                    killed += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+    except ImportError:
+        # Windows fallback
+        import platform as _plat
+        import subprocess as _sp
+        if _plat.system() == "Windows":
+            for name in names:
+                try:
+                    _sp.run(["taskkill", "/F", "/IM", f"{name}.exe"],
+                            capture_output=True, timeout=5)
+                    killed += 1
+                except Exception:
+                    pass
+
+    return {"success": killed > 0, "killed": killed, "ide": ide_id}

@@ -53,3 +53,17 @@ async def cmd_unbind_account(params: dict) -> None:
     from stitch_backend.domains.kiro_patch import service
     account_id = str(params.get("accountId", params.get("account_id", "")))
     service.unbind_account(account_id)
+
+
+@register_command("generate_new_machine_id")
+async def cmd_generate_new_machine_id(params: dict) -> str:
+    """Generate a new random machine ID."""
+    import uuid
+    return uuid.uuid4().hex
+
+
+@register_command("get_kiro_patch_config")
+async def cmd_get_kiro_patch_config(params: dict) -> dict:
+    """Read Kiro Patch V3 configuration from disk."""
+    from stitch_backend.domains.kiro_patch import service
+    return service.get_config()
