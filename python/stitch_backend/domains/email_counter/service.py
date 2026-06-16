@@ -60,11 +60,31 @@ class EmailCounterService:
     async def increment_counter(
         self, provider: str, strategy: str,
     ) -> int:
-        """Atomically increment counter and return new value."""
-        current = await self.get_counter(provider, strategy)
-        new_value = current + 1
-        await self.set_counter(provider, strategy, new_value)
-        return new_value
+        """Atomically increment counter and return new value.
+
+        Uses INSERT … ON CONFLICT DO UPDATE with ``counter + 1``
+        to match Rust's transactional guarantee.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        stmt = sqlite_insert(EmailCounter).values(
+            provider=provider, strategy=strategy, counter=1, updated_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["provider", "strategy"],
+            set_={"counter": EmailCounter.counter + 1, "updated_at": now},
+        )
+        await self._db.execute(stmt)
+        await self._db.flush()
+
+        # Re-read to get the actual new value
+        result = await self._db.execute(
+            text(
+                "SELECT counter FROM email_counters "
+                "WHERE provider = :p AND strategy = :s"
+            ),
+            {"p": provider, "s": strategy},
+        )
+        return int(result.scalar_one())
 
     async def reset_counter(
         self, provider: str, strategy: str,
@@ -98,6 +118,8 @@ class EmailCounterService:
         db_path = get_database_path()
         db_path_str = str(db_path)
         db_exists = db_path.exists()
+        import os
+        db_writable = os.access(db_path, os.W_OK) if db_exists else False
 
         counters = await self.get_all_counters()
 
@@ -141,7 +163,7 @@ class EmailCounterService:
         return {
             "databasePath": db_path_str,
             "databaseExists": db_exists,
-            "databaseWritable": db_exists,
+            "databaseWritable": db_writable,
             "counters": counters,
             "lastGeneratedEmails": last_emails,
             "currentStrategy": strategy,
