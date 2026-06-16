@@ -119,9 +119,9 @@ def validate_scenario_path(raw: str) -> Path:
             raise ValueError(f"Parent directory does not exist: {parent}")
         path = parent.resolve() / path.name
 
-    # Check under allowed roots
+    # Check under allowed roots (use path-component matching, not string prefix)
     canonical_roots = [r.resolve() if r.exists() else r for r in scenario_roots()]
-    if not any(str(path).startswith(str(root)) for root in canonical_roots):
+    if not any(path.is_relative_to(root) for root in canonical_roots):
         raise ValueError(f"Access denied: path outside known scenario roots: {path}")
 
     return path

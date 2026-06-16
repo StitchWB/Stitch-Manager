@@ -75,6 +75,13 @@ async def cmd_get_providers(params: dict) -> dict:
 
 # ── AWS Cognito ─────────────────────────────────────────────────────────────
 
+# Allowed provider identifiers for autoreg scripts
+_ALLOWED_AUTOREG_PROVIDERS = frozenset({
+    "kiro", "kiro_v2", "windsurf", "trae", "github",
+    "openai", "fireworks", "bitbucket", "python",
+})
+
+
 @register_command("auto_register")
 async def cmd_auto_register(params: dict) -> dict:
     """Auto-register via AWS Cognito (no browser)."""
@@ -83,6 +90,8 @@ async def cmd_auto_register(params: dict) -> dict:
     email = params.get("email", "")
     password = params.get("password", "")
     provider = params.get("provider", "kiro")
+    if provider not in _ALLOWED_AUTOREG_PROVIDERS:
+        return {"error": f"Unknown provider: {provider}"}
     job = await get_job_manager().start(
         script_path=f"scripts/autoreg_{provider}.py",
         args=["--email", email, "--password", password, "--action", "register"],
@@ -275,17 +284,20 @@ async def cmd_get_next_counter(params: dict) -> int:
 
     async def _op(session):
         try:
+            # Atomic upsert: insert or increment in a single statement
+            await session.execute(
+                sql_text(
+                    "INSERT INTO counters (key, value) VALUES (:k, 1) "
+                    "ON CONFLICT(key) DO UPDATE SET value = value + 1"
+                ),
+                {"k": key},
+            )
             result = await session.execute(
                 sql_text("SELECT value FROM counters WHERE key = :k"),
                 {"k": key},
             )
             row = result.fetchone()
-            val = int(row.value) + 1 if row else 1
-            await session.execute(
-                sql_text("INSERT OR REPLACE INTO counters (key, value) VALUES (:k, :v)"),
-                {"k": key, "v": val},
-            )
-            return val
+            return int(row.value) if row else 1
         except Exception:
             return 1
 

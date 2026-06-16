@@ -305,7 +305,15 @@ async def cmd_restore_backup(params: dict) -> dict:
     if not backup_path_str:
         return {"success": False, "message": "No backupPath specified"}
 
-    backup_file = Path(backup_path_str)
+    backup_file = Path(backup_path_str).resolve()
+    # Only allow restore from known backup directories
+    allowed_dirs = set()
+    for ide_check in ("kiro", "windsurf", "cursor", "trae"):
+        allowed_dirs.add(_get_backup_dir(ide_check).resolve())
+
+    if not any(str(backup_file).startswith(str(d)) for d in allowed_dirs):
+        return {"success": False, "message": "Backup path outside allowed directories"}
+
     if not backup_file.exists():
         return {"success": False, "message": f"Backup file not found: {backup_file}"}
 
@@ -368,12 +376,20 @@ async def cmd_patch_trae_full(params: dict) -> dict:
 
 @register_command("delete_backup")
 async def cmd_delete_backup(params: dict) -> dict:
-    """Delete a specific backup file."""
+    """Delete a specific backup file (with path containment check)."""
     backup_id = params.get("backupId", params.get("backupPath", ""))
     if not backup_id:
         return {"success": False, "message": "backupId is required"}
 
-    backup_file = Path(backup_id)
+    backup_file = Path(backup_id).resolve()
+    # Only allow deletion within known backup directories
+    allowed_dirs = set()
+    for ide in ("kiro", "windsurf", "cursor", "trae"):
+        allowed_dirs.add(_get_backup_dir(ide).resolve())
+
+    if not any(str(backup_file).startswith(str(d)) for d in allowed_dirs):
+        return {"success": False, "message": "Path outside allowed backup directories"}
+
     if not backup_file.exists():
         return {"success": False, "message": f"Backup file not found: {backup_file}"}
 
