@@ -427,8 +427,12 @@ async def cmd_open_url_in_browser(params: dict) -> None:
 
 @register_command("debug_run_ai_proxy_migration")
 async def cmd_debug_run_ai_proxy_migration(params: dict) -> dict:
-    """Run a raw SQL migration for debugging."""
+    """Run a raw SQL migration for debugging (requires STITCH_DEBUG_ALLOW_SQL=1)."""
+    import os
     from sqlalchemy import text as sql_text
+
+    if not os.environ.get("STITCH_DEBUG_ALLOW_SQL"):
+        return {"error": "Debug SQL execution is disabled. Set STITCH_DEBUG_ALLOW_SQL=1 to enable."}
 
     sql = params.get("sql", "")
     if not sql:

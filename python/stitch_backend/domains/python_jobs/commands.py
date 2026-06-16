@@ -5,6 +5,8 @@ Generic subprocess job management: start, cancel, status, control, run.
 
 from __future__ import annotations
 
+import asyncio
+
 from stitch_backend.core.command_registry import register_command
 
 
@@ -89,6 +91,16 @@ async def cmd_run_python_script(params: dict) -> dict:
         timeout_ms=params.get("timeoutMs", 120_000),
         python_binary=params.get("pythonBinary", "python"),
     )
+
+    # Wait for the subprocess to finish before returning
+    proc = job._process
+    if proc:
+        try:
+            timeout_secs = params.get("timeoutMs", 120_000) / 1000.0
+            await asyncio.wait_for(proc.wait(), timeout=timeout_secs)
+        except asyncio.TimeoutError:
+            proc.kill()
+
     return {
         "jobId": job.id,
         "state": job.state,
