@@ -67,6 +67,11 @@ def list_folders(conn: imaplib.IMAP4) -> list[dict[str, Any]]:
 
 # ── Search ────────────────────────────────────────────────────────────────────
 
+def _imap_quote(value: str) -> str:
+    """Escape a value for safe use inside IMAP quoted strings."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def search(conn: imaplib.IMAP4, query: dict[str, Any] | None) -> list[str]:
     """Run IMAP SEARCH and return a list of message UIDs (strings)."""
     criteria: list[str] = []
@@ -74,13 +79,13 @@ def search(conn: imaplib.IMAP4, query: dict[str, Any] | None) -> list[str]:
     if q.get("unreadOnly"):
         criteria.append("UNSEEN")
     if q.get("from"):
-        criteria.append(f'FROM "{q["from"]}"')
+        criteria.append(f'FROM "{_imap_quote(q["from"])}"')
     if q.get("to"):
-        criteria.append(f'TO "{q["to"]}"')
+        criteria.append(f'TO "{_imap_quote(q["to"])}"')
     if q.get("subjectContains"):
-        criteria.append(f'SUBJECT "{q["subjectContains"]}"')
+        criteria.append(f'SUBJECT "{_imap_quote(q["subjectContains"])}"')
     if q.get("bodyContains"):
-        criteria.append(f'BODY "{q["bodyContains"]}"')
+        criteria.append(f'BODY "{_imap_quote(q["bodyContains"])}"')
     if q.get("since"):
         criteria.append(f'SINCE {q["since"]}')
     search_str = " ".join(criteria) if criteria else "ALL"
