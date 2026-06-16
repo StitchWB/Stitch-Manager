@@ -82,13 +82,21 @@ class ProfileSettingsService(BaseService):
         self._repo = ProfileSettingsRepo(db)
 
     async def get_settings(self, alias: str) -> ProfileSettingsRecord | None:
-        """Load settings by alias; returns None if not found."""
+        """Load settings by alias; returns None if not found.
+
+        Transparently migrates legacy inline-proxy configs to the
+        proxyLibraryId format on first read (same as Rust).
+        """
         alias = alias.strip()
         if not alias:
             raise ProfileError("alias is required")
         row = await self._repo.get_by_pk(alias)
         if row is None:
             return None
+        # Transparent legacy proxy migration
+        migrated = await self._migrate_legacy_proxy_if_needed(row)
+        if migrated:
+            row = await self._repo.get_by_pk(alias)
         return self._row_to_record(row)
 
     async def save_settings(
@@ -100,6 +108,9 @@ class ProfileSettingsService(BaseService):
             raise ProfileError("alias is required")
         if settings.version != 1:
             raise ProfileError(f"Unsupported settings version: {settings.version}")
+
+        # Enforce proxy save-use policy (mirrors Rust enforce_proxy_save_use_policy)
+        self._enforce_proxy_save_use_policy(settings)
 
         config_json = settings.model_dump_json(by_alias=True)
         cookies = settings.storage.cookies
@@ -141,8 +152,8 @@ class ProfileSettingsService(BaseService):
         # Rename in profile_settings
         await self._repo.rename_alias(old_alias, new_alias)
 
-        # Cascade to related tables (best-effort)
-        for table in ("scenarios", "scenario_runs", "composed_flows"):
+        # Cascade to tables WITH updated_at column (best-effort)
+        for table in ("scenarios", "composed_flows"):
             try:
                 await self._db.execute(
                     text(
@@ -156,6 +167,17 @@ class ProfileSettingsService(BaseService):
                     "[Profiles] Cascade rename %s→%s in %s skipped: %s",
                     old_alias, new_alias, table, exc,
                 )
+        # scenario_runs has NO updated_at column
+        try:
+            await self._db.execute(
+                text("UPDATE scenario_runs SET alias = :new WHERE alias = :old"),
+                {"new": new_alias, "old": old_alias},
+            )
+        except Exception as exc:
+            logger.warning(
+                "[Profiles] Cascade rename %s→%s in scenario_runs skipped: %s",
+                old_alias, new_alias, exc,
+            )
         await self._db.flush()
         logger.info("[Profiles] Alias renamed: %s → %s", old_alias, new_alias)
 
@@ -266,6 +288,90 @@ class ProfileSettingsService(BaseService):
             return [dict(row._mapping) for row in rows]
         except Exception:
             return []
+
+    @staticmethod
+    def _enforce_proxy_save_use_policy(settings: ProfileSettingsV1) -> None:
+        """Validate proxy config before save (mirrors Rust enforce_proxy_save_use_policy).
+
+        When proxy is enabled, a proxyLibraryId MUST be present.
+        TODO: also check is_proxy_save_use_allowed(db, pid, max_age=300)
+        """
+        proxy = settings.network.proxy
+        if not proxy or not proxy.enabled:
+            return
+        pid = (proxy.proxy_library_id or "").strip()
+        if not pid:
+            raise ProfileError(
+                "proxy_save_use_guard_failed|proxyLibraryId is required "
+                "when proxy is enabled"
+            )
+
+    async def _migrate_legacy_proxy_if_needed(
+        self, row: ProfileSettings,
+    ) -> bool:
+        """Migrate legacy inline-proxy settings to proxyLibraryId format.
+
+        Legacy format stores ``url``, ``username``, ``password`` directly
+        inside ``network.proxy``.  The new format references a row in the
+        proxy_library via ``proxyLibraryId``.
+
+        Returns True if migration was performed and the row was re-saved.
+        """
+        try:
+            raw = json.loads(row.config_json)
+        except (json.JSONDecodeError, TypeError):
+            return False
+
+        proxy_obj = (
+            raw.get("network", {}).get("proxy")
+        )
+        if not proxy_obj or not isinstance(proxy_obj, dict):
+            return False
+        if not proxy_obj.get("enabled"):
+            return False
+        if (proxy_obj.get("proxyLibraryId") or "").strip():
+            return False  # already migrated
+
+        raw_url = (proxy_obj.get("url") or "").strip()
+        if not raw_url:
+            return False
+
+        # Try to parse the proxy URL and register it in proxy_library
+        try:
+            from stitch_backend.domains.proxy_library.service import (
+                parse_proxy_line,
+                upsert_proxy_entry,
+            )
+            draft = parse_proxy_line(raw_url)
+            legacy_user = (proxy_obj.get("username") or "").strip()
+            legacy_pass = (proxy_obj.get("password") or "").strip()
+            if legacy_user:
+                draft["username"] = legacy_user
+                draft["password"] = legacy_pass
+            draft["enabled"] = True
+            draft["label"] = f"{row.alias} proxy"
+            proxy_id = await upsert_proxy_entry(self._db, draft)
+
+            proxy_obj["proxyLibraryId"] = proxy_id
+            proxy_obj.pop("url", None)
+            proxy_obj.pop("username", None)
+            proxy_obj.pop("password", None)
+
+            new_json = json.dumps(raw)
+            await self._repo.upsert(
+                row.alias, new_json, row.cookies, row.notes,
+            )
+            logger.info(
+                "[Profiles] Legacy proxy migrated for alias=%s → %s",
+                row.alias, proxy_id,
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                "[Profiles] Legacy proxy migration skipped for %s: %s",
+                row.alias, exc,
+            )
+            return False
 
     async def _import_related(
         self, table: str, alias: str, items: list[dict],
