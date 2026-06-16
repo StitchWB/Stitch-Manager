@@ -86,6 +86,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.router.commands                # noqa: F401
     import stitch_backend.domains.background_manager.commands    # noqa: F401
     import stitch_backend.domains.cards.commands                 # noqa: F401
+    import stitch_backend.domains.kiro_patch.commands            # noqa: F401
+    import stitch_backend.domains.account_status.commands        # noqa: F401
     import stitch_backend.domains.utility.file_dialogs           # noqa: F401
     import stitch_backend.domains.utility.stubs                  # noqa: F401
 
