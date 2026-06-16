@@ -278,8 +278,8 @@ async def cmd_remove_patch(params: dict) -> dict:
 
 
 @register_command("list_backups")
-async def cmd_list_backups(params: dict) -> dict:
-    """List all backups for an IDE."""
+async def cmd_list_backups(params: dict) -> list:
+    """List all backups for an IDE (matches Rust: Vec<BackupInfo>)."""
     ide = params.get("ideType", params.get("ide", "kiro"))
     backup_dir = _get_backup_dir(ide)
 
@@ -293,7 +293,7 @@ async def cmd_list_backups(params: dict) -> dict:
             "fileSize": stat.st_size,
         })
 
-    return {"backups": backups}
+    return backups
 
 
 @register_command("restore_backup")

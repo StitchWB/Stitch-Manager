@@ -81,7 +81,7 @@ async def cmd_export_ai_proxy_accounts_payload(params: dict) -> str:
 
 
 @register_command("import_ai_proxy_accounts_payload")
-async def cmd_import_ai_proxy_accounts_payload(params: dict) -> dict:
+async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
     from stitch_backend.domains.ai_proxy.service import import_accounts_payload
 
     payload_str = params.get("payload", params.get("payloadStr", "{}"))
@@ -92,7 +92,7 @@ async def cmd_import_ai_proxy_accounts_payload(params: dict) -> dict:
         return await import_accounts_payload(session, payload_str)
 
     imported = await run_in_session(_op)
-    return {"imported": imported}
+    return imported  # int — matches Rust u64
 
 
 # ── Models ──────────────────────────────────────────────────────────────────
@@ -148,19 +148,20 @@ async def cmd_set_enabled_models(params: dict) -> None:
 
 
 @register_command("get_provider_model_mappings")
-async def cmd_get_provider_model_mappings(params: dict) -> dict:
+async def cmd_get_provider_model_mappings(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import get_settings_kv
 
     async def _op(session):
         raw = await get_settings_kv(session, "provider_model_mappings")
         if raw:
             try:
-                return json.loads(raw)
+                parsed = json.loads(raw)
+                return parsed if isinstance(parsed, list) else []
             except json.JSONDecodeError:
-                return {}
-        return {}
+                return []
+        return []
 
-    return await run_in_session(_op)
+    return await run_in_session(_op)  # list — matches Rust Vec<ProviderModelMapping>
 
 
 @register_command("set_provider_model_mappings")
@@ -236,10 +237,10 @@ async def cmd_configure_ai_proxy_ide(params: dict) -> dict:
 
 
 @register_command("get_ai_proxy_ide_config_preview")
-async def cmd_get_ai_proxy_ide_config_preview(params: dict) -> dict:
-    """Preview the IDE configuration that would be written."""
+async def cmd_get_ai_proxy_ide_config_preview(params: dict) -> str:
+    """Preview the IDE configuration that would be written (matches Rust: String)."""
     ide = params.get("ide", params.get("ideType", ""))
-    return {
+    preview = {
         "ide": ide,
         "configPreview": {
             "proxyUrl": "http://127.0.0.1:0",
@@ -247,6 +248,7 @@ async def cmd_get_ai_proxy_ide_config_preview(params: dict) -> dict:
             "models": [],
         },
     }
+    return json.dumps(preview, indent=2)
 
 
 @register_command("restore_ai_proxy_ide_config")
@@ -426,23 +428,23 @@ async def cmd_open_url_in_browser(params: dict) -> None:
 
 
 @register_command("debug_run_ai_proxy_migration")
-async def cmd_debug_run_ai_proxy_migration(params: dict) -> dict:
+async def cmd_debug_run_ai_proxy_migration(params: dict) -> str:
     """Run a raw SQL migration for debugging (requires STITCH_DEBUG_ALLOW_SQL=1)."""
     import os
     from sqlalchemy import text as sql_text
 
     if not os.environ.get("STITCH_DEBUG_ALLOW_SQL"):
-        return {"error": "Debug SQL execution is disabled. Set STITCH_DEBUG_ALLOW_SQL=1 to enable."}
+        return "Debug SQL execution is disabled. Set STITCH_DEBUG_ALLOW_SQL=1 to enable."
 
     sql = params.get("sql", "")
     if not sql:
-        return {"error": "sql is required"}
+        return "sql is required"
 
     async def _op(session):
         result = await session.execute(sql_text(sql))
-        return {"rowsAffected": result.rowcount}
+        return f"Rows affected: {result.rowcount}"
 
-    return await run_in_session(_op)
+    return await run_in_session(_op)  # str — matches Rust String
 
 
 @register_command("test_provider_connection")

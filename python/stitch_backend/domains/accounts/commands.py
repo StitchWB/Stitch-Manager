@@ -185,7 +185,8 @@ async def cmd_archive_account(params: dict) -> Any:
 
 
 @register_command("validate_account")
-async def cmd_validate_account(params: dict) -> dict:
+async def cmd_validate_account(params: dict) -> bool:
+    """Validate account exists and is active (matches Rust: bool)."""
     account_id = str(params.get("accountId") or params.get("id", ""))
 
     async def _op(session):
@@ -193,11 +194,7 @@ async def cmd_validate_account(params: dict) -> dict:
         return await svc.get_account(account_id)
 
     account = await run_in_session(_op)
-    return {
-        "valid": account.status == "active",
-        "accountId": account_id,
-        "status": account.status,
-    }
+    return account.status == "active"
 
 
 # ── Bulk operations ──────────────────────────────────────────────────────────

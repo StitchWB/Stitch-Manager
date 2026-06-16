@@ -7,14 +7,11 @@ These commands replace the Tauri utility commands:
 
 from __future__ import annotations
 
-import platform
 import re
 import subprocess
-import sys
 import webbrowser
 
 from stitch_backend import __version__
-from stitch_backend.config import get_settings
 from stitch_backend.core.command_registry import register_command
 
 
@@ -23,13 +20,9 @@ from stitch_backend.core.command_registry import register_command
 # ═════════════════════════════════════════════════════════════════════════════
 
 @register_command("get_app_version")
-async def cmd_get_app_version(params: dict) -> dict:
-    return {
-        "version": __version__,
-        "python": sys.version.split()[0],
-        "platform": platform.system(),
-        "arch": platform.machine(),
-    }
+async def cmd_get_app_version(params: dict) -> str:
+    """Return app version string (matches Rust: plain String)."""
+    return __version__
 
 
 @register_command("get_backend_health")
@@ -42,9 +35,10 @@ async def cmd_get_backend_health(params: dict) -> dict:
 
 
 @register_command("get_database_path")
-async def cmd_get_database_path(params: dict) -> dict:
-    settings = get_settings()
-    return {"path": settings.database_url}
+async def cmd_get_database_path(params: dict) -> str:
+    """Return database file path as plain string (matches Rust: String)."""
+    from stitch_backend.config import get_database_path as _resolve
+    return str(_resolve())
 
 
 # ═════════════════════════════════════════════════════════════════════════════

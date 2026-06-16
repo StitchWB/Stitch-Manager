@@ -57,8 +57,8 @@ def _now_iso() -> str:
 
 
 @register_command("list_recorded_scenarios")
-async def cmd_list_recorded(params: dict) -> dict:
-    """List all recorded scenarios."""
+async def cmd_list_recorded(params: dict) -> list:
+    """List all recorded scenarios (matches Rust: Vec<ScenarioRecordItem>)."""
     scenarios = _list_scenario_files()
     items = []
     for s in scenarios:
@@ -74,7 +74,7 @@ async def cmd_list_recorded(params: dict) -> dict:
             "provider": s.get("provider", ""),
             "accountAlias": s.get("accountAlias", ""),
         })
-    return {"items": items, "count": len(items)}
+    return items
 
 
 @register_command("upsert_recorded_scenario")
@@ -294,14 +294,15 @@ async def cmd_replay_preflight(params: dict) -> dict:
 
 
 @register_command("append_scenario_run")
-async def cmd_append_run(params: dict) -> dict:
-    """Record a scenario run (execution)."""
+async def cmd_append_run(params: dict) -> int:
+    """Record a scenario run (matches Rust: i64 — returns a numeric run timestamp)."""
     req = params.get("request", params)
     scenario_id = str(req.get("scenarioId", ""))
     _ensure_dirs()
 
+    run_id = str(uuid.uuid4())
     run = {
-        "id": str(uuid.uuid4()),
+        "id": run_id,
         "scenarioId": scenario_id,
         "startedAt": _now_iso(),
         "status": req.get("status", "running"),
@@ -309,14 +310,14 @@ async def cmd_append_run(params: dict) -> dict:
         "error": req.get("error"),
     }
 
-    run_path = RUNS_DIR / f"{run['id']}.json"
+    run_path = RUNS_DIR / f"{run_id}.json"
     run_path.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
-    return run
+    return int(time.time())  # numeric ID compatible with Rust i64
 
 
 @register_command("list_scenario_runs")
-async def cmd_list_runs(params: dict) -> dict:
-    """List scenario runs."""
+async def cmd_list_runs(params: dict) -> list:
+    """List scenario runs (matches Rust: Vec<ScenarioRunItem>)."""
     scenario_id = params.get("scenarioId")
     limit = int(params.get("limit", 50))
     _ensure_dirs()
@@ -333,12 +334,12 @@ async def cmd_list_runs(params: dict) -> dict:
         except Exception:
             continue
 
-    return {"items": runs, "count": len(runs)}
+    return runs
 
 
 @register_command("list_scenario_revisions")
-async def cmd_list_revisions(params: dict) -> dict:
-    """List revisions for a scenario (simplified — returns current as single revision)."""
+async def cmd_list_revisions(params: dict) -> list:
+    """List revisions for a scenario (matches Rust: Vec<ScenarioRevisionItem>)."""
     scenario_id = str(params.get("scenarioId", ""))
     _ensure_dirs()
 
@@ -359,7 +360,7 @@ async def cmd_list_revisions(params: dict) -> dict:
             except Exception:
                 continue
 
-    return {"items": revisions}
+    return revisions
 
 
 @register_command("rollback_recorded_scenario")
