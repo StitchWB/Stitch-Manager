@@ -229,3 +229,70 @@ async def cmd_bulk_export_accounts(params: dict) -> list:
 async def cmd_bulk_refresh_quota(params: dict) -> dict:
     # Phase 2 stub
     return {"refreshed": 0}
+
+
+# ── Additional accounts commands ────────────────────────────────────────────
+
+@register_command("get_windsurf_token")
+async def cmd_get_windsurf_token(params: dict) -> dict:
+    """Get token for existing Windsurf account."""
+    account_id = params.get("accountId", params.get("account_id", 0))
+    return {
+        "accountId": int(account_id),
+        "status": "unknown",
+        "message": "Windsurf token retrieval requires Codeium API login (not yet ported)",
+        "token": None,
+    }
+
+
+@register_command("import_accounts_payload")
+async def cmd_import_accounts_payload(params: dict) -> dict:
+    """Import accounts from JSON payload with dedup."""
+    import json as _json
+    from sqlalchemy import text as sql_text
+
+    accounts_json = params.get("accountsJson", params.get("accounts_json", ""))
+    if not accounts_json:
+        return {"imported": 0, "skipped": 0, "errors": ["Empty payload"]}
+
+    try:
+        payload = _json.loads(accounts_json) if isinstance(accounts_json, str) else accounts_json
+    except _json.JSONDecodeError as e:
+        return {"imported": 0, "skipped": 0, "errors": [f"Invalid JSON: {e}"]}
+
+    accounts = payload if isinstance(payload, list) else payload.get("accounts", [])
+
+    async def _op(session):
+        imported = 0
+        skipped = 0
+        for acc in accounts:
+            provider = acc.get("provider", "")
+            email = acc.get("email", acc.get("name", ""))
+            if not provider or not email:
+                skipped += 1
+                continue
+            try:
+                existing = await session.execute(
+                    sql_text("SELECT id FROM accounts WHERE provider = :p AND email = :e"),
+                    {"p": provider, "e": email},
+                )
+                if existing.fetchone():
+                    skipped += 1
+                    continue
+                await session.execute(sql_text(
+                    "INSERT INTO accounts (provider, email, token, status, tags, notes)"
+                    " VALUES (:p, :e, :t, :s, :tags, :notes)"
+                ), {
+                    "p": provider,
+                    "e": email,
+                    "t": acc.get("token", ""),
+                    "s": acc.get("status", "active"),
+                    "tags": acc.get("tags", ""),
+                    "notes": acc.get("notes", ""),
+                })
+                imported += 1
+            except Exception:
+                skipped += 1
+        return {"imported": imported, "skipped": skipped}
+
+    return await run_in_session(_op)
