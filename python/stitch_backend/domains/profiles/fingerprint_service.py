@@ -124,6 +124,7 @@ class FingerprintService:
 
     @staticmethod
     def save(email: str, profile: BrowserFingerprintProfile) -> None:
+        email = email.strip()
         d = _profiles_dir()
         d.mkdir(parents=True, exist_ok=True)
         path = d / f"{_safe_name(email)}.json"
@@ -133,6 +134,7 @@ class FingerprintService:
 
     @staticmethod
     def load(email: str) -> BrowserFingerprintProfile | None:
+        email = email.strip()
         path = _profiles_dir() / f"{_safe_name(email)}.json"
         if not path.exists():
             return None
@@ -142,6 +144,7 @@ class FingerprintService:
     @staticmethod
     def get_or_create(email: str | None) -> BrowserFingerprintProfile:
         if email:
+            email = email.strip()
             existing = FingerprintService.load(email)
             if existing:
                 return existing
@@ -149,6 +152,7 @@ class FingerprintService:
 
     @staticmethod
     def delete(email: str) -> None:
+        email = email.strip()
         path = _profiles_dir() / f"{_safe_name(email)}.json"
         if path.exists():
             path.unlink()
