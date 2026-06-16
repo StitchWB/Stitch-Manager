@@ -20,7 +20,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from stitch_backend.database import get_engine, get_session_factory
+from stitch_backend.database import get_session_factory
 
 logger = logging.getLogger(__name__)
 
