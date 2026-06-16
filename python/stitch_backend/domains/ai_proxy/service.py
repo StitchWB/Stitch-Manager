@@ -32,24 +32,28 @@ def _now_ts() -> int:
 
 
 def _row_to_account(row: Any) -> dict[str, Any]:
-    """Convert a SQLAlchemy Row to an AiProxyAccount dict (camelCase)."""
+    """Convert a SQLAlchemy Row to an AiProxyAccount dict (camelCase).
+
+    Uses ``getattr`` with defaults for all optional columns so the function
+    works even if the table was created by an older version with fewer columns.
+    """
     return {
         "id": row.id,
         "provider": row.provider,
         "name": row.name,
-        "oauthToken": row.oauth_token,
-        "apiKey": row.api_key,
-        "sessionToken": row.session_token,
-        "enabled": bool(row.enabled),
-        "accountType": row.account_type,
-        "requestsToday": row.requests_today or 0,
-        "requestsTotal": row.requests_total or 0,
-        "tokensUsed": row.tokens_used or 0,
-        "lastUsedAt": row.last_used_at,
-        "softQuotaTokensDaily": row.soft_quota_tokens_daily,
-        "softQuotaRequestsDaily": row.soft_quota_requests_daily,
-        "createdAt": row.created_at,
-        "updatedAt": row.updated_at,
+        "oauthToken": getattr(row, "oauth_token", None),
+        "apiKey": getattr(row, "api_key", None),
+        "sessionToken": getattr(row, "session_token", None),
+        "enabled": bool(getattr(row, "enabled", 1)),
+        "accountType": getattr(row, "account_type", None),
+        "requestsToday": getattr(row, "requests_today", 0) or 0,
+        "requestsTotal": getattr(row, "requests_total", 0) or 0,
+        "tokensUsed": getattr(row, "tokens_used", 0) or 0,
+        "lastUsedAt": getattr(row, "last_used_at", None),
+        "softQuotaTokensDaily": getattr(row, "soft_quota_tokens_daily", None),
+        "softQuotaRequestsDaily": getattr(row, "soft_quota_requests_daily", None),
+        "createdAt": getattr(row, "created_at", None),
+        "updatedAt": getattr(row, "updated_at", None),
         "oauthRefreshToken": getattr(row, "oauth_refresh_token", None),
         "oauthExpiresAt": getattr(row, "oauth_expires_at", None),
         "oauthScopes": getattr(row, "oauth_scopes", None),
@@ -98,6 +102,27 @@ class AiProxyAccountStore:
             "  UNIQUE(provider, name)"
             ")"
         ))
+        # Migrate: add columns that might be missing from older table versions
+        _MIGRATE_COLUMNS = [
+            ("oauth_refresh_token", "TEXT"),
+            ("oauth_expires_at", "INTEGER"),
+            ("oauth_scopes", "TEXT"),
+            ("oauth_token_type", "TEXT DEFAULT 'Bearer'"),
+            ("oauth_refresh_error", "TEXT"),
+            ("oauth_last_refresh_attempt_at", "INTEGER"),
+            ("oauth_last_refresh_success_at", "INTEGER"),
+            ("cooldown_until", "INTEGER"),
+            ("cooldown_reason", "TEXT"),
+            ("soft_quota_tokens_daily", "INTEGER"),
+            ("soft_quota_requests_daily", "INTEGER"),
+        ]
+        for col_name, col_type in _MIGRATE_COLUMNS:
+            try:
+                await session.execute(
+                    text(f"ALTER TABLE ai_proxy_accounts ADD COLUMN {col_name} {col_type}")
+                )
+            except Exception:
+                pass  # column already exists
         cls._TABLE_ENSUREED = True
 
     @classmethod

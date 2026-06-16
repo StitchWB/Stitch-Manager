@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useRegistrationStore } from '../../../stores/registration';
 import {
   testAddyioConnection,
@@ -48,40 +48,19 @@ export const useAddyioConnection = ({
     setAddyioConnectionMessage('');
 
     try {
-      console.warn('[ADDYIO] Testing token validity...');
       // Test token validity
       const tokenDetails = await testAddyioConnection(addyioApiToken);
-      console.warn('[ADDYIO] Token valid:', tokenDetails.name);
 
-      console.warn('[ADDYIO] Fetching account, domains, recipients...');
       // Fetch account info and domains
       const [account, domains] = await Promise.all([
         getAddyioAccount(addyioApiToken),
         getAddyioDomains(addyioApiToken),
       ]);
 
-      console.warn('[ADDYIO] ===== RAW API RESPONSE =====');
-      console.warn('[ADDYIO] Received domains object:', domains);
-      console.warn('[ADDYIO] domains.data:', domains.data);
-      console.warn('[ADDYIO] domains.data type:', typeof domains.data);
-      console.warn('[ADDYIO] domains.data is array:', Array.isArray(domains.data));
-      console.warn('[ADDYIO] domains.data length:', domains.data?.length);
-      console.warn('[ADDYIO] domains.sharedDomains:', domains.sharedDomains);
-      console.warn('[ADDYIO] domains.defaultAliasDomain:', domains.defaultAliasDomain);
-      console.warn('[ADDYIO] ===========================');
-
-      console.warn('[ADDYIO] Setting state...');
-
       setAddyioAccountInfo(account);
 
       const domainsToSet = domains.data || [];
-      console.warn('[ADDYIO] About to call setAddyioDomains with:', domainsToSet);
-      console.warn('[ADDYIO] domainsToSet is array:', Array.isArray(domainsToSet));
-      console.warn('[ADDYIO] domainsToSet length:', domainsToSet.length);
-
       setAddyioDomains(domainsToSet);
-
-      console.warn('[ADDYIO] setAddyioDomains called (state update is async)');
 
       // Update config with defaults if not set
       const updates: Partial<IMAPConfig> = {};
@@ -118,13 +97,6 @@ export const useAddyioConnection = ({
     onConfigUpdate,
     addLog,
   ]);
-
-  // Monitor addyioDomains state changes for debugging
-  useEffect(() => {
-    console.warn('[ADDYIO] addyioDomains state changed:', addyioDomains);
-    console.warn('[ADDYIO] addyioDomains.length:', addyioDomains.length);
-    console.warn('[ADDYIO] Is array:', Array.isArray(addyioDomains));
-  }, [addyioDomains]);
 
   return {
     addyioDomains,

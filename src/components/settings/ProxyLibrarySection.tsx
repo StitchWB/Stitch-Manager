@@ -261,21 +261,18 @@ export function ProxyLibrarySection() {
 
   const handleDelete = async (id: string, force = false) => {
     setError(null);
-    console.warn('[handleDelete] Starting delete for id:', id, 'force:', force);
+    if (import.meta.env.DEV) console.debug('[handleDelete] Starting delete for id:', id, 'force:', force);
     try {
       const res = await deleteProxyLibraryEntry({ id, options: { force } });
-      console.warn('[handleDelete] Delete result:', res);
+      if (import.meta.env.DEV) console.debug('[handleDelete] Delete result:', res);
       if (res.changed) {
         setItems((prev) => {
           const filtered = prev.filter((it) => it.id !== id);
-          console.warn('[handleDelete] Updated items, removed:', id, 'remaining:', filtered.length);
           return filtered;
         });
-      } else {
-        console.warn('[handleDelete] Delete returned changed=false, item may not have been deleted');
       }
     } catch (e) {
-      console.warn('[handleDelete] Error:', e);
+      if (import.meta.env.DEV) console.debug('[handleDelete] Error:', e);
       if (e instanceof ProxyLibraryError && e.code === 'proxy_in_use') {
         // Always show force-delete dialog, even if usage lookup fails
         const usage = await getProxyLibraryUsage(id).catch(() => null);
