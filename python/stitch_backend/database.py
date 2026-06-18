@@ -126,6 +126,7 @@ async def create_all_tables() -> None:
         import stitch_backend.domains.email_counter.models  # noqa: F401
         import stitch_backend.domains.composed_flows.models  # noqa: F401
         import stitch_backend.domains.email_inbox.models      # noqa: F401
+        import stitch_backend.domains.logging.models           # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
 
 

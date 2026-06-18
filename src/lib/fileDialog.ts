@@ -1,5 +1,5 @@
 /**
- * File dialog utilities — replaces `@tauri-apps/plugin-dialog`.
+ * File dialog utilities.
  *
  * All file picker / save picker / file read operations go through the
  * Python backend via HTTP commands.

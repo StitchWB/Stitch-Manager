@@ -2,7 +2,7 @@ import { describe, it, expect, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react';
 
 const listenMock = jest.fn(async () => () => undefined);
-jest.mock('@tauri-apps/api/event', () => ({
+jest.mock('../../lib/events', () => ({
   listen: (...args: any[]) => (listenMock as any)(...args),
 }));
 
@@ -26,7 +26,7 @@ describe('useEventListeners', () => {
   it('registers SETTINGS_UPDATED listener but does not reload on window focus', async () => {
     const addWindowListenerSpy = jest.spyOn(window, 'addEventListener');
 
-    renderHook(() => useEventListeners({ onThreadsChange: () => undefined }));
+    renderHook(() => useEventListeners({}));
 
     // No focus listener should be attached anymore.
     expect(addWindowListenerSpy).not.toHaveBeenCalledWith('focus', expect.any(Function));

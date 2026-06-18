@@ -30,15 +30,6 @@ import type { ConnectionStateMap, HistorySummary } from '../../components/ai-pro
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
 
-const hasTauriBridge = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const w = window as typeof window & {
-    __TAURI__?: unknown;
-    __TAURI_INTERNALS__?: { invoke?: unknown };
-  };
-  return Boolean(w.__TAURI__ || w.__TAURI_INTERNALS__?.invoke);
-};
-
 export function maskKey(key: string, visibleTail: number = 4): string {
   if (!key) return '';
   if (key.length <= visibleTail) return '•'.repeat(Math.max(0, key.length));
@@ -159,14 +150,6 @@ export function useAiProvidersController() {
   }, [setProviderQuotas, setOpenAiAccountQuotas, setKiroAccountQuotas]);
 
   const refreshProxyInfo = useCallback(async () => {
-    if (!hasTauriBridge()) {
-      setProxyStatus(null);
-      setProxySettings(null);
-      setProxyDraft(null);
-      setProxyError(null);
-      return;
-    }
-
     try {
       setProxyError(null);
       const [status, settings] = await Promise.all([getProxyStatus(), getProxySettings()]);
@@ -220,10 +203,6 @@ export function useAiProvidersController() {
 
   const handleStartStopProxy = useCallback(async () => {
     if (proxyBusy) return;
-    if (!hasTauriBridge()) {
-      appToast.error(t('aiHub.desktopOnly.proxyControlsUnavailable'));
-      return;
-    }
 
     setProxyBusy(true);
     setProxyError(null);
@@ -245,10 +224,6 @@ export function useAiProvidersController() {
 
   const scanAuthFiles = useCallback(async () => {
     if (authScanLoading) return;
-    if (!hasTauriBridge()) {
-      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
-      return;
-    }
     setAuthScanLoading(true);
     try {
       const files = await scanAuthFilesCmd();
@@ -502,10 +477,6 @@ export function useAiProvidersController() {
   }, []);
 
   const handleGenerateExport = useCallback(async () => {
-    if (!hasTauriBridge()) {
-      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
-      return;
-    }
     setExportLoading(true);
     try {
       const payload = await exportAiProxyAccountsPayload(
@@ -526,10 +497,6 @@ export function useAiProvidersController() {
   }, [exportFormat, exportIncludeSecrets]);
 
   const handleImportPayload = useCallback(async () => {
-    if (!hasTauriBridge()) {
-      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
-      return;
-    }
     if (!importPayload.trim()) {
       appToast.error(t('aiHub.controller.errors.importPayloadRequired'));
       return;
@@ -595,10 +562,6 @@ export function useAiProvidersController() {
   const handleImportAllFromScan = useCallback(async () => {
     if (!authScan || authScan.length === 0) {
       appToast.error(t('aiHub.controller.errors.noScanResultsToImport'));
-      return;
-    }
-    if (!hasTauriBridge()) {
-      appToast.error(t('aiHub.desktopOnly.actionUnavailable'));
       return;
     }
 

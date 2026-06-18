@@ -51,3 +51,33 @@ async def cmd_open_prompts_folder(params: dict) -> str:
     """Open the prompts folder in the system file explorer."""
     from stitch_backend.domains.prompts.service import PromptsService
     return PromptsService.open_prompts_folder()
+
+
+@register_command("get_prompt_content")
+async def cmd_get_prompt_content(params: dict) -> str:
+    """Read a prompt file's content. Mirrors Rust ``get_prompt_content``."""
+    from stitch_backend.domains.prompts.service import PromptsService
+
+    prompt_name = (params.get("promptName") or params.get("prompt_name") or "").strip()
+    if not prompt_name:
+        raise ValueError("promptName is required")
+
+    content = PromptsService.get_prompt_content(prompt_name)
+    if content is None:
+        raise FileNotFoundError("Prompt file not found")
+    return content
+
+
+@register_command("get_default_prompt_content")
+async def cmd_get_default_prompt_content(params: dict) -> str:
+    """Read a default prompt's content. Mirrors Rust ``get_default_prompt_content``."""
+    from stitch_backend.domains.prompts.service import PromptsService, _default_prompt_file_path
+
+    prompt_name = (params.get("promptName") or params.get("prompt_name") or "").strip()
+    if not prompt_name:
+        raise ValueError("promptName is required")
+
+    path = _default_prompt_file_path(prompt_name)
+    if not path.exists():
+        raise FileNotFoundError("Default prompt file not found")
+    return path.read_text(encoding="utf-8")

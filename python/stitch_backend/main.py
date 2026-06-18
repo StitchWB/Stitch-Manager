@@ -17,6 +17,7 @@ The app exposes:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -91,6 +92,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.ai_proxy.commands             # noqa: F401
     import stitch_backend.domains.python_jobs.commands           # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands            # noqa: F401
+    import stitch_backend.domains.logging.commands               # noqa: F401
+    import stitch_backend.domains.aws_accounts.commands          # noqa: F401
+    import stitch_backend.domains.quota.commands                 # noqa: F401
+    import stitch_backend.domains.telemetry.commands             # noqa: F401
     import stitch_backend.domains.utility.file_dialogs           # noqa: F401
     import stitch_backend.domains.utility.stubs                  # noqa: F401
 
@@ -108,6 +113,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Emit a startup event for any domain listeners
     from stitch_backend.core.event_bus import event_bus
+    event_bus.set_loop(asyncio.get_event_loop())
     await event_bus.emit("app.started", {"port": settings.port})
 
     yield

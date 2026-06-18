@@ -112,6 +112,7 @@ async def cmd_mcp_upsert_composed_flow(params: dict) -> dict:
 @register_command("mcp_start_composed_flow_run")
 async def cmd_mcp_start_composed_flow_run(params: dict) -> dict:
     """Start a composed flow execution with safety guards."""
+    from stitch_backend.config import REPO_ROOT
     from stitch_backend.domains.python_jobs.service import get_job_manager
 
     ensure_write_allowed("mcp_start_composed_flow_run")
@@ -125,8 +126,9 @@ async def cmd_mcp_start_composed_flow_run(params: dict) -> dict:
         append_critical_journal("mcp_start_composed_flow_run", params, result)
         return result
 
+    script_path = str(REPO_ROOT / "python" / "run_composed_flow.py")
     job = await get_job_manager().start(
-        script_path="scripts/run_composed_flow.py",
+        script_path=script_path,
         args=["--plan", plan_json, "--persist" if persist else "--no-persist"],
     )
     result = {"jobId": job.id}
@@ -198,6 +200,41 @@ async def cmd_mcp_list_aliases(params: dict) -> list:
         return await run_in_session(_op)
     except Exception:
         return []
+
+
+# -- Python Job Wait -------------------------------------------------------
+
+@register_command("mcp_wait_python_job")
+async def cmd_mcp_wait_python_job(params: dict) -> dict | None:
+    """Poll a Python job until terminal state or timeout.
+
+    Mirrors Rust ``mcp_wait_python_job`` — polls at configurable intervals.
+    """
+    import asyncio as _asyncio
+    from stitch_backend.domains.python_jobs.service import get_job_manager
+
+    job_id = params.get("jobId", params.get("job_id", ""))
+    timeout_ms = min(max(int(params.get("timeoutMs", params.get("timeout_ms", 120_000))), 1_000), 86_400_000)
+    poll_ms = min(max(int(params.get("pollIntervalMs", params.get("poll_interval_ms", 500))), 100), 10_000)
+
+    deadline = _asyncio.get_event_loop().time() + timeout_ms / 1000.0
+    mgr = get_job_manager()
+
+    while True:
+        job = mgr.get_status(job_id)
+        if job is None:
+            return None
+        terminal = job.state in ("succeeded", "failed", "cancelled", "timed_out")
+        if terminal or _asyncio.get_event_loop().time() >= deadline:
+            return {
+                "jobId": job.id,
+                "state": job.state,
+                "startedAt": job.started_at,
+                "finishedAt": job.finished_at,
+                "exitCode": job.exit_code,
+                "error": job.error,
+            }
+        await _asyncio.sleep(poll_ms / 1000.0)
 
 
 @register_command("mcp_get_server_info")

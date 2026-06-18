@@ -78,7 +78,8 @@ export async function cancelActiveRegistrationJob(): Promise<void> {
   if (!activePythonJobId) return;
   const jobId = activePythonJobId;
   activePythonJobId = null;
-  await cancelPythonJob(jobId).catch(() => undefined);
+  // Use stop_registration which routes to the in-process RegistrationService
+  await stopRegistration({ jobId }).catch(() => undefined);
 }
 
 /**

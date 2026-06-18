@@ -14,6 +14,8 @@ import {
   User,
   FileText,
   Activity,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '@/lib/i18n';
@@ -219,11 +221,18 @@ function JsonArtifact({ message, onCopy }: { message: string; onCopy: (text: str
 
 function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (text: string) => void; debugMode: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const isDebug = log.level === 'debug';
   const isJson = isJsonArtifact(log.message);
   const cleaned = useMemo(() => cleanLogMessage(log.message), [log.message]);
   const displayMsg = debugMode ? log.message : cleaned.displayMessage;
   const { icon, color } = getLogIcon(cleaned.displayMessage, log.level);
+
+  const handleCopy = useCallback(() => {
+    onCopy(displayMsg);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  }, [onCopy, displayMsg]);
 
   const formatTime = (timestamp: string) => {
     try {
@@ -240,9 +249,12 @@ function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (tex
 
   if (isDebug) {
     return (
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(!expanded)}
-        className="w-full text-left px-3 py-1 hover:bg-white/[0.02] transition-colors"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpanded(!expanded); }}
+        className="w-full text-left px-3 py-1 hover:bg-white/[0.02] transition-colors cursor-pointer select-text"
       >
         <div className="flex items-center gap-2">
           <ChevronRight
@@ -257,13 +269,13 @@ function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (tex
         {expanded && (
           <div className="mt-1 pl-5 text-[9px] text-slate-600 break-all">{log.message}</div>
         )}
-      </button>
+      </div>
     );
   }
 
   if (isJson) {
     return (
-      <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors">
+      <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors select-text">
         <div className={cn('shrink-0 mt-0.5', color)}>{icon}</div>
         <span className="text-[11px] text-slate-400 font-mono shrink-0 tabular-nums">
           {formatTime(log.timestamp)}
@@ -291,7 +303,7 @@ function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (tex
   };
 
   return (
-    <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors group">
+    <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.03] transition-colors group select-text">
       <div className={cn('shrink-0 mt-0.5', color)}>{icon}</div>
 
       <span className="text-[11px] text-slate-400 font-mono shrink-0 tabular-nums">
@@ -313,6 +325,14 @@ function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (tex
       <span className={cn('text-[11px] flex-1 break-words leading-relaxed', getTextColor())}>
         {formatLogMessage(displayMsg)}
       </span>
+
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
+      >
+        {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+      </button>
     </div>
   );
 }

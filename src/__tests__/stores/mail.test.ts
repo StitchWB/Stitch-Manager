@@ -1,10 +1,19 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { useMailStore } from '../../stores/mail';
 
-const mockInvoke = jest.fn() as jest.MockedFunction<typeof import('@tauri-apps/api/core').invoke>;
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: Parameters<typeof mockInvoke>) => mockInvoke(...args),
-}));
+const originalFetch = globalThis.fetch;
+
+/**
+ * Mock fetch with a dispatcher: the callback receives the command name
+ * (extracted from the URL path) and returns the response data.
+ */
+const mockFetchDispatch = (handler: (cmd: string) => unknown) => {
+  globalThis.fetch = jest.fn<any>().mockImplementation((url: string) => {
+    const cmd = url.replace('http://localhost:25584/api/', '');
+    const data = handler(cmd);
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) });
+  }) as unknown as typeof fetch;
+};
 
 describe('mail store', () => {
   beforeEach(() => {
@@ -41,6 +50,7 @@ describe('mail store', () => {
         unreadOnly: true,
         since: '',
         limit: 50,
+        search: '',
       },
       sync: {
         timeoutMs: 120000,
@@ -62,14 +72,18 @@ describe('mail store', () => {
       isProfileSaving: false,
       isProfileMutating: false,
     });
-    
-    mockInvoke.mockReset();
+
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
   });
 
   describe('connect action', () => {
     it('calls emailInboxUpsertProfile when connect succeeds with no activeProfileId', async () => {
       const store = useMailStore.getState();
-      
+
       store.setAccountId('test@example.com');
       store.setImapCredentials({
         host: 'imap.gmail.com',
@@ -78,9 +92,9 @@ describe('mail store', () => {
         password: 'password',
         useTls: true,
       });
-      
+
       expect(store.activeProfileId).toBeNull();
-      
+
       const session = {
         sessionId: 's1',
         provider: 'imap',
@@ -94,7 +108,7 @@ describe('mail store', () => {
         },
         connectedAt: '2026-03-09T00:00:00Z',
       };
-      
+
       const capabilities = {
         canDelete: true,
         canMarkAsRead: true,
@@ -102,7 +116,7 @@ describe('mail store', () => {
         canDownloadAttachments: true,
         canListFolders: true,
       };
-      
+
       const profile = {
         id: 'p1',
         label: 'IMAP · test@example.com',
@@ -121,8 +135,8 @@ describe('mail store', () => {
           },
         },
       };
-      
-      mockInvoke.mockImplementation(async (cmd: string) => {
+
+      mockFetchDispatch((cmd: string) => {
         if (cmd === 'email_inbox_connect') return session;
         if (cmd === 'email_inbox_get_capabilities') return capabilities;
         if (cmd === 'email_inbox_list_folders') return [];
@@ -130,21 +144,26 @@ describe('mail store', () => {
         if (cmd === 'email_inbox_get_sync_state') return null;
         throw new Error(`Unexpected command: ${cmd}`);
       });
-      
+
       await store.connect();
-      
+
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const upsertCalls = mockInvoke.mock.calls.filter(call => call[0] === 'email_inbox_upsert_profile');
+
+      const fetchCalls = (globalThis.fetch as jest.Mock).mock.calls;
+      const upsertCalls = fetchCalls.filter(
+        (call: unknown[]) => (call[0] as string).includes('email_inbox_upsert_profile'),
+      );
       expect(upsertCalls.length).toBeGreaterThan(0);
-      
-      const upsertCall = upsertCalls[0];
-      expect(upsertCall[1].input.label).toMatch(/IMAP · test@example\.com/);
+
+      // fetch(url, init) — init.body is JSON string
+      const initObj = upsertCalls[0][1] as { body: string };
+      const upsertBody = JSON.parse(initObj.body);
+      expect(upsertBody.input.label).toMatch(/IMAP · test@example\.com/);
     });
 
     it('does NOT call emailInboxUpsertProfile when connect succeeds WITH activeProfileId', async () => {
       const store = useMailStore.getState();
-      
+
       useMailStore.setState({
         activeProfileId: 'existing-profile-id',
         profiles: [{
@@ -166,7 +185,7 @@ describe('mail store', () => {
           },
         }],
       });
-      
+
       store.setAccountId('test@example.com');
       store.setImapCredentials({
         host: 'imap.gmail.com',
@@ -175,9 +194,9 @@ describe('mail store', () => {
         password: 'password',
         useTls: true,
       });
-      
+
       expect(useMailStore.getState().activeProfileId).toBe('existing-profile-id');
-      
+
       const session = {
         sessionId: 's1',
         provider: 'imap',
@@ -191,7 +210,7 @@ describe('mail store', () => {
         },
         connectedAt: '2026-03-09T00:00:00Z',
       };
-      
+
       const capabilities = {
         canDelete: true,
         canMarkAsRead: true,
@@ -199,26 +218,29 @@ describe('mail store', () => {
         canDownloadAttachments: true,
         canListFolders: true,
       };
-      
-      mockInvoke.mockImplementation(async (cmd: string) => {
+
+      mockFetchDispatch((cmd: string) => {
         if (cmd === 'email_inbox_connect_profile') return session;
         if (cmd === 'email_inbox_get_capabilities') return capabilities;
         if (cmd === 'email_inbox_list_folders') return [];
         throw new Error(`Unexpected command: ${cmd}`);
       });
-      
+
       await store.connect();
-      
+
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const upsertCalls = mockInvoke.mock.calls.filter(call => call[0] === 'email_inbox_upsert_profile');
+
+      const fetchCalls = (globalThis.fetch as jest.Mock).mock.calls;
+      const upsertCalls = fetchCalls.filter(
+        (call: unknown[]) => (call[0] as string).includes('email_inbox_upsert_profile'),
+      );
       expect(upsertCalls.length).toBe(0);
     });
 
     it('logs warning but does not fail connect when auto-save fails', async () => {
       const store = useMailStore.getState();
       const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      
+
       store.setAccountId('test@example.com');
       store.setImapCredentials({
         host: 'imap.gmail.com',
@@ -227,9 +249,9 @@ describe('mail store', () => {
         password: 'password',
         useTls: true,
       });
-      
+
       expect(store.activeProfileId).toBeNull();
-      
+
       const session = {
         sessionId: 's1',
         provider: 'imap',
@@ -243,7 +265,7 @@ describe('mail store', () => {
         },
         connectedAt: '2026-03-09T00:00:00Z',
       };
-      
+
       const capabilities = {
         canDelete: true,
         canMarkAsRead: true,
@@ -251,26 +273,41 @@ describe('mail store', () => {
         canDownloadAttachments: true,
         canListFolders: true,
       };
-      
-      mockInvoke.mockImplementation(async (cmd: string) => {
-        if (cmd === 'email_inbox_connect') return session;
-        if (cmd === 'email_inbox_get_capabilities') return capabilities;
-        if (cmd === 'email_inbox_list_folders') return [];
-        if (cmd === 'email_inbox_upsert_profile') throw new Error('Profile save failed');
-        throw new Error(`Unexpected command: ${cmd}`);
-      });
-      
+
+      // For this test, upsert_profile should fail
+      globalThis.fetch = jest.fn<any>().mockImplementation((url: string, opts: { body: string }) => {
+        const cmd = url.replace('http://localhost:25584/api/', '');
+        if (cmd === 'email_inbox_connect') {
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(session) });
+        }
+        if (cmd === 'email_inbox_get_capabilities') {
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(capabilities) });
+        }
+        if (cmd === 'email_inbox_list_folders') {
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
+        }
+        if (cmd === 'email_inbox_upsert_profile') {
+          // Return an error response
+          return Promise.resolve({
+            ok: false,
+            status: 500,
+            json: () => Promise.resolve({ message: 'Profile save failed' }),
+          });
+        }
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(null) });
+      }) as unknown as typeof fetch;
+
       await expect(store.connect()).resolves.not.toThrow();
-      
+
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         'Auto-save session as profile failed:',
-        'Profile save failed'
+        expect.stringContaining('Profile save failed'),
       );
-      
+
       expect(useMailStore.getState().session).toEqual(session);
-      
+
       consoleWarnSpy.mockRestore();
     });
   });
