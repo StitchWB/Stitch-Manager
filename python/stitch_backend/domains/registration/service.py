@@ -1,0 +1,554 @@
+"""RegistrationService — in-process provider execution with real-time log streaming.
+
+Replaces the Rust-era subprocess pattern.  Autoreg providers are called
+directly via ``asyncio.to_thread()`` with ``log_callback`` wired to the
+EventBus so the frontend receives logs over WebSocket in real-time.
+
+Architecture note — Log bridging
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Providers and pipeline code use Python's standard ``logging`` module
+(``logger.info(...)``), NOT ``self.log()``.  The ``_LogBridgeHandler``
+installed in ``_run()`` captures ALL ``logging`` output from the
+``autoreg`` and ``pipeline`` logger hierarchies and forwards it to the
+EventBus via ``log_callback``.  Without this bridge, ZERO provider logs
+reach the frontend.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from stitch_backend.config import REPO_ROOT
+from stitch_backend.core.event_bus import event_bus
+from stitch_backend.core.event_schemas import LogEntryPayload, ObsEventPayload
+
+logger = logging.getLogger(__name__)
+
+
+# ── Provider factory ────────────────────────────────────────────────────────
+
+def _build_imap_config(config: dict) -> dict | None:
+    """Extract IMAP config from frontend config dict."""
+    server = config.get("imap_server")
+    user = config.get("imap_user")
+    password = config.get("imap_password")
+    if server and user and password:
+        return {
+            "host": server,
+            "user": user,
+            "password": password,
+            "port": int(config.get("imap_port", 993)),
+        }
+    return None
+
+
+def _build_addyio_config(config: dict):
+    """Extract AddyIO config from frontend config dict."""
+    if not config.get("addyio_enabled"):
+        return None
+    from autoreg.services.addyio import AddyIoConfig
+    return AddyIoConfig(
+        api_token=config.get("addyio_api_token", ""),
+        domain=config.get("addyio_domain", ""),
+        alias_format=config.get("addyio_alias_format", "uuid"),
+        auto_delete=bool(config.get("addyio_auto_delete")),
+    )
+
+
+def _build_mailtm_config(config: dict) -> dict | None:
+    """Extract MailTM inbox config from frontend config dict."""
+    address = config.get("inbox_mailtm_address", "").strip()
+    password = config.get("inbox_mailtm_password", "").strip()
+    if not address or not password:
+        return None
+    return {
+        "address": address,
+        "password": password,
+        "base_url": config.get("inbox_mailtm_base_url", "https://api.mail.tm"),
+    }
+
+
+def _build_33mail_config(config: dict) -> dict | None:
+    """Extract 33mail config from frontend config dict."""
+    if not config.get("thirty_three_mail_enabled"):
+        return None
+    username = config.get("thirty_three_mail_username", "").strip()
+    if not username:
+        return None
+    return {
+        "username": username,
+        "domain": config.get("thirty_three_mail_domain", "33mail.com"),
+    }
+
+
+def _build_provider_kwargs(config: dict) -> dict[str, Any]:
+    """Build common provider kwargs from frontend config dict.
+
+    This replaces the env-var serialization that the Rust backend required.
+    The frontend already sends these as a flat config dict — we pass them
+    directly as Python kwargs.
+    """
+    kwargs: dict[str, Any] = {
+        "headless": config.get("headless", True),
+        "imap_config": _build_imap_config(config),
+        "email_strategy": config.get("email_strategy", "mailtm"),
+        "base_email": config.get("base_email") or None,
+        "addyio_config": _build_addyio_config(config),
+        "thirty_three_mail_config": _build_33mail_config(config),
+        "mailtm_inbox_config": _build_mailtm_config(config),
+    }
+    return kwargs
+
+
+def _build_provider(provider_name: str, config: dict):
+    """Instantiate the correct autoreg provider from config dict."""
+
+    base_kwargs = _build_provider_kwargs(config)
+
+    if provider_name == "fireworks":
+        from autoreg.providers.fireworks import FireworksProvider
+        return FireworksProvider(
+            **base_kwargs,
+            proxy_enabled=bool(config.get("proxy_url")),
+            proxy_url=config.get("proxy_url"),
+            proxy_type=config.get("proxy_type", "http"),
+            proxy_username=config.get("proxy_username"),
+            proxy_password=config.get("proxy_password"),
+        )
+
+    if provider_name in ("kiro", "kiro_v2"):
+        from autoreg.providers.kiro_v2 import KiroV2Provider
+        return KiroV2Provider(**base_kwargs)
+
+    if provider_name == "windsurf":
+        from autoreg.providers.windsurf import WindsurfProvider
+        return WindsurfProvider(**base_kwargs)
+
+    if provider_name == "trae":
+        from autoreg.providers.trae import TraeProvider
+        return TraeProvider(**base_kwargs)
+
+    if provider_name == "openai":
+        from autoreg.providers.openai import OpenAIProvider
+        return OpenAIProvider(
+            **base_kwargs,
+            proxy_enabled=bool(config.get("proxy_url")),
+            proxy_url=config.get("proxy_url"),
+            proxy_type=config.get("proxy_type", "http"),
+            proxy_username=config.get("proxy_username"),
+            proxy_password=config.get("proxy_password"),
+        )
+
+    if provider_name == "github":
+        from autoreg.providers.github import GithubProvider
+        return GithubProvider(**base_kwargs)
+
+    if provider_name == "bitbucket":
+        from autoreg.providers.bitbucket import BitbucketProvider
+        return BitbucketProvider(**base_kwargs)
+
+    raise ValueError(f"Unknown provider: {provider_name}")
+
+
+# ── Logging bridge ─────────────────────────────────────────────────────────
+#
+# CRITICAL: Providers (FireworksProvider, KiroProvider, etc.) and pipeline
+# code use ``logger.info()`` — they NEVER call ``self.log()``.  Without this
+# bridge, zero logs reach the frontend.
+#
+# We install a custom logging.Handler on the ``autoreg`` and ``pipeline``
+# logger hierarchies.  Every log record is formatted and forwarded to the
+# log_callback, which emits obs:event + logs:new to the EventBus.
+
+class _LogBridgeHandler(logging.Handler):
+    """Forward Python logging records to a ``Callable[[str], None]`` callback."""
+
+    def __init__(self, callback: "callable[[str], None]") -> None:
+        super().__init__(level=logging.DEBUG)
+        self._callback = callback
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            self._callback(msg)
+        except Exception:
+            pass  # Never let logging crash the provider
+
+
+# Logger names to bridge — covers all autoreg providers + pipeline code
+_BRIDGE_LOGGER_NAMES = ("autoreg",)
+
+
+def _install_log_bridge(callback: "callable[[str], None]") -> list[_LogBridgeHandler]:
+    """Attach ``_LogBridgeHandler`` to all autoreg/pipeline loggers.
+
+    Also sets the logger level to ``DEBUG`` so that ``logger.info()``
+    calls reach our handler (default level is ``WARNING`` which drops
+    info/debug records before any handler sees them).
+    """
+    handlers: list[_LogBridgeHandler] = []
+    for name in _BRIDGE_LOGGER_NAMES:
+        lg = logging.getLogger(name)
+        handler = _LogBridgeHandler(callback)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        lg.addHandler(handler)
+        # Ensure the logger level allows info/debug records through.
+        # NOTSET (0) inherits from root which is typically WARNING (30),
+        # so we must explicitly set it even when level == NOTSET.
+        if lg.level == logging.NOTSET or lg.level > logging.DEBUG:
+            lg.setLevel(logging.DEBUG)
+        handlers.append(handler)
+    return handlers
+
+
+def _remove_log_bridge(handlers: list[_LogBridgeHandler]) -> None:
+    """Detach bridge handlers from their loggers."""
+    for handler in handlers:
+        for name in _BRIDGE_LOGGER_NAMES:
+            try:
+                logging.getLogger(name).removeHandler(handler)
+            except Exception:
+                pass
+        handler.close()
+
+
+# ── EventBus pipeline transport ──────────────────────────────────────────────
+#
+# PipeTransport writes JSON to sys.stdout — designed for subprocess mode.
+# In-process mode needs events to go through the EventBus instead.
+
+def _make_event_bus_transport(job_id: str, provider_name: str):
+    """Create a PipeTransport subclass that also emits events to EventBus."""
+    from autoreg.pipeline.transport import PipeTransport
+
+    class EventBusTransport(PipeTransport):
+        """PipeTransport that mirrors emits to the EventBus."""
+
+        def emit(self, event: str, data: dict) -> None:
+            # Call parent (writes to stdout for backwards compat)
+            super().emit(event, data)
+            # Also emit to EventBus as pipeline.* event
+            event_bus.emit_sync(
+                f"pipeline.{event}",
+                {"jobId": job_id, "provider": provider_name, **data},
+            )
+
+        def _ensure_reader(self) -> None:
+            # In-process: no stdin reader needed — control signals come
+            # via the registration_control command, not stdin
+            pass
+
+    return EventBusTransport()
+
+
+# ── Log callback factory ─────────────────────────────────────────────────
+
+def _infer_level(message: str) -> str:
+    """Derive log level from message content."""
+    lower = message.lower()
+    if "error" in lower or "failed" in lower or "fail" in lower:
+        return "error"
+    if "warn" in lower:
+        return "warn"
+    if "debug" in lower:
+        return "debug"
+    if "success" in lower or "created" in lower or "completed" in lower or "ok" in lower:
+        return "success"
+    return "info"
+
+
+def _build_log_callback(job_id: str, provider_name: str):
+    """Build a log_callback compatible with ``CommonProvider.set_log_callback``.
+
+    The callback is called from the worker thread with a single string
+    argument (``Callable[[str], None]``).  It emits both ``obs:event``
+    (for the registration log panel) and ``logs:new`` (for the global
+    Logs page).
+    """
+    def log_callback(message: str) -> None:
+        level = _infer_level(message)
+        obs = ObsEventPayload(
+            source="python",
+            subsystem="registration",
+            level=level,
+            message=message,
+            jobId=job_id,
+            provider=provider_name,
+        )
+        event_bus.emit_sync("obs:event", obs.model_dump(exclude_none=True))
+
+        log_entry = LogEntryPayload(
+            id=f"reg_{uuid.uuid4().hex[:12]}",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            level=level,
+            source="registration",
+            message=message,
+            channel="backend",
+        )
+        event_bus.emit_sync("logs:new", log_entry.model_dump())
+    return log_callback
+
+
+# ── Service ─────────────────────────────────────────────────────────────────
+
+class RegistrationService:
+    """In-process registration runner with real-time EventBus streaming."""
+
+    def __init__(self) -> None:
+        self._jobs: dict[str, dict[str, Any]] = {}
+
+    async def submit(self, provider_name: str, config: dict) -> str:
+        """Submit a registration job.  Returns immediately with a job_id.
+
+        The registration runs in a background ``asyncio.Task``.
+        Progress is streamed via EventBus; final result is emitted as
+        ``registration.completed`` or ``registration.failed``.
+        """
+        job_id = uuid.uuid4().hex[:12]
+        now = datetime.now(timezone.utc).isoformat()
+        task = asyncio.create_task(self._run(job_id, provider_name, config))
+        self._jobs[job_id] = {
+            "id": job_id,
+            "provider": provider_name,
+            "state": "running",
+            "step": "start",
+            "progress": 0,
+            "email": config.get("email", ""),
+            "result": None,
+            "error": None,
+            "task": task,
+            "created_at": now,
+            "completed_at": None,
+        }
+        return job_id
+
+    async def cancel(self, job_id: str) -> bool:
+        """Cancel a running registration job.
+
+        Cancels the underlying ``asyncio.Task`` so the provider stops
+        executing.  Returns ``True`` if the job was cancelled.
+        """
+        job = self._jobs.get(job_id)
+        if not job or job["state"] != "running":
+            return False
+
+        task: asyncio.Task | None = job.get("task")
+        if task and not task.done():
+            task.cancel()
+            job["state"] = "cancelled"
+            await event_bus.emit("registration.failed", {
+                "jobId": job_id,
+                "provider": job.get("provider", ""),
+                "error": "Cancelled by user",
+                "message": "Registration cancelled by user",
+            })
+            return True
+        return False
+
+    async def run(self, provider_name: str, config: dict) -> dict:
+        """Run registration synchronously (await until complete).
+
+        Useful for simple callers that want to wait for the result.
+        """
+        job_id = uuid.uuid4().hex[:12]
+        now = datetime.now(timezone.utc).isoformat()
+        task = asyncio.create_task(self._run(job_id, provider_name, config))
+        self._jobs[job_id] = {
+            "id": job_id,
+            "provider": provider_name,
+            "state": "running",
+            "step": "start",
+            "progress": 0,
+            "email": config.get("email", ""),
+            "result": None,
+            "error": None,
+            "task": task,
+            "created_at": now,
+            "completed_at": None,
+        }
+        return await task
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        return self._jobs.get(job_id)
+
+    def list_jobs(self) -> list[dict[str, Any]]:
+        """Return all jobs sorted by created_at descending."""
+        return sorted(
+            self._jobs.values(),
+            key=lambda j: j.get("created_at", ""),
+            reverse=True,
+        )
+
+    def clear_jobs(self, status: str | None = None) -> int:
+        """Remove completed/failed/cancelled jobs.  Returns count removed."""
+        terminal = {"succeeded", "failed", "cancelled", "completed"}
+        to_remove = [
+            jid for jid, j in self._jobs.items()
+            if j["state"] in terminal and (status is None or j["state"] == status)
+        ]
+        for jid in to_remove:
+            del self._jobs[jid]
+        return len(to_remove)
+
+    def to_frontend_dict(self, job: dict[str, Any]) -> dict[str, Any]:
+        """Convert internal job dict to RegistrationJob shape for frontend."""
+        state = job.get("state", "unknown")
+        # Map internal states to frontend-friendly statuses
+        status_map = {
+            "running": "running",
+            "succeeded": "completed",
+            "completed": "completed",
+            "failed": "failed",
+            "cancelled": "cancelled",
+        }
+        return {
+            "id": job.get("id", ""),
+            "provider": job.get("provider", ""),
+            "status": status_map.get(state, state),
+            "step": job.get("step", ""),
+            "progress": job.get("progress", 0),
+            "email": job.get("email", ""),
+            "error": job.get("error"),
+            "createdAt": job.get("created_at"),
+            "completedAt": job.get("completed_at"),
+        }
+
+    # ── Internal ──────────────────────────────────────────────────────────
+
+    async def _run(self, job_id: str, provider_name: str, config: dict) -> dict:
+        """Execute a single registration in a thread with log streaming."""
+
+        log_callback = _build_log_callback(job_id, provider_name)
+
+        # Install logging bridge: capture ALL logger.info() from autoreg/pipeline
+        # and forward to the EventBus.  Without this, zero logs reach the frontend
+        # because providers use ``logger.info()`` not ``self.log()``.
+        bridge_handlers = _install_log_bridge(log_callback)
+
+        provider = None
+        try:
+            # Build provider
+            provider = _build_provider(provider_name, config)
+            provider.set_log_callback(log_callback)
+
+            # Load card pool if configured
+            _load_cards(provider_name, config)
+
+            # Emit start event
+            await event_bus.emit("registration.progress", {
+                "jobId": job_id,
+                "step": "start",
+                "message": f"Starting {provider_name} registration...",
+            })
+
+            # Run blocking provider.register() in a thread
+            result = await asyncio.to_thread(
+                provider.register,
+                email=config.get("email"),
+                password=config.get("password"),
+                name=config.get("name"),
+            )
+
+            # Update job state
+            job = self._jobs.get(job_id)
+            if job:
+                job["state"] = "succeeded" if result.get("success") else "failed"
+                job["step"] = "done"
+                job["progress"] = 100
+                job["result"] = result
+                job["completed_at"] = datetime.now(timezone.utc).isoformat()
+                if result.get("email"):
+                    job["email"] = result["email"]
+
+            # Emit completion event
+            if result.get("success"):
+                await event_bus.emit("registration.completed", {
+                    "jobId": job_id,
+                    "provider": provider_name,
+                    "email": result.get("email"),
+                    "accounts": result.get("accounts", []),
+                    "success": True,
+                })
+            else:
+                error_msg = result.get("error", "Unknown error")
+                await event_bus.emit("registration.failed", {
+                    "jobId": job_id,
+                    "provider": provider_name,
+                    "error": error_msg,
+                    "message": f"Registration failed: {error_msg}",
+                })
+
+            return result
+
+        except asyncio.CancelledError:
+            logger.info("Registration %s cancelled by user", job_id)
+            job = self._jobs.get(job_id)
+            if job:
+                job["state"] = "cancelled"
+                job["step"] = "cancelled"
+                job["error"] = "Cancelled by user"
+                job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            return {"success": False, "error": "Cancelled by user", "provider": provider_name}
+
+        except Exception as exc:
+            logger.exception("Registration %s failed: %s", job_id, exc)
+            job = self._jobs.get(job_id)
+            if job:
+                job["state"] = "failed"
+                job["step"] = "error"
+                job["error"] = str(exc)
+                job["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+            await event_bus.emit("registration.failed", {
+                "jobId": job_id,
+                "provider": provider_name,
+                "error": str(exc),
+                "message": f"Registration failed: {exc}",
+            })
+
+            return {"success": False, "error": str(exc), "provider": provider_name}
+
+        finally:
+            # Remove logging bridge FIRST so cleanup logs still flow
+            _remove_log_bridge(bridge_handlers)
+            if provider and hasattr(provider, "close"):
+                try:
+                    provider.close()
+                except Exception:
+                    pass
+
+
+def _load_cards(provider_name: str, config: dict) -> None:
+    """Load card pool from config (cards_file, cards_text, card_bin)."""
+    cards_file = config.get("cards_file", "")
+    cards_text = config.get("cards_text", "")
+    card_bin = config.get("card_bin", "")
+
+    if not any([cards_file, cards_text, card_bin]):
+        return
+
+    try:
+        from autoreg.core.card_pool import get_card_pool
+        pool = get_card_pool()
+        if cards_file:
+            pool.load_from_file(provider_name, cards_file)
+        elif cards_text:
+            pool.load_from_text(provider_name, cards_text)
+        elif card_bin:
+            from autoreg.core.card_generator import start_live_card_search
+            finder = start_live_card_search(card_bin, max_attempts=50)
+            import time
+            time.sleep(5)
+            if finder.live_card:
+                pool.load_from_text(provider_name, finder.live_card)
+    except Exception as exc:
+        logger.warning("Card pool loading failed: %s", exc)
+
+
+# ── Singleton ───────────────────────────────────────────────────────────────
+
+registration_service = RegistrationService()

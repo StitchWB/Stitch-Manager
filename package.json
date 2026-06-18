@@ -15,12 +15,13 @@
     "preview": "vite preview",
     "setup:py": "pip install -r python/requirements.txt",
     "download:cloakbrowser": "python python/autoreg/browser/download_cloakbrowser.py",
-    "validate:all": "npm run validate:python-case && npm run validate:routes && npm run validate:i18n",
+    "validate:all": "npm run validate:python-case && npm run validate:routes && npm run validate:i18n && npm run audit:contracts",
     "test": "npm run test:ts && npm run test:py",
     "test:ts": "jest",
     "test:py": "pytest python/tests",
     "lint:ui-kit": "eslint \"src/**/*.tsx\"",
-    "audit:py": "python -m vulture python/autoreg"
+    "audit:py": "python -m vulture python/autoreg",
+    "audit:contracts": "python scripts/audit_contracts.py"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
@@ -54,6 +55,7 @@
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "jest-environment-jsdom": "^30.4.1",
     "postcss": "^8.4.47",
     "prettier": "^3.7.4",
     "tailwindcss": "^3.4.14",

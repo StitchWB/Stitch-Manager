@@ -202,3 +202,278 @@ async def cmd_get_dashboard_stats(params: dict) -> dict:
         "totalProviders": 0,
         "registrationsToday": 0,
     }
+
+
+# =============================================================================
+# Active accounts (replaces stubs)
+# =============================================================================
+
+# In-memory tracking of active accounts per provider
+_ACTIVE_ACCOUNTS: dict[str, str] = {}
+
+
+@register_command("get_active_accounts")
+async def cmd_get_active_accounts(params: dict) -> dict:
+    """Return currently active account per provider."""
+    return dict(_ACTIVE_ACCOUNTS)
+
+
+@register_command("set_active_account")
+async def cmd_set_active_account(params: dict) -> dict:
+    """Set the active account for a provider."""
+    provider = params.get("provider", "")
+    account_id = params.get("accountId")
+    if provider and account_id:
+        _ACTIVE_ACCOUNTS[provider] = str(account_id)
+    elif provider and account_id is None:
+        _ACTIVE_ACCOUNTS.pop(provider, None)
+    return {"success": True, "provider": provider, "accountId": account_id}
+
+
+# =============================================================================
+# IDE paths (replaces stub)
+# =============================================================================
+
+@register_command("get_ide_paths")
+async def cmd_get_ide_paths(params: dict) -> dict:
+    """Detect installed IDEs and return their paths."""
+    import os
+    from pathlib import Path
+    from stitch_backend.config import REPO_ROOT
+
+    paths: dict[str, str] = {}
+    # Common IDE locations
+    ide_dirs = {
+        "vscode": ["Code", "Visual Studio Code"],
+        "cursor": ["Cursor"],
+        "windsurf": ["Windsurf", "Codeium"],
+        "trae": ["Trae"],
+        "kiro": ["Kiro"],
+    }
+
+    local_app = os.environ.get("LOCALAPPDATA", "")
+    program_files = os.environ.get("PROGRAMFILES", "C:\\Program Files")
+
+    for ide_name, dir_names in ide_dirs.items():
+        for dn in dir_names:
+            for base in [local_app, program_files]:
+                if base:
+                    candidate = os.path.join(base, dn)
+                    if os.path.isdir(candidate):
+                        paths[ide_name] = candidate
+                        break
+            if ide_name in paths:
+                break
+
+    return paths
+
+
+# =============================================================================
+# Observability (replaces stubs — backed by app_logs table)
+# =============================================================================
+
+@register_command("obs_ingest")
+async def cmd_obs_ingest(params: dict) -> dict:
+    """Ingest an observability event into app_logs."""
+    from stitch_backend.domains.logging.service import LoggingService
+    from stitch_backend.database import run_in_session
+
+    level = params.get("level", "info")
+    source = params.get("source", "observability")
+    message = params.get("message", "")
+    return await run_in_session(
+        lambda s: LoggingService(s).add_log(
+            level=level,
+            source=source,
+            message=message,
+            channel="observability",
+            details=params.get("details"),
+        )
+    )
+
+
+@register_command("obs_recent")
+async def cmd_obs_recent(params: dict) -> list:
+    """Return recent observability events."""
+    from stitch_backend.domains.logging.service import LoggingService
+    from stitch_backend.database import run_in_session
+
+    limit = int(params.get("limit", 50))
+    return await run_in_session(
+        lambda s: LoggingService(s).query_logs({
+            "channels": ["observability"],
+            "limit": limit,
+        })
+    )
+
+
+@register_command("obs_timeline")
+async def cmd_obs_timeline(params: dict) -> list:
+    """Return timeline of observability events."""
+    from stitch_backend.domains.logging.service import LoggingService
+    from stitch_backend.database import run_in_session
+
+    filter_ = params.get("filter", {})
+    filter_.setdefault("channels", ["observability", "backend", "app"])
+    return await run_in_session(
+        lambda s: LoggingService(s).query_logs(filter_)
+    )
+
+
+# =============================================================================
+# Proxy config (replaces stubs — backed by settings table)
+# =============================================================================
+
+@register_command("get_proxy_config")
+async def cmd_get_proxy_config(params: dict) -> dict:
+    """Return proxy configuration from settings."""
+    from stitch_backend.database import run_in_session
+    from sqlalchemy import text
+    import json
+
+    async def _op(session):
+        result = await session.execute(
+            text("SELECT value FROM settings WHERE key = 'proxy_config'")
+        )
+        row = result.first()
+        if row and row[0]:
+            try:
+                return json.loads(row[0])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {"enabled": False, "proxyType": "http", "proxies": []}
+
+    return await run_in_session(_op)
+
+
+@register_command("save_proxy_config")
+async def cmd_save_proxy_config(params: dict) -> None:
+    """Persist proxy configuration to settings."""
+    from stitch_backend.database import run_in_session
+    from sqlalchemy import text
+    import json
+
+    config_json = json.dumps(params)
+
+    async def _op(session):
+        await session.execute(
+            text(
+                "INSERT INTO settings (key, value) VALUES ('proxy_config', :v) "
+                "ON CONFLICT(key) DO UPDATE SET value = :v"
+            ),
+            {"v": config_json},
+        )
+
+    await run_in_session(_op)
+
+
+@register_command("get_proxy_settings")
+async def cmd_get_proxy_settings(params: dict) -> dict:
+    """Return AI proxy settings from settings table."""
+    from stitch_backend.database import run_in_session
+    from sqlalchemy import text
+    import json
+
+    async def _op(session):
+        result = await session.execute(
+            text("SELECT value FROM settings WHERE key = 'proxy_settings'")
+        )
+        row = result.first()
+        if row and row[0]:
+            try:
+                return json.loads(row[0])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {
+            "appMode": "disabled",
+            "proxyPort": 0,
+            "autoStart": False,
+            "routingStrategy": "round_robin",
+            "managementKey": "",
+        }
+
+    return await run_in_session(_op)
+
+
+@register_command("update_proxy_settings")
+async def cmd_update_proxy_settings(params: dict) -> None:
+    """Persist AI proxy settings to settings table."""
+    from stitch_backend.database import run_in_session
+    from sqlalchemy import text
+    import json
+
+    settings_json = json.dumps(params)
+
+    async def _op(session):
+        await session.execute(
+            text(
+                "INSERT INTO settings (key, value) VALUES ('proxy_settings', :v) "
+                "ON CONFLICT(key) DO UPDATE SET value = :v"
+            ),
+            {"v": settings_json},
+        )
+
+    await run_in_session(_op)
+
+
+# =============================================================================
+# Proxy debug logs (replaces stubs — backed by app_logs table)
+# =============================================================================
+
+@register_command("get_proxy_debug_logs")
+async def cmd_get_proxy_debug_logs(params: dict) -> list:
+    """Return proxy debug logs from app_logs table."""
+    from stitch_backend.domains.logging.service import LoggingService
+    from stitch_backend.database import run_in_session
+
+    limit = int(params.get("limit", 100))
+    result = await run_in_session(
+        lambda s: LoggingService(s).query_logs({
+            "channels": ["proxy"],
+            "limit": limit,
+        })
+    )
+    return result.get("logs", [])
+
+
+@register_command("clear_proxy_debug_logs")
+async def cmd_clear_proxy_debug_logs(params: dict) -> int:
+    """Clear proxy debug logs from app_logs table."""
+    from stitch_backend.domains.logging.service import LoggingService
+    from stitch_backend.database import run_in_session
+
+    return await run_in_session(
+        lambda s: LoggingService(s).clear_logs()
+    )
+
+
+# =============================================================================
+# Request history (replaces stubs — backed by app_logs table)
+# =============================================================================
+
+@register_command("get_request_history")
+async def cmd_get_request_history(params: dict) -> dict:
+    """Return AI proxy request history from app_logs."""
+    from stitch_backend.domains.logging.service import LoggingService
+    from stitch_backend.database import run_in_session
+
+    limit = int(params.get("limit", 50))
+    result = await run_in_session(
+        lambda s: LoggingService(s).query_logs({
+            "sources": ["ai_proxy", "proxy"],
+            "limit": limit,
+        })
+    )
+    logs = result.get("logs", [])
+    return {"items": logs, "total": result.get("total", 0)}
+
+
+@register_command("clear_request_history")
+async def cmd_clear_request_history(params: dict) -> None:
+    """Clear AI proxy request history."""
+    from stitch_backend.domains.logging.service import LoggingService
+    from stitch_backend.database import run_in_session
+
+    await run_in_session(
+        lambda s: LoggingService(s).clear_logs()
+    )

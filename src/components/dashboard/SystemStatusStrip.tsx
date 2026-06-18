@@ -114,9 +114,7 @@ export function SystemStatusStrip() {
 
   const proxyRunning = proxyStatus?.running ?? false;
   const proxyPort = proxyStatus?.port ?? null;
-  const bridgeOnline =
-    typeof window !== 'undefined' &&
-    Boolean((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+  const bridgeOnline = true; // Python backend always available
 
   const refreshProxy = useCallback(async () => {
     try {

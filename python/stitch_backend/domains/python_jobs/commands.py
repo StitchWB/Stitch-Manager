@@ -117,8 +117,8 @@ async def cmd_run_python_script(params: dict) -> str:
 @register_command("start_composed_flow_job")
 async def cmd_start_composed_flow_job(params: dict) -> dict:
     """Start a composed flow execution as a Python job."""
+    from stitch_backend.config import REPO_ROOT
     from stitch_backend.domains.python_jobs.service import get_job_manager
-    import json as _json
 
     req = params.get("request", params)
     alias = req.get("alias", "")
@@ -132,8 +132,9 @@ async def cmd_start_composed_flow_job(params: dict) -> dict:
     if persist:
         args.append("--persist")
 
+    script_path = str(REPO_ROOT / "python" / "run_composed_flow.py")
     job = await get_job_manager().start(
-        script_path="scripts/run_composed_flow.py",
+        script_path=script_path,
         args=args,
         timeout_ms=req.get("timeoutMs", 300_000),
         correlation_id=req.get("correlationId"),

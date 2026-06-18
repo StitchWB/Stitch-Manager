@@ -59,6 +59,7 @@ class EventBus:
     def __init__(self) -> None:
         self._handlers: dict[str, list[EventHandler]] = {}
         self._ws_clients: list[asyncio.Queue[dict[str, Any]]] = []
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     # ── Subscribe ─────────────────────────────────────────────────────────────
 
@@ -123,6 +124,22 @@ class EventBus:
     @property
     def ws_client_count(self) -> int:
         return len(self._ws_clients)
+
+    # ── Sync emit (for threads) ─────────────────────────────────────────────
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Store the running event loop so emit_sync can schedule on it."""
+        self._loop = loop
+
+    def emit_sync(self, event_name: str, data: dict[str, Any] | None = None) -> None:
+        """Thread-safe emit — schedules ``emit()`` on the stored event loop.
+
+        Safe to call from ``asyncio.to_thread()`` or any background thread.
+        """
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+        asyncio.run_coroutine_threadsafe(self.emit(event_name, data or {}), loop)
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

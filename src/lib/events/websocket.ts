@@ -1,9 +1,8 @@
 /**
- * WebSocket Event Adapter — replaces `@tauri-apps/api/event`.
+ * WebSocket Event Adapter — connects to the Python EventBus.
  *
  * Connects to the Python EventBus via `ws://localhost:25584/api/events`
- * and exposes the same `listen()` / `emit()` API as Tauri so existing
- * code works unchanged.
+ * and exposes a `listen()` / `emit()` API for frontend components.
  *
  * Python EventBus payload format:
  *   { "event": "account.token_refreshed", "data": { ... }, "timestamp": "..." }
@@ -183,7 +182,7 @@ connect();
 
 /**
  * Listen for a named event. Returns a promise that resolves to an unlisten
- * function — drop-in replacement for `@tauri-apps/api/event`'s `listen()`.
+ * function.
  *
  * @example
  * ```ts

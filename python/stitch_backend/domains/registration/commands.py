@@ -84,47 +84,41 @@ _ALLOWED_AUTOREG_PROVIDERS = frozenset({
 
 @register_command("auto_register")
 async def cmd_auto_register(params: dict) -> dict:
-    """Auto-register via AWS Cognito (no browser)."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+    """Auto-register via in-process provider call."""
+    from stitch_backend.domains.registration.service import registration_service
 
     email = params.get("email", "")
     password = params.get("password", "")
     provider = params.get("provider", "kiro")
     if provider not in _ALLOWED_AUTOREG_PROVIDERS:
         return {"error": f"Unknown provider: {provider}"}
-    job = await get_job_manager().start(
-        script_path=f"scripts/autoreg_{provider}.py",
-        args=["--email", email, "--password", password, "--action", "register"],
-    )
-    return {"jobId": job.id, "success": True}
+    config = {"email": email, "password": password, "headless": True}
+    job_id = await registration_service.submit(provider, config)
+    return {"jobId": job_id, "success": True}
 
 
 @register_command("confirm_registration")
 async def cmd_confirm_registration(params: dict) -> dict:
     """Confirm email registration with verification code."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+    from stitch_backend.domains.registration.service import registration_service
 
     email = params.get("email", "")
     code = params.get("code", "")
-    job = await get_job_manager().start(
-        script_path="scripts/autoreg_kiro.py",
-        args=["--email", email, "--code", code, "--action", "confirm"],
-    )
-    return {"jobId": job.id, "success": True}
+    config = {"email": email, "verification_code": code, "headless": True}
+    job_id = await registration_service.submit("kiro", config)
+    return {"jobId": job_id, "success": True}
 
 
 @register_command("auto_login")
 async def cmd_auto_login(params: dict) -> dict:
     """Auto-login to existing account via AWS Cognito."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+    from stitch_backend.domains.registration.service import registration_service
 
     email = params.get("email", "")
     password = params.get("password", "")
-    job = await get_job_manager().start(
-        script_path="scripts/autoreg_kiro.py",
-        args=["--email", email, "--password", password, "--action", "login"],
-    )
-    return {"jobId": job.id, "success": True}
+    config = {"email": email, "password": password, "headless": True, "launch_mode": "login"}
+    job_id = await registration_service.submit("kiro", config)
+    return {"jobId": job_id, "success": True}
 
 
 # ── Device Flow ─────────────────────────────────────────────────────────────
@@ -165,17 +159,21 @@ async def cmd_open_device_flow_url(params: dict) -> None:
 
 # ── Autoreg Jobs (8 providers) ─────────────────────────────────────────────
 
+
 async def _start_autoreg_job(provider: str, params: dict) -> dict:
-    """Common helper for all autoreg job starters."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+    """Common helper for all autoreg job starters.
+
+    Calls the autoreg provider in-process via RegistrationService,
+    streaming logs to the frontend via EventBus.
+    """
+    from stitch_backend.domains.registration.service import registration_service
 
     config = params.get("config", params)
-    config_json = json.dumps(config) if isinstance(config, dict) else str(config)
-    job = await get_job_manager().start(
-        script_path=f"scripts/autoreg_{provider}.py",
-        args=["--config", config_json],
-    )
-    return {"jobId": job.id}
+    if not isinstance(config, dict):
+        config = {}
+
+    job_id = await registration_service.submit(provider, config)
+    return {"jobId": job_id}
 
 
 @register_command("start_python_autoreg_job")
@@ -233,41 +231,185 @@ async def cmd_registration_control(params: dict) -> None:
 
 @register_command("stop_registration")
 async def cmd_stop_registration(params: dict) -> None:
-    """Stop a running registration job."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+    """Stop a running registration job.
+
+    If ``jobId`` is provided, cancels that specific job.
+    If no ``jobId``, cancels ALL currently running registration jobs.
+    """
+    from stitch_backend.domains.registration.service import registration_service
 
     job_id = params.get("jobId", "")
     if job_id:
-        await get_job_manager().cancel(job_id)
+        await registration_service.cancel(job_id)
+    else:
+        # Cancel all running jobs
+        running_ids = [
+            jid for jid, job in registration_service._jobs.items()
+            if job.get("state") == "running"
+        ]
+        for jid in running_ids:
+            await registration_service.cancel(jid)
+
+
+# ── Registration Jobs (query/clear) ─────────────────────────────────────
+
+@register_command("get_registration_jobs")
+async def cmd_get_registration_jobs(params: dict) -> list:
+    """Get all registration jobs.
+
+    Returns: ``RegistrationJob[]`` sorted by createdAt descending.
+    """
+    from stitch_backend.domains.registration.service import registration_service
+    return [
+        registration_service.to_frontend_dict(j)
+        for j in registration_service.list_jobs()
+    ]
+
+
+@register_command("get_registration_job")
+async def cmd_get_registration_job(params: dict) -> dict:
+    """Get a specific registration job by ID.
+
+    Params: ``jobId``
+    Returns: ``RegistrationJob``
+    """
+    from stitch_backend.domains.registration.service import registration_service
+    job_id = params.get("jobId", "")
+    job = registration_service.get_job(job_id)
+    if not job:
+        return {
+            "id": job_id, "status": "unknown", "provider": "",
+            "step": "", "progress": 0, "email": "", "error": None,
+            "createdAt": None, "completedAt": None,
+        }
+    return registration_service.to_frontend_dict(job)
+
+
+@register_command("clear_registration_jobs")
+async def cmd_clear_registration_jobs(params: dict) -> None:
+    """Clear completed/failed registration jobs.
+
+    Params: ``status`` (optional) — clear only jobs with this status.
+    """
+    from stitch_backend.domains.registration.service import registration_service
+    status = params.get("status")
+    registration_service.clear_jobs(status)
+
+
+@register_command("get_registration_status")
+async def cmd_get_registration_status(params: dict) -> dict:
+    """Get current registration status.
+
+    Returns the most recent running/completed job's status.
+    """
+    from stitch_backend.domains.registration.service import registration_service
+    # Find the most recent running job, or the most recent job overall
+    running = [
+        j for j in registration_service.list_jobs()
+        if j.get("state") == "running"
+    ]
+    if running:
+        job = running[0]
+        return {
+            "isRunning": True,
+            "success": None,
+            "status": "running",
+            "provider": job.get("provider"),
+            "email": job.get("email"),
+            "step": job.get("step"),
+            "progress": job.get("progress"),
+            "error": None,
+            "startedAt": job.get("created_at"),
+            "completedAt": None,
+        }
+    # Check the most recent completed job
+    all_jobs = registration_service.list_jobs()
+    if all_jobs:
+        job = all_jobs[0]
+        success = job.get("state") == "succeeded"
+        return {
+            "isRunning": False,
+            "success": success,
+            "status": job.get("state"),
+            "provider": job.get("provider"),
+            "email": job.get("email"),
+            "step": job.get("step", "done"),
+            "progress": job.get("progress", 100),
+            "error": job.get("error"),
+            "startedAt": job.get("created_at"),
+            "completedAt": job.get("completed_at"),
+        }
+    return {
+        "isRunning": False, "success": None, "status": None,
+        "provider": None, "email": None, "step": None,
+        "progress": None, "error": None,
+        "startedAt": None, "completedAt": None,
+    }
+
+
+@register_command("get_cloakbrowser_path")
+async def cmd_get_cloakbrowser_path(params: dict) -> str | None:
+    """Resolve bundled CloakBrowser executable path."""
+    from stitch_backend.config import get_settings
+    import os
+    settings = get_settings()
+    cloak_dir = settings.cloakbrowser_dir
+    exe_name = "chrome.exe" if os.name == "nt" else "chrome"
+    path = os.path.join(cloak_dir, exe_name)
+    if os.path.exists(path):
+        return path
+    # Walk up directories (like Rust version)
+    current = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(5):
+        candidate = os.path.join(current, "resources", "cloakbrowser", exe_name)
+        if os.path.exists(candidate):
+            return candidate
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return None
+
+
+@register_command("toggle_fireworks_pause")
+async def cmd_toggle_fireworks_pause(params: dict) -> dict:
+    """Toggle pause state for Fireworks registration."""
+    # Fireworks pause is managed via pipeline control signals
+    job_id = params.get("jobId", "")
+    paused = params.get("paused", False)
+    command = "pause" if paused else "resume"
+    from stitch_backend.domains.python_jobs.service import get_job_manager
+    if job_id:
+        get_job_manager().send_control(job_id, command, None)
+    return {"paused": paused}
 
 
 @register_command("authorize_kiro_account")
 async def cmd_authorize_kiro_account(params: dict) -> dict:
     """Authorize a Kiro account via existing AWS session OAuth."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+    from stitch_backend.domains.registration.service import registration_service
 
     account_id = params.get("accountId", "")
     headless = params.get("headless", False)
-    job = await get_job_manager().start(
-        script_path="scripts/authorize_kiro.py",
-        args=["--accountId", str(account_id), "--headless", str(headless).lower()],
-    )
-    return {"jobId": job.id}
+    config = {
+        "account_id": account_id,
+        "headless": headless,
+        "launch_mode": "kiro_oauth_only_existing_session",
+    }
+    job_id = await registration_service.submit("kiro_v2", config)
+    return {"jobId": job_id}
 
 
 # ── V2 Orchestrator ────────────────────────────────────────────────────────
 
 @register_command("start_registration_v2_command")
 async def cmd_start_registration_v2(params: dict) -> dict:
-    """Start Registration V2 flow (orchestrator stub)."""
-    from stitch_backend.domains.python_jobs.service import get_job_manager
+    """Start Registration V2 flow via in-process provider."""
+    from stitch_backend.domains.registration.service import registration_service
 
     req = params.get("params", params)
-    job = await get_job_manager().start(
-        script_path="scripts/registration_v2.py",
-        args=["--config", json.dumps(req)],
-    )
-    return {"success": True, "jobId": job.id, "email": req.get("email", "")}
+    job_id = await registration_service.submit("kiro_v2", req)
+    return {"success": True, "jobId": job_id, "email": req.get("email", "")}
 
 
 # ── Counters ───────────────────────────────────────────────────────────────

@@ -5,10 +5,18 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import { copyToClipboard as nativeCopy } from '@/lib/native';
 
 // Module-level timer for the stateless helper below.
 // Prevents a previous sensitive auto-clear from wiping out later clipboard content.
 let copyToClipboardAutoClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Write text to clipboard — delegates to native layer (Tauri plugin / navigator / execCommand).
+ */
+async function writeToClipboard(text: string): Promise<void> {
+  return nativeCopy(text);
+}
 
 interface UseCopyToClipboardOptions {
   successMessage?: string;
@@ -92,7 +100,7 @@ export const useCopyToClipboard = (
     if (autoClearTimerRef.current) clearTimeout(autoClearTimerRef.current);
     autoClearTimerRef.current = setTimeout(() => {
       // Best-effort: clearing clipboard may fail depending on browser permissions.
-      void navigator.clipboard.writeText('').catch(() => {});
+      void writeToClipboard('').catch(() => {});
       autoClearTimerRef.current = null;
     }, ms);
   };
@@ -134,7 +142,7 @@ export const useCopyToClipboard = (
           }
         }
 
-        await navigator.clipboard.writeText(text);
+        await writeToClipboard(text);
         setCopied(true);
 
         const perActionSuccess = copyOptions.successMessage || successMessage;
@@ -195,7 +203,7 @@ export const copyToClipboard = async (
       if (!window.confirm(message)) return;
     }
 
-    await navigator.clipboard.writeText(text);
+    await writeToClipboard(text);
     if (!options.silent) {
       toast.success(options.successMessage || options.message || 'Copied!', { duration: 1500 });
     }
@@ -206,7 +214,7 @@ export const copyToClipboard = async (
       const autoClearAfterMs = options.autoClearAfterMs ?? (options.sensitive ? 15000 : 0);
       if (autoClearAfterMs > 0) {
         copyToClipboardAutoClearTimer = setTimeout(() => {
-          void navigator.clipboard.writeText('').catch(() => {});
+          void writeToClipboard('').catch(() => {});
           copyToClipboardAutoClearTimer = null;
         }, autoClearAfterMs);
       }

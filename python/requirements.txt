@@ -57,3 +57,6 @@ patchright>=1.0.0
 
 # Optional: Regular Playwright (fallback if Patchright not available)
 # playwright>=1.40.0
+
+# Aliyun/slider captcha gap detection (ONNX deep-learning model)
+captcha-recognizer>=1.0.2

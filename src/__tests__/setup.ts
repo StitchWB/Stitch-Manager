@@ -24,12 +24,6 @@ if (typeof globalThis.crypto === 'undefined') {
   });
 }
 
-// Mock Tauri API
-Object.defineProperty(window, '__TAURI_INTERNALS__', {
-  value: {},
-  writable: true,
-});
-
 // Suppress console errors in tests (optional)
 const originalError = console.error;
 const originalWarn = console.warn;
