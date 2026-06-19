@@ -107,6 +107,16 @@ export const PROVIDERS: ProviderConfig[] = [
     category: 'ai',
   },
   {
+    id: 'qoder',
+    name: 'Qoder',
+    icon: 'Q',
+    color: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    gradient: 'from-teal-500/20 to-cyan-500/20 text-teal-400',
+    hexColor: '#14b8a6',
+    disabled: false,
+    category: 'ide',
+  },
+  {
     id: 'bitbucket',
     name: 'Bitbucket',
     icon: 'BB',

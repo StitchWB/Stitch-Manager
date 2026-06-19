@@ -40,6 +40,14 @@ export const PROVIDER_PIPELINES: Record<string, ProviderPipelineConfig> = {
       { id: 'stripe_billing', label: 'Stripe Billing', enabled: true, pauseAfter: false, skippable: true },
     ],
   },
+  qoder: {
+    needsBilling: false,
+    steps: [
+      { id: 'signup', label: 'Sign Up Form', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'otp_verify', label: 'OTP Verification', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'create_token', label: 'Create Access Token', enabled: true, pauseAfter: false, skippable: true },
+    ],
+  },
 };
 
 /**
