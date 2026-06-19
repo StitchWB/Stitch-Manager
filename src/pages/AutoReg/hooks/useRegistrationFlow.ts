@@ -57,6 +57,7 @@ export const useRegistrationFlow = ({
       'github',
       'openai',
       'fireworks',
+      'qoder',
       'bitbucket',
     ];
     if (!supportedProviders.includes(config.provider)) {

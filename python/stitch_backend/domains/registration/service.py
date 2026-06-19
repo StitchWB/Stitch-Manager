@@ -120,6 +120,17 @@ def _build_provider(provider_name: str, config: dict):
             proxy_password=config.get("proxy_password"),
         )
 
+    if provider_name == "qoder":
+        from autoreg.providers.qoder.provider import QoderProvider
+        return QoderProvider(
+            **base_kwargs,
+            proxy_enabled=bool(config.get("proxy_url")),
+            proxy_url=config.get("proxy_url"),
+            proxy_type=config.get("proxy_type", "http"),
+            proxy_username=config.get("proxy_username"),
+            proxy_password=config.get("proxy_password"),
+        )
+
     if provider_name in ("kiro", "kiro_v2"):
         from autoreg.providers.kiro_v2 import KiroV2Provider
         return KiroV2Provider(**base_kwargs)
