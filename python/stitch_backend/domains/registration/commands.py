@@ -78,7 +78,7 @@ async def cmd_get_providers(params: dict) -> dict:
 # Allowed provider identifiers for autoreg scripts
 _ALLOWED_AUTOREG_PROVIDERS = frozenset({
     "kiro", "kiro_v2", "windsurf", "trae", "github",
-    "openai", "fireworks", "bitbucket", "python",
+    "openai", "fireworks", "qoder", "bitbucket", "python",
 })
 
 
@@ -204,6 +204,11 @@ async def cmd_start_openai_autoreg_job(params: dict) -> dict:
 @register_command("start_fireworks_autoreg_job")
 async def cmd_start_fireworks_autoreg_job(params: dict) -> dict:
     return await _start_autoreg_job("fireworks", params)
+
+
+@register_command("start_qoder_autoreg_job")
+async def cmd_start_qoder_autoreg_job(params: dict) -> dict:
+    return await _start_autoreg_job("qoder", params)
 
 
 @register_command("start_bitbucket_autoreg_job")

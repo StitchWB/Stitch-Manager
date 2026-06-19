@@ -78,6 +78,7 @@ export const loadProviderStrategies = (): ProviderEmailStrategies => {
     copilot: { ...DEFAULT_EMAIL_STRATEGY },
     openai: { ...DEFAULT_EMAIL_STRATEGY },
     fireworks: { ...DEFAULT_EMAIL_STRATEGY },
+    qoder: { ...DEFAULT_EMAIL_STRATEGY },
     bitbucket: { ...DEFAULT_EMAIL_STRATEGY },
     claude: { ...DEFAULT_EMAIL_STRATEGY },
     gemini: { ...DEFAULT_EMAIL_STRATEGY },

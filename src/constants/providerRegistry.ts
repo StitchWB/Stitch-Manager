@@ -22,7 +22,8 @@ export type ProviderRegistryId =
   | 'anthropic'
   | 'gemini'
   | 'antigravity'
-  | 'fireworks';
+  | 'fireworks'
+  | 'qoder';
 
 export type ProviderRegistryEntry = {
   id: ProviderRegistryId;
@@ -154,6 +155,16 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
     accounts: { matchProviders: ['fireworks'] },
     aiProxy: { enabled: true },
   },
+  qoder: {
+    id: 'qoder',
+    label: 'Qoder',
+    badge: {
+      bg: 'bg-teal-500/10',
+      text: 'text-teal-400',
+      border: 'border-teal-500/20',
+    },
+    accounts: { matchProviders: ['qoder'] },
+  },
 };
 
 // =============================
@@ -167,6 +178,7 @@ export const ACCOUNT_PROVIDER_FILTER_IDS = [
   'aws',
   'github',
   'openai',
+  'qoder',
 ] as const;
 
 export type AccountProviderFilterId = (typeof ACCOUNT_PROVIDER_FILTER_IDS)[number];

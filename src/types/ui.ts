@@ -158,6 +158,52 @@ export interface FireworksAutoregResult {
   error: string | null;
 }
 
+export interface QoderAutoregConfig {
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  emailStrategy: string | null;
+  baseEmail: string | null;
+  headless: boolean;
+  proxyUrl: string | null;
+  imapServer: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  mailtmEnabled: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+  inboxProvider: string | null;
+  inboxMailbox: string | null;
+  inboxMailtmAddress: string | null;
+  inboxMailtmPassword: string | null;
+  inboxMailtmBaseUrl: string | null;
+  correlationId: string | null;
+  captchaTimeout: number;
+  captchaSoundEnabled: boolean;
+  debug?: boolean;
+}
+
+export interface QoderAutoregResult {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  token?: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  plan: string | null;
+  error: string | null;
+}
+
 export interface BitbucketAutoregConfig {
   email: string | null;
   password: string | null;
