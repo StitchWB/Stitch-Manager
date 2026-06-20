@@ -141,7 +141,7 @@ async def cmd_test_imap_connection(params: dict) -> str:
 
     # Resolve password sentinel ("********") from settings table
     is_gmail = "gmail.com" in server or "imap.google.com" in server
-    setting_key = "gmail_app_password" if is_gmail else "imap_password"
+    setting_key = "gmailAppPassword" if is_gmail else "imapPassword"
     if password in ("••••••••", "********", ""):
         from sqlalchemy import text as sql_text
         from stitch_backend.database import run_in_session

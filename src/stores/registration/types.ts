@@ -72,6 +72,7 @@ export interface ProviderEmailStrategies {
   qoder: ProviderEmailStrategy;
   bitbucket: ProviderEmailStrategy;
   claude: ProviderEmailStrategy;
+  anthropic: ProviderEmailStrategy;
   gemini: ProviderEmailStrategy;
   antigravity: ProviderEmailStrategy;
   aws_builder_id: ProviderEmailStrategy;
@@ -220,6 +221,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     qoder: { ...DEFAULT_EMAIL_STRATEGY },
     bitbucket: { ...DEFAULT_EMAIL_STRATEGY },
     claude: { ...DEFAULT_EMAIL_STRATEGY },
+    anthropic: { ...DEFAULT_EMAIL_STRATEGY },
     gemini: { ...DEFAULT_EMAIL_STRATEGY },
     antigravity: { ...DEFAULT_EMAIL_STRATEGY },
     aws_builder_id: { ...DEFAULT_EMAIL_STRATEGY },

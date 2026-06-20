@@ -326,6 +326,8 @@ export const ru: Translations = {
       updated: "Обновлено"
     },
     showArchived: "Показать архивные",
+    archiveFailed: "Не удалось архивировать аккаунт",
+    archiveSuccess: "Аккаунт архивирован",
     state: "Состояние",
     statusHeader: "Статус",
     successRate: "Успешность",
@@ -340,6 +342,7 @@ export const ru: Translations = {
     tokenCopied: "Токен скопирован",
     tokenCopiedAutoClear: "Токен скопирован (очистится через 15 секунд)",
     tokenCopyFailed: "Не удалось скопировать токен",
+    tokenRefreshed: "Токен обновлён",
     tokenOptional: "опционально, для ручного добавления",
     tokenOptionalHint: "Если указан, токен будет использован напрямую без авторизации.",
     totalSpent: "Всего потрачено",
@@ -646,6 +649,7 @@ export const ru: Translations = {
     },
     controller: {
       confirm: {
+        bulkDelete: "Удалить выбранные аккаунты AI Hub?",
         deleteAccount: "Вы уверены, что хотите удалить этот аккаунт?",
         importAllFromScan: "Импортировать {count} найденных credential(ов)? Дубликаты будут пропущены.",
         importPayload: "Импортировать аккаунты из payload? Возможны дубликаты. Продолжить?",
@@ -654,6 +658,7 @@ export const ru: Translations = {
       errors: {
         connectionTestFailed: "Тест соединения не прошёл: {msg}",
         deleteAccountFailed: "Не удалось удалить аккаунт: {msg}",
+        bulkDeleteFailed: "Не удалось удалить аккаунты: {msg}",
         downloadFailed: "Не удалось скачать файл",
         exportFailed: "Ошибка экспорта: {msg}",
         importFailed: "Ошибка импорта: {msg}",
@@ -683,7 +688,9 @@ export const ru: Translations = {
         mappingsSaved: "Сопоставления моделей провайдеров сохранены",
         migrationCompleted: "Миграция завершена! Подробности смотрите в консоли.",
         migrationRunning: "Запуск миграции...",
-        preparedImportFromScan: "Подготовлен JSON для импорта из скана (проверьте и импортируйте)"
+        preparedImportFromScan: "Подготовлен JSON для импорта из скана (проверьте и импортируйте)",
+        bulkDeleted: "Аккаунты AI Hub удалены",
+        exportNotImplemented: "Экспорт для этого провайдера пока не поддерживается"
       }
     },
     copy: {
@@ -1267,6 +1274,7 @@ export const ru: Translations = {
     modelsCount: "моделей",
     ms: "мс",
     newChat: "Новый чат",
+    newChatDefault: "Новый чат",
     noModels: "Моделей нет",
     placeholder: "...",
     profileLabel: "Профиль",
@@ -1334,6 +1342,7 @@ export const ru: Translations = {
     cvv: "CVV",
     delete: "Удалить",
     deleting: "Удаление",
+    archive: "Архивировать",
     dismiss: "Закрыть",
     dot: "•",
     edit: "Редактировать",
@@ -2091,6 +2100,10 @@ export const ru: Translations = {
     testingDraft: "Проверка…",
     testingEntry: "Проверка…",
     title: "Библиотека прокси",
+    totalLinesStat: "Итого строк",
+    type: "Тип",
+    updateError: "Не удалось обновить прокси",
+    username: "Имя пользователя",
   },
   proxyListManager: {
     activeCount: "Активных: {count}",

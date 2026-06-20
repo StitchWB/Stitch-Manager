@@ -75,6 +75,7 @@ export interface RegistrationJob {
   createdAt: string;
   completedAt?: string;
   account?: Account;
+  resultPayload?: { data?: unknown; ok?: boolean; message?: string | null; error?: { message?: string } | null } | null;
 }
 
 export interface OpenAIAutoregConfig {

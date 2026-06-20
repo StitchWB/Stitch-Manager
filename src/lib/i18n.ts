@@ -333,6 +333,8 @@ export interface Translations {
       updated: string;
     }
     showArchived: string;
+    archiveFailed: string;
+    archiveSuccess: string;
     state: string;
     statusHeader: string;
     successRate: string;
@@ -347,6 +349,7 @@ export interface Translations {
     tokenCopied: string;
     tokenCopiedAutoClear: string;
     tokenCopyFailed: string;
+    tokenRefreshed: string;
     tokenOptional: string;
     tokenOptionalHint: string;
     totalSpent: string;
@@ -654,6 +657,7 @@ export interface Translations {
     controller: {
       confirm: {
         deleteAccount: string;
+        bulkDelete: string;
         importAllFromScan: string;
         importPayload: string;
         prepareFromScan: string;
@@ -661,6 +665,7 @@ export interface Translations {
       errors: {
         connectionTestFailed: string;
         deleteAccountFailed: string;
+        bulkDeleteFailed: string;
         downloadFailed: string;
         exportFailed: string;
         importFailed: string;
@@ -691,6 +696,8 @@ export interface Translations {
         migrationCompleted: string;
         migrationRunning: string;
         preparedImportFromScan: string;
+        bulkDeleted: string;
+        exportNotImplemented: string;
       }
     }
     copy: {
@@ -1274,6 +1281,7 @@ export interface Translations {
     modelsCount: string;
     ms: string;
     newChat: string;
+    newChatDefault: string;
     noModels: string;
     placeholder: string;
     profileLabel: string;
@@ -1341,6 +1349,7 @@ export interface Translations {
     cvv: string;
     delete: string;
     deleting: string;
+    archive: string;
     dismiss: string;
     dot: string;
     edit: string;
@@ -2098,6 +2107,10 @@ export interface Translations {
     testingDraft: string;
     testingEntry: string;
     title: string;
+    totalLinesStat: string;
+    type: string;
+    updateError: string;
+    username: string;
   }
   proxyListManager: {
     activeCount: string;

@@ -6,8 +6,6 @@
 import {
   startWindsurfAutoregJob,
   startPythonAutoregJob,
-  getPythonAutoregJobStatus,
-  cancelPythonJob,
   startTraeAutoregJob,
   startGithubAutoregJob,
   startOpenAIAutoregJob,
@@ -20,6 +18,7 @@ import {
   stopRegistration,
   registrationControl,
   setAccountProxy,
+  getRegistrationJob,
 } from '../../../lib/tauri';
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
@@ -963,55 +962,56 @@ async function waitForJobResult<T extends { success: boolean; error?: string | n
   try {
     while (Date.now() < deadline) {
       if (onCancelled()) {
-        await cancelPythonJob(jobId).catch(() => undefined);
+        await stopRegistration({ jobId }).catch(() => undefined);
         throw new Error('Registration cancelled by user');
       }
 
-      const status = await getPythonAutoregJobStatus(jobId);
-      if (!status) {
-        throw new Error('Python job status not found');
-      }
+      // Use the registration job store (RegistrationService._jobs), not
+      // the Python subprocess job store (PythonJobManager) — autoreg jobs
+      // run in-process and are only tracked in RegistrationService.
+      const job = await getRegistrationJob({ jobId });
+      const jobStatus: string = job?.status ?? 'unknown';
 
-      if (status.state === 'queued' || status.state === 'running') {
+      if (jobStatus === 'running' || jobStatus === 'unknown') {
         await delay(800);
         continue;
       }
 
-      if (status.state === 'cancelled') {
+      if (jobStatus === 'cancelled') {
         throw new Error('Registration cancelled by user');
       }
 
-      if (status.state === 'timedout') {
-        throw new Error(`Registration timed out after ${timeoutMs / 60000} minutes`);
-      }
+      // Job is completed or failed — extract result
+      const payload = (job as unknown as Record<string, unknown> | undefined)
+        ?.resultPayload as JobPayload<T> | undefined;
 
-      const payload = (status.resultPayload as JobPayload<T> | undefined) ?? undefined;
       if (payload?.data) {
         return payload.data;
       }
 
-      if (status.state === 'succeeded') {
-        onLog('warn', 'Python job finished without structured result payload');
+      if (jobStatus === 'completed') {
+        onLog('warn', 'Job finished without structured result payload');
         return {
           ...fallbackResult,
           success: false,
-          error: 'Missing structured result payload from python job',
+          error: 'Missing structured result payload from registration job',
         };
       }
 
+      // failed / other terminal state
       return {
         ...fallbackResult,
         success: false,
         error:
-          status.error ||
+          job?.error ||
           payload?.error?.message ||
           payload?.message ||
           fallbackResult.error ||
-          'Python job failed',
+          'Registration job failed',
       };
     }
 
-    await cancelPythonJob(jobId).catch(() => undefined);
+    await stopRegistration({ jobId }).catch(() => undefined);
     throw new Error(`Registration timed out after ${timeoutMs / 60000} minutes`);
   } finally {
     if (activePythonJobId === jobId) {

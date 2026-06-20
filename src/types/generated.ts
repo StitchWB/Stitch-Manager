@@ -82,7 +82,7 @@ export type ProxyStatus = { running: boolean; port: number; uptimeSeconds: numbe
 
 export type KiroEndpointStrategy = "auto" | "runtime" | "codeWhisperer"
 
-export type ProxySettings = { appMode: string; proxyPort: number; autoStart: boolean; routingStrategy: string; managementKey: string; kiroEndpointStrategy?: KiroEndpointStrategy; kiroFallbackOnError?: boolean }
+export type ProxySettings = { appMode: string; proxyPort: number; autoStart: boolean; routingStrategy: string; managementKey: string; kiroEndpointStrategy?: KiroEndpointStrategy; kiroFallbackOnError?: boolean; freemodelApiKey?: string }
 
 export type Provider = "kiro" | "kiro_v2" | "windsurf" | "trae" | "copilot" | "openai" | "claude" | "anthropic" | "gemini" | "antigravity" | "fireworks" | "qoder" | "aws" | "aws_builder_id" | "github" | "bitbucket"
 
