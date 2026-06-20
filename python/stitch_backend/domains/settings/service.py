@@ -42,7 +42,7 @@ _BOOL_KEYS = {
 _FLOAT_KEYS = {"uiScale", "speedMultiplier"}
 _JSON_KEYS = {"customIdePaths"}
 
-PASSWORD_MASK = "••••••••"
+PASSWORD_MASK = "********"
 _PASSWORD_KEYS = {"imapPassword", "proxyPassword", "addyioApiToken", "gmailAppPassword"}
 
 
@@ -119,12 +119,14 @@ class SettingsService:
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class GetSettingsRequest(BaseModel):
-    pass  # No params
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 
 class UpdateSettingsRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     settings: dict[str, Any]

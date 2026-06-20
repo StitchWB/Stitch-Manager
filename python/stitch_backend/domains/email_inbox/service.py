@@ -310,7 +310,7 @@ def _sync_state_to_dict(row: EmailInboxSyncState) -> dict[str, Any]:
 async def _resolve_imap_password(host: str) -> str:
     """Resolve sentinel password from settings table."""
     from stitch_backend.database import run_in_session
-    setting_key = "gmail_app_password" if "gmail" in host.lower() else "imap_password"
+    setting_key = "gmailAppPassword" if "gmail" in host.lower() else "imapPassword"
 
     async def _fetch(db: AsyncSession) -> str:
         result = await db.execute(

@@ -32,37 +32,41 @@ logger = logging.getLogger(__name__)
 # ── Provider factory ────────────────────────────────────────────────────────
 
 def _build_imap_config(config: dict) -> dict | None:
-    """Extract IMAP config from frontend config dict."""
-    server = config.get("imap_server")
-    user = config.get("imap_user")
-    password = config.get("imap_password")
+    """Extract IMAP config from frontend config dict.
+
+    Accepts both camelCase (from frontend JSON) and snake_case keys.
+    """
+    server = config.get("imap_server") or config.get("imapServer")
+    user = config.get("imap_user") or config.get("imapUser")
+    password = config.get("imap_password") or config.get("imapPassword")
     if server and user and password:
+        port_raw = config.get("imap_port") or config.get("imapPort") or 993
         return {
             "host": server,
             "user": user,
             "password": password,
-            "port": int(config.get("imap_port", 993)),
+            "port": int(port_raw),
         }
     return None
 
 
 def _build_addyio_config(config: dict):
     """Extract AddyIO config from frontend config dict."""
-    if not config.get("addyio_enabled"):
+    if not (config.get("addyio_enabled") or config.get("addyioEnabled")):
         return None
     from autoreg.services.addyio import AddyIoConfig
     return AddyIoConfig(
-        api_token=config.get("addyio_api_token", ""),
-        domain=config.get("addyio_domain", ""),
-        alias_format=config.get("addyio_alias_format", "uuid"),
-        auto_delete=bool(config.get("addyio_auto_delete")),
+        api_token=config.get("addyio_api_token") or config.get("addyioApiToken") or "",
+        domain=config.get("addyio_domain") or config.get("addyioDomain") or "",
+        alias_format=config.get("addyio_alias_format") or config.get("addyioAliasFormat") or "uuid",
+        auto_delete=bool(config.get("addyio_auto_delete") or config.get("addyioAutoDelete")),
     )
 
 
 def _build_mailtm_config(config: dict) -> dict | None:
     """Extract MailTM inbox config from frontend config dict."""
-    address = config.get("inbox_mailtm_address", "").strip()
-    password = config.get("inbox_mailtm_password", "").strip()
+    address = (config.get("inbox_mailtm_address") or config.get("inboxMailtmAddress") or "").strip()
+    password = (config.get("inbox_mailtm_password") or config.get("inboxMailtmPassword") or "").strip()
     if not address or not password:
         return None
     return {
@@ -74,29 +78,27 @@ def _build_mailtm_config(config: dict) -> dict | None:
 
 def _build_33mail_config(config: dict) -> dict | None:
     """Extract 33mail config from frontend config dict."""
-    if not config.get("thirty_three_mail_enabled"):
+    if not (config.get("thirty_three_mail_enabled") or config.get("thirtyThreeMailEnabled")):
         return None
-    username = config.get("thirty_three_mail_username", "").strip()
+    username = (config.get("thirty_three_mail_username") or config.get("thirtyThreeMailUsername") or "").strip()
     if not username:
         return None
     return {
         "username": username,
-        "domain": config.get("thirty_three_mail_domain", "33mail.com"),
+        "domain": config.get("thirty_three_mail_domain") or config.get("thirtyThreeMailDomain") or "33mail.com",
     }
 
 
 def _build_provider_kwargs(config: dict) -> dict[str, Any]:
     """Build common provider kwargs from frontend config dict.
 
-    This replaces the env-var serialization that the Rust backend required.
-    The frontend already sends these as a flat config dict — we pass them
-    directly as Python kwargs.
+    Accepts both camelCase (from frontend JSON) and snake_case keys.
     """
     kwargs: dict[str, Any] = {
         "headless": config.get("headless", True),
         "imap_config": _build_imap_config(config),
-        "email_strategy": config.get("email_strategy", "mailtm"),
-        "base_email": config.get("base_email") or None,
+        "email_strategy": config.get("email_strategy") or config.get("emailStrategy") or "mailtm",
+        "base_email": config.get("base_email") or config.get("baseEmail") or None,
         "addyio_config": _build_addyio_config(config),
         "thirty_three_mail_config": _build_33mail_config(config),
         "mailtm_inbox_config": _build_mailtm_config(config),
@@ -197,9 +199,8 @@ _BRIDGE_LOGGER_NAMES = ("autoreg",)
 def _install_log_bridge(callback: "callable[[str], None]") -> list[_LogBridgeHandler]:
     """Attach ``_LogBridgeHandler`` to all autoreg/pipeline loggers.
 
-    Also sets the logger level to ``DEBUG`` so that ``logger.info()``
-    calls reach our handler (default level is ``WARNING`` which drops
-    info/debug records before any handler sees them).
+    Disables propagation for the duration to prevent duplicate log delivery
+    to the root handler (which would show every message twice).
     """
     handlers: list[_LogBridgeHandler] = []
     for name in _BRIDGE_LOGGER_NAMES:
@@ -208,20 +209,24 @@ def _install_log_bridge(callback: "callable[[str], None]") -> list[_LogBridgeHan
         handler.setFormatter(logging.Formatter("%(message)s"))
         lg.addHandler(handler)
         # Ensure the logger level allows info/debug records through.
-        # NOTSET (0) inherits from root which is typically WARNING (30),
-        # so we must explicitly set it even when level == NOTSET.
         if lg.level == logging.NOTSET or lg.level > logging.DEBUG:
             lg.setLevel(logging.DEBUG)
+        # Disable propagation so records don't ALSO go to the root logger.
+        # _remove_log_bridge will restore it.
+        lg.propagate = False
         handlers.append(handler)
     return handlers
 
 
 def _remove_log_bridge(handlers: list[_LogBridgeHandler]) -> None:
-    """Detach bridge handlers from their loggers."""
+    """Detach bridge handlers from their loggers and restore propagation."""
     for handler in handlers:
         for name in _BRIDGE_LOGGER_NAMES:
             try:
-                logging.getLogger(name).removeHandler(handler)
+                lg = logging.getLogger(name)
+                lg.removeHandler(handler)
+                # Restore propagation so normal logging works outside of jobs
+                lg.propagate = True
             except Exception:
                 pass
         handler.close()
@@ -416,6 +421,9 @@ class RegistrationService:
             "failed": "failed",
             "cancelled": "cancelled",
         }
+        # Wrap the raw result dict in {data: ...} so waitForJobResult can read it
+        raw_result = job.get("result")
+        result_payload = {"data": raw_result} if raw_result else None
         return {
             "id": job.get("id", ""),
             "provider": job.get("provider", ""),
@@ -426,6 +434,7 @@ class RegistrationService:
             "error": job.get("error"),
             "createdAt": job.get("created_at"),
             "completedAt": job.get("completed_at"),
+            "resultPayload": result_payload,
         }
 
     # ── Internal ──────────────────────────────────────────────────────────

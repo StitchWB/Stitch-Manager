@@ -326,6 +326,8 @@ export const en: Translations = {
       updated: "Updated"
     },
     showArchived: "Show archived",
+    archiveFailed: "Failed to archive account",
+    archiveSuccess: "Account archived",
     state: "State",
     statusHeader: "Status",
     successRate: "Success Rate",
@@ -340,6 +342,7 @@ export const en: Translations = {
     tokenCopied: "Token copied to clipboard",
     tokenCopiedAutoClear: "Token copied (will be cleared in 15 seconds)",
     tokenCopyFailed: "Failed to copy token",
+    tokenRefreshed: "Token refreshed",
     tokenOptional: "optional, for manual add",
     tokenOptionalHint: "If provided, the token will be used directly.",
     totalSpent: "Total Spent",
@@ -646,6 +649,7 @@ export const en: Translations = {
     },
     controller: {
       confirm: {
+        bulkDelete: "Delete selected AI Hub accounts?",
         deleteAccount: "Are you sure you want to delete this account?",
         importAllFromScan: "Import {count} scanned credential(s)? Duplicates are skipped.",
         importPayload: "Import accounts from payload? This may create duplicates. Continue?",
@@ -654,6 +658,7 @@ export const en: Translations = {
       errors: {
         connectionTestFailed: "Connection test failed: {msg}",
         deleteAccountFailed: "Failed to delete account: {msg}",
+        bulkDeleteFailed: "Failed to delete accounts: {msg}",
         downloadFailed: "Failed to download",
         exportFailed: "Export failed: {msg}",
         importFailed: "Import failed: {msg}",
@@ -683,7 +688,9 @@ export const en: Translations = {
         mappingsSaved: "Provider model mappings saved",
         migrationCompleted: "Migration completed! Check console for details.",
         migrationRunning: "Running migration...",
-        preparedImportFromScan: "Prepared import JSON from scan (review then import)"
+        preparedImportFromScan: "Prepared import JSON from scan (review then import)",
+        bulkDeleted: "AI Hub accounts deleted",
+        exportNotImplemented: "Export is not yet supported for this provider"
       }
     },
     copy: {
@@ -1267,6 +1274,7 @@ export const en: Translations = {
     modelsCount: "Models Count",
     ms: "Ms",
     newChat: "New Chat",
+    newChatDefault: "New Chat",
     noModels: "No Models",
     placeholder: "Message...",
     profileLabel: "Profile Label",
@@ -1334,6 +1342,7 @@ export const en: Translations = {
     cvv: "CVV",
     delete: "Delete",
     deleting: "Deleting",
+    archive: "Archive",
     dismiss: "Dismiss",
     dot: "Dot",
     edit: "Edit",
@@ -2091,6 +2100,10 @@ export const en: Translations = {
     testingDraft: "Testing…",
     testingEntry: "Testing…",
     title: "Proxy Library",
+    totalLinesStat: "Total lines",
+    type: "Type",
+    updateError: "Failed to update proxy",
+    username: "Username",
   },
   proxyListManager: {
     activeCount: "Active: {count}",
