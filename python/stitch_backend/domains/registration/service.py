@@ -31,16 +31,61 @@ logger = logging.getLogger(__name__)
 
 # ── Provider factory ────────────────────────────────────────────────────────
 
+def _resolve_imap_password_from_db(host: str) -> str:
+    """Synchronously resolve the real IMAP/Gmail password from the settings DB."""
+    import sqlite3 as _sqlite3
+    from stitch_backend.config import _app_data_dir, PYTHON_DIR, REPO_ROOT
+    # Mirror the same DB-path logic as _default_db_url()
+    canonical = _app_data_dir() / "stitch-manager"
+    if canonical.is_dir():
+        db_path = canonical / "stitch.db"
+    else:
+        db_path = REPO_ROOT / "stitch.db"
+        # Also try python/stitch.db (dev layout)
+        if not db_path.exists():
+            db_path = PYTHON_DIR / "stitch.db"
+    key = "gmailAppPassword" if "gmail" in host.lower() else "imapPassword"
+    try:
+        con = _sqlite3.connect(str(db_path), timeout=5)
+        row = con.execute(
+            "SELECT value FROM settings WHERE key = ?", (key,)
+        ).fetchone()
+        con.close()
+        return row[0] if row and row[0] else ""
+    except Exception as exc:
+        logger.warning("_resolve_imap_password_from_db failed: %s", exc)
+        return ""
+
+
 def _build_imap_config(config: dict) -> dict | None:
     """Extract IMAP config from frontend config dict.
 
     Accepts both camelCase (from frontend JSON) and snake_case keys.
+    When the password is the sentinel '********' (masked by settings API),
+    resolves the real password from the settings DB synchronously.
     """
     server = config.get("imap_server") or config.get("imapServer")
     user = config.get("imap_user") or config.get("imapUser")
     password = config.get("imap_password") or config.get("imapPassword")
     if server and user and password:
         port_raw = config.get("imap_port") or config.get("imapPort") or 993
+        # Resolve sentinel — frontend sends '********' when the password is
+        # stored in the DB (to avoid echoing it to the UI).
+        if password in ("********", "••••••••", ""):
+            real_pwd = _resolve_imap_password_from_db(str(server))
+            if real_pwd:
+                logger.debug("_build_imap_config: resolved DB password for %s", server)
+                password = real_pwd
+            else:
+                logger.warning(
+                    "_build_imap_config: sentinel received but no password in DB for %s",
+                    server,
+                )
+                return None  # Don't build a broken imap_config
+        logger.debug(
+            "_build_imap_config: server=%s user=%s password_len=%d",
+            server, user, len(password),
+        )
         return {
             "host": server,
             "user": user,
