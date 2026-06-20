@@ -199,12 +199,21 @@ _BRIDGE_LOGGER_NAMES = ("autoreg",)
 def _install_log_bridge(callback: "callable[[str], None]") -> list[_LogBridgeHandler]:
     """Attach ``_LogBridgeHandler`` to all autoreg/pipeline loggers.
 
-    Disables propagation for the duration to prevent duplicate log delivery
-    to the root handler (which would show every message twice).
+    Idempotent: any previously-attached bridge handlers are removed first so
+    that concurrent/overlapping jobs in the same backend process can NEVER
+    accumulate multiple handlers (which would deliver each log N times).
     """
     handlers: list[_LogBridgeHandler] = []
     for name in _BRIDGE_LOGGER_NAMES:
         lg = logging.getLogger(name)
+        # Purge any stale bridge handlers left over from a previous job.
+        for h in list(lg.handlers):
+            if isinstance(h, _LogBridgeHandler):
+                lg.removeHandler(h)
+                try:
+                    h.close()
+                except Exception:
+                    pass
         handler = _LogBridgeHandler(callback)
         handler.setFormatter(logging.Formatter("%(message)s"))
         lg.addHandler(handler)
@@ -212,7 +221,6 @@ def _install_log_bridge(callback: "callable[[str], None]") -> list[_LogBridgeHan
         if lg.level == logging.NOTSET or lg.level > logging.DEBUG:
             lg.setLevel(logging.DEBUG)
         # Disable propagation so records don't ALSO go to the root logger.
-        # _remove_log_bridge will restore it.
         lg.propagate = False
         handlers.append(handler)
     return handlers
