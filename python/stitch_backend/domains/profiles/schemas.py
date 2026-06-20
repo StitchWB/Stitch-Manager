@@ -133,46 +133,64 @@ class ProfileSettingsRecord(BaseModel):
 # ── Request DTOs ──────────────────────────────────────────────────────────────
 
 class GenerateProfileRequest(BaseModel):
-    pass
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 
 class GetOrCreateProfileRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     email: str | None = None
 
 
 class LoadProfileRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     email: str
 
 
 class SaveProfileRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     email: str
     profile: BrowserFingerprintProfile
 
 
 class DeleteProfileRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     email: str
 
 
 class RenameProfileRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     current_alias: str = Field(alias="current_alias")
     next_alias: str = Field(alias="next_alias")
 
 
 class ExportBundleRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     alias: str
     destination_path: str = Field(alias="destination_path")
 
 
 class ImportBundleRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     source_path: str = Field(alias="source_path")
     target_alias: str | None = Field(None, alias="target_alias")
     overwrite: bool = False
 
 
 class GetProfileSettingsRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     alias: str
 
 
 class SaveProfileSettingsRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     alias: str
     settings: ProfileSettingsV1

@@ -246,4 +246,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # Normal Ctrl+C — pywebview/pythonnet may raise this on exit.
+        # Suppress the traceback; the process exits cleanly.
+        pass

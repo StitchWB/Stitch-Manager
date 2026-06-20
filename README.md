@@ -16,8 +16,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/github/v/release/WhiteBite/Stitch-Account-Manager?style=flat-square&color=6366f1" alt="Release">
-  <img src="https://img.shields.io/badge/Tauri-2.x-blue?style=flat-square&logo=tauri" alt="Tauri 2.x">
-  <img src="https://img.shields.io/badge/Rust-Backend-orange?style=flat-square&logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square&logo=fastapi" alt="Python FastAPI">
+  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react" alt="React 18">
   <img src="https://img.shields.io/github/license/WhiteBite/Stitch-Account-Manager?style=flat-square&color=green" alt="License">
 </p>
@@ -226,9 +226,8 @@ npm run build
 
 **Requirements:**
 
-- Node.js 18+
-- Rust (for Tauri)
-- Python 3.11+ (for auto-registration)
+- Node.js 18+ (for the frontend build)
+- Python 3.11+ (backend + auto-registration)
 
 ---
 
@@ -236,7 +235,7 @@ npm run build
 
 ```
 Frontend:  React 18 • TypeScript • TailwindCSS • Zustand
-Backend:   Tauri 2.x • Rust • SQLite • SQLx
+Backend:   Python • FastAPI • SQLite • SQLAlchemy
 Automation: Python • DrissionPage • IMAPClient
 ```
 
@@ -395,9 +394,8 @@ npm run build
 
 **Требования:**
 
-- Node.js 18+
-- Rust (для Tauri)
-- Python 3.11+ (для авто-регистрации)
+- Node.js 18+ (для сборки фронтенда)
+- Python 3.11+ (бэкенд + авто-регистрация)
 
 ---
 
@@ -405,7 +403,7 @@ npm run build
 
 ```
 Frontend:  React 18 • TypeScript • TailwindCSS • Zustand
-Backend:   Tauri 2.x • Rust • SQLite • SQLx
+Backend:   Python • FastAPI • SQLite • SQLAlchemy
 Автоматизация: Python • DrissionPage • IMAPClient
 ```
 
