@@ -225,6 +225,10 @@ def _build_provider(provider_name: str, config: dict):
 class _LogBridgeHandler(logging.Handler):
     """Forward Python logging records to a ``Callable[[str], None]`` callback."""
 
+    # Stable marker so we can recognise bridge handlers even across module
+    # hot-reloads (where isinstance() fails because the class object differs).
+    _is_stitch_log_bridge = True
+
     def __init__(self, callback: "callable[[str], None]") -> None:
         super().__init__(level=logging.DEBUG)
         self._callback = callback
@@ -252,8 +256,11 @@ def _install_log_bridge(callback: "callable[[str], None]") -> list[_LogBridgeHan
     for name in _BRIDGE_LOGGER_NAMES:
         lg = logging.getLogger(name)
         # Purge any stale bridge handlers left over from a previous job.
+        # Match by marker attribute (not isinstance) so handlers from a
+        # hot-reloaded module are also removed — otherwise they accumulate
+        # and every log line is delivered N times.
         for h in list(lg.handlers):
-            if isinstance(h, _LogBridgeHandler):
+            if getattr(h, "_is_stitch_log_bridge", False):
                 lg.removeHandler(h)
                 try:
                     h.close()
