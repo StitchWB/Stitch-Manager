@@ -134,11 +134,22 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // Log actions
   addLog: (log: Omit<RegistrationLog, 'id' | 'timestamp'>) => {
     const state = get();
-    const lastLog = state.logs[state.logs.length - 1];
+    const now = Date.now();
 
-    // Deduplicate identical messages sent consecutively
-    if (lastLog && lastLog.message === log.message) {
-      return;
+    // Deduplicate identical messages within a short window. The previous
+    // implementation only checked the immediately-preceding log, which missed
+    // INTERLEAVED duplicates (e.g. the same line arriving from 2-3 sources
+    // out of order). Scan the tail of the buffer within a 2s window instead.
+    const DEDUP_WINDOW_MS = 2000;
+    const DEDUP_SCAN = 12; // only inspect the most recent entries
+    const tail = state.logs.slice(-DEDUP_SCAN);
+    for (let i = tail.length - 1; i >= 0; i--) {
+      const prev = tail[i];
+      if (prev.message !== log.message || prev.level !== log.level) continue;
+      const dt = now - new Date(prev.timestamp).getTime();
+      if (dt <= DEDUP_WINDOW_MS) {
+        return; // duplicate within window — drop
+      }
     }
 
     const newLog = {
