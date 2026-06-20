@@ -235,10 +235,11 @@ def get_verification_code_from_imap(
     max_retries: int = 3,
     logger=None,
     url_pattern: Optional[str] = None,
+    code_pattern: Optional[str] = None,
 ) -> Optional[str]:
     r"""
     Universal function to retrieve verification code from IMAP with retry logic.
-    
+
     Args:
         imap_config: IMAP configuration dict with host, port, user, password
         sender_keywords: List of keywords to match in FROM header (e.g., ['windsurf', 'codeium'])
@@ -249,10 +250,14 @@ def get_verification_code_from_imap(
         target_email: Optional email address to validate against (for catch-all/forwarding services)
         session_id: Optional session ID for log traceability in parallel registrations
         max_retries: Maximum number of retries on email mismatch (default: 3)
-    
+        code_pattern: Optional explicit regex (with one capture group) applied to the
+            email BODY with priority over all built-in heuristics. Use this when the
+            provider knows its exact code format and the generic heuristics would
+            misfire (e.g. Qoder's subject "Verify your Email" matches [A-Za-z0-9]{6}).
+
     Returns:
         6-digit verification code or None if not found
-    
+
     Example:
         # For Windsurf with email validation
         code = get_verification_code_from_imap(
@@ -262,16 +267,16 @@ def get_verification_code_from_imap(
             target_email='kiro-um8twn0n@whitebite.33mail.com',
             session_id='reg_a1b2c3d4'
         )
-        
-        # For AWS/Kiro
+
+        # For Qoder (explicit body pattern, avoids matching "Verify" in subject)
         code = get_verification_code_from_imap(
             imap_config={...},
-            sender_keywords=['aws', 'amazon', 'signin'],
-            target_email='user@example.com',
-            session_id='reg_x9y8z7w6'
+            sender_keywords=['qoder'],
+            target_email='alias@whitebite.ru',
+            code_pattern=r'(?<![#;:\w])(\d{6})(?![\w])',
         )
     """
-    
+
     def log(message: str):
         """Helper to log messages with session ID"""
         prefix = f"[{session_id}]" if session_id else ""
@@ -300,6 +305,7 @@ def get_verification_code_from_imap(
             session_id=session_id,
             logger=logger,
             url_pattern=url_pattern,
+            code_pattern=code_pattern,
         )
 
         if result.get("code"):
@@ -325,6 +331,7 @@ def _get_verification_code_internal(
     session_id: Optional[str],
     logger=None,
     url_pattern: Optional[str] = None,
+    code_pattern: Optional[str] = None,
 ) -> dict:
     """
     Internal function to retrieve verification code from IMAP (single attempt).
@@ -513,6 +520,20 @@ def _get_verification_code_internal(
                             log(f'[Email] Target email {target_email} not found in headers or body. Skipping this email to avoid mismatch.')
                             log(f'[Email/Debug] Checked: To={to_addr!r}, Delivered-To={delivered_to!r}, X-Forwarded-To={x_forwarded_to!r}, X-Original-To={x_original_to!r}, Resent-To={resent_to!r}, Envelope-To={envelope_to!r}, Received={len(received_headers)} header(s), Body snippet={body[:120]!r}')
                             continue
+
+                    # Provider-supplied explicit code pattern takes HIGHEST
+                    # priority and is applied ONLY to the body. This lets a
+                    # provider that knows its exact code format bypass the
+                    # generic heuristics below (which e.g. match "Verify" in
+                    # the subject "Verify your Email with Qoder").
+                    if code_pattern:
+                        cp_matches = re.findall(code_pattern, body)
+                        if cp_matches:
+                            mail.logout()
+                            log(f"[Email] Found code via provider code_pattern: {cp_matches[0]} (email date: {date_str})")
+                            return {"code": cp_matches[0], "error": None}
+                        else:
+                            log(f"[Email] Provider code_pattern did not match body (len={len(body)}). Snippet: {body[:200]!r}")
 
                     # Try to extract URL first (if url_pattern provided, e.g. for Fireworks confirm URL)
                     if url_pattern:

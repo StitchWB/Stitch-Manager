@@ -38,18 +38,21 @@ class ImapVerifier(IEmailVerifier):
         sender_keywords: list,
         max_wait: int = 120,
         session_id: Optional[str] = None,
+        code_pattern: Optional[str] = None,
     ) -> Optional[str]:
         """
-        Get 6-digit verification code from IMAP inbox.
+        Get verification code from IMAP inbox.
 
         Args:
             target_email: Email address to filter by
             sender_keywords: Keywords to match in sender (e.g., ['github', 'noreply'])
             max_wait: Maximum seconds to wait for code
             session_id: Optional session ID for logging
+            code_pattern: Optional explicit regex applied to email body with
+                priority over the built-in heuristics.
 
         Returns:
-            Verification code (6 digits) or None if not found
+            Verification code (6 chars) or None if not found
         """
         session_prefix = f"[{session_id}] " if session_id else ""
         logger.info(f"{session_prefix}Waiting for verification code for {target_email}")
@@ -60,6 +63,7 @@ class ImapVerifier(IEmailVerifier):
             target_email=target_email,
             max_wait=max_wait,
             session_id=session_id,
+            code_pattern=code_pattern,
             log_callback=lambda msg: logger.info(msg),
         )
 
