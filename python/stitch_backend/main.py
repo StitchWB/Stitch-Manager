@@ -104,7 +104,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     from stitch_backend.core.command_registry import list_commands, scan_providers
     commands = list_commands()
-    logger.info("Registered %d command(s): %s", len(commands), commands)
+    logger.info("Registered %d command(s)", len(commands))
+    logger.debug("Registered commands: %s", commands)
 
     # Auto-discover provider plugins
     providers = scan_providers()

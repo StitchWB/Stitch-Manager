@@ -112,12 +112,18 @@ class AccountResponse(BaseModel):
             else:
                 processed[key] = val
 
+        # Legacy DBs store ``id`` as INTEGER — coerce to str for the API.
+        if processed.get("id") is not None:
+            processed["id"] = str(processed["id"])
+
         return processed
 
 
 # ── Request DTOs ──────────────────────────────────────────────────────────────
 
 class ListAccountsRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     provider: str | None = None
     provider_type: str | None = Field(None, alias="providerType")
     provider_subtype: str | None = Field(None, alias="providerSubtype")
@@ -125,6 +131,8 @@ class ListAccountsRequest(BaseModel):
 
 
 class AddAccountRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     provider: str
     email: str
     password: str | None = None
@@ -137,10 +145,14 @@ class AddAccountRequest(BaseModel):
 
 
 class DeleteAccountRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     id: str | int
 
 
 class UpdateAccountTokenRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     id: str | int
     token: str
     refresh_token: str | None = Field(None, alias="refreshToken")
@@ -148,38 +160,53 @@ class UpdateAccountTokenRequest(BaseModel):
 
 
 class UpdateAccountNotesTagsRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     id: str | int
     notes: str | None = None
     tags: str | None = None
 
 
 class UpdateAccountMetadataRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     account_id: int | str = Field(alias="accountId")
-    metadata: str | None = None
 
 
 class SetAccountProxyRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     account_id: int | str = Field(alias="accountId")
     proxy_id: str | None = Field(None, alias="proxyId")
 
 
 class RefreshAccountRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     account_id: int | str = Field(alias="accountId")
 
 
 class GetAccountQuotaRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     account_id: int | str = Field(alias="accountId")
 
 
 class ArchiveAccountRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     id: str | int
     archived: bool = True
 
 
 class BulkDeleteRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     ids: list[str | int]
 
 
 class BulkExportRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     provider: str | None = None
     ids: list[str | int] | None = None

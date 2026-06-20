@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── Provider types ────────────────────────────────────────────────────────────
@@ -27,6 +27,8 @@ class MailTmConnectCredentials(BaseModel):
 
 
 class EmailConnectInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     provider: str  # "imap" | "mail_tm"
     account_id: str = Field(alias="accountId")
     credentials: dict[str, Any]  # { type: "imap"|"mail_tm", value: {...} }
@@ -123,6 +125,8 @@ class EmailInboxProfile(BaseModel):
 
 
 class EmailInboxProfileUpsertInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     id: str | None = None
     label: str | None = None
     connect_input: EmailConnectInput = Field(alias="connectInput")
@@ -140,6 +144,8 @@ class EmailInboxSyncState(BaseModel):
 
 
 class EmailInboxSyncStateUpsertInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     profile_id: str = Field(alias="profileId")
     status: str
     last_sync_at: str | None = Field(None, alias="lastSyncAt")

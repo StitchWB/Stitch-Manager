@@ -164,3 +164,7 @@ export type { TwoColumnLayoutProps } from './TwoColumnLayout';
 
 export { KeyValueList } from './KeyValueList';
 export type { KeyValueListProps, KeyValueRow } from './KeyValueList';
+
+export { Terminal } from './Terminal';
+
+export { StatusFilterChip, QuotaFilterChipDropdown } from './FilterChip';

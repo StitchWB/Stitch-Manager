@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.logging.models import AppLog
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,7 @@ class LoggingService:
         self._db.add(entry)
         await self._db.flush()
 
-        return {
+        result = {
             "id": log_id,
             "timestamp": now,
             "level": level,
@@ -128,6 +129,11 @@ class LoggingService:
             "sessionId": session_id,
             "context": context,
         }
+
+        # Broadcast to frontend via WebSocket
+        event_bus.emit_sync("logs.new", result)
+
+        return result
 
     # ── Query ────────────────────────────────────────────────────────────
 
@@ -184,7 +190,9 @@ class LoggingService:
             stmt = delete(AppLog)
         result = await self._db.execute(stmt)
         await self._db.flush()
-        return result.rowcount
+        deleted = result.rowcount
+        event_bus.emit_sync("logs.cleared", {"count": deleted})
+        return deleted
 
     # ── Export ────────────────────────────────────────────────────────────
 
