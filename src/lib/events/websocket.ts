@@ -138,7 +138,15 @@ function handleMessage(raw: string): void {
 
 function connect(): void {
   if (disposed) return;
-  if (ws?.readyState === WebSocket.OPEN) return;
+  // Short-circuit if a socket is already OPEN *or* still CONNECTING.
+  // Without the CONNECTING guard, every listen() call during startup
+  // (App.tsx subscribeToLogs + useEventListeners, etc.) spawns ANOTHER
+  // socket before the first reaches OPEN. Each extra socket registers as a
+  // separate WS client on the backend, so every event is delivered N times
+  // (the classic "logs appear 3x" bug).
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
 
   try {
     ws = new WebSocket(WS_URL);
@@ -205,10 +213,9 @@ export async function listen<T = unknown>(
   }
   set.add(handler as EventHandler);
 
-  // Ensure connection is alive when a listener is added
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    connect();
-  }
+  // Ensure connection is alive when a listener is added. connect() itself
+  // guards against OPEN/CONNECTING, so this won't spawn duplicate sockets.
+  connect();
 
   return () => {
     set.delete(handler as EventHandler);
