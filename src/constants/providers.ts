@@ -127,6 +127,16 @@ export const PROVIDERS: ProviderConfig[] = [
     category: 'git',
   },
   {
+    id: 'v0_app',
+    name: 'v0',
+    icon: 'v0',
+    color: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+    gradient: 'from-slate-500/20 to-zinc-500/20 text-slate-300',
+    hexColor: '#94a3b8',
+    disabled: false,
+    category: 'ide',
+  },
+  {
     id: 'claude',
     name: 'Claude',
     icon: 'C',

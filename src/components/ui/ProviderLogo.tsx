@@ -49,6 +49,7 @@ const fallbackIcons = {
   github: Github,
   fireworks: Flame,
   qoder: Code2,
+  v0_app: Code2,
 };
 
 export function ProviderLogo({ provider, size = 20, className, colored = false }: ProviderLogoProps) {

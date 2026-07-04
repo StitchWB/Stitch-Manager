@@ -23,7 +23,8 @@ export type ProviderRegistryId =
   | 'gemini'
   | 'antigravity'
   | 'fireworks'
-  | 'qoder';
+  | 'qoder'
+  | 'v0_app';
 
 export type ProviderRegistryEntry = {
   id: ProviderRegistryId;
@@ -165,6 +166,16 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
     },
     accounts: { matchProviders: ['qoder'] },
   },
+  v0_app: {
+    id: 'v0_app',
+    label: 'v0',
+    badge: {
+      bg: 'bg-slate-500/10',
+      text: 'text-slate-300',
+      border: 'border-slate-500/20',
+    },
+    accounts: { matchProviders: ['v0_app'] },
+  },
 };
 
 // =============================
@@ -179,6 +190,7 @@ export const ACCOUNT_PROVIDER_FILTER_IDS = [
   'github',
   'openai',
   'qoder',
+  'v0_app',
 ] as const;
 
 export type AccountProviderFilterId = (typeof ACCOUNT_PROVIDER_FILTER_IDS)[number];
