@@ -41,6 +41,8 @@ export interface AccountsTableProps {
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
   onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
+  onCopyRefUrl?: (refUrl: string) => Promise<void>;
+  onRefreshRefUrl?: (accountId: number) => Promise<void>;
   onUpdate?: (accountId: number, updates: { notes?: string; tags?: string }) => Promise<void>;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
   selectedProvider?: string | null;
@@ -73,6 +75,8 @@ export default function AccountsTable({
   onConfirmProfileSession,
   onClearProfileSession,
   onAuthorizeKiroAccount,
+  onCopyRefUrl,
+  onRefreshRefUrl,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onUpdate: _onUpdate,
   onRelationEdgeClick,
@@ -233,6 +237,9 @@ export default function AccountsTable({
               >
                 {t('accounts.columnQuota')}
               </TableHead>
+              <TableHead className="w-[80px] min-w-[80px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap">
+                Реф
+              </TableHead>
               <TableHead className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-2 text-right text-[10px] text-slate-400 whitespace-nowrap">
                 {t('common.actions')}
               </TableHead>
@@ -274,6 +281,8 @@ export default function AccountsTable({
                 onConfirmProfileSession={onConfirmProfileSession}
                 onClearProfileSession={onClearProfileSession}
                 onAuthorizeKiroAccount={onAuthorizeKiroAccount}
+                onCopyRefUrl={onCopyRefUrl}
+                onRefreshRefUrl={onRefreshRefUrl}
                 onRelationEdgeClick={onRelationEdgeClick}
               />
             ))}

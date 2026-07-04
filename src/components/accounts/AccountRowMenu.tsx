@@ -1,8 +1,9 @@
-import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff, KeyRound } from 'lucide-react';
+import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff, KeyRound, Link, RotateCcw } from 'lucide-react';
 import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import type { Account } from '@/types/generated';
+import { getRefMeta } from './AccountRefCell';
 
 function isAutoRefreshEnabled(account: Account): boolean {
   if (!account.metadata) return false;
@@ -35,6 +36,8 @@ interface AccountRowMenuProps {
   onClearProfileSession?: (accountId: number) => Promise<void>;
   onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
   onCopyToken: (token: string) => Promise<void>;
+  onCopyRefUrl?: (refUrl: string) => Promise<void>;
+  onRefreshRefUrl?: (accountId: number) => Promise<void>;
   onShowDetails: (account: Account) => void;
   onDelete: (accountId: number) => void;
   onCloseMenu: () => void;
@@ -57,11 +60,14 @@ export function AccountRowMenu({
   onClearProfileSession,
   onAuthorizeKiroAccount,
   onCopyToken,
+  onCopyRefUrl,
+  onRefreshRefUrl,
   onShowDetails,
   onDelete,
   onCloseMenu,
 }: AccountRowMenuProps) {
   const autoRefreshEnabled = isAutoRefreshEnabled(account);
+  const refMeta = getRefMeta(account);
   if (!isMenuOpen) return null;
 
   return (
@@ -188,6 +194,35 @@ export function AccountRowMenu({
         >
           <KeyRound size={12} className="text-amber-300" />
           {t('accounts.authorizeInIdeMenu')}
+        </ButtonBase>
+      ) : null}
+
+      {/* Ref-link actions — v0_app only */}
+      {refMeta && onCopyRefUrl && refMeta.refUrl ? (
+        <ButtonBase
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
+          onClick={() => {
+            void onCopyRefUrl(refMeta.refUrl!);
+            onCloseMenu();
+          }}
+        >
+          <Link size={12} className="text-emerald-400" />
+          Копировать реф-ссылку
+        </ButtonBase>
+      ) : null}
+
+      {refMeta && onRefreshRefUrl ? (
+        <ButtonBase
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
+          onClick={() => {
+            void onRefreshRefUrl(account.id);
+            onCloseMenu();
+          }}
+        >
+          <RotateCcw size={12} className="text-sky-400" />
+          {refMeta.refUrl ? 'Обновить реф-ссылку' : 'Получить реф-ссылку'}
         </ButtonBase>
       ) : null}
 

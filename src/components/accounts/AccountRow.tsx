@@ -22,6 +22,7 @@ import { useAccountRowData } from '@/hooks/useAccountRow';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { AccountRowMenu } from './AccountRowMenu';
 import { AccountQuotaCell } from './AccountQuotaCell';
+import { AccountRefCell } from './AccountRefCell';
 import { AccountRowQuickActions } from './AccountRowQuickActions';
 
 interface AccountRowProps {
@@ -48,6 +49,8 @@ interface AccountRowProps {
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
   onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
+  onCopyRefUrl?: (refUrl: string) => Promise<void>;
+  onRefreshRefUrl?: (accountId: number) => Promise<void>;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
 }
 
@@ -75,6 +78,8 @@ export function AccountRow({
   onConfirmProfileSession,
   onClearProfileSession,
   onAuthorizeKiroAccount,
+  onCopyRefUrl,
+  onRefreshRefUrl,
   onRelationEdgeClick,
 }: AccountRowProps) {
   const data = useAccountRowData(account, relationHints, relationEdges);
@@ -262,6 +267,9 @@ export function AccountRow({
         <AccountQuotaCell account={account} onCheckStatus={onCheckStatus} />
       </TableCell>
 
+      {/* Referral quota */}
+      <AccountRefCell account={account} />
+
       {/* Actions */}
       <TableCell
         className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-2 align-middle"
@@ -313,6 +321,8 @@ export function AccountRow({
             onConfirmProfileSession={onConfirmProfileSession}
             onClearProfileSession={onClearProfileSession}
             onAuthorizeKiroAccount={onAuthorizeKiroAccount}
+            onCopyRefUrl={onCopyRefUrl}
+            onRefreshRefUrl={onRefreshRefUrl}
             onCopyToken={onCopyToken}
             onShowDetails={onShowDetails}
             onDelete={onDelete}

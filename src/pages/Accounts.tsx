@@ -433,6 +433,24 @@ export default function Accounts() {
     [handleViewModeChange]
   );
 
+  const handleCopyRefUrl = useCallback(async (refUrl: string) => {
+    try {
+      await navigator.clipboard.writeText(refUrl);
+      toast.success('Реф-ссылка скопирована');
+    } catch {
+      toast.error('Не удалось скопировать ссылку');
+    }
+  }, []);
+
+  const handleRefreshRefUrl = useCallback(async (accountId: number) => {
+    try {
+      // TODO: wire to Tauri command that runs fetch_referral step on existing account
+      toast.info(`Запрос реф-ссылки для аккаунта #${accountId}…`);
+    } catch {
+      toast.error('Не удалось получить реф-ссылку');
+    }
+  }, []);
+
   const handleRelationEdgeClickInAll = useCallback(
     (edgeType: string, targetProvider: string) => {
       handleRelationFilterChange(`edge:${edgeType}:${targetProvider}`);
@@ -580,6 +598,8 @@ export default function Accounts() {
                 onConfirmProfileSession: handleConfirmProfileSession,
                 onClearProfileSession: handleClearProfileSession,
                 onAuthorizeKiroAccount: handleAuthorizeKiroAccount,
+                onCopyRefUrl: handleCopyRefUrl,
+                onRefreshRefUrl: handleRefreshRefUrl,
                 onUpdate: handleUpdateAccount,
                 selectedProvider: providerFilter === 'all' ? null : providerFilter,
               }}
