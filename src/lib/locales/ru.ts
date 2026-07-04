@@ -21,6 +21,19 @@ export const ru: Translations = {
       checking: "Проверка",
       failed: "Ошибка"
     },
+    account_ref_cell: {
+      column_header: "Реф",
+      copy_ref_url: "Копировать реф-ссылку",
+      refresh_ref_url: "Обновить реф-ссылку",
+      get_ref_url: "Получить реф-ссылку",
+      ref_copied: "Реф-ссылка скопирована",
+      ref_copy_failed: "Не удалось скопировать ссылку",
+      ref_refresh_pending: "Запрос реф-ссылки…",
+      ref_refresh_failed: "Не удалось получить реф-ссылку",
+      tooltip_active: "Активный донор",
+      tooltip_exhausted: "Квота исчерпана",
+      tooltip_no_link: "Нет реф-ссылки",
+    },
     accountsSelected: "выбрано",
     accountsTable: "Таблица аккаунтов",
     actionsMenuAria: "Открыть меню действий",
@@ -858,13 +871,13 @@ export const ru: Translations = {
       }
     },
     rotation: {
-      checkIntervalHint: "Как часто опрашивать кредиты активного аккаунта",
+      checkIntervalHint: "Как часто опрашивать к��едиты активного аккаунта",
       checkIntervalLabel: "Интервал проверки",
       eyebrow: "Ротация",
       secondsUnit: "сек",
       summary: "Переключать активный AI-аккаунт, когда кончаются кредиты",
       switchOnZeroHint: "Выбирать следующий аккаунт, когда кредиты на нуле",
-      switchOnZeroLabel: "Переключать при нуле кредитов",
+      switchOnZeroLabel: "Переключать при н��ле кредитов",
       title: "Ротация аккаунтов",
       toasts: {
         saveFailed: "Не удалось сохранить настройки ротации"
@@ -1193,7 +1206,7 @@ export const ru: Translations = {
     maxErrors: "Макс. ошибок",
     replenishment: {
       label: "Пополнение",
-      subtitle: "Поддерживайте целевое количество активных аккаунтов на каждый IDE."
+      subtitle: "Поддер��ивайте целевое количество активных аккаунтов на каждый IDE."
     },
     rotationRules: "Правила ротации",
     switchThreshold: "Смена через",
@@ -1894,7 +1907,7 @@ export const ru: Translations = {
     verificationCodeFound: "Найден код подтверждения",
     verificationCopied: "Скопировано",
     verificationCopyAction: "Копировать",
-    verificationCopyFailed: "Не удалось скопировать в буфер",
+    verificationCopyFailed: "Не удало��ь скопировать в буфер",
     verificationLinkCopied: "Ссылка скопирована",
     verificationLinkFound: "Найдена ссылка-подтверждение",
     verificationLinkOpen: "Открыть в браузере",
@@ -1969,7 +1982,7 @@ export const ru: Translations = {
     scanForIdes: "Сканировать IDE",
     scanning: "Сканирование...",
     settings: "Настройки патча",
-    subtitle: "Быстрое применение патчей для всех IDE",
+    subtitle: "Быстрое примен��ние патчей для всех IDE",
     title: "Быстрый патчинг",
     unpatchFailed: "Ошибка удаления патча",
     unpatching: "Удаление патча",
@@ -2572,7 +2585,7 @@ export const ru: Translations = {
     titleDelete: "Удалить",
     titleDeleteTemplate: "Удалить шаблон",
     composedFlowTask: "Задача составного потока",
-    scheduledSuffix: "по расписанию",
+    scheduledSuffix: "по р��списанию",
     labelSuccessRate: "Успешность"
   },
   settings: {

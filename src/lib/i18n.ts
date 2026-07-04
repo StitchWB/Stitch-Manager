@@ -28,6 +28,19 @@ export interface Translations {
       checking: string;
       failed: string;
     }
+    account_ref_cell: {
+      column_header: string;
+      copy_ref_url: string;
+      refresh_ref_url: string;
+      get_ref_url: string;
+      ref_copied: string;
+      ref_copy_failed: string;
+      ref_refresh_pending: string;
+      ref_refresh_failed: string;
+      tooltip_active: string;
+      tooltip_exhausted: string;
+      tooltip_no_link: string;
+    }
     accountsSelected: string;
     accountsTable: string;
     actionsMenuAria: string;
