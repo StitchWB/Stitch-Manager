@@ -54,6 +54,13 @@ class AccountResponse(BaseModel):
     last_checked_at: str | None = Field(None, alias="lastCheckedAt")
     registration_source: str | None = Field(None, alias="registrationSource")
 
+    # Referral (v0 quota system)
+    ref_code: str | None = Field(None, alias="refCode")
+    ref_url: str | None = Field(None, alias="refUrl")
+    ref_used_count: int = Field(0, alias="refUsedCount")
+    ref_max_count: int = Field(40, alias="refMaxCount")
+    referred_by_id: str | None = Field(None, alias="referredById")
+
     # Timestamps
     created_at: str = Field(alias="createdAt")
     updated_at: str | None = Field(None, alias="updatedAt")
