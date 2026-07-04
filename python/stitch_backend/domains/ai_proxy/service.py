@@ -7,20 +7,17 @@ table without an ORM model.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import time
 import uuid
-import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
 
-from stitch_backend.database import get_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +106,7 @@ class AiProxyAccountStore:
             ")"
         ))
         # Migrate: add columns that might be missing from older table versions
-        _MIGRATE_COLUMNS = [
+        _migrate_columns = [
             ("oauth_refresh_token", "TEXT"),
             ("oauth_expires_at", "INTEGER"),
             ("oauth_scopes", "TEXT"),
@@ -128,7 +125,7 @@ class AiProxyAccountStore:
             ("ref_max_count", "INTEGER NOT NULL DEFAULT 40"),
             ("referred_by_id", "INTEGER"),
         ]
-        for col_name, col_type in _MIGRATE_COLUMNS:
+        for col_name, col_type in _migrate_columns:
             try:
                 await session.execute(
                     text(f"ALTER TABLE ai_proxy_accounts ADD COLUMN {col_name} {col_type}")

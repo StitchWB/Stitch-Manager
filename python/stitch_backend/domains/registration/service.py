@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def _resolve_imap_password_from_db(host: str) -> str:
     """Synchronously resolve the real IMAP/Gmail password from the settings DB."""
     import sqlite3 as _sqlite3
-    from stitch_backend.config import _app_data_dir, PYTHON_DIR, REPO_ROOT
+    from stitch_backend.config import _app_data_dir, PYTHON_DIR
     # Mirror the same DB-path logic as _default_db_url()
     canonical = _app_data_dir() / "stitch-manager"
     if canonical.is_dir():
