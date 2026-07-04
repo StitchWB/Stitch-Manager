@@ -168,3 +168,5 @@ export type { KeyValueListProps, KeyValueRow } from './KeyValueList';
 export { Terminal } from './Terminal';
 
 export { StatusFilterChip, QuotaFilterChipDropdown } from './FilterChip';
+
+export { AccountDrawer } from './AccountDrawer';

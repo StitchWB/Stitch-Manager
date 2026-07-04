@@ -197,6 +197,7 @@ export default function Accounts() {
   useAccountsPageLifecycle({ fetchAccounts });
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadProfiles();
   }, [loadProfiles]);
 
@@ -426,12 +427,29 @@ export default function Accounts() {
   }, [setProfileSettingsAlias]);
 
   const handleNavigateToGraphFromSheets = useCallback(
-    (payload: { sheetName: string; serviceAccountId?: string; login?: string }) => {
-      if (import.meta.env.DEV) console.debug('[Accounts] Navigate to graph target:', payload);
+    (_payload: { sheetName: string; serviceAccountId?: string; login?: string }) => {
       handleViewModeChange('graph');
     },
     [handleViewModeChange]
   );
+
+  const handleCopyRefUrl = useCallback(async (refUrl: string) => {
+    try {
+      await navigator.clipboard.writeText(refUrl);
+      toast.success(t('accounts.account_ref_cell.ref_copied'));
+    } catch {
+      toast.error(t('accounts.account_ref_cell.ref_copy_failed'));
+    }
+  }, []);
+
+  const handleRefreshRefUrl = useCallback(async (_accountId: number) => {
+    try {
+      // TODO: wire to Tauri command that runs fetch_referral step on existing account
+      toast.info(t('accounts.account_ref_cell.ref_refresh_pending'));
+    } catch {
+      toast.error(t('accounts.account_ref_cell.ref_refresh_failed'));
+    }
+  }, []);
 
   const handleRelationEdgeClickInAll = useCallback(
     (edgeType: string, targetProvider: string) => {
@@ -580,6 +598,8 @@ export default function Accounts() {
                 onConfirmProfileSession: handleConfirmProfileSession,
                 onClearProfileSession: handleClearProfileSession,
                 onAuthorizeKiroAccount: handleAuthorizeKiroAccount,
+                onCopyRefUrl: handleCopyRefUrl,
+                onRefreshRefUrl: handleRefreshRefUrl,
                 onUpdate: handleUpdateAccount,
                 selectedProvider: providerFilter === 'all' ? null : providerFilter,
               }}

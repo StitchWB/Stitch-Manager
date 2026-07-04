@@ -7,20 +7,17 @@ table without an ORM model.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import time
 import uuid
-import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
 
-from stitch_backend.database import get_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +55,12 @@ def _row_to_account(row: Any) -> dict[str, Any]:
         "oauthExpiresAt": getattr(row, "oauth_expires_at", None),
         "oauthScopes": getattr(row, "oauth_scopes", None),
         "oauthTokenType": getattr(row, "oauth_token_type", None),
+        # Referral quota fields
+        "refCode": getattr(row, "ref_code", None),
+        "refUrl": getattr(row, "ref_url", None),
+        "refUsedCount": getattr(row, "ref_used_count", 0) or 0,
+        "refMaxCount": getattr(row, "ref_max_count", 40) or 40,
+        "referredById": getattr(row, "referred_by_id", None),
     }
 
 
@@ -103,7 +106,7 @@ class AiProxyAccountStore:
             ")"
         ))
         # Migrate: add columns that might be missing from older table versions
-        _MIGRATE_COLUMNS = [
+        _migrate_columns = [
             ("oauth_refresh_token", "TEXT"),
             ("oauth_expires_at", "INTEGER"),
             ("oauth_scopes", "TEXT"),
@@ -115,8 +118,14 @@ class AiProxyAccountStore:
             ("cooldown_reason", "TEXT"),
             ("soft_quota_tokens_daily", "INTEGER"),
             ("soft_quota_requests_daily", "INTEGER"),
+            # Referral fields (v0_app quota system)
+            ("ref_code", "TEXT"),
+            ("ref_url", "TEXT"),
+            ("ref_used_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("ref_max_count", "INTEGER NOT NULL DEFAULT 40"),
+            ("referred_by_id", "INTEGER"),
         ]
-        for col_name, col_type in _MIGRATE_COLUMNS:
+        for col_name, col_type in _migrate_columns:
             try:
                 await session.execute(
                     text(f"ALTER TABLE ai_proxy_accounts ADD COLUMN {col_name} {col_type}")
@@ -141,11 +150,13 @@ class AiProxyAccountStore:
             "INSERT INTO ai_proxy_accounts "
             "(provider, name, oauth_token, api_key, session_token, enabled, account_type,"
             " soft_quota_tokens_daily, soft_quota_requests_daily, created_at, updated_at,"
-            " oauth_refresh_token, oauth_expires_at, oauth_scopes, oauth_token_type)"
+            " oauth_refresh_token, oauth_expires_at, oauth_scopes, oauth_token_type,"
+            " ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id)"
             " VALUES (:provider, :name, :oauth_token, :api_key, :session_token,"
             " :enabled, :account_type, :soft_quota_tokens_daily, :soft_quota_requests_daily,"
             " :created_at, :updated_at, :oauth_refresh_token, :oauth_expires_at,"
-            " :oauth_scopes, :oauth_token_type)"
+            " :oauth_scopes, :oauth_token_type,"
+            " :ref_code, :ref_url, :ref_used_count, :ref_max_count, :referred_by_id)"
         ), {
             "provider": account.get("provider", ""),
             "name": account.get("name", ""),
@@ -162,6 +173,11 @@ class AiProxyAccountStore:
             "oauth_expires_at": account.get("oauth_expires_at") or account.get("oauthExpiresAt"),
             "oauth_scopes": account.get("oauth_scopes") or account.get("oauthScopes"),
             "oauth_token_type": account.get("oauth_token_type") or account.get("oauthTokenType") or "Bearer",
+            "ref_code": account.get("ref_code") or account.get("refCode"),
+            "ref_url": account.get("ref_url") or account.get("refUrl"),
+            "ref_used_count": account.get("ref_used_count") or account.get("refUsedCount") or 0,
+            "ref_max_count": account.get("ref_max_count") or account.get("refMaxCount") or 40,
+            "referred_by_id": account.get("referred_by_id") or account.get("referredById"),
         })
         return result.lastrowid or 0
 
@@ -209,6 +225,53 @@ class AiProxyAccountStore:
         ), {"p": provider, "n": name})
         row = result.fetchone()
         return _row_to_account(row) if row else None
+
+    @classmethod
+    async def get_donor(cls, session: Any, provider: str = "v0_app") -> dict[str, Any] | None:
+        """Return the first account that still has referral slots available.
+
+        Criteria: ref_url IS NOT NULL AND ref_used_count < ref_max_count,
+        ordered by created_at ASC (oldest donor first — exhausts sequentially).
+        """
+        await cls._ensure_table(session)
+        result = await session.execute(text(
+            "SELECT * FROM ai_proxy_accounts"
+            " WHERE provider = :provider"
+            "   AND ref_url IS NOT NULL"
+            "   AND ref_used_count < ref_max_count"
+            "   AND enabled = 1"
+            " ORDER BY created_at ASC"
+            " LIMIT 1"
+        ), {"provider": provider})
+        row = result.fetchone()
+        return _row_to_account(row) if row else None
+
+    @classmethod
+    async def increment_donor(cls, session: Any, donor_id: int) -> None:
+        """Atomically increment ref_used_count for a donor account."""
+        await cls._ensure_table(session)
+        await session.execute(text(
+            "UPDATE ai_proxy_accounts"
+            " SET ref_used_count = ref_used_count + 1,"
+            "     updated_at = :ts"
+            " WHERE id = :id"
+        ), {"id": donor_id, "ts": _now_ts()})
+
+    @classmethod
+    async def update_ref_fields(
+        cls,
+        session: Any,
+        account_id: int,
+        ref_code: str | None,
+        ref_url: str | None,
+    ) -> None:
+        """Set ref_code and ref_url on an existing account (post-registration)."""
+        await cls._ensure_table(session)
+        await session.execute(text(
+            "UPDATE ai_proxy_accounts"
+            " SET ref_code = :ref_code, ref_url = :ref_url, updated_at = :ts"
+            " WHERE id = :id"
+        ), {"id": account_id, "ref_code": ref_code, "ref_url": ref_url, "ts": _now_ts()})
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
