@@ -78,7 +78,7 @@ async def cmd_get_providers(params: dict) -> dict:
 # Allowed provider identifiers for autoreg scripts
 _ALLOWED_AUTOREG_PROVIDERS = frozenset({
     "kiro", "kiro_v2", "windsurf", "trae", "github",
-    "openai", "fireworks", "qoder", "bitbucket", "python",
+    "openai", "fireworks", "qoder", "bitbucket", "python", "v0_app",
 })
 
 
@@ -214,6 +214,11 @@ async def cmd_start_qoder_autoreg_job(params: dict) -> dict:
 @register_command("start_bitbucket_autoreg_job")
 async def cmd_start_bitbucket_autoreg_job(params: dict) -> dict:
     return await _start_autoreg_job("bitbucket", params)
+
+
+@register_command("start_v0_app_autoreg_job")
+async def cmd_start_v0_app_autoreg_job(params: dict) -> dict:
+    return await _start_autoreg_job("v0_app", params)
 
 
 @register_command("start_kiro_v2_autoreg_job")
@@ -417,7 +422,7 @@ async def cmd_start_registration_v2(params: dict) -> dict:
     return {"success": True, "jobId": job_id, "email": req.get("email", "")}
 
 
-# ── Counters ───────────────────────────────────────────────────────────────
+# ── Counters ────────────────────────────────────────────���──────────────────
 
 @register_command("get_next_counter")
 async def cmd_get_next_counter(params: dict) -> int:

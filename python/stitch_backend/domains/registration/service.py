@@ -209,6 +209,17 @@ def _build_provider(provider_name: str, config: dict):
         from autoreg.providers.bitbucket import BitbucketProvider
         return BitbucketProvider(**base_kwargs)
 
+    if provider_name == "v0_app":
+        from autoreg.providers.v0_app.provider import V0AppProvider
+        return V0AppProvider(
+            **base_kwargs,
+            proxy_enabled=bool(config.get("proxy_url")),
+            proxy_url=config.get("proxy_url"),
+            proxy_type=config.get("proxy_type", "http"),
+            proxy_username=config.get("proxy_username"),
+            proxy_password=config.get("proxy_password"),
+        )
+
     raise ValueError(f"Unknown provider: {provider_name}")
 
 

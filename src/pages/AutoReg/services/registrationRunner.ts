@@ -11,6 +11,7 @@ import {
   startOpenAIAutoregJob,
   startFireworksAutoregJob,
   startQoderAutoregJob,
+  startV0AppAutoregJob,
   startBitbucketAutoregJob,
   startKiroV2AutoregJob,
   startRegistrationV2,
@@ -23,7 +24,7 @@ import {
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
 import { DEFAULT_IMAP_PORT } from '../../../constants/registration';
-import type { ProviderName, OpenAIAutoregResult, FireworksAutoregResult, QoderAutoregResult, BitbucketAutoregResult, KiroV2AutoregResult } from '../../../types/ui';
+import type { ProviderName, OpenAIAutoregResult, FireworksAutoregResult, QoderAutoregResult, BitbucketAutoregResult, KiroV2AutoregResult, V0AppAutoregResult } from '../../../types/ui';
 import type { RegistrationConfig } from '../../../stores/registration/types';
 import type {
   PythonAutoregResult,
@@ -811,6 +812,72 @@ async function runProviderRegistration(params: {
         billingAttached: null,
         billingError: null,
         error: 'Kiro v2 job failed',
+      }
+    );
+  }
+
+  if (provider === 'v0_app') {
+    const correlationId = createCorrelationId();
+    const normalizedImapServer = imapServer?.trim() ? imapServer : null;
+    const normalizedImapUser = imapUser?.trim() ? imapUser : null;
+    const normalizedImapPassword = imapPassword?.trim() ? imapPassword : null;
+
+    const inboxBridgeFields = {
+      inboxProvider: config.imap.mailtmEnabled ? 'mail_tm' : 'imap',
+      inboxMailbox: 'INBOX',
+      inboxMailtmAddress: config.imap.mailtmEnabled ? normalizedImapUser : null,
+      inboxMailtmPassword: config.imap.mailtmEnabled ? normalizedImapPassword : null,
+      inboxMailtmBaseUrl: null,
+    };
+
+    const startResponse = await startV0AppAutoregJob({
+      email,
+      password: null,
+      name: null,
+      headless: config.advanced.headless,
+      proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+      imapServer: normalizedImapServer,
+      imapPort: normalizedImapServer ? config.imap.port || DEFAULT_IMAP_PORT : null,
+      imapUser: normalizedImapUser,
+      imapPassword: normalizedImapPassword,
+      addyioEnabled: config.imap.addyioEnabled ?? null,
+      addyioApiToken: config.imap.addyioApiToken ?? null,
+      addyioDomain: config.imap.addyioDomain ?? null,
+      addyioAliasFormat: config.imap.addyioAliasFormat ?? null,
+      addyioAutoDelete: config.imap.addyioAutoDelete ?? null,
+      thirtyThreeMailEnabled: config.imap.thirtyThreeMailEnabled ?? null,
+      thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername ?? null,
+      thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
+      mailtmEnabled: config.imap.mailtmEnabled ?? null,
+      correlationId,
+      ...inboxBridgeFields,
+    });
+    activePythonJobId = startResponse.jobId;
+
+    if (pipelineStepOverrides && pipelineStepOverrides.length > 0) {
+      for (const step of pipelineStepOverrides) {
+        await registrationControl(startResponse.jobId, 'configure', step.id, {
+          enabled: step.enabled,
+          pause_after: step.pauseAfter,
+          skippable: step.skippable,
+        }).catch((err: unknown) => {
+          onLog('warn', `Failed to configure step ${step.id}: ${String(err)}`);
+        });
+      }
+    }
+
+    return await waitForJobResult<V0AppAutoregResult>(
+      startResponse.jobId,
+      REGISTRATION_TIMEOUT_MS,
+      onCancelled,
+      onLog,
+      {
+        success: false,
+        email,
+        password: null,
+        name: null,
+        token: null,
+        error: 'v0 App job failed',
       }
     );
   }

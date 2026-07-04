@@ -79,6 +79,7 @@ export const loadProviderStrategies = (): ProviderEmailStrategies => {
     openai: { ...DEFAULT_EMAIL_STRATEGY },
     fireworks: { ...DEFAULT_EMAIL_STRATEGY },
     qoder: { ...DEFAULT_EMAIL_STRATEGY },
+    v0_app: { ...DEFAULT_EMAIL_STRATEGY },
     bitbucket: { ...DEFAULT_EMAIL_STRATEGY },
     claude: { ...DEFAULT_EMAIL_STRATEGY },
     anthropic: { ...DEFAULT_EMAIL_STRATEGY },

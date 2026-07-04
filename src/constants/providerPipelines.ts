@@ -48,6 +48,14 @@ export const PROVIDER_PIPELINES: Record<string, ProviderPipelineConfig> = {
       { id: 'create_token', label: 'Create Access Token', enabled: true, pauseAfter: false, skippable: true },
     ],
   },
+  v0_app: {
+    needsBilling: false,
+    steps: [
+      { id: 'signup', label: 'Sign Up', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'verify_email', label: 'Verify Email', enabled: true, pauseAfter: false, skippable: false },
+      { id: 'onboarding', label: 'Onboarding', enabled: true, pauseAfter: false, skippable: true },
+    ],
+  },
 };
 
 /**

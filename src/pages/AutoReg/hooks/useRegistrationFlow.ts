@@ -59,6 +59,7 @@ export const useRegistrationFlow = ({
       'fireworks',
       'qoder',
       'bitbucket',
+      'v0_app',
     ];
     if (!supportedProviders.includes(config.provider)) {
       const provider = String(config.provider);
