@@ -218,6 +218,7 @@ def _build_provider(provider_name: str, config: dict):
             proxy_type=config.get("proxy_type", "http"),
             proxy_username=config.get("proxy_username"),
             proxy_password=config.get("proxy_password"),
+            signup_url=config.get("signup_url"),
         )
 
     raise ValueError(f"Unknown provider: {provider_name}")
@@ -521,7 +522,61 @@ class RegistrationService:
         bridge_handlers = _install_log_bridge(log_callback)
 
         provider = None
+        _donor_id: int | None = None  # track donor for post-save increment
         try:
+            # ── v0_app: auto-select proxy + referral donor ─────────────────
+            if provider_name == "v0_app":
+                from stitch_backend.database import run_in_session
+                from stitch_backend.domains.registration.proxy_selector import ProxySelector
+                from stitch_backend.domains.registration.referral_pool import ReferralPoolService
+
+                # Auto-pick proxy only when not explicitly provided in config
+                if not config.get("proxy_url"):
+                    try:
+                        async def _pick_proxy(session):
+                            return await ProxySelector.next_proxy(session)
+                        proxy_entry = await run_in_session(_pick_proxy)
+                        if proxy_entry:
+                            config = dict(config)  # copy — do not mutate caller's dict
+                            config["proxy_url"] = ProxySelector.build_proxy_url(proxy_entry)
+                            config["proxy_type"] = proxy_entry.get("proxy_type", "http")
+                            config["proxy_username"] = proxy_entry.get("proxy_username")
+                            config["proxy_password"] = proxy_entry.get("proxy_password")
+                            logger.info(
+                                "Registration %s: auto-proxy %s",
+                                job_id, proxy_entry.get("proxy_url"),
+                            )
+                    except Exception as proxy_exc:
+                        logger.warning(
+                            "Registration %s: proxy auto-select failed (continuing without proxy): %s",
+                            job_id, proxy_exc,
+                        )
+
+                # Auto-select referral donor only when no explicit signup_url
+                if not config.get("signup_url"):
+                    try:
+                        async def _pick_donor(session):
+                            return await ReferralPoolService.get_active_donor(session)
+                        donor = await run_in_session(_pick_donor)
+                        config = dict(config)
+                        config["signup_url"] = ReferralPoolService.get_signup_url(donor)
+                        if donor:
+                            _donor_id = donor.get("id")
+                            logger.info(
+                                "Registration %s: using referral donor id=%s url=%s",
+                                job_id, _donor_id, config["signup_url"],
+                            )
+                        else:
+                            logger.info(
+                                "Registration %s: no donor — using seed URL %s",
+                                job_id, config["signup_url"],
+                            )
+                    except Exception as donor_exc:
+                        logger.warning(
+                            "Registration %s: donor selection failed (using seed URL): %s",
+                            job_id, donor_exc,
+                        )
+
             # Build provider
             provider = _build_provider(provider_name, config)
             provider.set_log_callback(log_callback)
@@ -572,10 +627,21 @@ class RegistrationService:
                         "api_key": result.get("api_key") or result.get("apiKey"),
                         "session_token": result.get("session_token") or result.get("sessionToken"),
                         "account_type": result.get("plan") or result.get("accountType") or "free",
+                        # Referral fields from fetch_referral step
+                        "ref_code": result.get("ref_code"),
+                        "ref_url": result.get("ref_url"),
+                        "referred_by_id": _donor_id,
                     }
 
+                    _donor_id_for_increment = _donor_id  # capture for lambda
+
                     async def _save(session):
-                        return await AiProxyAccountStore.create_account(session, account_record)
+                        new_id = await AiProxyAccountStore.create_account(session, account_record)
+                        # Increment donor counter inside the same session
+                        if _donor_id_for_increment is not None:
+                            from stitch_backend.domains.registration.referral_pool import ReferralPoolService
+                            await ReferralPoolService.increment_donor(session, _donor_id_for_increment)
+                        return new_id
 
                     account_id = await run_in_session(_save)
                     logger.info(
