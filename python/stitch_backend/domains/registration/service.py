@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def _resolve_imap_password_from_db(host: str) -> str:
     """Synchronously resolve the real IMAP/Gmail password from the settings DB."""
     import sqlite3 as _sqlite3
-    from stitch_backend.config import _app_data_dir, PYTHON_DIR, REPO_ROOT
+    from stitch_backend.config import _app_data_dir, PYTHON_DIR
     # Mirror the same DB-path logic as _default_db_url()
     canonical = _app_data_dir() / "stitch-manager"
     if canonical.is_dir():
@@ -218,6 +218,7 @@ def _build_provider(provider_name: str, config: dict):
             proxy_type=config.get("proxy_type", "http"),
             proxy_username=config.get("proxy_username"),
             proxy_password=config.get("proxy_password"),
+            signup_url=config.get("signup_url"),
         )
 
     raise ValueError(f"Unknown provider: {provider_name}")
@@ -380,7 +381,7 @@ def _build_log_callback(job_id: str, provider_name: str):
     return log_callback
 
 
-# ── Service ─────────────────────────────────────────────────────────────────
+# ── Service ────────────�����────────────────────────────────────────────────────
 
 class RegistrationService:
     """In-process registration runner with real-time EventBus streaming."""
@@ -521,7 +522,101 @@ class RegistrationService:
         bridge_handlers = _install_log_bridge(log_callback)
 
         provider = None
+        _donor_id: str | None = None  # track donor for post-save increment
         try:
+            # ── v0_app: auto-select proxy + referral donor ─────────────────
+            if provider_name == "v0_app":
+                from stitch_backend.database import run_in_session
+                from stitch_backend.domains.registration.proxy_selector import ProxySelector
+                from stitch_backend.domains.registration.referral_pool import ReferralPoolService
+
+                # Auto-pick proxy ONLY when explicitly opted in via config flag.
+                # Previously this ran whenever ``proxy_url`` was empty, which
+                # silently applied a (possibly dead) proxy from the library to
+                # every v0_app registration and caused ERR_EMPTY_RESPONSE in the
+                # CloakBrowser. Now it is opt-in: registration goes direct unless
+                # the caller enables rotation.
+                auto_proxy_enabled = bool(
+                    config.get("auto_proxy")
+                    or config.get("autoProxy")
+                    or config.get("proxy_rotation")
+                    or config.get("proxyRotation")
+                )
+                if auto_proxy_enabled and not config.get("proxy_url"):
+                    try:
+                        async def _pick_proxy(session):
+                            return await ProxySelector.next_proxy(session)
+                        proxy_entry = await run_in_session(_pick_proxy)
+                        if proxy_entry:
+                            config = dict(config)  # copy — do not mutate caller's dict
+                            config["proxy_url"] = ProxySelector.build_proxy_url(proxy_entry)
+                            config["proxy_type"] = proxy_entry.get("proxy_type", "http")
+                            config["proxy_username"] = proxy_entry.get("proxy_username")
+                            config["proxy_password"] = proxy_entry.get("proxy_password")
+                            # Visible in the registration console so a bad proxy
+                            # is immediately obvious instead of a silent failure.
+                            log_callback(
+                                f"[proxy] Auto-rotation ON — using proxy "
+                                f"{proxy_entry.get('proxy_url')}"
+                            )
+                            logger.info(
+                                "Registration %s: auto-proxy %s",
+                                job_id, proxy_entry.get("proxy_url"),
+                            )
+                        else:
+                            log_callback(
+                                "[proxy] Auto-rotation ON but no enabled proxy in "
+                                "library — continuing with a direct connection"
+                            )
+                    except Exception as proxy_exc:
+                        log_callback(
+                            f"[proxy] Auto-select failed ({proxy_exc}) — "
+                            f"continuing with a direct connection"
+                        )
+                        logger.warning(
+                            "Registration %s: proxy auto-select failed (continuing without proxy): %s",
+                            job_id, proxy_exc,
+                        )
+                elif config.get("proxy_url"):
+                    log_callback(f"[proxy] Using configured proxy {config.get('proxy_url')}")
+
+                # Referral donor: manual selection (referred_by_id) takes
+                # priority; otherwise auto-pick the oldest eligible donor.
+                # Skipped entirely if the caller passed an explicit signup_url.
+                if not config.get("signup_url"):
+                    manual_donor_id = (
+                        config.get("referred_by_id") or config.get("referredById")
+                    )
+                    try:
+                        async def _pick_donor(session):
+                            if manual_donor_id:
+                                return await ReferralPoolService.get_donor_by_id(
+                                    session, str(manual_donor_id)
+                                )
+                            return await ReferralPoolService.get_active_donor(session)
+                        donor = await run_in_session(_pick_donor)
+                        config = dict(config)
+                        config["signup_url"] = ReferralPoolService.get_signup_url(donor)
+                        if donor and donor.get("refUrl"):
+                            _donor_id = donor.get("id")
+                            logger.info(
+                                "Registration %s: using %s referral donor id=%s url=%s",
+                                job_id,
+                                "manual" if manual_donor_id else "auto",
+                                _donor_id,
+                                config["signup_url"],
+                            )
+                        else:
+                            logger.info(
+                                "Registration %s: no usable donor — using seed URL %s",
+                                job_id, config["signup_url"],
+                            )
+                    except Exception as donor_exc:
+                        logger.warning(
+                            "Registration %s: donor selection failed (using seed URL): %s",
+                            job_id, donor_exc,
+                        )
+
             # Build provider
             provider = _build_provider(provider_name, config)
             provider.set_log_callback(log_callback)
@@ -557,25 +652,42 @@ class RegistrationService:
 
             # Emit completion event + persist account to DB
             if result.get("success"):
-                # ── Persist account to ai_proxy_accounts ──────────────────
-                account_id: int | None = None
+                # ── Persist account to the `accounts` table (UI source) ────
+                account_id: str | None = None
                 reg_email = result.get("email") or config.get("email") or ""
                 try:
-                    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+                    from stitch_backend.domains.accounts.service import AccountService
                     from stitch_backend.database import run_in_session
 
-                    account_record = {
-                        "provider": provider_name,
-                        "name": reg_email,
-                        "enabled": True,
-                        "oauth_token": result.get("token"),
-                        "api_key": result.get("api_key") or result.get("apiKey"),
-                        "session_token": result.get("session_token") or result.get("sessionToken"),
-                        "account_type": result.get("plan") or result.get("accountType") or "free",
-                    }
+                    _donor_id_for_increment = _donor_id  # capture for closure
 
                     async def _save(session):
-                        return await AiProxyAccountStore.create_account(session, account_record)
+                        svc = AccountService(session)
+                        account = await svc.add_registered_account(
+                            provider=provider_name,
+                            email=reg_email,
+                            password=config.get("password"),
+                            token=result.get("token"),
+                            refresh_token=result.get("refresh_token")
+                            or result.get("refreshToken"),
+                            api_key=result.get("api_key") or result.get("apiKey"),
+                            display_name=reg_email,
+                            account_type=result.get("plan")
+                            or result.get("accountType")
+                            or "free",
+                            ref_code=result.get("ref_code"),
+                            ref_url=result.get("ref_url"),
+                            referred_by_id=_donor_id_for_increment,
+                        )
+                        # Increment donor counter inside the same session
+                        if _donor_id_for_increment is not None:
+                            from stitch_backend.domains.registration.referral_pool import (
+                                ReferralPoolService,
+                            )
+                            await ReferralPoolService.increment_donor(
+                                session, _donor_id_for_increment
+                            )
+                        return account.id
 
                     account_id = await run_in_session(_save)
                     logger.info(
@@ -591,7 +703,7 @@ class RegistrationService:
                 # ── Notify frontend: ACCOUNT_ADDED ─────────────────────────
                 await event_bus.emit("registration.account_added", {
                     "jobId": job_id,
-                    "id": account_id or 0,
+                    "id": account_id or "",
                     "email": reg_email,
                     "provider": provider_name,
                     "has_token": bool(result.get("token") or result.get("api_key")),

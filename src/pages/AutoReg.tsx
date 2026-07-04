@@ -14,6 +14,7 @@ import { useRegistrationFlow } from './AutoReg/hooks/useRegistrationFlow';
 import { useEventListeners } from './AutoReg/hooks/useEventListeners';
 import { useAddyioConnection } from './AutoReg/hooks/useAddyioConnection';
 import { CommandCenter, ConsolePanel } from './AutoReg/components';
+import { V0ReferralDonorPanel } from './AutoReg/components/V0ReferralDonorPanel';
 import { getActivePythonJobId } from './AutoReg/services';
 import {
   type PipelineStepOverride,
@@ -91,6 +92,9 @@ export default function AutoRegNext() {
   const { autoRegPage, setAutoRegTab, setAutoRegV2 } = useUIPreferencesStore();
 
   const [pythonAvailable, setPythonAvailable] = useState<boolean | null>(null);
+
+  // v0_app referral donor: null = auto-pick, otherwise a pinned donor account id
+  const [v0DonorId, setV0DonorId] = useState<string | null>(null);
 
   // Job tracking — read from global store so it survives page navigation
   const pipelineJobId = useRegistrationStore(state => state.pipelineJobId);
@@ -230,7 +234,7 @@ export default function AutoRegNext() {
   // Use custom hooks
   const { activeThreads, isStopping, handleStart, handleTestImap, handleStop } =
     useRegistrationFlow({
-      config: { ...config, logVerbosity },
+      config: { ...config, logVerbosity, v0ReferredById: v0DonorId },
       emailDomain,
       useRegistrationV2,
       canStart,
@@ -501,6 +505,16 @@ export default function AutoRegNext() {
               </Button>
             </div>
           </GlassCard>
+        </div>
+      )}
+
+      {config.provider === 'v0_app' && (
+        <div className="absolute top-3 right-3 z-40 w-[320px] max-w-[calc(100%-24px)]">
+          <V0ReferralDonorPanel
+            value={v0DonorId}
+            onChange={setV0DonorId}
+            refreshKey={successCount}
+          />
         </div>
       )}
 

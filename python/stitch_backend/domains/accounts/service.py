@@ -101,6 +101,55 @@ class AccountService:
         logger.info("Account created: %s (%s)", account.email, account.provider)
         return _to_response(account)
 
+    async def add_registered_account(
+        self,
+        *,
+        provider: str,
+        email: str,
+        password: str | None = None,
+        token: str | None = None,
+        refresh_token: str | None = None,
+        api_key: str | None = None,
+        display_name: str | None = None,
+        account_type: str | None = None,
+        ref_code: str | None = None,
+        ref_url: str | None = None,
+        ref_max_count: int = 40,
+        referred_by_id: str | None = None,
+    ) -> Account:
+        """Persist an auto-registered account (registration_source='auto').
+
+        Returns the ORM object (caller may need its id for follow-up work such
+        as donor-counter increments within the same session).
+        """
+        account = Account(
+            id=str(uuid.uuid4()),
+            email=email,
+            password=password,
+            provider=provider,
+            status="active",
+            display_name=display_name or email,
+            token=token,
+            refresh_token=refresh_token,
+            api_key=api_key,
+            registration_source="auto",
+            ref_code=ref_code,
+            ref_url=ref_url,
+            ref_used_count=0,
+            ref_max_count=ref_max_count,
+            referred_by_id=referred_by_id,
+            notes=(f"plan={account_type}" if account_type else None),
+            created_at=_utcnow(),
+        )
+        self._db.add(account)
+        await self._db.flush()
+        await self._db.refresh(account)
+        logger.info(
+            "Registered account saved: %s (%s) id=%s referred_by=%s",
+            account.email, account.provider, account.id, referred_by_id,
+        )
+        return account
+
     # ── Update ────────────────────────────────────────────────────────────────
 
     async def update_token(
