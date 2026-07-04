@@ -850,6 +850,7 @@ async function runProviderRegistration(params: {
       thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain ?? null,
       mailtmEnabled: config.imap.mailtmEnabled ?? null,
       correlationId,
+      referredById: config.v0ReferredById ?? null,
       ...inboxBridgeFields,
     });
     activePythonJobId = startResponse.jobId;

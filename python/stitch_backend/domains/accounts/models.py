@@ -138,6 +138,23 @@ class Account(Base):
         String, comment="manual | auto | import"
     )
 
+    # ═══════ Referral (v0 quota system) ═════════════════════════════════════
+    ref_code: Mapped[str | None] = mapped_column(
+        String, comment="Referral code granted to this account"
+    )
+    ref_url: Mapped[str | None] = mapped_column(
+        Text, comment="Full referral invite URL"
+    )
+    ref_used_count: Mapped[int] = mapped_column(
+        Integer, default=0, comment="How many signups used this account as donor"
+    )
+    ref_max_count: Mapped[int] = mapped_column(
+        Integer, default=40, comment="Referral cap before donor is exhausted"
+    )
+    referred_by_id: Mapped[str | None] = mapped_column(
+        String, comment="FK → accounts.id of the donor that referred this account"
+    )
+
     # ═══════ OmniRoute Sync ═════════════════════════════════════════════════
     omniroute_connection_id: Mapped[str | None] = mapped_column(
         String, comment="Connection ID inside OmniRoute"

@@ -381,7 +381,7 @@ def _build_log_callback(job_id: str, provider_name: str):
     return log_callback
 
 
-# ── Service ─────────────────────────────────────────────────────────────────
+# ── Service ────────────���────────────────────────────────────────────────────
 
 class RegistrationService:
     """In-process registration runner with real-time EventBus streaming."""
@@ -522,7 +522,7 @@ class RegistrationService:
         bridge_handlers = _install_log_bridge(log_callback)
 
         provider = None
-        _donor_id: int | None = None  # track donor for post-save increment
+        _donor_id: str | None = None  # track donor for post-save increment
         try:
             # ── v0_app: auto-select proxy + referral donor ─────────────────
             if provider_name == "v0_app":
@@ -552,23 +552,35 @@ class RegistrationService:
                             job_id, proxy_exc,
                         )
 
-                # Auto-select referral donor only when no explicit signup_url
+                # Referral donor: manual selection (referred_by_id) takes
+                # priority; otherwise auto-pick the oldest eligible donor.
+                # Skipped entirely if the caller passed an explicit signup_url.
                 if not config.get("signup_url"):
+                    manual_donor_id = (
+                        config.get("referred_by_id") or config.get("referredById")
+                    )
                     try:
                         async def _pick_donor(session):
+                            if manual_donor_id:
+                                return await ReferralPoolService.get_donor_by_id(
+                                    session, str(manual_donor_id)
+                                )
                             return await ReferralPoolService.get_active_donor(session)
                         donor = await run_in_session(_pick_donor)
                         config = dict(config)
                         config["signup_url"] = ReferralPoolService.get_signup_url(donor)
-                        if donor:
+                        if donor and donor.get("refUrl"):
                             _donor_id = donor.get("id")
                             logger.info(
-                                "Registration %s: using referral donor id=%s url=%s",
-                                job_id, _donor_id, config["signup_url"],
+                                "Registration %s: using %s referral donor id=%s url=%s",
+                                job_id,
+                                "manual" if manual_donor_id else "auto",
+                                _donor_id,
+                                config["signup_url"],
                             )
                         else:
                             logger.info(
-                                "Registration %s: no donor — using seed URL %s",
+                                "Registration %s: no usable donor — using seed URL %s",
                                 job_id, config["signup_url"],
                             )
                     except Exception as donor_exc:
@@ -612,36 +624,42 @@ class RegistrationService:
 
             # Emit completion event + persist account to DB
             if result.get("success"):
-                # ── Persist account to ai_proxy_accounts ──────────────────
-                account_id: int | None = None
+                # ── Persist account to the `accounts` table (UI source) ────
+                account_id: str | None = None
                 reg_email = result.get("email") or config.get("email") or ""
                 try:
-                    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+                    from stitch_backend.domains.accounts.service import AccountService
                     from stitch_backend.database import run_in_session
 
-                    account_record = {
-                        "provider": provider_name,
-                        "name": reg_email,
-                        "enabled": True,
-                        "oauth_token": result.get("token"),
-                        "api_key": result.get("api_key") or result.get("apiKey"),
-                        "session_token": result.get("session_token") or result.get("sessionToken"),
-                        "account_type": result.get("plan") or result.get("accountType") or "free",
-                        # Referral fields from fetch_referral step
-                        "ref_code": result.get("ref_code"),
-                        "ref_url": result.get("ref_url"),
-                        "referred_by_id": _donor_id,
-                    }
-
-                    _donor_id_for_increment = _donor_id  # capture for lambda
+                    _donor_id_for_increment = _donor_id  # capture for closure
 
                     async def _save(session):
-                        new_id = await AiProxyAccountStore.create_account(session, account_record)
+                        svc = AccountService(session)
+                        account = await svc.add_registered_account(
+                            provider=provider_name,
+                            email=reg_email,
+                            password=config.get("password"),
+                            token=result.get("token"),
+                            refresh_token=result.get("refresh_token")
+                            or result.get("refreshToken"),
+                            api_key=result.get("api_key") or result.get("apiKey"),
+                            display_name=reg_email,
+                            account_type=result.get("plan")
+                            or result.get("accountType")
+                            or "free",
+                            ref_code=result.get("ref_code"),
+                            ref_url=result.get("ref_url"),
+                            referred_by_id=_donor_id_for_increment,
+                        )
                         # Increment donor counter inside the same session
                         if _donor_id_for_increment is not None:
-                            from stitch_backend.domains.registration.referral_pool import ReferralPoolService
-                            await ReferralPoolService.increment_donor(session, _donor_id_for_increment)
-                        return new_id
+                            from stitch_backend.domains.registration.referral_pool import (
+                                ReferralPoolService,
+                            )
+                            await ReferralPoolService.increment_donor(
+                                session, _donor_id_for_increment
+                            )
+                        return account.id
 
                     account_id = await run_in_session(_save)
                     logger.info(
@@ -657,7 +675,7 @@ class RegistrationService:
                 # ── Notify frontend: ACCOUNT_ADDED ─────────────────────────
                 await event_bus.emit("registration.account_added", {
                     "jobId": job_id,
-                    "id": account_id or 0,
+                    "id": account_id or "",
                     "email": reg_email,
                     "provider": provider_name,
                     "has_token": bool(result.get("token") or result.get("api_key")),

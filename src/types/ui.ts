@@ -265,6 +265,8 @@ export interface V0AppAutoregConfig {
   inboxMailtmPassword: string | null;
   inboxMailtmBaseUrl: string | null;
   correlationId: string | null;
+  /** Manually selected referral donor account id (null = auto-pick). */
+  referredById?: string | null;
 }
 
 export interface V0AppAutoregResult {

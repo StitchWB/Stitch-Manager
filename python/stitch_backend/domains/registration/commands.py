@@ -221,6 +221,28 @@ async def cmd_start_v0_app_autoreg_job(params: dict) -> dict:
     return await _start_autoreg_job("v0_app", params)
 
 
+@register_command("get_referral_donors")
+async def cmd_get_referral_donors(params: dict) -> dict:
+    """List v0_app referral donors and identify the active auto-pick donor.
+
+    Powers the donor-picker on the registration page.  ``activeDonorId`` is the
+    donor that auto-selection would use next (oldest with slots remaining).
+    """
+    from stitch_backend.database import run_in_session
+    from stitch_backend.domains.registration.referral_pool import ReferralPoolService
+
+    async def _load(session):
+        donors = await ReferralPoolService.list_donors(session)
+        active = await ReferralPoolService.get_active_donor(session)
+        return donors, active
+
+    donors, active = await run_in_session(_load)
+    return {
+        "donors": donors,
+        "activeDonorId": active.get("id") if active else None,
+    }
+
+
 @register_command("start_kiro_v2_autoreg_job")
 async def cmd_start_kiro_v2_autoreg_job(params: dict) -> dict:
     return await _start_autoreg_job("kiro_v2", params)

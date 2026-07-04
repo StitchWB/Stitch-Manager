@@ -13,13 +13,16 @@ export interface RefMeta {
 }
 
 /**
- * Parse ref fields out of registrationMetadata JSON string.
- * Falls back to metadata if not found in registrationMetadata.
+ * Read ref fields for a v0_app account.
+ *
+ * Prefers the dedicated columns (refCode/refUrl/refUsedCount/refMaxCount) now
+ * persisted on the account, and falls back to the legacy JSON blobs
+ * (registrationMetadata / metadata) for accounts saved before the migration.
  */
 export function getRefMeta(account: Account): RefMeta | null {
   if (account.provider !== 'v0_app') return null;
 
-  function parseJson(s: string | null): Record<string, unknown> {
+  function parseJson(s: string | null | undefined): Record<string, unknown> {
     if (!s) return {};
     try { return JSON.parse(s) as Record<string, unknown>; } catch { return {}; }
   }
@@ -28,10 +31,14 @@ export function getRefMeta(account: Account): RefMeta | null {
   const meta = parseJson(account.metadata);
   const combined = { ...meta, ...regMeta };
 
-  const refUrl = (combined.refUrl ?? combined.ref_url ?? null) as string | null;
-  const refCode = (combined.refCode ?? combined.ref_code ?? null) as string | null;
-  const refUsedCount = Number(combined.refUsedCount ?? combined.ref_used_count ?? 0);
-  const refMaxCount = Number(combined.refMaxCount ?? combined.ref_max_count ?? V0_APP_REF_QUOTA);
+  const refUrl = (account.refUrl ?? combined.refUrl ?? combined.ref_url ?? null) as string | null;
+  const refCode = (account.refCode ?? combined.refCode ?? combined.ref_code ?? null) as string | null;
+  const refUsedCount = Number(
+    account.refUsedCount ?? combined.refUsedCount ?? combined.ref_used_count ?? 0,
+  );
+  const refMaxCount = Number(
+    account.refMaxCount ?? combined.refMaxCount ?? combined.ref_max_count ?? V0_APP_REF_QUOTA,
+  );
 
   return { refUrl, refCode, refUsedCount, refMaxCount };
 }

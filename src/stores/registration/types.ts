@@ -162,6 +162,11 @@ export interface RegistrationConfig {
   retryAttempts: number;
   uiScale: number;
   logVerbosity?: string;
+  /**
+   * Manually selected v0_app referral donor account id.
+   * Transient (not persisted) — null/undefined means auto-pick the donor.
+   */
+  v0ReferredById?: string | null;
 }
 
 // Save status for UI feedback
