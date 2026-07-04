@@ -208,7 +208,7 @@ export function AccountRowMenu({
           }}
         >
           <Link size={12} className="text-emerald-400" />
-          Копировать реф-ссылку
+          {t('accounts.account_ref_cell.copy_ref_url')}
         </ButtonBase>
       ) : null}
 
@@ -222,7 +222,9 @@ export function AccountRowMenu({
           }}
         >
           <RotateCcw size={12} className="text-sky-400" />
-          {refMeta.refUrl ? 'Обновить реф-ссылку' : 'Получить реф-ссылку'}
+          {refMeta.refUrl
+            ? t('accounts.account_ref_cell.refresh_ref_url')
+            : t('accounts.account_ref_cell.get_ref_url')}
         </ButtonBase>
       ) : null}
 

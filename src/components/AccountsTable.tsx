@@ -6,8 +6,7 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
 import type { AccountsTableVisibleColumns } from '../stores/uiPreferences';
 import { AccountRow } from './accounts/AccountRow';
-import { AccountDrawer } from '@/components/ui/AccountDrawer';
-import { ConfirmDialog } from '@/components/ui';
+import { AccountDrawer, ConfirmDialog } from '@/components/ui';
 import {
   Checkbox,
   EmptyState,
@@ -238,7 +237,7 @@ export default function AccountsTable({
                 {t('accounts.columnQuota')}
               </TableHead>
               <TableHead className="w-[80px] min-w-[80px] px-2 py-2 text-[10px] text-slate-400 whitespace-nowrap">
-                Реф
+                {t('accounts.account_ref_cell.column_header')}
               </TableHead>
               <TableHead className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-2 text-right text-[10px] text-slate-400 whitespace-nowrap">
                 {t('common.actions')}
