@@ -240,6 +240,42 @@ export interface BitbucketAutoregResult {
   error: string | null;
 }
 
+export interface V0AppAutoregConfig {
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  headless: boolean;
+  proxyUrl: string | null;
+  imapServer: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapPassword: string | null;
+  addyioEnabled: boolean | null;
+  addyioApiToken: string | null;
+  addyioDomain: string | null;
+  addyioAliasFormat: string | null;
+  addyioAutoDelete: boolean | null;
+  thirtyThreeMailEnabled: boolean | null;
+  thirtyThreeMailUsername: string | null;
+  thirtyThreeMailDomain: string | null;
+  mailtmEnabled: boolean | null;
+  inboxProvider: string | null;
+  inboxMailbox: string | null;
+  inboxMailtmAddress: string | null;
+  inboxMailtmPassword: string | null;
+  inboxMailtmBaseUrl: string | null;
+  correlationId: string | null;
+}
+
+export interface V0AppAutoregResult {
+  success: boolean;
+  email: string | null;
+  password: string | null;
+  name: string | null;
+  token: string | null;
+  error: string | null;
+}
+
 export interface KiroV2AutoregConfig {
   email: string | null;
   password: string | null;
