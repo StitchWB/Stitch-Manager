@@ -555,12 +555,52 @@ class RegistrationService:
                 if result.get("email"):
                     job["email"] = result["email"]
 
-            # Emit completion event
+            # Emit completion event + persist account to DB
             if result.get("success"):
+                # ── Persist account to ai_proxy_accounts ──────────────────
+                account_id: int | None = None
+                reg_email = result.get("email") or config.get("email") or ""
+                try:
+                    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+                    from stitch_backend.db import run_in_session
+
+                    account_record = {
+                        "provider": provider_name,
+                        "name": reg_email,
+                        "enabled": True,
+                        "oauth_token": result.get("token"),
+                        "api_key": result.get("api_key") or result.get("apiKey"),
+                        "session_token": result.get("session_token") or result.get("sessionToken"),
+                        "account_type": result.get("plan") or result.get("accountType") or "free",
+                    }
+
+                    async def _save(session):
+                        return await AiProxyAccountStore.create_account(session, account_record)
+
+                    account_id = await run_in_session(_save)
+                    logger.info(
+                        "Registration %s: account saved to DB id=%s email=%s",
+                        job_id, account_id, reg_email,
+                    )
+                except Exception as db_exc:
+                    logger.warning(
+                        "Registration %s: DB account save failed (non-critical): %s",
+                        job_id, db_exc,
+                    )
+
+                # ── Notify frontend: ACCOUNT_ADDED ─────────────────────────
+                await event_bus.emit("registration.account_added", {
+                    "jobId": job_id,
+                    "id": account_id or 0,
+                    "email": reg_email,
+                    "provider": provider_name,
+                    "has_token": bool(result.get("token") or result.get("api_key")),
+                })
+
                 await event_bus.emit("registration.completed", {
                     "jobId": job_id,
                     "provider": provider_name,
-                    "email": result.get("email"),
+                    "email": reg_email,
                     "accounts": result.get("accounts", []),
                     "success": True,
                 })
