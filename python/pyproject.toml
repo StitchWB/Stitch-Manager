@@ -76,6 +76,27 @@ python_version = "3.11"
 plugins = ["pydantic.mypy"]
 warn_return_any = true
 warn_unused_ignores = true
+check_untyped_defs = true
+# Do NOT ignore missing imports globally — catches bad module names (e.g. stitch_backend.db)
+ignore_missing_imports = false
+
+# Third-party libs without stubs: silence only those, never our own packages
+[[tool.mypy.overrides]]
+module = [
+    "DrissionPage.*",
+    "psutil.*",
+    "aiohttp.*",
+    "aiosqlite.*",
+    "alembic.*",
+    "uvicorn.*",
+    "keyring.*",
+    "autoreg.browser.*",
+    "autoreg.spoofers.*",
+    "autoreg.services.*",
+    "autoreg.email_providers.*",
+    "autoreg.pipeline.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
