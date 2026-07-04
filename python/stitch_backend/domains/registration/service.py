@@ -562,7 +562,7 @@ class RegistrationService:
                 reg_email = result.get("email") or config.get("email") or ""
                 try:
                     from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
-                    from stitch_backend.db import run_in_session
+                    from stitch_backend.database import run_in_session
 
                     account_record = {
                         "provider": provider_name,
