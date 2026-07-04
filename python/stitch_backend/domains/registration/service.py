@@ -381,7 +381,7 @@ def _build_log_callback(job_id: str, provider_name: str):
     return log_callback
 
 
-# ── Service ────────────���────────────────────────────────────────────────────
+# ── Service ────────────�����────────────────────────────────────────────────────
 
 class RegistrationService:
     """In-process registration runner with real-time EventBus streaming."""
@@ -530,8 +530,19 @@ class RegistrationService:
                 from stitch_backend.domains.registration.proxy_selector import ProxySelector
                 from stitch_backend.domains.registration.referral_pool import ReferralPoolService
 
-                # Auto-pick proxy only when not explicitly provided in config
-                if not config.get("proxy_url"):
+                # Auto-pick proxy ONLY when explicitly opted in via config flag.
+                # Previously this ran whenever ``proxy_url`` was empty, which
+                # silently applied a (possibly dead) proxy from the library to
+                # every v0_app registration and caused ERR_EMPTY_RESPONSE in the
+                # CloakBrowser. Now it is opt-in: registration goes direct unless
+                # the caller enables rotation.
+                auto_proxy_enabled = bool(
+                    config.get("auto_proxy")
+                    or config.get("autoProxy")
+                    or config.get("proxy_rotation")
+                    or config.get("proxyRotation")
+                )
+                if auto_proxy_enabled and not config.get("proxy_url"):
                     try:
                         async def _pick_proxy(session):
                             return await ProxySelector.next_proxy(session)
@@ -542,15 +553,32 @@ class RegistrationService:
                             config["proxy_type"] = proxy_entry.get("proxy_type", "http")
                             config["proxy_username"] = proxy_entry.get("proxy_username")
                             config["proxy_password"] = proxy_entry.get("proxy_password")
+                            # Visible in the registration console so a bad proxy
+                            # is immediately obvious instead of a silent failure.
+                            log_callback(
+                                f"[proxy] Auto-rotation ON — using proxy "
+                                f"{proxy_entry.get('proxy_url')}"
+                            )
                             logger.info(
                                 "Registration %s: auto-proxy %s",
                                 job_id, proxy_entry.get("proxy_url"),
                             )
+                        else:
+                            log_callback(
+                                "[proxy] Auto-rotation ON but no enabled proxy in "
+                                "library — continuing with a direct connection"
+                            )
                     except Exception as proxy_exc:
+                        log_callback(
+                            f"[proxy] Auto-select failed ({proxy_exc}) — "
+                            f"continuing with a direct connection"
+                        )
                         logger.warning(
                             "Registration %s: proxy auto-select failed (continuing without proxy): %s",
                             job_id, proxy_exc,
                         )
+                elif config.get("proxy_url"):
+                    log_callback(f"[proxy] Using configured proxy {config.get('proxy_url')}")
 
                 # Referral donor: manual selection (referred_by_id) takes
                 # priority; otherwise auto-pick the oldest eligible donor.
