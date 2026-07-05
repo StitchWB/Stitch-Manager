@@ -851,6 +851,7 @@ async function runProviderRegistration(params: {
       mailtmEnabled: config.imap.mailtmEnabled ?? null,
       correlationId,
       referredById: config.v0ReferredById ?? null,
+      signupUrl: config.v0SignupUrl?.trim() ? config.v0SignupUrl.trim() : null,
       ...inboxBridgeFields,
     });
     activePythonJobId = startResponse.jobId;

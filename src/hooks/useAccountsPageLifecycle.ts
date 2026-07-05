@@ -26,6 +26,14 @@ export function useAccountsPageLifecycle({ fetchAccounts }: UseAccountsPageLifec
       Promise.resolve(fetchAccounts()).catch(() => {});
     });
 
+    // Listen for accounts persisted by the registration pipeline.
+    // Registration emits `registration.account_added` (mapped to ACCOUNT_ADDED),
+    // which is a *different* event from `account-created`. Without this listener
+    // a freshly registered account would not appear until a manual refresh.
+    const unlistenRegAdded = listen('ACCOUNT_ADDED', () => {
+      Promise.resolve(fetchAccounts()).catch(() => {});
+    });
+
     // Listen for quota-updated events from background manager
     const unlistenQuota = listen('account:quota-updated', event => {
       const payload = event.payload as QuotaUpdatedPayload;
@@ -54,6 +62,7 @@ export function useAccountsPageLifecycle({ fetchAccounts }: UseAccountsPageLifec
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       unlistenCreated.then(unlisten => unlisten());
+      unlistenRegAdded.then(unlisten => unlisten());
       unlistenQuota.then(unlisten => unlisten());
     };
   }, [fetchAccounts, setProviderQuota, clearQuotaCheckError]);
