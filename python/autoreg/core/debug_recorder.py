@@ -82,3 +82,7 @@ def record_step(name: str, **meta: Any) -> None:
 def record_error(error: BaseException | str, **meta: Any) -> None:
     """Module-level convenience — record an error on the default recorder (no-op)."""
     _default_recorder.record_error(error, **meta)
+
+
+# Backward-compat aliases used by older provider code (e.g. kiro/browser.py)
+record = record_step
