@@ -67,3 +67,18 @@ def get_recorder(session_id: str | None = None) -> DebugRecorder:
     if session_id:
         return DebugRecorder(session_id=session_id)
     return _default_recorder
+
+
+def init_recorder(session_id: str | None = None, **kwargs: Any) -> DebugRecorder:
+    """Initialise and return a recorder (no-op stub)."""
+    return DebugRecorder(session_id=session_id)
+
+
+def record_step(name: str, **meta: Any) -> None:
+    """Module-level convenience — record a step on the default recorder (no-op)."""
+    _default_recorder.record_step(name, **meta)
+
+
+def record_error(error: BaseException | str, **meta: Any) -> None:
+    """Module-level convenience — record an error on the default recorder (no-op)."""
+    _default_recorder.record_error(error, **meta)
