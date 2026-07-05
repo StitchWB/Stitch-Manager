@@ -10,6 +10,23 @@ jest.mock('../../components/layout/Header', () => ({
   default: ({ title }: { title: string }) => <div>{title}</div>,
 }));
 
+// fetchKiroAccountQuotasSafe invokes a real Tauri command; stub it so the
+// page does not error in Jest where fetch/IPC is unavailable.
+jest.mock('../../lib/tauri/modules/aiProxy', () => {
+  const actual = jest.requireActual('../../lib/tauri/modules/aiProxy') as object;
+  return {
+    ...actual,
+    fetchKiroAccountQuotasSafe: jest.fn(async () => []),
+    getAiProxyAccounts: jest.fn(),
+    getAvailableModelsSafe: jest.fn(),
+    getProviderCapabilities: jest.fn(),
+    getProviderModelMappings: jest.fn(),
+    getRequestHistory: jest.fn(),
+    testProviderConnection: jest.fn(),
+    setProviderModelMappings: jest.fn(),
+  };
+});
+
 jest.mock('../../components/ai-proxy/AccountModal', () => ({
   __esModule: true,
   default: () => null,
@@ -25,7 +42,7 @@ jest.mock(
 
 describe('AiProviders page', () => {
   beforeEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
 
     jest.spyOn(aiProxyModule, 'getAiProxyAccounts').mockResolvedValue([
       {
@@ -67,6 +84,10 @@ describe('AiProviders page', () => {
       .mockResolvedValue([{ modelPattern: '^gpt-', provider: 'openai', modelId: 'gpt-4-turbo' }]);
 
     jest.spyOn(aiProxyModule, 'getRequestHistory').mockResolvedValue([] as any);
+    jest.spyOn(aiProxyModule as any, 'fetchAllQuotasSafe').mockResolvedValue([]);
+    jest.spyOn(aiProxyModule as any, 'fetchAllQuotas').mockResolvedValue([]);
+    jest.spyOn(aiProxyModule as any, 'fetchOpenAiAccountQuotasSafe').mockResolvedValue([]);
+    jest.spyOn(aiProxyModule as any, 'fetchOpenAiAccountQuotas').mockResolvedValue([]);
     jest.spyOn(aiProxyModule as any, 'fetchKiroAccountQuotasSafe').mockResolvedValue([]);
     jest.spyOn(aiProxyModule as any, 'fetchKiroAccountQuotas').mockResolvedValue([]);
     jest.spyOn(aiProxyModule, 'testProviderConnection').mockResolvedValue({
@@ -85,8 +106,11 @@ describe('AiProviders page', () => {
       </MemoryRouter>
     );
 
+    // 'AI Providers' is a hardcoded string in the Header mock we render above.
+    // The t() stub returns the last key segment, so 'aiHub.models.modelInventoryTitle'
+    // → 'modelInventoryTitle'. Use a regex to match either form.
     await screen.findByText('AI Providers');
-    await screen.findByText('Available Models');
+    await screen.findByText(/modelInventoryTitle|Available Models/i);
     expect(screen.getByText('gpt-4-turbo')).toBeTruthy();
 
     const testButton = screen.getByTitle('Test connection');
@@ -110,8 +134,10 @@ describe('AiProviders page', () => {
     );
 
     await screen.findByText('AI Providers');
-    await user.click(screen.getByRole('button', { name: 'Integrations' }));
-    await user.click(screen.getByRole('button', { name: 'Edit mappings' }));
+    // The t() stub returns last key segment; match either the translated English
+    // string or the key segment 'integrations' / 'eyebrow'.
+    await user.click(screen.getByRole('button', { name: /integrations|eyebrow/i }));
+    await user.click(screen.getByRole('button', { name: /edit mappings|editMappings/i }));
 
     await screen.findByText('Provider Model Mappings');
     await user.click(screen.getByRole('button', { name: 'Save' }));
