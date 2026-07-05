@@ -95,6 +95,8 @@ export default function AutoRegNext() {
 
   // v0_app referral donor: null = auto-pick, otherwise a pinned donor account id
   const [v0DonorId, setV0DonorId] = useState<string | null>(null);
+  // v0_app custom referral link: overrides donor selection when non-empty
+  const [v0CustomRefUrl, setV0CustomRefUrl] = useState<string>('');
 
   // Job tracking — read from global store so it survives page navigation
   const pipelineJobId = useRegistrationStore(state => state.pipelineJobId);
@@ -234,7 +236,12 @@ export default function AutoRegNext() {
   // Use custom hooks
   const { activeThreads, isStopping, handleStart, handleTestImap, handleStop } =
     useRegistrationFlow({
-      config: { ...config, logVerbosity, v0ReferredById: v0DonorId },
+      config: {
+        ...config,
+        logVerbosity,
+        v0ReferredById: v0DonorId,
+        v0SignupUrl: v0CustomRefUrl.trim() || null,
+      },
       emailDomain,
       useRegistrationV2,
       canStart,
@@ -513,6 +520,8 @@ export default function AutoRegNext() {
           <V0ReferralDonorPanel
             value={v0DonorId}
             onChange={setV0DonorId}
+            customUrl={v0CustomRefUrl}
+            onCustomUrlChange={setV0CustomRefUrl}
             refreshKey={successCount}
           />
         </div>

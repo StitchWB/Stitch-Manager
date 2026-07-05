@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link2, RefreshCw, AlertCircle } from 'lucide-react';
 
-import { GlassCard, Select } from '@/components/ui';
+import { GlassCard, Select, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { getReferralDonors, type ReferralDonor } from '@/lib/tauri';
 
@@ -9,6 +9,12 @@ interface V0ReferralDonorPanelProps {
   /** Selected donor id, or null for automatic selection. */
   value: string | null;
   onChange: (donorId: string | null) => void;
+  /**
+   * Custom referral link typed by the operator. When non-empty it overrides
+   * both donor auto-pick and the default seed URL.
+   */
+  customUrl?: string;
+  onCustomUrlChange?: (url: string) => void;
   /** Bump this to force a refetch (e.g. after a registration completes). */
   refreshKey?: number;
 }
@@ -22,7 +28,14 @@ const AUTO = '__auto__';
  * lets the operator either let the system auto-pick the oldest donor with free
  * slots, or pin a specific donor manually.
  */
-export function V0ReferralDonorPanel({ value, onChange, refreshKey = 0 }: V0ReferralDonorPanelProps) {
+export function V0ReferralDonorPanel({
+  value,
+  onChange,
+  customUrl = '',
+  onCustomUrlChange,
+  refreshKey = 0,
+}: V0ReferralDonorPanelProps) {
+  const hasCustomUrl = customUrl.trim().length > 0;
   const [donors, setDonors] = useState<ReferralDonor[]>([]);
   const [activeDonorId, setActiveDonorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -106,14 +119,15 @@ export function V0ReferralDonorPanel({ value, onChange, refreshKey = 0 }: V0Refe
         </div>
       )}
 
-      {/* Donor selector */}
+      {/* Donor selector — disabled while a custom link is in use */}
       <Select
         value={value ?? AUTO}
+        disabled={hasCustomUrl}
         onChange={e => {
           const v = e.target.value;
           onChange(v === AUTO ? null : v);
         }}
-        className="h-9 py-1 text-xs w-full"
+        className={cn('h-9 py-1 text-xs w-full', hasCustomUrl && 'opacity-40')}
       >
         <option value={AUTO}>
           Авто{activeDonorId ? '' : ' (нет доноров — стартовая ссылка)'}
@@ -128,6 +142,32 @@ export function V0ReferralDonorPanel({ value, onChange, refreshKey = 0 }: V0Refe
           );
         })}
       </Select>
+
+      {/* Manual custom referral link */}
+      {onCustomUrlChange && (
+        <div className="mt-3 pt-3 border-t border-white/10">
+          <label className="block text-[11px] uppercase tracking-widest text-slate-400 mb-1.5">
+            Своя реферальная ссылка
+          </label>
+          <Input
+            type="text"
+            value={customUrl}
+            onChange={e => onCustomUrlChange(e.target.value)}
+            placeholder="https://v0.app/ref/XXXXXX"
+            className="h-9 py-1 text-xs w-full"
+          />
+          <p
+            className={cn(
+              'text-[11px] mt-1.5',
+              hasCustomUrl ? 'text-emerald-300/80' : 'text-slate-500',
+            )}
+          >
+            {hasCustomUrl
+              ? 'Регистрация пойдёт по этой ссылке — выбор донора игнорируется.'
+              : 'Оставьте пустым, чтобы использовать выбор донора выше.'}
+          </p>
+        </div>
+      )}
     </GlassCard>
   );
 }

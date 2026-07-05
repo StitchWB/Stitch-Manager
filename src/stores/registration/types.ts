@@ -167,6 +167,12 @@ export interface RegistrationConfig {
    * Transient (not persisted) — null/undefined means auto-pick the donor.
    */
   v0ReferredById?: string | null;
+  /**
+   * Custom referral/signup link entered manually in the UI.
+   * Transient (not persisted). When set it overrides donor selection and the
+   * default seed URL for v0_app registrations.
+   */
+  v0SignupUrl?: string | null;
 }
 
 // Save status for UI feedback
