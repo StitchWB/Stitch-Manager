@@ -187,6 +187,8 @@ class CleanupQueue:
         return self.queue.qsize()
 
 
-# Global cleanup queue instance
+# Global cleanup queue instance.
+# NOTE: not started here — auto-starts lazily on first schedule_cleanup() call.
+# This avoids spawning a daemon thread on bare module import, which would hang
+# subprocess-based tools (e.g. audit_contracts.py, pytest --forked) at exit.
 cleanup_queue = CleanupQueue()
-cleanup_queue.start()
