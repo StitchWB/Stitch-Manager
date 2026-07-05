@@ -201,20 +201,33 @@ def _constant_default_sql(column: Any) -> str | None:
 
     Only handles plain scalar defaults (bool/int/float/str).  Callable or
     SQL-expression defaults are not safe as ALTER-time constants.
+
+    JSON columns are treated specially: their ``python_type`` raises
+    ``NotImplementedError``, so we check for them explicitly and return
+    ``NULL`` — SQLite accepts NULL as a default for any type affinity and
+    the ORM supplies the real Python value on every INSERT.
     """
+    from sqlalchemy import JSON
+
     default = getattr(column, "default", None)
     if default is None:
+        # JSON columns have no reliable python_type — return NULL so
+        # ALTER TABLE succeeds and the column is added as nullable.
+        if isinstance(column.type, JSON):
+            return "NULL"
+
         # Fall back to a type-appropriate zero value for NOT NULL columns.
-        py_type = getattr(column.type, "python_type", None)
         try:
-            if py_type is bool:
-                return "0"
-            if py_type in (int, float):
-                return "0"
-            if py_type is str:
-                return "''"
+            py_type = column.type.python_type
         except NotImplementedError:
             return None
+
+        if py_type is bool:
+            return "0"
+        if py_type in (int, float):
+            return "0"
+        if py_type is str:
+            return "''"
         return None
 
     if not getattr(default, "is_scalar", False):
