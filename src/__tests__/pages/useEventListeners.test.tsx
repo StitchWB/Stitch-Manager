@@ -1,21 +1,20 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react';
 
-const listenMock = jest.fn(async () => () => undefined);
+// babel-jest hoists jest.mock() above imports and forbids referencing
+// out-of-scope variables inside the factory unless they are prefixed with
+// `mock`. mockListen satisfies that rule and is used in assertions below.
+const mockListen = jest.fn(async () => () => undefined);
 jest.mock('../../lib/events', () => ({
-  listen: (...args: any[]) => (listenMock as any)(...args),
+  listen: (...args: any[]) => (mockListen as any)(...args),
 }));
-
-const loadSettingsSpy = jest.fn();
-const addLogSpy = jest.fn();
-const addResultSpy = jest.fn();
 
 jest.mock('../../stores/registration', () => ({
   useRegistrationStore: {
     getState: () => ({
-      addLog: addLogSpy,
-      addResult: addResultSpy,
-      loadSettings: loadSettingsSpy,
+      addLog: jest.fn(),
+      addResult: jest.fn(),
+      loadSettings: jest.fn(),
     }),
   },
 }));
@@ -31,7 +30,9 @@ describe('useEventListeners', () => {
     // No focus listener should be attached anymore.
     expect(addWindowListenerSpy).not.toHaveBeenCalledWith('focus', expect.any(Function));
 
-    const registeredEvents = (listenMock.mock.calls as unknown as any[][]).map(call => call[0]);
+    const registeredEvents = (mockListen.mock.calls as unknown as any[][]).map(
+      (call: any[]) => call[0]
+    );
     expect(registeredEvents).toContain('SETTINGS_UPDATED');
 
     addWindowListenerSpy.mockRestore();
