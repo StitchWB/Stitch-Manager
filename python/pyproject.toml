@@ -43,10 +43,16 @@ desktop = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=0.5.0",
     "pytest-cov>=5.0.0",
+    "hypothesis>=6.0.0",
     "httpx>=0.27.0",       # TestClient async
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    # browser automation — needed by tests/browser/**
+    "DrissionPage>=4.0.0",
+    "aioimaplib>=1.1.0",
+    "authlib>=1.3.0",
 ]
 
 [project.scripts]
