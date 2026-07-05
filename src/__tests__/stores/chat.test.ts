@@ -4,7 +4,7 @@ import { useChatStore } from '../../stores/chat';
 describe('chat store', () => {
   beforeEach(() => {
     useChatStore.getState().clearMessages();
-    useChatStore.getState().setModel('auto');
+    useChatStore.getState().setSessionModel('auto');
     useChatStore.getState().setError(null);
     useChatStore.getState().setLoading(false);
   });
@@ -22,7 +22,7 @@ describe('chat store', () => {
       requestedModel: 'gpt-4-turbo',
     });
 
-    const msg = useChatStore.getState().messages.find(m => m.id === id);
+    const msg = useChatStore.getState().messages().find(m => m.id === id);
     expect(msg).toBeTruthy();
     expect(msg?.routedProvider).toBe('openai');
     expect(msg?.routedModel).toBe('gpt-4-turbo');

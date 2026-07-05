@@ -5,6 +5,20 @@
 
 import '@testing-library/jest-dom';
 
+// jsdom does not ship with a `fetch` implementation. Polyfill it so tests that
+// exercise code paths using fetch (e.g. Tauri command wrappers) do not throw
+// "ReferenceError: fetch is not defined".
+if (typeof globalThis.fetch === 'undefined') {
+  (globalThis as any).fetch = jest.fn(async (_url: string, _init?: RequestInit) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({}),
+    text: async () => '',
+    clone() { return this; },
+    headers: new Headers(),
+  }));
+}
+
 // React 18: ensure act() environment is enabled for Testing Library.
 // This prevents noisy warnings about updates not wrapped in act(...)
 // when using userEvent and async state updates.
@@ -22,6 +36,18 @@ if (typeof globalThis.crypto === 'undefined') {
     value: () => `test-uuid-${Math.random().toString(16).slice(2)}`,
     configurable: true,
   });
+}
+
+// Polyfill fetch for jsdom — jsdom does not ship fetch, but some components
+// (e.g. AiProviders) call it indirectly. The mock returns an empty success
+// response; individual tests can override it with jest.spyOn(globalThis, 'fetch').
+if (typeof globalThis.fetch === 'undefined') {
+  (globalThis as any).fetch = jest.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({}),
+    text: async () => '',
+  }));
 }
 
 // Suppress console errors in tests (optional)
