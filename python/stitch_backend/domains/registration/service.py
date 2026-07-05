@@ -381,7 +381,7 @@ def _build_log_callback(job_id: str, provider_name: str):
     return log_callback
 
 
-# ── Service ────────────�����────────────────────────────────────────────────────
+# ── Service ────────────�������────────────────────────────────────────────────────
 
 class RegistrationService:
     """In-process registration runner with real-time EventBus streaming."""
@@ -580,9 +580,25 @@ class RegistrationService:
                 elif config.get("proxy_url"):
                     log_callback(f"[proxy] Using configured proxy {config.get('proxy_url')}")
 
+                # A custom referral link entered manually in the UI arrives as
+                # camelCase ``signupUrl``. Normalize it to ``signup_url`` so the
+                # block below treats it as an explicit override and skips donor
+                # selection entirely.
+                _custom_signup_url = (
+                    config.get("signup_url")
+                    or config.get("signupUrl")
+                )
+                if _custom_signup_url and not config.get("signup_url"):
+                    config = dict(config)
+                    config["signup_url"] = str(_custom_signup_url).strip()
+
                 # Referral donor: manual selection (referred_by_id) takes
                 # priority; otherwise auto-pick the oldest eligible donor.
                 # Skipped entirely if the caller passed an explicit signup_url.
+                if config.get("signup_url"):
+                    log_callback(
+                        f"[v0_app] Using custom referral link: {config.get('signup_url')}"
+                    )
                 if not config.get("signup_url"):
                     manual_donor_id = (
                         config.get("referred_by_id") or config.get("referredById")

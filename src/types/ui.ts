@@ -267,6 +267,11 @@ export interface V0AppAutoregConfig {
   correlationId: string | null;
   /** Manually selected referral donor account id (null = auto-pick). */
   referredById?: string | null;
+  /**
+   * Explicit referral/signup link entered by the operator. When set it
+   * overrides both donor auto-pick and the default seed URL.
+   */
+  signupUrl?: string | null;
 }
 
 export interface V0AppAutoregResult {
