@@ -381,7 +381,7 @@ def _build_log_callback(job_id: str, provider_name: str):
     return log_callback
 
 
-# ── Service ────────────�������────────────────────────────────────────────────────
+# ── Service ────────────���������────────────────────────────────────────────────────
 
 class RegistrationService:
     """In-process registration runner with real-time EventBus streaming."""
@@ -667,6 +667,13 @@ class RegistrationService:
                     job["email"] = result["email"]
 
             # Emit completion event + persist account to DB
+            # Debug visibility: show what the provider actually returned so a
+            # missing/false `success` key (which silently skips the DB save)
+            # is immediately obvious in the registration console.
+            log_callback(
+                f"[db] Provider result: success={result.get('success')!r} "
+                f"email={result.get('email')!r} keys={sorted(result.keys())}"
+            )
             if result.get("success"):
                 # ── Persist account to the `accounts` table (UI source) ────
                 account_id: str | None = None
@@ -710,11 +717,26 @@ class RegistrationService:
                         "Registration %s: account saved to DB id=%s email=%s",
                         job_id, account_id, reg_email,
                     )
+                    # Surface success in the registration console so operators
+                    # can confirm the account actually reached the database.
+                    log_callback(
+                        f"[db] Account saved: id={account_id} email={reg_email}"
+                    )
                 except Exception as db_exc:
+                    import traceback as _tb
                     logger.warning(
                         "Registration %s: DB account save failed (non-critical): %s",
                         job_id, db_exc,
                     )
+                    # CRITICAL for debugging: without this the account silently
+                    # never appears in the UI list. Show the real error + a
+                    # trimmed traceback in the registration console.
+                    log_callback(
+                        f"[db] ACCOUNT SAVE FAILED — the account will NOT "
+                        f"appear in the list! Error: {db_exc!r}"
+                    )
+                    for _line in _tb.format_exc().strip().splitlines()[-4:]:
+                        log_callback(f"[db]   {_line}")
 
                 # ── Notify frontend: ACCOUNT_ADDED ─────────────────────────
                 await event_bus.emit("registration.account_added", {
