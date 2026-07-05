@@ -381,7 +381,7 @@ def _build_log_callback(job_id: str, provider_name: str):
     return log_callback
 
 
-# ── Service ────────────���������────────────────────────────────────────────────────
+# ── Service ────────────�����������────────────────────────────────────────────────────
 
 class RegistrationService:
     """In-process registration runner with real-time EventBus streaming."""
@@ -515,6 +515,19 @@ class RegistrationService:
         """Execute a single registration in a thread with log streaming."""
 
         log_callback = _build_log_callback(job_id, provider_name)
+
+        # Ensure DB schema is up to date before any session work.
+        # When the Python backend starts normally this runs in lifespan(), but
+        # when the server is offline or the job runs in a separate process the
+        # lifespan never fires.  Running it here is idempotent (no-op if schema
+        # is already current) and prevents silent OperationalError on old DBs
+        # that are missing columns added after their creation (e.g. ref_code,
+        # expires_at, registration_source, ...).
+        try:
+            from stitch_backend.database import create_all_tables as _migrate_db
+            await _migrate_db()
+        except Exception as _mig_exc:
+            log_callback(f"[db] Schema migration warning: {_mig_exc!r}")
 
         # Install logging bridge: capture ALL logger.info() from autoreg/pipeline
         # and forward to the EventBus.  Without this, zero logs reach the frontend
