@@ -270,7 +270,7 @@ describe('buildAccountInboxQuery', () => {
       { email: 'master+kiro@domain.com' },
       { profile, reason: 'plus-alias' }
     );
-    expect(query).toEqual({ to: 'master+kiro@domain.com' });
+    expect(query).toEqual({ search: 'master+kiro@domain.com' });
   });
 
   it('filters by recipient address for catch-all resolutions', () => {
@@ -279,7 +279,7 @@ describe('buildAccountInboxQuery', () => {
       { email: 'someone@mydomain.com' },
       { profile, reason: 'catch-all' }
     );
-    expect(query).toEqual({ to: 'someone@mydomain.com' });
+    expect(query).toEqual({ search: 'someone@mydomain.com' });
   });
 
   it('filters by recipient address for auto-reg fallback resolutions', () => {
@@ -291,6 +291,6 @@ describe('buildAccountInboxQuery', () => {
       { email: 'whatever@elsewhere.io' },
       { profile, reason: 'auto-reg-fallback' }
     );
-    expect(query).toEqual({ to: 'whatever@elsewhere.io' });
+    expect(query).toEqual({ search: 'whatever@elsewhere.io' });
   });
 });
