@@ -1,16 +1,26 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { renderHook, act } from '@testing-library/react';
 
-// Mock stores
-const addNotification = jest.fn();
+// babel-jest hoists jest.mock() above imports and forbids referencing
+// out-of-scope variables inside the factory unless prefixed with `mock`.
+const mockAddNotification = jest.fn();
 jest.mock('../../stores/app', () => ({
-  useAppStore: () => ({ addNotification }),
+  useAppStore: () => ({ addNotification: mockAddNotification }),
 }));
 
-const addLog = jest.fn();
-const addHistoryEntry = jest.fn();
 jest.mock('../../stores/registration', () => ({
-  useRegistrationStore: () => ({ addLog, addHistoryEntry }),
+  useRegistrationStore: (selector?: any) => {
+    const store = {
+      addLog: jest.fn(),
+      addHistoryEntry: jest.fn(),
+      setActiveThreads: jest.fn(),
+      setIsStopping: jest.fn(),
+      setPipelineJobId: jest.fn(),
+      activeThreads: [],
+      isStopping: false,
+    };
+    return selector ? selector(store) : store;
+  },
 }));
 
 jest.mock('../../lib/tauri', () => ({
@@ -18,9 +28,9 @@ jest.mock('../../lib/tauri', () => ({
   stopRegistration: jest.fn(async () => undefined),
 }));
 
-const runRegistration = jest.fn();
+const mockRunRegistration = jest.fn();
 jest.mock('../../pages/AutoReg/services', () => ({
-  runRegistration: (...args: any[]) => runRegistration(...args),
+  runRegistration: (...args: any[]) => mockRunRegistration(...args),
 }));
 
 import { useRegistrationFlow } from '../../pages/AutoReg/hooks/useRegistrationFlow';
@@ -28,7 +38,7 @@ import { useRegistrationFlow } from '../../pages/AutoReg/hooks/useRegistrationFl
 describe('useRegistrationFlow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (runRegistration as any).mockResolvedValue({ successCount: 1, skipCount: 0, failCount: 0 });
+    (mockRunRegistration as any).mockResolvedValue({ successCount: 1, skipCount: 0, failCount: 0 });
   });
 
   it('allows openai provider and calls registration runner', async () => {
@@ -53,8 +63,8 @@ describe('useRegistrationFlow', () => {
       await result.current.handleStart();
     });
 
-    expect(runRegistration).toHaveBeenCalledTimes(1);
-    expect(addNotification).not.toHaveBeenCalledWith(
+    expect(mockRunRegistration).toHaveBeenCalledTimes(1);
+    expect(mockAddNotification).not.toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Provider not supported' })
     );
   });

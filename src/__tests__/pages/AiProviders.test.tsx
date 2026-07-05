@@ -15,10 +15,13 @@ jest.mock('../../components/ai-proxy/AccountModal', () => ({
   default: () => null,
 }));
 
-jest.mock('../../components/ai-proxy/QuotaDashboard', () => ({
-  // eslint-disable-next-line i18next/no-literal-string
-  QuotaDashboard: () => <div>QuotaDashboard</div>,
-}));
+// QuotaDashboard was removed from the codebase; mark virtual so Jest does not
+// try to resolve it on disk.
+jest.mock(
+  '../../components/ai-proxy/QuotaDashboard',
+  () => ({ QuotaDashboard: () => null }),
+  { virtual: true },
+);
 
 describe('AiProviders page', () => {
   beforeEach(() => {
@@ -64,6 +67,8 @@ describe('AiProviders page', () => {
       .mockResolvedValue([{ modelPattern: '^gpt-', provider: 'openai', modelId: 'gpt-4-turbo' }]);
 
     jest.spyOn(aiProxyModule, 'getRequestHistory').mockResolvedValue([] as any);
+    jest.spyOn(aiProxyModule as any, 'fetchKiroAccountQuotasSafe').mockResolvedValue([]);
+    jest.spyOn(aiProxyModule as any, 'fetchKiroAccountQuotas').mockResolvedValue([]);
     jest.spyOn(aiProxyModule, 'testProviderConnection').mockResolvedValue({
       success: true,
       provider: 'openai',

@@ -63,11 +63,18 @@ jest.mock('../../lib/tauri', () => ({
 
 // Registration store is a facade; we mock it to return new function refs on each call
 // so we can detect whether AutoReg re-runs its init effect on re-render.
-const loadSettingsSpy = jest.fn();
-const saveImmediatelySpy = jest.fn();
-
+//
+// IMPORTANT: `loadSettingsSpy`/`saveImmediatelySpy` live INSIDE the factory.
+// babel-jest hoists `jest.mock()` calls to the top of the file, so any outer
+// `const` declared after imports is in the TDZ when the factory runs — which
+// causes "setPipelineJobId is not a function" because the whole store object
+// becomes undefined.  Tests can access spies via:
+//   const { __spies } = jest.requireMock('../../stores/registration');
 jest.mock('../../stores/registration', () => {
-  const useRegistrationStore = () => ({
+  const loadSettingsSpy = jest.fn();
+  const saveImmediatelySpy = jest.fn();
+
+  const storeState = {
     config: {
       provider: 'kiro',
       count: 3,
@@ -106,19 +113,39 @@ jest.mock('../../stores/registration', () => {
     setLogVerbosity: jest.fn(),
     clearLogs: jest.fn(),
     setActiveProvider: jest.fn(),
-  });
+    setActiveThreads: jest.fn(),
+    setIsStopping: jest.fn(),
+    setPipelineJobId: jest.fn(),
+    addLog: jest.fn(),
+    addHistoryEntry: jest.fn(),
+    activeThreads: [],
+    isStopping: false,
+    pipelineJobId: null,
+  };
+
+  // Support both `useRegistrationStore()` (no args) and selector calls
+  // `useRegistrationStore(state => state.setPipelineJobId)` that AutoReg uses.
+  const useRegistrationStore = (selector?: any) =>
+    selector ? selector(storeState) : storeState;
 
   // Static accessor used by AutoReg init effect.
   (useRegistrationStore as any).getState = () => ({
     settingsLoaded: true,
     loadSettings: loadSettingsSpy,
     saveImmediately: saveImmediatelySpy,
+    ...storeState,
   });
 
-  return { useRegistrationStore };
+  return { useRegistrationStore, __spies: { loadSettingsSpy, saveImmediatelySpy } };
 });
 
 describe('AutoReg page', () => {
+  // Retrieve spies that were declared inside the jest.mock() factory.
+  const { __spies } = jest.requireMock('../../stores/registration') as {
+    __spies: { loadSettingsSpy: jest.Mock; saveImmediatelySpy: jest.Mock };
+  };
+  const { loadSettingsSpy, saveImmediatelySpy } = __spies;
+
   const renderAutoReg = () =>
     render(
       <MemoryRouter>
@@ -149,7 +176,7 @@ describe('AutoReg page', () => {
     const cc = getByTestId('command-center');
     const allowed = JSON.parse(cc.getAttribute('data-allowed') || '[]');
 
-    expect(allowed).toEqual(['kiro', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks']);
+    expect(allowed).toEqual(['kiro', 'kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'qoder', 'bitbucket', 'v0_app']);
     expect(allowed).toContain('openai');
   });
 
