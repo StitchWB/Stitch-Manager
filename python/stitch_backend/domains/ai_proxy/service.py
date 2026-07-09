@@ -552,6 +552,13 @@ async def _ensure_settings_table(session: Any) -> None:
     ))
 
 
+def _ensure_settings_table_sync(session: Any) -> None:
+    """Synchronous wrapper for ``_ensure_settings_table`` — used by command handlers."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(_ensure_settings_table(session))
+
+
 async def get_settings_kv(session: Any, key: str) -> str | None:
     """Read a value from ``ai_proxy_settings`` K/V table."""
     await _ensure_settings_table(session)
@@ -563,6 +570,13 @@ async def get_settings_kv(session: Any, key: str) -> str | None:
     return row.value if row else None
 
 
+def get_settings_kv_sync(session: Any, key: str) -> str | None:
+    """Synchronous wrapper for ``get_settings_kv`` — used by command handlers."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(get_settings_kv(session, key))
+
+
 async def set_settings_kv(session: Any, key: str, value: str) -> None:
     """Write a value to ``ai_proxy_settings`` K/V table."""
     await _ensure_settings_table(session)
@@ -572,9 +586,23 @@ async def set_settings_kv(session: Any, key: str, value: str) -> None:
     ), {"k": key, "v": value, "ts": _now_ts()})
 
 
+def set_settings_kv_sync(session: Any, key: str, value: str) -> None:
+    """Synchronous wrapper for ``set_settings_kv`` — used by command handlers."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_settings_kv(session, key, value))
+
+
 async def get_zai_token_db_path(session: Any) -> str | None:
     """Read the configured Z.AI CAPTCHA token database path."""
     return await get_settings_kv(session, ZAI_TOKEN_DB_PATH_KEY)
+
+
+def get_zai_token_db_path_sync(session: Any) -> str | None:
+    """Synchronous wrapper for ``get_zai_token_db_path`` — used by command handlers."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(get_zai_token_db_path(session))
 
 
 async def set_zai_token_db_path(session: Any, path: str) -> None:
@@ -583,6 +611,13 @@ async def set_zai_token_db_path(session: Any, path: str) -> None:
     if not normalized_path:
         raise ValueError("zai_token_db_path must not be empty")
     await set_settings_kv(session, ZAI_TOKEN_DB_PATH_KEY, normalized_path)
+
+
+def set_zai_token_db_path_sync(session: Any, path: str) -> None:
+    """Synchronous wrapper for ``set_zai_token_db_path`` — used by command handlers."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_zai_token_db_path(session, path))
 
 
 # ── Export / Import ───────────────────────────────────────────────────────────
