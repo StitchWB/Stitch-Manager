@@ -5,6 +5,7 @@ import type { ContentBlock } from '../types/generated';
 interface UseChatOptions {
   apiUrl?: string;
   model?: string;
+  provider?: string;
   apiKey?: string;
   maxTokens?: number;
   temperature?: number;
@@ -35,6 +36,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const {
     apiUrl = DEFAULT_API_URL,
     model: optionModel,
+    provider,
     apiKey,
     maxTokens = 4096,
     temperature = 1.0,
@@ -166,6 +168,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           temperature: activeProfile?.temperature ?? temperature,
           stream: true,
         };
+
+        if (provider) {
+          requestBody.provider = provider;
+        }
 
         const hasImageContent = apiMessages.some(message =>
           Array.isArray(message.content)
@@ -352,6 +358,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     [
       apiUrl,
       model,
+      provider,
       apiKey,
       maxTokens,
       temperature,

@@ -47,9 +47,9 @@ def _make_set_cmd(provider: str):
     return handler
 
 
-# ── Register all 10 commands ─────────────────────────────────────────────────
+# ── Register all provider API-key commands ───────────────────────────────────
 
-_PROVIDERS = ["gemini", "openai", "anthropic", "antigravity", "fireworks"]
+_PROVIDERS = ["gemini", "openai", "anthropic", "antigravity", "fireworks", "zai"]
 
 for _p in _PROVIDERS:
     register_command(f"get_{_p}_api_keys")(_make_get_cmd(_p))

@@ -538,14 +538,11 @@ class AuthFileScanner:
 
 # ── Settings K/V helpers ──────────────────────────────────────────────────────
 
-_SETTINGS_TABLE_READY = False
+ZAI_TOKEN_DB_PATH_KEY = "zai_token_db_path"
 
 
 async def _ensure_settings_table(session: Any) -> None:
     """Create the ``ai_proxy_settings`` K/V table if it doesn't exist."""
-    global _SETTINGS_TABLE_READY  # noqa: PLW0603
-    if _SETTINGS_TABLE_READY:
-        return
     await session.execute(text(
         "CREATE TABLE IF NOT EXISTS ai_proxy_settings ("
         "  key TEXT PRIMARY KEY,"
@@ -553,7 +550,6 @@ async def _ensure_settings_table(session: Any) -> None:
         "  updated_at INTEGER"
         ")"
     ))
-    _SETTINGS_TABLE_READY = True
 
 
 async def get_settings_kv(session: Any, key: str) -> str | None:
@@ -574,6 +570,19 @@ async def set_settings_kv(session: Any, key: str, value: str) -> None:
         "INSERT OR REPLACE INTO ai_proxy_settings (key, value, updated_at)"
         " VALUES (:k, :v, :ts)"
     ), {"k": key, "v": value, "ts": _now_ts()})
+
+
+async def get_zai_token_db_path(session: Any) -> str | None:
+    """Read the configured Z.AI CAPTCHA token database path."""
+    return await get_settings_kv(session, ZAI_TOKEN_DB_PATH_KEY)
+
+
+async def set_zai_token_db_path(session: Any, path: str) -> None:
+    """Store the Z.AI CAPTCHA token database path in settings K/V."""
+    normalized_path = path.strip()
+    if not normalized_path:
+        raise ValueError("zai_token_db_path must not be empty")
+    await set_settings_kv(session, ZAI_TOKEN_DB_PATH_KEY, normalized_path)
 
 
 # ── Export / Import ───────────────────────────────────────────────────────────

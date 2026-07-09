@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import webbrowser
-from typing import Any
+from pathlib import Path
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
@@ -100,7 +100,7 @@ async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
 @register_command("get_available_models")
 async def cmd_get_available_models(params: dict) -> list:
     """Return list of known models across all providers."""
-    _KNOWN = [
+    known_models = [
         {"id": "gpt-4o", "provider": "openai", "name": "GPT-4o"},
         {"id": "gpt-4o-mini", "provider": "openai", "name": "GPT-4o Mini"},
         {"id": "gpt-4.1", "provider": "openai", "name": "GPT-4.1"},
@@ -111,8 +111,13 @@ async def cmd_get_available_models(params: dict) -> list:
         {"id": "claude-3-7-sonnet", "provider": "anthropic", "name": "Claude 3.7 Sonnet"},
         {"id": "accounts/fireworks/models/llama4-scout-instruct-17b-16e-instruct",
          "provider": "fireworks", "name": "Llama 4 Scout"},
+        {"id": "glm-4.7", "provider": "zai", "name": "GLM 4.7"},
+        {"id": "GLM-5-Turbo", "provider": "zai", "name": "GLM-5 Turbo"},
+        {"id": "GLM-5v-Turbo", "provider": "zai", "name": "GLM-5v Turbo"},
+        {"id": "GLM-5.1", "provider": "zai", "name": "GLM 5.1"},
+        {"id": "glm-5.2", "provider": "zai", "name": "GLM 5.2"},
     ]
-    return _KNOWN
+    return known_models
 
 
 @register_command("get_enabled_models")
@@ -197,18 +202,18 @@ async def cmd_set_provider_model_mappings(params: dict) -> None:
 async def cmd_get_provider_capabilities(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
 
-    _PROVIDERS = ("openai", "gemini", "anthropic", "antigravity", "fireworks")
+    providers = ("openai", "gemini", "anthropic", "antigravity", "fireworks", "zai")
 
     async def _op(session):
         accounts = await AiProxyAccountStore.get_accounts(session)
         result = []
-        for provider in _PROVIDERS:
+        for provider in providers:
             total = [a for a in accounts if a["provider"].lower() == provider]
             enabled = [a for a in total if a["enabled"]]
             result.append({
                 "provider": provider,
-                "supportsApiKeys": provider in ("openai", "gemini", "antigravity", "anthropic", "fireworks"),
-                "supportsOauth": True,
+                "supportsApiKeys": provider in ("openai", "gemini", "antigravity", "anthropic", "fireworks", "zai"),
+                "supportsOauth": provider != "zai",
                 "totalAccounts": len(total),
                 "enabledAccounts": len(enabled),
                 "totalApiKeys": 0,
@@ -276,8 +281,8 @@ async def cmd_restore_ai_proxy_ide_config(params: dict) -> dict:
 
 def _sidecar_auth_dirs() -> list:
     """Return auth directories matching Rust sidecar paths.rs logic."""
-    import os, sys
-    from pathlib import Path
+    import os
+    import sys
     dirs = []
     override = os.environ.get("STITCH_AI_PROXY_AUTH_DIR", "").strip()
     if override:
@@ -310,7 +315,8 @@ def _quota_from_api_keys_count(openai_count: int, gemini_count: int, antigravity
 
 async def _try_cli_quota(cli_name: str, provider: str) -> dict | None:
     """Try running a CLI quota tool (gemini/codex/claude) and parse JSON output."""
-    import asyncio, json as _json
+    import asyncio
+    import json as _json
     try:
         proc = await asyncio.create_subprocess_exec(
             cli_name, "quota", "--json",
@@ -385,7 +391,8 @@ async def cmd_fetch_all_quotas(params: dict) -> list:
 @register_command("fetch_openai_account_quotas_cmd")
 async def cmd_fetch_openai_account_quotas(params: dict) -> list:
     """Fetch OpenAI/Codex account-level quotas from auth files and usage API."""
-    import json as _json, time, asyncio
+    import json as _json
+    import time
     import httpx
 
     auth_dirs = _sidecar_auth_dirs()
@@ -463,8 +470,9 @@ async def cmd_fetch_openai_account_quotas(params: dict) -> list:
 @register_command("fetch_kiro_account_quotas_cmd")
 async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
     """Fetch Kiro account quotas via CodeWhisperer API using stored tokens."""
-    import sys, time, os
-    from pathlib import Path
+    import os
+    import sys
+    import time
 
     async def _get_kiro_accounts(session):
         from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
@@ -715,6 +723,33 @@ async def cmd_debug_run_ai_proxy_migration(params: dict) -> str:
 async def cmd_test_provider_connection(params: dict) -> dict:
     """Test connection to an AI proxy provider."""
     provider = params.get("provider", "")
+    if provider == "zai":
+        from stitch_backend.domains.ai_proxy.service import get_zai_token_db_path
+
+        async def _op(session):
+            return await get_zai_token_db_path(session)
+
+        token_db_path = await run_in_session(_op)
+        if not token_db_path:
+            return {
+                "success": False,
+                "provider": provider,
+                "message": "zai_token_db_path is not configured",
+                "latencyMs": 0,
+            }
+        if not Path(token_db_path).is_file():
+            return {
+                "success": False,
+                "provider": provider,
+                "message": "zai_token_db_path does not point to an existing file",
+                "latencyMs": 0,
+            }
+        return {
+            "success": True,
+            "provider": provider,
+            "message": "Z.AI token database is configured",
+            "latencyMs": 0,
+        }
     return {
         "success": False,
         "provider": provider,

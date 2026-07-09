@@ -23,6 +23,7 @@ export type ProviderRegistryId =
   | 'gemini'
   | 'antigravity'
   | 'fireworks'
+  | 'zai'
   | 'qoder'
   | 'v0_app';
 
@@ -156,6 +157,17 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
     accounts: { matchProviders: ['fireworks'] },
     aiProxy: { enabled: true },
   },
+  zai: {
+    id: 'zai',
+    label: 'Z.AI / GLM',
+    badge: {
+      bg: 'bg-cyan-500/10',
+      text: 'text-cyan-400',
+      border: 'border-cyan-500/20',
+    },
+    accounts: { matchProviders: ['zai'] },
+    aiProxy: { enabled: true },
+  },
   qoder: {
     id: 'qoder',
     label: 'Qoder',
@@ -224,6 +236,7 @@ export const AI_PROXY_PROVIDER_LIST = [
   'kiro',
   'antigravity',
   'fireworks',
+  'zai',
 ] as const;
 
 export type AiProxyProviderName = (typeof AI_PROXY_PROVIDER_LIST)[number];

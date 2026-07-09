@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 
 class ApiKeyBase(BaseModel):
-    """Common API key shape shared by Gemini, OpenAI, Antigravity, Fireworks."""
+    """Common API key shape shared by API-key providers."""
 
     api_key: str = Field(alias="apiKey")
     base_url: str | None = Field(default=None, alias="baseUrl")
@@ -35,6 +35,7 @@ PROVIDER_SCHEMAS: dict[str, type[ApiKeyBase]] = {
     "anthropic": AnthropicApiKey,
     "antigravity": ApiKeyBase,
     "fireworks": ApiKeyBase,
+    "zai": ApiKeyBase,
 }
 
 # Database key names in ai_proxy_settings table
@@ -44,6 +45,7 @@ PROVIDER_DB_KEYS: dict[str, str] = {
     "anthropic": "anthropic_api_keys",
     "antigravity": "antigravity_api_keys",
     "fireworks": "fireworks_api_keys",
+    "zai": "zai_api_keys",
 }
 
 
