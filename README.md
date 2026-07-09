@@ -119,6 +119,8 @@ Schema reference: `docs/google-sheets-graph-schema.md`
   - [Setup Guide](docs/freemodel-setup.md)
   - Claude models via bridge (port 3456) — управляется через **AI Hub → FreeModel**
   - OpenAI models directly
+- **Z.AI / GLM** — Initial web-session adapter seam for GLM models
+  - [Setup and current runtime limitations](docs/zai-glm-setup.md)
 
 ### FreeModel Bridge
 

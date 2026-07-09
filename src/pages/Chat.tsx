@@ -21,6 +21,7 @@ import { useChatStore, type ChatSession } from '../stores/chat';
 import { useAppStore } from '../stores/app';
 import type { ContentBlock, ModelInfo } from '../types/generated';
 import { t } from '../lib/i18n';
+import { isZaiChatModel, resolveChatCompletionsUrl } from './chatRouting';
 
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
@@ -37,6 +38,7 @@ import {
   getAntigravityApiKeys,
   getGeminiApiKeys,
   getOpenAIApiKeys,
+  getZaiApiKeys,
 } from '@/lib/tauri/modules/apiKeys';
 import { Button, ButtonBase, Checkbox, EmptyState, Input, LoadingSpinner, Select, StatusBadge, Textarea, Tooltip } from '@/components/ui';
 
@@ -48,6 +50,7 @@ interface SetupSnapshot {
   geminiKeys: number;
   openaiKeys: number;
   antigravityKeys: number;
+  zaiKeys: number;
   freemodelKey: boolean;
   enabledProviderAccounts: number;
   totalProviderAccounts: number;
@@ -103,6 +106,7 @@ export default function Chat() {
     geminiKeys: 0,
     openaiKeys: 0,
     antigravityKeys: 0,
+    zaiKeys: 0,
     freemodelKey: false,
     enabledProviderAccounts: 0,
     totalProviderAccounts: 0,
@@ -121,17 +125,20 @@ export default function Chat() {
   const [inspectorMessageId, setInspectorMessageId] = useState<string | null>(null);
   const [errorDismissed, setErrorDismissed] = useState(false);
 
-  // Resolve the active endpoint URL — all traffic goes through AI Proxy.
-  const activePort = proxyPort;
-  const aiProxyUrl = `http://127.0.0.1:${activePort}/v1/chat/completions`;
-  const apiUrl = aiProxyUrl; // For display purposes
+  const modelList = aiProxyModels;
+  const activeRouteModel = modelList.find(m => m.id === model);
+  const selectedModelUsesZaiRoute = isZaiChatModel(activeRouteModel);
+  const chatApiUrl = resolveChatCompletionsUrl(activeRouteModel, proxyPort);
+  const chatProvider = selectedModelUsesZaiRoute ? 'zai' : undefined;
+  const apiUrl = chatApiUrl; // For display purposes
 
   // Force re-render when language changes
   void language;
 
   const { messages, isLoading, error, sendMessage, clearMessages, stopGeneration } = useChat({
-    apiUrl: aiProxyUrl,
+    apiUrl: chatApiUrl,
     model,
+    provider: chatProvider,
     apiKey: CHAT_PROXY_API_KEY,
   });
 
@@ -150,15 +157,16 @@ export default function Chat() {
         getProxySettings(),
       ]);
 
-      const [geminiKeys, openaiKeys, antigravityKeys, capabilities, mappings] = await Promise.all([
+      const [geminiKeys, openaiKeys, antigravityKeys, zaiKeys, capabilities, mappings] = await Promise.all([
         getGeminiApiKeys(),
         getOpenAIApiKeys(),
         getAntigravityApiKeys(),
+        getZaiApiKeys(),
         getProviderCapabilities(),
         getProviderModelMappings(),
       ]);
 
-      const availableModels = proxyStatus.running ? await getAiProxyAvailableModels() : [];
+      const availableModels = await getAiProxyAvailableModels();
 
       const [history, stats, cost] = await Promise.all([
         getRequestHistorySafe(20, 0),
@@ -167,7 +175,7 @@ export default function Chat() {
       ]);
 
       const hasAnyConfiguredKey =
-        geminiKeys.length > 0 || openaiKeys.length > 0 || antigravityKeys.length > 0 || !!proxySettings.freemodelApiKey;
+        geminiKeys.length > 0 || openaiKeys.length > 0 || antigravityKeys.length > 0 || zaiKeys.length > 0 || !!proxySettings.freemodelApiKey;
 
       setProxyRunning(proxyStatus.running);
       setProxyMode(proxySettings.appMode);
@@ -183,6 +191,7 @@ export default function Chat() {
         geminiKeys: geminiKeys.length,
         openaiKeys: openaiKeys.length,
         antigravityKeys: antigravityKeys.length,
+        zaiKeys: zaiKeys.length,
         freemodelKey: !!proxySettings.freemodelApiKey,
         enabledProviderAccounts,
         totalProviderAccounts,
@@ -218,16 +227,13 @@ export default function Chat() {
     }
   }, []);
 
-  const modelList = aiProxyModels;
-
-  const totalApiKeys = setup.geminiKeys + setup.openaiKeys + setup.antigravityKeys;
+  const totalApiKeys = setup.geminiKeys + setup.openaiKeys + setup.antigravityKeys + setup.zaiKeys;
   const hasProviderSetup = setup.enabledProviderAccounts > 0 || totalApiKeys > 0 || setup.freemodelKey;
   const hasModels = modelList.length > 0;
 
-  // Block reason — only AI Proxy now.
-  const setupBlockReason = !proxyRunning
+  const setupBlockReason = !selectedModelUsesZaiRoute && !proxyRunning
     ? 'AI Proxy is not running. Start it in Settings to enable debug chat.'
-    : proxyMode === 'quota-only'
+    : !selectedModelUsesZaiRoute && proxyMode === 'quota-only'
       ? 'AI Proxy is in quota-only mode. Switch to Full mode to use debug chat.'
       : !hasProviderSetup
         ? 'Set up providers or API keys in AI Proxy to enable debug chat.'
