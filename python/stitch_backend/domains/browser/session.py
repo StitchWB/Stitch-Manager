@@ -81,7 +81,8 @@ def _profile_dir_for_account(account_id: int, email: str = "") -> Path:
 # ── Launch browser ─────────────────────────────────────────────────────────
 
 _PROVIDER_URLS: dict[str, str] = {
-    "kiro": "https://kiro.dev/",
+    "kiro": "https://app.kiro.dev/home",
+    "kiro_v2": "https://app.kiro.dev/home",
     "windsurf": "https://codeium.com/profile",
     "github": "https://github.com/settings/profile",
     "trae": "https://trae.sh/",

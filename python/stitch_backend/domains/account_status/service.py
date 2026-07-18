@@ -17,6 +17,8 @@ import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from autoreg.providers.base import ProviderId
+
 logger = logging.getLogger(__name__)
 
 _HTTP_TIMEOUT = 15.0
@@ -85,31 +87,33 @@ async def check_account_status(db: AsyncSession, account_id: int) -> dict[str, A
             raw="Token expired. Please re-authenticate.",
         )
 
-    # Provider dispatch
-    if provider in ("aws_builder_id", "aws"):
+    # Provider dispatch — use ProviderId enum for exhaustive, typo-proof matching
+    _pid = provider  # keep original string for _status_info calls
+
+    if provider in (ProviderId.AWS.value, ProviderId.AWS_BUILDER_ID.value):
         return _status_info(
-            provider, email, account.get("status") == "active",
+            _pid, email, account.get("status") == "active",
             "AWS Builder ID", expires_at=expires_at,
             raw="AWS Builder ID account - used for OAuth authorization",
         )
 
-    if provider == "github":
+    if provider == ProviderId.GITHUB.value:
         is_active = bool(token) and not _is_token_expired(expires_at)
         return _status_info(
-            provider, email, is_active, "GitHub Account",
+            _pid, email, is_active, "GitHub Account",
             expires_at=expires_at,
             raw="GitHub account - used for OAuth authorization",
         )
 
-    if provider == "trae":
+    if provider == ProviderId.TRAE.value:
         is_active = bool(token) and not _is_token_expired(expires_at)
         return _status_info(
-            provider, email, is_active, "Trae Account",
+            _pid, email, is_active, "Trae Account",
             expires_at=expires_at,
             raw="Trae quota check not yet implemented",
         )
 
-    if provider == "windsurf":
+    if provider == ProviderId.WINDSURF.value:
         if not token:
             raise RuntimeError("No token found for Windsurf account")
         metadata = account.get("metadata")
@@ -128,26 +132,26 @@ async def check_account_status(db: AsyncSession, account_id: int) -> dict[str, A
         await _update_account_status(db, account_id, status_str, status.get("quotaUsed", 0))
         return status
 
-    if provider == "kiro":
+    if provider in (ProviderId.KIRO.value, ProviderId.KIRO_V2.value):
         if not token:
             raise RuntimeError("No token found for Kiro account")
         # Kiro quota check via CodeWhisperer API
         quota = await _check_kiro_quota(token)
         if quota.get("error"):
             return _status_info(
-                provider, email, False, "Error",
+                _pid, email, False, "Error",
                 expires_at=expires_at, raw=quota["error"],
             )
         used = quota.get("used", 0)
         limit = quota.get("limit", 0)
         await _update_account_status(db, account_id, "active", used)
         return _status_info(
-            provider, email, True, "Pro",
+            _pid, email, True, "Pro",
             quota_used=used, quota_limit=limit,
             expires_at=expires_at,
         )
 
-    raise RuntimeError(f"Status check not supported for provider: {provider}")
+    raise RuntimeError(f"Status check not supported for provider: {provider!r}")
 
 
 # ── check_windsurf_balance ────────────────────────────────────────────────────

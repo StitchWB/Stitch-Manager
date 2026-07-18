@@ -65,3 +65,6 @@ patchright>=1.0.0
 
 # Aliyun/slider captcha gap detection (ONNX deep-learning model)
 captcha-recognizer>=1.0.2
+
+# TOTP code generation (for MFA registration)
+pyotp>=2.9.0
