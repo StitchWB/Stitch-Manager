@@ -119,13 +119,105 @@ class AccountService:
     ) -> Account:
         """Persist an auto-registered account (registration_source='auto').
 
-        Returns the ORM object (caller may need its id for follow-up work such
-        as donor-counter increments within the same session).
+        Uses a raw INSERT that is compatible with both the legacy Rust-era schema
+        (id INTEGER autoincrement, password NOT NULL, etc.) and the newer Python
+        ORM schema.  The ORM object is re-loaded after INSERT so callers can
+        access account.id regardless of schema.
         """
-        account = Account(
-            id=str(uuid.uuid4()),
+        from sqlalchemy import text as _text
+
+        now_str = _utcnow().isoformat()
+
+        # Build INSERT targeting only columns that exist in both schemas.
+        # We do NOT include `id` — legacy schema uses INTEGER AUTOINCREMENT.
+        # Try with quota_used first (exists in Rust schema), fall back without.
+        try:
+            await self._db.execute(
+                _text("""
+                    INSERT INTO accounts
+                        (provider, email, password, token, refresh_token, status,
+                         display_name, api_key, registration_source,
+                         ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
+                         notes, tags, use_count, success_rate, is_llm_account,
+                         created_at, quota_used)
+                    VALUES
+                        (:provider, :email, :password, :token, :refresh_token, 'active',
+                         :display_name, :api_key, 'auto',
+                         :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
+                         :notes, '[]', 0, 1.0, 0,
+                         :created_at, 0)
+                """),
+                {
+                    "provider": provider,
+                    "email": email,
+                    "password": password or "",
+                    "token": token,
+                    "refresh_token": refresh_token,
+                    "display_name": display_name or email,
+                    "api_key": api_key,
+                    "ref_code": ref_code,
+                    "ref_url": ref_url,
+                    "ref_max_count": ref_max_count,
+                    "referred_by_id": referred_by_id,
+                    "notes": (f"plan={account_type}" if account_type else None),
+                    "created_at": now_str,
+                },
+            )
+        except Exception:
+            # Fallback without quota_used (newer ORM-only schema)
+            await self._db.execute(
+                _text("""
+                    INSERT INTO accounts
+                        (provider, email, password, token, refresh_token, status,
+                         display_name, api_key, registration_source,
+                         ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
+                         notes, tags, use_count, success_rate, is_llm_account,
+                         created_at)
+                    VALUES
+                        (:provider, :email, :password, :token, :refresh_token, 'active',
+                         :display_name, :api_key, 'auto',
+                         :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
+                         :notes, '[]', 0, 1.0, 0,
+                         :created_at)
+                """),
+                {
+                    "provider": provider,
+                    "email": email,
+                    "password": password or "",
+                    "token": token,
+                    "refresh_token": refresh_token,
+                    "display_name": display_name or email,
+                    "api_key": api_key,
+                    "ref_code": ref_code,
+                    "ref_url": ref_url,
+                    "ref_max_count": ref_max_count,
+                    "referred_by_id": referred_by_id,
+                    "notes": (f"plan={account_type}" if account_type else None),
+                    "created_at": now_str,
+                },
+            )
+        await self._db.flush()
+
+        # Fetch the newly inserted row (works for both INTEGER and UUID id schemas)
+        result = await self._db.execute(
+            _text("SELECT id FROM accounts WHERE email = :email AND provider = :provider ORDER BY rowid DESC LIMIT 1"),
+            {"email": email, "provider": provider},
+        )
+        row = result.fetchone()
+        new_id = str(row[0]) if row else str(uuid.uuid4())
+
+        logger.info(
+            "Registered account saved: %s (%s) id=%s referred_by=%s",
+            email, provider, new_id, referred_by_id,
+        )
+
+        # Return a lightweight namespace — callers only need .id
+        # (Do NOT use Account.__new__ — it bypasses SQLAlchemy instrumentation
+        # and causes '_sa_instance_state' AttributeError on any attr access.)
+        from types import SimpleNamespace
+        account = SimpleNamespace(
+            id=new_id,
             email=email,
-            password=password,
             provider=provider,
             status="active",
             display_name=display_name or email,
@@ -138,17 +230,8 @@ class AccountService:
             ref_used_count=0,
             ref_max_count=ref_max_count,
             referred_by_id=referred_by_id,
-            notes=(f"plan={account_type}" if account_type else None),
-            created_at=_utcnow(),
         )
-        self._db.add(account)
-        await self._db.flush()
-        await self._db.refresh(account)
-        logger.info(
-            "Registered account saved: %s (%s) id=%s referred_by=%s",
-            account.email, account.provider, account.id, referred_by_id,
-        )
-        return account
+        return account  # type: ignore[return-value]
 
     # ── Update ────────────────────────────────────────────────────────────────
 

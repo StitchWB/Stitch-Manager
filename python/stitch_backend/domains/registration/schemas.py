@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from autoreg.providers.base import ProviderId
 
 
 class StartRegistrationRequest(BaseModel):
@@ -12,6 +14,18 @@ class StartRegistrationRequest(BaseModel):
     email: str = ""
     password: str = ""
     count: int = 1
+
+    @field_validator("provider_id")
+    @classmethod
+    def validate_provider_id(cls, v: str) -> str:
+        try:
+            ProviderId(v)
+        except ValueError:
+            raise ValueError(
+                f"Unknown provider id: {v!r}. "
+                f"Valid values: {[p.value for p in ProviderId]}"
+            )
+        return v
 
 
 class CancelRegistrationRequest(BaseModel):

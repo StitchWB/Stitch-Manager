@@ -448,12 +448,12 @@ export default function AutoRegNext() {
                         setLaunchContext(prev =>
                           prev
                             ? {
-                                ...prev,
-                                launchMode:
-                                  mode === 'existing_aws_session'
-                                    ? 'kiro_oauth_only_existing_session'
-                                    : 'kiro_full_register',
-                              }
+                              ...prev,
+                              launchMode:
+                                mode === 'existing_aws_session'
+                                  ? 'kiro_oauth_only_existing_session'
+                                  : 'kiro_full_register',
+                            }
                             : prev
                         );
                       }}
@@ -466,7 +466,7 @@ export default function AutoRegNext() {
 
                   {kiroBootstrapMode === 'existing_aws_session' && (
                     <div>
-                        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">
+                      <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">
                         {t('autoReg.awsAccount')}
                       </div>
                       <Select
@@ -477,9 +477,9 @@ export default function AutoRegNext() {
                           setLaunchContext(prev =>
                             prev
                               ? {
-                                  ...prev,
-                                  awsBootstrapAccountId: val ?? undefined,
-                                }
+                                ...prev,
+                                awsBootstrapAccountId: val ?? undefined,
+                              }
                               : prev
                           );
                         }}
@@ -557,8 +557,6 @@ export default function AutoRegNext() {
         }
         logVerbosity={logVerbosity as LogVerbosity}
         onLogVerbosityChange={stableSetLogVerbosity}
-        showDebugLogsInConsole={showDebugLogs}
-        onShowDebugLogsInConsoleChange={setShowDebugLogs}
         verificationCodeTimeout={config.advanced.verificationCodeTimeout}
         onVerificationCodeTimeoutChange={verificationCodeTimeout =>
           stableSetAdvancedSettings({ verificationCodeTimeout })

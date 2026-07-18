@@ -152,7 +152,29 @@ def _build_provider_kwargs(config: dict) -> dict[str, Any]:
 
 
 def _build_provider(provider_name: str, config: dict):
-    """Instantiate the correct autoreg provider from config dict."""
+    """Instantiate the correct autoreg provider from config dict.
+
+    autoreg modules are imported lazily but cached in sys.modules after first
+    use.  We purge the kiro_v2 subpackage cache before each instantiation so
+    that uvicorn's file watcher triggers a real reload — otherwise code changes
+    to browser.py / provider.py are invisible until the whole process restarts.
+    """
+    import sys as _sys
+
+    _RELOAD_PREFIXES = (
+        "autoreg.providers.kiro_v2",
+        "autoreg.providers.fireworks",
+        "autoreg.providers.qoder",
+        "autoreg.providers.windsurf",
+        "autoreg.providers.trae",
+        "autoreg.providers.openai",
+        "autoreg.providers.github",
+        "autoreg.providers.bitbucket",
+        "autoreg.providers.v0_app",
+    )
+    for _key in list(_sys.modules):
+        if any(_key == p or _key.startswith(p + ".") for p in _RELOAD_PREFIXES):
+            del _sys.modules[_key]
 
     base_kwargs = _build_provider_kwargs(config)
 
@@ -180,7 +202,44 @@ def _build_provider(provider_name: str, config: dict):
 
     if provider_name in ("kiro", "kiro_v2"):
         from autoreg.providers.kiro_v2 import KiroV2Provider
-        return KiroV2Provider(**base_kwargs)
+        from autoreg.shared.logging_system import StructuredLogger, LogLevel
+        debug = bool(config.get("debug") or config.get("debugMode"))
+        level = LogLevel.DEBUG if debug else LogLevel.NORMAL
+        struct_logger = StructuredLogger(account_id="kiro_v2", log_level=level)
+
+        # Resolve card — explicit config fields take priority, then card pool
+        card_number = config.get("card_number") or config.get("cardNumber")
+        card_expiry = config.get("card_expiry") or config.get("cardExpiry")
+        card_cvc = config.get("card_cvc") or config.get("cardCvc")
+        cardholder_name = config.get("cardholder_name") or config.get("cardholderName")
+        if not card_number:
+            try:
+                from autoreg.core.card_pool import get_card_pool
+                card = get_card_pool().get_card(provider_name)
+                if card:
+                    card_number = card.number
+                    card_cvc = card.cvv
+                    # Normalise expiry → MM/YY
+                    yr = card.exp_year[-2:] if len(card.exp_year) == 4 else card.exp_year
+                    card_expiry = f"{card.exp_month}/{yr}"
+                    logger.info("kiro_v2: using card from pool ****%s", card_number[-4:])
+            except Exception as _card_exc:
+                logger.debug("kiro_v2: card pool lookup failed: %s", _card_exc)
+
+        return KiroV2Provider(
+            **base_kwargs,
+            logger_instance=struct_logger,
+            speed_multiplier=float(config.get("speed_multiplier") or config.get("speedMultiplier") or 1.0),
+            card_number=card_number,
+            card_expiry=card_expiry,
+            card_cvc=card_cvc,
+            cardholder_name=cardholder_name,
+            billing_country=config.get("billing_country") or config.get("billingCountry"),
+            billing_address=config.get("billing_address") or config.get("billingAddress"),
+            billing_city=config.get("billing_city") or config.get("billingCity"),
+            billing_state=config.get("billing_state") or config.get("billingState"),
+            billing_zip=config.get("billing_zip") or config.get("billingZip"),
+        )
 
     if provider_name == "windsurf":
         from autoreg.providers.windsurf import WindsurfProvider
@@ -730,11 +789,53 @@ class RegistrationService:
                         "Registration %s: account saved to DB id=%s email=%s",
                         job_id, account_id, reg_email,
                     )
-                    # Surface success in the registration console so operators
-                    # can confirm the account actually reached the database.
                     log_callback(
                         f"[db] Account saved: id={account_id} email={reg_email}"
                     )
+
+                    # Link TOTP key to the account if MFA was registered
+                    totp_key_id = result.get("totp_key_id")
+                    if totp_key_id and account_id:
+                        try:
+                            import sqlite3 as _sqlite3
+                            from stitch_backend.config import get_settings as _get_settings
+                            _db_path = _get_settings().database_url.split("///", 1)[-1]
+                            with _sqlite3.connect(_db_path) as _conn:
+                                _conn.execute(
+                                    "UPDATE totp_keys SET account_id = ? WHERE id = ?",
+                                    (str(account_id), totp_key_id),
+                                )
+                                _conn.commit()
+                            log_callback(f"[db] TOTP key {totp_key_id} linked to account {account_id}")
+                        except Exception as _totp_exc:
+                            log_callback(f"[db] TOTP link failed (non-fatal): {_totp_exc}")
+
+                    # Persist browser profile path + cookies so "Open browser"
+                    # button restores the authenticated session instead of
+                    # launching a blank profile.
+                    _kiro_account = result.get("kiro_account") or {}
+                    _profile_path = _kiro_account.get("browser_profile_path") or ""
+                    _cookies = _kiro_account.get("cookies") or "[]"
+                    _session_data = (_kiro_account.get("session_data")
+                                     or result.get("session_data", {}).get("session_data")
+                                     or "{}")
+                    if _profile_path and account_id:
+                        try:
+                            import sqlite3 as _sqlite3
+                            from stitch_backend.config import get_settings as _get_settings
+                            _db_path = _get_settings().database_url.split("///", 1)[-1]
+                            with _sqlite3.connect(_db_path) as _conn:
+                                _conn.execute(
+                                    "UPDATE accounts SET browser_profile_path=?, cookies=?, "
+                                    "session_data=? WHERE id=?",
+                                    (_profile_path, _cookies, _session_data, str(account_id)),
+                                )
+                                _conn.commit()
+                            log_callback(
+                                f"[db] Browser profile saved: {_profile_path}"
+                            )
+                        except Exception as _bp_exc:
+                            log_callback(f"[db] Browser profile save failed (non-fatal): {_bp_exc}")
                 except Exception as db_exc:
                     import traceback as _tb
                     logger.warning(
@@ -818,9 +919,9 @@ class RegistrationService:
 
 def _load_cards(provider_name: str, config: dict) -> None:
     """Load card pool from config (cards_file, cards_text, card_bin)."""
-    cards_file = config.get("cards_file", "")
-    cards_text = config.get("cards_text", "")
-    card_bin = config.get("card_bin", "")
+    cards_file = config.get("cards_file") or config.get("cardsFile") or ""
+    cards_text = config.get("cards_text") or config.get("cardsText") or ""
+    card_bin = config.get("card_bin") or config.get("cardBin") or ""
 
     if not any([cards_file, cards_text, card_bin]):
         return
