@@ -27,6 +27,10 @@
     "audit:py": "python -m vulture python/autoreg",
     "audit:contracts": "python scripts/audit_contracts.py"
   },
+  "overrides": {
+    "@emnapi/core": "^1.11.2",
+    "@emnapi/runtime": "^1.11.2"
+  },
   "dependencies": {
     "@types/dompurify": "^3.0.5",
     "clsx": "^2.1.1",
