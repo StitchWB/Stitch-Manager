@@ -14,8 +14,13 @@ describe('ProviderSelector', () => {
       />
     );
 
+    // Active provider label is always visible in the collapsed trigger
     expect(screen.getByText('Kiro')).toBeTruthy();
-    expect(screen.getByText('Windsurf')).toBeTruthy();
+
+    // Expand the dropdown to see all providers in the current (IDE) category
+    await user.click(screen.getByRole('button', { expanded: false }));
+
+    expect(await screen.findByText('Windsurf')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'AI' }));
     // Allow effect-driven category switch to settle
