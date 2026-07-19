@@ -214,7 +214,19 @@ export function MailSidebar({
       folder: 10,
     };
 
-    return [...availableFolders].sort((a, b) => {
+    // Some IMAP servers expose the same mailbox more than once (for example,
+    // both as a SPECIAL-USE folder and as a regular folder). Keep one entry
+    // per canonical path and prefer the entry with a specific folder kind.
+    const uniqueByPath = new Map<string, EmailFolder>();
+    for (const folder of availableFolders) {
+      const canonicalPath = folder.path.trim().toLocaleLowerCase();
+      const existing = uniqueByPath.get(canonicalPath);
+      if (!existing || (existing.kind === 'folder' && folder.kind !== 'folder')) {
+        uniqueByPath.set(canonicalPath, folder);
+      }
+    }
+
+    return [...uniqueByPath.values()].sort((a, b) => {
       const oa = order[a.kind] ?? 10;
       const ob = order[b.kind] ?? 10;
       if (oa !== ob) return oa - ob;
@@ -318,8 +330,8 @@ export function MailSidebar({
                     <Fragment key={profile.id}>
                       <div
                         className={`group w-full rounded-lg border px-2.5 py-2 transition-colors ${selected
-                            ? 'border-indigo-400/50 bg-indigo-500/10 text-white'
-                            : 'border-white/10 bg-black/20 text-slate-200 hover:border-white/20 hover:bg-black/30'
+                          ? 'border-indigo-400/50 bg-indigo-500/10 text-white'
+                          : 'border-white/10 bg-black/20 text-slate-200 hover:border-white/20 hover:bg-black/30'
                           }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -385,15 +397,15 @@ export function MailSidebar({
                             const label = getFolderLabel(folder);
                             return (
                               <ButtonBase
-                                key={folder.id}
+                                key={`folder:${folder.path.trim().toLocaleLowerCase()}`}
                                 type="button"
                                 disabled={isConnecting}
                                 onClick={() => {
                                   void onSelectFolder(folder);
                                 }}
                                 className={`w-full text-left rounded-md px-2 py-1.5 transition-colors flex items-center gap-2 ${folderActive
-                                    ? 'bg-indigo-500/15 text-white'
-                                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                                  ? 'bg-indigo-500/15 text-white'
+                                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                                   } disabled:opacity-50`}
                                 style={depth > 0 ? { paddingLeft: 8 + depth * 12 } : undefined}
                                 title={folder.path}

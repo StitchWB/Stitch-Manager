@@ -11,6 +11,7 @@ import {
   Shield,
   AtSign,
   Server,
+  Cloud,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { AddyIoAccountDetails } from '../../types/generated';
@@ -43,6 +44,7 @@ export interface IdentityConfig {
   thirtyThreeMailUsername?: string;
   thirtyThreeMailDomain?: string;
   mailtmEnabled?: boolean;
+  icloudEnabled?: boolean;
   emailGenerationDomain?: string;
 }
 
@@ -149,7 +151,7 @@ const ImapForm = memo(
 
 ImapForm.displayName = 'ImapForm';
 
-type GenerationMode = 'custom' | 'cf-to-imap' | 'gmail' | 'addyio' | '33mail' | 'mailtm';
+type GenerationMode = 'custom' | 'cf-to-imap' | 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'icloud_pool';
 
 export function IdentitySystemCard({
   config,
@@ -183,11 +185,13 @@ export function IdentitySystemCard({
       ? '33mail'
       : config.mailtmEnabled
         ? 'mailtm'
-        : config.strategy === 'gmail'
-          ? 'gmail'
-          : config.strategy === 'cf-to-imap'
-            ? 'cf-to-imap'
-            : 'custom';
+        : config.icloudEnabled
+          ? 'icloud_pool'
+          : config.strategy === 'gmail'
+            ? 'gmail'
+            : config.strategy === 'cf-to-imap'
+              ? 'cf-to-imap'
+              : 'custom';
 
   const handleModeChange = (mode: GenerationMode) => {
     const updates: Partial<IdentityConfig> = {
@@ -196,6 +200,7 @@ export function IdentitySystemCard({
       addyioEnabled: mode === 'addyio',
       thirtyThreeMailEnabled: mode === '33mail',
       mailtmEnabled: mode === 'mailtm',
+      icloudEnabled: mode === 'icloud_pool',
       // Preserve emailGenerationDomain when in cf-to-imap mode, clear when leaving
       emailGenerationDomain:
         mode === 'cf-to-imap' ? (config.emailGenerationDomain || '') : '',
@@ -241,9 +246,11 @@ export function IdentitySystemCard({
           ? !!(config.thirtyThreeMailUsername && config.server && config.email)
           : activeMode === 'mailtm'
             ? true
-            : activeMode === 'cf-to-imap'
-              ? !!(config.emailGenerationDomain && config.server && config.email && (config.password || passwordSet))
-              : !!(config.server && config.email && (config.password || passwordSet));
+            : activeMode === 'icloud_pool'
+              ? !!(config.icloudEnabled)
+              : activeMode === 'cf-to-imap'
+                ? !!(config.emailGenerationDomain && config.server && config.email && (config.password || passwordSet))
+                : !!(config.server && config.email && (config.password || passwordSet));
 
   const generatePreview = useCallback(() => {
     if (activeMode === 'gmail') {
@@ -283,6 +290,9 @@ export function IdentitySystemCard({
     } else if (activeMode === 'mailtm') {
       const randomStr = Math.random().toString(36).substring(2, 10);
       setPreview(`${randomStr}@tmpmail.net`);
+    } else if (activeMode === 'icloud_pool') {
+      const randomStr = Math.random().toString(36).substring(2, 10);
+      setPreview(`${randomStr}@privaterelay.appleid.com`);
     }
   }, [activeMode, config]);
 
@@ -325,6 +335,7 @@ export function IdentitySystemCard({
           { id: '33mail', label: '33mail', icon: AtSign, color: 'text-purple-400' },
           { id: 'addyio', label: 'Addy.io', icon: Shield, color: 'text-indigo-400' },
           { id: 'mailtm', label: 'Mail.tm', icon: Mail, color: 'text-cyan-400' },
+          { id: 'icloud_pool', label: 'iCloud', icon: Cloud, color: 'text-sky-400' },
         ].map(mode => (
           <button
             key={mode.id}
@@ -700,6 +711,41 @@ export function IdentitySystemCard({
             </div>
           </div>
         )}
+
+        {activeMode === 'icloud_pool' && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                  <Cloud className="w-4 h-4 text-sky-400" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <p className="text-sky-300 text-xs font-bold uppercase tracking-widest">
+                    iCloud Hide My Email
+                  </p>
+                  <p className="text-slate-300 text-xs leading-relaxed">
+                    Aliases from your iCloud pool ({t('identity.noImapConfigNeeded').toLowerCase()} — verification via iCloud IMAP).
+                  </p>
+                  <div className="flex items-center gap-2 text-[10px] text-sky-400 font-medium">
+                    <CheckCircle size={12} />
+                    <span>@privaterelay.appleid.com forwarding</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-sky-400 font-medium">
+                    <CheckCircle size={12} />
+                    <span>~700 aliases / month for $0.99</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-sky-400 font-medium">
+                    <CheckCircle size={12} />
+                    <span>Pre-fill pool in Settings → Connectivity</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg px-3 py-2 text-[10px] text-sky-300 font-mono truncate">
+              {preview || 'abc123@privaterelay.appleid.com'}
+            </div>
+          </div>
+        )}
       </div>
 
       {(activeMode === 'custom' || activeMode === 'cf-to-imap' || activeMode === 'gmail') && (
@@ -711,9 +757,9 @@ export function IdentitySystemCard({
               </span>
             )}
             {testStatus === 'success' && (
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md">
-                  <CheckCircle size={12} /> {t('identity.imapOk')}
-                </div>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md">
+                <CheckCircle size={12} /> {t('identity.imapOk')}
+              </div>
             )}
             {testStatus === 'error' && (
               <Tooltip content={testError || 'Connection failed'}>
