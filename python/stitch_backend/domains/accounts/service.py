@@ -128,84 +128,66 @@ class AccountService:
         from sqlalchemy import text as _text
 
         now_str = _utcnow().isoformat()
+        new_id = str(uuid.uuid4())
+
+        common_params = {
+            "id": new_id,
+            "provider": provider,
+            "email": email,
+            "password": password or "",
+            "token": token,
+            "refresh_token": refresh_token,
+            "display_name": display_name or email,
+            "api_key": api_key,
+            "ref_code": ref_code,
+            "ref_url": ref_url,
+            "ref_max_count": ref_max_count,
+            "referred_by_id": referred_by_id,
+            "notes": (f"plan={account_type}" if account_type else None),
+            "created_at": now_str,
+        }
 
         # Build INSERT targeting only columns that exist in both schemas.
-        # We do NOT include `id` — legacy schema uses INTEGER AUTOINCREMENT.
-        # Try with quota_used first (exists in Rust schema), fall back without.
+        # Always include `id` — the current ORM schema uses UUID String (NOT NULL).
+        # Try with quota_used first (exists in legacy Rust schema), fall back without.
         try:
             await self._db.execute(
                 _text("""
                     INSERT INTO accounts
-                        (provider, email, password, token, refresh_token, status,
+                        (id, provider, email, password, token, refresh_token, status,
                          display_name, api_key, registration_source,
                          ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
                          notes, tags, use_count, success_rate, is_llm_account,
                          created_at, quota_used)
                     VALUES
-                        (:provider, :email, :password, :token, :refresh_token, 'active',
+                        (:id, :provider, :email, :password, :token, :refresh_token, 'active',
                          :display_name, :api_key, 'auto',
                          :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
                          :notes, '[]', 0, 1.0, 0,
                          :created_at, 0)
                 """),
-                {
-                    "provider": provider,
-                    "email": email,
-                    "password": password or "",
-                    "token": token,
-                    "refresh_token": refresh_token,
-                    "display_name": display_name or email,
-                    "api_key": api_key,
-                    "ref_code": ref_code,
-                    "ref_url": ref_url,
-                    "ref_max_count": ref_max_count,
-                    "referred_by_id": referred_by_id,
-                    "notes": (f"plan={account_type}" if account_type else None),
-                    "created_at": now_str,
-                },
+                common_params,
             )
         except Exception:
             # Fallback without quota_used (newer ORM-only schema)
             await self._db.execute(
                 _text("""
                     INSERT INTO accounts
-                        (provider, email, password, token, refresh_token, status,
+                        (id, provider, email, password, token, refresh_token, status,
                          display_name, api_key, registration_source,
                          ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
                          notes, tags, use_count, success_rate, is_llm_account,
                          created_at)
                     VALUES
-                        (:provider, :email, :password, :token, :refresh_token, 'active',
+                        (:id, :provider, :email, :password, :token, :refresh_token, 'active',
                          :display_name, :api_key, 'auto',
                          :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
                          :notes, '[]', 0, 1.0, 0,
                          :created_at)
                 """),
-                {
-                    "provider": provider,
-                    "email": email,
-                    "password": password or "",
-                    "token": token,
-                    "refresh_token": refresh_token,
-                    "display_name": display_name or email,
-                    "api_key": api_key,
-                    "ref_code": ref_code,
-                    "ref_url": ref_url,
-                    "ref_max_count": ref_max_count,
-                    "referred_by_id": referred_by_id,
-                    "notes": (f"plan={account_type}" if account_type else None),
-                    "created_at": now_str,
-                },
+                common_params,
             )
         await self._db.flush()
-
-        # Fetch the newly inserted row (works for both INTEGER and UUID id schemas)
-        result = await self._db.execute(
-            _text("SELECT id FROM accounts WHERE email = :email AND provider = :provider ORDER BY rowid DESC LIMIT 1"),
-            {"email": email, "provider": provider},
-        )
-        row = result.fetchone()
-        new_id = str(row[0]) if row else str(uuid.uuid4())
 
         logger.info(
             "Registered account saved: %s (%s) id=%s referred_by=%s",
