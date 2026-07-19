@@ -40,29 +40,57 @@ def disconnect(conn: imaplib.IMAP4) -> None:
 # ── Folder listing ────────────────────────────────────────────────────────────
 
 def list_folders(conn: imaplib.IMAP4) -> list[dict[str, Any]]:
-    """Return [{id, path, name, kind, delimiter}]."""
+    """Return unique folders as [{id, path, name, kind, delimiter}]."""
     status, data = conn.list()
     if status != "OK":
         return []
-    folders: list[dict[str, Any]] = []
+
+    folders_by_path: dict[str, dict[str, Any]] = {}
     for item in data:
         if item is None:
             continue
         line = item.decode("utf-8", errors="replace") if isinstance(item, bytes) else str(item)
-        # IMAP LIST format: (\\Flags) "delimiter" "name"
+        # IMAP LIST format: (\Flags) "delimiter" "name"
         parts = line.split('"')
         if len(parts) >= 4:
-            delim = parts[1] if len(parts) > 1 else "/"
-            name = parts[3] if len(parts) > 3 else line
+            delimiter = parts[1] if len(parts) > 1 else "/"
+            path = parts[3] if len(parts) > 3 else line
         else:
-            delim = "/"
-            name = line.split()[-1] if line.split() else "INBOX"
-        kind = "inbox" if name.upper() == "INBOX" else "folder"
-        folders.append({
-            "id": name, "path": name, "name": name,
-            "kind": kind, "delimiter": delim,
-        })
-    return folders
+            delimiter = "/"
+            path = line.split()[-1] if line.split() else "INBOX"
+
+        flags = line.upper()
+        if path.upper() == "INBOX" or "\\INBOX" in flags:
+            kind = "inbox"
+        elif "\\SENT" in flags:
+            kind = "sent"
+        elif "\\DRAFTS" in flags:
+            kind = "drafts"
+        elif "\\TRASH" in flags:
+            kind = "trash"
+        elif "\\JUNK" in flags or "\\SPAM" in flags:
+            kind = "spam"
+        elif "\\ALL" in flags:
+            kind = "all"
+        elif "\\ARCHIVE" in flags:
+            kind = "archive"
+        else:
+            kind = "folder"
+
+        name = path.rsplit(delimiter, 1)[-1] if delimiter else path
+        folder = {
+            "id": path,
+            "path": path,
+            "name": name,
+            "kind": kind,
+            "delimiter": delimiter,
+        }
+        canonical_path = path.strip().casefold()
+        existing = folders_by_path.get(canonical_path)
+        if existing is None or (existing["kind"] == "folder" and kind != "folder"):
+            folders_by_path[canonical_path] = folder
+
+    return list(folders_by_path.values())
 
 
 # ── Search ────────────────────────────────────────────────────────────────────
@@ -89,7 +117,10 @@ def search(conn: imaplib.IMAP4, query: dict[str, Any] | None) -> list[str]:
     if q.get("since"):
         criteria.append(f'SINCE {q["since"]}')
     search_str = " ".join(criteria) if criteria else "ALL"
-    status, data = conn.search(None, search_str)
+    # Use UID SEARCH because every downstream operation (FETCH/STORE) treats
+    # the returned identifier as a stable UID. Mixing sequence numbers from
+    # SEARCH with UID FETCH caused valid messages to fail intermittently.
+    status, data = conn.uid("search", None, search_str)
     if status != "OK":
         return []
     ids = data[0].split() if data and data[0] else []
@@ -165,12 +196,16 @@ def fetch_message(conn: imaplib.IMAP4, uid: str) -> dict[str, Any]:
 
 def mark_as_read(conn: imaplib.IMAP4, uid: str) -> None:
     conn.select("INBOX")
-    conn.store(uid, "+FLAGS", "\\Seen")
+    status, _ = conn.uid("store", uid, "+FLAGS", "(\\Seen)")
+    if status != "OK":
+        raise RuntimeError(f"Failed to mark message UID {uid} as read")
 
 
 def delete_message(conn: imaplib.IMAP4, uid: str) -> None:
     conn.select("INBOX")
-    conn.store(uid, "+FLAGS", "\\Deleted")
+    status, _ = conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
+    if status != "OK":
+        raise RuntimeError(f"Failed to delete message UID {uid}")
     conn.expunge()
 
 
