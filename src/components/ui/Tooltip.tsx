@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,17 +23,22 @@ export function Tooltip({
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const tooltipRef = React.useRef<HTMLDivElement>(null);
+
+  // Use callback ref to measure after mount without storing in useRef that
+  // causes the framer-motion PopChild "ref is not a prop" warning.
+  const [tooltipEl, setTooltipEl] = useState<HTMLDivElement | null>(null);
+  const tooltipRef = useCallback((node: HTMLDivElement | null) => {
+    setTooltipEl(node);
+  }, []);
 
   const handleMouseEnter = (e: React.MouseEvent | React.FocusEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 
-    // Calculate position based on side
     let x = rect.left + rect.width / 2;
     let y = rect.top;
 
     if (side === 'top') {
-      y = rect.top - sideOffset; // Will be adjusted after render
+      y = rect.top - sideOffset;
     } else if (side === 'bottom') {
       y = rect.bottom + sideOffset;
     } else if (side === 'left') {
@@ -49,24 +54,18 @@ export function Tooltip({
   };
 
   // Adjust position after tooltip is rendered to account for its size
-  React.useEffect(() => {
-    if (isVisible && tooltipRef.current) {
-      const tooltipRect = tooltipRef.current.getBoundingClientRect();
+  useEffect(() => {
+    if (isVisible && tooltipEl) {
+      const tooltipRect = tooltipEl.getBoundingClientRect();
       setPosition(prev => {
         let newX = prev.x;
         let newY = prev.y;
-
-        // Adjust for side
-        if (side === 'top') {
-          newY = prev.y - tooltipRect.height;
-        } else if (side === 'left') {
-          newX = prev.x - tooltipRect.width;
-        }
-
+        if (side === 'top') newY = prev.y - tooltipRect.height;
+        else if (side === 'left') newX = prev.x - tooltipRect.width;
         return { x: newX, y: newY };
       });
     }
-  }, [isVisible, side]);
+  }, [isVisible, tooltipEl, side]);
 
   const getTransform = () => {
     if (side === 'top' || side === 'bottom') return 'translateX(-50%)';
@@ -85,15 +84,16 @@ export function Tooltip({
       >
         {children}
       </div>
-      {isVisible &&
-        createPortal(
-          <AnimatePresence>
+      {createPortal(
+        // AnimatePresence must wrap the conditional so exit animations work
+        <AnimatePresence>
+          {isVisible && (
             <motion.div
               ref={tooltipRef}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.15, delay: delay }}
+              transition={{ duration: 0.15, delay }}
               className={cn(
                 'fixed z-[99999] px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-vsc-sidebar border border-vsc-border-light rounded-md shadow-xl backdrop-blur-xl whitespace-nowrap pointer-events-none',
                 className
@@ -105,7 +105,6 @@ export function Tooltip({
               }}
             >
               {content}
-              {/* Tiny arrow */}
               <div
                 className={cn(
                   'absolute w-2 h-2 bg-vsc-sidebar border-vsc-border-light rotate-45',
@@ -116,9 +115,11 @@ export function Tooltip({
                 )}
               />
             </motion.div>
-          </AnimatePresence>,
-          document.body
-        )}
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   );
 }
+
