@@ -402,6 +402,7 @@ export default function AutoRegNext() {
     thirtyThreeMailUsername: config.imap.thirtyThreeMailUsername,
     thirtyThreeMailDomain: config.imap.thirtyThreeMailDomain,
     mailtmEnabled: config.imap.mailtmEnabled,
+    icloudEnabled: config.imap.icloudEnabled,
     emailGenerationDomain: config.imap.emailGenerationDomain,
   };
 
