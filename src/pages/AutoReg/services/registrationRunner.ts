@@ -170,7 +170,13 @@ export async function runRegistration(options: RegistrationOptions): Promise<Reg
 
         if (shouldGenerateInPython) {
           const serviceName =
-            strategy === 'addyio' ? 'addy.io' : strategy === '33mail' ? '33mail' : 'Mail.tm';
+            strategy === 'addyio'
+              ? 'addy.io'
+              : strategy === '33mail'
+                ? '33mail'
+                : strategy === 'icloud_pool'
+                  ? 'iCloud Hide My Email'
+                  : 'Mail.tm';
           onLog('info', `[${i + 1}/${totalCount}] Using ${serviceName} for email generation...`);
         }
 
@@ -781,6 +787,7 @@ async function runProviderRegistration(params: {
       billingCity: null,
       billingState: null,
       billingZip: null,
+      kiroPlan: config.advanced.kiroPlan?.trim() || 'free',
       correlationId,
       ...inboxBridgeFields,
     });
@@ -1165,8 +1172,7 @@ async function processRegistrationResult(params: {
       'error',
       `[${index + 1}/${totalCount}] Debug: provider=${provider}, success=${String(
         result?.success
-      )}, email=${String(result?.email)}, error=${String(result?.error)}, apiKey=${
-        windsurfApiKey ? 'present' : 'missing'
+      )}, email=${String(result?.email)}, error=${String(result?.error)}, apiKey=${windsurfApiKey ? 'present' : 'missing'
       }, keys=${keys.join(',')}`
     );
     if (jsonShort) {

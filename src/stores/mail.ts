@@ -104,6 +104,11 @@ interface MailState {
   isMutating: boolean;
   isLoadingMessage: boolean;
   error: string | null;
+  /**
+   * Scoped error for a single message fetch (e.g. a stale/deleted UID).
+   * Surfaced next to the message instead of a page-wide banner.
+   */
+  messageLoadError: string | null;
 
   profiles: EmailInboxProfile[];
   activeProfileId: string | null;
@@ -133,6 +138,7 @@ interface MailState {
   upsertProfileFromDraft: (draft: MailboxProfileDraft) => Promise<void>;
   saveCurrentSessionAsProfile: (label?: string) => Promise<void>;
   clearError: () => void;
+  clearMessageLoadError: () => void;
 
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -335,6 +341,7 @@ export const useMailStore = create<MailState>((set, get) => ({
   isMutating: false,
   isLoadingMessage: false,
   error: null,
+  messageLoadError: null,
 
   profiles: [],
   activeProfileId: null,
@@ -414,8 +421,8 @@ export const useMailStore = create<MailState>((set, get) => ({
 
         const nextSelectedByMailbox = effectiveMailbox
           ? folders.find(
-              folder => folder.path.trim().toLowerCase() === effectiveMailbox.toLowerCase()
-            )
+            folder => folder.path.trim().toLowerCase() === effectiveMailbox.toLowerCase()
+          )
           : null;
 
         const inboxFolder =
@@ -553,9 +560,9 @@ export const useMailStore = create<MailState>((set, get) => ({
       set(state => ({
         ...(state.activeProfileId
           ? (() => {
-              const active = profiles.find(profile => profile.id === state.activeProfileId);
-              return active ? deriveStateFromConnectInput(active.connectInput) : {};
-            })()
+            const active = profiles.find(profile => profile.id === state.activeProfileId);
+            return active ? deriveStateFromConnectInput(active.connectInput) : {};
+          })()
           : {}),
         profiles,
         profileSyncMap,
@@ -660,16 +667,16 @@ export const useMailStore = create<MailState>((set, get) => ({
     const connectInput =
       source === 'imap'
         ? buildImapConnectInput({
-            accountId,
-            mailbox: resolveEffectiveMailbox({ mailbox, selectedFolder }),
-            readOnly: true,
-            credentials: imapCredentials,
-          })
+          accountId,
+          mailbox: resolveEffectiveMailbox({ mailbox, selectedFolder }),
+          readOnly: true,
+          credentials: imapCredentials,
+        })
         : buildMailTmConnectInput({
-            accountId,
-            readOnly: true,
-            credentials: mailTmCredentials,
-          });
+          accountId,
+          readOnly: true,
+          credentials: mailTmCredentials,
+        });
 
     const normalizedLabel = normalizeProfileLabel(
       label || `${source === 'imap' ? 'IMAP' : 'Mail.tm'} · ${accountId || 'session'}`
@@ -795,6 +802,7 @@ export const useMailStore = create<MailState>((set, get) => ({
     }
   },
   clearError: () => set({ error: null }),
+  clearMessageLoadError: () => set({ messageLoadError: null }),
 
   connect: async () => {
     const {
@@ -833,29 +841,29 @@ export const useMailStore = create<MailState>((set, get) => ({
         ? source === 'imap'
           ? hasFolderOverride
             ? await emailInboxConnect(
-                buildImapConnectInput({
-                  accountId,
-                  mailbox: nextMailbox,
-                  readOnly: true,
-                  credentials: imapCredentials,
-                })
-              )
+              buildImapConnectInput({
+                accountId,
+                mailbox: nextMailbox,
+                readOnly: true,
+                credentials: imapCredentials,
+              })
+            )
             : await emailInboxConnectProfile(activeProfileId)
           : await emailInboxConnectProfile(activeProfileId)
         : await emailInboxConnect(
-            source === 'imap'
-              ? buildImapConnectInput({
-                  accountId,
-                  mailbox: nextMailbox,
-                  readOnly: true,
-                  credentials: imapCredentials,
-                })
-              : buildMailTmConnectInput({
-                  accountId,
-                  readOnly: true,
-                  credentials: mailTmCredentials,
-                })
-          );
+          source === 'imap'
+            ? buildImapConnectInput({
+              accountId,
+              mailbox: nextMailbox,
+              readOnly: true,
+              credentials: imapCredentials,
+            })
+            : buildMailTmConnectInput({
+              accountId,
+              readOnly: true,
+              credentials: mailTmCredentials,
+            })
+        );
 
       const capabilities = await emailInboxGetCapabilities(nextSession.sessionId);
 
@@ -1083,16 +1091,16 @@ export const useMailStore = create<MailState>((set, get) => ({
   loadMessageById: async messageId => {
     const { session } = get();
     if (!session) {
-      set({ error: t('mail.errorNoActiveSession') });
+      set({ messageLoadError: t('mail.errorNoActiveSession') });
       return;
     }
 
-    set({ isLoadingMessage: true, error: null, selectedMessageId: messageId });
+    set({ isLoadingMessage: true, messageLoadError: null, selectedMessageId: messageId });
 
     try {
       const loaded = await emailInboxGetById(session.sessionId, messageId);
       if (!loaded) {
-        set({ error: t('mail.errorMessageNotFound') });
+        set({ messageLoadError: t('mail.errorMessageNotFound') });
         return;
       }
 
@@ -1100,7 +1108,10 @@ export const useMailStore = create<MailState>((set, get) => ({
         messages: state.messages.map(item => (item.id === loaded.id ? loaded : item)),
       }));
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      // Single-message fetch errors (e.g. a stale/deleted UID) should not
+      // block the whole mail workspace with a page-wide banner - surface
+      // them scoped to this message instead.
+      set({ messageLoadError: toErrorMessage(error) });
     } finally {
       set({ isLoadingMessage: false });
     }

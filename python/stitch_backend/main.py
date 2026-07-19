@@ -97,8 +97,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.aws_accounts.commands          # noqa: F401
     import stitch_backend.domains.quota.commands                 # noqa: F401
     import stitch_backend.domains.telemetry.commands             # noqa: F401
+    import stitch_backend.domains.totp.commands                  # noqa: F401
     import stitch_backend.domains.utility.file_dialogs           # noqa: F401
     import stitch_backend.domains.utility.stubs                  # noqa: F401
+    import stitch_backend.domains.icloud_email_pool.commands     # noqa: F401
 
     # Import EventBus listeners (side-effect: register @event_bus.on handlers)
     import stitch_backend.domains.proxy_mgmt.event_listeners  # noqa: F401
@@ -112,6 +114,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     providers = scan_providers()
     if providers:
         logger.info("Discovered %d provider(s): %s", len(providers), list(providers.keys()))
+
+    # iCloud pool — register bridge + auto-configure from saved settings
+    try:
+        from stitch_backend.domains.icloud_email_pool.service import get_icloud_pool_service
+        from stitch_backend.database import get_session_factory as _gsf
+        icloud_svc = get_icloud_pool_service()
+        icloud_svc.register_bridge()
+
+        # Try to restore credentials from settings so the session can be
+        # re-authenticated automatically on next fill or claim.
+        async def _load_icloud_settings():
+            factory = _gsf()
+            async with factory() as _db:
+                from stitch_backend.domains.settings.service import SettingsService
+                _settings = await SettingsService(_db).get_all()
+            apple_id = _settings.get("icloudAppleId", "")
+            app_pw   = _settings.get("icloudAppPassword", "")
+            enabled  = _settings.get("icloudEnabled", False)
+            if enabled and apple_id and app_pw and app_pw != "********":
+                icloud_svc.configure(apple_id=apple_id, app_password=app_pw)
+                logger.info("iCloud pool service pre-configured for %s", apple_id)
+
+        await _load_icloud_settings()
+    except Exception as _exc:
+        logger.warning("iCloud pool service init skipped: %s", _exc)
 
     # Emit a startup event for any domain listeners
     from stitch_backend.core.event_bus import event_bus

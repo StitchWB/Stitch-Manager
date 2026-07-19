@@ -1759,19 +1759,32 @@ export interface Translations {
   }
   mail: {
     accountIdLabel: string;
+    accountRecentLabel: string;
     accountScopeBannerTitle: string;
     accountScopeClear: string;
     accountScopeMissingMailbox: string;
     accountScopeNoMailbox: string;
     accountScopeNotFound: string;
     accountScopeViaMailbox: string;
+    accountSearchHint: string;
+    accountSearchNoResults: string;
+    accountSearchPlaceholder: string;
     accountsRailTitle: string;
     activeProfileLabel: string;
     addMailboxAction: string;
     addMailboxFromAutoReg: string;
+    addMailboxFromAutoRegDescription: string;
     addMailboxFromSheets: string;
+    addMailboxFromSheetsDescription: string;
+    addMailboxGmail: string;
+    addMailboxGmailDescription: string;
+    addMailboxICloud: string;
+    addMailboxICloudDescription: string;
     addMailboxImap: string;
+    addMailboxImapDescription: string;
     addMailboxMailTm: string;
+    addMailboxModalDescription: string;
+    addMailboxModalTitle: string;
     advancedFiltersTitle: string;
     attachmentsLabel: string;
     bccField: string;
@@ -1817,6 +1830,10 @@ export interface Translations {
       refresh: string;
       row_issues: string;
     }
+    groupGmail: string;
+    groupICloud: string;
+    groupImap: string;
+    groupMailTm: string;
     headerActiveMailbox: string;
     headerNoActiveMailbox: string;
     headerScopedToAccount: string;
@@ -1856,6 +1873,12 @@ export interface Translations {
     profileSyncUnknown: string;
     profilesLoading: string;
     profilesTitle: string;
+    presetAppleId: string;
+    presetAppPasswordHint: string;
+    presetGmailHint: string;
+    presetGmailTitle: string;
+    presetICloudHint: string;
+    presetICloudTitle: string;
     providerAddress: string;
     providerAvailable: string;
     providerBaseUrl: string;
@@ -2648,6 +2671,7 @@ export interface Translations {
       googleSheets: string;
       aiProxy: string;
       extension: string;
+      proxy: string;
     }
     database: {
       location: string;
@@ -3075,18 +3099,18 @@ export function t(key: string, params?: Record<string, string | number>): string
 type PathsToStringProps<T> = T extends string
   ? []
   : {
-      [K in Extract<keyof T, string>]: [K, ...PathsToStringProps<T[K]>];
-    }[Extract<keyof T, string>];
+    [K in Extract<keyof T, string>]: [K, ...PathsToStringProps<T[K]>];
+  }[Extract<keyof T, string>];
 
 type Join<T extends string[], D extends string> = T extends []
   ? never
   : T extends [infer F]
-    ? F
-    : T extends [infer F, ...infer R]
-      ? F extends string
-        ? `${F}${D}${Join<Extract<R, string[]>, D>}`
-        : never
-      : string;
+  ? F
+  : T extends [infer F, ...infer R]
+  ? F extends string
+  ? `${F}${D}${Join<Extract<R, string[]>, D>}`
+  : never
+  : string;
 
 export type TranslationKey = Join<PathsToStringProps<Translations>, '.'>;
 

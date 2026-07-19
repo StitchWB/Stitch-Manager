@@ -24,6 +24,8 @@ import { AccountRowMenu } from './AccountRowMenu';
 import { AccountQuotaCell } from './AccountQuotaCell';
 import { AccountRefCell } from './AccountRefCell';
 import { AccountRowQuickActions } from './AccountRowQuickActions';
+import { TotpBadge } from '@/components/totp/TotpBadge';
+import { useTotpStore } from '@/stores/totp';
 
 interface AccountRowProps {
   account: Account;
@@ -84,6 +86,11 @@ export function AccountRow({
 }: AccountRowProps) {
   const data = useAccountRowData(account, relationHints, relationEdges);
   const { copy } = useCopyToClipboard();
+  const allTotpKeys = useTotpStore((s) => s.keys);
+  const accountIdStr = String(account.id);
+  const totpKeys = allTotpKeys.filter(
+    (k) => k.enabled && k.accountId === accountIdStr
+  );
 
   return (
     <TableRow
@@ -185,7 +192,7 @@ export function AccountRow({
 
       {/* Status */}
       <TableCell className="w-[70px] min-w-[70px] px-2 py-2 align-middle">
-          <Badge
+        <Badge
           variant={data.statusVariant as BadgeProps['variant']}
           size="sm"
           className="normal-case tracking-normal border-0 gap-1"
@@ -266,6 +273,20 @@ export function AccountRow({
       >
         <AccountQuotaCell account={account} onCheckStatus={onCheckStatus} />
       </TableCell>
+
+      {/* 2FA TOTP code — shown only when this account has linked TOTP keys */}
+      {totpKeys.length > 0 && (
+        <TableCell className="w-[100px] min-w-[100px] px-2 py-2 align-middle" onClick={(e) => e.stopPropagation()}>
+          <TotpBadge
+            secret={totpKeys[0].secret}
+            period={totpKeys[0].period}
+            variant="compact"
+          />
+        </TableCell>
+      )}
+      {totpKeys.length === 0 && (
+        <TableCell className="w-[100px] min-w-[100px] px-2 py-2 align-middle" />
+      )}
 
       {/* Referral quota */}
       <AccountRefCell account={account} />

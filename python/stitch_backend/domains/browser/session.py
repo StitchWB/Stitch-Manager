@@ -139,6 +139,12 @@ async def launch_account_browser(
         cmd.append(f"--proxy-server={proxy_url}")
     cmd.append(url)
 
+    # Inject cookies into the Chrome profile BEFORE launching.
+    # This is the only reliable method — CDP post-launch injection fails
+    # because we can't know the CDP port of a freshly spawned browser.
+    if cookies_json:
+        _write_cookies_to_profile(cookies_json, profile)
+
     logger.info("Launching browser: %s  profile=%s", " ".join(cmd[:3]), profile)
 
     try:
@@ -162,29 +168,130 @@ async def launch_account_browser(
     )
 
 
-async def _inject_cookies(proc: asyncio.subprocess.Process, cookies_json: str, profile: Path) -> None:
-    """Best-effort cookie injection via DrissionPage CDP.
+def _write_cookies_to_profile(cookies_json: str, profile: Path) -> None:
+    """Write cookies directly into the Chrome profile's SQLite Cookies database.
 
-    Waits a moment for the browser to start, then connects via CDP
-    and sets cookies.  Silently ignores errors.
+    This must be done BEFORE the browser launches.  Chrome encrypts cookies
+    on Windows (DPAPI) starting with Chrome 80+ — we can only write *session*
+    cookies (no encrypted value) reliably from outside Chrome.  For Kiro/AWS
+    the session is maintained by HttpOnly session cookies which Chrome will
+    rewrite on first use after we seed them, so this approach works for the
+    "restore authenticated session" use-case.
+
+    Falls back silently if the profile has no Cookies DB yet (first launch).
     """
-    await asyncio.sleep(3)  # give the browser time to start
+    import sqlite3
+    import time as _time
 
     try:
-        from DrissionPage import ChromiumPage, ChromiumOptions
-
-        co = ChromiumOptions()
-        co.set_user_data_path(str(profile))
-        co.set_local_port(9222)
-
-        page = ChromiumPage(co)
         cookies = json.loads(cookies_json)
-        if isinstance(cookies, list):
-            for cookie in cookies:
-                page.set.cookies(cookie)
-        logger.info("Injected %d cookies via CDP", len(cookies) if isinstance(cookies, list) else 0)
-    except Exception:
-        logger.debug("Cookie injection skipped (DrissionPage not available or browser not ready)")
+        if not isinstance(cookies, list) or not cookies:
+            return
+    except (json.JSONDecodeError, TypeError):
+        return
+
+    # Chrome stores cookies in Default/Cookies (SQLite)
+    default_dir = profile / "Default"
+    default_dir.mkdir(parents=True, exist_ok=True)
+    cookies_db = default_dir / "Cookies"
+
+    try:
+        with sqlite3.connect(str(cookies_db)) as conn:
+            # Create table if this is a fresh profile with no Cookies file yet
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cookies (
+                    creation_utc     INTEGER NOT NULL UNIQUE PRIMARY KEY,
+                    host_key         TEXT NOT NULL,
+                    top_frame_site_key TEXT NOT NULL DEFAULT '',
+                    name             TEXT NOT NULL,
+                    value            TEXT NOT NULL,
+                    encrypted_value  BLOB DEFAULT '',
+                    path             TEXT NOT NULL,
+                    expires_utc      INTEGER NOT NULL,
+                    is_secure        INTEGER NOT NULL,
+                    is_httponly      INTEGER NOT NULL,
+                    last_access_utc  INTEGER NOT NULL,
+                    has_expires      INTEGER NOT NULL DEFAULT 1,
+                    is_persistent    INTEGER NOT NULL DEFAULT 1,
+                    priority         INTEGER NOT NULL DEFAULT 1,
+                    samesite         INTEGER NOT NULL DEFAULT -1,
+                    source_scheme    INTEGER NOT NULL DEFAULT 0,
+                    source_port      INTEGER NOT NULL DEFAULT -1,
+                    last_update_utc  INTEGER NOT NULL DEFAULT 0,
+                    source_type      INTEGER NOT NULL DEFAULT 0,
+                    has_cross_site_ancestor INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+
+            # Chrome time = microseconds since 1601-01-01
+            # Python time = seconds since 1970-01-01; offset = 11644473600s
+            _CHROME_EPOCH_OFFSET = 11_644_473_600 * 1_000_000
+            now_chrome = int(_time.time() * 1_000_000) + _CHROME_EPOCH_OFFSET
+
+            inserted = 0
+            for i, c in enumerate(cookies):
+                if not isinstance(c, dict):
+                    continue
+                name = c.get("name", "")
+                value = c.get("value", "")
+                domain = c.get("domain", "")
+                path_ = c.get("path", "/")
+                secure = int(bool(c.get("secure", False)))
+                http_only = int(bool(c.get("httpOnly", c.get("http_only", False))))
+                expires_raw = c.get("expires", c.get("expirationDate", 0)) or 0
+                if expires_raw and expires_raw > 1e10:
+                    # Already in microseconds (Chrome format) — use as-is
+                    expires_chrome = int(expires_raw)
+                elif expires_raw:
+                    # Unix seconds → Chrome microseconds
+                    expires_chrome = int(expires_raw * 1_000_000) + _CHROME_EPOCH_OFFSET
+                else:
+                    # Session cookie
+                    expires_chrome = 0
+
+                # Unique creation time (must not collide)
+                creation_utc = now_chrome + i
+
+                try:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO cookies
+                            (creation_utc, host_key, top_frame_site_key,
+                             name, value, encrypted_value,
+                             path, expires_utc, is_secure, is_httponly,
+                             last_access_utc, has_expires, is_persistent,
+                             priority, samesite, source_scheme, source_port,
+                             last_update_utc, source_type, has_cross_site_ancestor)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        """,
+                        (
+                            creation_utc, domain, "",
+                            name, value, b"",
+                            path_, expires_chrome, secure, http_only,
+                            creation_utc,
+                            1 if expires_chrome else 0,
+                            1 if expires_chrome else 0,
+                            1, -1, 0, -1,
+                            creation_utc, 0, 0,
+                        ),
+                    )
+                    inserted += 1
+                except Exception:  # noqa: BLE001
+                    pass  # Skip individual bad cookies
+
+            conn.commit()
+        logger.info("Wrote %d/%d cookies to profile %s", inserted, len(cookies), profile)
+    except Exception as exc:
+        logger.debug("Cookie write to profile failed (non-fatal): %s", exc)
+
+
+async def _inject_cookies(proc: asyncio.subprocess.Process, cookies_json: str, profile: Path) -> None:
+    """Legacy CDP cookie injection — kept for reference but no longer used.
+
+    _write_cookies_to_profile() is called before launch instead.
+    """
+    # no-op: pre-launch injection now handles this
+    pass
 
 
 # ── Kill browser ───────────────────────────────────────────────────────────

@@ -13,8 +13,10 @@ import {
   ChevronRight,
   Repeat,
   Wrench,
-  ShieldCheck } from
-'lucide-react';
+  ShieldCheck,
+  KeyRound
+} from
+  'lucide-react';
 import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
@@ -33,23 +35,23 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-      cn(
-        'flex items-center transition-all duration-200 rounded-xl group relative',
-        collapsed ? 'justify-center px-2 py-2.5 mx-1' : 'gap-3 px-3 py-2.5 mx-2',
-        isActive ?
-        'bg-white/[0.06] text-white font-semibold' :
-        'text-slate-300 hover:text-white hover:bg-white/[0.04]'
-      )
+        cn(
+          'flex items-center transition-all duration-200 rounded-xl group relative',
+          collapsed ? 'justify-center px-2 py-2.5 mx-1' : 'gap-3 px-3 py-2.5 mx-2',
+          isActive ?
+            'bg-white/[0.06] text-white font-semibold' :
+            'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+        )
       }>
-      
+
       <span className="shrink-0">{icon}</span>
       {!collapsed &&
-      <span className="text-sm tracking-tight animate-in fade-in slide-in-from-left-2 duration-300">
+        <span className="text-sm tracking-tight animate-in fade-in slide-in-from-left-2 duration-300">
           {label}
         </span>
       }
       {collapsed &&
-      <div className="absolute left-full ml-4 px-2 py-1 bg-vsc-sidebar text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap shadow-xl border border-white/10">
+        <div className="absolute left-full ml-4 px-2 py-1 bg-vsc-sidebar text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap shadow-xl border border-white/10">
           {label}
         </div>
       }
@@ -89,12 +91,12 @@ export default function Sidebar() {
         'flex flex-col shrink-0 transition-all duration-300 ease-in-out border-r border-white/10 relative z-40 bg-[#111116]/80 backdrop-blur-3xl',
         sidebarCollapsed ? 'w-16' : 'w-52'
       )}>
-      
+
       {/* Collapse Toggle Button — integrated into border-right */}
       <ButtonBase
         onClick={toggleSidebar}
         className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-8 rounded-full bg-vsc-sidebar text-slate-400 flex items-center justify-center shadow-lg hover:text-white hover:bg-vsc-panel transition-colors z-50 border border-white/20">
-        
+
         {sidebarCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
       </ButtonBase>
 
@@ -105,12 +107,12 @@ export default function Sidebar() {
             <Terminal className="w-5 h-5 text-white" />
           </div>
           {!sidebarCollapsed &&
-          <div className="flex flex-col min-w-0 animate-in fade-in slide-in-from-left-2 duration-500">
+            <div className="flex flex-col min-w-0 animate-in fade-in slide-in-from-left-2 duration-500">
               <h1 className="text-white text-base font-black tracking-tighter leading-tight truncate uppercase">{t("common.sidebar.stitch")}
 
-            </h1>
+              </h1>
               <span className="text-indigo-400/80 text-[10px] font-bold tracking-widest uppercase">{t("common.sidebar.manager_v")}
-              {appVersion}
+                {appVersion}
               </span>
             </div>
           }
@@ -124,52 +126,58 @@ export default function Sidebar() {
           icon={<LayoutDashboard size={20} />}
           label={t('sidebar.dashboard')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/accounts"
           icon={<Users size={20} />}
           label={t('sidebar.accounts')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/autoreg"
           icon={<RefreshCw size={20} />}
           label={t('sidebar.autoReg')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/patcher"
           icon={<Code size={20} />}
           label={t('sidebar.idePatch')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/ai"
           icon={<ShieldCheck size={20} />}
           label={t('sidebar.aiHub')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/automation"
           icon={<Repeat size={20} />}
           label={t('sidebar.automation')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/mail"
           icon={<Mail size={20} />}
           label={t('sidebar.mail')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/tools"
           icon={<Wrench size={20} />}
           label={t('sidebar.tools')}
           collapsed={sidebarCollapsed} />
 
+        <NavItem
+          to="/totp"
+          icon={<KeyRound size={20} />}
+          label="2FA"
+          collapsed={sidebarCollapsed} />
+
         <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
           {!sidebarCollapsed &&
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
               {t('sidebar.system')}
             </p>
           }
@@ -180,13 +188,13 @@ export default function Sidebar() {
           icon={<Settings size={20} />}
           label={t('sidebar.settings')}
           collapsed={sidebarCollapsed} />
-        
+
         <NavItem
           to="/logs"
           icon={<FileText size={20} />}
           label={t('sidebar.logs')}
           collapsed={sidebarCollapsed} />
-        
+
       </nav>
 
       {/* Footer */}
@@ -196,10 +204,10 @@ export default function Sidebar() {
             'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
             sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
           )}>
-          
+
           <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
           {!sidebarCollapsed &&
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
               {t('sidebar.localMode')}
             </span>
           }

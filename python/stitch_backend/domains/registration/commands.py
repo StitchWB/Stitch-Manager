@@ -254,11 +254,19 @@ async def cmd_start_kiro_v2_autoreg_job(params: dict) -> dict:
 async def cmd_registration_control(params: dict) -> None:
     """Send pipeline control signal to a running registration job."""
     from stitch_backend.domains.python_jobs.service import get_job_manager
+    from stitch_backend.domains.registration.service import push_control_to_transport
 
     job_id = params.get("jobId", "")
     command = params.get("command", "")
+    step_id = params.get("stepId") or params.get("step_id")
     data = params.get("data")
-    get_job_manager().send_control(job_id, command, data)
+
+    # Route to in-process EventBusTransport first (kiro_v2 and other
+    # providers that run in-process via asyncio.to_thread)
+    pushed = push_control_to_transport(job_id, command, step_id=step_id, data=data)
+    if not pushed:
+        # Fallback: subprocess mode — write to control file
+        get_job_manager().send_control(job_id, command, data)
 
 
 @register_command("stop_registration")

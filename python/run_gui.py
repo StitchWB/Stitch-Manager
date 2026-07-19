@@ -5,12 +5,12 @@ Usage::
     # Production (serves static build from dist/)
     python run_gui.py
 
-    # Development (pywebview points to Vite dev server on port 5174)
-    python run_gui.py --dev
+    # Development with an already-running reloadable backend
+    python run_gui.py --dev --external-backend
 
-The backend always starts on port 25584.  In dev mode the webview loads
-the Vite dev-server URL so hot-reload works; in prod mode it loads the
-backend itself which serves the Vite build output via StaticFiles.
+By default this launcher starts the backend on port 25584.  In dev mode the
+webview loads the Vite dev-server URL.  ``--external-backend`` makes the
+launcher use an existing backend instead, which is used by start-dev.ps1.
 """
 
 from __future__ import annotations
@@ -177,29 +177,41 @@ def main() -> None:
         help="Development mode: webview connects to Vite dev server (port 5174)",
     )
     parser.add_argument(
+        "--external-backend",
+        action="store_true",
+        help="Use an already-running backend instead of starting an embedded one",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Kill any existing process on the API port before starting",
     )
     args = parser.parse_args()
 
-    # 0. Clear port if --force or port is occupied
-    if _port_in_use(API_PORT):
-        if args.force:
-            print(f"[run_gui] Port {API_PORT} is occupied, killing old process (--force)")
-            _kill_port_hog(API_PORT)
-            time.sleep(1)
-        else:
-            print(
-                f"WARNING: Port {API_PORT} is already in use.\n"
-                f"         Use --force to kill the old process, or stop it manually.\n"
-                f"         Trying to start anyway...",
-                file=sys.stderr,
-            )
+    if args.external_backend and args.force:
+        parser.error("--force cannot be used with --external-backend")
 
-    # 1. Start the FastAPI backend in a daemon thread
-    server_thread = threading.Thread(target=_start_uvicorn, daemon=True)
-    server_thread.start()
+    server_thread: threading.Thread | None = None
+
+    if args.external_backend:
+        print(f"[run_gui] Using external backend at {HEALTH_URL}")
+    else:
+        # Clear the API port only when this process owns the backend lifecycle.
+        if _port_in_use(API_PORT):
+            if args.force:
+                print(f"[run_gui] Port {API_PORT} is occupied, killing old process (--force)")
+                _kill_port_hog(API_PORT)
+                time.sleep(1)
+            else:
+                print(
+                    f"WARNING: Port {API_PORT} is already in use.\n"
+                    f"         Use --force to kill the old process, or stop it manually.\n"
+                    f"         Trying to start anyway...",
+                    file=sys.stderr,
+                )
+
+        server_thread = threading.Thread(target=_start_uvicorn, daemon=True)
+        server_thread.start()
 
     # 2. Decide what URL the webview will load
     if args.dev:
@@ -234,13 +246,15 @@ def main() -> None:
         background_color="#000000",
     )
 
-    # 5. Start backend watchdog in a daemon thread
-    watchdog_thread = threading.Thread(
-        target=_backend_watchdog,
-        args=(server_thread, window),
-        daemon=True,
-    )
-    watchdog_thread.start()
+    # Monitor only a backend owned by this process. The canonical dev launcher
+    # supervises its external reloadable backend separately.
+    if server_thread is not None:
+        watchdog_thread = threading.Thread(
+            target=_backend_watchdog,
+            args=(server_thread, window),
+            daemon=True,
+        )
+        watchdog_thread.start()
 
     webview.start(debug=args.dev)
 

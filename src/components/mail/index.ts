@@ -1,3 +1,5 @@
+export { AddMailboxModal } from './AddMailboxModal';
+export type { AddMailboxSource } from './AddMailboxModal';
 export { GoogleSheetsRawMailboxImport } from './GoogleSheetsRawMailboxImport';
 export { MailHtmlSandbox } from './MailHtmlSandbox';
 export { MailManualConnectModal } from './MailManualConnectModal';

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, ImageOff, Images, MailOpen, MailSearch, Trash2 } from 'lucide-react';
-import { Badge, EmptyState, LoadingSpinner, SegmentedControl } from '@/components/ui';
+import { AlertTriangle, FileText, ImageOff, Images, MailOpen, MailSearch, Trash2, X } from 'lucide-react';
+import { Badge, EmptyState, IconButton, LoadingSpinner, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import type { EmailMessage, ProviderCapabilities } from '@/lib/tauri/modules/emailInbox';
 import { MailHtmlSandbox } from './MailHtmlSandbox';
@@ -10,6 +10,9 @@ interface MailMessageViewerProps {
   message: EmailMessage | null;
   capabilities: ProviderCapabilities | null;
   busy: boolean;
+  /** Scoped error for the currently selected message fetch, if any. */
+  loadError?: string | null;
+  onClearLoadError?: () => void;
   onMarkRead?: (messageId: string) => Promise<void>;
   onDelete?: (messageId: string) => Promise<void>;
 }
@@ -33,6 +36,8 @@ export function MailMessageViewer({
   message,
   capabilities,
   busy,
+  loadError,
+  onClearLoadError,
   onMarkRead,
   onDelete,
 }: MailMessageViewerProps) {
@@ -56,6 +61,20 @@ export function MailMessageViewer({
         <div className="flex items-center justify-center h-full">
           <LoadingSpinner size="lg" />
         </div>
+      ) : !message && loadError ? (
+        <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
+          <AlertTriangle size={22} className="text-red-400" />
+          <p className="text-sm text-red-200 max-w-sm">{loadError}</p>
+          {onClearLoadError ? (
+            <button
+              type="button"
+              onClick={onClearLoadError}
+              className="text-xs text-slate-400 hover:text-white underline underline-offset-2"
+            >
+              {t('common.dismiss')}
+            </button>
+          ) : null}
+        </div>
       ) : !message ? (
         <EmptyState
           icon={MailSearch}
@@ -65,6 +84,20 @@ export function MailMessageViewer({
         />
       ) : (
         <>
+          {loadError ? (
+            <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-red-500/20 bg-red-500/10">
+              <p className="text-[11px] text-red-200 flex items-center gap-1.5">
+                <AlertTriangle size={12} />
+                {loadError}
+              </p>
+              {onClearLoadError ? (
+                <IconButton size="sm" onClick={onClearLoadError} aria-label={t('common.dismiss')}>
+                  <X size={12} />
+                </IconButton>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Header */}
           <header className="px-4 py-3 border-b border-white/[0.06] space-y-2">
             <div className="flex items-start justify-between gap-3">

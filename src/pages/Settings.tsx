@@ -8,6 +8,7 @@ import {
   Zap,
   Table2,
   Puzzle,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
@@ -38,6 +39,7 @@ import {
   IMAPSettingsSection,
   EmailCounterSection,
   EmailServicesSection,
+  ICloudEmailSection,
   GoogleSheetsSettingsSection,
   ExtensionSettingsSection,
   BackgroundManagerSettingsSection,
@@ -57,6 +59,7 @@ import { LoadingSpinner, TabButton } from '@/components/ui';
 type SettingsCategory =
   | 'general'
   | 'connectivity'
+  | 'proxy'
   | 'automation'
   | 'google-sheets'
   | 'ai-proxy'
@@ -78,6 +81,11 @@ const categories: CategoryConfig[] = [
     id: 'connectivity',
     labelKey: 'settings.categories.connectivity',
     icon: <Globe className="w-4 h-4" />,
+  },
+  {
+    id: 'proxy',
+    labelKey: 'settings.categories.proxy',
+    icon: <ShieldCheck className="w-4 h-4" />,
   },
   {
     id: 'automation',
@@ -147,6 +155,11 @@ export default function Settings() {
 
   // Mail.tm settings
   const [mailtmEnabled, setMailtmEnabled] = useState(false);
+
+  // iCloud Hide My Email pool settings
+  const [icloudEnabled, setIcloudEnabled] = useState(false);
+  const [icloudAppleId, setIcloudAppleId] = useState('');
+  const [icloudAppPassword, setIcloudAppPassword] = useState('');
 
   // Addy.io dynamic data
   const [addyioDomains, setAddyioDomains] = useState<string[]>([]);
@@ -231,6 +244,10 @@ export default function Settings() {
 
       // Load Mail.tm settings
       setMailtmEnabled(data.mailtmEnabled || false);
+
+      // Load iCloud settings
+      setIcloudEnabled(data.icloudEnabled || false);
+      setIcloudAppleId(data.icloudAppleId || '');
 
       // Load email generation domain (localStorage, not in Rust DB)
       setEmailGenerationDomain(loadEmailGenerationDomain());
@@ -474,6 +491,9 @@ export default function Settings() {
         thirtyThreeMailDomain: thirtyThreeMailDomain,
         thirtyThreeMailTemplate: thirtyThreeMailTemplate,
         mailtmEnabled: mailtmEnabled,
+        icloudEnabled: icloudEnabled,
+        icloudAppleId: icloudAppleId,
+        // icloudAppPassword saved explicitly via ICloudEmailSection.onSave (secret field)
         customIdePaths: customIdePaths,
         googleSheetsSpreadsheetId: normalizedGoogleSheetsSpreadsheetId,
         // Removed automation settings (managed in PatcherSettingsDrawer)
@@ -525,6 +545,8 @@ export default function Settings() {
     thirtyThreeMailDomain,
     thirtyThreeMailTemplate,
     mailtmEnabled,
+    icloudEnabled,
+    icloudAppleId,
     customIdePaths,
     googleSheetsSpreadsheetId,
     googleSheetsServiceAccountJson,
@@ -619,8 +641,6 @@ export default function Settings() {
 
   const renderConnectivitySettings = () => (
     <div className="space-y-8" style={getAnimationStyle(0)}>
-      <ProxyLibrarySection />
-
       <ProxySettingsSectionV2 />
 
       <IMAPSettingsSection
@@ -747,6 +767,35 @@ export default function Settings() {
           debouncedAutoSave();
         }}
       />
+
+      <ICloudEmailSection
+        enabled={icloudEnabled}
+        onEnabledChange={enabled => {
+          setIcloudEnabled(enabled);
+          if (enabled) {
+            setAddyioEnabled(false);
+            setThirtyThreeMailEnabled(false);
+            setMailtmEnabled(false);
+          }
+          debouncedAutoSave();
+        }}
+        appleId={icloudAppleId}
+        onAppleIdChange={id => {
+          setIcloudAppleId(id);
+          debouncedAutoSave();
+        }}
+        appPassword={icloudAppPassword}
+        onAppPasswordChange={pw => setIcloudAppPassword(pw)}
+        onSave={async () => {
+          // Persist Apple ID + password explicitly (password is sensitive)
+          const { updateSettings } = await import('@/lib/tauri');
+          await updateSettings({
+            icloudEnabled: true,
+            icloudAppleId: icloudAppleId,
+            icloudAppPassword: icloudAppPassword,
+          });
+        }}
+      />
     </div>
   );
 
@@ -756,6 +805,12 @@ export default function Settings() {
         return renderGeneralSettings();
       case 'connectivity':
         return renderConnectivitySettings();
+      case 'proxy':
+        return (
+          <div style={getAnimationStyle(0)}>
+            <ProxyLibrarySection />
+          </div>
+        );
       case 'automation':
         return <AutomationTab />;
       case 'google-sheets':
@@ -811,9 +866,8 @@ export default function Settings() {
         <div className="flex-1 overflow-y-auto p-8 relative">
           {/* Transition wrapper */}
           <div
-            className={`transition-all duration-150 ease-out ${
-              isTransitioning ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
-            }`}
+            className={`transition-all duration-150 ease-out ${isTransitioning ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+              }`}
           >
             {renderContent()}
           </div>

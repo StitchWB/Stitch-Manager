@@ -4,10 +4,17 @@ import { Button, Checkbox, Input, Modal, Select } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import type { EmailProviderType } from '@/lib/tauri/modules/emailInbox';
 import type { MailImapCredentials, MailTmCredentials } from '@/stores/mail';
+import { getPresetForKind, type MailboxProviderKind } from '@/lib/mail/providerPresets';
 
 interface MailManualConnectModalProps {
   isOpen: boolean;
   defaultSource?: EmailProviderType;
+  /**
+   * When set to 'icloud' or 'gmail', the host/port/TLS fields are pre-filled
+   * with the known preset and locked, so the user only has to enter their
+   * address and app-specific password.
+   */
+  presetKind?: MailboxProviderKind;
   source: EmailProviderType;
   accountId: string;
   mailbox: string;
@@ -27,9 +34,20 @@ interface MailManualConnectModalProps {
   onClose: () => void;
 }
 
+const PRESET_TITLE_KEY: Record<'icloud' | 'gmail', string> = {
+  icloud: 'mail.presetICloudTitle',
+  gmail: 'mail.presetGmailTitle',
+};
+
+const PRESET_HINT_KEY: Record<'icloud' | 'gmail', string> = {
+  icloud: 'mail.presetICloudHint',
+  gmail: 'mail.presetGmailHint',
+};
+
 export function MailManualConnectModal({
   isOpen,
   defaultSource,
+  presetKind,
   source,
   accountId,
   mailbox,
@@ -50,15 +68,35 @@ export function MailManualConnectModal({
 }: MailManualConnectModalProps) {
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
 
-  // When the modal opens with a different default source than current, switch.
+  const isKnownPreset = presetKind === 'icloud' || presetKind === 'gmail';
+
+  // When the modal opens with a different default source than current, switch,
+  // and pre-fill the well-known host/port/TLS for iCloud/Gmail presets.
   useEffect(() => {
-    if (!isOpen || !defaultSource) return;
+    if (!isOpen) return;
     if (hasOpenedOnce) return;
     setHasOpenedOnce(true);
-    if (defaultSource !== source) {
+
+    if (defaultSource && defaultSource !== source) {
       onSourceChange(defaultSource);
     }
-  }, [defaultSource, hasOpenedOnce, isOpen, onSourceChange, source]);
+
+    if (isKnownPreset) {
+      const preset = getPresetForKind(presetKind!);
+      if (preset) {
+        onImapPatch({ host: preset.host, port: preset.port, useTls: preset.useTls });
+      }
+    }
+  }, [
+    defaultSource,
+    hasOpenedOnce,
+    isKnownPreset,
+    isOpen,
+    onImapPatch,
+    onSourceChange,
+    presetKind,
+    source,
+  ]);
 
   // Reset the once-open flag when modal closes
   useEffect(() => {
@@ -75,11 +113,16 @@ export function MailManualConnectModal({
     []
   );
 
+  const modalTitle = isKnownPreset ? t(PRESET_TITLE_KEY[presetKind!]) : t('mail.manualConnectionTitle');
+  const usernameLabel = presetKind === 'icloud' ? t('mail.presetAppleId') : t('mail.providerUsername');
+  const passwordHint =
+    presetKind === 'icloud' || presetKind === 'gmail' ? t('mail.presetAppPasswordHint') : undefined;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={t('mail.manualConnectionTitle')}
+      title={modalTitle}
       size="lg"
       footer={
         <div className="flex flex-wrap justify-end gap-2">
@@ -111,16 +154,22 @@ export function MailManualConnectModal({
       }
     >
       <div className="space-y-4">
-        <p className="text-xs text-slate-400">{t('mail.manualConnectionDescription')}</p>
+        {isKnownPreset ? (
+          <p className="text-xs text-slate-400">{t(PRESET_HINT_KEY[presetKind!])}</p>
+        ) : (
+          <p className="text-xs text-slate-400">{t('mail.manualConnectionDescription')}</p>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Select
-            label={t('mail.sourceLabel')}
-            value={source}
-            onValueChange={value => onSourceChange(value as EmailProviderType)}
-            disabled={controlsDisabled}
-            options={sourceOptions}
-          />
+          {!isKnownPreset ? (
+            <Select
+              label={t('mail.sourceLabel')}
+              value={source}
+              onValueChange={value => onSourceChange(value as EmailProviderType)}
+              disabled={controlsDisabled}
+              options={sourceOptions}
+            />
+          ) : null}
 
           <Input
             label={t('mail.accountIdLabel')}
@@ -129,12 +178,14 @@ export function MailManualConnectModal({
             disabled={controlsDisabled}
           />
 
-          <Input
-            label={t('mail.mailboxLabel')}
-            value={mailbox}
-            onChange={event => onMailboxChange(event.target.value)}
-            disabled={controlsDisabled || source !== 'imap'}
-          />
+          {!isKnownPreset ? (
+            <Input
+              label={t('mail.mailboxLabel')}
+              value={mailbox}
+              onChange={event => onMailboxChange(event.target.value)}
+              disabled={controlsDisabled || source !== 'imap'}
+            />
+          ) : null}
         </div>
 
         {source === 'imap' ? (
@@ -143,17 +194,17 @@ export function MailManualConnectModal({
               label={t('mail.providerHost')}
               value={imapCredentials.host}
               onChange={event => onImapPatch({ host: event.target.value })}
-              disabled={controlsDisabled}
+              disabled={controlsDisabled || isKnownPreset}
             />
             <Input
               label={t('mail.providerPort')}
               type="number"
               value={String(imapCredentials.port)}
               onChange={event => onImapPatch({ port: Number(event.target.value) || 0 })}
-              disabled={controlsDisabled}
+              disabled={controlsDisabled || isKnownPreset}
             />
             <Input
-              label={t('mail.providerUsername')}
+              label={usernameLabel}
               value={imapCredentials.username}
               onChange={event => onImapPatch({ username: event.target.value })}
               disabled={controlsDisabled}
@@ -161,6 +212,7 @@ export function MailManualConnectModal({
             <Input
               label={t('mail.providerPassword')}
               type="password"
+              hint={passwordHint}
               value={imapCredentials.password}
               onChange={event => onImapPatch({ password: event.target.value })}
               disabled={controlsDisabled}
@@ -170,7 +222,7 @@ export function MailManualConnectModal({
                 checked={imapCredentials.useTls}
                 onChange={event => onImapPatch({ useTls: event.target.checked })}
                 label={t('mail.providerUseTls')}
-                disabled={controlsDisabled}
+                disabled={controlsDisabled || isKnownPreset}
               />
             </div>
           </div>

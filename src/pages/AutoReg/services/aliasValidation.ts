@@ -1,6 +1,6 @@
 import type { RegistrationConfig } from '../../../stores/registration/types';
 
-export type PythonAliasStrategy = 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'custom' | 'cf-to-imap';
+export type PythonAliasStrategy = 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'icloud_pool' | 'custom' | 'cf-to-imap';
 
 export function validateAliasConfiguration(
   strategy: PythonAliasStrategy,
@@ -28,6 +28,10 @@ export function validateAliasConfiguration(
 
   if (strategy === 'mailtm' && !config.imap.mailtmEnabled) {
     return 'Mail.tm strategy selected but Mail.tm is disabled in configuration';
+  }
+
+  if (strategy === 'icloud_pool' && !config.imap.icloudEnabled) {
+    return 'iCloud pool strategy selected but iCloud is disabled in configuration';
   }
 
   return null;

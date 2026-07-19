@@ -1,14 +1,16 @@
-"""Account SQLAlchemy ORM model — 34 fields, single source of truth.
+"""Account SQLAlchemy ORM model — 35 fields, single source of truth.
 
 Field groups:
-  - Base       (id, email, password, provider, status, display_name, timestamps)
-  - Tokens     (token, refresh_token, expires_at, token_type, kiro_*, api_key)
-  - Machine    (machine_id, patch_config, hardware_fingerprint)
-  - Browser    (profile_path, cookies, session_data, fingerprint, user_agent)
-  - Proxy      (proxy_id, proxy_config)
-  - Meta       (notes, tags, use_count, success_rate, last_used_at, last_checked_at,
-                registration_source)
-  - OmniRoute  (omniroute_connection_id, is_llm_account, omniroute_synced_at)
+  - Base             (id, email, password, provider, status, display_name, timestamps)
+  - Tokens           (token, refresh_token, expires_at, token_type, kiro_*, api_key)
+  - Machine          (machine_id, patch_config, hardware_fingerprint)
+  - Browser          (profile_path, cookies, session_data, fingerprint, user_agent)
+  - Proxy            (proxy_id, proxy_config)
+  - Provider Meta    (provider_metadata — JSON bag for provider-specific extras, e.g.
+                      Kiro v2/v3 client_id + client_secret)
+  - Meta             (notes, tags, use_count, success_rate, last_used_at, last_checked_at,
+                      registration_source)
+  - OmniRoute        (omniroute_connection_id, is_llm_account, omniroute_synced_at)
 """
 
 from __future__ import annotations
@@ -153,6 +155,16 @@ class Account(Base):
     )
     referred_by_id: Mapped[str | None] = mapped_column(
         String, comment="FK → accounts.id of the donor that referred this account"
+    )
+
+    # ═══════ Provider Metadata ══════════════════════════════════════════════
+    provider_metadata: Mapped[dict | None] = mapped_column(
+        JSON,
+        comment=(
+            "Provider-specific extras stored as JSON. "
+            "For Kiro v2/v3: {client_id, client_secret, region}. "
+            "Keys match provider_metadata in AccountResponse / generated.ts."
+        ),
     )
 
     # ═══════ OmniRoute Sync ═════════════════════════════════════════════════

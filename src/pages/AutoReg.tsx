@@ -591,6 +591,8 @@ export default function AutoRegNext() {
         onCardsTextChange={cardsText => useRegistrationStore.getState().setAdvancedSettings({ cardsText })}
         cardBin={config.advanced.cardBin || ''}
         onCardBinChange={(cardBin: string) => useRegistrationStore.getState().setAdvancedSettings({ cardBin })}
+        kiroPlan={config.advanced.kiroPlan || 'free'}
+        onKiroPlanChange={(kiroPlan: string) => useRegistrationStore.getState().setAdvancedSettings({ kiroPlan })}
         captchaSoundEnabled={config.advanced.captchaSoundEnabled}
         onCaptchaSoundEnabledChange={captchaSoundEnabled =>
           stableSetAdvancedSettings({ captchaSoundEnabled })

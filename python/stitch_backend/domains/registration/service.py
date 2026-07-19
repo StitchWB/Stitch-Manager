@@ -239,6 +239,7 @@ def _build_provider(provider_name: str, config: dict):
             billing_city=config.get("billing_city") or config.get("billingCity"),
             billing_state=config.get("billing_state") or config.get("billingState"),
             billing_zip=config.get("billing_zip") or config.get("billingZip"),
+            kiro_plan=config.get("kiro_plan") or config.get("kiroPlan") or "free",
         )
 
     if provider_name == "windsurf":
@@ -369,27 +370,63 @@ def _remove_log_bridge(handlers: list[_LogBridgeHandler]) -> None:
 # In-process mode needs events to go through the EventBus instead.
 
 def _make_event_bus_transport(job_id: str, provider_name: str):
-    """Create a PipeTransport subclass that also emits events to EventBus."""
+    """Create a PipeTransport subclass that routes events through EventBus
+    and receives control commands from ``registration_control`` API calls.
+
+    In-process mode:
+    - emit() → EventBus (WebSocket → frontend)
+    - read_command() → in-memory queue populated by push_command()
+    - push_command() → called by registration_control command handler
+    """
     from autoreg.pipeline.transport import PipeTransport
 
     class EventBusTransport(PipeTransport):
-        """PipeTransport that mirrors emits to the EventBus."""
+        """PipeTransport backed by EventBus instead of stdin/stdout."""
 
         def emit(self, event: str, data: dict) -> None:
-            # Call parent (writes to stdout for backwards compat)
-            super().emit(event, data)
-            # Also emit to EventBus as pipeline.* event
+            # Skip stdout write (parent); emit to EventBus only
             event_bus.emit_sync(
                 f"pipeline.{event}",
                 {"jobId": job_id, "provider": provider_name, **data},
             )
+            logger.debug("Emitted event: %s", event)
 
         def _ensure_reader(self) -> None:
-            # In-process: no stdin reader needed — control signals come
-            # via the registration_control command, not stdin
-            pass
+            # No stdin reader — commands come via push_command()
+            self._started = True
 
-    return EventBusTransport()
+        def push_command(self, command: str, step_id=None, data=None) -> None:
+            """Called by registration_control to inject a control command."""
+            from autoreg.pipeline.transport import PipelineCommand
+            cmd = PipelineCommand(
+                command=command,
+                step_id=step_id,
+                data=data or {},
+            )
+            self._queue.append(cmd)
+
+    transport = EventBusTransport()
+    # Register transport in global registry so registration_control can push commands
+    _ACTIVE_TRANSPORTS[job_id] = transport
+    return transport
+
+
+# Registry: job_id → EventBusTransport (so registration_control can push commands)
+_ACTIVE_TRANSPORTS: dict[str, Any] = {}
+
+
+def push_control_to_transport(job_id: str, command: str, step_id=None, data=None) -> bool:
+    """Called by the registration_control command to forward resume/skip/abort."""
+    t = _ACTIVE_TRANSPORTS.get(job_id)
+    if t and hasattr(t, "push_command"):
+        t.push_command(command, step_id=step_id, data=data)
+        return True
+    return False
+
+
+def cleanup_transport(job_id: str) -> None:
+    """Remove transport from registry when job completes."""
+    _ACTIVE_TRANSPORTS.pop(job_id, None)
 
 
 # ── Log callback factory ─────────────────────────────────────────────────
@@ -709,6 +746,10 @@ class RegistrationService:
             provider = _build_provider(provider_name, config)
             provider.set_log_callback(log_callback)
 
+            # Create EventBus-backed transport so pipeline events (pause/resume/
+            # step_waiting etc.) flow to the frontend over WebSocket.
+            event_transport = _make_event_bus_transport(job_id, provider_name)
+
             # Load card pool if configured
             _load_cards(provider_name, config)
 
@@ -725,6 +766,7 @@ class RegistrationService:
                 email=config.get("email"),
                 password=config.get("password"),
                 name=config.get("name"),
+                transport=event_transport,
             )
 
             # Update job state
@@ -915,6 +957,8 @@ class RegistrationService:
                     provider.close()
                 except Exception:
                     pass
+            # Remove transport from registry so stale job_ids don't leak
+            cleanup_transport(job_id)
 
 
 def _load_cards(provider_name: str, config: dict) -> None:

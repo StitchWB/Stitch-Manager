@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ── Response ──────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ class AccountResponse(BaseModel):
             val = getattr(data, attr)
             if isinstance(val, datetime):
                 processed[key] = _dt(val)
-            elif attr in ("patch_config", "fingerprint", "proxy_config"):
+            elif attr in ("patch_config", "fingerprint", "proxy_config", "provider_metadata"):
                 processed[key] = _json(val)
             elif attr == "tags":
                 processed[key] = _json(val)
@@ -124,6 +124,20 @@ class AccountResponse(BaseModel):
             processed["id"] = str(processed["id"])
 
         return processed
+
+    @field_validator("provider_metadata", mode="before")
+    @classmethod
+    def _coerce_provider_metadata(cls, v: Any) -> Any:
+        """Serialize dict/list to JSON string regardless of the input path.
+
+        _from_orm only fires for ORM objects. When data arrives as a plain
+        dict (raw SQL, SimpleNamespace already processed, import payloads),
+        _from_orm returns early and Pydantic receives the raw dict value.
+        This validator catches that case on the field level.
+        """
+        if v is None or isinstance(v, str):
+            return v
+        return json.dumps(v)
 
 
 # ── Request DTOs ──────────────────────────────────────────────────────────────
@@ -217,3 +231,32 @@ class BulkExportRequest(BaseModel):
 
     provider: str | None = None
     ids: list[str | int] | None = None
+
+
+# ── Kiro-specific request DTOs ────────────────────────────────────────────────
+
+class RefreshKiroTokenRequest(BaseModel):
+    """Request body for ``refresh_kiro_token`` command."""
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    account_id: str | int = Field(alias="accountId")
+    proxy: str | None = None
+    force: bool = False  # refresh even if token is still valid
+
+
+class CheckKiroAccountRequest(BaseModel):
+    """Request body for ``check_kiro_account`` command."""
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    account_id: str | int = Field(alias="accountId")
+    proxy: str | None = None
+    auto_refresh: bool = Field(True, alias="autoRefresh")
+
+
+class UpdateProviderMetadataRequest(BaseModel):
+    """Merge arbitrary key/value pairs into account.provider_metadata."""
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    account_id: str | int = Field(alias="accountId")
+    metadata: dict = {}
+    merge: bool = True  # True = merge with existing, False = overwrite
