@@ -20,14 +20,17 @@ from stitch_backend.domains.accounts.schemas import (
     ArchiveAccountRequest,
     BulkDeleteRequest,
     BulkExportRequest,
+    CheckKiroAccountRequest,
     DeleteAccountRequest,
     GetAccountQuotaRequest,
     ListAccountsRequest,
     RefreshAccountRequest,
+    RefreshKiroTokenRequest,
     SetAccountProxyRequest,
     UpdateAccountMetadataRequest,
     UpdateAccountNotesTagsRequest,
     UpdateAccountTokenRequest,
+    UpdateProviderMetadataRequest,
 )
 from stitch_backend.domains.accounts.service import AccountService
 
@@ -291,5 +294,79 @@ async def cmd_import_accounts_payload(params: dict) -> dict:
             except Exception:
                 skipped += 1
         return {"imported": imported, "skipped": skipped}
+
+    return await run_in_session(_op)
+
+
+# ── Kiro token management ─────────────────────────────────────────────────────
+
+@register_command("refresh_kiro_token")
+async def cmd_refresh_kiro_token(params: dict) -> dict:
+    """Refresh the OAuth access token for a Kiro account.
+
+    Uses ``provider_metadata.client_id`` + ``client_secret`` when available
+    (v2/v3 registration flow); falls back to the legacy clientIdHash for older
+    accounts.  Persists the new token + expiry to the DB.
+
+    Request: ``{ accountId, proxy?, force? }``
+    Response: ``{ success, refreshed, expires_at, account?, error? }``
+    """
+    req = _parse(RefreshKiroTokenRequest, params)
+
+    async def _op(session):
+        svc = AccountService(session)
+        return await svc.refresh_kiro_token(
+            str(req.account_id),
+            proxy=req.proxy,
+            force=req.force,
+        )
+
+    return await run_in_session(_op)
+
+
+@register_command("check_kiro_account")
+async def cmd_check_kiro_account(params: dict) -> dict:
+    """Verify a Kiro account is alive and fetch credit / subscription info.
+
+    Calls GET /getUsageLimits.  Automatically attempts a token refresh when
+    the access token appears expired (``autoRefresh=true`` by default).
+
+    Request: ``{ accountId, proxy?, autoRefresh? }``
+    Response: ``{ alive, suspended, email, subscription, credit_used,
+                  credit_limit, credit_remaining, region, error, checked_at, account }``
+    """
+    req = _parse(CheckKiroAccountRequest, params)
+
+    async def _op(session):
+        svc = AccountService(session)
+        return await svc.check_kiro_account(
+            str(req.account_id),
+            proxy=req.proxy,
+            auto_refresh=req.auto_refresh,
+        )
+
+    return await run_in_session(_op)
+
+
+@register_command("update_provider_metadata")
+async def cmd_update_provider_metadata(params: dict) -> dict:
+    """Merge or overwrite provider-specific metadata on an account.
+
+    Stores arbitrary key/value pairs in ``account.provider_metadata`` (JSON).
+    For Kiro v2/v3 this is used to persist ``client_id`` + ``client_secret``
+    after registration so the token can be refreshed later without a browser.
+
+    Request: ``{ accountId, metadata: {…}, merge?: true }``
+    Response: ``AccountResponse``
+    """
+    req = _parse(UpdateProviderMetadataRequest, params)
+
+    async def _op(session):
+        svc = AccountService(session)
+        return await svc.update_provider_metadata(
+            str(req.account_id),
+            req.metadata,
+            merge=req.merge,
+        )
 
     return await run_in_session(_op)

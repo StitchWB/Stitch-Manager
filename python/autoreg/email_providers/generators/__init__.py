@@ -6,6 +6,7 @@ from .counter import CounterEmailGenerator
 from .addyio import AddyIoEmailGenerator
 from .thirtythreemail import ThirtyThreeMailGenerator
 from .mailtm import MailTmEmailGenerator
+from .icloud import ICloudPoolEmailGenerator
 from .template_utils import render_template, TemplateState
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     'AddyIoEmailGenerator',
     'ThirtyThreeMailGenerator',
     'MailTmEmailGenerator',
+    'ICloudPoolEmailGenerator',
     'render_template',
     'TemplateState',
 ]

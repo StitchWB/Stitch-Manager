@@ -68,3 +68,6 @@ captcha-recognizer>=1.0.2
 
 # TOTP code generation (for MFA registration)
 pyotp>=2.9.0
+
+# iCloud Hide My Email pool (Apple ID session management)
+pyicloud>=1.0.0

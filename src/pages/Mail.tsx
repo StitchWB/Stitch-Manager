@@ -11,6 +11,7 @@ import {
   MailToolbar,
 } from '@/components/mail';
 import type { AddMailboxAction } from '@/components/mail/MailSidebar';
+import type { MailboxProviderKind } from '@/lib/mail/providerPresets';
 import { Button, Modal } from '@/components/ui';
 import { useMailRuntime } from '@/hooks/useMailRuntime';
 import { useMailStore } from '@/stores/mail';
@@ -42,6 +43,11 @@ export default function Mail() {
   const [manualModalSource, setManualModalSource] = useUIState<ManualModalSource>(
     'mail-manual-modal-source',
     'imap',
+    'session'
+  );
+  const [manualModalPresetKind, setManualModalPresetKind] = useUIState<MailboxProviderKind | undefined>(
+    'mail-manual-modal-preset',
+    undefined,
     'session'
   );
 
@@ -265,12 +271,28 @@ export default function Mail() {
         }
 
         case 'imapManual': {
+          setManualModalPresetKind(undefined);
+          setManualModalSource('imap');
+          setManualModalOpen(true);
+          break;
+        }
+
+        case 'icloud': {
+          setManualModalPresetKind('icloud');
+          setManualModalSource('imap');
+          setManualModalOpen(true);
+          break;
+        }
+
+        case 'gmail': {
+          setManualModalPresetKind('gmail');
           setManualModalSource('imap');
           setManualModalOpen(true);
           break;
         }
 
         case 'mailTmManual': {
+          setManualModalPresetKind(undefined);
           setManualModalSource('mail_tm');
           setManualModalOpen(true);
           break;
@@ -287,6 +309,7 @@ export default function Mail() {
       registrationImap,
       setActiveProfileId,
       setManualModalOpen,
+      setManualModalPresetKind,
       setManualModalSource,
       setRawModalOpen,
     ]
@@ -382,6 +405,8 @@ export default function Mail() {
               onAddMailbox={action => {
                 void handleAddMailbox(action);
               }}
+              onRenameProfile={runtime.renameProfile}
+              onDeleteProfile={runtime.deleteProfile}
             />
 
             {/* Center: toolbar + message list */}
@@ -420,6 +445,8 @@ export default function Mail() {
                 message={runtime.selectedMessage}
                 capabilities={runtime.capabilities}
                 busy={runtime.isMutating || runtime.isLoadingMessage}
+                loadError={runtime.messageLoadError}
+                onClearLoadError={runtime.clearMessageLoadError}
                 onMarkRead={runtime.markAsRead}
                 onDelete={runtime.deleteMessage}
               />
@@ -432,6 +459,7 @@ export default function Mail() {
       <MailManualConnectModal
         isOpen={manualModalOpen}
         defaultSource={manualModalSource}
+        presetKind={manualModalPresetKind}
         source={runtime.source}
         accountId={runtime.accountId}
         mailbox={runtime.mailbox}

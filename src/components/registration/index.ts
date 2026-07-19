@@ -7,5 +7,5 @@ export { AutomationTab } from './AutomationTab';
 export { InboxTab } from './InboxTab';
 export { SoundsTab } from './SoundsTab';
 export { LaunchPad } from './LaunchPad';
-export { PipelineStepConfigPanel } from './PipelineStepConfigPanel';
+export { PipelineStepConfigPanel, PipelineStepSummaryBar } from './PipelineStepConfigPanel';
 export { PROVIDER_REQUIREMENT_HINTS } from './providerRequirements';

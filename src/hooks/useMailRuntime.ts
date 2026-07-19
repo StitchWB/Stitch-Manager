@@ -31,6 +31,7 @@ export function useMailRuntime() {
   const isMutating = useMailStore(state => state.isMutating);
   const isLoadingMessage = useMailStore(state => state.isLoadingMessage);
   const error = useMailStore(state => state.error);
+  const messageLoadError = useMailStore(state => state.messageLoadError);
 
   const setSource = useMailStore(state => state.setSource);
   const setAccountId = useMailStore(state => state.setAccountId);
@@ -52,6 +53,7 @@ export function useMailRuntime() {
   const upsertProfileFromDraft = useMailStore(state => state.upsertProfileFromDraft);
   const saveCurrentSessionAsProfile = useMailStore(state => state.saveCurrentSessionAsProfile);
   const clearError = useMailStore(state => state.clearError);
+  const clearMessageLoadError = useMailStore(state => state.clearMessageLoadError);
   const connect = useMailStore(state => state.connect);
   const disconnect = useMailStore(state => state.disconnect);
   const listMessages = useMailStore(state => state.listMessages);
@@ -153,6 +155,8 @@ export function useMailRuntime() {
     isMutating,
     isLoadingMessage,
     error,
+    messageLoadError,
+    clearMessageLoadError,
     connectDisabled,
     setSource,
     setAccountId,

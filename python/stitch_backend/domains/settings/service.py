@@ -34,16 +34,19 @@ _INT_KEYS = {
 }
 _BOOL_KEYS = {
     "proxyEnabled", "proxyRotationEnabled", "addyioEnabled", "addyioAutoDelete",
-    "thirtyThreeMailEnabled", "mailtmEnabled", "headless", "autoRotateEnabled",
-    "spoofMachineIdEnabled", "tokenRefreshEnabled", "realisticTyping",
-    "humanDelays", "screenshotsOnError", "captchaSoundEnabled",
+    "thirtyThreeMailEnabled", "mailtmEnabled", "icloudEnabled", "headless",
+    "autoRotateEnabled", "spoofMachineIdEnabled", "tokenRefreshEnabled",
+    "realisticTyping", "humanDelays", "screenshotsOnError", "captchaSoundEnabled",
     "autoReplenishEnabled", "proxyList",
 }
 _FLOAT_KEYS = {"uiScale", "speedMultiplier"}
 _JSON_KEYS = {"customIdePaths"}
 
 PASSWORD_MASK = "********"
-_PASSWORD_KEYS = {"imapPassword", "proxyPassword", "addyioApiToken", "gmailAppPassword"}
+_PASSWORD_KEYS = {
+    "imapPassword", "proxyPassword", "addyioApiToken", "gmailAppPassword",
+    "icloudAppPassword",
+}
 
 
 def _parse_value(key: str, raw: str | None) -> Any:

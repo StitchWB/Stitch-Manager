@@ -319,6 +319,7 @@ export interface KiroV2AutoregConfig {
   cardsText: string | null;
   cardBin: string | null;
   correlationId: string | null;
+  kiroPlan: string | null;
 }
 
 export interface KiroV2AutoregResult {

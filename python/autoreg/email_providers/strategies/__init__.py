@@ -6,6 +6,7 @@ from .counter_imap import CounterImapStrategy
 from .addyio_imap import AddyIoImapStrategy
 from .custom import CustomStrategy
 from .mailtm_strategy import MailTmStrategy
+from .icloud_pool import ICloudPoolStrategy
 
 __all__ = [
     'BaseStrategy',
@@ -14,4 +15,5 @@ __all__ = [
     'AddyIoImapStrategy',
     'CustomStrategy',
     'MailTmStrategy',
+    'ICloudPoolStrategy',
 ]

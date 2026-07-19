@@ -26,6 +26,8 @@ interface MissionControlHUDProps {
   showDebug?: boolean;
   onShowDebugChange?: (show: boolean) => void;
   hideTimeline?: boolean;
+  /** Hide the short status strip when a container renders a fuller status card. */
+  hideLiveStatus?: boolean;
 }
 
 // Parse log message to determine current step
@@ -294,6 +296,7 @@ export function MissionControlHUD({
   showDebug = false,
   onShowDebugChange,
   hideTimeline = false,
+  hideLiveStatus = false,
 }: MissionControlHUDProps) {
   const currentStep = useMemo(() => parseCurrentStep(logs, isRunning), [logs, isRunning]);
   const { action, detail } = useMemo(() => parseLiveAction(logs, isRunning), [logs, isRunning]);
@@ -311,10 +314,12 @@ export function MissionControlHUD({
         </div>
       )}
 
-      {/* Live Status Strip - Compact, no padding */}
-      <div className="shrink-0">
-        <LiveStatusCard action={action} detail={detail} onStart={onStart} canStart={canStart} />
-      </div>
+      {/* The console renders a full error card itself, so do not duplicate it with a truncated status strip. */}
+      {!hideLiveStatus && (
+        <div className="shrink-0">
+          <LiveStatusCard action={action} detail={detail} onStart={onStart} canStart={canStart} />
+        </div>
+      )}
 
       {/* Success Strips - Compact, no padding */}
       {successAccounts.length > 0 && (

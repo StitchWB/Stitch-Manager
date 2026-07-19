@@ -8,6 +8,7 @@ import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
 import { useUIPreferencesStore } from './stores/uiPreferences';
+import { useTotpStore } from './stores/totp';
 import { CommandPalette } from '@/components/ui';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -27,6 +28,7 @@ const ApiKeys = lazy(() => import('./pages/ApiKeys'));
 const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Tools = lazy(() => import('./pages/Tools'));
 const Automation = lazy(() => import('./pages/Automation'));
+const Totp = lazy(() => import('./pages/Totp'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -126,6 +128,7 @@ function App() {
   const subscribeToLogs = useLogsStore(state => state.subscribeToLogs);
   const unsubscribeFromLogs = useLogsStore(state => state.unsubscribeFromLogs);
   const fetchLogs = useLogsStore(state => state.fetchLogs);
+  const fetchTotpKeys = useTotpStore(state => state.fetchKeys);
 
   const hasInitialized = useRef(false);
 
@@ -175,10 +178,13 @@ function App() {
     // Fetch initial logs from database
     fetchLogs();
 
+    // Pre-fetch TOTP keys so account rows can show codes immediately
+    void fetchTotpKeys().catch(() => { });
+
     return () => {
       unsubscribeFromLogs();
     };
-  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs]);
+  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs, fetchTotpKeys]);
 
   // Idle route prefetch to speed up first navigation.
   useEffect(() => {
@@ -271,6 +277,7 @@ function App() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/scenarios" element={<Scenarios />} />
             <Route path="/tools" element={<Tools />} />
+            <Route path="/totp" element={<Totp />} />
             <Route path="/api-keys" element={<Navigate to="/ai/api-keys" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

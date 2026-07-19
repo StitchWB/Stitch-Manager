@@ -8,7 +8,7 @@ import type { ProviderName } from '../../types/ui';
 export type MailStrategy = 'custom' | 'gmail' | 'cf-to-imap';
 
 // Email strategy type
-export type EmailStrategy = 'static' | 'counter' | 'addyio' | 'addyio_counter';
+export type EmailStrategy = 'static' | 'counter' | 'addyio' | 'addyio_counter' | 'icloud_pool';
 
 // IMAP configuration (kept for future email verification)
 export interface IMAPConfig {
@@ -43,6 +43,9 @@ export interface IMAPConfig {
   thirtyThreeMailTemplate?: string;
   // Mail.tm fields (GLOBAL - shared across providers)
   mailtmEnabled?: boolean;
+  // iCloud Hide My Email pool fields (GLOBAL - shared across providers)
+  icloudEnabled?: boolean;
+  icloudAppleId?: string;
   // CF-to-IMAP: explicit email generation domain (overrides imap.email domain)
   emailGenerationDomain?: string;
 }
@@ -142,6 +145,9 @@ export interface AdvancedSettings {
   // Card pool (pipe/CSV/space format, one per line)
   cardsText?: string;
   cardBin?: string; // BIN for auto-generating Live cards
+
+  // Kiro-specific
+  kiroPlan?: string; // free | pro | pro_plus | pro_max | power
 
   // Google Sheets Identity Graph (NO encryption in this phase)
   googleSheetsSpreadsheetId?: string;

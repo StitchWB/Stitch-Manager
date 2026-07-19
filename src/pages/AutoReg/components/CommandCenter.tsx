@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   ProviderSelector,
   ConfigTabs,
@@ -7,6 +8,8 @@ import {
   NetworkTab,
   SoundsTab,
   LaunchPad,
+  PipelineStepConfigPanel,
+  PipelineStepSummaryBar,
 } from '../../../components/registration';
 import type { PipelineStepOverride } from '../../../components/registration/PipelineStepConfigPanel';
 import { type ProviderName } from '../../../types/ui';
@@ -52,8 +55,6 @@ interface CommandCenterProps {
   onDelayBetweenAccountsChange: (delay: number) => void;
   logVerbosity: LogVerbosity;
   onLogVerbosityChange: (verbosity: LogVerbosity) => void;
-  showDebugLogsInConsole: boolean;
-  onShowDebugLogsInConsoleChange: (enabled: boolean) => void;
   verificationCodeTimeout: number;
   onVerificationCodeTimeoutChange: (timeout: number) => void;
   oauthCallbackTimeout: number;
@@ -88,6 +89,10 @@ interface CommandCenterProps {
   // Cards
   cardBin?: string;
   onCardBinChange?: (text: string) => void;
+
+  // Kiro plan
+  kiroPlan?: string;
+  onKiroPlanChange?: (plan: string) => void;
 
   // Network
   networkConfig: NetworkConfig;
@@ -139,8 +144,6 @@ export const CommandCenter = ({
   onDelayBetweenAccountsChange,
   logVerbosity,
   onLogVerbosityChange,
-  showDebugLogsInConsole,
-  onShowDebugLogsInConsoleChange,
   verificationCodeTimeout,
   onVerificationCodeTimeoutChange,
   oauthCallbackTimeout,
@@ -165,6 +168,8 @@ export const CommandCenter = ({
   onCardsTextChange,
   cardBin,
   onCardBinChange,
+  kiroPlan,
+  onKiroPlanChange,
   captchaSoundEnabled,
   onCaptchaSoundEnabledChange,
   captchaSoundFile,
@@ -186,6 +191,10 @@ export const CommandCenter = ({
   saveStatus,
   disabled,
 }: CommandCenterProps) => {
+  // When true, the scrollable content area shows the scenario step editor
+  // instead of the active tab's content.
+  const [showScenarioEditor, setShowScenarioEditor] = useState(false);
+
   const savePill =
     saveStatus === 'saving' ? (
       <StatusBadge status="idle" size="sm" className="rounded-md border border-white/10">
@@ -202,7 +211,7 @@ export const CommandCenter = ({
     ) : null;
 
   return (
-    <div className="w-full md:w-[360px] lg:w-[400px] shrink-0 flex flex-col h-full border-b md:border-b-0 md:border-r border-white/5">
+    <div className="w-full min-w-[320px] max-w-[520px] md:w-[360px] lg:w-[400px] resize-x overflow-hidden shrink-0 flex flex-col h-full border-b md:border-b-0 md:border-r border-white/5">
       {/* Provider Selector */}
       <ProviderSelector
         activeProvider={activeProvider}
@@ -219,92 +228,113 @@ export const CommandCenter = ({
 
       {/* Tabbed Content - with scroll */}
       <div className="flex-1 overflow-y-auto px-4 py-2 min-h-0">
-        {activeTab === 'identity' && (
-          <IdentityTab
-            provider={activeProvider}
-            identityConfig={identityConfig}
-            onConfigChange={updates => {
-              if ('emailPattern' in updates) {
-                onIdentityConfigChange({ ...updates });
-              } else {
-                onIdentityConfigChange(updates);
-              }
-            }}
-            onTest={onTestImap}
-            disabled={disabled}
-            saveStatus={saveStatus}
-            passwordSet={passwordSet}
-            gmailAppPasswordSet={gmailAppPasswordSet}
-            onTestAddyio={onTestAddyio}
-            isTestingAddyio={isTestingAddyio}
-            addyioConnectionStatus={addyioConnectionStatus}
-            addyioConnectionMessage={addyioConnectionMessage}
-            addyioAccountInfo={addyioAccountInfo}
-            addyioDomains={addyioDomains}
+        {/* Scenario editor overlays the regular tab content */}
+        {showScenarioEditor && pipelineSteps && onPipelineStepsChange ? (
+          <PipelineStepConfigPanel
+            steps={pipelineSteps}
+            onChange={onPipelineStepsChange}
+            onBack={() => setShowScenarioEditor(false)}
+            disabled={isRunning}
           />
-        )}
+        ) : (
+          <>
+            {activeTab === 'identity' && (
+              <IdentityTab
+                provider={activeProvider}
+                identityConfig={identityConfig}
+                onConfigChange={updates => {
+                  if ('emailPattern' in updates) {
+                    onIdentityConfigChange({ ...updates });
+                  } else {
+                    onIdentityConfigChange(updates);
+                  }
+                }}
+                onTest={onTestImap}
+                disabled={disabled}
+                saveStatus={saveStatus}
+                passwordSet={passwordSet}
+                gmailAppPasswordSet={gmailAppPasswordSet}
+                onTestAddyio={onTestAddyio}
+                isTestingAddyio={isTestingAddyio}
+                addyioConnectionStatus={addyioConnectionStatus}
+                addyioConnectionMessage={addyioConnectionMessage}
+                addyioAccountInfo={addyioAccountInfo}
+                addyioDomains={addyioDomains}
+              />
+            )}
 
-        {activeTab === 'engine' && (
-          <EngineTab
-            provider={activeProvider}
-            useRegistrationV2={useRegistrationV2}
-            onUseRegistrationV2Change={onUseRegistrationV2Change}
-            headless={headless}
-            onHeadlessChange={onHeadlessChange}
-            speedMultiplier={speedMultiplier}
-            onSpeedMultiplierChange={onSpeedMultiplierChange}
-            delayBetweenAccounts={delayBetweenAccounts}
-            onDelayBetweenAccountsChange={onDelayBetweenAccountsChange}
-            logVerbosity={logVerbosity}
-            onLogVerbosityChange={onLogVerbosityChange}
-            showDebugLogsInConsole={showDebugLogsInConsole}
-            onShowDebugLogsInConsoleChange={onShowDebugLogsInConsoleChange}
-            verificationCodeTimeout={verificationCodeTimeout}
-            onVerificationCodeTimeoutChange={onVerificationCodeTimeoutChange}
-            oauthCallbackTimeout={oauthCallbackTimeout}
-            onOauthCallbackTimeoutChange={onOauthCallbackTimeoutChange}
-            allowAccessWait={allowAccessWait}
-            onAllowAccessWaitChange={onAllowAccessWaitChange}
-            pageLoadTimeout={pageLoadTimeout}
-            onPageLoadTimeoutChange={onPageLoadTimeoutChange}
-            elementWaitTimeout={elementWaitTimeout}
-            onElementWaitTimeoutChange={onElementWaitTimeoutChange}
-            imapPollInterval={imapPollInterval}
-            onImapPollIntervalChange={onImapPollIntervalChange}
-            passwordLength={passwordLength}
-            onPasswordLengthChange={onPasswordLengthChange}
-            realisticTyping={realisticTyping}
-            onRealisticTypingChange={onRealisticTypingChange}
-            humanDelays={humanDelays}
-            onHumanDelaysChange={onHumanDelaysChange}
-            screenshotsOnError={screenshotsOnError}
-            onScreenshotsOnErrorChange={onScreenshotsOnErrorChange}
-            cardsText={cardsText}
-            onCardsTextChange={onCardsTextChange}
-            cardBin={cardBin}
-            onCardBinChange={onCardBinChange}
-            disabled={disabled}
-          />
-        )}
+            {activeTab === 'engine' && (
+              <EngineTab
+                provider={activeProvider}
+                useRegistrationV2={useRegistrationV2}
+                onUseRegistrationV2Change={onUseRegistrationV2Change}
+                headless={headless}
+                onHeadlessChange={onHeadlessChange}
+                speedMultiplier={speedMultiplier}
+                onSpeedMultiplierChange={onSpeedMultiplierChange}
+                delayBetweenAccounts={delayBetweenAccounts}
+                onDelayBetweenAccountsChange={onDelayBetweenAccountsChange}
+                logVerbosity={logVerbosity}
+                onLogVerbosityChange={onLogVerbosityChange}
+                verificationCodeTimeout={verificationCodeTimeout}
+                onVerificationCodeTimeoutChange={onVerificationCodeTimeoutChange}
+                oauthCallbackTimeout={oauthCallbackTimeout}
+                onOauthCallbackTimeoutChange={onOauthCallbackTimeoutChange}
+                allowAccessWait={allowAccessWait}
+                onAllowAccessWaitChange={onAllowAccessWaitChange}
+                pageLoadTimeout={pageLoadTimeout}
+                onPageLoadTimeoutChange={onPageLoadTimeoutChange}
+                elementWaitTimeout={elementWaitTimeout}
+                onElementWaitTimeoutChange={onElementWaitTimeoutChange}
+                imapPollInterval={imapPollInterval}
+                onImapPollIntervalChange={onImapPollIntervalChange}
+                passwordLength={passwordLength}
+                onPasswordLengthChange={onPasswordLengthChange}
+                realisticTyping={realisticTyping}
+                onRealisticTypingChange={onRealisticTypingChange}
+                humanDelays={humanDelays}
+                onHumanDelaysChange={onHumanDelaysChange}
+                screenshotsOnError={screenshotsOnError}
+                onScreenshotsOnErrorChange={onScreenshotsOnErrorChange}
+                cardsText={cardsText}
+                onCardsTextChange={onCardsTextChange}
+                cardBin={cardBin}
+                onCardBinChange={onCardBinChange}
+                kiroPlan={kiroPlan}
+                onKiroPlanChange={onKiroPlanChange}
+                disabled={disabled}
+              />
+            )}
 
-        {activeTab === 'network' && (
-          <NetworkTab config={networkConfig} onChange={onNetworkConfigChange} disabled={disabled} />
-        )}
+            {activeTab === 'network' && (
+              <NetworkTab config={networkConfig} onChange={onNetworkConfigChange} disabled={disabled} />
+            )}
 
-        {activeTab === 'sounds' && (
-          <SoundsTab
-            captchaSoundEnabled={captchaSoundEnabled}
-            onCaptchaSoundEnabledChange={onCaptchaSoundEnabledChange}
-            captchaSoundFile={captchaSoundFile}
-            onCaptchaSoundFileChange={onCaptchaSoundFileChange}
-            captchaTimeout={captchaTimeout}
-            onCaptchaTimeoutChange={onCaptchaTimeoutChange}
-            disabled={disabled}
-          />
-        )}
+            {activeTab === 'sounds' && (
+              <SoundsTab
+                captchaSoundEnabled={captchaSoundEnabled}
+                onCaptchaSoundEnabledChange={onCaptchaSoundEnabledChange}
+                captchaSoundFile={captchaSoundFile}
+                onCaptchaSoundFileChange={onCaptchaSoundFileChange}
+                captchaTimeout={captchaTimeout}
+                onCaptchaTimeoutChange={onCaptchaTimeoutChange}
+                disabled={disabled}
+              />
+            )}
 
-        {/* Tab 'inbox' removed — inbox settings merged into identity tab */}
+            {/* Tab 'inbox' removed — inbox settings merged into identity tab */}
+          </>
+        )}
       </div>
+
+      {/* Compact scenario summary bar — always visible when steps are present */}
+      {pipelineSteps && onPipelineStepsChange && !showScenarioEditor && (
+        <PipelineStepSummaryBar
+          steps={pipelineSteps}
+          onConfigure={() => setShowScenarioEditor(true)}
+          disabled={isRunning}
+        />
+      )}
 
       {/* Launch Pad */}
       <LaunchPad
@@ -316,8 +346,6 @@ export const CommandCenter = ({
         onStart={onStart}
         onStop={onStop}
         jobId={jobId}
-        pipelineSteps={pipelineSteps}
-        onPipelineStepsChange={onPipelineStepsChange}
       />
     </div>
   );

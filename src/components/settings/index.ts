@@ -8,6 +8,7 @@ export { ProxyListManager } from './ProxyListManager';
 export { IMAPSettingsSection } from './IMAPSettingsSection';
 export { EmailCounterSection } from './EmailCounterSection';
 export { EmailServicesSection } from './EmailServicesSection';
+export { ICloudEmailSection } from './ICloudEmailSection';
 export { GoogleSheetsSettingsSection } from './GoogleSheetsSettingsSection';
 export { ExtensionSettingsSection } from './ExtensionSettingsSection';
 export { BackgroundManagerSettingsSection } from './BackgroundManagerSettingsSection';

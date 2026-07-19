@@ -1,26 +1,41 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import {
   Archive,
-  ChevronDown,
-  Database,
+  Cloud,
   FileText,
   Inbox,
   type LucideIcon,
+  Mail as MailIcon,
   Mailbox,
+  Pencil,
   Plus,
   Send,
+  Server,
   ShieldAlert,
   Trash2,
   Wand2,
 } from 'lucide-react';
-import { Badge, Button, ButtonBase, EmptyState } from '@/components/ui';
+import {
+  ActionDialog,
+  Badge,
+  Button,
+  ButtonBase,
+  ConfirmDialog,
+  EmptyState,
+  Input,
+  OverflowMenu,
+} from '@/components/ui';
 import { t } from '@/lib/i18n';
 import type { EmailFolder, EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
 import type { MailProfileSyncState } from '@/stores/mail';
 import { AUTO_REG_MAILBOX_PROFILE_ID } from '@/lib/mail/runtime';
+import { detectMailboxProviderKind, type MailboxProviderKind } from '@/lib/mail/providerPresets';
 import { MailSidebarAccounts } from './MailSidebarAccounts';
+import { AddMailboxModal, type AddMailboxSource } from './AddMailboxModal';
 
 type AddMailboxAction =
+  | 'icloud'
+  | 'gmail'
   | 'fromAutoReg'
   | 'imapManual'
   | 'mailTmManual'
@@ -40,6 +55,8 @@ interface MailSidebarProps {
   onSelectProfile: (profileId: string | null) => void;
   onSelectFolder: (folder: EmailFolder | null) => Promise<void> | void;
   onAddMailbox: (action: AddMailboxAction) => void;
+  onRenameProfile: (profileId: string, nextLabel: string) => Promise<void>;
+  onDeleteProfile: (profileId: string) => Promise<void>;
 }
 
 const FOLDER_ICONS: Record<string, LucideIcon> = {
@@ -62,6 +79,22 @@ const KIND_LABEL_KEYS: Record<string, string> = {
   archive: 'mail.folderAllMail',
   all: 'mail.folderAllMail',
 };
+
+const GROUP_ICONS: Record<MailboxProviderKind, LucideIcon> = {
+  icloud: Cloud,
+  gmail: MailIcon,
+  imap: Server,
+  mail_tm: Send,
+};
+
+const GROUP_LABEL_KEYS: Record<MailboxProviderKind, string> = {
+  icloud: 'mail.groupICloud',
+  gmail: 'mail.groupGmail',
+  imap: 'mail.groupImap',
+  mail_tm: 'mail.groupMailTm',
+};
+
+const GROUP_ORDER: MailboxProviderKind[] = ['icloud', 'gmail', 'imap', 'mail_tm'];
 
 function pickFolderIcon(folder: EmailFolder): LucideIcon {
   return FOLDER_ICONS[folder.kind] ?? Mailbox;
@@ -114,6 +147,15 @@ function formatRelativeTime(value: string | null | undefined): string | null {
   return date.toLocaleDateString();
 }
 
+const ADD_SOURCE_TO_ACTION: Record<AddMailboxSource, AddMailboxAction> = {
+  icloud: 'icloud',
+  gmail: 'gmail',
+  imap: 'imapManual',
+  fromAutoReg: 'fromAutoReg',
+  fromSheets: 'fromSheets',
+  mailTmManual: 'mailTmManual',
+};
+
 export function MailSidebar({
   profiles,
   activeProfileId,
@@ -127,12 +169,31 @@ export function MailSidebar({
   onSelectProfile,
   onSelectFolder,
   onAddMailbox,
+  onRenameProfile,
+  onDeleteProfile,
 }: MailSidebarProps) {
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<EmailInboxProfile | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<EmailInboxProfile | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
-  const sortedProfiles = useMemo(() => {
-    return [...profiles].sort((a, b) => a.label.localeCompare(b.label));
+  const groupedProfiles = useMemo(() => {
+    const groups = new Map<MailboxProviderKind, EmailInboxProfile[]>();
+    for (const profile of profiles) {
+      const kind = detectMailboxProviderKind(profile);
+      const bucket = groups.get(kind) ?? [];
+      bucket.push(profile);
+      groups.set(kind, bucket);
+    }
+    for (const bucket of groups.values()) {
+      bucket.sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return GROUP_ORDER.filter(kind => groups.has(kind)).map(kind => ({
+      kind,
+      profiles: groups.get(kind) ?? [],
+    }));
   }, [profiles]);
 
   const selectedFolderPath = selectedFolder?.path.trim().toLowerCase() ?? '';
@@ -161,13 +222,39 @@ export function MailSidebar({
     });
   }, [availableFolders]);
 
-  const handleAddMenuToggle = () => {
-    setAddMenuOpen(prev => !prev);
+  const handleAddModalSelect = (source: AddMailboxSource) => {
+    setAddModalOpen(false);
+    onAddMailbox(ADD_SOURCE_TO_ACTION[source]);
   };
 
-  const handleAddMenuPick = (action: AddMailboxAction) => {
-    setAddMenuOpen(false);
-    onAddMailbox(action);
+  const openRenameDialog = (profile: EmailInboxProfile) => {
+    setRenameTarget(profile);
+    setRenameValue(profile.label);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renameTarget) return;
+    const nextLabel = renameValue.trim();
+    if (!nextLabel) return;
+
+    setRenameBusy(true);
+    try {
+      await onRenameProfile(renameTarget.id, nextLabel);
+      setRenameTarget(null);
+    } finally {
+      setRenameBusy(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await onDeleteProfile(deleteTarget.id);
+      setDeleteTarget(null);
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -207,152 +294,186 @@ export function MailSidebar({
           />
         ) : null}
 
-        <div className="space-y-1 overflow-auto pr-1 -mr-1">
-          {sortedProfiles.map(profile => {
-            const sync = profileSyncMap[profile.id] ?? null;
-            const selected = profile.id === activeProfileId;
-            const tone = getProfileBadgeTone(sync);
-            const lastSync = formatRelativeTime(sync?.lastSyncAt);
-            const isAutoReg = profile.id === AUTO_REG_MAILBOX_PROFILE_ID;
-
+        <div className="space-y-3 overflow-auto pr-1 -mr-1">
+          {groupedProfiles.map(group => {
+            const GroupIcon = GROUP_ICONS[group.kind];
             return (
-              <Fragment key={profile.id}>
-                <ButtonBase
-                  type="button"
-                  onClick={() => onSelectProfile(profile.id)}
-                  className={`w-full text-left rounded-lg border px-2.5 py-2 transition-colors ${
-                    selected
-                      ? 'border-indigo-400/50 bg-indigo-500/10 text-white'
-                      : 'border-white/10 bg-black/20 text-slate-200 hover:border-white/20 hover:bg-black/30'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        {isAutoReg ? (
-                          <Wand2 size={11} className="text-indigo-300 shrink-0" />
+              <div key={group.kind} className="space-y-1">
+                <div className="flex items-center gap-1.5 px-1 text-slate-500">
+                  <GroupIcon size={11} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">
+                    {t(GROUP_LABEL_KEYS[group.kind])}
+                  </span>
+                  <span className="text-[10px] text-slate-600">({group.profiles.length})</span>
+                </div>
+
+                {group.profiles.map(profile => {
+                  const sync = profileSyncMap[profile.id] ?? null;
+                  const selected = profile.id === activeProfileId;
+                  const tone = getProfileBadgeTone(sync);
+                  const lastSync = formatRelativeTime(sync?.lastSyncAt);
+                  const isAutoReg = profile.id === AUTO_REG_MAILBOX_PROFILE_ID;
+
+                  return (
+                    <Fragment key={profile.id}>
+                      <div
+                        className={`group w-full rounded-lg border px-2.5 py-2 transition-colors ${selected
+                            ? 'border-indigo-400/50 bg-indigo-500/10 text-white'
+                            : 'border-white/10 bg-black/20 text-slate-200 hover:border-white/20 hover:bg-black/30'
+                          }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <ButtonBase
+                            type="button"
+                            onClick={() => onSelectProfile(profile.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {isAutoReg ? (
+                                <Wand2 size={11} className="text-indigo-300 shrink-0" />
+                              ) : null}
+                              <p className="text-xs font-medium text-white truncate">
+                                {profile.label}
+                              </p>
+                            </div>
+                            <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                              {profile.accountId}
+                            </p>
+                          </ButtonBase>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge variant={tone} size="sm" withDot={tone !== 'outline'}>
+                              {profile.provider === 'imap' ? 'IMAP' : 'Mail.tm'}
+                            </Badge>
+                            <OverflowMenu
+                              size="sm"
+                              triggerLabel={t('common.more')}
+                              className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
+                              items={[
+                                {
+                                  id: 'rename',
+                                  label: t('mail.renameProfileAction'),
+                                  icon: <Pencil size={12} />,
+                                  onSelect: () => openRenameDialog(profile),
+                                },
+                                {
+                                  id: 'delete',
+                                  label: t('mail.deleteProfileAction'),
+                                  icon: <Trash2 size={12} />,
+                                  tone: 'danger',
+                                  onSelect: () => setDeleteTarget(profile),
+                                },
+                              ]}
+                            />
+                          </div>
+                        </div>
+                        {selected && lastSync ? (
+                          <p className="text-[10px] text-slate-500 mt-1.5">
+                            {t('mail.lastSyncedAt', { time: lastSync })}
+                          </p>
                         ) : null}
-                        <p className="text-xs font-medium text-white truncate">
-                          {profile.label}
-                        </p>
                       </div>
-                      <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                        {profile.accountId}
-                      </p>
-                    </div>
-                    <Badge variant={tone} size="sm" withDot={tone !== 'outline'}>
-                      {profile.provider === 'imap' ? 'IMAP' : 'Mail.tm'}
-                    </Badge>
-                  </div>
-                  {selected && lastSync ? (
-                    <p className="text-[10px] text-slate-500 mt-1.5">
-                      {t('mail.lastSyncedAt', { time: lastSync })}
-                    </p>
-                  ) : null}
-                </ButtonBase>
 
-                {/* Folders nested under the selected profile */}
-                {selected && hasSession && folderOptions.length > 0 ? (
-                  <div className="pl-3 mt-1 space-y-0.5">
-                    {folderOptions.map(folder => {
-                      const Icon = pickFolderIcon(folder);
-                      const folderActive =
-                        folder.path.trim().toLowerCase() === selectedFolderPath;
-                      const depth = getFolderDepth(folder);
-                      const label = getFolderLabel(folder);
-                      return (
-                        <ButtonBase
-                          key={folder.id}
-                          type="button"
-                          disabled={isConnecting}
-                          onClick={() => {
-                            void onSelectFolder(folder);
-                          }}
-                          className={`w-full text-left rounded-md px-2 py-1.5 transition-colors flex items-center gap-2 ${
-                            folderActive
-                              ? 'bg-indigo-500/15 text-white'
-                              : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                          } disabled:opacity-50`}
-                          style={depth > 0 ? { paddingLeft: 8 + depth * 12 } : undefined}
-                          title={folder.path}
-                        >
-                          <Icon size={12} />
-                          <span className="text-[11px] truncate">{label}</span>
-                        </ButtonBase>
-                      );
-                    })}
-                  </div>
-                ) : null}
+                      {/* Folders nested under the selected profile */}
+                      {selected && hasSession && folderOptions.length > 0 ? (
+                        <div className="pl-3 mt-1 space-y-0.5">
+                          {folderOptions.map(folder => {
+                            const Icon = pickFolderIcon(folder);
+                            const folderActive =
+                              folder.path.trim().toLowerCase() === selectedFolderPath;
+                            const depth = getFolderDepth(folder);
+                            const label = getFolderLabel(folder);
+                            return (
+                              <ButtonBase
+                                key={folder.id}
+                                type="button"
+                                disabled={isConnecting}
+                                onClick={() => {
+                                  void onSelectFolder(folder);
+                                }}
+                                className={`w-full text-left rounded-md px-2 py-1.5 transition-colors flex items-center gap-2 ${folderActive
+                                    ? 'bg-indigo-500/15 text-white'
+                                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                                  } disabled:opacity-50`}
+                                style={depth > 0 ? { paddingLeft: 8 + depth * 12 } : undefined}
+                                title={folder.path}
+                              >
+                                <Icon size={12} />
+                                <span className="text-[11px] truncate">{label}</span>
+                              </ButtonBase>
+                            );
+                          })}
+                        </div>
+                      ) : null}
 
-                {selected && !hasSession ? (
-                  <p className="text-[10px] text-slate-600 px-2 py-1 italic">
-                    {t('mail.foldersDisconnectedHint')}
-                  </p>
-                ) : null}
-              </Fragment>
+                      {selected && !hasSession ? (
+                        <p className="text-[10px] text-slate-600 px-2 py-1 italic">
+                          {t('mail.foldersDisconnectedHint')}
+                        </p>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </div>
             );
           })}
         </div>
       </section>
 
-      {/* Add mailbox dropdown */}
-      <div className="p-3 border-t border-white/[0.06] relative" ref={addMenuRef}>
+      {/* Add mailbox entry point */}
+      <div className="p-3 border-t border-white/[0.06]">
         <Button
           size="sm"
           variant="secondary"
           className="w-full"
           leftIcon={<Plus size={14} />}
-          rightIcon={
-            <ChevronDown
-              size={12}
-              className={`transition-transform ${addMenuOpen ? 'rotate-180' : ''}`}
-            />
-          }
-          onClick={handleAddMenuToggle}
+          onClick={() => setAddModalOpen(true)}
         >
           {t('mail.addMailboxAction')}
         </Button>
-
-        {addMenuOpen ? (
-          <div
-            className="absolute bottom-full left-3 right-3 mb-2 rounded-lg border border-white/10 bg-vsc-panel shadow-xl py-1 z-30 max-h-[200px] overflow-y-auto"
-            role="menu"
-          >
-            <ButtonBase
-              type="button"
-              onClick={() => handleAddMenuPick('fromAutoReg')}
-              className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-white/5 flex items-center gap-2"
-            >
-              <Mailbox size={12} className="text-indigo-300" />
-              {t('mail.addMailboxFromAutoReg')}
-            </ButtonBase>
-            <ButtonBase
-              type="button"
-              onClick={() => handleAddMenuPick('imapManual')}
-              className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-white/5 flex items-center gap-2"
-            >
-              <Inbox size={12} className="text-emerald-300" />
-              {t('mail.addMailboxImap')}
-            </ButtonBase>
-            <ButtonBase
-              type="button"
-              onClick={() => handleAddMenuPick('mailTmManual')}
-              className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-white/5 flex items-center gap-2"
-            >
-              <Send size={12} className="text-amber-300" />
-              {t('mail.addMailboxMailTm')}
-            </ButtonBase>
-            <ButtonBase
-              type="button"
-              onClick={() => handleAddMenuPick('fromSheets')}
-              className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-white/5 flex items-center gap-2"
-            >
-              <Database size={12} className="text-sky-300" />
-              {t('mail.addMailboxFromSheets')}
-            </ButtonBase>
-          </div>
-        ) : null}
       </div>
+
+      <AddMailboxModal
+        isOpen={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onSelect={handleAddModalSelect}
+      />
+
+      <ActionDialog
+        isOpen={Boolean(renameTarget)}
+        onClose={() => setRenameTarget(null)}
+        onSubmit={() => {
+          void handleRenameSubmit();
+        }}
+        title={t('mail.renameProfileDialogTitle')}
+        description={t('mail.renameProfileDialogDescription')}
+        mode="edit"
+        confirmText={t('common.save')}
+        cancelText={t('common.cancel')}
+        isLoading={renameBusy}
+        submitDisabled={!renameValue.trim()}
+      >
+        <Input
+          label={t('mail.renameProfileLabel')}
+          value={renameValue}
+          onChange={event => setRenameValue(event.target.value)}
+          autoFocus
+        />
+      </ActionDialog>
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          void handleDeleteConfirm();
+        }}
+        title={t('mail.deleteProfileDialogTitle')}
+        message={t('mail.deleteProfileDialogDescription', { label: deleteTarget?.label ?? '' })}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
+        variant="danger"
+        isLoading={deleteBusy}
+      />
     </aside>
   );
 }

@@ -34,7 +34,8 @@ export const PROVIDER_PIPELINES: Record<string, ProviderPipelineConfig> = {
       { id: 'password', label: 'Создание пароля', enabled: true, pauseAfter: false, skippable: false },
       { id: 'oauth_redirect', label: 'Авторизация', enabled: true, pauseAfter: false, skippable: false },
       { id: 'mfa_registration', label: 'Настройка 2FA', enabled: true, pauseAfter: false, skippable: true },
-      { id: 'stripe_billing', label: 'Настройка оплаты', enabled: true, pauseAfter: false, skippable: true },
+      { id: 'stripe_billing', label: 'Настройка оплаты', enabled: true, pauseAfter: true, skippable: true },
+      { id: 'plan_selection', label: 'Выбор плана', enabled: true, pauseAfter: false, skippable: true },
     ],
   },
   qoder: {

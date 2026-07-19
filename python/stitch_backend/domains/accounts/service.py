@@ -7,6 +7,7 @@ each other's repos directly.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -307,6 +308,197 @@ class AccountService:
         count = int(result.rowcount)  # type: ignore[attr-defined]
         logger.info("Bulk deleted %d account(s)", count)
         return count
+
+    # ── Provider metadata ─────────────────────────────────────────────────────
+
+    async def update_provider_metadata(
+        self,
+        account_id: str,
+        metadata: dict,
+        *,
+        merge: bool = True,
+    ) -> AccountResponse:
+        """Store (or merge) provider-specific metadata on an account.
+
+        Args:
+            account_id: Account to update.
+            metadata: Dict of key→value pairs to store.
+            merge: If True, *update* existing dict keys rather than replacing
+                   the whole field (default).  Pass ``False`` to overwrite.
+        """
+        account = await self.get_account(account_id)
+        if merge and isinstance(account.provider_metadata, dict):
+            updated = {**account.provider_metadata, **metadata}
+        else:
+            updated = metadata
+        account.provider_metadata = updated
+        account.updated_at = _utcnow()
+        await self._db.flush()
+        await self._db.refresh(account)
+        logger.debug("provider_metadata updated for account %s: keys=%s", account_id, list(metadata))
+        return _to_response(account)
+
+    # ── Kiro token refresh ────────────────────────────────────────────────────
+
+    async def refresh_kiro_token(
+        self,
+        account_id: str,
+        *,
+        proxy: str | None = None,
+        force: bool = False,
+    ) -> dict:
+        """Refresh the Kiro access token for *account_id*.
+
+        Uses ``provider_metadata.client_id`` + ``client_secret`` when stored
+        (v2/v3 registration flow), otherwise falls back to the legacy
+        clientIdHash approach.
+
+        Args:
+            account_id: Account whose token should be refreshed.
+            proxy: Optional proxy URL to use for the OIDC request.
+            force: Refresh even if the token has not expired yet.
+
+        Returns:
+            Dict with ``{"success": True, "expires_at": "…", "account": AccountResponse}``.
+
+        Raises:
+            ``stitch_backend.core.exceptions.AccountNotFoundError`` if the account
+            doesn't exist, or a ``TokenRefreshError`` on OIDC failure.
+        """
+        from autoreg.providers.kiro_v2.token_refresh import (
+            TokenRefreshError,
+            refresh_from_account_metadata,
+            should_refresh_token,
+        )
+
+        account = await self.get_account(account_id)
+
+        if not account.refresh_token:
+            return {"success": False, "error": "no refresh_token stored for this account"}
+
+        if not force:
+            expires_at_str = (
+                account.expires_at.isoformat() if account.expires_at else None
+            )
+            if not should_refresh_token(expires_at_str, buffer_seconds=300):
+                return {
+                    "success": True,
+                    "refreshed": False,
+                    "message": "token still valid",
+                    "expires_at": expires_at_str,
+                    "account": _to_response(account),
+                }
+
+        try:
+            result = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: refresh_from_account_metadata(
+                    account.refresh_token,  # type: ignore[arg-type]
+                    account.provider_metadata,
+                    proxy=proxy,
+                ),
+            )
+        except TokenRefreshError as exc:
+            logger.warning("Token refresh failed for account %s: %s", account_id, exc)
+            account.status = "expired"
+            account.updated_at = _utcnow()
+            await self._db.flush()
+            return {"success": False, "error": str(exc)}
+
+        # Persist the new tokens
+        account.token = result["access_token"]
+        if result.get("refresh_token"):
+            account.refresh_token = result["refresh_token"]
+
+        expires_at_str = result.get("expires_at")
+        if expires_at_str:
+            try:
+                from datetime import datetime
+                account.expires_at = datetime.fromisoformat(
+                    expires_at_str.replace("Z", "+00:00")
+                )
+            except ValueError:
+                pass
+
+        account.status = "active"
+        account.updated_at = _utcnow()
+        await self._db.flush()
+        await self._db.refresh(account)
+
+        logger.info("Token refreshed for account %s (%s)", account_id, account.email)
+        return {
+            "success": True,
+            "refreshed": True,
+            "expires_at": expires_at_str,
+            "account": _to_response(account),
+        }
+
+    async def check_kiro_account(
+        self,
+        account_id: str,
+        *,
+        proxy: str | None = None,
+        auto_refresh: bool = True,
+    ) -> dict:
+        """Verify the Kiro account is alive and fetch credit usage.
+
+        Calls GET /getUsageLimits with the stored access token.  If the call
+        returns 401 and ``auto_refresh=True``, attempts a token refresh first.
+
+        Returns:
+            Dict with ``alive``, ``suspended``, ``email``, ``subscription``,
+            ``credit_used``, ``credit_limit``, ``credit_remaining`` and the
+            updated ``account`` snapshot.
+        """
+        from autoreg.providers.kiro_v2.verify_alive import verify_alive
+
+        account = await self.get_account(account_id)
+
+        if not account.token:
+            return {"alive": False, "error": "no access_token stored"}
+
+        health = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
+        )
+
+        # Token expired — try refresh once
+        if not health.alive and "401" in health.error and auto_refresh and account.refresh_token:
+            logger.info("check_kiro_account: token expired, attempting refresh for %s", account_id)
+            refresh_result = await self.refresh_kiro_token(account_id, proxy=proxy, force=True)
+            if refresh_result.get("success") and refresh_result.get("refreshed"):
+                # Re-read the updated account and retry health check
+                account = await self.get_account(account_id)
+                health = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
+                )
+
+        # Update last_checked_at and status
+        account.last_checked_at = _utcnow()
+        if health.suspended:
+            account.status = "banned"
+        elif not health.alive and "expired" in health.error:
+            account.status = "expired"
+        elif health.alive:
+            account.status = "active"
+        account.updated_at = _utcnow()
+        await self._db.flush()
+        await self._db.refresh(account)
+
+        return {
+            "alive": health.alive,
+            "suspended": health.suspended,
+            "email": health.email,
+            "subscription": health.subscription,
+            "credit_used": health.credit_used,
+            "credit_limit": health.credit_limit,
+            "credit_remaining": health.credit_remaining,
+            "region": health.region,
+            "error": health.error,
+            "checked_at": health.checked_at,
+            "account": _to_response(account),
+        }
 
     # ── Bulk export ───────────────────────────────────────────────────────────
 

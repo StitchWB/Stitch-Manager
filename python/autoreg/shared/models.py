@@ -20,6 +20,7 @@ class EmailStrategy(str, Enum):
     ADDYIO_COUNTER = "addyio_counter"  # Combine addy.io with counter
     THIRTY_THREE_MAIL = "33mail"  # Use 33mail.com wildcard
     MAILTM = "mailtm"  # Use Mail.tm temporary emails
+    ICLOUD_POOL = "icloud_pool"  # iCloud Hide My Email pool
 
 
 class ImapConfig(BaseModel):
@@ -72,6 +73,43 @@ class AddyIoConfig(BaseModel):
         return v.strip()
 
 
+class ICloudConfig(BaseModel):
+    """iCloud Hide My Email pool configuration."""
+
+    model_config = ConfigDict(frozen=False)
+
+    apple_id: str = Field(..., description="Apple ID (e.g. user@icloud.com)")
+    app_specific_password: str = Field(
+        ..., description="App-specific password from appleid.apple.com"
+    )
+    cookie_directory: str = Field(
+        "", description="Directory for pyicloud session cookies (empty = ~/.pyicloud)"
+    )
+    imap_password: str = Field(
+        "", description="iCloud IMAP password (usually same as app_specific_password)"
+    )
+    min_pool_size: int = Field(
+        50, ge=1, le=700, description="Minimum pool size before auto-refill triggers"
+    )
+    label_prefix: str = Field(
+        "Auto-registration", description="Prefix for Hide My Email alias labels"
+    )
+
+    @field_validator("apple_id")
+    @classmethod
+    def validate_apple_id(cls, v: str) -> str:
+        if not v or "@" not in v:
+            raise ValueError("apple_id must be a valid email address")
+        return v.strip()
+
+    @field_validator("app_specific_password")
+    @classmethod
+    def validate_app_password(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("app_specific_password cannot be empty")
+        return v.strip()
+
+
 class PythonAutoregConfig(BaseModel):
     """Configuration for Python browser automation"""
 
@@ -100,6 +138,11 @@ class PythonAutoregConfig(BaseModel):
 
     # Addy.io settings (optional, only for addyio strategies)
     addyio_config: AddyIoConfig | None = Field(None, description="Addy.io configuration")
+
+    # iCloud Hide My Email pool settings
+    icloud_config: ICloudConfig | None = Field(
+        None, description="iCloud Hide My Email pool configuration"
+    )
 
     # 33mail settings
     thirty_three_mail_username: str | None = Field(
@@ -288,6 +331,7 @@ __all__ = [
     "EmailStrategy",
     "ImapConfig",
     "AddyIoConfig",
+    "ICloudConfig",
     "PythonAutoregConfig",
     "AutoregResult",
     "KiroRegistrationConfig",

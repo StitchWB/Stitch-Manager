@@ -18,7 +18,7 @@ export interface EmailGenerationOptions {
 
 export interface EmailGenerationResult {
   email: string | null;
-  strategy: 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'custom' | 'cf-to-imap';
+  strategy: 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'icloud_pool' | 'custom' | 'cf-to-imap';
   shouldGenerateInPython: boolean;
 }
 
@@ -31,7 +31,7 @@ export async function generateEmail(
 ): Promise<EmailGenerationResult> {
   const { provider, imapConfig, emailPattern, emailCustomPrefix, emailDomain } = options;
 
-  // If addy.io, 33mail, or Mail.tm is enabled, let Python generate the email
+  // If addy.io, 33mail, Mail.tm, or iCloud pool is enabled, let Python generate the email
   if (imapConfig.addyioEnabled) {
     return {
       email: null,
@@ -52,6 +52,14 @@ export async function generateEmail(
     return {
       email: null,
       strategy: 'mailtm',
+      shouldGenerateInPython: true,
+    };
+  }
+
+  if (imapConfig.icloudEnabled) {
+    return {
+      email: null,
+      strategy: 'icloud_pool',
       shouldGenerateInPython: true,
     };
   }

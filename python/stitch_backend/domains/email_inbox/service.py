@@ -109,7 +109,16 @@ async def list_messages(
         uids = imap_provider.search(conn, query)
         if limit:
             uids = uids[-int(limit):]
-        return [imap_provider.fetch_message(conn, uid) for uid in uids]
+
+        messages: list[dict[str, Any]] = []
+        for uid in uids:
+            try:
+                messages.append(imap_provider.fetch_message(conn, uid))
+            except Exception:
+                # A single stale/deleted/malformed UID must not abort the
+                # entire inbox listing — skip it and keep loading the rest.
+                logger.warning("Skipping message UID %s: fetch failed", uid, exc_info=True)
+        return messages
 
     return await asyncio.to_thread(_do)
 
