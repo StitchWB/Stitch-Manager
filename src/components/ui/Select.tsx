@@ -1,4 +1,5 @@
 import { forwardRef, useState, useRef, useEffect, useCallback, Children, isValidElement } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { FieldHint, fieldClasses, getFieldShellClassName, useFieldA11y } from './field';
 import { ChevronDown, Check } from 'lucide-react';
@@ -59,9 +60,29 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
 
     const [open, setOpen] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
+    const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number; maxHeight: number; openUp: boolean } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
     const hiddenRef = useRef<HTMLSelectElement>(null);
+
+    // Compute dropdown position in document coordinates (for portal rendering)
+    const updateDropdownPosition = useCallback(() => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const estimatedHeight = Math.min(resolvedOptions.length * 32 + 8, 240);
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const spaceAbove = rect.top - 8;
+      const openUp = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+      setDropdownRect({
+        top: openUp ? rect.top - Math.min(estimatedHeight, spaceAbove) - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: openUp ? Math.min(estimatedHeight, spaceAbove) : Math.min(estimatedHeight, spaceBelow),
+        openUp,
+      });
+    }, [resolvedOptions.length]);
 
     // Merge refs
     const setRefs = useCallback(
@@ -77,17 +98,33 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     const selectedOption = resolvedOptions.find(o => o.value === currentValue);
     const displayLabel = selectedOption?.label ?? currentValue ?? '';
 
-    // Close on outside click
+    // Close on outside click (accounts for portal-rendered dropdown)
     useEffect(() => {
       if (!open) return;
       const handler = (e: MouseEvent) => {
-        if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        const target = e.target as Node;
+        const inTrigger = containerRef.current?.contains(target);
+        const inDropdown = listRef.current?.contains(target);
+        if (!inTrigger && !inDropdown) {
           setOpen(false);
         }
       };
       document.addEventListener('mousedown', handler);
       return () => document.removeEventListener('mousedown', handler);
     }, [open]);
+
+    // Position dropdown on open + track scroll/resize
+    useEffect(() => {
+      if (!open) return;
+      updateDropdownPosition();
+      const reposition = () => updateDropdownPosition();
+      window.addEventListener('scroll', reposition, true);
+      window.addEventListener('resize', reposition);
+      return () => {
+        window.removeEventListener('scroll', reposition, true);
+        window.removeEventListener('resize', reposition);
+      };
+    }, [open, updateDropdownPosition]);
 
     // Scroll highlighted item into view
     useEffect(() => {
@@ -201,6 +238,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {/* Custom trigger button */}
         <div className="relative">
           <button
+            ref={triggerRef}
             type="button"
             role="combobox"
             aria-expanded={open}
@@ -241,8 +279,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             />
           </button>
 
-          {/* Dropdown list */}
-          {open && (
+          {/* Dropdown list — rendered in a portal to escape overflow clipping */}
+          {open && dropdownRect && createPortal(
             <ul
               ref={listRef}
               id={`${a11y.fieldId}-listbox`}
@@ -252,8 +290,15 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                   ? `${a11y.fieldId}-option-${highlightedIndex}`
                   : undefined
               }
+              style={{
+                position: 'fixed',
+                top: dropdownRect.top,
+                left: dropdownRect.left,
+                width: dropdownRect.width,
+                maxHeight: dropdownRect.maxHeight,
+              }}
               className={cn(
-                'absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-lg',
+                'z-[9999] overflow-auto rounded-lg',
                 'bg-slate-900 border border-white/10 shadow-xl shadow-black/40',
                 'py-1 text-sm'
               )}
@@ -292,7 +337,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                   </li>
                 );
               })}
-            </ul>
+            </ul>,
+            document.body
           )}
         </div>
 

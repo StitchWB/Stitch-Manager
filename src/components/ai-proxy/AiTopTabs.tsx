@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { t } from '@/lib/i18n';
 import { TabButton } from '@/components/ui';
 
-type AiTabId = 'providers' | 'routing' | 'monitor' | 'antigravity' | 'apiKeys' | 'chat';
+type AiTabId = 'providers' | 'routing' | 'monitor' | 'antigravity' | 'apiKeys' | 'opencodeConfig' | 'chat';
 
 interface AiTab {
   id: AiTabId;
@@ -18,6 +18,7 @@ const AI_TABS: AiTab[] = [
   { id: 'chat', label: 'aiHub.tabs.chat', to: '/ai/chat' },
   { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity' },
   { id: 'apiKeys', label: 'aiHub.tabs.apiKeys', to: '/ai/api-keys' },
+  { id: 'opencodeConfig', label: 'aiHub.tabs.opencodeConfig', to: '/ai/opencode-config' },
 ];
 
 function activeTab(pathname: string): AiTabId {
@@ -26,6 +27,7 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/chat')) return 'chat';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
   if (pathname.startsWith('/ai/api-keys')) return 'apiKeys';
+  if (pathname.startsWith('/ai/opencode-config')) return 'opencodeConfig';
   // Legacy redirects fall through to providers as the default landing tab.
   return 'providers';
 }

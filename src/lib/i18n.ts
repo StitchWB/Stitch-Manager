@@ -964,6 +964,7 @@ export interface Translations {
       freemodel: string;
       integrations: string;
       monitor: string;
+      opencodeConfig: string;
       providers: string;
       routing: string;
       usage: string;
@@ -3008,6 +3009,79 @@ export interface Translations {
     connectionFailed: string;
     connectionSuccess: string;
     testConnection: string;
+  }
+  opencode: {
+    title: string;
+    subtitle: string;
+    errors: {
+      loadFailed: string;
+      saveFailed: string;
+      providerIdRequired: string;
+      baseUrlAndApiKeyRequired: string;
+      testFailed: string;
+      noModelsSelected: string;
+      providerNameRequired: string;
+    };
+    toasts: {
+      saved: string;
+      providerDeleted: string;
+      providerSaved: string;
+      agentAdded: string;
+      agentDeleted: string;
+      modelsDiscovered: string;
+      providerAdded: string;
+    };
+    confirm: {
+      deleteProvider: string;
+      deleteAgent: string;
+    };
+    prompts: {
+      agentId: string;
+      agentModel: string;
+    };
+    empty: {
+      noProviders: string;
+      noProvidersDesc: string;
+      noAgents: string;
+      noAgentsDesc: string;
+      noModels: string;
+      noModelsDesc: string;
+    };
+    buttons: {
+      addProvider: string;
+      addAgent: string;
+      addFallback: string;
+      testConnection: string;
+      testing: string;
+      selectAll: string;
+      deselectAll: string;
+      addSelectedModels: string;
+    };
+    fields: {
+      providerId: string;
+      providerName: string;
+      npmPackage: string;
+      baseUrl: string;
+      apiKey: string;
+      timeout: string;
+      headerTimeout: string;
+      model: string;
+      variant: string;
+      fallbackModels: string;
+    };
+    labels: {
+      models: string;
+    };
+    titles: {
+      newProvider: string;
+      editProvider: string;
+      allModels: string;
+      testApi: string;
+      discoveredModels: string;
+    };
+    descriptions: {
+      testApi: string;
+    };
   }
 }
 

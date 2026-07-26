@@ -957,6 +957,7 @@ export const ru: Translations = {
       freemodel: "Freemodel",
       integrations: "Интеграции",
       monitor: "Мониторинг",
+      opencodeConfig: "OpenCode конфиг",
       providers: "Провайдеры",
       routing: "Маршрутизация",
       usage: "Использование"
@@ -2997,5 +2998,78 @@ export const ru: Translations = {
     connectionFailed: "Ошибка",
     connectionSuccess: "Успех",
     testConnection: "Тест"
-  }
+  },
+  opencode: {
+    title: "Конфигурация OpenCode",
+    subtitle: "Управление конфигурацией OpenCode и Oh-My-OpenAgent",
+    errors: {
+      loadFailed: "Не удалось загрузить конфиг: {msg}",
+      saveFailed: "Не удалось сохранить конфиг: {msg}",
+      providerIdRequired: "Требуется ID провайдера",
+      baseUrlAndApiKeyRequired: "Требуются Base URL и API Key",
+      testFailed: "Тест API не удался: {msg}",
+      noModelsSelected: "Выберите хотя бы одну модель",
+      providerNameRequired: "Требуется название провайдера",
+    },
+    toasts: {
+      saved: "Конфигурация сохранена",
+      providerDeleted: "Провайдер удален",
+      providerSaved: "Провайдер сохранен",
+      agentAdded: "Агент добавлен",
+      agentDeleted: "Агент удален",
+      modelsDiscovered: "Обнаружено {count} моделей",
+      providerAdded: "Добавлено {count} моделей в {name}",
+    },
+    confirm: {
+      deleteProvider: "Удалить провайдера {id}?",
+      deleteAgent: "Удалить агента {id}?",
+    },
+    prompts: {
+      agentId: "Введите ID агента (например, build, oracle):",
+      agentModel: "Введите модель для агента:",
+    },
+    empty: {
+      noProviders: "Нет настроенных провайдеров",
+      noProvidersDesc: "Добавьте провайдера чтобы начать",
+      noAgents: "Нет настроенных агентов",
+      noAgentsDesc: "Добавьте агента чтобы начать",
+      noModels: "Нет доступных моделей",
+      noModelsDesc: "Добавьте провайдера с моделями чтобы увидеть их здесь",
+    },
+    buttons: {
+      addProvider: "Добавить провайдера",
+      addAgent: "Добавить агента",
+      addFallback: "Добавить fallback",
+      testConnection: "Проверить соединение",
+      testing: "Проверка...",
+      selectAll: "Выбрать все",
+      deselectAll: "Снять выбор",
+      addSelectedModels: "Добавить {count} моделей",
+    },
+    fields: {
+      providerId: "ID провайдера",
+      providerName: "Название провайдера",
+      npmPackage: "NPM пакет",
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+      timeout: "Таймаут (мс)",
+      headerTimeout: "Таймаут заголовка (мс)",
+      model: "Модель",
+      variant: "Вариант",
+      fallbackModels: "Fallback модели",
+    },
+    labels: {
+      models: "моделей",
+    },
+    titles: {
+      newProvider: "Новый провайдер",
+      editProvider: "Редактировать провайдера",
+      allModels: "Все модели",
+      testApi: "Тест API",
+      discoveredModels: "Обнаруженные модели ({count})",
+    },
+    descriptions: {
+      testApi: "Проверьте API endpoint чтобы обнаружить доступные модели и добавить их в конфигурацию",
+    },
+  },
 };
