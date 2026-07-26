@@ -16,12 +16,13 @@ import { TotpTimer } from './TotpTimer';
 import { cn } from '@/lib/utils';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { generateTotp, totpCounter } from '@/lib/totp';
+import { t } from '@/lib/i18n';
 
 interface TotpBadgeProps {
   secret: string;
   period?: number;
-  /** compact: tiny chip for table rows; full: bigger card-style */
-  variant?: 'compact' | 'full';
+  /** compact: tiny chip for table rows; row: medium chip for key list; full: bigger card-style */
+  variant?: 'compact' | 'row' | 'full';
   className?: string;
 }
 
@@ -106,12 +107,12 @@ export function TotpBadge({
     }
 
     return (
-      <Tooltip content={`2FA: ${formatCode(code)} — click to copy`} side="top">
+      <Tooltip content={t('totp.copyCode', { code: formatCode(code) })} side="top">
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            void copy(code, { sensitive: false, successMessage: '2FA code copied' });
+            void copy(code, { sensitive: false, successMessage: t('totp.codeCopied') });
           }}
           className={cn(
             'inline-flex items-center gap-1.5 rounded px-1.5 py-0.5',
@@ -125,6 +126,49 @@ export function TotpBadge({
             {formatCode(code)}
           </span>
           <TotpTimer period={period} size={18} strokeWidth={2} showText={false} />
+        </button>
+      </Tooltip>
+    );
+  }
+
+  /* ── row variant (list rows) ── */
+  if (variant === 'row') {
+    if (!isReady) {
+      return (
+        <span
+          className={cn(
+            'inline-flex items-center gap-2 rounded-md px-2.5 py-1',
+            'bg-white/5 border border-white/10 text-slate-600 font-mono text-base tabular-nums',
+            className
+          )}
+          aria-label="Generating 2FA code…"
+        >
+          ···&nbsp;···
+        </span>
+      );
+    }
+
+    return (
+      <Tooltip content={t('totp.copyCode', { code: formatCode(code) })} side="top">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void copy(code, { sensitive: false, successMessage: t('totp.codeCopied') });
+          }}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-md px-2.5 py-1',
+            'bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20',
+            'text-emerald-300 transition-colors cursor-pointer select-none',
+            className
+          )}
+          aria-label="Copy 2FA code"
+        >
+          <span className="font-mono text-base font-semibold tabular-nums tracking-[0.15em]">
+            {formatCode(code)}
+          </span>
+          <TotpTimer period={period} size={20} strokeWidth={2} showText={false} />
+          <Copy size={13} className="opacity-60" />
         </button>
       </Tooltip>
     );
@@ -156,7 +200,7 @@ export function TotpBadge({
             type="button"
             disabled={!isReady}
             onClick={() =>
-              void copy(code, { sensitive: false, successMessage: '2FA code copied' })
+              void copy(code, { sensitive: false, successMessage: t('totp.codeCopied') })
             }
             className={cn(
               'rounded p-1.5 transition-colors',

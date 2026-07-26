@@ -43,7 +43,7 @@ export const useTotpStore = create<TotpState>((set, get) => ({
 
   addKey: async (params) => {
     const key = await addTotpKey(params);
-    set((s) => ({ keys: [...s.keys, key] }));
+    set((s) => ({ keys: [key, ...s.keys] }));
     return key;
   },
 
