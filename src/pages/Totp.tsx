@@ -19,7 +19,6 @@ import {
   IconButton,
   Input,
   EmptyState,
-  ConfirmDialog,
   Tooltip,
   ToolbarSearchField,
 } from '@/components/ui';
@@ -44,6 +43,9 @@ interface FormState {
 const EMPTY_FORM: FormState = { label: '', secret: '', issuer: '' };
 
 const SEARCH_INPUT_ID = 'totp-search';
+
+/* Common issuer presets; merged with issuers already in use */
+const ISSUER_PRESETS = ['Kiro', 'AWS Builder ID', 'GitHub', 'Google', 'Microsoft', 'Discord'];
 
 /* ── Normalize secret: strip spaces/dashes, uppercase ── */
 function normalizeSecret(raw: string): string {
@@ -88,7 +90,7 @@ export default function Totp() {
   const [editLabel, setEditLabel] = useState('');
   const [editIssuer, setEditIssuer] = useState('');
 
-  const [deleteTarget, setDeleteTarget] = useState<TotpKey | null>(null);
+  const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<'newest' | 'alpha'>('newest');
@@ -183,18 +185,30 @@ export default function Totp() {
     [editLabel, editIssuer, updateKey]
   );
 
-  /* ── Delete confirm ── */
-  const handleDeleteConfirm = useCallback(async () => {
-    if (!deleteTarget) return;
-    try {
-      await removeKey(deleteTarget.id);
-      toast.success(t('totp.keyRemoved'));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('totp.removeFailed'));
-    } finally {
-      setDeleteTarget(null);
-    }
-  }, [deleteTarget, removeKey]);
+  /* ── Two-click delete: first click arms (red glow), second deletes ── */
+  const handleDeleteClick = useCallback(
+    async (key: TotpKey) => {
+      if (armedDeleteId !== key.id) {
+        setArmedDeleteId(key.id);
+        return;
+      }
+      setArmedDeleteId(null);
+      try {
+        await removeKey(key.id);
+        toast.success(t('totp.keyRemoved'));
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t('totp.removeFailed'));
+      }
+    },
+    [armedDeleteId, removeKey]
+  );
+
+  /* Auto-disarm after 3s */
+  useEffect(() => {
+    if (!armedDeleteId) return;
+    const timer = window.setTimeout(() => setArmedDeleteId(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [armedDeleteId]);
 
   /* ── Filtered + sorted keys ── */
   const filteredSortedKeys = useMemo(() => {
@@ -214,6 +228,12 @@ export default function Totp() {
     }
     return result;
   }, [keys, query, sort]);
+
+  /* ── Issuer autocomplete: user's own issuers first, then presets ── */
+  const issuerSuggestions = useMemo(() => {
+    const existing = keys.map((k) => k.issuer).filter((i): i is string => !!i);
+    return [...new Set([...existing, ...ISSUER_PRESETS])].sort((a, b) => a.localeCompare(b));
+  }, [keys]);
 
   /* ── Groups (only when grouping is on) ── */
   const groups = useMemo(
@@ -237,6 +257,7 @@ export default function Totp() {
       key={key.id}
       totpKey={key}
       showIssuer={showIssuer}
+      issuerSuggestions={issuerSuggestions}
       isEditing={editId === key.id}
       editLabel={editLabel}
       editIssuer={editIssuer}
@@ -245,7 +266,8 @@ export default function Totp() {
       onStartEdit={() => startEdit(key)}
       onSaveEdit={() => void handleEditSave(key.id)}
       onCancelEdit={() => setEditId(null)}
-      onDelete={() => setDeleteTarget(key)}
+      isDeleteArmed={armedDeleteId === key.id}
+      onDelete={() => void handleDeleteClick(key)}
     />
   );
 
@@ -330,10 +352,11 @@ export default function Totp() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-slate-400">{t('totp.issuerLabel')}</label>
-                <Input
+                <IssuerSuggestInput
                   placeholder={t('totp.issuerPlaceholder')}
                   value={form.issuer}
-                  onChange={(e) => setForm((f) => ({ ...f, issuer: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, issuer: v }))}
+                  suggestions={issuerSuggestions}
                 />
               </div>
             </div>
@@ -415,16 +438,6 @@ export default function Totp() {
         )}
       </div>
 
-      {/* Delete confirm dialog */}
-      <ConfirmDialog
-        isOpen={deleteTarget !== null}
-        title={t('totp.deleteTitle')}
-        message={t('totp.deleteMessage', { label: deleteTarget?.label ?? '' })}
-        confirmText={t('totp.deleteConfirm')}
-        variant="danger"
-        onConfirm={handleDeleteConfirm}
-        onClose={() => setDeleteTarget(null)}
-      />
     </div>
   );
 }
@@ -436,6 +449,7 @@ export default function Totp() {
 interface TotpKeyRowProps {
   totpKey: TotpKey;
   showIssuer: boolean;
+  issuerSuggestions: string[];
   isEditing: boolean;
   editLabel: string;
   editIssuer: string;
@@ -444,12 +458,14 @@ interface TotpKeyRowProps {
   onStartEdit: () => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
+  isDeleteArmed: boolean;
   onDelete: () => void;
 }
 
 function TotpKeyRow({
   totpKey,
   showIssuer,
+  issuerSuggestions,
   isEditing,
   editLabel,
   editIssuer,
@@ -458,6 +474,7 @@ function TotpKeyRow({
   onStartEdit,
   onSaveEdit,
   onCancelEdit,
+  isDeleteArmed,
   onDelete,
 }: TotpKeyRowProps) {
   return (
@@ -482,11 +499,12 @@ function TotpKeyRow({
               placeholder={t('totp.labelLabel')}
               className="h-7 text-sm"
             />
-            <Input
+            <IssuerSuggestInput
               value={editIssuer}
-              onChange={(e) => onEditIssuerChange(e.target.value)}
+              onChange={onEditIssuerChange}
               placeholder={t('totp.issuerLabel')}
               className="h-7 text-sm"
+              suggestions={issuerSuggestions}
             />
             <IconButton
               onClick={onSaveEdit}
@@ -540,11 +558,81 @@ function TotpKeyRow({
             onClick={onDelete}
             variant="ghost"
             size="sm"
-            tooltip={t('totp.removeTooltip')}
-            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-slate-500 hover:text-red-400"
+            tooltip={isDeleteArmed ? t('totp.deleteConfirm') : t('totp.removeTooltip')}
+            className={cn(
+              'transition-all',
+              isDeleteArmed
+                ? 'opacity-100 text-red-400 bg-red-500/20 border border-red-500/50 drop-shadow-[0_0_4px_rgba(239,68,68,0.8)] animate-[glow-red_1.5s_ease-in-out_infinite]'
+                : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-500 hover:text-red-400'
+            )}
           >
             <Trash2 size={14} />
           </IconButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Issuer suggest input — kit-styled autocomplete
+   (popup classes mirror ui/Select dropdown)
+   ═══════════════════════════════════════════════ */
+
+interface IssuerSuggestInputProps {
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: string[];
+  placeholder?: string;
+  className?: string;
+}
+
+function IssuerSuggestInput({
+  value,
+  onChange,
+  suggestions,
+  placeholder,
+  className,
+}: IssuerSuggestInputProps) {
+  const [open, setOpen] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    return suggestions.filter((s) => s.toLowerCase() !== q && (!q || s.toLowerCase().includes(q)));
+  }, [suggestions, value]);
+
+  return (
+    <div className="relative flex-1 min-w-0">
+      <Input
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false);
+        }}
+        placeholder={placeholder}
+        className={className}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute inset-x-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg bg-slate-900 border border-white/10 shadow-xl shadow-black/40">
+          {filtered.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(s);
+                setOpen(false);
+              }}
+              className="w-full px-3 py-1.5 text-left text-sm text-slate-300 hover:bg-white/5 transition-colors"
+            >
+              {s}
+            </button>
+          ))}
         </div>
       )}
     </div>
