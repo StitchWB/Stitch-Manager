@@ -28,6 +28,25 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+# RU-Windows consoles are cp1251: printing '→' or '⚠' would crash the launcher.
+if sys.stdout is not None:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr is not None:
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Windowed (frozen) builds have no console — mirror all output to a log file,
+# otherwise launcher/uvicorn errors vanish and the app dies silently.
+if getattr(sys, "frozen", False) and sys.platform == "win32":
+    _log_dir = os.path.join(
+        os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "stitch-manager"
+    )
+    os.makedirs(_log_dir, exist_ok=True)
+    _log_file = open(  # noqa: SIM115 (process-lifetime handle)
+        os.path.join(_log_dir, "launcher.log"), "a", encoding="utf-8", buffering=1
+    )
+    sys.stdout = _log_file
+    sys.stderr = _log_file
+
 import requests  # noqa: E402 (available after sys.path fix)
 import uvicorn  # noqa: E402
 
@@ -77,6 +96,21 @@ def _port_in_use(port: int) -> bool:
     """Check if a TCP port is already bound."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _icon_path() -> str | None:
+    """Locate the app icon in a PyInstaller bundle or the dev repo tree."""
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "resources", "icons", "app-icon.ico"))
+    candidates.append(
+        os.path.join(os.path.dirname(_HERE), "resources", "icons", "app-icon.ico")
+    )
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def _start_uvicorn() -> None:
@@ -196,19 +230,13 @@ def main() -> None:
     if args.external_backend:
         print(f"[run_gui] Using external backend at {HEALTH_URL}")
     else:
-        # Clear the API port only when this process owns the backend lifecycle.
+        # Single-instance desktop app: a busy port means a zombie instance.
+        # Starting "anyway" only produces a dead backend + a window attached
+        # to the old process, so free the port unconditionally.
         if _port_in_use(API_PORT):
-            if args.force:
-                print(f"[run_gui] Port {API_PORT} is occupied, killing old process (--force)")
-                _kill_port_hog(API_PORT)
-                time.sleep(1)
-            else:
-                print(
-                    f"WARNING: Port {API_PORT} is already in use.\n"
-                    f"         Use --force to kill the old process, or stop it manually.\n"
-                    f"         Trying to start anyway...",
-                    file=sys.stderr,
-                )
+            print(f"[run_gui] Port {API_PORT} is occupied — killing old instance")
+            _kill_port_hog(API_PORT)
+            time.sleep(1)
 
         server_thread = threading.Thread(target=_start_uvicorn, daemon=True)
         server_thread.start()
@@ -256,7 +284,11 @@ def main() -> None:
         )
         watchdog_thread.start()
 
-    webview.start(debug=args.dev)
+    start_kwargs: dict = {"debug": args.dev}
+    icon = _icon_path()
+    if icon:
+        start_kwargs["icon"] = icon  # taskbar/window icon on Windows
+    webview.start(**start_kwargs)
 
 
 if __name__ == "__main__":

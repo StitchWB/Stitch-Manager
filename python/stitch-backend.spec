@@ -64,10 +64,13 @@ a = Analysis(
         *_collect_autoreg_data(),
         # Frontend build output (Vite dist/)
         (str(ROOT.parent / 'dist'), 'dist'),
-        # Sidecar binaries (holone, stitch-cli-proxy-api)
-        (str(ROOT.parent / 'src-tauri' / 'binaries'), 'src-tauri/binaries'),
+        # App icon for pywebview window/taskbar (webview.start(icon=...))
+        (str(ROOT.parent / 'resources' / 'icons' / 'app-icon.ico'), 'resources/icons'),
         # HoloNe rules for security inspector (bundled in package)
         (str(ROOT / 'stitch_backend' / 'domains' / 'ai_proxy' / 'holone_rules'), 'stitch_backend/domains/ai_proxy/holone_rules'),
+        # NOTE: src-tauri/binaries (holone/stitch-cli-proxy-api sidecars, ~96 MB)
+        # are intentionally NOT bundled — the native gateway replaced them and
+        # the UI's start_ai_proxy command no longer touches the sidecars.
     ],
     hiddenimports=[
         # SQLAlchemy async drivers
@@ -107,6 +110,46 @@ a = Analysis(
         'scipy',
         'PIL',
         'cv2',
+        # Optional litellm telemetry; its PyInstaller hook runs
+        # json.loads(exec_statement(...)) and crashes when the subprocess
+        # returns an empty string. Loaded only if callbacks=["sentry"].
+        'sentry_sdk',
+        # ── Local-ML stack pulled by litellm for LOCAL model inference.
+        # The gateway only calls REMOTE provider APIs. ~300 MB saved.
+        'torch',
+        'torchvision',
+        'transformers',
+        'sklearn',
+        'pandas',
+        'sympy',
+        'networkx',
+        'pyarrow',
+        'openpyxl',
+        'nltk',
+        'joblib',
+        'tensorboard',
+        'onnxruntime',
+        'safetensors',
+        # ── pywebview Qt backend — Windows uses winforms, Qt never loads.
+        # Measured: 83.7 MB of Qt5 DLLs.
+        'PyQt5',
+        'PySide2',
+        'PySide6',
+        # ── Dev/doc tooling pulled transitively (sphinx 11.9 MB,
+        # babel 30.3 MB of locale data, mypy).
+        'sphinx',
+        'babel',
+        'mypy',
+        # ── litellm Proxy DB driver — we run the Router SDK on SQLite.
+        'psycopg2',
+        # ── HF tokenizers: litellm falls back to tiktoken.
+        'tokenizers',
+        # ── gRPC: only Vertex/Bedrock enterprise providers need it;
+        # Gemini AI Studio (google-genai) talks plain REST.
+        'grpc',
+        'grpc_tools',
+        # NOTE: boto3/botocore intentionally KEPT — Kiro AWS SSO OIDC
+        # registration (autoreg/providers/kiro/oauth_pkce.py) uses them.
     ],
     noarchive=False,
     optimize=1,
@@ -127,7 +170,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,       # Keep console so users can see logs / errors
+    console=False,      # Desktop app: no console window next to the webview
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
