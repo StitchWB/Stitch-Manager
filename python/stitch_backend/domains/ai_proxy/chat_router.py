@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.database import get_db
 from stitch_backend.domains.ai_proxy.service import get_zai_token_db_path
+from stitch_backend.domains.ai_proxy.account_selection import select_available_account
+from stitch_backend.domains.ai_proxy.qoder_chat_gateway import QoderAdapter, QoderCredentials, QoderProviderError
 from stitch_backend.domains.ai_proxy.zai_chat_gateway import (
     ChatCompletionRequest,
     InvalidChatCompletionRequestError,
@@ -147,6 +149,27 @@ async def create_chat_completion(
         raise HTTPException(status_code=422, detail={"error": {"message": "Request body must be a JSON object"}})
 
     chat_request = _parse_chat_request(payload)
+    if chat_request.provider == "qoder":
+        adapter = await _build_qoder_adapter(session)
+        try:
+            response = await adapter.create_chat_completion(chat_request)
+        except QoderProviderError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={"error": {"code": exc.code, "message": "Qoder chat completion failed"}},
+            ) from None
+        finally:
+            await adapter.close()
+        return StreamingResponse(
+            _to_sse(response),
+            media_type="text/event-stream",
+            headers={
+                "X-Routed-Provider": "qoder",
+                "X-Routed-Model": chat_request.model,
+                "X-Requested-Model": chat_request.model,
+            },
+        )
+
     if chat_request.provider != "zai":
         raise HTTPException(
             status_code=404,
@@ -230,6 +253,45 @@ async def _build_gateway(session: AsyncSession) -> ZaiChatCompletionGateway:
         token_db_path=Path(token_db_path),
         user_id=user_id,
     )
+
+
+async def _build_qoder_adapter(session: AsyncSession) -> QoderAdapter:
+    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+
+    accounts = await AiProxyAccountStore.get_accounts(session)
+    qoder_accounts = [account for account in accounts if str(account.get("provider", "")).lower() == "qoder"]
+    account = select_available_account(qoder_accounts, provider="qoder")
+    if account is not None:
+        from httpx import AsyncClient
+
+        return QoderAdapter(
+            client=AsyncClient(timeout=30.0),
+            credentials=QoderCredentials(
+                api_key=_string_value(account.get("apiKey")),
+                access_token=_string_value(account.get("oauthToken")),
+                refresh_token=_string_value(account.get("oauthRefreshToken")),
+            ),
+        )
+
+    if qoder_accounts:
+        raise HTTPException(status_code=429, detail={"error": {"message": "Qoder accounts are cooling down"}})
+
+    keys = await ApiKeysService(session).get_keys("qoder")
+    key = _first_configured_key(keys)
+    if key is None:
+        raise HTTPException(status_code=400, detail={"error": {"message": "Qoder credentials are not configured"}})
+    from httpx import AsyncClient
+
+    return QoderAdapter(
+        client=AsyncClient(timeout=30.0),
+        credentials=QoderCredentials(
+            api_key=key.get("apiKey"),
+        ),
+    )
+
+
+def _string_value(value: str | int | float | bool | None) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def _first_configured_key(keys: list[dict]) -> dict | None:

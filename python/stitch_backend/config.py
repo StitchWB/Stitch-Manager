@@ -12,10 +12,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # ── Project root detection ────────────────────────────────────────────────────
-# python/stitch_backend/config.py  →  parent.parent = repo root
-_BACKEND_DIR = Path(__file__).resolve().parent          # python/stitch_backend
-PYTHON_DIR = _BACKEND_DIR.parent                        # python/
-REPO_ROOT = PYTHON_DIR.parent                           # repo root
+# In dev mode: python/stitch_backend/config.py  →  parent.parent = repo root
+# In PyInstaller .exe: use sys._MEIPASS (bundled resources directory)
+
+if getattr(sys, 'frozen', False):
+    # Running as PyInstaller bundle
+    REPO_ROOT = Path(sys._MEIPASS)
+else:
+    # Running from source
+    _BACKEND_DIR = Path(__file__).resolve().parent          # python/stitch_backend
+    PYTHON_DIR = _BACKEND_DIR.parent                        # python/
+    REPO_ROOT = PYTHON_DIR.parent                           # repo root
 
 
 def _app_data_dir() -> Path:
@@ -71,6 +78,11 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
 
+    # ── LiteLLM gateway ────────────────────────────────────────────────────────
+    litellm_gateway_enabled: bool = True
+    litellm_gateway_local_api_key: Optional[str] = "proxypal-local"
+    litellm_gateway_model_prefix: str = "/v1"
+
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_origins: str = "*"          # comma-separated or "*"
 
@@ -85,10 +97,23 @@ class Settings(BaseSettings):
             self.database_url = _default_db_url()
         return self
 
-    # ── OmniRoute sidecar ────────────────────────────────────────────────────
+    # ── OmniRoute sidecar (legacy) ──────────────────────────────────────────
     omniroute_host: str = "127.0.0.1"
     omniroute_port: int = 20128
     omniroute_auto_start: bool = False
+
+    # ── Native AI gateway ───────────────────────────────────────────────────
+    proxy_port: int = 20128  # ponytail: reuse omniroute_port for compatibility
+
+    # ── HoloNe proxy guard ───────────────────────────────────────────────────
+    holone_enabled: bool = False
+    holone_binary_path: Optional[str] = None
+    holone_listen_host: str = "127.0.0.1"
+    holone_listen_port: int = 8787
+    holone_upstream_url: str = "http://127.0.0.1:20128"
+    holone_mode: str = "monitor"
+    holone_log_path: Optional[str] = None
+    holone_sentinel_interval_seconds: int = 30
 
     # ── Email / IMAP ──────────────────────────────────────────────────────────
     imap_host: Optional[str] = None
