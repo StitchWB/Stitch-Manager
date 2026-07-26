@@ -957,6 +957,7 @@ export const en: Translations = {
       freemodel: "Freemodel",
       integrations: "Integrations",
       monitor: "Monitor",
+      opencodeConfig: "OpenCode Config",
       providers: "Providers",
       routing: "Routing",
       usage: "Usage"
@@ -3001,5 +3002,78 @@ export const en: Translations = {
     connectionFailed: "Failed",
     connectionSuccess: "Success",
     testConnection: "Test"
-  }
+  },
+  opencode: {
+    title: "OpenCode Config",
+    subtitle: "Manage OpenCode and Oh-My-OpenAgent configuration",
+    errors: {
+      loadFailed: "Failed to load config: {msg}",
+      saveFailed: "Failed to save config: {msg}",
+      providerIdRequired: "Provider ID is required",
+      baseUrlAndApiKeyRequired: "Base URL and API Key are required",
+      testFailed: "API test failed: {msg}",
+      noModelsSelected: "Please select at least one model",
+      providerNameRequired: "Provider name is required",
+    },
+    toasts: {
+      saved: "Configuration saved",
+      providerDeleted: "Provider deleted",
+      providerSaved: "Provider saved",
+      agentAdded: "Agent added",
+      agentDeleted: "Agent deleted",
+      modelsDiscovered: "Discovered {count} models",
+      providerAdded: "Added {count} models to {name}",
+    },
+    confirm: {
+      deleteProvider: "Delete provider {id}?",
+      deleteAgent: "Delete agent {id}?",
+    },
+    prompts: {
+      agentId: "Enter agent ID (e.g., build, oracle):",
+      agentModel: "Enter model for agent:",
+    },
+    empty: {
+      noProviders: "No providers configured",
+      noProvidersDesc: "Add a provider to get started",
+      noAgents: "No agents configured",
+      noAgentsDesc: "Add an agent to get started",
+      noModels: "No models available",
+      noModelsDesc: "Add a provider with models to see them here",
+    },
+    buttons: {
+      addProvider: "Add Provider",
+      addAgent: "Add Agent",
+      addFallback: "Add Fallback",
+      testConnection: "Test Connection",
+      testing: "Testing...",
+      selectAll: "Select All",
+      deselectAll: "Deselect All",
+      addSelectedModels: "Add {count} Models",
+    },
+    fields: {
+      providerId: "Provider ID",
+      providerName: "Provider Name",
+      npmPackage: "NPM Package",
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+      timeout: "Timeout (ms)",
+      headerTimeout: "Header Timeout (ms)",
+      model: "Model",
+      variant: "Variant",
+      fallbackModels: "Fallback Models",
+    },
+    labels: {
+      models: "models",
+    },
+    titles: {
+      newProvider: "New Provider",
+      editProvider: "Edit Provider",
+      allModels: "All Models",
+      testApi: "Test API",
+      discoveredModels: "Discovered Models ({count})",
+    },
+    descriptions: {
+      testApi: "Test an API endpoint to discover available models and add them to your configuration",
+    },
+  },
 };

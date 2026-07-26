@@ -170,3 +170,6 @@ export { Terminal } from './Terminal';
 export { StatusFilterChip, QuotaFilterChipDropdown } from './FilterChip';
 
 export { AccountDrawer } from './AccountDrawer';
+
+export { ModelPicker } from './ModelPicker';
+export type { ModelOption } from './ModelPicker';

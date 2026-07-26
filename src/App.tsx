@@ -25,6 +25,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Logs = lazy(() => import('./pages/Logs'));
 const Chat = lazy(() => import('./pages/Chat'));
 const ApiKeys = lazy(() => import('./pages/ApiKeys'));
+const OpenCodeConfig = lazy(() => import('./pages/OpenCodeConfig'));
 const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Tools = lazy(() => import('./pages/Tools'));
 const Automation = lazy(() => import('./pages/Automation'));
@@ -262,6 +263,7 @@ function App() {
             <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai/antigravity" element={<Antigravity />} />
             <Route path="/ai/api-keys" element={<ApiKeys />} />
+            <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
             <Route path="/ai/chat" element={<Chat />} />
             <Route path="/ai/:section" element={<AiProviders />} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
