@@ -25,7 +25,11 @@ dependencies = [
     # ── HTTP client (OmniRoute sync) ──────────────────────────────────────
     "httpx>=0.27.0",
 
+    # ── Optional LiteLLM gateway ───────────────────────────────────────────
+    "litellm[proxy]>=1.93.0,<2.0.0",
+
     # ── Utilities ──────────────────────────────────────────────────────────
+    "aiofiles>=24.0.0",
     "python-dotenv>=1.0.0",
     "psutil>=5.9.0",
     "keyring>=25.0.0",

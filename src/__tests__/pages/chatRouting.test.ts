@@ -14,7 +14,18 @@ describe('chat routing', () => {
     expect(resolveChatCompletionsUrl(model, 25583)).toBe('http://localhost:25584/api/v1/chat/completions');
   });
 
-  it('keeps non-Z.AI models on the OmniRoute sidecar endpoint', () => {
+  it('routes Qoder models to the native Stitch endpoint', () => {
+    const model = {
+      id: 'qwen3-coder-plus',
+      provider: 'qoder',
+      ownedBy: 'qoder',
+      source: 'aiProxy',
+    };
+
+    expect(resolveChatCompletionsUrl(model, 25584)).toBe('http://localhost:25584/api/v1/chat/completions');
+  });
+
+  it('keeps other non-native models on the OmniRoute sidecar endpoint', () => {
     const model = {
       id: 'gpt-4o-mini',
       provider: 'openai',
