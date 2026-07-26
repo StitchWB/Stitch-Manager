@@ -35,6 +35,7 @@ PROVIDER_SCHEMAS: dict[str, type[ApiKeyBase]] = {
     "anthropic": AnthropicApiKey,
     "antigravity": ApiKeyBase,
     "fireworks": ApiKeyBase,
+    "qoder": ApiKeyBase,
     "zai": ApiKeyBase,
 }
 
@@ -45,6 +46,7 @@ PROVIDER_DB_KEYS: dict[str, str] = {
     "anthropic": "anthropic_api_keys",
     "antigravity": "antigravity_api_keys",
     "fireworks": "fireworks_api_keys",
+    "qoder": "qoder_api_keys",
     "zai": "zai_api_keys",
 }
 

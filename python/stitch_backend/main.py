@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -31,8 +32,37 @@ from stitch_backend.api.middleware import install_middleware
 from stitch_backend.api.router import api_router
 from stitch_backend.config import get_settings, REPO_ROOT
 from stitch_backend.database import create_all_tables, dispose_engine
+from stitch_backend.domains.ai_proxy.litellm_gateway import create_litellm_gateway_router
 
 logger = logging.getLogger(__name__)
+
+
+def _configure_logging(level: str) -> None:
+    """Configure logging to write INFO to stdout, ERROR/WARNING to stderr."""
+    # Create handlers
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(logging.DEBUG)
+    stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
+    
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.WARNING)
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        "%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    stdout_handler.setFormatter(formatter)
+    stderr_handler.setFormatter(formatter)
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    root_logger.addHandler(stdout_handler)
+    root_logger.addHandler(stderr_handler)
+    
+    # Reduce noise from command_registry warnings (expected in dev mode with --reload)
+    logging.getLogger("stitch_backend.core.command_registry").setLevel(logging.ERROR)
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -42,14 +72,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown hooks."""
     settings = get_settings()
 
-    # Configure root logger
-    logging.basicConfig(
-        level=settings.log_level,
-        format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    # Configure logging: INFO to stdout, ERROR/WARNING to stderr
+    _configure_logging(settings.log_level)
 
-    logger.info("Stitch Backend starting — port=%d  db=%s", settings.port, settings.database_url)
+    try:
+        from stitch_backend.version import __version__
+        logger.info("Stitch Backend v%s starting — port=%d  db=%s", __version__, settings.port, settings.database_url)
+    except ImportError:
+        logger.info("Stitch Backend (dev) starting — port=%d  db=%s", settings.port, settings.database_url)
 
     # Ensure tables exist (dev convenience; use Alembic in production)
     await create_all_tables()
@@ -75,6 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.scenarios.commands       # noqa: F401
     import stitch_backend.domains.scheduler.commands       # noqa: F401
     import stitch_backend.domains.proxy_mgmt.commands       # noqa: F401
+    import stitch_backend.domains.proxy_mgmt.holone_commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands      # noqa: F401
     import stitch_backend.domains.replenishment.commands       # noqa: F401
     import stitch_backend.domains.profiles.commands              # noqa: F401
@@ -91,6 +122,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.account_status.commands        # noqa: F401
     import stitch_backend.domains.ai_proxy.commands             # noqa: F401
     import stitch_backend.domains.ai_proxy.zai_token_commands   # noqa: F401
+    import stitch_backend.domains.opencode_config.commands       # noqa: F401
     import stitch_backend.domains.python_jobs.commands           # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands            # noqa: F401
     import stitch_backend.domains.logging.commands               # noqa: F401
@@ -154,12 +186,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from stitch_backend.domains.replenishment.service import get_replenishment_service as _get_replen
     await _get_replen().stop()
 
-    # Stop OmniRoute sidecar if running
-    from stitch_backend.domains.proxy_mgmt.omniroute import stop_omniroute as _stop_or
-    try:
-        await _stop_or()
-    except Exception:
-        logger.debug("OmniRoute stop during shutdown: not running or already stopped")
+    # ponytail: native gateway runs with Stitch process; no sidecar shutdown needed
+    # Legacy OmniRoute/HoloNe sidecar shutdown removed
 
     # Stop scheduled worker
     from stitch_backend.domains.scheduler.worker import get_worker
@@ -197,6 +225,9 @@ def create_app() -> FastAPI:
 
     # ── Routes ────────────────────────────────────────────────────────────────
     app.include_router(api_router)
+    litellm_gateway = create_litellm_gateway_router(settings)
+    if litellm_gateway is not None:
+        app.include_router(litellm_gateway)
 
     # ── Root / health ─────────────────────────────────────────────────────────
     # Static serving is optional: only when Vite build output (dist/) exists.

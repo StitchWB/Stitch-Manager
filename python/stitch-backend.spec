@@ -62,6 +62,12 @@ a = Analysis(
         (str(ROOT / 'stitch_backend'), 'stitch_backend'),
         # Runtime data assets from compiled autoreg (configs, templates, etc.)
         *_collect_autoreg_data(),
+        # Frontend build output (Vite dist/)
+        (str(ROOT.parent / 'dist'), 'dist'),
+        # Sidecar binaries (holone, stitch-cli-proxy-api)
+        (str(ROOT.parent / 'src-tauri' / 'binaries'), 'src-tauri/binaries'),
+        # HoloNe rules for security inspector
+        (str(ROOT.parent / '_references' / 'HoloNe' / 'rules'), '_references/HoloNe/rules'),
     ],
     hiddenimports=[
         # SQLAlchemy async drivers
@@ -127,4 +133,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(ROOT.parent / 'resources' / 'icons' / 'app-icon.ico'),
 )

@@ -25,6 +25,7 @@ from stitch_backend.domains.api_keys.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+_POOL_SNAPSHOT_KEY = "native_gateway_key_pool_v1"
 
 
 class ApiKeysService:
@@ -78,3 +79,25 @@ class ApiKeysService:
     async def list_providers(self) -> list[str]:
         """Return all known provider names."""
         return list(PROVIDER_DB_KEYS.keys())
+
+    async def get_pool_snapshot(self) -> str | None:
+        """Load the secret-free native gateway scheduler state."""
+        await self._ensure_table()
+        result = await self._db.execute(
+            text("SELECT value FROM ai_proxy_settings WHERE key = :k"),
+            {"k": _POOL_SNAPSHOT_KEY},
+        )
+        row = result.first()
+        return None if row is None else str(row[0])
+
+    async def set_pool_snapshot(self, snapshot: str) -> None:
+        """Persist the secret-free native gateway scheduler state."""
+        await self._ensure_table()
+        await self._db.execute(
+            text(
+                "INSERT OR REPLACE INTO ai_proxy_settings (key, value, updated_at) "
+                "VALUES (:k, :v, :ts)"
+            ),
+            {"k": _POOL_SNAPSHOT_KEY, "v": snapshot, "ts": int(time.time())},
+        )
+        await self._db.flush()
