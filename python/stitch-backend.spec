@@ -66,8 +66,8 @@ a = Analysis(
         (str(ROOT.parent / 'dist'), 'dist'),
         # Sidecar binaries (holone, stitch-cli-proxy-api)
         (str(ROOT.parent / 'src-tauri' / 'binaries'), 'src-tauri/binaries'),
-        # HoloNe rules for security inspector
-        (str(ROOT.parent / '_references' / 'HoloNe' / 'rules'), '_references/HoloNe/rules'),
+        # HoloNe rules for security inspector (bundled in package)
+        (str(ROOT / 'stitch_backend' / 'domains' / 'ai_proxy' / 'holone_rules'), 'stitch_backend/domains/ai_proxy/holone_rules'),
     ],
     hiddenimports=[
         # SQLAlchemy async drivers

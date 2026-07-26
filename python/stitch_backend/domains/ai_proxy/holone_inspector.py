@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import Final
 
 
@@ -44,10 +45,9 @@ class _BlockTerm:
     kind: str
 
 
-from stitch_backend.config import REPO_ROOT
-
-_RULES_PATH: Final = REPO_ROOT / "_references" / "HoloNe" / "rules" / "rules.json"
-_BLOCKLIST_PATH: Final = REPO_ROOT / "_references" / "HoloNe" / "rules" / "blocklist.json"
+_RULES_DIR: Final = Path(__file__).resolve().parent / "holone_rules"
+_RULES_PATH: Final = _RULES_DIR / "rules.json"
+_BLOCKLIST_PATH: Final = _RULES_DIR / "blocklist.json"
 
 
 class HoloneInspector:
