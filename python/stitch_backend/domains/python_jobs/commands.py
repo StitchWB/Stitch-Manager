@@ -13,12 +13,20 @@ from stitch_backend.core.command_registry import register_command
 @register_command("start_python_job")
 async def cmd_start_python_job(params: dict) -> dict:
     """Start a Python subprocess job."""
+    from stitch_backend.config import REPO_ROOT
     from stitch_backend.domains.python_jobs.service import get_job_manager
 
     req = params.get("request", params)
     script = req.get("scriptPath", "")
     if not script:
         return {"error": "scriptPath is required"}
+
+    # Resolve relative paths against REPO_ROOT so 'python/foo.py' works
+    # regardless of the backend process cwd.
+    from pathlib import Path
+    script_path = Path(script)
+    if not script_path.is_absolute():
+        script = str(REPO_ROOT / script)
 
     job = await get_job_manager().start(
         script_path=script,

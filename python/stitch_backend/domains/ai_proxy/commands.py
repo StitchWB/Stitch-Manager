@@ -97,27 +97,359 @@ async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
 
 # ── Models ──────────────────────────────────────────────────────────────────
 
+# Simple in-memory cache for model discovery (60s TTL)
+_models_cache: dict = {"data": None, "expires": 0}
+_CACHE_TTL = 60  # seconds
+
+# Fallback models for providers with no public API or when API fails
+_FALLBACK_MODELS: dict[str, list[dict[str, str]]] = {
+    "openai": [
+        {"id": "gpt-4o", "name": "GPT-4o"},
+        {"id": "gpt-4o-mini", "name": "GPT-4o Mini"},
+        {"id": "gpt-4.1", "name": "GPT-4.1"},
+        {"id": "o3", "name": "o3"},
+        {"id": "o4-mini", "name": "o4 Mini"},
+    ],
+    "anthropic": [
+        {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
+        {"id": "claude-3-7-sonnet-20250219", "name": "Claude 3.7 Sonnet"},
+        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
+    ],
+    "gemini": [
+        {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro"},
+        {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
+        {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"},
+    ],
+    "antigravity": [
+        {"id": "gpt-4o", "name": "GPT-4o (AG)"},
+        {"id": "o3", "name": "o3 (AG)"},
+    ],
+    "fireworks": [
+        {"id": "accounts/fireworks/models/llama4-scout-instruct-17b-16e-instruct", "name": "Llama 4 Scout"},
+        {"id": "accounts/fireworks/models/deepseek-r1", "name": "DeepSeek R1"},
+    ],
+    "dashscope": [
+        {"id": "qwen-max", "name": "Qwen Max"},
+        {"id": "qwen-plus", "name": "Qwen Plus"},
+    ],
+    "zai": [
+        {"id": "glm-4.7", "name": "GLM 4.7"},
+        {"id": "GLM-5-Turbo", "name": "GLM-5 Turbo"},
+        {"id": "GLM-5v-Turbo", "name": "GLM-5v Turbo"},
+        {"id": "GLM-5.1", "name": "GLM 5.1"},
+        {"id": "glm-5.2", "name": "GLM 5.2"},
+    ],
+    "kiro": [
+        {"id": "claude-sonnet-4.5", "name": "Claude Sonnet 4.5"},
+        {"id": "claude-haiku-4.5", "name": "Claude Haiku 4.5"},
+        {"id": "claude-opus-4.5", "name": "Claude Opus 4.5"},
+        {"id": "claude-sonnet-4", "name": "Claude Sonnet 4"},
+    ],
+}
+
+# Default base URLs for OpenAI-compatible providers
+_PROVIDER_BASE_URLS: dict[str, str] = {
+    "openai": "https://api.openai.com",
+    "antigravity": "https://api.openai.com",
+    "fireworks": "https://api.fireworks.ai/inference",
+    "dashscope": "https://dashscope.aliyuncs.com/compatible-mode",
+}
+
+
+async def _fetch_openai_compatible_models(
+    provider: str, keys: list[dict],
+) -> list[dict[str, str]]:
+    """Fetch models from OpenAI-compatible /v1/models endpoint."""
+    import httpx
+
+    key = keys[0]
+    api_key = key.get("apiKey")
+    if not api_key:
+        return []
+
+    base_url = key.get("baseUrl") or _PROVIDER_BASE_URLS.get(provider, "https://api.openai.com")
+    url = f"{base_url.rstrip('/')}/v1/models"
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        models = data.get("data", [])
+        return [
+            {"id": m["id"], "provider": provider, "name": m.get("id", m["id"])}
+            for m in models if "id" in m
+        ]
+
+
+async def _fetch_anthropic_models(keys: list[dict]) -> list[dict[str, str]]:
+    """Fetch models from Anthropic /v1/models endpoint."""
+    import httpx
+
+    key = keys[0]
+    api_key = key.get("apiKey")
+    if not api_key:
+        return []
+
+    url = "https://api.anthropic.com/v1/models"
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(url, headers=headers)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        models = data.get("data", [])
+        return [
+            {"id": m["id"], "provider": "anthropic", "name": m.get("display_name", m["id"])}
+            for m in models if "id" in m
+        ]
+
+
+async def _fetch_gemini_models(keys: list[dict]) -> list[dict[str, str]]:
+    """Fetch models from Gemini API."""
+    import httpx
+
+    key = keys[0]
+    api_key = key.get("apiKey")
+    if not api_key:
+        return []
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(url)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        models = data.get("models", [])
+        result = []
+        for m in models:
+            name = m.get("name", "")
+            if name.startswith("models/"):
+                name = name[7:]  # strip "models/" prefix
+            if name:
+                result.append({"id": name, "provider": "gemini", "name": name})
+        return result
+
+
+async def _fetch_zai_models(keys: list[dict]) -> list[dict[str, str]]:
+    """Z.AI has no public models API — return known list if keys configured."""
+    if keys:
+        return [{"id": m["id"], "provider": "zai", "name": m["name"]} for m in _FALLBACK_MODELS["zai"]]
+    return []
+
+
+async def _fetch_kiro_models(accounts: list[dict]) -> list[dict[str, str]]:
+    """Fetch models from Kiro API using enabled accounts."""
+    import httpx
+    from stitch_backend.domains.kiro_gateway.upstream.models import fetch_kiro_models
+
+    kiro_accounts = [
+        a for a in accounts
+        if (a.get("provider") or "").lower() in ("kiro", "kiro_v2") and a.get("enabled")
+    ]
+    if not kiro_accounts:
+        return []
+
+    # Try first enabled account
+    account = kiro_accounts[0]
+    token = account.get("oauthToken") or account.get("sessionToken")
+    if not token:
+        return []
+
+    proxy_account = {
+        "id": str(account.get("id", "")),
+        "accessToken": token,
+        "region": account.get("region", "us-east-1"),
+        "provider": "kiro",
+        "authMethod": "oauth",
+        "profileArn": account.get("profileArn"),
+        "machineId": account.get("machineId"),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            models = await fetch_kiro_models(proxy_account, client)
+            return [
+                {
+                    "id": m.get("modelId", ""),
+                    "provider": "kiro",
+                    "name": m.get("modelName", m.get("modelId", "")),
+                }
+                for m in models if m.get("modelId")
+            ]
+    except Exception:
+        return []
+
+
+async def _fetch_freemodel_models() -> list[dict[str, str]]:
+    """Fetch models from FreeModel bridge if running."""
+    import httpx
+    from stitch_backend.domains.freemodel_bridge.service import FreemodelBridgeService
+
+    try:
+        status = FreemodelBridgeService.status()
+        if status.get("status") != "running":
+            return []
+        port = status.get("port", 0)
+        if not port:
+            return []
+
+        url = f"http://127.0.0.1:{port}/v1/models"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+            models = data.get("data", [])
+            return [
+                {"id": m["id"], "provider": "freemodel", "name": m.get("id", m["id"])}
+                for m in models if "id" in m
+            ]
+    except Exception:
+        return []
+
+
+async def _fetch_all_provider_models(
+    session, enabled_providers: set[str],
+) -> list[dict[str, str]]:
+    """Fetch models from all connected providers in parallel."""
+    import asyncio
+    import logging
+    from stitch_backend.domains.api_keys.service import ApiKeysService
+
+    logger = logging.getLogger(__name__)
+    svc = ApiKeysService(session)
+    tasks: list[tuple[str, asyncio.Task]] = []
+    task_names: list[str] = []
+
+    # API-key providers
+    for provider in ("openai", "anthropic", "gemini", "antigravity", "fireworks", "zai", "dashscope"):
+        try:
+            keys = await svc.get_keys(provider)
+            if keys:
+                if provider in ("openai", "antigravity", "fireworks", "dashscope"):
+                    coro = _fetch_openai_compatible_models(provider, keys)
+                elif provider == "anthropic":
+                    coro = _fetch_anthropic_models(keys)
+                elif provider == "gemini":
+                    coro = _fetch_gemini_models(keys)
+                elif provider == "zai":
+                    coro = _fetch_zai_models(keys)
+                else:
+                    continue
+                tasks.append((provider, asyncio.ensure_future(coro)))
+                task_names.append(provider)
+                logger.info("[Models] Fetching models for %s (%d keys)", provider, len(keys))
+            else:
+                logger.debug("[Models] No keys for %s", provider)
+        except Exception as e:
+            logger.warning("[Models] Error checking keys for %s: %s", provider, e)
+
+    # Account-based: Kiro
+    if enabled_providers & {"kiro", "kiro_v2"}:
+        accounts_func = await _get_accounts_func()
+        accounts = await accounts_func(session)
+        tasks.append(("kiro", asyncio.ensure_future(_fetch_kiro_models(accounts))))
+        task_names.append("kiro")
+        logger.info("[Models] Fetching Kiro models (%d enabled accounts)",
+                     sum(1 for a in accounts if (a.get("provider") or "").lower() in ("kiro", "kiro_v2") and a.get("enabled")))
+
+    # FreeModel bridge
+    tasks.append(("freemodel", asyncio.ensure_future(_fetch_freemodel_models())))
+    task_names.append("freemodel")
+
+    if not tasks:
+        logger.warning("[Models] No providers configured — returning empty list")
+        return []
+
+    # Fetch all in parallel with timeout
+    results = await asyncio.gather(*(t for _, t in tasks), return_exceptions=True)
+
+    # Aggregate results
+    all_models: list[dict[str, str]] = []
+    for i, result in enumerate(results):
+        name = task_names[i] if i < len(task_names) else "?"
+        if isinstance(result, list):
+            count = len(result)
+            all_models.extend(result)
+            logger.info("[Models] %s: %d models", name, count)
+        else:
+            logger.error("[Models] %s failed: %r", name, result)
+
+    logger.info("[Models] Total: %d models from %d providers", len(all_models), len(tasks))
+    return all_models
+
+
+# Helper to get accounts function (avoids circular import)
+_accounts_func = None
+
+
+async def _get_accounts_func():
+    global _accounts_func
+    if _accounts_func is None:
+        from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+        _accounts_func = AiProxyAccountStore.get_accounts
+    return _accounts_func
+
+
 @register_command("get_available_models")
 async def cmd_get_available_models(params: dict) -> list:
-    """Return list of known models across all providers."""
-    known_models = [
-        {"id": "gpt-4o", "provider": "openai", "name": "GPT-4o"},
-        {"id": "gpt-4o-mini", "provider": "openai", "name": "GPT-4o Mini"},
-        {"id": "gpt-4.1", "provider": "openai", "name": "GPT-4.1"},
-        {"id": "o3", "provider": "openai", "name": "o3"},
-        {"id": "gemini-2.5-pro", "provider": "gemini", "name": "Gemini 2.5 Pro"},
-        {"id": "gemini-2.5-flash", "provider": "gemini", "name": "Gemini 2.5 Flash"},
-        {"id": "claude-sonnet-4-20250514", "provider": "anthropic", "name": "Claude Sonnet 4"},
-        {"id": "claude-3-7-sonnet", "provider": "anthropic", "name": "Claude 3.7 Sonnet"},
-        {"id": "accounts/fireworks/models/llama4-scout-instruct-17b-16e-instruct",
-         "provider": "fireworks", "name": "Llama 4 Scout"},
-        {"id": "glm-4.7", "provider": "zai", "name": "GLM 4.7"},
-        {"id": "GLM-5-Turbo", "provider": "zai", "name": "GLM-5 Turbo"},
-        {"id": "GLM-5v-Turbo", "provider": "zai", "name": "GLM-5v Turbo"},
-        {"id": "GLM-5.1", "provider": "zai", "name": "GLM 5.1"},
-        {"id": "glm-5.2", "provider": "zai", "name": "GLM 5.2"},
-    ]
-    return known_models
+    """Return models from actually connected providers via real API calls."""
+    import time
+    from stitch_backend.database import run_in_session
+    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+
+    # Check cache
+    now = time.time()
+    if _models_cache["data"] is not None and _models_cache["expires"] > now:
+        return _models_cache["data"]
+
+    async def _op(session):
+        accounts = await AiProxyAccountStore.get_accounts(session)
+        enabled_providers = {
+            (a.get("provider") or "").lower()
+            for a in accounts if a.get("enabled")
+        }
+        result = await _fetch_all_provider_models(session, enabled_providers)
+
+        # Fallback: if all API calls returned [], use known models for connected providers
+        if not result:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("[Models] All API calls returned empty — using fallback for %s", enabled_providers)
+
+            # Check API keys
+            from stitch_backend.domains.api_keys.service import ApiKeysService
+            svc = ApiKeysService(session)
+            key_providers = set()
+            for provider in ("openai", "anthropic", "gemini", "antigravity", "fireworks", "zai", "dashscope"):
+                try:
+                    keys = await svc.get_keys(provider)
+                    if keys:
+                        key_providers.add(provider)
+                except Exception:
+                    pass
+
+            # Add fallback models for connected providers
+            for provider in enabled_providers | key_providers:
+                if provider in _FALLBACK_MODELS:
+                    for m in _FALLBACK_MODELS[provider]:
+                        result.append({"id": m["id"], "provider": provider, "name": m["name"]})
+
+        return result
+
+    result = await run_in_session(_op)
+
+    # Update cache
+    _models_cache["data"] = result
+    _models_cache["expires"] = now + _CACHE_TTL
+
+    return result
 
 
 @register_command("get_enabled_models")

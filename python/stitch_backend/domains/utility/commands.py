@@ -1,13 +1,12 @@
-"""Utility command handlers — app metadata, clipboard, browser, validators.
+"""Utility command handlers — app metadata, clipboard, browser, API key validation.
 
 These commands replace the Tauri utility commands:
     get_app_version, copy_to_clipboard, open_in_browser, open_url_in_browser,
-    get_database_path, get_backend_health, validate_email_rust, etc.
+    get_database_path, get_backend_health, check_fireworks_api_key_rust.
 """
 
 from __future__ import annotations
 
-import re
 import subprocess
 import webbrowser
 
@@ -87,93 +86,11 @@ async def cmd_open_in_file_manager(params: dict) -> dict:
         return {"success": False, "error": str(e)}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# Validators (replacing Rust validate_* commands)
-# ═════════════════════════════════════════════════════════════════════════════
-
-@register_command("validate_email_rust")
-async def cmd_validate_email(params: dict) -> dict:
-    email = params.get("email", "")
-    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-    valid = bool(re.match(pattern, email))
-    return {"valid": valid, "email": email}
-
-
-@register_command("validate_password_rust")
-async def cmd_validate_password(params: dict) -> dict:
-    password = params.get("password", "")
-    min_length = params.get("minLength", 8)
-    valid = len(password) >= min_length
-    errors = []
-    if not valid:
-        errors.append(f"Password must be at least {min_length} characters")
-    return {"valid": valid, "errors": errors}
-
-
-@register_command("validate_name_rust")
-async def cmd_validate_name(params: dict) -> dict:
-    name = params.get("name", "")
-    valid = bool(name.strip()) and len(name.strip()) >= 2
-    return {"valid": valid, "name": name}
-
-
-@register_command("validate_verification_code_rust")
-async def cmd_validate_verification_code(params: dict) -> dict:
-    code = params.get("code", "")
-    valid = bool(re.match(r"^\d{4,8}$", code))
-    return {"valid": valid, "code": code}
-
-
-@register_command("validate_registration_data_rust")
-async def cmd_validate_registration_data(params: dict) -> dict:
-    email = params.get("email", "")
-    password = params.get("password", "")
-    errors = []
-    if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
-        errors.append("Invalid email format")
-    if len(password) < 8:
-        errors.append("Password must be at least 8 characters")
-    return {"valid": len(errors) == 0, "errors": errors}
-
-
 @register_command("check_fireworks_api_key_rust")
 async def cmd_check_fireworks_api_key(params: dict) -> dict:
     api_key = params.get("apiKey", "")
     valid = api_key.startswith("fw_") and len(api_key) > 10
     return {"valid": valid}
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# Token counter stubs (Phase 2 — real implementation in Phase 6)
-# ═════════════════════════════════════════════════════════════════════════════
-
-@register_command("count_tokens_rust")
-async def cmd_count_tokens(params: dict) -> dict:
-    text = params.get("text", "")
-    # Rough estimate: ~4 chars per token
-    estimated = max(1, len(text) // 4)
-    return {"count": estimated, "model": "estimate"}
-
-
-@register_command("estimate_tokens_rust")
-async def cmd_estimate_tokens(params: dict) -> dict:
-    text = params.get("text", "")
-    estimated = max(1, len(text) // 4)
-    return {"estimate": estimated}
-
-
-@register_command("count_message_tokens_rust")
-async def cmd_count_message_tokens(params: dict) -> dict:
-    messages = params.get("messages", [])
-    total = sum(max(1, len(m.get("content", "")) // 4) for m in messages)
-    return {"count": total}
-
-
-@register_command("estimate_message_tokens_rust")
-async def cmd_estimate_message_tokens(params: dict) -> dict:
-    messages = params.get("messages", [])
-    total = sum(max(1, len(m.get("content", "")) // 4) for m in messages)
-    return {"estimate": total}
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -278,16 +195,32 @@ async def cmd_obs_ingest(params: dict) -> dict:
     from stitch_backend.domains.logging.service import LoggingService
     from stitch_backend.database import run_in_session
 
-    level = params.get("level", "info")
-    source = params.get("source", "observability")
-    message = params.get("message", "")
+    # Frontend sends the payload nested under "event"; fall back to flat params.
+    event = params.get("event")
+    if not isinstance(event, dict):
+        event = params
+
+    level = event.get("level", "info")
+    source = event.get("source") or "observability"
+    message = event.get("message") or event.get("name") or ""
+    details = {
+        k: v
+        for k, v in {
+            "name": event.get("name"),
+            "subsystem": event.get("subsystem"),
+            "fields": event.get("fields"),
+            "error": event.get("error"),
+            "origin": event.get("origin"),
+        }.items()
+        if v is not None
+    } or None
     return await run_in_session(
         lambda s: LoggingService(s).add_log(
             level=level,
             source=source,
             message=message,
             channel="observability",
-            details=params.get("details"),
+            details=details,
         )
     )
 

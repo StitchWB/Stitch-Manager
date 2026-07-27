@@ -3,6 +3,7 @@ import {
   type EmailConnectInput,
   emailInboxConnect,
   emailInboxConnectProfile,
+  emailInboxCreateMailTmAccount,
   emailInboxDeleteProfile,
   emailInboxDelete,
   emailInboxDisconnect,
@@ -93,6 +94,8 @@ interface MailState {
   session: EmailMailboxSession | null;
   capabilities: ProviderCapabilities | null;
   messages: EmailMessage[];
+  /** Per-profile message cache so switching back restores messages instantly. */
+  messagesByProfile: Record<string, EmailMessage[]>;
   selectedMessageId: string | null;
   query: MailQueryFilters;
   sync: MailSyncControls;
@@ -130,6 +133,8 @@ interface MailState {
   selectFolder: (folder: EmailFolder | null) => Promise<void>;
   applyDraft: (draft: MailboxProfileDraft) => void;
   setActiveProfileId: (profileId: string | null) => void;
+  /** Create a random Mail.tm account, persist it as a profile, and select it. */
+  registerMailTmMailbox: () => Promise<EmailInboxProfile | null>;
   loadProfiles: () => Promise<void>;
   loadProviderCatalog: () => Promise<void>;
   loadProfileSyncState: (profileId: string) => Promise<void>;
@@ -185,6 +190,7 @@ const FOLDER_RECONNECT_DEBOUNCE_MS = 220;
 let folderReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let listRequestToken = 0;
 let waitRequestToken = 0;
+let connectRetriedFor: string | null = null;
 
 function clearFolderReconnectTimer(): void {
   if (folderReconnectTimer) {
@@ -255,6 +261,23 @@ async function ensureSelectedFolderSession(get: () => MailState): Promise<void> 
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Backend keeps sessions in memory — a restart invalidates every session id. */
+function isSessionLostError(error: unknown): boolean {
+  return toErrorMessage(error).includes('Session not found');
+}
+
+/**
+ * Drop the dead session and reconnect via the active profile.
+ * Silent recovery: no error banner, auto-list refires on the new session.
+ */
+function recoverFromLostSession(): void {
+  const { activeProfileId, isConnecting } = useMailStore.getState();
+  useMailStore.setState({ session: null, capabilities: null, connectedMailbox: null });
+  if (activeProfileId && !isConnecting) {
+    void useMailStore.getState().connect();
+  }
 }
 
 function normalizeProfileLabel(label: string): string {
@@ -330,6 +353,7 @@ export const useMailStore = create<MailState>((set, get) => ({
   session: null,
   capabilities: null,
   messages: [],
+  messagesByProfile: {},
   selectedMessageId: null,
   query: DEFAULT_QUERY,
   sync: DEFAULT_SYNC,
@@ -437,6 +461,10 @@ export const useMailStore = create<MailState>((set, get) => ({
         };
       });
     } catch (error) {
+      if (isSessionLostError(error)) {
+        recoverFromLostSession();
+        return;
+      }
       set({ error: toErrorMessage(error) });
     }
   },
@@ -525,7 +553,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         availableFolders: [],
         selectedFolder: null,
         connectedMailbox: null,
-        messages: [],
+        messages: state.messagesByProfile[profileId] ?? [],
         selectedMessageId: null,
         isSyncing: false,
         isWaiting: false,
@@ -541,6 +569,44 @@ export const useMailStore = create<MailState>((set, get) => ({
       connectedMailbox: null,
       error: null,
     });
+  },
+  registerMailTmMailbox: async () => {
+    set({ isProfileSaving: true, error: null });
+
+    try {
+      const account = await emailInboxCreateMailTmAccount();
+      const connectInput = buildMailTmConnectInput({
+        accountId: `mailtm:${account.address}`,
+        readOnly: true,
+        credentials: {
+          address: account.address,
+          password: account.password,
+          baseUrl: account.baseUrl,
+        },
+      });
+
+      const profile = await emailInboxUpsertProfile({
+        id: null,
+        label: `Mail.tm · ${account.address}`,
+        connectInput,
+      });
+
+      set(state => ({
+        profiles: [profile, ...state.profiles],
+        activeProfileId: profile.id,
+        ...deriveStateFromConnectInput(profile.connectInput),
+        availableFolders: [],
+        selectedFolder: null,
+        connectedMailbox: null,
+      }));
+
+      return profile;
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+      return null;
+    } finally {
+      set({ isProfileSaving: false });
+    }
   },
   loadProfiles: async () => {
     set({ isProfilesLoading: true, error: null });
@@ -779,12 +845,16 @@ export const useMailStore = create<MailState>((set, get) => ({
         const profileSyncMap = { ...state.profileSyncMap };
         delete profileSyncMap[profileId];
 
+        const messagesByProfile = { ...state.messagesByProfile };
+        delete messagesByProfile[profileId];
+
         const nextActiveProfileId =
           state.activeProfileId === profileId ? (profiles[0]?.id ?? null) : state.activeProfileId;
 
         return {
           profiles,
           profileSyncMap,
+          messagesByProfile,
           activeProfileId: nextActiveProfileId,
           session: state.activeProfileId === profileId ? null : state.session,
           capabilities: state.activeProfileId === profileId ? null : state.capabilities,
@@ -823,7 +893,14 @@ export const useMailStore = create<MailState>((set, get) => ({
       invalidateListAndWaitTokens();
 
       if (session) {
-        await emailInboxDisconnect(session.sessionId);
+        try {
+          await emailInboxDisconnect(session.sessionId);
+        } catch (error) {
+          // ponytail: old session already dead backend-side — proceed to fresh connect
+          if (!isSessionLostError(error)) {
+            throw error;
+          }
+        }
       }
 
       const nextMailbox =
@@ -867,12 +944,16 @@ export const useMailStore = create<MailState>((set, get) => ({
 
       const capabilities = await emailInboxGetCapabilities(nextSession.sessionId);
 
+      connectRetriedFor = null;
+
       set({
         session: nextSession,
         capabilities,
-        messages: [],
         selectedMessageId: null,
         connectedMailbox: source === 'imap' ? nextMailbox : null,
+        // Preserve cached messages instead of clearing — setActiveProfileId already
+        // loaded them from messagesByProfile. The auto-list effect will refresh.
+        messages: activeProfileId ? (get().messagesByProfile[activeProfileId] ?? []) : [],
       });
 
       void get().loadFolders();
@@ -887,6 +968,22 @@ export const useMailStore = create<MailState>((set, get) => ({
       }
     } catch (error) {
       set({ error: toErrorMessage(error) });
+      // ponytail: one delayed retry for backend cold-start races — the frontend
+      // is interactive seconds before uvicorn accepts connections, and the
+      // auto-connect memo in Mail.tsx would otherwise block any retry.
+      const transient = /offline|refused|failed to fetch|networkerror|timed out/i.test(
+        toErrorMessage(error)
+      );
+      const retryKey = `${activeProfileId ?? 'manual'}`;
+      if (transient && connectRetriedFor !== retryKey) {
+        connectRetriedFor = retryKey;
+        setTimeout(() => {
+          const s = get();
+          if (!s.session && !s.isConnecting && s.activeProfileId === activeProfileId) {
+            void s.connect();
+          }
+        }, 3000);
+      }
     } finally {
       set({ isConnecting: false });
     }
@@ -904,16 +1001,27 @@ export const useMailStore = create<MailState>((set, get) => ({
       clearFolderReconnectTimer();
       invalidateListAndWaitTokens();
 
-      await emailInboxDisconnect(session.sessionId);
-      set({
+      const { activeProfileId } = get();
+      try {
+        await emailInboxDisconnect(session.sessionId);
+      } catch (error) {
+        // ponytail: a dead session (backend restart) is already gone — treat as disconnected
+        if (!isSessionLostError(error)) {
+          throw error;
+        }
+      }
+      set(state => ({
         session: null,
         capabilities: null,
         messages: [],
         selectedMessageId: null,
         availableFolders: [],
-        selectedFolder: get().selectedFolder,
+        selectedFolder: state.selectedFolder,
         connectedMailbox: null,
-      });
+        messagesByProfile: activeProfileId
+          ? { ...state.messagesByProfile, [activeProfileId]: [] }
+          : state.messagesByProfile,
+      }));
     } catch (error) {
       set({ error: toErrorMessage(error) });
     } finally {
@@ -945,10 +1053,13 @@ export const useMailStore = create<MailState>((set, get) => ({
         return;
       }
 
-      set({
+      set(state => ({
         messages,
         lastSyncAt: Date.now(),
-      });
+        messagesByProfile: activeProfileId
+          ? { ...state.messagesByProfile, [activeProfileId]: messages }
+          : state.messagesByProfile,
+      }));
 
       if (activeProfileId) {
         const now = new Date().toISOString();
@@ -969,6 +1080,11 @@ export const useMailStore = create<MailState>((set, get) => ({
       }
     } catch (error) {
       if (requestToken !== listRequestToken) {
+        return;
+      }
+
+      if (isSessionLostError(error)) {
+        recoverFromLostSession();
         return;
       }
 
@@ -1059,6 +1175,11 @@ export const useMailStore = create<MailState>((set, get) => ({
         return;
       }
 
+      if (isSessionLostError(error)) {
+        recoverFromLostSession();
+        return;
+      }
+
       set({ error: toErrorMessage(error) });
 
       if (activeProfileId) {
@@ -1108,6 +1229,10 @@ export const useMailStore = create<MailState>((set, get) => ({
         messages: state.messages.map(item => (item.id === loaded.id ? loaded : item)),
       }));
     } catch (error) {
+      if (isSessionLostError(error)) {
+        recoverFromLostSession();
+        return;
+      }
       // Single-message fetch errors (e.g. a stale/deleted UID) should not
       // block the whole mail workspace with a page-wide banner - surface
       // them scoped to this message instead.
@@ -1131,6 +1256,10 @@ export const useMailStore = create<MailState>((set, get) => ({
         messages: markMessageAsReadLocal(state.messages, messageId),
       }));
     } catch (error) {
+      if (isSessionLostError(error)) {
+        recoverFromLostSession();
+        return;
+      }
       set({ error: toErrorMessage(error) });
     } finally {
       set({ isMutating: false });
@@ -1152,6 +1281,10 @@ export const useMailStore = create<MailState>((set, get) => ({
         selectedMessageId: state.selectedMessageId === messageId ? null : state.selectedMessageId,
       }));
     } catch (error) {
+      if (isSessionLostError(error)) {
+        recoverFromLostSession();
+        return;
+      }
       set({ error: toErrorMessage(error) });
     } finally {
       set({ isMutating: false });

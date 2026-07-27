@@ -236,47 +236,4 @@ async def cmd_get_oauth_sessions_count(params: dict) -> int:
     return len(_OAUTH_SESSIONS)
 
 
-@register_command("start_oauth_flow")
-async def cmd_start_oauth_flow(params: dict) -> dict:
-    """Start an OAuth flow for a provider via the AI proxy sidecar.
 
-    Mirrors Rust ``start_oauth_flow`` — delegates to proxy management API.
-    """
-    provider = params.get("provider", "")
-    if not provider:
-        return {"error": "provider is required"}
-
-    # Delegate to proxy_mgmt for actual sidecar communication
-    from stitch_backend.core.command_registry import get_command_handler
-    try:
-        handler = get_command_handler("get_ai_proxy_accounts")
-        # For now return a stub response — real flow goes through AI proxy sidecar
-    except Exception:
-        pass
-
-    return {
-        "provider": provider,
-        "authUrl": f"https://{provider}.example.com/oauth/authorize",
-        "state": str(uuid.uuid4()),
-        "message": "OAuth flow initiated — complete in browser",
-    }
-
-
-@register_command("poll_oauth_status")
-async def cmd_poll_oauth_status(params: dict) -> dict:
-    """Poll OAuth status from the AI proxy sidecar.
-
-    Mirrors Rust ``poll_oauth_status`` — queries proxy management API.
-    """
-    provider = params.get("provider", "")
-    oauth_state = params.get("oauthState", params.get("oauth_state", ""))
-
-    if not provider or not oauth_state:
-        return {"status": "error", "error": "provider and oauthState are required"}
-
-    # In real deployment this would query the sidecar's management API
-    return {
-        "status": "pending",
-        "provider": provider,
-        "state": oauth_state,
-    }

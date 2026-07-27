@@ -200,9 +200,9 @@ export default function Antigravity() {
     const label =
       expiredCount > 0
         ? t('aiHub.antigravity.status.credentialsWithExpired', {
-            count: antigravityFiles.length,
-            expired: expiredCount,
-          })
+          count: antigravityFiles.length,
+          expired: expiredCount,
+        })
         : t('aiHub.antigravity.status.credentials', { count: antigravityFiles.length });
     return (
       <StatusBadge status={status} size="sm" withDot>
@@ -274,7 +274,7 @@ export default function Antigravity() {
       />
 
       <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-5xl space-y-4">
+        <div className="mx-auto w-full max-w-5xl space-y-4">
           {antigravityFiles.length === 0 ? (
             <GlassCard gradient className="p-5">
               <EmptyState

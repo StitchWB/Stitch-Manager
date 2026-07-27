@@ -15,12 +15,13 @@ import {
   Signal,
   Radio,
   X,
+  ArrowDownToLine,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 
 
 import { useAppStore } from '../stores/app';
-import { useLogsStore, LogLevel, LogEntry } from '../stores/logs';
+import { useLogsStore, LogLevel, LogEntry, getLogGroupKey } from '../stores/logs';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { useRegistrationStore } from '../stores/registration';
 import { useUIState } from '../hooks/useUIState';
@@ -72,38 +73,37 @@ const CHANNEL_DOT_MAP: Record<string, string> = {
 };
 
 interface LogGroupData {
-  stage: string;
+  id: string;
+  name: string;
+  source: string;
   entries: LogEntry[];
   status: 'success' | 'error' | 'progress' | 'info';
-  duration?: number;
-  firstTimestamp: number;
+  duration: number;
+  lastActivity: number;
+  levelCounts: Record<LogLevel, number>;
 }
 
-function detectStageFromLog(log: LogEntry): string {
-  const stageMatches = log.message.match(/\[([^\]]+)\]/g);
-  if (stageMatches && stageMatches.length > 0) {
-    const lastMatch = stageMatches[stageMatches.length - 1];
-    const stage = lastMatch.slice(1, -1);
-    if (!stage.includes('/') && stage.length > 0) return stage;
-  }
-  return log.source || 'system';
+function shortId(id: string): string {
+  return id.length > 12 ? `…${id.slice(-12)}` : id;
 }
 
-function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
+function groupLogsByOperation(logs: LogEntry[]): LogGroupData[] {
   const groups = new Map<string, LogEntry[]>();
   for (const log of logs) {
-    const stage = detectStageFromLog(log);
-    if (!groups.has(stage)) groups.set(stage, []);
-    groups.get(stage)!.push(log);
+    const key = getLogGroupKey(log);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(log);
   }
 
   const result: LogGroupData[] = [];
-  for (const [stage, entries] of groups.entries()) {
+
+  for (const [key, entries] of groups) {
     const hasError = entries.some(e => e.level === 'error');
     const hasSuccess = entries.some(e => e.level === 'success');
     const hasProgress = entries.some(
-      e => e.message.includes('⏳') || e.message.includes('Attempt')
+      e => e.message.includes('\u23F3') || e.message.includes('Attempt')
     );
+
     let status: 'success' | 'error' | 'progress' | 'info' = 'info';
     if (hasError) status = 'error';
     else if (hasSuccess) status = 'success';
@@ -112,16 +112,38 @@ function groupLogsByStage(logs: LogEntry[]): LogGroupData[] {
     const timestamps = entries.map(e => new Date(e.timestamp).getTime());
     const firstTimestamp = Math.min(...timestamps);
     const lastTimestamp = Math.max(...timestamps);
+
+    const levelCounts: Record<LogLevel, number> = {
+      debug: 0,
+      info: 0,
+      success: 0,
+      warn: 0,
+      error: 0,
+    };
+    for (const e of entries) {
+      levelCounts[e.level] = (levelCounts[e.level] ?? 0) + 1;
+    }
+
+    const first = entries[0];
+    const name = first.correlationId
+      ? shortId(first.correlationId)
+      : first.sessionId
+        ? shortId(first.sessionId)
+        : first.source || 'system';
+
     result.push({
-      stage,
+      id: key,
+      name,
+      source: first.source || 'system',
       entries,
       status,
       duration: lastTimestamp - firstTimestamp,
-      firstTimestamp,
+      lastActivity: lastTimestamp,
+      levelCounts,
     });
   }
 
-  return result.sort((a, b) => b.firstTimestamp - a.firstTimestamp);
+  return result.sort((a, b) => b.lastActivity - a.lastActivity);
 }
 
 export default function Logs() {
@@ -176,6 +198,11 @@ export default function Logs() {
   const [isResizingPane, setIsResizingPane] = useUIState('logs-resizing-pane', false, 'session');
   const { copy } = useCopyToClipboard();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const logListRef = useRef<HTMLDivElement | null>(null);
+
+  const [isFollowing, setIsFollowing] = useState(true);
+  const [newLogCount, setNewLogCount] = useState(0);
+  const prevLogsLength = useRef(logs.length);
 
   const rawSourceFilters = useMemo(
     () =>
@@ -228,7 +255,43 @@ export default function Logs() {
     return () => clearTimeout(timer);
   }, [searchQuery, setFilter]);
 
-  const groupedLogs = useMemo(() => groupLogsByStage(logs), [logs]);
+  // Follow / +N new logs
+  useEffect(() => {
+    const prevLen = prevLogsLength.current;
+    prevLogsLength.current = logs.length;
+
+    if (logs.length > prevLen && prevLen > 0) {
+      if (isFollowing) {
+        if (logListRef.current) {
+          logListRef.current.scrollTop = 0;
+        }
+      } else {
+        setNewLogCount(c => c + (logs.length - prevLen));
+      }
+    }
+  }, [logs.length, isFollowing]);
+
+  const handleFollowToggle = useCallback(() => {
+    setIsFollowing(v => {
+      const next = !v;
+      if (next) {
+        setNewLogCount(0);
+        if (logListRef.current) {
+          logListRef.current.scrollTop = 0;
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const handleNewLogsClick = useCallback(() => {
+    setNewLogCount(0);
+    if (logListRef.current) {
+      logListRef.current.scrollTop = 0;
+    }
+  }, []);
+
+  const groupedLogs = useMemo(() => groupLogsByOperation(logs), [logs]);
 
   const pythonLogs = useMemo(
     () =>
@@ -532,78 +595,92 @@ export default function Logs() {
     [errorLogIds, selectedErrorIndex, setLogsSelectedLogId]
   );
 
-  const renderFlatLogs = (rows: LogEntry[]) => (
-    <div className="font-mono text-xs">
-      {rows.map(log => {
-        const isCopied = copiedId === log.id;
-        return (
-          <div
-            key={log.id}
-            className={cn(
-              'w-full flex items-start gap-2 px-3 py-1.5 border-b border-white/[0.03] transition-colors',
-              selectedLogId === log.id ? 'bg-indigo-500/10' : 'hover:bg-white/[0.02]'
-            )}
-          >
-            <ButtonBase
-              className="flex-1 min-w-0 flex items-start gap-3 text-left"
-              onClick={() => setLogsSelectedLogId(log.id)}
-            >
-              <span className="text-slate-600 tabular-nums shrink-0">
-                {new Date(log.timestamp).toLocaleTimeString('en-US', {
-                  hour12: false,
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
-              </span>
+  const stripTag = (message: string): string => {
+    return message.replace(/^\s*\[[^\]]+\]\s*/, '');
+  };
 
-              <span
-                className={cn(
-                  'shrink-0 w-11 text-center font-bold uppercase',
-                  log.level === 'debug' && 'text-slate-500',
-                  log.level === 'info' && 'text-vsc-blue',
-                  log.level === 'success' && 'text-vsc-green',
-                  log.level === 'warn' && 'text-vsc-yellow',
-                  log.level === 'error' && 'text-vsc-red'
-                )}
-              >
-                {log.level === 'debug'
-                  ? 'DBG'
-                  : log.level === 'info'
-                    ? 'INF'
-                    : log.level === 'success'
-                      ? 'OK'
-                      : log.level === 'warn'
-                        ? 'WRN'
-                        : 'ERR'}
-              </span>
+  const renderFlatLogs = (rows: LogEntry[]) => {
+    // Dedup consecutive identical messages
+    const deduped: { log: LogEntry; count: number; displayMessage: string }[] = [];
+    for (const log of rows) {
+      const msg = stripTag(log.message);
+      const last = deduped[deduped.length - 1];
+      if (last && last.displayMessage === msg && last.log.level === log.level) {
+        last.count += 1;
+      } else {
+        deduped.push({ log, count: 1, displayMessage: msg });
+      }
+    }
 
-              <span className="text-purple-400 shrink-0 w-28 truncate">
-                [{log.source || 'system'}]
-              </span>
+    return (
+      <div className="font-mono text-xs">
+        {deduped.map((item, idx) => {
+          const { log, count, displayMessage } = item;
+          const isCopied = copiedId === log.id;
+          const isSelected = selectedLogId === log.id;
+          const dedupKey = `${log.id}-${idx}`;
 
-              <div className="flex-1 min-w-0 text-slate-300 break-words line-clamp-2">
-                {log.message}
-              </div>
-            </ButtonBase>
-
-            <ButtonBase
-              onClick={() => {
-                void copyMessage(log.message, log.id);
-              }}
-              className="text-slate-500 hover:text-slate-200 transition-colors p-1 rounded hover:bg-white/5 shrink-0"
-            >
-              {isCopied ? (
-                <Check className="w-3 h-3 text-vsc-green" />
-              ) : (
-                <Copy className="w-3 h-3" />
+          return (
+            <div
+              key={dedupKey}
+              className={cn(
+                'border-l-4 pl-2 pr-3 py-1.5 border-b border-white/[0.03] transition-colors',
+                log.level === 'debug' && 'border-l-slate-600',
+                log.level === 'info' && 'border-l-sky-400',
+                log.level === 'success' && 'border-l-emerald-400',
+                log.level === 'warn' && 'border-l-amber-400 bg-amber-500/5',
+                log.level === 'error' && 'border-l-red-400 bg-red-500/5',
+                isSelected && 'bg-white/[0.04]'
               )}
-            </ButtonBase>
-          </div>
-        );
-      })}
-    </div>
-  );
+            >
+              <div className="flex items-start gap-2">
+                <ButtonBase
+                  className="flex-1 min-w-0 flex items-start gap-2 text-left"
+                  onClick={() => setLogsSelectedLogId(log.id)}
+                >
+                  <span className="text-slate-600 tabular-nums shrink-0 w-20 text-right">
+                    {new Date(log.timestamp).toLocaleTimeString('en-US', {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </span>
+
+                  <span className="text-purple-400 shrink-0 w-28 truncate text-right">
+                    {log.source || 'system'}
+                  </span>
+
+                  <span className="flex-1 min-w-0 text-slate-300 break-words line-clamp-2">
+                    {displayMessage || t('logs.emptyMessage')}
+                  </span>
+                </ButtonBase>
+
+                {count > 1 && (
+                  <span className="text-xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded shrink-0">
+                    ×{count}
+                  </span>
+                )}
+
+                <ButtonBase
+                  onClick={() => {
+                    void copyMessage(log.message, log.id);
+                  }}
+                  className="text-slate-500 hover:text-slate-200 transition-colors p-1 rounded hover:bg-white/5 shrink-0"
+                >
+                  {isCopied ? (
+                    <Check className="w-3 h-3 text-vsc-green" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                </ButtonBase>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -649,12 +726,25 @@ export default function Logs() {
 
       <div className="px-6 pt-3 pb-2 border-b border-white/5 bg-vsc-bg/80 backdrop-blur-xl sticky top-0 z-20">
         <div className="flex flex-wrap items-center gap-2">
+          <Input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setLogsSearchQuery(e.target.value)
+            }
+            placeholder={t('logs.searchPlaceholder')}
+            leftIcon={<Search className="w-4 h-4" />}
+            containerClassName="flex-1 min-w-[200px] max-w-full"
+            className="h-8 py-1 text-xs"
+          />
+
           <FilterDropdown
             value={levelFilter}
             onChange={handleLevelChange}
             icon={<SlidersHorizontal size={14} />}
             label={t('logs.level')}
-            triggerClassName="h-8 min-w-[152px]"
+            triggerClassName="h-8 min-w-[120px]"
             showActiveState
             options={[
               {
@@ -700,7 +790,7 @@ export default function Logs() {
             values={effectiveSourceFilters}
             onChange={handleSourceChange}
             icon={<Signal size={14} />}
-            triggerClassName="h-8 min-w-[180px]"
+            triggerClassName="h-8 min-w-[160px]"
             menuClassName="min-w-[260px]"
             placeholder={t('logs.allSources')}
             footerAllLabel={t('logs.selectAllSources')}
@@ -726,7 +816,7 @@ export default function Logs() {
             onChange={handleChannelChange}
             icon={<Radio size={14} />}
             label={t('logs.channel')}
-            triggerClassName="h-8 min-w-[148px]"
+            triggerClassName="h-8 min-w-[120px]"
             showActiveState
             options={LOG_CHANNELS.map(channel => ({
               value: channel,
@@ -734,19 +824,6 @@ export default function Logs() {
               dot: CHANNEL_DOT_MAP[channel],
               count: channelCounts[channel] ?? 0,
             }))}
-          />
-
-          <Input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setLogsSearchQuery(e.target.value)
-            }
-            placeholder={t('logs.searchPlaceholder')}
-            leftIcon={<Search className="w-4 h-4" />}
-            containerClassName="w-[280px] max-w-full"
-            className="h-8 py-1 text-xs"
           />
 
           <Button
@@ -844,6 +921,29 @@ export default function Logs() {
             icon={<Layers size={14} />}
             className={selectedTab === 'grouped' ? 'text-indigo-200' : ''}
           />
+
+          {selectedTab === 'grouped' && (
+            <>
+              <div className="w-px h-6 bg-white/10" />
+              <Toggle
+                checked={groupingEnabled}
+                onChange={setGroupingEnabled}
+                label={t('logs.groupByStage')}
+              />
+              <Toggle
+                checked={autoCollapseSuccess}
+                onChange={setAutoCollapseSuccess}
+                label={t('logs.autoCollapseSuccess')}
+              />
+              <Button onClick={expandAllGroups} variant="ghost" size="xs">
+                {t('logs.expandAll')}
+              </Button>
+              <Button onClick={collapseAllGroups} variant="ghost" size="xs">
+                {t('logs.collapseAll')}
+              </Button>
+            </>
+          )}
+
           <TabButton
             active={selectedTab === 'errors'}
             onClick={() => setLogsSelectedTab('errors')}
@@ -858,9 +958,9 @@ export default function Logs() {
             icon={<Terminal size={14} />}
             className={selectedTab === 'python' ? 'text-emerald-200' : ''}
           />
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <div className="w-px h-6 bg-white/10" />
+
           <Button
             size="xs"
             variant={selectedTab === 'errors' ? 'secondary' : 'ghost'}
@@ -882,37 +982,7 @@ export default function Logs() {
           >
             {t('logs.presetRegistration')}
           </Button>
-
-          <div className="ml-auto flex items-center gap-2">
-            <Badge variant="outline" size="sm">
-              {t('logs.keyboardSearch')}
-            </Badge>
-            <Badge variant="outline" size="sm">
-              {t('logs.keyboardTabs')}
-            </Badge>
-          </div>
         </div>
-
-        {selectedTab === 'grouped' && (
-          <div className="flex flex-wrap items-center gap-3 mt-2">
-            <Toggle
-              checked={groupingEnabled}
-              onChange={setGroupingEnabled}
-              label={t('logs.groupByStage')}
-            />
-            <Toggle
-              checked={autoCollapseSuccess}
-              onChange={setAutoCollapseSuccess}
-              label={t('logs.autoCollapseSuccess')}
-            />
-            <Button onClick={expandAllGroups} variant="ghost" size="xs">
-              {t('logs.expandAll')}
-            </Button>
-            <Button onClick={collapseAllGroups} variant="ghost" size="xs">
-              {t('logs.collapseAll')}
-            </Button>
-          </div>
-        )}
       </div>
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -924,7 +994,28 @@ export default function Logs() {
           )}
 
           <div className="h-full card overflow-hidden flex flex-col bg-vsc-bg">
-            <div className="overflow-auto flex-1">
+            <div ref={logListRef} className="overflow-auto flex-1 relative">
+              {/* Follow toggle + new logs badge */}
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                {newLogCount > 0 && (
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={handleNewLogsClick}
+                    className="animate-pulse"
+                  >
+                    {t('logs.newLogs', { count: String(newLogCount) })}
+                  </Button>
+                )}
+                <Button
+                  size="xs"
+                  variant={isFollowing ? 'secondary' : 'ghost'}
+                  onClick={handleFollowToggle}
+                  leftIcon={<ArrowDownToLine size={12} className={isFollowing ? 'text-vsc-green' : ''} />}
+                >
+                  {t('logs.follow')}
+                </Button>
+              </div>
               {logs.length === 0 && !isLoading ? (
                 <EmptyState
                   icon={FileText}
@@ -935,14 +1026,18 @@ export default function Logs() {
                 <div className="p-3 space-y-2">
                   {groupedLogs.map(group => (
                     <LogGroup
-                      key={group.stage}
-                      stage={group.stage}
+                      key={group.id}
+                      name={group.name}
+                      source={group.source}
                       entries={group.entries}
                       status={group.status}
-                      isCollapsed={collapsedGroups.has(group.stage)}
-                      onToggle={() => toggleGroup(group.stage)}
+                      isCollapsed={collapsedGroups.has(group.id)}
+                      onToggle={() => toggleGroup(group.id)}
                       duration={group.duration}
-                      icon="📋"
+                      lastActivity={group.lastActivity}
+                      levelCounts={group.levelCounts}
+                      onSelectLog={(log: LogEntry) => setLogsSelectedLogId(log.id)}
+                      selectedLogId={selectedLogId}
                     />
                   ))}
                 </div>
@@ -1059,6 +1154,15 @@ export default function Logs() {
                   <div className="text-xs text-slate-400">{t('logs.contextLabel')}</div>
                   <pre className="text-[11px] font-mono text-slate-300 bg-black/30 border border-white/10 rounded-md p-2 overflow-auto max-h-56">
                     {JSON.stringify(selectedLog.context, null, 2)}
+                  </pre>
+                </>
+              ) : null}
+
+              {selectedLog.details ? (
+                <>
+                  <div className="text-xs text-slate-400">{t('logs.detailsPanel')}</div>
+                  <pre className="text-[11px] font-mono text-slate-300 bg-black/30 border border-white/10 rounded-md p-2 overflow-auto max-h-56">
+                    {JSON.stringify(selectedLog.details, null, 2)}
                   </pre>
                 </>
               ) : null}

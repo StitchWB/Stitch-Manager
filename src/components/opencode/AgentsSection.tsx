@@ -84,7 +84,7 @@ export function AgentsSection({
         icon={Bot}
         title="No agents configured"
         description="Agents define which model handles each task type"
-        action={<Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Agent</Button>}
+        action={<Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Agent</Button>}
       />
     );
   }
@@ -98,7 +98,7 @@ export function AgentsSection({
             Which model each agent role uses ({allIds.length} agents)
           </p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Agent</Button>
+        <Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Agent</Button>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

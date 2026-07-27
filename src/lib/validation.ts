@@ -59,28 +59,6 @@ export function validateHostname(hostname: string): string | null {
 }
 
 /**
- * Validate URL format
- */
-export function validateUrl(url: string): string | null {
-  if (!url || url.trim() === '') {
-    return null; // Empty is valid for optional fields
-  }
-  
-  try {
-    const urlObj = new URL(url);
-    
-    // Check for valid protocol
-    if (!['http:', 'https:', 'socks4:', 'socks5:'].includes(urlObj.protocol)) {
-      return 'URL must use http, https, socks4, or socks5 protocol';
-    }
-    
-    return null;
-  } catch {
-    return 'Invalid URL format';
-  }
-}
-
-/**
  * Validate email format
  */
 export function validateEmail(email: string): string | null {
@@ -96,51 +74,4 @@ export function validateEmail(email: string): string | null {
   }
   
   return null;
-}
-
-/**
- * Validate all settings fields
- */
-export function validateSettings(settings: {
-  imapServer?: string;
-  imapPort?: string | number;
-  imapEmail?: string;
-  proxyUrl?: string;
-  proxyEnabled?: boolean;
-}): ValidationError[] {
-  const errors: ValidationError[] = [];
-  
-  // Validate IMAP server if provided
-  if (settings.imapServer && settings.imapServer.trim() !== '') {
-    const hostnameError = validateHostname(settings.imapServer);
-    if (hostnameError) {
-      errors.push({ field: 'imapServer', message: hostnameError });
-    }
-  }
-  
-  // Validate IMAP port if provided
-  if (settings.imapPort !== undefined && settings.imapPort !== '') {
-    const portError = validatePort(settings.imapPort);
-    if (portError) {
-      errors.push({ field: 'imapPort', message: portError });
-    }
-  }
-  
-  // Validate IMAP email if provided
-  if (settings.imapEmail && settings.imapEmail.trim() !== '') {
-    const emailError = validateEmail(settings.imapEmail);
-    if (emailError) {
-      errors.push({ field: 'imapEmail', message: emailError });
-    }
-  }
-  
-  // Validate proxy URL if proxy is enabled
-  if (settings.proxyEnabled && settings.proxyUrl) {
-    const urlError = validateUrl(settings.proxyUrl);
-    if (urlError) {
-      errors.push({ field: 'proxyUrl', message: urlError });
-    }
-  }
-  
-  return errors;
 }

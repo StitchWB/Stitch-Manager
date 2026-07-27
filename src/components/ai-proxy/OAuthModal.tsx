@@ -245,7 +245,7 @@ export default function OAuthModal({
             </> :
 
           <>
-              <ExternalLink className="w-4 h-4 mr-2" />
+              <ExternalLink className="w-4 h-4" />
               {flowType === 'device_code' ? t("aiProxy.oAuthModal.openVerificationPage") : t("aiProxy.oAuthModal.openAuthorizationPage")}
             </>
           }

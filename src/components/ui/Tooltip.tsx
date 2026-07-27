@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
 export interface TooltipProps {
@@ -24,8 +24,7 @@ export function Tooltip({
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
-  // Use callback ref to measure after mount without storing in useRef that
-  // causes the framer-motion PopChild "ref is not a prop" warning.
+  // Use callback ref to measure after mount.
   const [tooltipEl, setTooltipEl] = useState<HTMLDivElement | null>(null);
   const tooltipRef = useCallback((node: HTMLDivElement | null) => {
     setTooltipEl(node);
@@ -85,38 +84,39 @@ export function Tooltip({
         {children}
       </div>
       {createPortal(
-        // AnimatePresence must wrap the conditional so exit animations work
-        <AnimatePresence>
-          {isVisible && (
-            <motion.div
-              ref={tooltipRef}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.15, delay }}
+        // No AnimatePresence: it wraps children in PopChild which reads
+        // children.props.ref on React 18.3 and logs a "ref is not a prop"
+        // warning (framer-motion v12 / React 18.3 incompat). motion.div alone
+        // still animates initial→animate on mount; exit is instant, which is
+        // fine for a tooltip.
+        isVisible && (
+          <motion.div
+            ref={tooltipRef}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.15, delay }}
+            className={cn(
+              'fixed z-[99999] px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-vsc-sidebar border border-vsc-border-light rounded-md shadow-xl backdrop-blur-xl whitespace-nowrap pointer-events-none',
+              className
+            )}
+            style={{
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              transform: getTransform(),
+            }}
+          >
+            {content}
+            <div
               className={cn(
-                'fixed z-[99999] px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-vsc-sidebar border border-vsc-border-light rounded-md shadow-xl backdrop-blur-xl whitespace-nowrap pointer-events-none',
-                className
+                'absolute w-2 h-2 bg-vsc-sidebar border-vsc-border-light rotate-45',
+                side === 'top' && 'bottom-[-5px] left-1/2 -translate-x-1/2 border-b border-r',
+                side === 'bottom' && 'top-[-5px] left-1/2 -translate-x-1/2 border-t border-l',
+                side === 'left' && 'right-[-5px] top-1/2 -translate-y-1/2 border-t border-r',
+                side === 'right' && 'left-[-5px] top-1/2 -translate-y-1/2 border-b border-l'
               )}
-              style={{
-                left: `${position.x}px`,
-                top: `${position.y}px`,
-                transform: getTransform(),
-              }}
-            >
-              {content}
-              <div
-                className={cn(
-                  'absolute w-2 h-2 bg-vsc-sidebar border-vsc-border-light rotate-45',
-                  side === 'top' && 'bottom-[-5px] left-1/2 -translate-x-1/2 border-b border-r',
-                  side === 'bottom' && 'top-[-5px] left-1/2 -translate-x-1/2 border-t border-l',
-                  side === 'left' && 'right-[-5px] top-1/2 -translate-y-1/2 border-t border-r',
-                  side === 'right' && 'left-[-5px] top-1/2 -translate-y-1/2 border-b border-l'
-                )}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>,
+            />
+          </motion.div>
+        ),
         document.body
       )}
     </>

@@ -127,8 +127,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.mcp_bridge.commands            # noqa: F401
     import stitch_backend.domains.logging.commands               # noqa: F401
     import stitch_backend.domains.aws_accounts.commands          # noqa: F401
-    import stitch_backend.domains.quota.commands                 # noqa: F401
-    import stitch_backend.domains.telemetry.commands             # noqa: F401
+    
     import stitch_backend.domains.totp.commands                  # noqa: F401
     import stitch_backend.domains.utility.file_dialogs           # noqa: F401
     import stitch_backend.domains.utility.stubs                  # noqa: F401

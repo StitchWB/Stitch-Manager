@@ -92,13 +92,6 @@ export async function generateTotp(
 }
 
 /**
- * Get seconds remaining in current TOTP window.
- */
-export function totpSecondsRemaining(period = 30): number {
-  return period - (Math.floor(Date.now() / 1000) % period);
-}
-
-/**
  * Get the current TOTP counter (time step).
  */
 export function totpCounter(period = 30): number {

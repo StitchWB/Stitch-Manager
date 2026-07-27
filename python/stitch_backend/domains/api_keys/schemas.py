@@ -37,6 +37,7 @@ PROVIDER_SCHEMAS: dict[str, type[ApiKeyBase]] = {
     "fireworks": ApiKeyBase,
     "qoder": ApiKeyBase,
     "zai": ApiKeyBase,
+    "dashscope": ApiKeyBase,
 }
 
 # Database key names in ai_proxy_settings table
@@ -48,6 +49,7 @@ PROVIDER_DB_KEYS: dict[str, str] = {
     "fireworks": "fireworks_api_keys",
     "qoder": "qoder_api_keys",
     "zai": "zai_api_keys",
+    "dashscope": "dashscope_api_keys",
 }
 
 

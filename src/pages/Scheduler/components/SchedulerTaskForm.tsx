@@ -114,7 +114,7 @@ function parseStringRecord(raw: string): Record<string, string> {
   }
 }
 
-export function isScheduleStateValid(schedule: SchedulerScheduleState): boolean {
+function isScheduleStateValid(schedule: SchedulerScheduleState): boolean {
   if (schedule.scheduleType === 'once') {
     return (
       Number.isFinite(new Date(schedule.onceDateTime).getTime()) && Boolean(schedule.onceDateTime)

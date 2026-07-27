@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { TestTube, Loader2, CheckCircle2, XCircle, Server, Key, Link2, Package } from 'lucide-react';
+import { TestTube, Loader2, CheckCircle2, XCircle, Server, Key, Link2, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { Modal, Button, Input, Badge } from '@/components/ui';
-import { testOpenCodeApi, type ProviderConfig } from '@/lib/tauri/modules/opencodeConfig';
+import { Modal, Button, Input, Badge, Toggle } from '@/components/ui';
+import { testOpenCodeApi, type ProviderConfig, type ModelConfig } from '@/lib/tauri/modules/opencodeConfig';
 
 interface ProviderEditorModalProps {
   isOpen: boolean;
@@ -12,10 +12,21 @@ interface ProviderEditorModalProps {
   onClose: () => void;
 }
 
+type ModelInfo = {
+  id: string;
+  owned_by?: string;
+  vision?: boolean;
+  reasoning?: boolean;
+  tool_call?: boolean;
+  status?: 'stable' | 'experimental';
+  limit?: { context?: number; output?: number };
+  modalities?: { input?: string[]; output?: string[] };
+};
+
 type TestState =
   | { status: 'idle' }
   | { status: 'testing' }
-  | { status: 'success'; models: string[] }
+  | { status: 'success'; models: ModelInfo[] }
   | { status: 'error'; message: string };
 
 export function ProviderEditorModal({
@@ -33,6 +44,8 @@ export function ProviderEditorModal({
   const [modelsExpanded, setModelsExpanded] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
   const [removedModels, setRemovedModels] = useState<Set<string>>(new Set());
+  const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [modelEdits, setModelEdits] = useState<Record<string, ModelConfig>>({});
 
   useEffect(() => {
     if (isOpen) {
@@ -44,6 +57,8 @@ export function ProviderEditorModal({
       setModelsExpanded(false);
       setModelFilter('');
       setRemovedModels(new Set());
+      setEditingModel(null);
+      setModelEdits({});
     }
   }, [provider, isOpen]);
 
@@ -54,6 +69,60 @@ export function ProviderEditorModal({
 
   const handleRemoveModel = (modelId: string) => {
     setRemovedModels(prev => new Set(prev).add(modelId));
+  };
+
+  const handleEditModel = (modelId: string) => {
+    if (editingModel === modelId) {
+      setEditingModel(null);
+      return;
+    }
+    const existing = provider?.models?.[modelId];
+    setEditingModel(modelId);
+    setModelEdits(prev => ({
+      ...prev,
+      [modelId]: {
+        ...prev[modelId],
+        limit: {
+          context: prev[modelId]?.limit?.context ?? existing?.limit?.context ?? 128000,
+          output: prev[modelId]?.limit?.output ?? existing?.limit?.output ?? 4096,
+        },
+        modalities: {
+          input: prev[modelId]?.modalities?.input ?? existing?.modalities?.input ?? ['text'],
+          output: prev[modelId]?.modalities?.output ?? existing?.modalities?.output ?? ['text'],
+        },
+        reasoning: prev[modelId]?.reasoning ?? existing?.reasoning ?? false,
+        tool_call: prev[modelId]?.tool_call ?? existing?.tool_call ?? false,
+        attachment: prev[modelId]?.attachment ?? existing?.attachment ?? false,
+      },
+    }));
+  };
+
+  const updateModelEdit = (modelId: string, patch: Partial<ModelConfig>) => {
+    setModelEdits(prev => ({
+      ...prev,
+      [modelId]: { ...prev[modelId], ...patch },
+    }));
+  };
+
+  const updateModelLimit = (modelId: string, field: 'context' | 'output', value: number) => {
+    setModelEdits(prev => ({
+      ...prev,
+      [modelId]: {
+        ...prev[modelId],
+        limit: { ...prev[modelId]?.limit, [field]: value },
+      },
+    }));
+  };
+
+  const updateModelModalities = (modelId: string, ioField: 'input' | 'output', value: string) => {
+    const arr = value.split(',').map(s => s.trim()).filter(Boolean);
+    setModelEdits(prev => ({
+      ...prev,
+      [modelId]: {
+        ...prev[modelId],
+        modalities: { ...prev[modelId]?.modalities, [ioField]: arr.length > 0 ? arr : undefined },
+      },
+    }));
   };
 
   const handleTest = async () => {
@@ -89,7 +158,21 @@ export function ProviderEditorModal({
       Object.entries(provider?.models || {}).filter(([id]) => !removedModels.has(id))
     );
     if (test.status === 'success' && Object.keys(models).length === 0) {
-      models = Object.fromEntries(test.models.map(m => [m, { name: m }]));
+      models = Object.fromEntries(test.models.map(m => [m.id, {
+        name: m.id,
+        limit: m.limit || { context: 128000, output: 4096 },
+        modalities: m.modalities || { input: m.vision ? ['text', 'image'] : ['text'], output: ['text'] },
+        reasoning: m.reasoning ?? false,
+        tool_call: m.tool_call ?? true,
+        attachment: m.vision ?? false,
+      }]));
+    }
+
+    // Merge model edits
+    for (const [modelId, edits] of Object.entries(modelEdits)) {
+      if (models[modelId]) {
+        models[modelId] = { ...models[modelId], ...edits };
+      }
     }
 
     onSave(id, {
@@ -129,7 +212,7 @@ export function ProviderEditorModal({
               {test.status === 'testing' ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
-                <TestTube className="w-4 h-4 mr-2" />
+                <TestTube className="w-4 h-4" />
               )}
               Test
             </Button>
@@ -199,7 +282,7 @@ export function ProviderEditorModal({
             </div>
             <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
               {test.models.slice(0, 20).map(m => (
-                <Badge key={m} size="sm" variant="success">{m}</Badge>
+                <Badge key={m.id} size="sm" variant="success">{m.id}</Badge>
               ))}
               {test.models.length > 20 && (
                 <Badge size="sm" variant="outline">+{test.models.length - 20} more</Badge>
@@ -255,25 +338,102 @@ export function ProviderEditorModal({
                   placeholder="Filter models..."
                   className="mb-2"
                 />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-48 overflow-y-auto">
-                  {filteredModels.map(m => (
-                    <div
-                      key={m}
-                      className="flex items-center justify-between gap-2 px-2 py-1 rounded text-xs hover:bg-white/5 group"
-                    >
-                      <span className="truncate">{m}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveModel(m)}
-                        className="opacity-0 group-hover:opacity-100 text-vsc-text-muted hover:text-red-400 transition-opacity shrink-0"
-                        title="Remove model"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                <div className="space-y-1 max-h-96 overflow-y-auto">
+                  {filteredModels.map(m => {
+                    const isEditing = editingModel === m;
+                    const edit = modelEdits[m] || {};
+                    const modelConfig = provider?.models?.[m];
+                    const merged = { ...modelConfig, ...edit };
+                    return (
+                      <div key={m}>
+                        <button
+                          type="button"
+                          onClick={() => handleEditModel(m)}
+                          className="flex items-center justify-between w-full gap-2 px-2 py-1 rounded text-xs hover:bg-white/5 group"
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            {isEditing ? (
+                              <ChevronDown className="w-3 h-3 shrink-0 text-vsc-text-muted" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3 shrink-0 text-vsc-text-muted" />
+                            )}
+                            <span className="truncate">{m}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleRemoveModel(m); }}
+                            className="opacity-0 group-hover:opacity-100 text-vsc-text-muted hover:text-red-400 transition-opacity shrink-0"
+                            title="Remove model"
+                          >
+                            ×
+                          </button>
+                        </button>
+
+                        {isEditing && (
+                          <div className="ml-5 mt-1 mb-2 p-3 rounded-lg border border-vsc-border bg-white/[0.02] space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <Input
+                                label="Context Limit"
+                                type="number"
+                                value={String(merged.limit?.context ?? '')}
+                                onChange={e => updateModelLimit(m, 'context', parseInt(e.target.value) || 0)}
+                                placeholder="128000"
+                                hint="Max context window size"
+                              />
+                              <Input
+                                label="Output Limit"
+                                type="number"
+                                value={String(merged.limit?.output ?? '')}
+                                onChange={e => updateModelLimit(m, 'output', parseInt(e.target.value) || 0)}
+                                placeholder="4096"
+                                hint="Max output tokens"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <Input
+                                label="Input Modalities"
+                                value={(merged.modalities?.input || []).join(', ')}
+                                onChange={e => updateModelModalities(m, 'input', e.target.value)}
+                                placeholder="text, image"
+                                hint="Comma-separated"
+                              />
+                              <Input
+                                label="Output Modalities"
+                                value={(merged.modalities?.output || []).join(', ')}
+                                onChange={e => updateModelModalities(m, 'output', e.target.value)}
+                                placeholder="text"
+                                hint="Comma-separated"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <Toggle
+                                label="Reasoning"
+                                checked={merged.reasoning ?? false}
+                                onChange={(v) => updateModelEdit(m, { reasoning: v })}
+                                tooltip="Model supports reasoning/thinking"
+                              />
+                              <Toggle
+                                label="Tool Call"
+                                checked={merged.tool_call ?? false}
+                                onChange={(v) => updateModelEdit(m, { tool_call: v })}
+                                tooltip="Model supports tool calling"
+                              />
+                              <Toggle
+                                label="Attachment"
+                                checked={merged.attachment ?? false}
+                                onChange={(v) => updateModelEdit(m, { attachment: v })}
+                                tooltip="Model supports file attachments"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   {filteredModels.length === 0 && (
-                    <div className="col-span-2 text-xs text-vsc-text-muted py-2">
+                    <div className="text-xs text-vsc-text-muted py-2">
                       No models match "{modelFilter}"
                     </div>
                   )}

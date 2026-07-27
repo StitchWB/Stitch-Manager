@@ -1,8 +1,15 @@
-import { Cloud, Database, Mail as MailIcon, Server, Wand2 } from 'lucide-react';
+import { Cloud, Database, Mail as MailIcon, Send, Server, Wand2 } from 'lucide-react';
 import { ButtonBase, Modal } from '@/components/ui';
 import { t } from '@/lib/i18n';
 
-export type AddMailboxSource = 'icloud' | 'gmail' | 'imap' | 'fromAutoReg' | 'fromSheets' | 'mailTmManual';
+export type AddMailboxSource =
+  | 'icloud'
+  | 'gmail'
+  | 'imap'
+  | 'fromAutoReg'
+  | 'fromSheets'
+  | 'mailTmManual'
+  | 'mailTmRegister';
 
 interface SourceCardConfig {
   id: AddMailboxSource;
@@ -47,6 +54,13 @@ const SOURCE_CARDS: SourceCardConfig[] = [
     titleKey: 'mail.addMailboxFromSheets',
     descriptionKey: 'mail.addMailboxFromSheetsDescription',
     accent: 'text-amber-300',
+  },
+  {
+    id: 'mailTmRegister',
+    icon: <Send size={18} />,
+    titleKey: 'mail.addMailboxMailTmRegister',
+    descriptionKey: 'mail.addMailboxMailTmRegisterDescription',
+    accent: 'text-teal-300',
   },
 ];
 

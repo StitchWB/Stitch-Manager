@@ -7,6 +7,8 @@ DB commands use ``run_in_session`` pattern.
 
 from __future__ import annotations
 
+import asyncio
+
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
 
@@ -86,6 +88,14 @@ async def cmd_delete(params: dict) -> dict:
 
 
 # ── Capability / catalog commands (2) ─────────────────────────────────────────
+
+@register_command("email_inbox_create_mailtm_account")
+async def cmd_create_mailtm_account(params: dict) -> dict:
+    """Create a random Mail.tm account and return its credentials."""
+    from stitch_backend.domains.email_inbox import mailtm_provider
+    base_url = params.get("baseUrl") or params.get("base_url") or None
+    return await asyncio.to_thread(mailtm_provider.create_random_account, base_url)
+
 
 @register_command("email_inbox_get_capabilities")
 async def cmd_get_capabilities(params: dict) -> dict:

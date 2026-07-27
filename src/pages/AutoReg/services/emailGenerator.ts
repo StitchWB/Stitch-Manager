@@ -147,25 +147,3 @@ async function generateCustomEmail(
 
   return `${pattern}@${emailDomain}`;
 }
-
-/**
- * Validate email format
- */
-export function validateEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-/**
- * Get email domain from full email address
- */
-export function getEmailDomain(email: string): string {
-  return email.split('@')[1] || '';
-}
-
-/**
- * Get email local part (before @)
- */
-export function getEmailLocalPart(email: string): string {
-  return email.split('@')[0] || '';
-}

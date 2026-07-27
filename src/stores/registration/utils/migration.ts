@@ -2,8 +2,7 @@
  * Migration utilities for provider strategies
  */
 
-import type { ProviderName } from '../../../types/ui';
-import type { IMAPConfig, ProviderEmailStrategy, ProviderEmailStrategies } from '../types';
+import type { ProviderEmailStrategy, ProviderEmailStrategies } from '../types';
 
 const DEFAULT_EMAIL_STRATEGY: ProviderEmailStrategy = {
   strategy: 'custom',
@@ -13,58 +12,16 @@ const DEFAULT_EMAIL_STRATEGY: ProviderEmailStrategy = {
 };
 
 /**
- * Migrate old providerImapConfigs format to new providerEmailStrategies format
- */
-export const migrateProviderStrategies = (): ProviderEmailStrategies | null => {
-  try {
-    const stored = localStorage.getItem('providerEmailStrategies');
-    if (stored) {
-      if (import.meta.env.DEV) console.debug('[MIGRATION] Found providerEmailStrategies, no migration needed');
-      return JSON.parse(stored);
-    }
-
-    // Check for old format
-    const oldStored = localStorage.getItem('providerImapConfigs');
-    if (!oldStored) {
-      if (import.meta.env.DEV) console.debug('[MIGRATION] No old data found');
-      return null;
-    }
-
-    if (import.meta.env.DEV) console.debug('[MIGRATION] Found old providerImapConfigs, migrating...');
-    const oldConfigs = JSON.parse(oldStored);
-    const providerEmailStrategies = {} as ProviderEmailStrategies;
-
-    // Convert old format to new format (extract only strategy and domain info)
-    for (const [provider, oldConfig] of Object.entries(oldConfigs)) {
-      const old = oldConfig as IMAPConfig;
-      providerEmailStrategies[provider as ProviderName] = {
-        strategy: old.strategy || 'custom',
-        customDomain: old.server ? `${old.email?.split('@')[1] || ''}` : '',
-        thirtyThreeMailDomain: old.thirtyThreeMailDomain || '33mail.com',
-        addyioDomain: old.addyioDomain || '',
-      };
-    }
-
-    // Save migrated data in new format
-    localStorage.setItem('providerEmailStrategies', JSON.stringify(providerEmailStrategies));
-    // Remove old format
-    localStorage.removeItem('providerImapConfigs');
-    if (import.meta.env.DEV) console.debug('[MIGRATION] Migration completed, old data removed');
-
-    return providerEmailStrategies;
-  } catch (error) {
-    console.error('[MIGRATION] Migration failed:', error);
-    return null;
-  }
-};
-
-/**
  * Load provider strategies from localStorage with migration support
  */
 export const loadProviderStrategies = (): ProviderEmailStrategies => {
-  const migrated = migrateProviderStrategies();
-  if (migrated) {
-    return migrated;
+  try {
+    const stored = localStorage.getItem('providerEmailStrategies');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // fall through to defaults
   }
 
 // Return defaults if no stored data
