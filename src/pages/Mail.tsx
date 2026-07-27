@@ -12,6 +12,8 @@ import {
 } from '@/components/mail';
 import type { AddMailboxAction } from '@/components/mail/MailSidebar';
 import type { MailboxProviderKind } from '@/lib/mail/providerPresets';
+import { detectMailboxProviderKind } from '@/lib/mail/providerPresets';
+import { emailInboxUpsertProfile } from '@/lib/tauri/modules/emailInbox';
 import { Button, Modal } from '@/components/ui';
 import { useMailRuntime } from '@/hooks/useMailRuntime';
 import { useMailStore } from '@/stores/mail';
@@ -22,6 +24,8 @@ import {
   ACCOUNT_QUERY_PARAM,
   AUTO_REG_MAILBOX_PROFILE_ID,
   buildAccountScopeContext,
+  buildImapConnectInput,
+  buildMailTmConnectInput,
   deriveAutoRegProfile,
   upsertAutoRegMailboxProfile,
   type AccountScopeContext,
@@ -50,12 +54,14 @@ export default function Mail() {
     undefined,
     'session'
   );
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
 
   const {
     loadProfiles,
     loadProviderCatalog,
     upsertProfileFromDraft,
     setActiveProfileId,
+    registerMailTmMailbox,
     selectFolder,
     session,
     loadFolders,
@@ -110,12 +116,12 @@ export default function Mail() {
     void connect();
   }, [activeProfileId, connect, isConnecting, profiles, session]);
 
-  // Auto-list inbox whenever the (session, mailbox) pair changes. This covers
-  // the initial connect and any folder switch that triggers a reconnect.
+  // Auto-list inbox when session/mailbox/profile changes. Resets on profile
+  // switch to ensure fresh data even when the session id is reused.
   const autoListedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!session) return;
-    const key = `${session.sessionId}|${connectedMailbox ?? ''}`;
+    const key = `${session.sessionId}|${connectedMailbox ?? ''}|${activeProfileId ?? ''}`;
     if (autoListedFor.current === key) return;
 
     autoListedFor.current = key;
@@ -124,7 +130,7 @@ export default function Mail() {
       void listMessages();
     }, 50);
     return () => clearTimeout(timer);
-  }, [connectedMailbox, listMessages, session]);
+  }, [activeProfileId, connectedMailbox, listMessages, session]);
 
   // Account-scoped deep link: /mail?account=<id> resolves the appropriate
   // mailbox profile for that account, switches to it, and applies a `to`
@@ -251,6 +257,14 @@ export default function Mail() {
 
   const handleAddMailbox = useCallback(
     async (action: AddMailboxAction) => {
+      // ponytail: manual connect flows need editable fields — an active profile
+      // or a live session locks them all, and Connect is blocked while a session exists
+      if (action !== 'fromAutoReg' && action !== 'fromSheets') {
+        setActiveProfileId(null);
+        if (runtime.session) {
+          await runtime.disconnect();
+        }
+      }
       switch (action) {
         case 'fromAutoReg': {
           try {
@@ -298,6 +312,17 @@ export default function Mail() {
           break;
         }
 
+        case 'mailTmRegister': {
+          const profile = await registerMailTmMailbox();
+          if (profile) {
+            toast.success(profile.label);
+          } else {
+            const message = useMailStore.getState().error;
+            toast.error(message || t('mail.mailboxRegisterFailed'));
+          }
+          break;
+        }
+
         case 'fromSheets': {
           setRawModalOpen(true);
           break;
@@ -306,13 +331,58 @@ export default function Mail() {
     },
     [
       loadProfiles,
+      registerMailTmMailbox,
       registrationImap,
+      runtime.disconnect,
+      runtime.session,
       setActiveProfileId,
       setManualModalOpen,
       setManualModalPresetKind,
       setManualModalSource,
       setRawModalOpen,
     ]
+  );
+
+  const handleEditProfile = useCallback(
+    (profileId: string) => {
+      const profile = profiles.find(p => p.id === profileId);
+      if (!profile) return;
+
+      const ci = profile.connectInput;
+      const kind = detectMailboxProviderKind(profile);
+
+      // Disconnect current session so fields become editable
+      if (runtime.session) {
+        void runtime.disconnect();
+      }
+      setActiveProfileId(null);
+
+      // Pre-fill draft from profile
+      if (ci.provider === 'imap') {
+        runtime.setSource('imap');
+        runtime.setAccountId(ci.accountId);
+        runtime.setMailbox(ci.options?.mailbox ?? 'INBOX');
+        runtime.setImapCredentials(ci.credentials.value);
+        setManualModalPresetKind(kind === 'icloud' ? 'icloud' : kind === 'gmail' ? 'gmail' : undefined);
+        setManualModalSource('imap');
+      } else {
+        const tmCreds = ci.credentials as { type: 'mail_tm'; value: { address: string; password: string; baseUrl?: string | null } };
+        runtime.setSource('mail_tm');
+        runtime.setAccountId(ci.accountId);
+        runtime.setMailbox('INBOX');
+        runtime.setMailTmCredentials({
+          address: tmCreds.value.address,
+          password: tmCreds.value.password,
+          baseUrl: tmCreds.value.baseUrl ?? '',
+        });
+        setManualModalPresetKind(undefined);
+        setManualModalSource('mail_tm');
+      }
+
+      setEditingProfileId(profileId);
+      setManualModalOpen(true);
+    },
+    [profiles, runtime, setActiveProfileId, setManualModalPresetKind, setManualModalSource, setManualModalOpen]
   );
 
   const activeProfile = useMemo(
@@ -405,6 +475,7 @@ export default function Mail() {
               onAddMailbox={action => {
                 void handleAddMailbox(action);
               }}
+              onEditProfile={handleEditProfile}
               onRenameProfile={runtime.renameProfile}
               onDeleteProfile={runtime.deleteProfile}
             />
@@ -467,22 +538,52 @@ export default function Mail() {
         mailTmCredentials={runtime.mailTmCredentials}
         hasSession={Boolean(runtime.session)}
         isConnecting={runtime.isConnecting}
-        connectDisabled={runtime.connectDisabled}
-        controlsDisabled={controlsDisabled}
+        connectDisabled={editingProfileId ? false : runtime.connectDisabled}
+        controlsDisabled={editingProfileId ? false : controlsDisabled}
         onSourceChange={runtime.setSource}
         onAccountIdChange={runtime.setAccountId}
         onMailboxChange={runtime.setMailbox}
         onImapPatch={runtime.setImapCredentials}
         onMailTmPatch={runtime.setMailTmCredentials}
         onConnect={async () => {
+          if (editingProfileId) {
+            // Save edited profile before connecting
+            const connectInput =
+              runtime.source === 'imap'
+                ? buildImapConnectInput({
+                    accountId: runtime.accountId,
+                    mailbox: runtime.mailbox,
+                    readOnly: true,
+                    credentials: runtime.imapCredentials,
+                  })
+                : buildMailTmConnectInput({
+                    accountId: runtime.accountId,
+                    readOnly: true,
+                    credentials: runtime.mailTmCredentials,
+                  });
+            try {
+              await emailInboxUpsertProfile({
+                id: editingProfileId,
+                connectInput,
+              });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              toast.error(message);
+              return;
+            }
+          }
           await runtime.connect();
           // Close modal on successful connect
           if (!runtime.error) {
             setManualModalOpen(false);
+            setEditingProfileId(null);
           }
         }}
         onDisconnect={runtime.disconnect}
-        onClose={() => setManualModalOpen(false)}
+        onClose={() => {
+          setManualModalOpen(false);
+          setEditingProfileId(null);
+        }}
       />
 
       {/* Google Sheets RAW import modal */}

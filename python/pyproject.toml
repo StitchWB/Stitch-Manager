@@ -33,6 +33,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "psutil>=5.9.0",
     "keyring>=25.0.0",
+
+    # ── CLI / MCP ───────────────────────────────────────────────────────────
+    "typer>=0.9.0",
+    "fastmcp>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +66,8 @@ dev = [
 [project.scripts]
 stitch-backend = "stitch_backend.main:run"
 stitch-desktop = "stitch_backend.desktop:main"
+stitch = "stitch_backend.cli.main:app"
+stitch-mcp = "stitch_backend.mcp_server.server:main"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]

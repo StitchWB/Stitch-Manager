@@ -5,9 +5,6 @@
 
 export {
   generateEmail,
-  validateEmail,
-  getEmailDomain,
-  getEmailLocalPart,
   type EmailGenerationOptions,
   type EmailGenerationResult,
 } from './emailGenerator';

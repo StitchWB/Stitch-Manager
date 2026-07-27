@@ -1,53 +1,99 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Save, Settings, Server, Bot, Package, TestTube, Sliders } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bot, Package, Save, Server, Settings, Sliders, TestTube } from 'lucide-react';
 import { toast } from 'sonner';
 
-import Header from '../components/layout/Header';
-import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
+import { AiSectionNav, type AiSectionNavItem } from '@/components/ai-proxy/AiSectionNav';
+import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
+import { ConnectionsNav } from '@/components/ai-proxy/ConnectionsNav';
+import { AgentsSection } from '@/components/opencode/AgentsSection';
+import { ApiTesterSection } from '@/components/opencode/ApiTesterSection';
+import { GeneralSection } from '@/components/opencode/GeneralSection';
+import { ModelsSection } from '@/components/opencode/ModelsSection';
+import { ProvidersSection } from '@/components/opencode/ProvidersSection';
+import Header from '@/components/layout/Header';
+import { Button, LoadingSpinner, PageHeader, StatusBadge } from '@/components/ui';
+import { useUIState } from '@/hooks/useUIState';
+import { useAppStore } from '@/stores/app';
 import {
-  getOpenCodeConfig,
-  setOpenCodeConfig,
   getOhMyOpenAgentConfig,
+  getOpenCodeConfig,
   setOhMyOpenAgentConfig,
-  type OpenCodeConfig,
+  setOpenCodeConfig,
+  validateModelConfig,
   type OhMyOpenAgentConfig,
+  type OpenCodeConfig,
   type ProviderConfig,
 } from '@/lib/tauri/modules/opencodeConfig';
-import { Button, SegmentedControl, LoadingSpinner } from '@/components/ui';
-import type { SegmentedOption } from '@/components/ui';
-
-import { ProvidersSection } from '../components/opencode/ProvidersSection';
-import { AgentsSection } from '../components/opencode/AgentsSection';
-import { GeneralSection } from '../components/opencode/GeneralSection';
-import { ModelsSection } from '../components/opencode/ModelsSection';
-import { ApiTesterSection } from '../components/opencode/ApiTesterSection';
 
 type ConfigTab = 'providers' | 'agents' | 'general' | 'models' | 'tester';
 
-const TAB_OPTIONS: SegmentedOption[] = [
-  { value: 'providers', label: 'Providers', icon: <Server className="w-4 h-4" /> },
-  { value: 'agents', label: 'Agents', icon: <Bot className="w-4 h-4" /> },
-  { value: 'general', label: 'General', icon: <Sliders className="w-4 h-4" /> },
-  { value: 'models', label: 'Models', icon: <Package className="w-4 h-4" /> },
-  { value: 'tester', label: 'API Tester', icon: <TestTube className="w-4 h-4" /> },
-];
-
 export default function OpenCodeConfig() {
-  const [activeTab, setActiveTab] = useState<ConfigTab>('providers');
+  const [activeTab, setActiveTab] = useUIState<ConfigTab>(
+    'opencode-config-active-tab',
+    'providers',
+    'persist'
+  );
+  const language = useAppStore(state => state.language);
+  const copy =
+    language === 'ru'
+      ? {
+          eyebrow: 'AI Hub / Подключения / OpenCode',
+          title: 'Конфигурация OpenCode',
+          description: 'Провайдеры, роли агентов, модели и инструменты проверки в одном месте.',
+          sectionsLabel: 'Разделы OpenCode',
+          unsaved: 'Есть несохранённые изменения',
+          save: 'Сохранить конфигурацию',
+          loading: 'Загрузка конфигурации…',
+        }
+      : {
+          eyebrow: 'AI Hub / Connections / OpenCode',
+          title: 'OpenCode configuration',
+          description: 'Manage providers, agent roles, model assignments and testing tools in one place.',
+          sectionsLabel: 'OpenCode sections',
+          unsaved: 'Unsaved changes',
+          save: 'Save configuration',
+          loading: 'Loading configuration…',
+        };
+  const tabOptions = useMemo<AiSectionNavItem<ConfigTab>[]>(
+    () =>
+      language === 'ru'
+        ? [
+            { value: 'providers', label: 'Провайдеры', description: 'Endpoints и ключи', icon: Server },
+            { value: 'agents', label: 'Агенты', description: 'Роли, модели и fallback', icon: Bot },
+            { value: 'general', label: 'Общее', description: 'Defaults, MCP и плагины', icon: Sliders },
+            { value: 'models', label: 'Модели', description: 'Каталог и назначения', icon: Package },
+            { value: 'tester', label: 'API-тестер', description: 'Поиск и импорт моделей', icon: TestTube },
+          ]
+        : [
+            { value: 'providers', label: 'Providers', description: 'Endpoints and credentials', icon: Server },
+            { value: 'agents', label: 'Agents', description: 'Roles, models and fallbacks', icon: Bot },
+            { value: 'general', label: 'General', description: 'Defaults, MCP and plugins', icon: Sliders },
+            { value: 'models', label: 'Models', description: 'Catalog and assignments', icon: Package },
+            { value: 'tester', label: 'API Tester', description: 'Discover and import models', icon: TestTube },
+          ],
+    [language]
+  );
   const [config, setConfig] = useState<OpenCodeConfig>({});
   const [ohMyConfig, setOhMyConfig] = useState<OhMyOpenAgentConfig>({});
+  const [savedSnapshot, setSavedSnapshot] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const currentSnapshot = useMemo(
+    () => JSON.stringify({ config, ohMyConfig }),
+    [config, ohMyConfig]
+  );
+  const isDirty = savedSnapshot !== '' && currentSnapshot !== savedSnapshot;
 
   const loadConfig = useCallback(async () => {
     try {
       setLoading(true);
-      const [oc, om] = await Promise.all([
-        getOpenCodeConfig(),
-        getOhMyOpenAgentConfig(),
-      ]);
-      setConfig(oc || { provider: {} });
-      setOhMyConfig(om || {});
+      const [oc, om] = await Promise.all([getOpenCodeConfig(), getOhMyOpenAgentConfig()]);
+      const nextConfig = oc || { provider: {} };
+      const nextOhMyConfig = om || {};
+      setConfig(nextConfig);
+      setOhMyConfig(nextOhMyConfig);
+      setSavedSnapshot(JSON.stringify({ config: nextConfig, ohMyConfig: nextOhMyConfig }));
     } catch (error) {
       toast.error('Failed to load config');
       console.error(error);
@@ -57,16 +103,22 @@ export default function OpenCodeConfig() {
   }, []);
 
   useEffect(() => {
-    void loadConfig();
+    const timer = window.setTimeout(() => {
+      void loadConfig();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadConfig]);
 
   const handleSave = useCallback(async () => {
+    const errors = validateModelConfig(config);
+    if (errors.length > 0) {
+      errors.forEach(err => toast.error(err));
+      return;
+    }
     try {
       setSaving(true);
-      await Promise.all([
-        setOpenCodeConfig(config),
-        setOhMyOpenAgentConfig(ohMyConfig),
-      ]);
+      await Promise.all([setOpenCodeConfig(config), setOhMyOpenAgentConfig(ohMyConfig)]);
+      setSavedSnapshot(JSON.stringify({ config, ohMyConfig }));
       toast.success('Configuration saved');
     } catch (error) {
       toast.error('Failed to save config');
@@ -76,25 +128,28 @@ export default function OpenCodeConfig() {
     }
   }, [config, ohMyConfig]);
 
-  const updateConfig = useCallback((updater: (c: OpenCodeConfig) => OpenCodeConfig) => {
-    setConfig(prev => updater(prev));
+  const updateConfig = useCallback((updater: (value: OpenCodeConfig) => OpenCodeConfig) => {
+    setConfig(previous => updater(previous));
   }, []);
 
-  const updateOhMyConfig = useCallback((updater: (c: OhMyOpenAgentConfig) => OhMyOpenAgentConfig) => {
-    setOhMyConfig(prev => updater(prev));
-  }, []);
+  const updateOhMyConfig = useCallback(
+    (updater: (value: OhMyOpenAgentConfig) => OhMyOpenAgentConfig) => {
+      setOhMyConfig(previous => updater(previous));
+    },
+    []
+  );
 
   const handleProvidersChange = useCallback((providers: Record<string, ProviderConfig>) => {
-    setConfig(prev => ({ ...prev, provider: providers }));
+    setConfig(previous => ({ ...previous, provider: providers }));
   }, []);
 
   const handleToggleProvider = useCallback((providerId: string, enabled: boolean) => {
-    setConfig(prev => {
-      const disabled = prev.disabled_providers || [];
+    setConfig(previous => {
+      const disabled = previous.disabled_providers || [];
       const next = enabled
         ? disabled.filter(id => id !== providerId)
         : [...new Set([...disabled, providerId])];
-      return { ...prev, disabled_providers: next };
+      return { ...previous, disabled_providers: next };
     });
   }, []);
 
@@ -107,98 +162,104 @@ export default function OpenCodeConfig() {
         options: { baseURL: baseUrl, apiKey },
         models: Object.fromEntries(models.map(id => [id, { name: id }])),
       };
-      setConfig(prev => ({
-        ...prev,
-        provider: { ...prev.provider, [providerId]: newProvider },
+      setConfig(previous => ({
+        ...previous,
+        provider: { ...previous.provider, [providerId]: newProvider },
       }));
       toast.success(`Added provider "${providerName}" with ${models.length} models`);
     },
     []
   );
 
-  if (loading) {
-    return (
-      <div className="flex flex-col h-full overflow-hidden bg-void-base">
-        <Header
-          title="OpenCode Config"
-          subtitle="Manage OpenCode and Oh-My-OpenAgent configuration"
-          icon={<Settings size={18} />}
-        />
-        <AiTopTabs />
-        <div className="flex-1 flex items-center justify-center">
-          <LoadingSpinner />
-        </div>
-      </div>
-    );
-  }
+  const pageActions = (
+    <div className="flex items-center gap-2">
+      {isDirty ? (
+        <StatusBadge status="warning" size="sm" withDot>
+          {copy.unsaved}
+        </StatusBadge>
+      ) : null}
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={() => void handleSave()}
+        disabled={saving || !isDirty}
+        isLoading={saving}
+        leftIcon={<Save size={14} />}
+      >
+        {copy.save}
+      </Button>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-void-base">
-      <Header
-        title="OpenCode Config"
-        subtitle="Manage OpenCode and Oh-My-OpenAgent configuration"
-        icon={<Settings size={18} />}
-        actions={
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="w-4 h-4 mr-2" />
-            {saving ? 'Saving...' : 'Save All'}
-          </Button>
-        }
-      />
+    <div className="flex h-full flex-col overflow-hidden bg-void-base">
+      <Header title="AI Hub" icon={<Settings size={18} />} />
       <AiTopTabs />
+      <ConnectionsNav />
+      <PageHeader
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        description={copy.description}
+        actions={loading ? undefined : pageActions}
+      />
 
-      <div className="flex-1 overflow-auto">
-        <div className="sticky top-0 z-10 bg-vsc-bg/80 backdrop-blur-xl border-b border-vsc-border px-6 py-3">
-          <SegmentedControl
-            options={TAB_OPTIONS}
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-slate-500">
+          <LoadingSpinner />
+          {copy.loading}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <AiSectionNav
+            label={copy.sectionsLabel}
+            items={tabOptions}
             value={activeTab}
-            onChange={(value) => setActiveTab(value as ConfigTab)}
+            onChange={value => setActiveTab(value)}
           />
+          <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
+            <div className="mx-auto w-full max-w-7xl">
+              {activeTab === 'providers' ? (
+                <ProvidersSection
+                  providers={config.provider || {}}
+                  disabledProviders={config.disabled_providers || []}
+                  onChange={handleProvidersChange}
+                  onToggleEnabled={handleToggleProvider}
+                />
+              ) : null}
+              {activeTab === 'agents' ? (
+                <AgentsSection
+                  opencodeConfig={config}
+                  ohMyConfig={ohMyConfig}
+                  onOpencodeChange={updateConfig}
+                  onOhMyChange={updateOhMyConfig}
+                />
+              ) : null}
+              {activeTab === 'general' ? (
+                <GeneralSection
+                  config={config}
+                  ohMyConfig={ohMyConfig}
+                  onChange={updateConfig}
+                  onOhMyChange={updateOhMyConfig}
+                />
+              ) : null}
+              {activeTab === 'models' ? (
+                <ModelsSection
+                  providers={config.provider || {}}
+                  defaultModel={config.model}
+                  smallModel={config.small_model}
+                  onSetDefault={model => updateConfig(previous => ({ ...previous, model }))}
+                  onSetSmall={model => updateConfig(previous => ({ ...previous, small_model: model }))}
+                />
+              ) : null}
+              {activeTab === 'tester' ? (
+                <div className="max-w-4xl">
+                  <ApiTesterSection onAddProvider={handleAddProvider} />
+                </div>
+              ) : null}
+            </div>
+          </main>
         </div>
-
-        <div className="p-6">
-          {activeTab === 'providers' && (
-            <ProvidersSection
-              providers={config.provider || {}}
-              disabledProviders={config.disabled_providers || []}
-              onChange={handleProvidersChange}
-              onToggleEnabled={handleToggleProvider}
-            />
-          )}
-
-          {activeTab === 'agents' && (
-            <AgentsSection
-              opencodeConfig={config}
-              ohMyConfig={ohMyConfig}
-              onOpencodeChange={updateConfig}
-              onOhMyChange={updateOhMyConfig}
-            />
-          )}
-
-          {activeTab === 'general' && (
-            <GeneralSection
-              config={config}
-              ohMyConfig={ohMyConfig}
-              onChange={updateConfig}
-              onOhMyChange={updateOhMyConfig}
-            />
-          )}
-
-          {activeTab === 'models' && (
-            <ModelsSection
-              providers={config.provider || {}}
-              defaultModel={config.model}
-              smallModel={config.small_model}
-              onSetDefault={(m) => updateConfig(prev => ({ ...prev, model: m }))}
-              onSetSmall={(m) => updateConfig(prev => ({ ...prev, small_model: m }))}
-            />
-          )}
-
-          {activeTab === 'tester' && (
-            <ApiTesterSection onAddProvider={handleAddProvider} />
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

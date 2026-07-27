@@ -25,6 +25,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Logs = lazy(() => import('./pages/Logs'));
 const Chat = lazy(() => import('./pages/Chat'));
 const ApiKeys = lazy(() => import('./pages/ApiKeys'));
+const AiIntegrations = lazy(() => import('./pages/AiIntegrations'));
 const OpenCodeConfig = lazy(() => import('./pages/OpenCodeConfig'));
 const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Tools = lazy(() => import('./pages/Tools'));
@@ -79,7 +80,9 @@ function RouteTracker() {
     if (hasRestored.current) return;
     hasRestored.current = true;
 
-    if (activeRoute && activeRoute !== '/' && activeRoute !== location.pathname) {
+    // Restore the last workspace only when the app opens at the root.
+    // Explicit deep links must always win over persisted navigation state.
+    if (activeRoute && activeRoute !== '/' && location.pathname === '/') {
       // Ensure the route exists in our route list
       const validRoutes = [
         '/',
@@ -256,8 +259,8 @@ function App() {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/autoreg" element={<AutoReg />} />
             <Route path="/ai" element={<AiOverview />} />
-            <Route path="/ai/overview" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai/integrations" element={<Navigate to="/ai/routing" replace />} />
+            <Route path="/ai/overview" element={<Navigate to="/ai" replace />} />
+            <Route path="/ai/integrations" element={<AiIntegrations />} />
             <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
@@ -265,9 +268,10 @@ function App() {
             <Route path="/ai/api-keys" element={<ApiKeys />} />
             <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
             <Route path="/ai/chat" element={<Chat />} />
+            <Route path="/ai/analytics" element={<AiAnalytics />} />
             <Route path="/ai/:section" element={<AiProviders />} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai-analytics" element={<AiAnalytics />} />
+            <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
             <Route path="/patcher" element={<Patcher />} />
             <Route path="/scheduler" element={<Scheduler />} />

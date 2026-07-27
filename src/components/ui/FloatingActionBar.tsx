@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Download, Trash2, X, RefreshCw, UserPlus, FolderOpen, CheckCircle, Eraser, Archive } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
@@ -47,22 +47,23 @@ export function FloatingActionBar({
   const hasProfileActions = onCreateProfiles || onOpenProfileSession || onConfirmProfileSession || onClearProfileSession;
 
   return (
-    <AnimatePresence>
-      {selectedCount > 0 && (
-        <motion.div
-          initial={{ y: 100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 100, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          className={cn(
-            'fixed bottom-0 left-0 right-0 z-50',
-            'h-14 flex items-center justify-between px-6',
-            'border-t border-white/10',
-            'shadow-action-bar',
-            className
-          )}
-          style={{ background: '#18181b' }}
-        >
+    // No AnimatePresence: framer-motion v12 PopChild reads children.props.ref
+    // on React 18.3 and logs a "ref is not a prop" warning. motion.div alone
+    // still animates initial→animate on mount; exit is instant.
+    selectedCount > 0 && (
+      <motion.div
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        className={cn(
+          'fixed bottom-0 left-0 right-0 z-50',
+          'h-14 flex items-center justify-between px-6',
+          'border-t border-white/10',
+          'shadow-action-bar',
+          className
+        )}
+        style={{ background: '#18181b' }}
+      >
           {/* Left: Selection count or progress */}
           <div className="text-sm text-white font-medium">
             {isRefreshing && progressText ? (
@@ -201,8 +202,7 @@ export function FloatingActionBar({
               <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </motion.div>
+    )
   );
 }

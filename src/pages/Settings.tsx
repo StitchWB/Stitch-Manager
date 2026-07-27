@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import {
   Settings as SettingsIcon,
-  Globe,
   Repeat,
   CheckCircle,
   AlertCircle,
   Zap,
   Table2,
-  Puzzle,
   ShieldCheck,
+  Palette,
+  Mail,
+  Monitor,
+  Chrome,
 } from 'lucide-react';
 import { useAppStore } from '../stores/app';
 import { useLogsStore } from '../stores/logs';
@@ -54,12 +56,13 @@ import {
   saveEmailGenerationDomain,
 } from '../stores/registration/utils/migration';
 import { AutomationTab } from '../components/registration/AutomationTab';
-import { LoadingSpinner, TabButton } from '@/components/ui';
+import { LoadingSpinner, TabButton, SegmentedControl } from '@/components/ui';
 
 type SettingsCategory =
-  | 'general'
-  | 'connectivity'
+  | 'appearance'
+  | 'mail'
   | 'proxy'
+  | 'system'
   | 'automation'
   | 'google-sheets'
   | 'ai-proxy'
@@ -73,19 +76,24 @@ interface CategoryConfig {
 
 const categories: CategoryConfig[] = [
   {
-    id: 'general',
-    labelKey: 'settings.categories.general',
-    icon: <SettingsIcon className="w-4 h-4" />,
+    id: 'appearance',
+    labelKey: 'settings.categories.appearance',
+    icon: <Palette className="w-4 h-4" />,
   },
   {
-    id: 'connectivity',
-    labelKey: 'settings.categories.connectivity',
-    icon: <Globe className="w-4 h-4" />,
+    id: 'mail',
+    labelKey: 'settings.categories.mail',
+    icon: <Mail className="w-4 h-4" />,
   },
   {
     id: 'proxy',
     labelKey: 'settings.categories.proxy',
     icon: <ShieldCheck className="w-4 h-4" />,
+  },
+  {
+    id: 'system',
+    labelKey: 'settings.categories.system',
+    icon: <Monitor className="w-4 h-4" />,
   },
   {
     id: 'automation',
@@ -105,7 +113,7 @@ const categories: CategoryConfig[] = [
   {
     id: 'extension',
     labelKey: 'settings.categories.extension',
-    icon: <Puzzle className="w-4 h-4" />,
+    icon: <Chrome className="w-4 h-4" />,
   },
 ];
 
@@ -123,9 +131,17 @@ export default function Settings() {
 
   const [activeCategory, setActiveCategory] = useUIState<SettingsCategory>(
     'settings-active-category',
-    'general',
+    'appearance',
     'persist'
   );
+  // Fallback: if a stale category id is stored (e.g. legacy 'general'/'connectivity'),
+  // map it to the first valid category.
+  useEffect(() => {
+    const validIds = categories.map(c => c.id);
+    if (!validIds.includes(activeCategory)) {
+      setActiveCategory('appearance');
+    }
+  }, [activeCategory, setActiveCategory]);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -189,6 +205,10 @@ export default function Settings() {
 
   // Validation errors
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  // Inner tab state for Mail and Proxy categories
+  const [mailTab, setMailTab] = useState<'imap' | 'aliases' | 'icloud'>('imap');
+  const [proxyTab, setProxyTab] = useState<'quick' | 'library'>('quick');
 
   // Refs for timer cleanup to prevent memory leaks
   const categoryChangeOuterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -614,7 +634,7 @@ export default function Settings() {
     );
   }
 
-  const renderGeneralSettings = () => (
+  const renderAppearanceSettings = () => (
     <div className="space-y-8" style={getAnimationStyle(0)}>
       <ThemeLanguageSection
         theme={theme}
@@ -624,195 +644,228 @@ export default function Settings() {
       />
 
       <UIScaleSection uiScale={uiScale} onUIScaleChange={setUIScale} />
-
-      <IDEPathsSection
-        customIdePaths={customIdePaths}
-        onCustomIdePathsChange={paths => {
-          setCustomIdePaths(paths);
-          debouncedAutoSave();
-        }}
-      />
-
-      <DatabaseSection dbPath={dbPath} onCopy={copy} />
-
-      <BackgroundManagerSettingsSection />
     </div>
   );
 
-  const renderConnectivitySettings = () => (
-    <div className="space-y-8" style={getAnimationStyle(0)}>
-      <ProxySettingsSectionV2 />
-
-      <IMAPSettingsSection
-        imapServer={imapServer}
-        onImapServerChange={server => {
-          setImapServer(server);
-          debouncedAutoSave();
-        }}
-        imapPort={imapPort}
-        onImapPortChange={port => {
-          setImapPort(port);
-          debouncedAutoSave();
-        }}
-        imapEmail={imapEmail}
-        onImapEmailChange={email => {
-          setImapEmail(email);
-          debouncedAutoSave();
-        }}
-        imapPassword={imapPassword}
-        onImapPasswordChange={password => {
-          setImapPassword(password);
-          debouncedAutoSave();
-        }}
-        emailGenerationDomain={emailGenerationDomain}
-        onEmailGenerationDomainChange={domain => {
-          setEmailGenerationDomain(domain);
-          saveEmailGenerationDomain(domain);
-          debouncedAutoSave();
-        }}
-        showPassword={showPassword}
-        onShowPasswordToggle={() => setShowPassword(!showPassword)}
-        validationErrors={validationErrors}
-        onValidate={validateField}
+  const renderMailSettings = () => (
+    <div className="space-y-6" style={getAnimationStyle(0)}>
+      <SegmentedControl
+        options={[
+          { value: 'imap', label: t('settings.mailTabs.imap') },
+          { value: 'aliases', label: t('settings.mailTabs.aliases') },
+          { value: 'icloud', label: t('settings.mailTabs.icloud') },
+        ]}
+        value={mailTab}
+        onChange={v => setMailTab(v as 'imap' | 'aliases' | 'icloud')}
+        size="sm"
+        className="max-w-md"
       />
 
-      <EmailCounterSection
-        emailCounter={emailCounter}
-        onEmailCounterChange={handleEmailCounterChange}
-        isLoading={isLoadingCounter}
-      />
+      {mailTab === 'imap' && (
+        <div className="space-y-8">
+          <IMAPSettingsSection
+            imapServer={imapServer}
+            onImapServerChange={server => {
+              setImapServer(server);
+              debouncedAutoSave();
+            }}
+            imapPort={imapPort}
+            onImapPortChange={port => {
+              setImapPort(port);
+              debouncedAutoSave();
+            }}
+            imapEmail={imapEmail}
+            onImapEmailChange={email => {
+              setImapEmail(email);
+              debouncedAutoSave();
+            }}
+            imapPassword={imapPassword}
+            onImapPasswordChange={password => {
+              setImapPassword(password);
+              debouncedAutoSave();
+            }}
+            emailGenerationDomain={emailGenerationDomain}
+            onEmailGenerationDomainChange={domain => {
+              setEmailGenerationDomain(domain);
+              saveEmailGenerationDomain(domain);
+              debouncedAutoSave();
+            }}
+            showPassword={showPassword}
+            onShowPasswordToggle={() => setShowPassword(!showPassword)}
+            validationErrors={validationErrors}
+            onValidate={validateField}
+          />
 
-      <EmailServicesSection
-        addyioEnabled={addyioEnabled}
-        onAddyioEnabledChange={enabled => {
-          setAddyioEnabled(enabled);
-          if (enabled) setThirtyThreeMailEnabled(false);
-          debouncedAutoSave();
-        }}
-        addyioApiToken={addyioApiTokenDraft}
-        onAddyioApiTokenChange={token => {
-          setAddyioApiTokenDraft(token);
-          setConnectionStatus('idle');
-        }}
-        onSaveAddyioApiToken={handleSaveAddyioApiToken}
-        isAddyioApiTokenDirty={addyioApiTokenDraft !== addyioApiToken}
-        isSavingAddyioApiToken={isSaving}
-        addyioAliasFormat={addyioAliasFormat}
-        onAddyioAliasFormatChange={format => {
-          setAddyioAliasFormat(format);
-          debouncedAutoSave();
-        }}
-        addyioDomain={addyioDomain}
-        onAddyioDomainChange={domain => {
-          setAddyioDomain(domain);
-          debouncedAutoSave();
-        }}
-        addyioAutoDelete={addyioAutoDelete}
-        onAddyioAutoDeleteChange={enabled => {
-          setAddyioAutoDelete(enabled);
-          debouncedAutoSave();
-        }}
-        addyioDefaultRecipientId={addyioDefaultRecipientId}
-        onAddyioDefaultRecipientIdChange={id => {
-          setAddyioDefaultRecipientId(id);
-          debouncedAutoSave();
-        }}
-        addyioDescriptionTemplate={addyioDescriptionTemplate}
-        onAddyioDescriptionTemplateChange={template => {
-          setAddyioDescriptionTemplate(template);
-          debouncedAutoSave();
-        }}
-        addyioFromName={addyioFromName}
-        onAddyioFromNameChange={name => {
-          setAddyioFromName(name);
-          debouncedAutoSave();
-        }}
-        addyioDomains={addyioDomains}
-        addyioRecipients={addyioRecipients}
-        addyioAccountInfo={addyioAccountInfo}
-        isTestingConnection={isTestingConnection}
-        connectionStatus={connectionStatus}
-        connectionMessage={connectionMessage}
-        onTestConnection={handleTestAddyioConnection}
-        showPassword={showPassword}
-        onShowPasswordToggle={() => setShowPassword(!showPassword)}
-        thirtyThreeMailEnabled={thirtyThreeMailEnabled}
-        onThirtyThreeMailEnabledChange={enabled => {
-          setThirtyThreeMailEnabled(enabled);
-          if (enabled) setAddyioEnabled(false);
-          debouncedAutoSave();
-        }}
-        thirtyThreeMailUsername={thirtyThreeMailUsername}
-        onThirtyThreeMailUsernameChange={username => {
-          setThirtyThreeMailUsername(username);
-          debouncedAutoSave();
-        }}
-        thirtyThreeMailDomain={thirtyThreeMailDomain}
-        onThirtyThreeMailDomainChange={domain => {
-          setThirtyThreeMailDomain(domain);
-          debouncedAutoSave();
-        }}
-        thirtyThreeMailTemplate={thirtyThreeMailTemplate}
-        onThirtyThreeMailTemplateChange={template => {
-          setThirtyThreeMailTemplate(template);
-          debouncedAutoSave();
-        }}
-        mailtmEnabled={mailtmEnabled}
-        onMailtmEnabledChange={enabled => {
-          setMailtmEnabled(enabled);
-          if (enabled) {
-            setAddyioEnabled(false);
-            setThirtyThreeMailEnabled(false);
-          }
-          debouncedAutoSave();
-        }}
-      />
+          <EmailCounterSection
+            emailCounter={emailCounter}
+            onEmailCounterChange={handleEmailCounterChange}
+            isLoading={isLoadingCounter}
+          />
+        </div>
+      )}
 
-      <ICloudEmailSection
-        enabled={icloudEnabled}
-        onEnabledChange={enabled => {
-          setIcloudEnabled(enabled);
-          if (enabled) {
-            setAddyioEnabled(false);
-            setThirtyThreeMailEnabled(false);
-            setMailtmEnabled(false);
-          }
-          debouncedAutoSave();
-        }}
-        appleId={icloudAppleId}
-        onAppleIdChange={id => {
-          setIcloudAppleId(id);
-          debouncedAutoSave();
-        }}
-        appPassword={icloudAppPassword}
-        onAppPasswordChange={pw => setIcloudAppPassword(pw)}
-        onSave={async () => {
-          // Persist Apple ID + password explicitly (password is sensitive)
-          const { updateSettings } = await import('@/lib/tauri');
-          await updateSettings({
-            icloudEnabled: true,
-            icloudAppleId: icloudAppleId,
-            icloudAppPassword: icloudAppPassword,
-          });
-        }}
-      />
+      {mailTab === 'aliases' && (
+        <EmailServicesSection
+          addyioEnabled={addyioEnabled}
+          onAddyioEnabledChange={enabled => {
+            setAddyioEnabled(enabled);
+            if (enabled) setThirtyThreeMailEnabled(false);
+            debouncedAutoSave();
+          }}
+          addyioApiToken={addyioApiTokenDraft}
+          onAddyioApiTokenChange={token => {
+            setAddyioApiTokenDraft(token);
+            setConnectionStatus('idle');
+          }}
+          onSaveAddyioApiToken={handleSaveAddyioApiToken}
+          isAddyioApiTokenDirty={addyioApiTokenDraft !== addyioApiToken}
+          isSavingAddyioApiToken={isSaving}
+          addyioAliasFormat={addyioAliasFormat}
+          onAddyioAliasFormatChange={format => {
+            setAddyioAliasFormat(format);
+            debouncedAutoSave();
+          }}
+          addyioDomain={addyioDomain}
+          onAddyioDomainChange={domain => {
+            setAddyioDomain(domain);
+            debouncedAutoSave();
+          }}
+          addyioAutoDelete={addyioAutoDelete}
+          onAddyioAutoDeleteChange={enabled => {
+            setAddyioAutoDelete(enabled);
+            debouncedAutoSave();
+          }}
+          addyioDefaultRecipientId={addyioDefaultRecipientId}
+          onAddyioDefaultRecipientIdChange={id => {
+            setAddyioDefaultRecipientId(id);
+            debouncedAutoSave();
+          }}
+          addyioDescriptionTemplate={addyioDescriptionTemplate}
+          onAddyioDescriptionTemplateChange={template => {
+            setAddyioDescriptionTemplate(template);
+            debouncedAutoSave();
+          }}
+          addyioFromName={addyioFromName}
+          onAddyioFromNameChange={name => {
+            setAddyioFromName(name);
+            debouncedAutoSave();
+          }}
+          addyioDomains={addyioDomains}
+          addyioRecipients={addyioRecipients}
+          addyioAccountInfo={addyioAccountInfo}
+          isTestingConnection={isTestingConnection}
+          connectionStatus={connectionStatus}
+          connectionMessage={connectionMessage}
+          onTestConnection={handleTestAddyioConnection}
+          showPassword={showPassword}
+          onShowPasswordToggle={() => setShowPassword(!showPassword)}
+          thirtyThreeMailEnabled={thirtyThreeMailEnabled}
+          onThirtyThreeMailEnabledChange={enabled => {
+            setThirtyThreeMailEnabled(enabled);
+            if (enabled) setAddyioEnabled(false);
+            debouncedAutoSave();
+          }}
+          thirtyThreeMailUsername={thirtyThreeMailUsername}
+          onThirtyThreeMailUsernameChange={username => {
+            setThirtyThreeMailUsername(username);
+            debouncedAutoSave();
+          }}
+          thirtyThreeMailDomain={thirtyThreeMailDomain}
+          onThirtyThreeMailDomainChange={domain => {
+            setThirtyThreeMailDomain(domain);
+            debouncedAutoSave();
+          }}
+          thirtyThreeMailTemplate={thirtyThreeMailTemplate}
+          onThirtyThreeMailTemplateChange={template => {
+            setThirtyThreeMailTemplate(template);
+            debouncedAutoSave();
+          }}
+          mailtmEnabled={mailtmEnabled}
+          onMailtmEnabledChange={enabled => {
+            setMailtmEnabled(enabled);
+            if (enabled) {
+              setAddyioEnabled(false);
+              setThirtyThreeMailEnabled(false);
+            }
+            debouncedAutoSave();
+          }}
+        />
+      )}
+
+      {mailTab === 'icloud' && (
+        <ICloudEmailSection
+          enabled={icloudEnabled}
+          onEnabledChange={enabled => {
+            setIcloudEnabled(enabled);
+            if (enabled) {
+              setAddyioEnabled(false);
+              setThirtyThreeMailEnabled(false);
+              setMailtmEnabled(false);
+            }
+            debouncedAutoSave();
+          }}
+          appleId={icloudAppleId}
+          onAppleIdChange={id => {
+            setIcloudAppleId(id);
+            debouncedAutoSave();
+          }}
+          appPassword={icloudAppPassword}
+          onAppPasswordChange={pw => setIcloudAppPassword(pw)}
+          onSave={async () => {
+            const { updateSettings } = await import('@/lib/tauri');
+            await updateSettings({
+              icloudEnabled: true,
+              icloudAppleId: icloudAppleId,
+              icloudAppPassword: icloudAppPassword,
+            });
+          }}
+        />
+      )}
     </div>
   );
 
   const renderContent = () => {
     switch (activeCategory) {
-      case 'general':
-        return renderGeneralSettings();
-      case 'connectivity':
-        return renderConnectivitySettings();
+      case 'appearance':
+        return renderAppearanceSettings();
+      case 'mail':
+        return renderMailSettings();
       case 'proxy':
         return (
-          <div style={getAnimationStyle(0)}>
-            <ProxyLibrarySection />
+          <div className="space-y-6" style={getAnimationStyle(0)}>
+            <SegmentedControl
+              options={[
+                { value: 'quick', label: t('settings.proxyTabs.quick') },
+                { value: 'library', label: t('settings.proxyTabs.library') },
+              ]}
+              value={proxyTab}
+              onChange={v => setProxyTab(v as 'quick' | 'library')}
+              size="sm"
+              className="max-w-md"
+            />
+            {proxyTab === 'quick' ? <ProxySettingsSectionV2 /> : <ProxyLibrarySection />}
+          </div>
+        );
+      case 'system':
+        return (
+          <div className="space-y-8" style={getAnimationStyle(0)}>
+            <IDEPathsSection
+              customIdePaths={customIdePaths}
+              onCustomIdePathsChange={paths => {
+                setCustomIdePaths(paths);
+                debouncedAutoSave();
+              }}
+            />
+            <DatabaseSection dbPath={dbPath} onCopy={copy} />
           </div>
         );
       case 'automation':
-        return <AutomationTab />;
+        return (
+          <div className="space-y-8" style={getAnimationStyle(0)}>
+            <AutomationTab />
+            <BackgroundManagerSettingsSection />
+          </div>
+        );
       case 'google-sheets':
         return (
           <div style={getAnimationStyle(0)}>

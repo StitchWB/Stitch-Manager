@@ -8,17 +8,19 @@ IMAP blocking calls are delegated to ``imap_provider`` via ``asyncio.to_thread``
 from __future__ import annotations
 
 import asyncio
+import imaplib
 import json
 import logging
+import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from stitch_backend.domains.email_inbox import imap_provider
+from stitch_backend.domains.email_inbox import imap_provider, mailtm_provider
 from stitch_backend.domains.email_inbox.models import (
     EmailInboxProfile,
     EmailInboxSyncState,
@@ -56,6 +58,32 @@ def _get_session(session_id: str) -> dict[str, Any]:
     return sess
 
 
+def _imap_call(sess: dict[str, Any], fn: Callable[[imaplib.IMAP4], Any]) -> Any:
+    """Run fn(conn) under the session lock; reconnect once on a dead/desynced connection.
+
+    imaplib is not thread-safe, so all IMAP traffic for a session serialises
+    through the per-session lock. If a previous command left the stream
+    desynced (abort) or the server dropped us (illegal state / LOGOUT), the
+    connection is replaced and the command retried exactly once.
+    """
+    lock = sess["lock"]
+    with lock:
+        try:
+            return fn(sess["conn"])
+        except imaplib.IMAP4.abort as exc:
+            logger.warning("IMAP stream desync (%s); reconnecting once", exc)
+        except imaplib.IMAP4.error as exc:
+            if "state" not in str(exc).lower():
+                raise
+            logger.warning("IMAP connection dead (%s); reconnecting once", exc)
+        try:
+            imap_provider.disconnect(sess["conn"])
+        except Exception:
+            pass
+        sess["conn"] = imap_provider.connect(**sess["connect_kwargs"])
+        return fn(sess["conn"])
+
+
 # ── Session operations ────────────────────────────────────────────────────────
 
 async def connect(input_data: dict[str, Any]) -> dict[str, Any]:
@@ -63,6 +91,24 @@ async def connect(input_data: dict[str, Any]) -> dict[str, Any]:
     provider = input_data.get("provider", "imap")
     account_id = input_data.get("accountId", "").strip()
     creds = input_data.get("credentials", {})
+
+    if provider == "mail_tm":
+        tm_creds = creds.get("value", creds)
+        address = tm_creds.get("address", "")
+        password = tm_creds.get("password", "")
+        base_url = tm_creds.get("baseUrl") or tm_creds.get("base_url") or None
+        if not address or not password:
+            raise RuntimeError("Mail.tm credentials require address and password")
+        svc = await asyncio.to_thread(mailtm_provider.connect, address, password, base_url)
+        session_id = str(uuid.uuid4())
+        _sessions[session_id] = {"provider": "mail_tm", "service": svc, "lock": threading.Lock()}
+        return {
+            "sessionId": session_id,
+            "provider": provider,
+            "accountId": account_id,
+            "capabilities": mailtm_provider.MAILTM_CAPABILITIES,
+            "connectedAt": _now_iso(),
+        }
 
     if provider != "imap":
         raise RuntimeError(f"Provider not supported: {provider}")
@@ -81,7 +127,16 @@ async def connect(input_data: dict[str, Any]) -> dict[str, Any]:
         imap_provider.connect, host, port, username, password, use_tls,
     )
     session_id = str(uuid.uuid4())
-    _sessions[session_id] = {"provider": "imap", "conn": conn}
+    # ponytail: imaplib is NOT thread-safe — lock per-session serialises all IMAP calls
+    _sessions[session_id] = {
+        "provider": "imap",
+        "conn": conn,
+        "lock": threading.Lock(),
+        "connect_kwargs": {
+            "host": host, "port": port,
+            "username": username, "password": password, "use_tls": use_tls,
+        },
+    }
     return {
         "sessionId": session_id,
         "provider": provider,
@@ -93,53 +148,78 @@ async def connect(input_data: dict[str, Any]) -> dict[str, Any]:
 
 async def disconnect(session_id: str) -> None:
     sess = _sessions.pop(session_id, None)
-    if sess and sess.get("conn"):
-        await asyncio.to_thread(imap_provider.disconnect, sess["conn"])
+    if not sess:
+        return
+    if sess.get("provider") == "mail_tm" and sess.get("service"):
+        await asyncio.to_thread(mailtm_provider.disconnect, sess["service"])
+    elif sess.get("conn"):
+        # ponytail: hold lock so no concurrent list/fetch races with logout
+        lock = sess.get("lock")
+        if lock:
+            lock.acquire()
+        try:
+            await asyncio.to_thread(imap_provider.disconnect, sess["conn"])
+        finally:
+            if lock:
+                lock.release()
 
 
 async def list_messages(
     session_id: str, query: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     sess = _get_session(session_id)
-    conn = sess["conn"]
+    if sess["provider"] == "mail_tm":
+        return await asyncio.to_thread(mailtm_provider.list_messages, sess["service"], query)
     limit = (query or {}).get("limit")
 
     def _do() -> list[dict[str, Any]]:
-        conn.select("INBOX", readonly=True)
-        uids = imap_provider.search(conn, query)
-        if limit:
-            uids = uids[-int(limit):]
+        def _run(conn: imaplib.IMAP4) -> list[dict[str, Any]]:
+            conn.select("INBOX", readonly=True)
+            uids = imap_provider.search(conn, query)
+            if limit:
+                uids = uids[-int(limit):]
 
-        messages: list[dict[str, Any]] = []
-        for uid in uids:
-            try:
-                messages.append(imap_provider.fetch_message(conn, uid))
-            except Exception:
-                # A single stale/deleted/malformed UID must not abort the
-                # entire inbox listing — skip it and keep loading the rest.
-                logger.warning("Skipping message UID %s: fetch failed", uid, exc_info=True)
-        return messages
+            messages: list[dict[str, Any]] = []
+            for uid in uids:
+                try:
+                    messages.append(imap_provider.fetch_message(conn, uid))
+                except (imaplib.IMAP4.abort, imaplib.IMAP4.error):
+                    # Connection-level failure — let _imap_call reconnect; do NOT
+                    # skip, or every remaining UID fails the same way.
+                    raise
+                except Exception:
+                    # A single stale/deleted/malformed UID must not abort the
+                    # entire inbox listing — skip it and keep loading the rest.
+                    logger.warning("Skipping message UID %s: fetch failed", uid, exc_info=True)
+            return messages
+
+        return _imap_call(sess, _run)
 
     return await asyncio.to_thread(_do)
 
 
 async def list_folders(session_id: str) -> list[dict[str, Any]]:
     sess = _get_session(session_id)
-    return await asyncio.to_thread(imap_provider.list_folders, sess["conn"])
+    if sess["provider"] == "mail_tm":
+        return [dict(mailtm_provider.INBOX_FOLDER)]
+    return await asyncio.to_thread(_imap_call, sess, imap_provider.list_folders)
 
 
 async def get_by_id(session_id: str, message_id: str) -> dict[str, Any] | None:
     sess = _get_session(session_id)
-    conn = sess["conn"]
+    if sess["provider"] == "mail_tm":
+        return await asyncio.to_thread(mailtm_provider.get_message, sess["service"], message_id)
 
-    def _do() -> dict[str, Any] | None:
+    def _run(conn: imaplib.IMAP4) -> dict[str, Any] | None:
         conn.select("INBOX", readonly=True)
         try:
             return imap_provider.fetch_message(conn, message_id)
+        except (imaplib.IMAP4.abort, imaplib.IMAP4.error):
+            raise
         except Exception:
             return None
 
-    return await asyncio.to_thread(_do)
+    return await asyncio.to_thread(_imap_call, sess, _run)
 
 
 async def wait_for_email(
@@ -162,16 +242,32 @@ async def wait_for_email(
 
 async def mark_as_read(session_id: str, message_id: str) -> None:
     sess = _get_session(session_id)
-    await asyncio.to_thread(imap_provider.mark_as_read, sess["conn"], message_id)
+    if sess["provider"] == "mail_tm":
+        await asyncio.to_thread(mailtm_provider.mark_as_read, sess["service"], message_id)
+        return
+
+    def _run(conn: imaplib.IMAP4) -> None:
+        imap_provider.mark_as_read(conn, message_id)
+
+    await asyncio.to_thread(_imap_call, sess, _run)
 
 
 async def delete_message(session_id: str, message_id: str) -> None:
     sess = _get_session(session_id)
-    await asyncio.to_thread(imap_provider.delete_message, sess["conn"], message_id)
+    if sess["provider"] == "mail_tm":
+        await asyncio.to_thread(mailtm_provider.delete_message, sess["service"], message_id)
+        return
+
+    def _run(conn: imaplib.IMAP4) -> None:
+        imap_provider.delete_message(conn, message_id)
+
+    await asyncio.to_thread(_imap_call, sess, _run)
 
 
 def get_capabilities(session_id: str) -> dict[str, bool]:
-    _get_session(session_id)
+    sess = _get_session(session_id)
+    if sess["provider"] == "mail_tm":
+        return mailtm_provider.MAILTM_CAPABILITIES
     return _IMAP_CAPABILITIES
 
 
@@ -184,12 +280,8 @@ def get_provider_catalog() -> list[dict[str, Any]]:
         },
         {
             "provider": "mail_tm", "displayName": "Mail.tm",
-            "available": False,
-            "capabilities": {
-                "canDelete": True, "canMarkAsRead": True,
-                "canSearchBody": True, "canDownloadAttachments": True,
-                "canListFolders": False,
-            },
+            "available": True,
+            "capabilities": mailtm_provider.MAILTM_CAPABILITIES,
             "supportsProfileConnect": True,
         },
     ]

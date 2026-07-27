@@ -740,7 +740,20 @@ export const en: Translations = {
       eyebrow: "Integrations",
       mappingsHint: "Review which providers can fulfill model patterns.",
       mappingsTitle: "Provider Model Mappings",
-      title: "IDE/CLI Integrations"
+      title: "IDE/CLI Integrations",
+      ideCli: {
+        title: "IDE/CLI Configuration",
+        description: "Configure your IDE or CLI to route requests through AI Proxy"
+      },
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+      configureIde: "Configure IDE/CLI",
+      transfer: {
+        title: "Import/Export",
+        description: "Transfer accounts and settings between instances"
+      },
+      import: "Import",
+      export: "Export"
     },
     labels: {
       providers: "Providers",
@@ -880,9 +893,65 @@ export const en: Translations = {
       switchOnZeroLabel: "Switch on zero credits",
       title: "Account Rotation",
       toasts: {
-        saveFailed: "Failed to save rotation settings"
+        saveFailed: "Failed to save rotation settings",
+        strategySaved: "Rotation strategy saved"
       },
-      toggleTooltip: "Enable automatic switching of the active account"
+      toggleTooltip: "Enable automatic switching of the active account",
+      strategy: {
+        title: "Rotation Strategy",
+        description: "Choose how to select the next account when switching"
+      },
+      strategies: {
+        roundRobin: {
+          title: "Round Robin",
+          description: "Cycle through accounts in order"
+        },
+        random: {
+          title: "Random",
+          description: "Pick a random account"
+        },
+        leastUsed: {
+          title: "Least Used",
+          description: "Pick the account with the most remaining credits"
+        },
+        priority: {
+          title: "Priority",
+          description: "Use accounts in priority order (drag to reorder)"
+        }
+      },
+      priority: {
+        title: "Provider Priority",
+        description: "Drag providers to set the order they will be used"
+      }
+    },
+    topology: {
+      title: "Provider Topology",
+      router: "AI Proxy Router",
+      routerDescription: "Routes requests to available providers",
+      security: "HoloNe Protection",
+      securityDescription: "Prompt injection & jailbreak defense",
+      active: "Active",
+      keys: "keys",
+      requests: "requests today",
+      success: "success",
+      noProviders: "No providers configured"
+    },
+    healthCheck: {
+      title: "Health Check",
+      description: "Automatically test provider health and disable unhealthy keys",
+      enableLabel: "Enable health check",
+      intervalLabel: "Check interval",
+      intervalHint: "How often to test provider health",
+      autoDisableLabel: "Auto-disable unhealthy",
+      autoDisableHint: "Automatically disable keys that fail health checks",
+      showAdvanced: "Show advanced settings",
+      hideAdvanced: "Hide advanced settings",
+      testEndpointLabel: "Test endpoint",
+      testEndpointHint: "Endpoint to use for health checks",
+      cooldownLabel: "Cooldown duration",
+      cooldownHint: "How long to disable a key after failure",
+      exponentialBackoffLabel: "Exponential backoff",
+      exponentialBackoffHint: "Double cooldown duration on each failure"
     },
     search: {
       placeholder: "Search accounts..."
@@ -1070,15 +1139,15 @@ export const en: Translations = {
     aliasPattern: "ALIAS PATTERN",
     appPassword: "APP PASSWORD",
     automationHeaderCard: {
-      statusLabel: "Status Label",
-      title: "Title",
-      toggleTooltip: "Toggle Tooltip"
+      statusLabel: "Status",
+      title: "Auto-Replenish Accounts",
+      toggleTooltip: "Toggle auto-replenishment"
     },
     automation_tab: {
       accounts: "Accounts",
-      api: "Api",
+      api: "API",
       running: "Running",
-      v304: "V304",
+      v304: "v3.0.4",
       waiting: "Waiting"
     },
     awsAccount: "Aws Account",
@@ -1169,7 +1238,7 @@ export const en: Translations = {
     providerReplenishmentSection: {
       accountUnit: "Account Unit",
       activeSummary: "Active Summary",
-      description: "Description",
+      description: "Providers included in auto-replenishment and their active accounts.",
       minReserveLabel: "Min Reserve Label",
       minTooltip: "Min Tooltip",
       strategyLabel: "Strategy Label",
@@ -1749,7 +1818,10 @@ export const en: Translations = {
     success: "Success",
     title: "Logs",
     verbosityLabel: "Verbosity Label",
-    warning: "Warn"
+    warning: "Warn",
+  follow: "Follow",
+  newLogs: "+{count} new",
+  emptyMessage: "(empty message)",
   },
   mail: {
     accountIdLabel: "Account ID",
@@ -1768,8 +1840,10 @@ export const en: Translations = {
     addMailboxAction: "Add mailbox",
     addMailboxFromAutoReg: "From Registration settings",
     addMailboxFromAutoRegDescription: "Reuse the IMAP/Gmail credentials already configured in Auto-Reg.",
-    addMailboxFromSheets: "Import from Google Sheets",
-    addMailboxFromSheetsDescription: "Detect mailbox credentials from a connected Google Sheets dataset.",
+addMailboxFromSheets: "Import from Google Sheets",
+  addMailboxFromSheetsDescription: "Detect mailbox credentials from a connected Google Sheets dataset.",
+  addMailboxMailTmRegister: "New Mail.tm mailbox",
+  addMailboxMailTmRegisterDescription: "Create a fresh random Mail.tm account and connect it immediately.",
     addMailboxGmail: "Gmail",
     addMailboxGmailDescription: "Connect a Gmail inbox using an app password.",
     addMailboxICloud: "iCloud",
@@ -1842,6 +1916,7 @@ export const en: Translations = {
     loadMessageAction: "Open",
     mailboxLabel: "Mailbox",
     mailboxNotSelectedHint: "Select/create mailbox profile first. Until then, inbox actions remain unavailable.",
+  mailboxRegisterFailed: "Failed to register Mail.tm mailbox",
     mailboxNotSelectedTitle: "Mailbox not selected",
     manualConnectionAction: "Manual Setup",
     manualConnectionDescription: "Configure manual IMAP or Mail.tm credentials here. Profile mode keeps these fields locked.",
@@ -1888,7 +1963,8 @@ export const en: Translations = {
     readStateRead: "Read",
     readStateUnread: "Unread",
     receivedAtField: "Received At",
-    renameProfileAction: "Rename",
+    editProfileAction: "Edit",
+  renameProfileAction: "Rename",
     renameProfileDialogDescription: "Set a new display name for this mailbox profile.",
     renameProfileDialogTitle: "Rename mailbox profile",
     renameProfileLabel: "Rename profile",
@@ -2618,54 +2694,78 @@ export const en: Translations = {
   },
   settings: {
     ai_proxy_settings: {
-      ai_proxy: "Ai proxy",
-      ai_proxy_port: "Ai proxy port",
-      ai_proxy_status: "Ai proxy status",
-      ai_proxy_will_be_stopped_in_quotaonly_mode: "Ai proxy will be stopped in quotaonly mode",
-      auto_start: "Auto start",
+      ai_proxy: "AI Proxy",
+      ai_proxy_port: "AI Proxy Port",
+      ai_proxy_status: "AI Proxy Status",
+      ai_proxy_will_be_stopped_in_quotaonly_mode: "AI Proxy will be stopped in quota-only mode",
+      auto_start: "Auto Start",
       clear: "Clear",
-      configure_ai_proxy_to_distribute_models_to_idecli_: "Configure ai proxy to distribute models to idecli",
-      configure_idecli: "Configure idecli",
-      enabled_changes_apply_to_opencode_config_previews: "Enabled changes apply to opencode config previews",
-      fill_first: "Fill first",
-      full_mode_ai_proxy_quota: "Full mode ai proxy quota",
-      idecli_clients_connect_to_this_port_through_the_ai: "Idecli clients connect to this port through the ai",
+      configure_ai_proxy_to_distribute_models_to_idecli_: "Configure AI Proxy to distribute models to IDE/CLI clients",
+      configure_idecli: "Configure IDE/CLI",
+      disabled_mode: "Disabled",
+      enabled_changes_apply_to_opencode_config_previews: " changes applied to OpenCode config previews",
+      fill_first: "Fill First",
+      full_mode_ai_proxy_quota: "Full Mode (Proxy + Quota)",
+      full_mode_desc: "Run AI Proxy to distribute models to IDE/CLI clients and track quota usage",
+      idecli_clients_connect_to_this_port_through_the_ai: "IDE/CLI clients connect to this port through the AI Proxy",
       loading: "Loading",
       loading_model_toggles: "Loading model toggles",
       mode: "Mode",
-      opencode_model_access: "Opencode model access",
-      quotaonly_mode: "Quotaonly mode",
-      round_robin: "Round robin",
-      routing_strategy: "Routing strategy",
-      running_on_port: "Running on port",
-      save_settings: "Save settings",
+      opencode_model_access: "OpenCode Model Access",
+      quotaonly_mode: "Quota Only (no proxy)",
+      quotaonly_mode_desc: "Track quota without exposing the AI Proxy endpoint to IDE/CLI clients",
+      round_robin: "Round Robin",
+      routing_strategy: "Routing Strategy",
+      running_on_port: "Running on port ",
+      save_models: "Save Models",
+      save_settings: "Save Settings",
       saved: "Saved",
-      select_all: "Select all",
+      saving: "Saving…",
+      select_all: "Select All",
+      select_at_least_one_model: "Select at least one model to keep OpenCode available.",
       start: "Start",
-      start_ai_proxy_automatically_to_keep_idecli_client: "Start ai proxy automatically to keep idecli client",
+      start_ai_proxy_automatically_to_keep_idecli_client: "Start AI Proxy automatically to keep IDE/CLI client connections",
       stop: "Stop",
       stopped: "Stopped",
-      toggle_which_model_ids_are_exposed_in_the_opencode: "Toggle which model ids are exposed in the opencode"
+      toggle_which_model_ids_are_exposed_in_the_opencode: "Toggle which model IDs are exposed in the OpenCode configuration"
     },
     background_manager_settings_section: {
-      auto_refresh_quota: "Auto refresh quota",
-      automatically_refresh_account_quotas_in_the_backgr: "Automatically refresh account quotas in the backgr",
+      auto_refresh_quota: "Auto Refresh Quota",
+      automatically_refresh_account_quotas_in_the_backgr: "Automatically refresh account quotas in the background",
       errors: "Errors",
+      failed_to_load: "Failed to load config",
+      idle: "Idle",
+      interval_1h: "1 hour",
+      interval_1m: "1 minute",
+      interval_5m: "5 minutes",
+      interval_10m: "10 minutes",
+      interval_30m: "30 minutes",
       last: "Last",
       loading: "Loading",
       next: "Next",
-      refresh_interval: "Refresh interval",
+      refresh_interval: "Refresh Interval",
+      refreshing_now: "Refreshing now…",
       saved: "Saved",
       tracked: "Tracked"
     },
     categories: {
+      appearance: "Appearance",
+      mail: "Mail",
+      proxy: "Proxy",
+      system: "IDE & Paths",
       automation: "Automation",
-      general: "General",
-      connectivity: "Connectivity",
       googleSheets: "Google Sheets",
       aiProxy: "AI Proxy",
       extension: "Extension",
-      proxy: "Proxy"
+    },
+    mailTabs: {
+      imap: "IMAP",
+      aliases: "Aliases",
+      icloud: "iCloud",
+    },
+    proxyTabs: {
+      quick: "Quick Setup",
+      library: "Library",
     },
     database: {
       location: "Location",
@@ -2683,21 +2783,56 @@ export const en: Translations = {
       user: "User"
     },
     email_services_section: {
-      account_status: "Account status",
-      autodelete_aliases: "Autodelete aliases",
+      account_status: "Account Status",
+      autodelete_aliases: "Auto-delete Aliases",
       bandwidth: "Bandwidth",
-      default_recipient: "Default recipient",
+      default_recipient: "Default Recipient",
+      description: "Configure third-party email alias services.",
       domain: "Domain",
-      enable_mailtm_temporary_email: "Enable mailtm temporary email",
+      enable_mailtm_temporary_email: "Enable Mail.tm Temporary Email",
       format: "Format",
-      mailtm_provides_free_temporary_email_addresses_no_: "Mailtm provides free temporary email addresses no",
-      mb: "Mb",
+      mailtm_provides_free_temporary_email_addresses_no_: "Mail.tm provides free temporary email addresses — no configuration needed",
+      mb: "MB",
       n_random_chars: "N random chars",
       not_saved_yet: "Not saved yet",
       placeholders: "Placeholders",
-      save_token: "Save token",
+      save_token: "Save Token",
+      saving: "Saving…",
+      select_domain: "Select domain…",
       subscription: "Subscription",
-      token_is_sensitive_and_is_not_saved_until_you_clic: "Token is sensitive and is not saved until you clic"
+      test_connection: "Test Connection",
+      testing: "Testing…",
+      token_is_sensitive_and_is_not_saved_until_you_clic: "Token is sensitive and is not saved until you click",
+      use_account_default: "Use account default"
+    },
+    icloud: {
+      title: "iCloud Hide My Email",
+      description: "Use Apple's Hide My Email service to generate private forwarding aliases (~700/mo for $0.99/mo iCloud+).",
+      enable: "Enable iCloud Hide My Email pool",
+      appleId: "Apple ID",
+      appPassword: "App-Specific Password",
+      appPasswordHint: "Generate an app-specific password at appleid.apple.com. Standard Apple ID password won't work.",
+      saveAuthenticate: "Save & Authenticate",
+      saving: "Saving…",
+      authenticating: "Authenticating…",
+      refreshStats: "Refresh Stats",
+      poolStatus: "Pool Status",
+      available: "Available",
+      reserved: "Reserved",
+      used: "Used",
+      rateLimit: "Rate limit: {remaining} alias(es) available now",
+      nextSlot: "(next slot in ~{minutes} min)",
+      generate: "Generate",
+      aliases: "aliases",
+      fillPool: "Fill Pool",
+      generating: "Generating…",
+      rateLimitNote: "Apple limits new aliases to ~5 every 30 minutes. Pre-fill the pool in advance for uninterrupted bulk registrations.",
+      verify2fa: "Verify",
+      twoFaCode: "2FA Verification Code",
+      twoFaPrompt: "Enter the 2FA code sent to your trusted device.",
+      authSuccess: "Authenticated successfully.",
+      twoFaVerified: "2FA verified. Session active.",
+      generated: "Generated {count} new alias(es)."
     },
     extension: {
       bridgeHint: "Bridge should be connected when extension is loaded and Chrome is running. Use Ping extension to verify connectivity.",
@@ -2847,18 +2982,18 @@ export const en: Translations = {
       socks5: "Socks5"
     },
     proxy_settings_section_v2: {
-      description: "Description",
+      description: "A single proxy for all operations when you don't need the library.",
       enableProxy: "Enable Proxy",
       example: "Example",
-      http: "Http",
-      legacy_proxy_config: "Legacy proxy config",
+      http: "HTTP",
+      legacy_proxy_config: "Legacy Proxy Config",
       proxyType: "Proxy Type",
-      proxy_library: "Proxy library",
+      proxy_library: "Proxy Library",
       saved: "Saved",
       saving: "Saving",
-      socks5: "Socks5",
+      socks5: "SOCKS5",
       supportedFormats: "Supported Formats",
-      title: "Title",
+      title: "Proxy Configuration",
       withAuth: "With Auth",
       withoutAuth: "Without Auth"
     },
@@ -2925,12 +3060,12 @@ export const en: Translations = {
   },
   totp: {
     title: "TOTP Keys",
-    subtitle: "Manage Time-based One-Time Password secrets. Codes are generated locally тАФ your secrets never leave this device.",
+    subtitle: "Manage Time-based One-Time Password secrets. Codes are generated locally — your secrets never leave this device.",
     addKey: "Add key",
-    adding: "AddingтАж",
-    searchPlaceholder: "Search keysтАж",
+    adding: "Adding…",
+    searchPlaceholder: "Search keys…",
     sortNewest: "Newest first",
-    sortAlpha: "AтАУZ",
+    sortAlpha: "A–Z",
     groupByIssuer: "Group by issuer",
     noIssuer: "No issuer",
     noMatch: "No keys match your search",
@@ -2944,8 +3079,8 @@ export const en: Translations = {
     secretLabel: "Secret key",
     secretPlaceholder: "Base32 secret or otpauth:// URI",
     labelRequired: "Label is required",
-    invalidSecret: "Invalid secret тАФ must be a Base32 string (AтАУZ, 2тАУ7)",
-    invalidOtpauth: "Invalid otpauth:// URI тАФ expected otpauth://totp/тАж?secret=тАж",
+    invalidSecret: "Invalid secret — must be a Base32 string (A–Z, 2–7)",
+    invalidOtpauth: "Invalid otpauth:// URI — expected otpauth://totp/…?secret=…",
     keyAdded: "2FA key added",
     keyUpdated: "Key updated",
     keyRemoved: "Key removed",
@@ -2957,10 +3092,10 @@ export const en: Translations = {
     deleteConfirm: "Remove",
     editTooltip: "Edit label",
     removeTooltip: "Remove key",
-    copyCode: "2FA: {code} тАФ click to copy",
+    copyCode: "2FA: {code} — click to copy",
     codeCopied: "2FA code copied",
     linkedAccount: "Linked to an account",
-    uriDetected: "otpauth:// URI detected тАФ fields filled"
+    uriDetected: "otpauth:// URI detected — fields filled"
   },
   tools: {
     bankLabel: "Bank",

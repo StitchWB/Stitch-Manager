@@ -110,41 +110,52 @@ export function GeneralSection({ config, ohMyConfig, onChange, onOhMyChange }: G
         </div>
       </GlassCard>
 
-      {/* oh-my-openagent system settings */}
-      <GlassCard className="p-6 space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold mb-1">Oh-My-OpenAgent</h3>
-          <p className="text-sm text-vsc-text-muted">
-            System settings from oh-my-openagent.json
-          </p>
-        </div>
+      {/* oh-my-openagent system settings — only shown when plugin is active */}
+      {plugins.includes('oh-my-openagent') ? (
+        <GlassCard className="p-6 space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold mb-1">Oh-My-OpenAgent</h3>
+            <p className="text-sm text-vsc-text-muted">
+              System settings from oh-my-openagent.json
+            </p>
+          </div>
 
-        <ModelPicker
-          label="Default Model"
-          value={ohMyConfig.default_model || ''}
-          options={modelOptions}
-          onChange={(v) => onOhMyChange(prev => ({ ...prev, default_model: v }))}
-          placeholder="Select default model"
-        />
+          <ModelPicker
+            label="Default Model"
+            value={ohMyConfig.default_model || ''}
+            options={modelOptions}
+            onChange={(v) => onOhMyChange(prev => ({ ...prev, default_model: v }))}
+            placeholder="Select default model"
+          />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Toggle
-            label="Google Auth"
-            checked={ohMyConfig.google_auth ?? false}
-            onChange={(v) => onOhMyChange(prev => ({ ...prev, google_auth: v }))}
-            tooltip="Enable Google OAuth for Gemini models"
-          />
-          <Toggle
-            label="Auto Multimodal Routing"
-            checked={(ohMyConfig.hooks?.auto_multimodal_routing as boolean) ?? true}
-            onChange={(v) => onOhMyChange(prev => ({
-              ...prev,
-              hooks: { ...prev.hooks, auto_multimodal_routing: v },
-            }))}
-            tooltip="Automatically route image inputs to multimodal-capable models"
-          />
-        </div>
-      </GlassCard>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Toggle
+              label="Google Auth"
+              checked={ohMyConfig.google_auth ?? false}
+              onChange={(v) => onOhMyChange(prev => ({ ...prev, google_auth: v }))}
+              tooltip="Enable Google OAuth for Gemini models"
+            />
+            <Toggle
+              label="Auto Multimodal Routing"
+              checked={(ohMyConfig.hooks?.auto_multimodal_routing as boolean) ?? true}
+              onChange={(v) => onOhMyChange(prev => ({
+                ...prev,
+                hooks: { ...prev.hooks, auto_multimodal_routing: v },
+              }))}
+              tooltip="Automatically route image inputs to multimodal-capable models"
+            />
+          </div>
+        </GlassCard>
+      ) : (
+        <GlassCard className="p-6">
+          <div>
+            <h3 className="text-lg font-semibold mb-1">Oh-My-OpenAgent</h3>
+            <p className="text-sm text-vsc-text-muted">
+              Add &apos;oh-my-openagent&apos; to Plugins to enable these settings
+            </p>
+          </div>
+        </GlassCard>
+      )}
 
       {/* MCP Servers */}
       <GlassCard className="p-6 space-y-4">

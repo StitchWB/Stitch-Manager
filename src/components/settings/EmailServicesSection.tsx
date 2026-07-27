@@ -99,7 +99,7 @@ export function EmailServicesSection({
   return (
     <SectionHeader
       title={t('autoReg.emailAliases')}
-      description="Configure third-party email alias services."
+      description={t('settings.email_services_section.description')}
       icon={<Shield className="w-4 h-4 text-indigo-400" />}
       className="pt-6 border-t border-white/10">
       
@@ -163,7 +163,7 @@ export function EmailServicesSection({
 
                   }>
                   
-                    {isSavingAddyioApiToken ? 'Saving...' : 'Save Token'}
+                    {isSavingAddyioApiToken ? t('settings.email_services_section.saving') : t('settings.email_services_section.save_token')}
                   </Button>
                   <Button
                   onClick={onTestConnection}
@@ -178,7 +178,7 @@ export function EmailServicesSection({
 
                   }>
                   
-                    {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                    {isTestingConnection ? t('settings.email_services_section.testing') : t('settings.email_services_section.test_connection')}
                   </Button>
                 </div>
 
@@ -234,7 +234,7 @@ export function EmailServicesSection({
                   value={addyioDomain}
                   onChange={(e) => onAddyioDomainChange(e.target.value)}
                   options={[
-                  { value: '', label: 'Select domain...' },
+                  { value: '', label: t('settings.email_services_section.select_domain') },
                   ...addyioDomains.map((d) => ({ value: d, label: d }))]
                   } /> :
 
@@ -277,7 +277,7 @@ export function EmailServicesSection({
                 value={addyioDefaultRecipientId}
                 onChange={(e) => onAddyioDefaultRecipientIdChange(e.target.value)}
                 options={[
-                { value: '', label: 'Use account default' },
+                { value: '', label: t('settings.email_services_section.use_account_default') },
                 ...addyioRecipients.map((r) => ({
                   value: r.id,
                   label: `${r.email} ${r.emailVerifiedAt ? '✓' : '(unverified)'}`

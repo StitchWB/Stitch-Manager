@@ -1,27 +1,70 @@
 import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, Info } from 'lucide-react';
-import { LogEntry } from '../../stores/logs';
+import { LogEntry, LogLevel } from '../../stores/logs';
 import { cn } from '../../lib/utils';
 import { Copy, Check } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { Tooltip } from '../Tooltip';
+import { t } from '../../lib/i18n';
 
 // ============================================
 // Types
 // ============================================
 
 export interface LogGroupProps {
-  stage: string;
-  accountId?: string;
+  name: string;
+  source: string;
   entries: LogEntry[];
   status: 'success' | 'error' | 'progress' | 'info';
   isCollapsed: boolean;
   onToggle: () => void;
   duration?: number;
-  icon?: string;
+  lastActivity: number;
+  levelCounts?: Record<LogLevel | string, number>;
   onSelectLog?: (log: LogEntry) => void;
   selectedLogId?: string | null;
 }
+
+// ============================================
+// Constants
+// ============================================
+
+const LEVEL_DOT_MAP: Record<string, string> = {
+  debug: 'bg-slate-500',
+  info: 'bg-sky-400',
+  success: 'bg-emerald-400',
+  warn: 'bg-amber-400',
+  error: 'bg-red-400',
+};
+
+const LEVEL_BORDER_MAP: Record<string, string> = {
+  debug: 'border-l-slate-600',
+  info: 'border-l-sky-400',
+  success: 'border-l-emerald-400',
+  warn: 'border-l-amber-400',
+  error: 'border-l-red-400',
+};
+
+const LEVEL_TINT_MAP: Record<string, string> = {
+  warn: 'bg-amber-500/5',
+  error: 'bg-red-500/5',
+};
+
+const LEVEL_LABEL_MAP: Record<string, string> = {
+  debug: 'DBG',
+  info: 'INF',
+  success: 'OK',
+  warn: 'WRN',
+  error: 'ERR',
+};
+
+const LEVEL_BADGE_COLOR_MAP: Record<string, string> = {
+  debug: 'text-slate-500',
+  info: 'text-sky-400',
+  success: 'text-emerald-400',
+  warn: 'text-amber-400',
+  error: 'text-red-400',
+};
 
 // ============================================
 // Helper Functions
@@ -42,24 +85,24 @@ const getStatusIcon = (status: LogGroupProps['status']) => {
 
 const getStageEmoji = (stage: string): string => {
   const stageMap: Record<string, string> = {
-    email: '📧',
-    imap: '📬',
-    verification: '✅',
-    browser: '🌐',
-    api: '🔌',
-    database: '💾',
-    system: '⚙️',
-    registration: '📝',
-    patcher: '🔧',
-    settings: '⚙️',
-    server: '🖥️',
-    accounts: '👤',
-    password: '🔐',
-    oauth: '🔑',
-    aws: '☁️',
-    kiro: '🚀',
+    email: '\u{1F4E7}',
+    imap: '\u{1F4EC}',
+    verification: '\u2705',
+    browser: '\u{1F310}',
+    api: '\u{1F50C}',
+    database: '\u{1F4BE}',
+    system: '\u2699\uFE0F',
+    registration: '\u{1F4DD}',
+    patcher: '\u{1F527}',
+    settings: '\u2699\uFE0F',
+    server: '\u{1F5A5}\uFE0F',
+    accounts: '\u{1F464}',
+    password: '\u{1F510}',
+    oauth: '\u{1F511}',
+    aws: '\u2601\uFE0F',
+    kiro: '\u{1F680}',
   };
-  return stageMap[stage.toLowerCase()] || '📋';
+  return stageMap[stage.toLowerCase()] || '\u{1F4CB}';
 };
 
 const formatDuration = (ms: number): string => {
@@ -67,35 +110,66 @@ const formatDuration = (ms: number): string => {
   return `${(ms / 1000).toFixed(1)}s`;
 };
 
+const stripTag = (message: string): string => {
+  return message.replace(/^\s*\[[^\]]+\]\s*/, '');
+};
+
+// ============================================
+// Dedup helper
+// ============================================
+
+interface DedupedEntry {
+  log: LogEntry;
+  count: number;
+  displayMessage: string;
+}
+
+function dedupEntries(entries: LogEntry[]): DedupedEntry[] {
+  const result: DedupedEntry[] = [];
+  for (const log of entries) {
+    const msg = stripTag(log.message);
+    const last = result[result.length - 1];
+    if (last && last.displayMessage === msg && last.log.level === log.level) {
+      last.count += 1;
+    } else {
+      result.push({ log, count: 1, displayMessage: msg });
+    }
+  }
+  return result;
+}
+
 // ============================================
 // Component
 // ============================================
 
 export function LogGroup({
-  stage,
-  accountId,
+  name,
+  source,
   entries,
   status,
   isCollapsed,
   onToggle,
   duration,
-  icon,
+  lastActivity,
+  levelCounts,
   onSelectLog,
   selectedLogId,
 }: LogGroupProps) {
-  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+  const [expandedDedup, setExpandedDedup] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const { copy } = useCopyToClipboard();
 
-  const toggleLogExpansion = useCallback((logId: string) => {
-    setExpandedLogs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(logId)) {
-        newSet.delete(logId);
+  const deduped = useMemo(() => dedupEntries(entries), [entries]);
+
+  const toggleDedup = useCallback((logId: string) => {
+    setExpandedDedup(prev => {
+      const next = new Set(prev);
+      if (next.has(logId)) {
+        next.delete(logId);
       } else {
-        newSet.add(logId);
+        next.add(logId);
       }
-      return newSet;
+      return next;
     });
   }, []);
 
@@ -108,6 +182,27 @@ export function LogGroup({
     [copy]
   );
 
+  const timeStr = new Date(lastActivity).toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  const statusIcon = getStatusIcon(status);
+  const emoji = getStageEmoji(source);
+  const displayName = name === source ? name : `${source} · ${name}`;
+
+  const levelOrder: LogLevel[] = ['info', 'success', 'warn', 'error', 'debug'];
+  const countBadges = levelOrder
+    .filter(level => (levelCounts?.[level] ?? 0) > 0)
+    .map(level => (
+      <span key={level} className={cn('inline-flex items-center gap-1 text-xs', LEVEL_BADGE_COLOR_MAP[level] || 'text-slate-400')}>
+        <span className={cn('w-2 h-2 rounded-full shrink-0', LEVEL_DOT_MAP[level])} />
+        {levelCounts?.[level]} {LEVEL_LABEL_MAP[level]}
+      </span>
+    ));
+
   return (
     <div className="border border-white/5 rounded-lg overflow-hidden mb-2 bg-[#0a0a0a]">
       {/* Header */}
@@ -115,137 +210,135 @@ export function LogGroup({
         type="button"
         onClick={onToggle}
         className={cn(
-          'w-full flex items-center gap-3 px-4 py-2 hover:bg-white/[0.02] transition-colors',
+          'w-full flex items-center gap-2 px-3 py-2 hover:bg-white/[0.02] transition-colors',
           'border-b border-white/5'
         )}
       >
-        {/* Collapse Icon */}
         {isCollapsed ? (
           <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
         ) : (
           <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
         )}
 
-        {/* Stage Emoji */}
-        <span className="text-base shrink-0">{icon || getStageEmoji(stage)}</span>
+        <span className="text-base shrink-0">{emoji}</span>
 
-        {/* Stage Name */}
-        <span className="text-sm font-semibold text-slate-300 uppercase tracking-wide shrink-0">
-          [{stage}]
+        <span className="text-sm font-semibold text-slate-200 truncate">
+          {displayName}
         </span>
 
-        {/* Status Icon */}
-        <span className="shrink-0">{getStatusIcon(status)}</span>
+        {statusIcon}
 
-        {/* Account ID (if provided) */}
-        {accountId && <span className="text-xs text-slate-500 shrink-0">{accountId}</span>}
-
-        {/* Entry Count */}
         <span className="text-xs text-slate-500 shrink-0">
-          ({entries.length} {entries.length === 1 ? 'entry' : 'entries'})
+          ({entries.length})
         </span>
 
-        {/* Duration */}
-        {duration !== undefined && (
-          <span className="text-xs text-slate-500 tabular-nums shrink-0">
-            [{formatDuration(duration)}]
-          </span>
+        <span className="text-xs text-slate-500 tabular-nums shrink-0">{timeStr}</span>
+
+        {duration !== undefined && duration > 0 && (
+          <span className="text-xs text-slate-500 tabular-nums shrink-0">{formatDuration(duration)}</span>
         )}
 
-        {/* Spacer */}
+        {countBadges.length > 0 && (
+          <span className="flex items-center gap-1.5 shrink-0">{countBadges}</span>
+        )}
+
         <div className="flex-1" />
       </button>
 
       {/* Entries (when expanded) */}
       {!isCollapsed && (
         <div className="font-mono text-xs">
-          {entries.map((log, idx) => {
+          {deduped.map((item, idx) => {
+            const { log, count, displayMessage } = item;
             const isCopied = copiedId === log.id;
-            const isLongMessage = log.message.length > 200;
-            const isExpanded = expandedLogs.has(log.id);
             const isSelected = selectedLogId === log.id;
-            const isActionable = Boolean(onSelectLog) || isLongMessage;
+            const isDedupExpanded = expandedDedup.has(log.id);
+            const dedupKey = `${log.id}-${idx}`;
 
             return (
-              <div
-                key={`${log.id}-${log.timestamp}-${idx}`}
-                className={cn(
-                  'flex items-start gap-3 px-4 py-1 hover:bg-white/[0.02] transition-colors border-b border-white/[0.02] group',
-                  isSelected && 'bg-white/[0.04] border-white/[0.08]'
-                )}
-              >
-                {/* Timestamp - Gray */}
-                <span className="text-slate-600 tabular-nums shrink-0">
-                  {new Date(log.timestamp).toLocaleTimeString('en-US', {
-                    hour12: false,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                  })}
-                </span>
-
-                {/* Level - Color coded, 3 chars */}
-                <span
+              <div key={dedupKey}>
+                <div
                   className={cn(
-                    'shrink-0 w-12 text-center font-bold uppercase',
-                    log.level === 'debug' && 'text-slate-500',
-                    log.level === 'info' && 'text-vsc-blue',
-                    log.level === 'success' && 'text-vsc-green',
-                    log.level === 'warn' && 'text-vsc-yellow',
-                    log.level === 'error' && 'text-vsc-red'
+                    'flex items-start gap-2 pl-2 pr-3 py-1 hover:bg-white/[0.02] transition-colors border-b border-white/[0.02] group',
+                    'border-l-4',
+                    LEVEL_BORDER_MAP[log.level] || 'border-l-slate-600',
+                    LEVEL_TINT_MAP[log.level],
+                    isSelected && 'bg-white/[0.04] border-white/[0.08]'
                   )}
                 >
-                  {log.level === 'debug'
-                    ? 'DBG'
-                    : log.level === 'info'
-                      ? 'INF'
-                      : log.level === 'success'
-                        ? 'OK'
-                        : log.level === 'warn'
-                          ? 'WRN'
-                          : 'ERR'}
-                </span>
+                  <span className="text-slate-600 tabular-nums shrink-0 w-20 text-right">
+                    {new Date(log.timestamp).toLocaleTimeString('en-US', {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </span>
 
-                {/* Source - Purple */}
-                <span className="text-purple-400 shrink-0 w-24 truncate">
-                  [{log.source || 'system'}]
-                </span>
-
-                {/* Message - White, expandable */}
-                <div className="flex-1 min-w-0">
                   <button
                     type="button"
                     className={cn(
-                      'text-slate-300 break-words text-left w-full bg-transparent border-0 p-0',
-                      isActionable ? 'cursor-pointer' : 'cursor-default',
-                      !isExpanded && isLongMessage && 'line-clamp-1'
+                      'flex-1 min-w-0 text-slate-300 break-words text-left bg-transparent border-0 p-0 cursor-pointer',
+                      'line-clamp-1'
                     )}
-                    onClick={() => {
-                      onSelectLog?.(log);
-                      if (isLongMessage) {
-                        toggleLogExpansion(log.id);
-                      }
-                    }}
-                    disabled={!isActionable}
+                    onClick={() => onSelectLog?.(log)}
                   >
-                    {log.message}
+                    {displayMessage || t('logs.emptyMessage')}
                   </button>
+
+                  {count > 1 && (
+                    <button
+                      type="button"
+                      className="text-xs text-slate-500 hover:text-slate-300 bg-white/5 hover:bg-white/10 px-1.5 py-0.5 rounded shrink-0 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleDedup(log.id);
+                      }}
+                    >
+                      \u00d7{count}
+                    </button>
+                  )}
+
+                  <Tooltip content="Copy message">
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(log.message, log.id)}
+                      className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
+                    >
+                      {isCopied ? (
+                        <Check className="w-3 h-3 text-vsc-green" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  </Tooltip>
                 </div>
 
-                {/* Copy button - appears on hover */}
-                <Tooltip content="Copy message">
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(log.message, log.id)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-all p-1 rounded hover:bg-white/5 shrink-0"
-                  >
-                    {isCopied ? (
-                      <Check className="w-3 h-3 text-vsc-green" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
+                {/* Expanded dedup entries */}
+                {isDedupExpanded && count > 1 && entries.filter(e => stripTag(e.message) === displayMessage && e.level === log.level).map((dupLog, dupIdx) => (
+                  <div
+                    key={`${dupLog.id}-${dupIdx}`}
+                    className={cn(
+                      'flex items-start gap-2 pl-2 pr-3 py-1 transition-colors border-b border-white/[0.02]',
+                      'border-l-4 border-l-transparent',
+                      LEVEL_TINT_MAP[dupLog.level],
+                      'opacity-60'
                     )}
-                  </button>
-                </Tooltip>
+                  >
+                    <span className="text-slate-600 tabular-nums shrink-0 w-20 text-right">
+                      {new Date(dupLog.timestamp).toLocaleTimeString('en-US', {
+                        hour12: false,
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </span>
+                    <span className="flex-1 min-w-0 text-slate-400 break-words line-clamp-1">
+                      {stripTag(dupLog.message) || t('logs.emptyMessage')}
+                    </span>
+                    <span className="w-6 shrink-0" />
+                  </div>
+                ))}
               </div>
             );
           })}

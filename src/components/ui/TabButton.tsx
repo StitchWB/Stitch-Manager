@@ -1,12 +1,15 @@
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+
 import { cn } from '../../lib/utils';
 
-interface TabButtonProps {
+export interface TabButtonProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick'> {
   active: boolean;
   onClick: () => void;
-  icon?: React.ReactNode;
-  label: React.ReactNode;
-  disabled?: boolean;
-  className?: string;
+  icon?: ReactNode;
+  label: ReactNode;
+  appearance?: 'workspace' | 'section';
+  size?: 'sm' | 'md';
 }
 
 export function TabButton({
@@ -14,8 +17,11 @@ export function TabButton({
   onClick,
   icon,
   label,
+  appearance = 'section',
+  size = 'md',
   disabled = false,
-  className = '',
+  className,
+  ...buttonProps
 }: TabButtonProps) {
   return (
     <button
@@ -23,16 +29,42 @@ export function TabButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200',
-        active
-          ? 'text-white bg-indigo-500/20 shadow-[0_0_10px_rgba(99,102,241,0.3)]'
-          : 'text-slate-500 hover:text-slate-300 hover:bg-white/5',
-        disabled && 'opacity-50 cursor-not-allowed',
+        'relative inline-flex shrink-0 select-none items-center justify-center gap-2 rounded-md border font-medium transition-colors duration-150',
+        size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-9 px-3 text-sm',
+        appearance === 'workspace' &&
+        (active
+          ? 'border-white/[0.11] bg-white/[0.07] text-white shadow-sm'
+          : 'border-transparent text-slate-300/80 hover:border-white/[0.06] hover:bg-white/[0.045] hover:text-white'),
+        appearance === 'section' &&
+        (active
+          ? 'border-white/[0.1] bg-vsc-hover text-vsc-text shadow-sm'
+          : 'border-transparent text-vsc-text-muted hover:bg-white/[0.04] hover:text-vsc-text'),
+        disabled && 'cursor-not-allowed opacity-50',
         className
       )}
+      {...buttonProps}
     >
-      {icon && <span className="w-4 h-4">{icon}</span>}
-      {label}
+      {icon ? (
+        <span
+          className={cn(
+            'flex h-4 w-4 shrink-0 items-center justify-center',
+            active
+              ? appearance === 'workspace'
+                ? 'text-vsc-blue'
+                : 'text-indigo-300'
+              : 'text-slate-500'
+          )}
+        >
+          {icon}
+        </span>
+      ) : null}
+      <span className="whitespace-nowrap">{label}</span>
+      {active && appearance === 'workspace' ? (
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-2 -bottom-[9px] h-0.5 rounded-full bg-vsc-blue"
+        />
+      ) : null}
     </button>
   );
 }

@@ -101,3 +101,31 @@ class ApiKeysService:
             {"k": _POOL_SNAPSHOT_KEY, "v": snapshot, "ts": int(time.time())},
         )
         await self._db.flush()
+
+    async def get_keys_by_db_key(self, db_key: str) -> list[dict[str, Any]]:
+        """Load API keys by raw DB key name (for custom providers)."""
+        await self._ensure_table()
+        result = await self._db.execute(
+            text("SELECT value FROM ai_proxy_settings WHERE key = :k"),
+            {"k": db_key},
+        )
+        row = result.first()
+        if row is None:
+            return []
+        from stitch_backend.domains.api_keys.schemas import parse_keys
+        return parse_keys("openai", row[0])
+
+    async def set_keys_by_db_key(self, db_key: str, keys: list[dict[str, Any]]) -> None:
+        """Save API keys by raw DB key name (for custom providers)."""
+        from stitch_backend.domains.api_keys.schemas import serialize_keys
+        json_value = serialize_keys("openai", keys)
+        now = int(time.time())
+        await self._ensure_table()
+        await self._db.execute(
+            text(
+                "INSERT OR REPLACE INTO ai_proxy_settings (key, value, updated_at) "
+                "VALUES (:k, :v, :ts)"
+            ),
+            {"k": db_key, "v": json_value, "ts": now},
+        )
+        await self._db.flush()

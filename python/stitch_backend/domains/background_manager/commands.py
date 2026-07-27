@@ -1,28 +1,21 @@
-"""Background Manager commands — 1 command.
-
-Ported from Rust ``commands/background.rs``.
-Returns default config/status since actual background tasks are handled
-by dedicated services (replenishment, registration, scheduler).
-"""
+"""Background Manager configuration commands."""
 
 from __future__ import annotations
 
-from stitch_backend.core.command_registry import register_command
+import json
 
-_DEFAULT_CONFIG: dict = {
-    "autoRegisterEnabled": False,
-    "registerIntervalMinutes": 30,
-    "minAccountsThreshold": 5,
-    "autoSwitchEnabled": False,
-    "switchOnZeroCredits": True,
-    "checkCreditsIntervalSeconds": 60,
-    "autoRefreshQuotaEnabled": False,
-    "refreshQuotaIntervalSeconds": 300,
-    "refreshQuotaMaxErrors": 3,
-}
+from typing import cast
+
+from sqlalchemy import text
+
+from stitch_backend.core.command_registry import register_command
+from stitch_backend.database import run_in_session
+from stitch_backend.domains.background_manager.schemas import (
+    BackgroundManagerConfig,
+    normalise_background_manager_config,
+)
 
 _DEFAULT_STATUS: dict = {
-    "config": _DEFAULT_CONFIG,
     "isRegistering": False,
     "isSwitching": False,
     "isRefreshingQuota": False,
@@ -35,42 +28,46 @@ _DEFAULT_STATUS: dict = {
 }
 
 
-@register_command("get_background_manager_status")
-async def cmd_get_background_manager_status(params: dict) -> dict:
-    """Return background manager status."""
-    return _DEFAULT_STATUS
-
-
-@register_command("get_background_manager_config")
-async def cmd_get_background_manager_config(params: dict) -> dict:
-    """Return background manager config from settings table."""
-    from stitch_backend.database import run_in_session
-    from sqlalchemy import text
-
+async def _load_config() -> BackgroundManagerConfig:
     async def _op(session):
         result = await session.execute(
             text("SELECT value FROM settings WHERE key = 'background_manager_config'")
         )
         row = result.first()
-        if row and row[0]:
-            import json
-            try:
-                return json.loads(row[0])
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return _DEFAULT_CONFIG
+        if not row or not row[0]:
+            return BackgroundManagerConfig.model_validate({})
+        try:
+            value = json.loads(row[0])
+        except (json.JSONDecodeError, TypeError):
+            return BackgroundManagerConfig.model_validate({})
+        return normalise_background_manager_config(value)
 
-    return await run_in_session(_op)
+    return cast(BackgroundManagerConfig, await run_in_session(_op))
+
+
+@register_command("get_background_manager_status")
+async def cmd_get_background_manager_status(params: dict) -> dict:
+    """Return static worker status with the effective persisted config."""
+    config = await _load_config()
+    return {
+        "config": config.model_dump(mode="json", by_alias=True),
+        **_DEFAULT_STATUS,
+    }
+
+
+@register_command("get_background_manager_config")
+async def cmd_get_background_manager_config(params: dict) -> dict:
+    """Return a validated, default-complete background manager config."""
+    config = await _load_config()
+    return config.model_dump(mode="json", by_alias=True)
 
 
 @register_command("update_background_manager_config")
 async def cmd_update_background_manager_config(params: dict) -> None:
-    """Persist background manager config to settings table."""
-    from stitch_backend.database import run_in_session
-    from sqlalchemy import text
-    import json
-
-    config_json = json.dumps(params)
+    """Persist frontend ``{config}`` envelopes and legacy raw config bodies."""
+    raw_config = params.get("config", params)
+    config = BackgroundManagerConfig.model_validate(raw_config)
+    config_json = config.model_dump_json(by_alias=True)
 
     async def _op(session):
         await session.execute(

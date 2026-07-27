@@ -1,15 +1,9 @@
 /**
  * iCloud Hide My Email Pool — Settings UI section.
- *
- * Shows:
- *  - Enable/disable toggle
- *  - Apple ID + App-specific password fields
- *  - Authenticate button + 2FA code input
- *  - Pool stats (available / used / rate limit)
- *  - Fill pool button (generates up to 5 aliases)
  */
 
 import { useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Cloud, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle, Zap } from 'lucide-react';
 import {
   Button,
@@ -33,7 +27,6 @@ interface ICloudEmailSectionProps {
   onAppleIdChange: (v: string) => void;
   appPassword: string;
   onAppPasswordChange: (v: string) => void;
-  /** Called after successful configure+save so parent can persist. */
   onSave: () => void | Promise<void>;
 }
 
@@ -67,11 +60,11 @@ export function ICloudEmailSection({
       const result = await authenticateICloud();
       if (result.status === 'ok') {
         setAuthStatus('ok');
-        setAuthMessage('Authenticated successfully.');
+        setAuthMessage(t('settings.icloud.authSuccess'));
         await refreshStats();
       } else {
         setAuthStatus('needs_2fa');
-        setAuthMessage(result.message ?? 'Enter the 2FA code sent to your trusted device.');
+        setAuthMessage(result.message ?? t('settings.icloud.twoFaPrompt'));
       }
     } catch (err) {
       setAuthStatus('error');
@@ -86,7 +79,7 @@ export function ICloudEmailSection({
       const result = await authenticateICloud(twoFaCode.trim());
       if (result.status === 'ok') {
         setAuthStatus('ok');
-        setAuthMessage('2FA verified. Session active.');
+        setAuthMessage(t('settings.icloud.twoFaVerified'));
         setTwoFaCode('');
         await refreshStats();
       } else {
@@ -112,7 +105,7 @@ export function ICloudEmailSection({
     setFilling(true);
     try {
       const result = await fillICloudPool({ count: fillCount, labelPrefix: 'Auto-registration' });
-      setAuthMessage(`Generated ${result.created} new alias${result.created !== 1 ? 'es' : ''}.`);
+      setAuthMessage(t('settings.icloud.generated', { count: result.created }));
       await refreshStats();
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Pool fill failed.');
@@ -123,8 +116,8 @@ export function ICloudEmailSection({
 
   return (
     <SectionHeader
-      title="iCloud Hide My Email"
-      description="Use Apple's Hide My Email service to generate private forwarding aliases (~700/mo for $0.99/mo iCloud+)."
+      title={t('settings.icloud.title')}
+      description={t('settings.icloud.description')}
       icon={<Cloud className="w-4 h-4 text-sky-400" />}
       className="pt-0"
     >
@@ -133,37 +126,32 @@ export function ICloudEmailSection({
           !enabled ? 'opacity-60 hover:opacity-100' : ''
         }`}
       >
-        {/* Enable toggle */}
         <Checkbox
           checked={enabled}
           onChange={e => {
             onEnabledChange(e.target.checked);
-            if (e.target.checked) {
-              // Mutually exclusive with other alias services — handled by parent
-            }
           }}
           className="py-0 px-0 hover:bg-transparent"
           label={
             <span className="text-slate-300 text-sm font-medium">
-              Enable iCloud Hide My Email pool
+              {t('settings.icloud.enable')}
             </span>
           }
         />
 
         {enabled && (
           <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
-            {/* Credentials */}
             <div className="grid grid-cols-2 gap-4">
               <Input
                 type="email"
-                label="Apple ID"
+                label={t('settings.icloud.appleId')}
                 value={appleId}
                 onChange={e => onAppleIdChange(e.target.value)}
                 placeholder="you@icloud.com"
               />
               <Input
                 type={showPassword ? 'text' : 'password'}
-                label="App-Specific Password"
+                label={t('settings.icloud.appPassword')}
                 value={appPassword}
                 onChange={e => onAppPasswordChange(e.target.value)}
                 placeholder="xxxx-xxxx-xxxx-xxxx"
@@ -180,19 +168,9 @@ export function ICloudEmailSection({
             </div>
 
             <p className="text-[10px] text-slate-500 -mt-2">
-              Generate an app-specific password at{' '}
-              <a
-                href="https://appleid.apple.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-400 hover:underline"
-              >
-                appleid.apple.com
-              </a>
-              . Standard Apple ID password won't work.
+              {t('settings.icloud.appPasswordHint')}
             </p>
 
-            {/* Configure + Authenticate */}
             <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="primary"
@@ -208,10 +186,10 @@ export function ICloudEmailSection({
                 }
               >
                 {authStatus === 'configuring'
-                  ? 'Saving…'
+                  ? t('settings.icloud.saving')
                   : authStatus === 'authenticating'
-                  ? 'Authenticating…'
-                  : 'Save & Authenticate'}
+                  ? t('settings.icloud.authenticating')
+                  : t('settings.icloud.saveAuthenticate')}
               </Button>
 
               {(authStatus === 'ok' || stats) && (
@@ -221,12 +199,11 @@ export function ICloudEmailSection({
                   onClick={refreshStats}
                   leftIcon={<RefreshCw className="w-3 h-3" />}
                 >
-                  Refresh Stats
+                  {t('settings.icloud.refreshStats')}
                 </Button>
               )}
             </div>
 
-            {/* Status message */}
             {authMessage && (
               <div
                 className={`text-xs flex items-center gap-1.5 ${
@@ -242,12 +219,11 @@ export function ICloudEmailSection({
               </div>
             )}
 
-            {/* 2FA input */}
             {authStatus === 'needs_2fa' && (
               <div className="flex items-end gap-2">
                 <Input
                   type="text"
-                  label="2FA Verification Code"
+                  label={t('settings.icloud.twoFaCode')}
                   value={twoFaCode}
                   onChange={e => setTwoFaCode(e.target.value)}
                   placeholder="123456"
@@ -259,48 +235,46 @@ export function ICloudEmailSection({
                   disabled={twoFaCode.length < 4}
                   onClick={handleVerify2FA}
                 >
-                  Verify
+                  {t('settings.icloud.verify2fa')}
                 </Button>
               </div>
             )}
 
-            {/* Pool stats */}
             {stats && (
               <div className="glass-card rounded-lg p-3 border border-sky-500/20 bg-sky-500/5">
                 <h4 className="text-white font-medium text-xs mb-2 flex items-center gap-2">
                   <Zap className="w-3 h-3 text-sky-400" />
-                  Pool Status
+                  {t('settings.icloud.poolStatus')}
                 </h4>
                 <div className="grid grid-cols-3 gap-2 text-xs mb-2">
                   <div className="text-center">
                     <div className="text-emerald-400 font-semibold text-base leading-none">{stats.available}</div>
-                    <div className="text-slate-500 mt-0.5">Available</div>
+                    <div className="text-slate-500 mt-0.5">{t('settings.icloud.available')}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-amber-400 font-semibold text-base leading-none">{stats.reserved}</div>
-                    <div className="text-slate-500 mt-0.5">Reserved</div>
+                    <div className="text-slate-500 mt-0.5">{t('settings.icloud.reserved')}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-slate-300 font-semibold text-base leading-none">{stats.used}</div>
-                    <div className="text-slate-500 mt-0.5">Used</div>
+                    <div className="text-slate-500 mt-0.5">{t('settings.icloud.used')}</div>
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-500">
-                  Rate limit: {stats.rateRemaining} alias{stats.rateRemaining !== 1 ? 'es' : ''} available now
+                  {t('settings.icloud.rateLimit', { remaining: stats.rateRemaining })}
                   {stats.rateSecondsUntilSlot > 0 && (
                     <span className="text-amber-400 ml-1">
-                      (next slot in ~{Math.ceil(stats.rateSecondsUntilSlot / 60)} min)
+                      {t('settings.icloud.nextSlot', { minutes: Math.ceil(stats.rateSecondsUntilSlot / 60) })}
                     </span>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Fill pool */}
             {authStatus === 'ok' && (
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400">Generate</span>
+                  <span className="text-xs text-slate-400">{t('settings.icloud.generate')}</span>
                   <select
                     value={fillCount}
                     onChange={e => setFillCount(Number(e.target.value))}
@@ -310,7 +284,7 @@ export function ICloudEmailSection({
                       <option key={n} value={n}>{n}</option>
                     ))}
                   </select>
-                  <span className="text-xs text-slate-400">aliases</span>
+                  <span className="text-xs text-slate-400">{t('settings.icloud.aliases')}</span>
                 </div>
                 <Button
                   variant="secondary"
@@ -319,15 +293,13 @@ export function ICloudEmailSection({
                   onClick={handleFill}
                   leftIcon={filling ? <LoadingSpinner size="xs" /> : <Zap className="w-3 h-3" />}
                 >
-                  {filling ? 'Generating…' : 'Fill Pool'}
+                  {filling ? t('settings.icloud.generating') : t('settings.icloud.fillPool')}
                 </Button>
               </div>
             )}
 
-            {/* Rate limit note */}
             <p className="text-[10px] text-slate-500">
-              Apple limits new aliases to ~5 every 30 minutes. Pre-fill the pool in advance for
-              uninterrupted bulk registrations.
+              {t('settings.icloud.rateLimitNote')}
             </p>
           </div>
         )}

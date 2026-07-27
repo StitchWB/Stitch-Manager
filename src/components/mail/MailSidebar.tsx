@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import {
   Archive,
   Cloud,
+  Copy,
   FileText,
   Inbox,
   type LucideIcon,
@@ -11,6 +12,7 @@ import {
   Plus,
   Send,
   Server,
+  Settings,
   ShieldAlert,
   Trash2,
   Wand2,
@@ -25,6 +27,7 @@ import {
   Input,
   OverflowMenu,
 } from '@/components/ui';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { t } from '@/lib/i18n';
 import type { EmailFolder, EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
 import type { MailProfileSyncState } from '@/stores/mail';
@@ -39,6 +42,7 @@ type AddMailboxAction =
   | 'fromAutoReg'
   | 'imapManual'
   | 'mailTmManual'
+  | 'mailTmRegister'
   | 'fromSheets';
 
 interface MailSidebarProps {
@@ -55,6 +59,7 @@ interface MailSidebarProps {
   onSelectProfile: (profileId: string | null) => void;
   onSelectFolder: (folder: EmailFolder | null) => Promise<void> | void;
   onAddMailbox: (action: AddMailboxAction) => void;
+  onEditProfile: (profileId: string) => void;
   onRenameProfile: (profileId: string, nextLabel: string) => Promise<void>;
   onDeleteProfile: (profileId: string) => Promise<void>;
 }
@@ -154,6 +159,7 @@ const ADD_SOURCE_TO_ACTION: Record<AddMailboxSource, AddMailboxAction> = {
   fromAutoReg: 'fromAutoReg',
   fromSheets: 'fromSheets',
   mailTmManual: 'mailTmManual',
+  mailTmRegister: 'mailTmRegister',
 };
 
 export function MailSidebar({
@@ -169,10 +175,12 @@ export function MailSidebar({
   onSelectProfile,
   onSelectFolder,
   onAddMailbox,
+  onEditProfile,
   onRenameProfile,
   onDeleteProfile,
 }: MailSidebarProps) {
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const { copy } = useCopyToClipboard();
   const [renameTarget, setRenameTarget] = useState<EmailInboxProfile | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
@@ -344,11 +352,11 @@ export function MailSidebar({
                               {isAutoReg ? (
                                 <Wand2 size={11} className="text-indigo-300 shrink-0" />
                               ) : null}
-                              <p className="text-xs font-medium text-white truncate">
+                              <p className="text-xs font-medium text-white truncate" title={profile.label}>
                                 {profile.label}
                               </p>
                             </div>
-                            <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={profile.accountId}>
                               {profile.accountId}
                             </p>
                           </ButtonBase>
@@ -362,6 +370,21 @@ export function MailSidebar({
                               triggerLabel={t('common.more')}
                               className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
                               items={[
+                                {
+                                  id: 'copyEmail',
+                                  label: t('accounts.quickActions.copyEmail'),
+                                  icon: <Copy size={12} />,
+                                  onSelect: () =>
+                                    copy(profile.accountId.replace(/^[a-z_]+:/i, ''), {
+                                      successMessage: t('accounts.quickActions.emailCopied'),
+                                    }),
+                                },
+                                {
+                                  id: 'edit',
+                                  label: t('mail.editProfileAction'),
+                                  icon: <Settings size={12} />,
+                                  onSelect: () => onEditProfile(profile.id),
+                                },
                                 {
                                   id: 'rename',
                                   label: t('mail.renameProfileAction'),

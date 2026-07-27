@@ -1,54 +1,106 @@
+import type { LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  Cable,
+  KeyRound,
+  LayoutDashboard,
+  MessageSquare,
+  Orbit,
+  Route,
+  Server,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { t } from '@/lib/i18n';
 import { TabButton } from '@/components/ui';
+import { t } from '@/lib/i18n';
+import { useAppStore } from '@/stores/app';
 
-type AiTabId = 'providers' | 'routing' | 'monitor' | 'antigravity' | 'apiKeys' | 'opencodeConfig' | 'chat';
+type AiTabId =
+  | 'overview'
+  | 'providers'
+  | 'routing'
+  | 'connections'
+  | 'monitor'
+  | 'chat'
+  | 'antigravity'
+  | 'apiKeys';
 
 interface AiTab {
   id: AiTabId;
   label: string;
   to: string;
+  icon: LucideIcon;
 }
 
 const AI_TABS: AiTab[] = [
-  { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers' },
-  { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing' },
-  { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor' },
-  { id: 'chat', label: 'aiHub.tabs.chat', to: '/ai/chat' },
-  { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity' },
-  { id: 'apiKeys', label: 'aiHub.tabs.apiKeys', to: '/ai/api-keys' },
-  { id: 'opencodeConfig', label: 'aiHub.tabs.opencodeConfig', to: '/ai/opencode-config' },
+  { id: 'overview', label: 'Overview', to: '/ai', icon: LayoutDashboard },
+  { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers', icon: Server },
+  { id: 'apiKeys', label: 'aiHub.tabs.apiKeys', to: '/ai/api-keys', icon: KeyRound },
+  { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity', icon: Orbit },
+  { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
+  { id: 'connections', label: 'Connections', to: '/ai/integrations', icon: Cable },
+  { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
+  { id: 'chat', label: 'aiHub.tabs.chat', to: '/ai/chat', icon: MessageSquare },
 ];
 
 function activeTab(pathname: string): AiTabId {
+  if (pathname === '/ai' || pathname === '/ai/overview') return 'overview';
   if (pathname.startsWith('/ai/routing')) return 'routing';
-  if (pathname.startsWith('/ai/monitor')) return 'monitor';
+  if (pathname.startsWith('/ai/integrations') || pathname.startsWith('/ai/opencode-config')) {
+    return 'connections';
+  }
+  if (pathname.startsWith('/ai/monitor') || pathname.startsWith('/ai/analytics')) return 'monitor';
   if (pathname.startsWith('/ai/chat')) return 'chat';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
   if (pathname.startsWith('/ai/api-keys')) return 'apiKeys';
-  if (pathname.startsWith('/ai/opencode-config')) return 'opencodeConfig';
-  // Legacy redirects fall through to providers as the default landing tab.
   return 'providers';
+}
+
+function getLabel(label: string): string {
+  return label.includes('.') ? t(label) : label;
 }
 
 export function AiTopTabs() {
   const navigate = useNavigate();
   const location = useLocation();
+  const language = useAppStore(state => state.language);
   const current = activeTab(location.pathname);
 
   return (
-    <div className="px-6 py-3 border-b border-white/5 bg-vsc-bg/70 backdrop-blur-xl sticky top-0 z-20">
-      <div className="flex flex-wrap items-center gap-2">
-        {AI_TABS.map(tab => (
-          <TabButton
-            key={tab.id}
-            onClick={() => navigate(tab.to)}
-            active={current === tab.id}
-            label={t(tab.label)}
-          />
-        ))}
+    <nav
+      aria-label={language === 'ru' ? 'Рабочее пространство AI Hub' : 'AI Hub workspace'}
+      className="shrink-0 overflow-x-auto border-b border-vsc-border-light bg-vsc-panel/95 px-3 shadow-[0_1px_0_rgba(255,255,255,0.025)] md:px-5 [scrollbar-width:thin]"
+    >
+      <div className="flex h-12 min-w-max items-center gap-0.5 py-1.5">
+        {AI_TABS.map(tab => {
+          const Icon = tab.icon;
+          const isActive = current === tab.id;
+          const label =
+            tab.id === 'overview'
+              ? language === 'ru'
+                ? 'Обзор'
+                : 'Overview'
+              : tab.id === 'connections'
+                ? language === 'ru'
+                  ? 'Подключения'
+                  : 'Connections'
+                : getLabel(tab.label);
+
+          return (
+            <TabButton
+              key={tab.id}
+              active={isActive}
+              appearance="workspace"
+              size="sm"
+              onClick={() => navigate(tab.to)}
+              aria-current={isActive ? 'page' : undefined}
+              title={label}
+              icon={<Icon size={14} />}
+              label={label}
+            />
+          );
+        })}
       </div>
-    </div>
+    </nav>
   );
 }

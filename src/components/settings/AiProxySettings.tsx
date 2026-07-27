@@ -199,7 +199,7 @@ export function AiProxySettings() {
     const selected = selectedModelIds;
     if (selected.length === 0) {
       setModelsSaveStatus('error');
-      setModelsError('Select at least one model to keep OpenCode available.');
+      setModelsError(t('settings.ai_proxy_settings.select_at_least_one_model'));
       return;
     }
 
@@ -291,13 +291,14 @@ export function AiProxySettings() {
             }
           }}>
 
+          <option value="disabled">{t("settings.ai_proxy_settings.disabled_mode")}</option>
           <option value="full">{t("settings.ai_proxy_settings.full_mode_ai_proxy_quota")}</option>
           <option value="quota-only">{t("settings.ai_proxy_settings.quotaonly_mode")}</option>
         </Select>
         <p className="text-xs text-vsc-text-muted">
           {localSettings.appMode === 'full' ?
-          'Run AI Proxy to distribute models to IDE/CLI clients and track quota usage' :
-          'Track quota without exposing the AI Proxy endpoint to IDE/CLI clients'}
+          t('settings.ai_proxy_settings.full_mode_desc') :
+          t('settings.ai_proxy_settings.quotaonly_mode_desc')}
         </p>
         {localSettings.appMode === 'quota-only' && status?.running &&
         <p className="text-xs text-vsc-yellow">{t("settings.ai_proxy_settings.ai_proxy_will_be_stopped_in_quotaonly_mode")}</p>
@@ -351,8 +352,8 @@ export function AiProxySettings() {
           value={localSettings.routingStrategy}
           onChange={(e) => setLocalSettings({ ...localSettings, routingStrategy: e.target.value })}>
 
-          <option value="round-robin">{t("settings.ai_proxy_settings.round_robin")}</option>
-          <option value="fill-first">{t("settings.ai_proxy_settings.fill_first")}</option>
+          <option value="round_robin">{t("settings.ai_proxy_settings.round_robin")}</option>
+          <option value="fill_first">{t("settings.ai_proxy_settings.fill_first")}</option>
         </Select>
       </div>
 
@@ -428,7 +429,7 @@ export function AiProxySettings() {
               onClick={handleSaveModels}
               disabled={modelsLoading || modelsSaving || !modelsDirty}>
 
-              {modelsSaving ? 'Saving...' : 'Save models'}
+              {modelsSaving ? t('settings.ai_proxy_settings.saving') : t('settings.ai_proxy_settings.save_models')}
             </Button>
           </div>
         </div>

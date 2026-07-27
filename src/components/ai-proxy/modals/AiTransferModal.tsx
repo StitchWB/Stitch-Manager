@@ -15,6 +15,8 @@ interface AiTransferModalProps {
   isOpen: boolean;
   onClose: () => void;
   transferMode: 'import' | 'export';
+  showAuthScanActions?: boolean;
+  importDescription?: string;
   authScan: AuthFile[] | null;
   authScanLoading: boolean;
   importPayload: string;
@@ -42,6 +44,8 @@ export function AiTransferModal({
   isOpen,
   onClose,
   transferMode,
+  showAuthScanActions = true,
+  importDescription,
   authScan,
   authScanLoading,
   importPayload,
@@ -91,28 +95,32 @@ export function AiTransferModal({
             <div className="bg-black/30 border border-white/10 rounded-lg p-3">
               <div className="text-sm text-white font-medium">{t('aiHub.modals.importTitle')}</div>
               <div className="text-xs text-slate-400 mt-1">
-                {t('aiHub.modals.importDescription')}
+                {importDescription ?? t('aiHub.modals.importDescription')}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={onScanAuthFiles}
-                  disabled={authScanLoading}
-                  leftIcon={<RefreshCw size={16} />}
-                >
-                  {authScanLoading
-                    ? t('aiHub.actions.scanningAuthFiles')
-                    : t('aiHub.actions.scanAuthFiles')}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={onPrepareImportFromScan}
-                  disabled={!authScan || authScan.length === 0}
-                >
-                  {t('aiHub.actions.prepareFromScan')}
-                </Button>
+                {showAuthScanActions ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={onScanAuthFiles}
+                      disabled={authScanLoading}
+                      leftIcon={<RefreshCw size={16} />}
+                    >
+                      {authScanLoading
+                        ? t('aiHub.actions.scanningAuthFiles')
+                        : t('aiHub.actions.scanAuthFiles')}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={onPrepareImportFromScan}
+                      disabled={!authScan || authScan.length === 0}
+                    >
+                      {t('aiHub.actions.prepareFromScan')}
+                    </Button>
+                  </>
+                ) : null}
                 <Button
                   variant="primary"
                   size="sm"
@@ -121,16 +129,20 @@ export function AiTransferModal({
                 >
                   {importLoading ? t('aiHub.actions.importing') : t('aiHub.actions.importJson')}
                 </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={onImportAllFromScan}
-                  disabled={importLoading || authScanLoading || !authScan || authScan.length === 0}
-                >
-                  {importLoading
-                    ? t('aiHub.actions.importing')
-                    : t('aiHub.actions.importAllFromScan')}
-                </Button>
+                {showAuthScanActions ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={onImportAllFromScan}
+                    disabled={
+                      importLoading || authScanLoading || !authScan || authScan.length === 0
+                    }
+                  >
+                    {importLoading
+                      ? t('aiHub.actions.importing')
+                      : t('aiHub.actions.importAllFromScan')}
+                  </Button>
+                ) : null}
               </div>
             </div>
 
@@ -158,7 +170,7 @@ export function AiTransferModal({
               </div>
             )}
 
-            {authScan && (
+            {showAuthScanActions && authScan && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium text-white">

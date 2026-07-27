@@ -1,6 +1,7 @@
-import { t } from "@/lib/i18n";import { useState, useEffect, useCallback, useRef } from 'react';
+import { t } from "@/lib/i18n";
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, AlertCircle, CheckCircle, Activity, Clock, Hash, ShieldAlert } from 'lucide-react';
-import { Button, Toggle } from '@/components/ui';
+import { Button, Toggle, SectionHeader } from '@/components/ui';
 import { backgroundManager } from '@/lib/tauri';
 import type { BackgroundManagerConfig, BackgroundManagerStatus } from '@/lib/tauri/modules/backgroundManager';
 
@@ -107,30 +108,30 @@ export function BackgroundManagerSettingsSection() {
     return (
       <div className="flex items-center gap-2 text-red-400">
         <AlertCircle size={16} />
-        <span>{error || 'Failed to load config'}</span>
+        <span>{error || t('settings.background_manager_settings_section.failed_to_load')}</span>
       </div>);
 
   }
 
   const intervals = [
-  { value: 60, label: '1 minute' },
-  { value: 300, label: '5 minutes' },
-  { value: 600, label: '10 minutes' },
-  { value: 1800, label: '30 minutes' },
-  { value: 3600, label: '1 hour' }];
+  { value: 60, label: t('settings.background_manager_settings_section.interval_1m') },
+  { value: 300, label: t('settings.background_manager_settings_section.interval_5m') },
+  { value: 600, label: t('settings.background_manager_settings_section.interval_10m') },
+  { value: 1800, label: t('settings.background_manager_settings_section.interval_30m') },
+  { value: 3600, label: t('settings.background_manager_settings_section.interval_1h') }];
 
 
   const isRunning = status?.isRefreshingQuota ?? false;
 
   return (
-    <div className="space-y-4">
+    <SectionHeader
+      title={t("settings.background_manager_settings_section.auto_refresh_quota")}
+      description={t("settings.background_manager_settings_section.automatically_refresh_account_quotas_in_the_backgr")}
+      icon={<Activity className="w-4 h-4 text-primary" />}
+      className="pt-6 border-t border-white/10"
+    >
+    <div className="glass-card rounded-lg p-4 border border-white/10 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-slate-200">{t("settings.background_manager_settings_section.auto_refresh_quota")}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">{t("settings.background_manager_settings_section.automatically_refresh_account_quotas_in_the_backgr")}
-
-          </p>
-        </div>
         <Toggle
           label={t("settings.background_manager_settings_section.auto_refresh_quota")}
           checked={config.autoRefreshQuotaEnabled}
@@ -168,7 +169,7 @@ export function BackgroundManagerSettingsSection() {
           <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
             <Activity size={12} className={isRunning ? 'text-emerald-400' : 'text-slate-500'} />
             <span>
-              {isRunning ? 'Refreshing now...' : 'Idle'}
+              {isRunning ? t('settings.background_manager_settings_section.refreshing_now') : t('settings.background_manager_settings_section.idle')}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
@@ -207,6 +208,7 @@ export function BackgroundManagerSettingsSection() {
           <span>{error}</span>
         </div>
       }
-    </div>);
+    </div>
+    </SectionHeader>);
 
 }

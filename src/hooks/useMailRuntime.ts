@@ -45,6 +45,7 @@ export function useMailRuntime() {
   const selectFolder = useMailStore(state => state.selectFolder);
   const applyDraft = useMailStore(state => state.applyDraft);
   const setActiveProfileId = useMailStore(state => state.setActiveProfileId);
+  const registerMailTmMailbox = useMailStore(state => state.registerMailTmMailbox);
   const loadProfiles = useMailStore(state => state.loadProfiles);
   const loadProviderCatalog = useMailStore(state => state.loadProviderCatalog);
   const loadProfileSyncState = useMailStore(state => state.loadProfileSyncState);
@@ -169,6 +170,7 @@ export function useMailRuntime() {
     selectFolder,
     applyDraft,
     setActiveProfileId,
+    registerMailTmMailbox,
     loadProfiles,
     loadProviderCatalog,
     loadProfileSyncState,

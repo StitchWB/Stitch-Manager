@@ -168,3 +168,14 @@ export type DeviceFlowClient = { clientId: string; clientSecret: string }
 
 export type DeviceFlowSession = { client: DeviceFlowClient; deviceCode: string; userCode: string; verificationUri: string; interval: number; expiresAt: number }
 
+export interface ApiKeyEntry {
+  key: string;
+  baseUrl?: string;
+  prefix?: string;
+  addedAt: number;
+  lastTested?: number;
+  status?: 'ok' | 'invalid' | 'rate_limited' | 'error' | 'unknown';
+  lastError?: string;
+  models?: string[];
+}
+

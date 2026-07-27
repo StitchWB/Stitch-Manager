@@ -54,6 +54,17 @@ function normalizeErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * Single source of truth for grouping logs into operations.
+ * Correlated entries group by correlationId/sessionId; everything else
+ * falls into one running bucket per source.
+ */
+export function getLogGroupKey(log: LogEntry): string {
+  if (log.correlationId) return `cid:${log.correlationId}`;
+  if (log.sessionId) return `sid:${log.sessionId}`;
+  return `src:${log.source || 'system'}`;
+}
+
 // ============================================
 // Default Filter
 // ============================================
@@ -271,14 +282,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
 
   collapseAllGroups: () => {
     const { logs } = get();
-    // Collapse all unique stages (detected from messages)
-    const allGroups = new Set(
-      logs.map(log => {
-        const stageMatch = log.message.match(/\[([^\]]+)\]/);
-        return stageMatch ? stageMatch[1] : log.source;
-      })
-    );
-    set({ collapsedGroups: allGroups });
+    set({ collapsedGroups: new Set(logs.map(getLogGroupKey)) });
   },
 
   // Subscribe to real-time log events
@@ -347,59 +351,18 @@ export const useLogsStore = create<LogsState>((set, get) => ({
 
         // Auto-collapse logic
         if (groupingEnabled && autoCollapseSuccess) {
-          // Detect stage from new log
-          const stageMatches = newLog.message.match(/\[([^\]]+)\]/g);
-          let stage = newLog.source;
+          const groupKey = getLogGroupKey(newLog);
 
-          if (stageMatches && stageMatches.length > 0) {
-            const lastMatch = stageMatches[stageMatches.length - 1];
-            const extracted = lastMatch.slice(1, -1);
-
-            // Filter out account IDs (contain /)
-            if (!extracted.includes('/') && extracted.length > 0) {
-              stage = extracted;
-            } else if (stageMatches.length > 1) {
-              // Try second-to-last if last was account ID
-              const secondLast = stageMatches[stageMatches.length - 2];
-              const extracted2 = secondLast.slice(1, -1);
-              if (!extracted2.includes('/') && extracted2.length > 0) {
-                stage = extracted2;
-              }
-            }
-          }
-
-          // Check if this is a success log
           if (
             newLog.level === 'success' ||
-            newLog.message.includes('✅') ||
+            newLog.message.includes('\u2705') ||
             newLog.message.includes('[OK]')
           ) {
-            // Count logs in this stage
-            const stageLogs = updatedLogs.filter(l => {
-              const logStageMatches = l.message.match(/\[([^\]]+)\]/g);
-              let logStage = l.source;
+            const groupSize = updatedLogs.filter(l => getLogGroupKey(l) === groupKey).length;
 
-              if (logStageMatches && logStageMatches.length > 0) {
-                const lastMatch = logStageMatches[logStageMatches.length - 1];
-                const extracted = lastMatch.slice(1, -1);
-                if (!extracted.includes('/') && extracted.length > 0) {
-                  logStage = extracted;
-                } else if (logStageMatches.length > 1) {
-                  const secondLast = logStageMatches[logStageMatches.length - 2];
-                  const extracted2 = secondLast.slice(1, -1);
-                  if (!extracted2.includes('/') && extracted2.length > 0) {
-                    logStage = extracted2;
-                  }
-                }
-              }
-
-              return logStage === stage;
-            });
-
-            // Auto-collapse if >5 entries
-            if (stageLogs.length > 5) {
+            if (groupSize > 5) {
               const newCollapsedGroups = new Set(collapsedGroups);
-              newCollapsedGroups.add(stage);
+              newCollapsedGroups.add(groupKey);
 
               set({
                 logs: updatedLogs,
@@ -460,11 +423,3 @@ export const useLogsStore = create<LogsState>((set, get) => ({
     get().addLocalLog(log);
   },
 }));
-
-// ============================================
-// Helper function to add logs from anywhere (non-React contexts)
-// ============================================
-
-export const appLog = (level: LogLevel, message: string, source: string = 'system') => {
-  useLogsStore.getState().addLocalLog({ level, message, source });
-};

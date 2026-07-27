@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Activity, Bug, MessageSquare, Plus, RefreshCw, Repeat, Search, Server, Zap } from 'lucide-react';
+import { Bug, MessageSquare, Plus, RefreshCw, Search, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelection } from '../hooks/useSelection';
@@ -10,7 +10,8 @@ import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
-import { AccountRotationCard } from '../components/ai-proxy/sections/AccountRotationCard';
+import { RotationSettingsPanel } from '../components/ai-proxy/sections/RotationSettingsPanel';
+import { RoutingFlowBoard } from '../components/ai-proxy/sections/RoutingFlowBoard';
 import { MappingsEditor } from '../components/ai-proxy/sections/MappingsEditor';
 import { AiProxyAccountsTable } from '../components/ai-proxy/AiProxyAccountsTable';
 import { AiProxyAccountDrawer } from '../components/ai-proxy/AiProxyAccountDrawer';
@@ -19,23 +20,20 @@ import { AiMappingsModal } from '../components/ai-proxy/modals/AiMappingsModal';
 import { ProxyStatusBar } from '../components/ai-proxy/sections/ProxyStatusBar';
 import { MonitorOverview } from '../components/ai-proxy/sections/MonitorOverview';
 import { ProxyDebugDrawer } from '../components/ai-proxy/ProxyDebugDrawer';
-import { RoutingSidePanel } from '../components/ai-proxy/sections/RoutingSidePanel';
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
 import type { ProxySettings, AiProxyAccount } from '../types/generated';
 import {
   Button,
   IconButton,
   Input,
-  MetricStrip,
   OverflowMenu,
   PageHeader,
   Tooltip,
-  TwoColumnLayout,
   FloatingActionBar,
 } from '@/components/ui';
-import type { MetricSegment } from '@/components/ui';
 import { getBackgroundManagerConfig } from '../lib/tauri/modules/backgroundManager';
 import { t } from '../lib/i18n';
+import { useAppStore } from '../stores/app';
 
 const CLIENT_API_KEY = 'proxystitch-local';
 
@@ -49,13 +47,14 @@ function resolveSection(param: string | undefined): AiSection {
 
 export default function AiProviders() {
   const navigate = useNavigate();
+  const language = useAppStore(state => state.language);
   const { section: sectionParam } = useParams<{ section?: string }>();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AiProxyAccount | null>(null);
   const [drawerAccount, setDrawerAccount] = useState<AiProxyAccount | null>(null);
   const [isMappingsModalOpen, setIsMappingsModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [transferMode, setTransferMode] = useState<'import' | 'export'>('import');
+  const [transferMode] = useState<'import' | 'export'>('import');
   const [isIdeWizardOpen, setIsIdeWizardOpen] = useState(false);
   const [showDebugDrawer, setShowDebugDrawer] = useState(false);
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState<boolean | null>(null);
@@ -63,6 +62,7 @@ export default function AiProviders() {
   const selection = useSelection();
 
   const {
+    accounts,
     loading,
     searchQuery,
     setSearchQuery,
@@ -170,8 +170,7 @@ export default function AiProviders() {
 
   const aiSection = useMemo<AiSection>(() => resolveSection(sectionParam), [sectionParam]);
 
-  // Lightweight fetch of background-manager autoSwitch flag — used only by the
-  // Routing tab's MetricStrip. Re-fetches when entering the Routing tab.
+  // Lightweight fetch of the background-manager autoSwitch flag for the routing flow.
   useEffect(() => {
     if (aiSection !== 'routing') return;
     let cancelled = false;
@@ -189,48 +188,6 @@ export default function AiProviders() {
     };
   }, [aiSection]);
 
-  const routingMetricSegments = useMemo<MetricSegment[]>(() => {
-    const running = Boolean(proxyStatus?.running);
-    const port = proxyStatus?.port;
-    const mappingsCount = modelMappings.length;
-
-    return [
-      {
-        id: 'proxy',
-        label: t('aiHub.routing.metrics.proxyLabel'),
-        value: running ? t('aiHub.proxy.running') : t('aiHub.proxy.stopped'),
-        icon: <Server size={11} />,
-        tone: running ? 'success' : 'neutral',
-      },
-      {
-        id: 'port',
-        label: t('aiHub.routing.metrics.portLabel'),
-        value: running && port ? port : t('aiHub.table.emptyValue'),
-        icon: <Activity size={11} />,
-        tone: running && port ? 'info' : 'neutral',
-      },
-      {
-        id: 'mappings',
-        label: t('aiHub.routing.metrics.mappingsLabel'),
-        value: mappingsCount,
-        icon: <Activity size={11} />,
-        tone: mappingsCount > 0 ? 'info' : 'neutral',
-      },
-      {
-        id: 'auto-switch',
-        label: t('aiHub.routing.metrics.autoSwitchLabel'),
-        value:
-          autoSwitchEnabled === null
-            ? t('aiHub.table.emptyValue')
-            : autoSwitchEnabled
-              ? t('aiHub.routing.metrics.autoSwitchOn')
-              : t('aiHub.routing.metrics.autoSwitchOff'),
-        icon: <Repeat size={11} />,
-        tone: autoSwitchEnabled ? 'success' : 'neutral',
-      },
-    ];
-  }, [proxyStatus, modelMappings.length, autoSwitchEnabled]);
-
   const setProxyDraftWithUpdater = useCallback(
     (updater: (prev: ProxySettings | null) => ProxySettings | null) => {
       setProxyDraft(prev => updater(prev));
@@ -238,13 +195,20 @@ export default function AiProviders() {
     [setProxyDraft]
   );
 
+  const scrollToRoutingSection = useCallback((sectionId: string) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
   // === Page header config per section ===
   const headerForSection = (() => {
     if (aiSection === 'routing') {
       return {
         eyebrow: t('sidebar.aiHub'),
         title: t('aiHub.sections.routing.title'),
-        description: t('aiHub.sections.routing.subtitle'),
+        description:
+          language === 'ru'
+            ? 'Настройте источники, правила выбора, ротацию и единый AI Proxy.'
+            : 'Configure sources, selection rules, rotation, and the shared AI Proxy.',
         actions: null,
       };
     }
@@ -259,7 +223,7 @@ export default function AiProviders() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => navigate('/ai-analytics')}
+              onClick={() => navigate('/ai/analytics')}
             >
               {t('aiHub.actions.openDetailedAnalytics')}
             </Button>
@@ -324,6 +288,7 @@ export default function AiProviders() {
         title={headerForSection.title}
         description={headerForSection.description}
         actions={headerForSection.actions}
+        className={aiSection === 'routing' ? 'px-4 py-2.5 md:px-5 md:py-3' : undefined}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -337,7 +302,13 @@ export default function AiProviders() {
         )}
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
+          <div
+            className={
+              aiSection === 'routing'
+                ? 'flex-1 space-y-3 overflow-auto p-3 md:p-4'
+                : 'flex-1 space-y-4 overflow-auto p-4 md:p-6'
+            }
+          >
             {/* === PROVIDERS TAB === */}
             {aiSection === 'providers' && (
               <>
@@ -393,7 +364,7 @@ export default function AiProviders() {
                         await Promise.all(ids.map(id => controller.handleDelete(id)));
                         toast.success(t('aiHub.controller.toasts.bulkDeleted', { count: ids.length }));
                         selection.clear();
-                      } catch (e) {
+                      } catch {
                         toast.error(t('aiHub.controller.errors.bulkDeleteFailed'));
                       }
                     }}
@@ -411,13 +382,34 @@ export default function AiProviders() {
 
             {/* === ROUTING TAB === */}
             {aiSection === 'routing' && (
-              <>
-                <MetricStrip segments={routingMetricSegments} density="compact" />
-                <TwoColumnLayout
-                gap="md"
-                breakpoint="lg"
-                main={
-                  <div className="flex flex-col gap-4">
+              <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3">
+                <RoutingFlowBoard
+                  accounts={accounts}
+                  mappings={modelMappings}
+                  proxyStatus={proxyStatus}
+                  proxySettings={proxySettings}
+                  baseUrl={baseUrl}
+                  autoSwitchEnabled={autoSwitchEnabled}
+                  proxyBusy={proxyBusy}
+                  onOpenProviders={() => navigate('/ai/providers')}
+                  onOpenMappings={() => scrollToRoutingSection('routing-mappings')}
+                  onOpenRotation={() => scrollToRoutingSection('routing-rotation')}
+                  onOpenProxy={() => scrollToRoutingSection('routing-proxy')}
+                  onStartStopProxy={handleStartStopProxy}
+                />
+
+                <div id="routing-mappings" className="scroll-mt-4">
+                  <MappingsEditor
+                    modelMappings={modelMappings}
+                    onAddMapping={addMapping}
+                    onUpsertMapping={upsertMapping}
+                    onRemoveMapping={removeMapping}
+                    onSaveMappings={handleSaveMappings}
+                  />
+                </div>
+
+                <div className="grid items-start gap-3 xl:grid-cols-2">
+                  <div id="routing-proxy" className="min-w-0 scroll-mt-4">
                     <AiProxyControlsSection
                       visible
                       proxyStatus={proxyStatus}
@@ -442,35 +434,13 @@ export default function AiProviders() {
                       showConfigActions
                       showRuntimeActions
                     />
+                  </div>
 
-                    <MappingsEditor
-                      modelMappings={modelMappings}
-                      onAddMapping={addMapping}
-                      onUpsertMapping={upsertMapping}
-                      onRemoveMapping={removeMapping}
-                      onSaveMappings={handleSaveMappings}
-                    />
+                  <div id="routing-rotation" className="min-w-0 scroll-mt-4">
+                    <RotationSettingsPanel capabilities={providerCapabilities} visible />
                   </div>
-                }
-                side={
-                  <div className="flex flex-col gap-3">
-                    <AccountRotationCard visible />
-                    <RoutingSidePanel
-                      onOpenIdeWizard={() => setIsIdeWizardOpen(true)}
-                      onOpenImport={() => {
-                        setTransferMode('import');
-                        setIsTransferModalOpen(true);
-                      }}
-                      onOpenExport={() => {
-                        setTransferMode('export');
-                        setIsTransferModalOpen(true);
-                      }}
-                    />
-                  </div>
-                }
-                sideWidth="w-full lg:w-[340px]"
-              />
-              </>
+                </div>
+              </div>
             )}
 
             {/* === MONITOR TAB === */}

@@ -48,3 +48,19 @@ async def test_opencode_api(params: dict) -> dict:
     
     tester = OpenCodeApiTester()
     return await tester.test_api(base_url, api_key)
+
+
+@register_command("bulk_test_opencode_api")
+async def bulk_test_opencode_api(params: dict) -> dict:
+    """Test multiple API keys against the same base URL in parallel."""
+    base_url = params.get("baseUrl", "")
+    api_keys = params.get("apiKeys", [])
+    concurrency = params.get("concurrency", 10)
+    
+    if not base_url:
+        return {"success": False, "error": "baseUrl is required"}
+    if not api_keys or not isinstance(api_keys, list):
+        return {"success": False, "error": "apiKeys must be a non-empty list"}
+    
+    tester = OpenCodeApiTester()
+    return await tester.bulk_test_api(base_url, api_keys, concurrency=concurrency)

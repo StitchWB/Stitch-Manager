@@ -748,6 +748,19 @@ export interface Translations {
       mappingsHint: string;
       mappingsTitle: string;
       title: string;
+      ideCli: {
+        title: string;
+        description: string;
+      }
+      baseUrl: string;
+      apiKey: string;
+      configureIde: string;
+      transfer: {
+        title: string;
+        description: string;
+      }
+      import: string;
+      export: string;
     }
     labels: {
       providers: string;
@@ -888,8 +901,64 @@ export interface Translations {
       title: string;
       toasts: {
         saveFailed: string;
+        strategySaved: string;
       }
       toggleTooltip: string;
+      strategy: {
+        title: string;
+        description: string;
+      }
+      strategies: {
+        roundRobin: {
+          title: string;
+          description: string;
+        }
+        random: {
+          title: string;
+          description: string;
+        }
+        leastUsed: {
+          title: string;
+          description: string;
+        }
+        priority: {
+          title: string;
+          description: string;
+        }
+      }
+      priority: {
+        title: string;
+        description: string;
+      }
+    }
+    topology: {
+      title: string;
+      router: string;
+      routerDescription: string;
+      security: string;
+      securityDescription: string;
+      active: string;
+      keys: string;
+      requests: string;
+      success: string;
+      noProviders: string;
+    }
+    healthCheck: {
+      title: string;
+      description: string;
+      enableLabel: string;
+      intervalLabel: string;
+      intervalHint: string;
+      autoDisableLabel: string;
+      autoDisableHint: string;
+      showAdvanced: string;
+      hideAdvanced: string;
+      testEndpointLabel: string;
+      testEndpointHint: string;
+      cooldownLabel: string;
+      cooldownHint: string;
+      exponentialBackoffLabel: string;
+      exponentialBackoffHint: string;
     }
     search: {
       placeholder: string;
@@ -1757,6 +1826,9 @@ export interface Translations {
     title: string;
     verbosityLabel: string;
     warning: string;
+  follow: string;
+  newLogs: string;
+  emptyMessage: string;
   }
   mail: {
     accountIdLabel: string;
@@ -1777,6 +1849,8 @@ export interface Translations {
     addMailboxFromAutoRegDescription: string;
     addMailboxFromSheets: string;
     addMailboxFromSheetsDescription: string;
+    addMailboxMailTmRegister: string;
+    addMailboxMailTmRegisterDescription: string;
     addMailboxGmail: string;
     addMailboxGmailDescription: string;
     addMailboxICloud: string;
@@ -1849,6 +1923,7 @@ export interface Translations {
     loadMessageAction: string;
     mailboxLabel: string;
     mailboxNotSelectedHint: string;
+    mailboxRegisterFailed: string;
     mailboxNotSelectedTitle: string;
     manualConnectionAction: string;
     manualConnectionDescription: string;
@@ -1895,6 +1970,7 @@ export interface Translations {
     readStateRead: string;
     readStateUnread: string;
     receivedAtField: string;
+    editProfileAction: string;
     renameProfileAction: string;
     renameProfileDialogDescription: string;
     renameProfileDialogTitle: string;
@@ -2633,21 +2709,27 @@ export interface Translations {
       clear: string;
       configure_ai_proxy_to_distribute_models_to_idecli_: string;
       configure_idecli: string;
+      disabled_mode: string;
       enabled_changes_apply_to_opencode_config_previews: string;
       fill_first: string;
       full_mode_ai_proxy_quota: string;
+      full_mode_desc: string;
       idecli_clients_connect_to_this_port_through_the_ai: string;
       loading: string;
       loading_model_toggles: string;
       mode: string;
       opencode_model_access: string;
       quotaonly_mode: string;
+      quotaonly_mode_desc: string;
       round_robin: string;
       routing_strategy: string;
       running_on_port: string;
+      save_models: string;
       save_settings: string;
       saved: string;
+      saving: string;
       select_all: string;
+      select_at_least_one_model: string;
       start: string;
       start_ai_proxy_automatically_to_keep_idecli_client: string;
       stop: string;
@@ -2658,21 +2740,39 @@ export interface Translations {
       auto_refresh_quota: string;
       automatically_refresh_account_quotas_in_the_backgr: string;
       errors: string;
+      failed_to_load: string;
+      idle: string;
+      interval_1h: string;
+      interval_1m: string;
+      interval_5m: string;
+      interval_10m: string;
+      interval_30m: string;
       last: string;
       loading: string;
       next: string;
       refresh_interval: string;
+      refreshing_now: string;
       saved: string;
       tracked: string;
     }
     categories: {
+      appearance: string;
+      mail: string;
+      proxy: string;
+      system: string;
       automation: string;
-      general: string;
-      connectivity: string;
       googleSheets: string;
       aiProxy: string;
       extension: string;
-      proxy: string;
+    }
+    mailTabs: {
+      imap: string;
+      aliases: string;
+      icloud: string;
+    }
+    proxyTabs: {
+      quick: string;
+      library: string;
     }
     database: {
       location: string;
@@ -2694,6 +2794,7 @@ export interface Translations {
       autodelete_aliases: string;
       bandwidth: string;
       default_recipient: string;
+      description: string;
       domain: string;
       enable_mailtm_temporary_email: string;
       format: string;
@@ -2703,8 +2804,42 @@ export interface Translations {
       not_saved_yet: string;
       placeholders: string;
       save_token: string;
+      saving: string;
+      select_domain: string;
       subscription: string;
+      test_connection: string;
+      testing: string;
       token_is_sensitive_and_is_not_saved_until_you_clic: string;
+      use_account_default: string;
+    }
+    icloud: {
+      title: string;
+      description: string;
+      enable: string;
+      appleId: string;
+      appPassword: string;
+      appPasswordHint: string;
+      saveAuthenticate: string;
+      saving: string;
+      authenticating: string;
+      refreshStats: string;
+      poolStatus: string;
+      available: string;
+      reserved: string;
+      used: string;
+      rateLimit: string;
+      nextSlot: string;
+      generate: string;
+      aliases: string;
+      fillPool: string;
+      generating: string;
+      rateLimitNote: string;
+      verify2fa: string;
+      twoFaCode: string;
+      twoFaPrompt: string;
+      authSuccess: string;
+      twoFaVerified: string;
+      generated: string;
     }
     extension: {
       bridgeHint: string;

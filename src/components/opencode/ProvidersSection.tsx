@@ -48,7 +48,7 @@ export function ProvidersSection({
         description="Add your first provider to get started"
         action={
           <Button onClick={() => { setEditingId(null); setIsModalOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" /> Add Provider
+            <Plus className="w-4 h-4" /> Add Provider
           </Button>
         }
       />
@@ -65,7 +65,7 @@ export function ProvidersSection({
           </p>
         </div>
         <Button onClick={() => { setEditingId(null); setIsModalOpen(true); }}>
-          <Plus className="w-4 h-4 mr-2" /> Add Provider
+          <Plus className="w-4 h-4" /> Add Provider
         </Button>
       </div>
 
