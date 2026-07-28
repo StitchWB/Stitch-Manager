@@ -115,6 +115,12 @@ async def bootstrap() -> None:
             "Discovered %d provider(s): %s", len(providers), list(providers.keys())
         )
 
+    # ── Command metadata ─────────────────────────────────────────────────────
+    # Extract Pydantic models, categories, and descriptions from handlers
+    from stitch_backend.core.command_meta import build_command_meta
+
+    build_command_meta()
+
     # ── iCloud pool ──────────────────────────────────────────────────────────
     try:
         from stitch_backend.domains.icloud_email_pool.service import get_icloud_pool_service
