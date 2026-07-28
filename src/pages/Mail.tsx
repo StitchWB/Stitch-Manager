@@ -13,7 +13,7 @@ import {
 import type { AddMailboxAction } from '@/components/mail/MailSidebar';
 import type { MailboxProviderKind } from '@/lib/mail/providerPresets';
 import { detectMailboxProviderKind } from '@/lib/mail/providerPresets';
-import { emailInboxUpsertProfile } from '@/lib/tauri/modules/emailInbox';
+import { emailInboxUpsertProfile } from '@/lib/backend/modules/emailInbox';
 import { Button, Modal } from '@/components/ui';
 import { useMailRuntime } from '@/hooks/useMailRuntime';
 import { useMailStore } from '@/stores/mail';

@@ -1,6 +1,6 @@
 import { Button, Input, Modal, Select, Toggle } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { type ProxyLibraryDraft } from '@/lib/tauri/modules/proxyLibrary';
+import { type ProxyLibraryDraft } from '@/lib/backend/modules/proxyLibrary';
 
 interface ProfileAddProxyModalProps {
   isOpen: boolean;

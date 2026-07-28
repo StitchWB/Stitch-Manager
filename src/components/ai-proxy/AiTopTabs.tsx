@@ -2,7 +2,6 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   Cable,
-  KeyRound,
   LayoutDashboard,
   MessageSquare,
   Orbit,
@@ -22,8 +21,7 @@ type AiTabId =
   | 'connections'
   | 'monitor'
   | 'chat'
-  | 'antigravity'
-  | 'apiKeys';
+  | 'antigravity';
 
 interface AiTab {
   id: AiTabId;
@@ -35,7 +33,6 @@ interface AiTab {
 const AI_TABS: AiTab[] = [
   { id: 'overview', label: 'Overview', to: '/ai', icon: LayoutDashboard },
   { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers', icon: Server },
-  { id: 'apiKeys', label: 'aiHub.tabs.apiKeys', to: '/ai/api-keys', icon: KeyRound },
   { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity', icon: Orbit },
   { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
   { id: 'connections', label: 'Connections', to: '/ai/integrations', icon: Cable },
@@ -52,7 +49,8 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/monitor') || pathname.startsWith('/ai/analytics')) return 'monitor';
   if (pathname.startsWith('/ai/chat')) return 'chat';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
-  if (pathname.startsWith('/ai/api-keys')) return 'apiKeys';
+  // Redirect old api-keys route to providers
+  if (pathname.startsWith('/ai/api-keys')) return 'providers';
   return 'providers';
 }
 

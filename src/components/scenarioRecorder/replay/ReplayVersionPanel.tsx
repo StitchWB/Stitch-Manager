@@ -1,6 +1,6 @@
 import { Button, Select } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import type { ScenarioRevisionItem } from '@/lib/tauri/modules/pythonJobs';
+import type { ScenarioRevisionItem } from '@/lib/backend/modules/pythonJobs';
 
 type ReplayVersionPanelProps = {
   loading: boolean;

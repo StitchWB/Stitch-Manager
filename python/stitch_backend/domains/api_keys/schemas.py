@@ -53,6 +53,23 @@ PROVIDER_DB_KEYS: dict[str, str] = {
 }
 
 
+# ── Request DTOs ──────────────────────────────────────────────────────────────
+
+
+class GetApiKeysRequest(BaseModel):
+    """No-arg request for get_*_api_keys commands (all params are in the URL)."""
+
+    model_config = {"populate_by_name": True, "extra": "ignore"}
+
+
+class SetApiKeysRequest(BaseModel):
+    """Request body for set_*_api_keys commands."""
+
+    keys: list[dict[str, Any]] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True, "extra": "ignore"}
+
+
 def parse_keys(provider: str, raw_json: str) -> list[dict[str, Any]]:
     """Parse stored JSON into a list of API key dicts."""
     import json

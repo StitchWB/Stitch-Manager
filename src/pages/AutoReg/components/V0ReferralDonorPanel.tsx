@@ -3,7 +3,7 @@ import { Link2, RefreshCw, AlertCircle } from 'lucide-react';
 
 import { GlassCard, Select, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { getReferralDonors, type ReferralDonor } from '@/lib/tauri';
+import { getReferralDonors, type ReferralDonor } from '@/lib/backend';
 
 interface V0ReferralDonorPanelProps {
   /** Selected donor id, or null for automatic selection. */

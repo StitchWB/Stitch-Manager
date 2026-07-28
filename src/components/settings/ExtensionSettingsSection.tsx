@@ -3,7 +3,7 @@ import { Chrome, FolderOpen, Link2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, SectionHeader } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { copyToClipboard, openInBrowser, openInFileManager } from '@/lib/tauri/modules/utils';
+import { copyToClipboard, openInBrowser, openInFileManager } from '@/lib/backend/modules/utils';
 import { useExtensionBridgeProbe } from '@/lib/scenarioRecorder/useExtensionBridgeProbe';
 
 export function ExtensionSettingsSection() {

@@ -33,13 +33,13 @@ import {
   getRequestHistorySafe,
   getDailyStatsSafe,
   getCostEstimateSafe,
-} from '@/lib/tauri/modules/aiProxy';
+} from '@/lib/backend/modules/aiProxy';
 import {
   getAntigravityApiKeys,
   getGeminiApiKeys,
   getOpenAIApiKeys,
   getZaiApiKeys,
-} from '@/lib/tauri/modules/apiKeys';
+} from '@/lib/backend/modules/apiKeys';
 import { Button, ButtonBase, Checkbox, EmptyState, Input, LoadingSpinner, Select, StatusBadge, Textarea, Tooltip } from '@/components/ui';
 
 interface ChatModelInfo extends ModelInfo {

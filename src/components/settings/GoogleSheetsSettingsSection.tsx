@@ -7,7 +7,7 @@ import {
   initGoogleSheetsSchema,
   normalizeSpreadsheetId,
   testGoogleSheetsConnection,
-} from '@/lib/tauri/modules/googleSheets';
+} from '@/lib/backend/modules/googleSheets';
 
 const SETTINGS_SECRET_MASK = '********';
 

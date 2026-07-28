@@ -5,7 +5,7 @@ import type {
   ImapConnectCredentials,
   MailTmConnectCredentials,
   WaitForEmailOptions,
-} from '@/lib/tauri/modules/emailInbox';
+} from '@/lib/backend/modules/emailInbox';
 
 type NullableString = string | null | undefined;
 

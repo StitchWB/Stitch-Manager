@@ -30,7 +30,7 @@ import {
   validateTaskFormState,
 } from './Scheduler/components/SchedulerTaskForm';
 import { formatDistanceToNow } from 'date-fns';
-import type { SchedulerTemplate } from '../lib/tauri/modules/scheduler';
+import type { SchedulerTemplate } from '../lib/backend/modules/scheduler';
 import { Button, ConfirmDialog, EmptyState, GlassCard, IconButton, Modal, ProgressBar, StatCard, StatusBadge, Toggle } from '@/components/ui';
 
 function parseJsonObject(raw: string): Record<string, unknown> {

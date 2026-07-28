@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { getSettings, updateSettings } from '../../lib/tauri';
+import { getSettings, updateSettings } from '../../lib/backend';
 import type { SettingsData } from '../../types/generated';
 import type { ProviderName } from '../../types/ui';
 

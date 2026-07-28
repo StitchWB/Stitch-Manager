@@ -16,7 +16,7 @@ import {
   fetchGoogleSheetsDataset,
   testGoogleSheetsConnection,
   type GoogleSheetsParams,
-} from '@/lib/tauri/modules/googleSheets';
+} from '@/lib/backend/modules/googleSheets';
 
 type GoogleSheetsDatasetResult = {
   dataset: GoogleSheetsDataset | null;

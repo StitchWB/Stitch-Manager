@@ -27,7 +27,7 @@ import {
   type EmailProviderCatalogItem,
   type EmailProviderType,
   type ProviderCapabilities,
-} from '@/lib/tauri/modules/emailInbox';
+} from '@/lib/backend/modules/emailInbox';
 import type { MailboxProfileDraft } from '@/lib/mail/sources/types';
 import {
   buildEmailQuery,

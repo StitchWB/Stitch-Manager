@@ -6,7 +6,7 @@ import {
   startPythonJob,
   cancelPythonJob,
   type PythonJobStartResponse } from
-'@/lib/tauri/modules/pythonJobs';
+'@/lib/backend/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
 
 type BrowserRuntimeInstallModalProps = {

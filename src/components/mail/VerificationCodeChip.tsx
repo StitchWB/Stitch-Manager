@@ -86,7 +86,7 @@ export function VerificationCodeChip({
   };
 
   const handleOpenLink = (url: string) => {
-    // window.open works inside Tauri webview and bubbles to the host browser
+    // window.open works inside Backend webview and bubbles to the host browser
     // via the iframe sandbox base-target=_blank rule. Outside the sandbox we
     // open in a new tab.
     window.open(url, '_blank', 'noopener,noreferrer');

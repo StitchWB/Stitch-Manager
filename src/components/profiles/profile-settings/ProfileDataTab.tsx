@@ -1,7 +1,7 @@
 import { Cookie, Upload } from 'lucide-react';
 import { Button, Textarea } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { type ProfileSettingsV1 } from '@/lib/tauri/modules/profiles';
+import { type ProfileSettingsV1 } from '@/lib/backend/modules/profiles';
 
 interface ProfileDataTabProps {
   draft: ProfileSettingsV1;

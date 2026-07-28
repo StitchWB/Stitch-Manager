@@ -25,8 +25,8 @@ async def cmd_apply_patch(params: dict) -> str:
 
 
 @register_command("check_kiro_patch_status")
-async def cmd_check_status(params: dict) -> bool:
-    """Check if Kiro Patch is installed."""
+async def cmd_check_status(params: dict) -> dict[str, bool]:
+    """Check if Kiro Patch is installed (marker + proxy injection)."""
     from stitch_backend.domains.kiro_patch import service
     return service.check_patch_status()
 

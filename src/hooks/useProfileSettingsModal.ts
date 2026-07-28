@@ -18,8 +18,8 @@ import {
   saveProfileSettings,
   type ProfileSettingsV1,
   type BrowserFingerprintProfile,
-} from '@/lib/tauri/modules/profiles';
-import { copyToClipboard, openInFileManager } from '@/lib/tauri/modules/utils';
+} from '@/lib/backend/modules/profiles';
+import { copyToClipboard, openInFileManager } from '@/lib/backend/modules/utils';
 import {
   listProxyLibrary,
   createOrGetProxyLibraryEntry,
@@ -29,7 +29,7 @@ import {
   ProxyLibraryError,
   type ProxyLibraryDraft,
   type ProxyLibraryEntry,
-} from '@/lib/tauri/modules/proxyLibrary';
+} from '@/lib/backend/modules/proxyLibrary';
 
 export type SettingsTab = 'main' | 'proxy' | 'geo' | 'data';
 

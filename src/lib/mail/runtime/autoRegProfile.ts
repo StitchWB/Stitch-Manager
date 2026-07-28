@@ -7,7 +7,7 @@ import {
   emailInboxUpsertProfile,
   type EmailConnectInput,
   type EmailInboxProfile,
-} from '@/lib/tauri/modules/emailInbox';
+} from '@/lib/backend/modules/emailInbox';
 import type { IMAPConfig } from '@/stores/registration/types';
 
 /**

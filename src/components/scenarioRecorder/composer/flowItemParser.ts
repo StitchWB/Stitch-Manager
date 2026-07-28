@@ -1,4 +1,4 @@
-import type { ComposedFlowItem } from '@/lib/tauri/modules/pythonJobs';
+import type { ComposedFlowItem } from '@/lib/backend/modules/pythonJobs';
 import type { ComposedFlow } from '@/lib/scenarioFlow/types';
 
 export const parseFlowItem = (item: ComposedFlowItem): ComposedFlow | null => {

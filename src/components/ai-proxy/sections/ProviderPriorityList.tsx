@@ -20,7 +20,7 @@ import { GripVertical, Zap } from 'lucide-react';
 
 import { t } from '@/lib/i18n';
 import { ButtonBase, GlassCard } from '@/components/ui';
-import type { ProviderCapability } from '../../../lib/tauri/modules/aiProxy';
+import type { ProviderCapability } from '../../../lib/backend/modules/aiProxy';
 
 interface ProviderPriorityListProps {
   capabilities: ProviderCapability[];

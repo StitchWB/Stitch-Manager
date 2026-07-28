@@ -19,8 +19,8 @@ import {
   isTraePatched,
   isTraeExtensionPatched,
   isTraeWorkbenchPatched,
-  TauriError,
-} from '../lib/tauri';
+  BackendError,
+} from '../lib/backend';
 
 // ============================================
 // Types
@@ -99,7 +99,7 @@ export const usePatcherStore = create<PatcherState>()(
 
             return ides;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, scanning: false });
             throw error;
           }
@@ -117,7 +117,7 @@ export const usePatcherStore = create<PatcherState>()(
             }));
             return status;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             // Set error status for this IDE
             const errorStatus: PatchStatus = {
               ideId,
@@ -194,7 +194,7 @@ export const usePatcherStore = create<PatcherState>()(
             set({ traePatchLoading: false });
             return result;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, traePatchLoading: false });
             throw error;
           }
@@ -241,7 +241,7 @@ export const usePatcherStore = create<PatcherState>()(
 
             return result;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set(state => ({
               error: message,
               operationInProgress: { ...state.operationInProgress, [ideId]: null },
@@ -281,7 +281,7 @@ export const usePatcherStore = create<PatcherState>()(
 
             return result;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set(state => ({
               error: message,
               operationInProgress: { ...state.operationInProgress, [ideId]: null },
@@ -315,7 +315,7 @@ export const usePatcherStore = create<PatcherState>()(
 
             return backupList;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, backupsLoading: false });
             throw error;
           }
@@ -378,7 +378,7 @@ export const usePatcherStore = create<PatcherState>()(
 
             return result;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set(state => ({
               error: message,
               operationInProgress: ideId
@@ -404,7 +404,7 @@ export const usePatcherStore = create<PatcherState>()(
               return { backups: newBackups };
             });
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message });
             throw error;
           }

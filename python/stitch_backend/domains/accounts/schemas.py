@@ -65,10 +65,6 @@ class AccountResponse(BaseModel):
     created_at: str = Field(alias="createdAt")
     updated_at: str | None = Field(None, alias="updatedAt")
 
-    # OmniRoute
-    is_llm_account: bool = Field(False, alias="isLlmAccount")
-    omniroute_connection_id: str | None = Field(None, alias="omnirouteConnectionId")
-
     # Legacy compat fields (nullable, present in generated.ts)
     metadata: str | None = None
     provider_type: str | None = Field(None, alias="providerType")
@@ -162,7 +158,6 @@ class AddAccountRequest(BaseModel):
     api_key: str | None = Field(None, alias="apiKey")
     display_name: str | None = Field(None, alias="displayName")
     metadata: str | None = None
-    is_llm_account: bool = Field(False, alias="isLlmAccount")
 
 
 class DeleteAccountRequest(BaseModel):
@@ -253,10 +248,4 @@ class CheckKiroAccountRequest(BaseModel):
     auto_refresh: bool = Field(True, alias="autoRefresh")
 
 
-class UpdateProviderMetadataRequest(BaseModel):
-    """Merge arbitrary key/value pairs into account.provider_metadata."""
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    account_id: str | int = Field(alias="accountId")
-    metadata: dict = {}
-    merge: bool = True  # True = merge with existing, False = overwrite

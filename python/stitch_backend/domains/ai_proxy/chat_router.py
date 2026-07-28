@@ -173,7 +173,7 @@ async def create_chat_completion(
     if chat_request.provider != "zai":
         raise HTTPException(
             status_code=404,
-            detail={"error": {"message": "Use OmniRoute for non-Z.AI chat completions"}},
+            detail={"error": {"message": "Use the native gateway for non-Z.AI chat completions"}},
         )
 
     gateway = await _build_gateway(session)

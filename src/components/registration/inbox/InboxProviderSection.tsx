@@ -5,7 +5,7 @@ import { Mail, Info } from 'lucide-react';
 import {
   CollapsibleSection,
 } from '@/components/ui';
-import type { EmailProviderType } from '@/lib/tauri/modules/emailInbox';
+import type { EmailProviderType } from '@/lib/backend/modules/emailInbox';
 
 export interface InboxProviderSectionProps {
   provider: EmailProviderType;

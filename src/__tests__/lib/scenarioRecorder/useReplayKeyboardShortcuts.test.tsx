@@ -1,7 +1,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import type { ScenarioRecordItem } from '../../../lib/tauri/modules/pythonJobs';
+import type { ScenarioRecordItem } from '../../../lib/backend/modules/pythonJobs';
 import {
   useReplayListNavigation,
   useReplayStartHotkey,

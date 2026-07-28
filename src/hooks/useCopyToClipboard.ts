@@ -12,7 +12,7 @@ import { copyToClipboard as nativeCopy } from '@/lib/native';
 let copyToClipboardAutoClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * Write text to clipboard — delegates to native layer (Tauri plugin / navigator / execCommand).
+ * Write text to clipboard — delegates to native layer (Backend plugin / navigator / execCommand).
  */
 async function writeToClipboard(text: string): Promise<void> {
   return nativeCopy(text);

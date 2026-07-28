@@ -453,11 +453,11 @@ export interface OAuthSessionManager {
 }
 
 // ============================================
-// OAuth Command Types for Tauri
+// OAuth Command Types for Backend
 // ============================================
 
 /**
- * OAuth command parameters for Tauri backend
+ * OAuth command parameters for Backend backend
  */
 export interface OAuthCommandParams {
   provider: OAuthProvider;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pause, Play, Square } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { Badge, Button, GlassCard, Input } from '@/components/ui';
-import { registrationControl } from '../../lib/tauri';
+import { registrationControl } from '../../lib/backend';
 
 interface LaunchPadProps {
   count: number;

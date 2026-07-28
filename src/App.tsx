@@ -24,7 +24,6 @@ const Mail = lazy(() => import('./pages/Mail'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Logs = lazy(() => import('./pages/Logs'));
 const Chat = lazy(() => import('./pages/Chat'));
-const ApiKeys = lazy(() => import('./pages/ApiKeys'));
 const AiIntegrations = lazy(() => import('./pages/AiIntegrations'));
 const OpenCodeConfig = lazy(() => import('./pages/OpenCodeConfig'));
 const Scenarios = lazy(() => import('./pages/Scenarios'));
@@ -265,7 +264,7 @@ function App() {
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai/antigravity" element={<Antigravity />} />
-            <Route path="/ai/api-keys" element={<ApiKeys />} />
+            <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
             <Route path="/ai/chat" element={<Chat />} />
             <Route path="/ai/analytics" element={<AiAnalytics />} />
@@ -284,7 +283,7 @@ function App() {
             <Route path="/scenarios" element={<Scenarios />} />
             <Route path="/tools" element={<Tools />} />
             <Route path="/totp" element={<Totp />} />
-            <Route path="/api-keys" element={<Navigate to="/ai/api-keys" replace />} />
+            <Route path="/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

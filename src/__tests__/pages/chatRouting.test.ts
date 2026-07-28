@@ -25,7 +25,7 @@ describe('chat routing', () => {
     expect(resolveChatCompletionsUrl(model, 25584)).toBe('http://localhost:25584/api/v1/chat/completions');
   });
 
-  it('keeps other non-native models on the OmniRoute sidecar endpoint', () => {
+  it('routes other models via the unified gateway', () => {
     const model = {
       id: 'gpt-4o-mini',
       provider: 'openai',
@@ -36,12 +36,6 @@ describe('chat routing', () => {
     expect(isZaiChatModel(model)).toBe(false);
     expect(resolveChatCompletionsUrl(model, 25584)).toBe(
       'http://127.0.0.1:25584/v1/chat/completions'
-    );
-  });
-
-  it('keeps unknown or auto routing on the OmniRoute sidecar endpoint', () => {
-    expect(resolveChatCompletionsUrl(undefined, 25585)).toBe(
-      'http://127.0.0.1:25585/v1/chat/completions'
     );
   });
 });

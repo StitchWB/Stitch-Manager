@@ -17,6 +17,7 @@ export interface PatchModules {
   constantPatching: boolean;
   customPrompts: boolean;
   requestSpy: boolean;
+  proxyInjection: boolean; // Intercept all HTTP/HTTPS via reverse proxy
 }
 
 export interface PatchConstants {
@@ -37,6 +38,9 @@ export interface KiroPatchConfig {
   accountBindings: Record<string, string>; // accountId -> machineId
   currentAccountId: string | null;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
+  proxyEnabled?: boolean; // Whether reverse proxy is enabled
+  proxyPort: number; // Port for reverse proxy server (default: 5580)
+  outboundProxy?: string; // Outbound proxy for geo-spoofing (format: host:port:user:pass)
   constants: PatchConstants;
   promptsPath: string | null;
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getSettings, updateSettings, getRegistrationStatus } from '@/lib/tauri';
+import { getSettings, updateSettings, getRegistrationStatus } from '@/lib/backend';
 import { useRegistrationStore } from '../../../stores/registration';
 import { useAccountsStore } from '../../../stores/accounts';
 import { RegistrationStatus, SettingsData } from '../../../types/generated';

@@ -102,6 +102,12 @@ export const PATCH_OPTIONS: Record<
       descKey: 'patcher.errorSuppressionDesc',
       defaultEnabled: false,
     },
+    {
+      id: 'proxyInjection',
+      labelKey: 'patcher.proxyInjection',
+      descKey: 'patcher.proxyInjectionDesc',
+      defaultEnabled: true,
+    },
   ],
   windsurf: [],
   trae: [

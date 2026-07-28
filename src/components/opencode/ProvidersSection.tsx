@@ -5,7 +5,7 @@ import {
   GlassCard, Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
   Button, Badge, EmptyState, ConfirmDialog, Toggle,
 } from '@/components/ui';
-import type { ProviderConfig } from '@/lib/tauri/modules/opencodeConfig';
+import type { ProviderConfig } from '@/lib/backend/modules/opencodeConfig';
 import { ProviderEditorModal } from './ProviderEditorModal';
 
 interface ProvidersSectionProps {

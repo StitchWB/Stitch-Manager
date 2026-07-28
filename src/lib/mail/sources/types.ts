@@ -1,4 +1,4 @@
-import type { EmailConnectInput, EmailProviderType } from '@/lib/tauri/modules/emailInbox';
+import type { EmailConnectInput, EmailProviderType } from '@/lib/backend/modules/emailInbox';
 
 export type MailboxSourceType = 'google_sheets_raw';
 

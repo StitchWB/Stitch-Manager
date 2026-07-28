@@ -92,7 +92,6 @@ class AccountService:
             token=req.token,
             refresh_token=req.refresh_token,
             api_key=req.api_key,
-            is_llm_account=req.is_llm_account,
             registration_source="manual",
             created_at=_utcnow(),
         )
@@ -157,13 +156,13 @@ class AccountService:
                         (id, provider, email, password, token, refresh_token, status,
                          display_name, api_key, registration_source,
                          ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
-                         notes, tags, use_count, success_rate, is_llm_account,
+                         notes, tags, use_count, success_rate,
                          created_at, quota_used)
                     VALUES
                         (:id, :provider, :email, :password, :token, :refresh_token, 'active',
                          :display_name, :api_key, 'auto',
                          :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
-                         :notes, '[]', 0, 1.0, 0,
+                         :notes, '[]', 0, 1.0,
                          :created_at, 0)
                 """),
                 common_params,
@@ -176,13 +175,13 @@ class AccountService:
                         (id, provider, email, password, token, refresh_token, status,
                          display_name, api_key, registration_source,
                          ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
-                         notes, tags, use_count, success_rate, is_llm_account,
+                         notes, tags, use_count, success_rate,
                          created_at)
                     VALUES
                         (:id, :provider, :email, :password, :token, :refresh_token, 'active',
                          :display_name, :api_key, 'auto',
                          :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
-                         :notes, '[]', 0, 1.0, 0,
+                         :notes, '[]', 0, 1.0,
                          :created_at)
                 """),
                 common_params,

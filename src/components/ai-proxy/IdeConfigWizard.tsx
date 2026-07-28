@@ -12,7 +12,7 @@ import {
   getProxySettings,
   autoImportAiProxyAuthFiles,
   type AuthImportResult,
-} from '../../lib/tauri/modules/aiProxy';
+} from '../../lib/backend/modules/aiProxy';
 import {
   DEFAULT_PROVIDER_PROFILE_KEY,
   PROVIDER_PROFILES,

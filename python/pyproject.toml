@@ -22,8 +22,9 @@ dependencies = [
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
 
-    # ── HTTP client (OmniRoute sync) ──────────────────────────────────────
+    # ── HTTP client ──────────────────────────────────────────────────
     "httpx>=0.27.0",
+    "socksio>=1.0.0",  # SOCKS5 proxy support for httpx
 
     # ── Optional LiteLLM gateway ───────────────────────────────────────────
     "litellm[proxy]>=1.93.0,<2.0.0",

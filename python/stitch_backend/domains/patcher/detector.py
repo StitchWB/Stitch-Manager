@@ -28,6 +28,7 @@ _WINDOWS_PATHS: Dict[str, List[str]] = {
     "kiro": [
         r"%LOCALAPPDATA%\Programs\Kiro",
         r"%LOCALAPPDATA%\Kiro",
+        r"S:\Kiro",  # Custom installation path
     ],
     "windsurf": [
         r"%LOCALAPPDATA%\Programs\Windsurf",

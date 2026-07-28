@@ -6,7 +6,7 @@
 import '@testing-library/jest-dom';
 
 // jsdom does not ship with a `fetch` implementation. Polyfill it so tests that
-// exercise code paths using fetch (e.g. Tauri command wrappers) do not throw
+// exercise code paths using fetch (e.g. Backend command wrappers) do not throw
 // "ReferenceError: fetch is not defined".
 if (typeof globalThis.fetch === 'undefined') {
   (globalThis as any).fetch = jest.fn(async (_url: string, _init?: RequestInit) => ({

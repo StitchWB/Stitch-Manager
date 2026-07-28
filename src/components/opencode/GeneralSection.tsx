@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { GlassCard, Input, Toggle, ModelPicker, Button } from '@/components/ui';
 import type { ModelOption } from '@/components/ui';
-import type { OpenCodeConfig, OhMyOpenAgentConfig, CompactionConfig } from '@/lib/tauri/modules/opencodeConfig';
+import type { OpenCodeConfig, OhMyOpenAgentConfig, CompactionConfig } from '@/lib/backend/modules/opencodeConfig';
 
 interface GeneralSectionProps {
   config: OpenCodeConfig;

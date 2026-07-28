@@ -10,7 +10,7 @@ import {
   type EmailMailboxSession,
   type EmailMessage,
   type EmailProviderType,
-} from '@/lib/tauri/modules/emailInbox';
+} from '@/lib/backend/modules/emailInbox';
 import type { IMAPConfig } from '@/stores/registration/types';
 import {
   buildEmailQuery,

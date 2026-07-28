@@ -56,8 +56,6 @@ WRITE_COMMANDS: set[str] = {
     "delete_composed_flow",
     "start_composed_flow_job",
     "mark_composed_flow_ran",
-    "start_ai_proxy",
-    "stop_ai_proxy",
     "update_proxy_settings",
     "create_ai_proxy_account",
     "start_freemodel_bridge",
@@ -65,8 +63,6 @@ WRITE_COMMANDS: set[str] = {
     "start_replenishment",
     "stop_replenishment",
     "create_aws_account",
-    "start_omniroute",
-    "stop_omniroute",
     "update_settings",
 }
 

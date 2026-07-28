@@ -45,8 +45,8 @@ import {
   type ScenarioMetadata,
   type ScenarioRevisionItem,
   type ScenarioRecordItem } from
-'@/lib/tauri/modules/pythonJobs';
-import { openInFileManager, copyToClipboard } from '@/lib/tauri/modules/utils';
+'@/lib/backend/modules/pythonJobs';
+import { openInFileManager, copyToClipboard } from '@/lib/backend/modules/utils';
 import { t } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';

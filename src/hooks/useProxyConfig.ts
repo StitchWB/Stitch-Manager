@@ -1,7 +1,7 @@
 // Hook for managing proxy configuration
 
 import { useState, useEffect, useCallback } from 'react';
-import { safeInvoke } from '../lib/tauri/core';
+import { safeInvoke } from '../lib/backend/core';
 import type { ProxyConfig } from '../types/generated';
 
 const defaultProxyConfig: ProxyConfig = {

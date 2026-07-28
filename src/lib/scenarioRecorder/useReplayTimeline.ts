@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getObsTimeline } from '@/lib/tauri/modules/observability';
+import { getObsTimeline } from '@/lib/backend/modules/observability';
 
 type TimelineEntry = { ts: string; level: string; message: string };
 

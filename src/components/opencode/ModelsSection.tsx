@@ -5,7 +5,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
   IconButton, Tooltip,
 } from '@/components/ui';
-import type { ProviderConfig } from '@/lib/tauri/modules/opencodeConfig';
+import type { ProviderConfig } from '@/lib/backend/modules/opencodeConfig';
 
 interface ModelsSectionProps {
   providers: Record<string, ProviderConfig>;

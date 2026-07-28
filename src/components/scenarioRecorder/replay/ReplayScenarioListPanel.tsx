@@ -12,7 +12,7 @@ import {
   ToolbarSection,
 } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import type { ScenarioRecordItem } from '@/lib/tauri/modules/pythonJobs';
+import type { ScenarioRecordItem } from '@/lib/backend/modules/pythonJobs';
 
 type ReplayScenarioListPanelProps = {
   alias: string | null;

@@ -23,7 +23,7 @@ import {
   type OhMyOpenAgentConfig,
   type OpenCodeConfig,
   type ProviderConfig,
-} from '@/lib/tauri/modules/opencodeConfig';
+} from '@/lib/backend/modules/opencodeConfig';
 
 type ConfigTab = 'providers' | 'agents' | 'general' | 'models' | 'tester';
 

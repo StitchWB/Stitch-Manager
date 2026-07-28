@@ -99,13 +99,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.email.commands          # noqa: F401
     import stitch_backend.domains.oauth.commands           # noqa: F401
     import stitch_backend.domains.activation.commands      # noqa: F401
-    import stitch_backend.domains.patcher.commands         # noqa: F401
     import stitch_backend.domains.browser.commands         # noqa: F401
     import stitch_backend.domains.proxy_library.commands  # noqa: F401
     import stitch_backend.domains.scenarios.commands       # noqa: F401
     import stitch_backend.domains.scheduler.commands       # noqa: F401
-    import stitch_backend.domains.proxy_mgmt.commands       # noqa: F401
-    import stitch_backend.domains.proxy_mgmt.holone_commands  # noqa: F401
+    import stitch_backend.domains.patcher.commands         # noqa: F401
     import stitch_backend.domains.google_sheets.commands      # noqa: F401
     import stitch_backend.domains.replenishment.commands       # noqa: F401
     import stitch_backend.domains.profiles.commands              # noqa: F401
@@ -119,6 +117,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.background_manager.commands    # noqa: F401
     import stitch_backend.domains.cards.commands                 # noqa: F401
     import stitch_backend.domains.kiro_patch.commands            # noqa: F401
+    import stitch_backend.domains.kiro_proxy.commands            # noqa: F401
     import stitch_backend.domains.account_status.commands        # noqa: F401
     import stitch_backend.domains.ai_proxy.commands             # noqa: F401
     import stitch_backend.domains.ai_proxy.zai_token_commands   # noqa: F401
@@ -132,9 +131,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.utility.file_dialogs           # noqa: F401
     import stitch_backend.domains.utility.stubs                  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands     # noqa: F401
-
-    # Import EventBus listeners (side-effect: register @event_bus.on handlers)
-    import stitch_backend.domains.proxy_mgmt.event_listeners  # noqa: F401
 
     from stitch_backend.core.command_registry import list_commands, scan_providers
     commands = list_commands()

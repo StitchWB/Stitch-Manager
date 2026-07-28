@@ -13,6 +13,9 @@ import {
   HelpCircle,
   Zap,
   Settings as SettingsIcon,
+  Search,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { t } from '@/lib/i18n';
@@ -29,7 +32,10 @@ import {
   copyDefaultPrompts,
   getSettings,
   updateSettings,
-} from '@/lib/tauri';
+  startKiroProxy,
+  stopKiroProxy,
+} from '@/lib/backend';
+import { usePatcherStore } from '../../stores/patcher';
 import type { KiroPatchConfig } from '../../types/kiro-patch';
 import type { Account } from '../../types/generated';
 import type { SettingsData } from '../../types/generated';
@@ -75,6 +81,9 @@ export default function PatcherSettingsDrawer({
   const [customMachineId, setCustomMachineId] = useState<string>('');
 
   const { copy } = useCopyToClipboard();
+  
+  // IDE detection from patcher store
+  const { detectedIDEs, scanning, detectIDEs } = usePatcherStore();
 
   const loadData = useCallback(async () => {
     try {
@@ -83,6 +92,7 @@ export default function PatcherSettingsDrawer({
         getKiroPatchConfig(),
         getSettings(),
         listAccounts(),
+        detectIDEs(), // Detect IDEs on load
       ]);
       setConfig(kiroCfg);
       setGlobalSettings(globalCfg);
@@ -93,7 +103,7 @@ export default function PatcherSettingsDrawer({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [detectIDEs]);
 
   useEffect(() => {
     if (isOpen) {
@@ -239,6 +249,87 @@ export default function PatcherSettingsDrawer({
               {/* === KIRO CONFIG TAB === */}
               {activeTab === 'kiro' && config && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* Detected IDEs Section */}
+                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 px-1">
+                        <Search className="w-4 h-4 text-green-400" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          {t('patcher.detectedIdes')}
+                        </h3>
+                        <Tooltip content={t('patcher.scanDescription')}>
+                          <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-slate-400 cursor-help transition-colors" />
+                        </Tooltip>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => detectIDEs()}
+                        disabled={scanning}
+                      >
+                        <RefreshCw size={12} className={scanning ? 'animate-spin' : ''} />
+                        {scanning ? t('patcher.scanning') : t('patcher.scanForIdes')}
+                      </Button>
+                    </div>
+                    
+                    {detectedIDEs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 bg-black/20 rounded-xl border border-dashed border-white/10">
+                        <Monitor className="w-8 h-8 text-slate-700 mb-2" />
+                        <p className="text-[10px] text-slate-600 uppercase font-bold tracking-widest">
+                          {t('patcher.noIdesDetected')}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-2">
+                        {detectedIDEs.map((ide) => (
+                          <div
+                            key={ide.id}
+                            className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5 group hover:border-white/10 transition-colors"
+                          >
+                            <div className="flex-1 min-w-0 pr-4">
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-slate-200 font-bold">
+                                  {ide.displayName || ide.name}
+                                </div>
+                                {ide.isPatched ? (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold uppercase">
+                                    {t('patcher.patched')}
+                                  </span>
+                                ) : ide.canPatch ? (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-semibold uppercase">
+                                    {t('patcher.canPatch')}
+                                  </span>
+                                ) : null}
+                                {ide.isRunning && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-semibold uppercase">
+                                    {t('patcher.running')}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                                {ide.path || ide.installPath}
+                              </div>
+                              {ide.version && (
+                                <div className="text-[10px] text-slate-600 mt-0.5">
+                                  v{ide.version}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {ide.isPatched ? (
+                                <CheckCircle2 size={16} className="text-emerald-400" />
+                              ) : ide.canPatch ? (
+                                <XCircle size={16} className="text-amber-400" />
+                              ) : (
+                                <XCircle size={16} className="text-slate-600" />
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Machine ID Section */}
                   <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-4">
                     <div className="flex items-center gap-2 px-1">
@@ -275,6 +366,99 @@ export default function PatcherSettingsDrawer({
                         <RefreshCw size={14} />
                         {t('kiroPatch.generateNew')}
                       </Button>
+                    </div>
+                  </div>
+
+                  {/* Proxy Section */}
+                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 px-1">
+                        <Activity className="w-4 h-4 text-cyan-400" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          {t('kiroPatch.proxyTitle')}
+                        </h3>
+                        <Tooltip content={t('kiroPatch.proxyDescription')}>
+                          <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-slate-400 cursor-help transition-colors" />
+                        </Tooltip>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.proxyEnabled ?? false}
+                          onChange={async (e) => {
+                            const enabled = e.target.checked;
+                            setConfig(prev =>
+                              prev ? { ...prev, proxyEnabled: enabled } : null
+                            );
+                            
+                            // Auto-start/stop proxy when toggled
+                            try {
+                              if (enabled) {
+                                await startKiroProxy();
+                                toast.success(t('kiroPatch.proxyStarted'));
+                              } else {
+                                await stopKiroProxy();
+                                toast.success(t('kiroPatch.proxyStopped'));
+                              }
+                            } catch (error) {
+                              toast.error(String(error));
+                              // Revert toggle on error
+                              setConfig(prev =>
+                                prev ? { ...prev, proxyEnabled: !enabled } : null
+                              );
+                            }
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+                      </label>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <Input
+                        label={t('kiroPatch.proxyPort')}
+                        type="number"
+                        min={1024}
+                        max={65535}
+                        value={config.proxyPort ?? 5580}
+                        onChange={e =>
+                          setConfig(prev =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  proxyPort: parseInt(e.target.value) || 5580,
+                                }
+                              : null
+                          )
+                        }
+                        className="text-xs font-mono"
+                      />
+                      <p className="text-[10px] text-slate-500 px-1">
+                        {t('kiroPatch.proxyPortHint')}
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-3 pt-3 border-t border-white/5">
+                      <Input
+                        label={t('kiroPatch.outboundProxy')}
+                        type="text"
+                        placeholder="186.243.169.3:63576:user:pass"
+                        value={config.outboundProxy ?? ''}
+                        onChange={e =>
+                          setConfig(prev =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  outboundProxy: e.target.value,
+                                }
+                              : null
+                          )
+                        }
+                        className="text-xs font-mono"
+                      />
+                      <p className="text-[10px] text-slate-500 px-1">
+                        {t('kiroPatch.outboundProxyHint')}
+                      </p>
                     </div>
                   </div>
 

@@ -3,7 +3,7 @@ import { MailOpen, Paperclip, Trash2 } from 'lucide-react';
 import { Badge, Button, Checkbox, EmptyState } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import type { EmailMessage, ProviderCapabilities } from '@/lib/tauri/modules/emailInbox';
+import type { EmailMessage, ProviderCapabilities } from '@/lib/backend/modules/emailInbox';
 
 const VIRTUAL_ROW_HEIGHT = 64;
 const VIRTUAL_OVERSCAN = 8;

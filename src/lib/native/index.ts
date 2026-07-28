@@ -2,7 +2,7 @@
  * Native API layer — pure Web API implementations.
  *
  * Uses standard browser APIs (Clipboard, Notifications) with
- * graceful fallbacks. No Tauri dependencies.
+ * graceful fallbacks. No Backend dependencies.
  */
 
 // ---------------------------------------------------------------------------

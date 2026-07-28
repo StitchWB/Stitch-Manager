@@ -5,7 +5,7 @@ import {
   providerAuthFlowStart,
   providerAuthFlowStatus,
   openUrlInBrowser } from
-'../../lib/tauri/modules/aiProxy';
+'../../lib/backend/modules/aiProxy';
 import { ExternalLink, Loader2, Copy, Check } from 'lucide-react';
 import { Button, IconButton, Modal } from '@/components/ui';
 

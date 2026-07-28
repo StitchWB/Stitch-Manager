@@ -27,7 +27,7 @@ import {
   getModelUsage,
   getRequestHistorySafe,
   getWeeklyStats,
-} from '../lib/tauri/modules/aiProxy';
+} from '../lib/backend/modules/aiProxy';
 import type {
   DailyStats,
   DailyStatsPoint,

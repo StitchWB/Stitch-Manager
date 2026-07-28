@@ -9,7 +9,7 @@ import {
   type AddTotpKeyParams,
   type UpdateTotpKeyParams,
   type LinkTotpKeyParams,
-} from '@/lib/tauri/modules/totp';
+} from '@/lib/backend/modules/totp';
 
 interface TotpState {
   keys: TotpKey[];

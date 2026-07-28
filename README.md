@@ -241,6 +241,17 @@ Backend:   Python • FastAPI • SQLite • SQLAlchemy
 Automation: Python • DrissionPage • IMAPClient
 ```
 
+## 🏗️ Architecture
+
+Stitch Manager uses a fully Python-based architecture:
+
+- **LiteLLM Router** — key rotation and request routing
+- **FastAPI** — HTTP API for account management
+- **Built-in Security** — Python-based prompt injection & jailbreak defense
+- **SQLite** — local database
+
+All components run as Python processes, without external binaries.
+
 ---
 
 ## 📄 License
@@ -408,6 +419,17 @@ Frontend:  React 18 • TypeScript • TailwindCSS • Zustand
 Backend:   Python • FastAPI • SQLite • SQLAlchemy
 Автоматизация: Python • DrissionPage • IMAPClient
 ```
+
+## 🏗️ Архитектура
+
+Stitch Manager использует полностью Python-based архитектуру:
+
+- **LiteLLM Router** — ротация ключей и маршрутизация запросов
+- **FastAPI** — HTTP API для управления аккаунтами
+- **Встроенная защита** — Python модуль безопасности (без внешних бинарников)
+- **SQLite** — локальная база данных
+
+Все компоненты работают как Python процессы, без внешних бинарников.
 
 ---
 

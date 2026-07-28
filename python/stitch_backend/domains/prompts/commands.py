@@ -46,13 +46,6 @@ async def cmd_copy_default_prompts(params: dict) -> str:
     return PromptsService.copy_default_prompts()
 
 
-@register_command("open_prompts_folder")
-async def cmd_open_prompts_folder(params: dict) -> str:
-    """Open the prompts folder in the system file explorer."""
-    from stitch_backend.domains.prompts.service import PromptsService
-    return PromptsService.open_prompts_folder()
-
-
 @register_command("get_prompt_content")
 async def cmd_get_prompt_content(params: dict) -> str:
     """Read a prompt file's content. Mirrors Rust ``get_prompt_content``."""

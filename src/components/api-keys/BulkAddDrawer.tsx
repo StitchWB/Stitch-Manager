@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
-import { X, Clipboard, CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Plus } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { X, Clipboard, CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { maskKey } from '../../lib/utils/maskKey';
+import { parseProviderText } from '../../lib/utils/parseProviderText';
 import type { ApiKeyEntry } from '../../types/apiKeys';
-import type { BulkTestKeyResult } from '../../lib/tauri/modules/opencodeConfig';
+import type { BulkTestKeyResult } from '../../lib/backend/modules/opencodeConfig';
 
 interface BulkAddDrawerProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface BulkAddDrawerProps {
   onBulkTest: (baseUrl: string, keys: string[]) => Promise<BulkTestKeyResult[]>;
   onAddKey: (entry: ApiKeyEntry) => void;
   onAddAllValid: (entries: ApiKeyEntry[]) => void;
+  prefillKeys?: string[];
 }
 
 type TestResultEntry = {
@@ -33,12 +35,24 @@ export function BulkAddDrawer({
   onBulkTest,
   onAddKey,
   onAddAllValid,
+  prefillKeys = [],
 }: BulkAddDrawerProps) {
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl);
   const [rawKeys, setRawKeys] = useState('');
   const [results, setResults] = useState<TestResultEntry[]>([]);
   const [isTesting, setIsTesting] = useState(false);
   const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
+
+  // Pre-fill keys when drawer opens with prefillKeys
+  useEffect(() => {
+    if (isOpen && prefillKeys.length > 0) {
+      setRawKeys(prefillKeys.join('\n'));
+    } else if (!isOpen) {
+      setRawKeys('');
+      setResults([]);
+      setAddedKeys(new Set());
+    }
+  }, [isOpen, prefillKeys]);
 
   const existingKeySet = new Set(existingKeys.map(k => k.key));
 
@@ -65,6 +79,47 @@ export function BulkAddDrawer({
       toast.error('Failed to read clipboard');
     }
   }, []);
+
+  const handleSmartPaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const parsed = parseProviderText(text);
+
+      // Check if URL matches current provider
+      if (parsed.baseUrl && defaultBaseUrl && !parsed.baseUrl.includes(defaultBaseUrl) && !defaultBaseUrl.includes(parsed.baseUrl)) {
+        toast.warning(
+          `URL не совпадает с текущим провайдером!\nОбнаружен: ${parsed.baseUrl}\nОжидался: ${defaultBaseUrl}\n\nВозможно стоит переключиться на Custom таб.`,
+          { duration: 8000 }
+        );
+      }
+
+      // Auto-fill base URL if found and current is empty or default
+      if (parsed.baseUrl && (!baseUrl || baseUrl === defaultBaseUrl)) {
+        setBaseUrl(parsed.baseUrl);
+      }
+
+      // Add extracted keys
+      if (parsed.keys.length > 0) {
+        setRawKeys(prev => {
+          const existing = new Set(prev.split('\n').map(k => k.trim()).filter(k => k.length > 0));
+          const newKeys = parsed.keys.filter(k => !existing.has(k));
+          if (newKeys.length === 0) return prev;
+          const merged = prev ? `${prev}\n${newKeys.join('\n')}` : newKeys.join('\n');
+          return merged;
+        });
+      }
+
+      const parts = [];
+      if (parsed.name) parts.push(`Provider: ${parsed.name}`);
+      if (parsed.baseUrl) parts.push(`URL: ${parsed.baseUrl}`);
+      if (parsed.keys.length > 0) parts.push(`${parsed.keys.length} keys`);
+      if (parsed.models.length > 0) parts.push(`${parsed.models.length} models`);
+
+      toast.success(parts.length > 0 ? `Smart parsed: ${parts.join(' · ')}` : 'Nothing found in clipboard');
+    } catch {
+      toast.error('Failed to read clipboard');
+    }
+  }, [baseUrl, defaultBaseUrl]);
 
   const handleTestAll = useCallback(async () => {
     if (parsedKeys.length === 0) {
@@ -159,7 +214,12 @@ export function BulkAddDrawer({
       )}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <h2 className="text-sm font-semibold text-slate-200">Add {provider} Keys</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-200">Add {provider} Keys</h2>
+            {baseUrl && (
+              <p className="text-xs text-slate-500 truncate max-w-[280px] mt-0.5">{baseUrl}</p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
@@ -187,13 +247,24 @@ export function BulkAddDrawer({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs text-slate-500">API Keys (one per line)</label>
-              <button
-                onClick={handlePaste}
-                className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 transition-colors"
-              >
-                <Clipboard className="w-3 h-3" />
-                Paste
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSmartPaste}
+                  className="inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                  title="Paste full post — auto-extracts URL, keys & models"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Smart Paste
+                </button>
+                <button
+                  onClick={handlePaste}
+                  className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 transition-colors"
+                  title="Paste keys only"
+                >
+                  <Clipboard className="w-3 h-3" />
+                  Paste
+                </button>
+              </div>
             </div>
             <textarea
               value={rawKeys}

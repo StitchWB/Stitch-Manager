@@ -5,7 +5,7 @@
  * have to remember IMAP host/port/TLS settings.
  */
 
-import type { EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
+import type { EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 
 export type MailboxProviderKind = 'icloud' | 'gmail' | 'imap' | 'mail_tm';
 

@@ -6,7 +6,7 @@ import {
   getPythonJobStatus,
   sendPythonJobControl,
   type PythonJobStartResponse,
-} from '@/lib/tauri/modules/pythonJobs';
+} from '@/lib/backend/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
 import type { ScenarioRecordStatus, ScenarioRunnerMode } from './types';
 
@@ -143,13 +143,13 @@ export function useScenarioRecorder() {
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
 
-      // Tauri "Couldn't find callback id" occurs when the frontend reloads
+      // Backend "Couldn't find callback id" occurs when the frontend reloads
       // or the component unmounts before the Rust side resolves the invoke
       // promise.  The job may actually have started on the Rust side, so
       // rather than treating this as a hard error we move to a transitional
       // state and let the polling effect discover the real job status.
       if (errMsg.includes("Couldn't find callback")) {
-        console.warn('[useScenarioRecorder] Tauri callback lost during startPythonJob — job may still be running. Polling will recover status.');
+        console.warn('[useScenarioRecorder] Backend callback lost during startPythonJob — job may still be running. Polling will recover status.');
         setState(prev => ({
           ...prev,
           // Keep 'starting' so the polling effect continues trying to
@@ -200,7 +200,7 @@ export function useScenarioRecorder() {
   }, []);
 
   // Timeout for 'starting' state: if we're stuck in 'starting' without a
-  // jobId for more than 15 seconds, the Tauri callback was likely lost and
+  // jobId for more than 15 seconds, the Backend callback was likely lost and
   // we never received the job ID.  Transition to error so the UI isn't stuck.
   useEffect(() => {
     if (state.status !== 'starting') return;
@@ -212,7 +212,7 @@ export function useScenarioRecorder() {
         return {
           ...prev,
           status: 'error' as ScenarioRecordStatus,
-          error: 'Failed to start recorder: Tauri callback was lost. Try again or restart the app.',
+          error: 'Failed to start recorder: Backend callback was lost. Try again or restart the app.',
         };
       });
     }, 15_000);

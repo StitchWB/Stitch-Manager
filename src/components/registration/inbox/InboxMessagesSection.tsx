@@ -3,7 +3,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { Button, EmptyState, GlassCard } from '@/components/ui';
 import { Mail, Trash2, Eye, MessageSquare } from 'lucide-react';
 import { CollapsibleSection } from '@/components/ui';
-import type { EmailMessage } from '@/lib/tauri/modules/emailInbox';
+import type { EmailMessage } from '@/lib/backend/modules/emailInbox';
 
 export interface InboxMessagesSectionProps {
   messages: EmailMessage[];

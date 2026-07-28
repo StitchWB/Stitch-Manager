@@ -1,4 +1,4 @@
-import { safeInvoke } from '@/lib/tauri/core';
+import { safeInvoke } from '@/lib/backend/core';
 import type { ObsEvent, ObsEventInput } from './types';
 
 const SESSION_ID_KEY = 'stitch.obs.session_id';

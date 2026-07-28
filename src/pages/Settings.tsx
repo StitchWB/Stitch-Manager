@@ -26,8 +26,8 @@ import {
   getAddyioRecipients,
   getEmailCounter,
   setEmailCounter,
-} from '@/lib/tauri';
-import { normalizeSpreadsheetId } from '@/lib/tauri/modules/googleSheets';
+} from '@/lib/backend';
+import { normalizeSpreadsheetId } from '@/lib/backend/modules/googleSheets';
 import { SettingsData, AddyIoAccountDetails } from '../types/generated';
 import Header from '../components/layout/Header';
 import { t } from '../lib/i18n';
@@ -812,7 +812,7 @@ export default function Settings() {
           appPassword={icloudAppPassword}
           onAppPasswordChange={pw => setIcloudAppPassword(pw)}
           onSave={async () => {
-            const { updateSettings } = await import('@/lib/tauri');
+            const { updateSettings } = await import('@/lib/backend');
             await updateSettings({
               icloudEnabled: true,
               icloudAppleId: icloudAppleId,

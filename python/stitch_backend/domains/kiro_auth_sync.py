@@ -97,10 +97,17 @@ class WriteKiroAuthTokenInput(TypedDict, total=False):
     client_id: str
     client_secret: str
     profile_arn: str
+    account_id: str       # for machine ID binding
+    machine_id: str       # machine ID to patch after token write
 
 
-def write_kiro_auth_token_file(input: WriteKiroAuthTokenInput) -> dict[str, str]:
-    """Write token file in a format byte-compatible with Kiro IDE (mode 0o600)."""
+async def write_kiro_auth_token_file(input: WriteKiroAuthTokenInput) -> dict[str, str]:
+    """Write token file in a format byte-compatible with Kiro IDE (mode 0o600).
+
+    Also patches the machine ID if ``machine_id`` and ``account_id`` are
+    provided in the input, enabling automatic machine ID switching on
+    every account activation.
+    """
     KIRO_SSO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     client_id_hash = _compute_client_id_hash(input.get("start_url"))
@@ -151,6 +158,15 @@ def write_kiro_auth_token_file(input: WriteKiroAuthTokenInput) -> dict[str, str]
             "scopes": _KIRO_OIDC_SCOPES,
         }
         _write_text(Path(client_reg_path), json.dumps(client_data, indent=2))
+
+    # ── Automatic machine ID switching ────────────────────────────────────
+    # ponytail: fire-and-forget; caller doesn't need to know about machine ID
+    machine_id = input.get("machine_id")
+    account_id = input.get("account_id")
+    if machine_id and account_id:
+        from stitch_backend.domains.activation.machine_id import patch_machine_id
+
+        await patch_machine_id(account_id, machine_id, ide="kiro")
 
     return {
         "token_path": str(KIRO_AUTH_TOKEN_PATH),

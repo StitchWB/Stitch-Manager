@@ -22,7 +22,7 @@ import { cn } from '../lib/utils';
 import { useBinPresetsStore, type BinPreset } from '../stores/binPresets';
 import { useCardToolsStore, type PersistedCard } from '../stores/cardTools';
 import { toast } from 'sonner';
-import { safeInvoke } from '../lib/tauri/core';
+import { safeInvoke } from '../lib/backend/core';
 import { t } from '../lib/i18n';
 
 /* ═══════════════════════════════════════════════

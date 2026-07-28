@@ -57,7 +57,7 @@ jest.mock('../../stores/uiPreferences', () => ({
   }),
 }));
 
-jest.mock('../../lib/tauri', () => ({
+jest.mock('../../lib/backend', () => ({
   checkPythonAutoreg: jest.fn(async () => true),
 }));
 

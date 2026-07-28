@@ -58,17 +58,6 @@ class ProviderNotAvailableError(ProviderError):
     """Provider is registered but not currently usable (e.g. maintenance)."""
 
 
-# ── OmniRoute errors ──────────────────────────────────────────────────────────
-
-class OmniRouteError(StitchError):
-    """Communication with OmniRoute sidecar failed."""
-
-
-class OmniRouteNotRunningError(OmniRouteError):
-    def __init__(self) -> None:
-        super().__init__("OmniRoute sidecar is not running")
-
-
 # ── Job errors ────────────────────────────────────────────────────────────────
 
 class JobError(StitchError):

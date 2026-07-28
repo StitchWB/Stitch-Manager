@@ -4,17 +4,17 @@
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import {
-  mockTauriInvoke,
+  mockBackendInvoke,
   clearTauriMocks,
   createMockSettings,
   createMockAccount,
   createSuccessMockHandler,
-} from './utils/mockTauri';
+} from './utils/mockBackend';
 
 describe('Example Test Suite', () => {
   beforeEach(() => {
     // Setup mocks before each test
-    mockTauriInvoke(createSuccessMockHandler());
+    mockBackendInvoke(createSuccessMockHandler());
   });
 
   afterEach(() => {

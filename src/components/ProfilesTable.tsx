@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { LayoutGrid } from 'lucide-react';
 import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
 import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
-import { getProfileSettings } from '@/lib/tauri/modules/profiles';
+import { getProfileSettings } from '@/lib/backend/modules/profiles';
 import { ProfileScenariosPanel } from './scenarioRecorder/ProfileScenariosPanel';
 import { Button, EmptyState } from '@/components/ui';
 

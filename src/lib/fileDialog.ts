@@ -5,7 +5,7 @@
  * Python backend via HTTP commands.
  */
 
-import { safeInvoke } from '@/lib/tauri/core/invoke';
+import { safeInvoke } from '@/lib/backend/core/invoke';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

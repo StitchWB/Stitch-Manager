@@ -29,7 +29,7 @@ import {
   type ProxyLibraryImportResult,
   type ProxyLibraryType,
   type ProxyLibraryUsage } from
-'@/lib/tauri/modules/proxyLibrary';
+'@/lib/backend/modules/proxyLibrary';
 
 interface ForceUpdateDialogState {
   isOpen: boolean;

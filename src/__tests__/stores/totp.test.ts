@@ -10,15 +10,15 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 
 // ── mock safeInvoke so tests run without a live backend ──────────────────────
-// totp.ts imports from '../core/invoke' (relative to lib/tauri/modules/).
-// From the Jest rootDir (src/) that resolves to lib/tauri/core/invoke.
-jest.mock('../../lib/tauri/core/invoke', () => ({
+// totp.ts imports from '../core/invoke' (relative to lib/Backend/modules/).
+// From the Jest rootDir (src/) that resolves to lib/Backend/core/invoke.
+jest.mock('../../lib/backend/core/invoke', () => ({
   safeInvoke: jest.fn(),
 }));
 
-import { safeInvoke } from '../../lib/tauri/core/invoke';
+import { safeInvoke } from '../../lib/backend/core/invoke';
 import { useTotpStore } from '../../stores/totp';
-import type { TotpKey } from '../../lib/tauri/modules/totp';
+import type { TotpKey } from '../../lib/backend/modules/totp';
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 

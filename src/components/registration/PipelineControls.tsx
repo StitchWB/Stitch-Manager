@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { registrationControl, type PipelineControlAction } from '../../lib/tauri';
+import { registrationControl, type PipelineControlAction } from '../../lib/backend';
 import { Button, Badge } from '@/components/ui';
 import { Play, SkipForward, Hand, X } from 'lucide-react';
 import { t } from '@/lib/i18n';
@@ -125,7 +125,7 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
     }
   }, [jobId]);
 
-  // Register Tauri event listeners when jobId is set
+  // Register Backend event listeners when jobId is set
   useEffect(() => {
     if (!jobId) {
       listenersRef.current.forEach((unlisten) => unlisten());

@@ -9,7 +9,7 @@ import {
   Loader2
 } from
   'lucide-react';
-import { safeInvoke } from '../../lib/tauri/core';
+import { safeInvoke } from '../../lib/backend/core';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../Tooltip';

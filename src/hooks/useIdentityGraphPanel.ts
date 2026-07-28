@@ -24,7 +24,7 @@ import {
   upsertGoogleSheetsAuthMethod,
   upsertGoogleSheetsLink,
   upsertGoogleSheetsProfileLink,
-} from '@/lib/tauri/modules/googleSheets';
+} from '@/lib/backend/modules/googleSheets';
 import { buildUnifiedGraph } from '@/lib/graph/unifiedGraph';
 import { useAccountsStore } from '@/stores/accounts';
 import { useRegistrationStore } from '@/stores/registration';

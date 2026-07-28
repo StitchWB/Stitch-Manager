@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Inbox, Search, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Badge, ButtonBase, EmptyState, Input, ProviderLogo } from '@/components/ui';
-import { listAccounts } from '@/lib/tauri/modules/accounts';
+import { listAccounts } from '@/lib/backend/modules/accounts';
 import { useUIPersistedState } from '@/hooks/useUIState';
 import {
   ACCOUNT_QUERY_PARAM,
@@ -10,7 +10,7 @@ import {
   type MailboxResolution,
 } from '@/lib/mail/runtime';
 import type { Account } from '@/types/generated';
-import type { EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
+import type { EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 import { t } from '@/lib/i18n';
 
 interface MailSidebarAccountsProps {

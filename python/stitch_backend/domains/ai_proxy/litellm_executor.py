@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import math
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -12,12 +14,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from starlette.responses import Response
 
-from stitch_backend.domains.ai_proxy.holone_stream import (
-    SecurityMode,
-    protect_anthropic_sse,
-    protect_openai_response,
-    protect_openai_sse,
-)
+from stitch_backend.domains.ai_proxy.adaptive_router import get_adaptive_router
+from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
+from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
 from stitch_backend.domains.ai_proxy.litellm_gateway import (
     GatewayRequest,
     JsonObject,
@@ -25,19 +24,11 @@ from stitch_backend.domains.ai_proxy.litellm_gateway import (
     LiteLLMDeployment,
     _deployment_configs,
 )
+from stitch_backend.domains.ai_proxy.model_availability import get_model_tracker
+from stitch_backend.domains.ai_proxy.rate_limiter import get_rate_limiter
 from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
 
-try:
-    from stitch_backend.domains.ai_proxy.holone_stream import protect_anthropic_response
-except ImportError:  # pragma: no cover - compatibility with older HoloNe builds
-    def _protect_anthropic_response(
-        response: JsonObject,
-        mode: SecurityMode = SecurityMode.BLOCK,
-        client_has_tools: bool = False,
-    ) -> tuple[JsonObject, tuple[()], bool]:
-        return response, (), False
-
-    protect_anthropic_response = _protect_anthropic_response  # type: ignore[assignment]
+logger = logging.getLogger(__name__)
 
 
 class CompletionRouter(Protocol):
@@ -81,7 +72,6 @@ class LiteLLMExecutor:
         self,
         load_keys: KeyLoader,
         build_router: RouterFactory,
-        security_mode: SecurityMode = SecurityMode.BLOCK,
         load_config: ConfigLoader | None = None,
     ) -> None:
         self._load_keys = load_keys
@@ -90,74 +80,281 @@ class LiteLLMExecutor:
         self._router: CompletionRouter | None = None
         self._configuration_id: str | None = None
         self._providers: tuple[str, ...] = ()
-        self._security_mode = security_mode
         self._router_lock = asyncio.Lock()
 
     async def chat(self, payload: GatewayRequest) -> JsonObject | Response:
         config = await self._load_config()
         routed_model = _routed_model(payload, config)
         router = await self._current_router(config)
-        response = await router.acompletion(
-            model=routed_model,
-            messages=_required_messages(payload),
-            stream=payload.stream,
-        )
-
-        if payload.stream:
-            result, _ = await self._stream_response(
-                response, client_has_tools=bool(payload.tools)
+        
+        # Extract provider from model name (e.g., "openai/gpt-4" -> "openai")
+        provider = routed_model.split("/", 1)[0] if "/" in routed_model else "unknown"
+        
+        # Track metrics
+        metrics_tracker = get_metrics_tracker()
+        rate_limiter = get_rate_limiter()
+        cost_tracker = get_cost_tracker()
+        
+        # Check rate limit
+        if not await rate_limiter.can_use(provider):
+            logger.warning("Rate limit exceeded for provider %s", provider)
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        
+        start_time = time.time()
+        try:
+            response = await router.acompletion(
+                model=routed_model,
+                messages=_required_messages(payload),
+                stream=payload.stream,
             )
-        else:
-            response_object = _json_object(response)
-            result = protect_openai_response(
-                response_object,
-                mode=self._security_mode,
-                client_has_tools=bool(payload.tools),
-            )[0]
-        return result
+            
+            latency = time.time() - start_time
+            
+            # Record rate limit usage
+            await rate_limiter.record(provider)
+            
+            # Extract tokens from response (if available)
+            input_tokens = 0
+            output_tokens = 0
+            if not payload.stream and hasattr(response, "usage"):
+                usage = response.usage
+                input_tokens = getattr(usage, "prompt_tokens", 0)
+                output_tokens = getattr(usage, "completion_tokens", 0)
+            
+            # Record success metrics
+            await metrics_tracker.record_success(
+                provider=provider,
+                model=routed_model,
+                latency=latency,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            
+            # Record cost
+            await cost_tracker.record_usage(
+                key_id=provider,
+                model=routed_model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            
+            logger.info(
+                "✅ %s | latency=%.2fs | tokens=%d/%d",
+                routed_model, latency, input_tokens, output_tokens
+            )
+            
+            if payload.stream:
+                result, _ = await self._stream_response(response)
+            else:
+                result = _json_object(response)
+            return result
+            
+        except Exception as e:
+            latency = time.time() - start_time
+            error_str = str(e).lower()
+            
+            # Check if this is a "model not found" error
+            model_tracker = get_model_tracker()
+            if "model" in error_str and ("not found" in error_str or "does not exist" in error_str):
+                # Extract the actual model name (without provider prefix)
+                actual_model = routed_model.split("/", 1)[1] if "/" in routed_model else routed_model
+                await model_tracker.mark_model_unavailable(provider, actual_model)
+                logger.warning(
+                    "🚫 Model %s not available for provider %s, marked as unavailable",
+                    actual_model, provider
+                )
+            
+            await metrics_tracker.record_error(
+                provider=provider,
+                model=routed_model,
+                latency=latency,
+                error=str(e),
+            )
+            logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, e)
+            raise
 
     async def messages(self, payload: GatewayRequest) -> JsonObject | Response:
         config = await self._load_config()
         routed_model = _routed_model(payload, config)
         router = await self._current_router(config)
         model = routed_model.split("/", 1)[1] if "/" in routed_model else routed_model
-        response = await router.aanthropic_messages(
-            model=model,
-            messages=_required_messages(payload),
-            stream=payload.stream,
-        )
-
-        if payload.stream:
-            result, _ = await self._stream_anthropic_response(
-                response, client_has_tools=bool(payload.tools)
+        
+        # Extract provider from model name
+        provider = routed_model.split("/", 1)[0] if "/" in routed_model else "unknown"
+        
+        # Track metrics
+        metrics_tracker = get_metrics_tracker()
+        rate_limiter = get_rate_limiter()
+        cost_tracker = get_cost_tracker()
+        
+        # Check rate limit
+        if not await rate_limiter.can_use(provider):
+            logger.warning("Rate limit exceeded for provider %s", provider)
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        
+        start_time = time.time()
+        try:
+            response = await router.aanthropic_messages(
+                model=model,
+                messages=_required_messages(payload),
+                stream=payload.stream,
             )
-        else:
-            response_object = _json_object(response)
-            result = protect_anthropic_response(
-                response_object,
-                mode=self._security_mode,
-                client_has_tools=bool(payload.tools),
-            )[0]
-        return result
+            
+            latency = time.time() - start_time
+            
+            # Record rate limit usage
+            await rate_limiter.record(provider)
+            
+            # Extract tokens from response (if available)
+            input_tokens = 0
+            output_tokens = 0
+            if not payload.stream and hasattr(response, "usage"):
+                usage = response.usage
+                input_tokens = getattr(usage, "input_tokens", 0)
+                output_tokens = getattr(usage, "output_tokens", 0)
+            
+            # Record success metrics
+            await metrics_tracker.record_success(
+                provider=provider,
+                model=routed_model,
+                latency=latency,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            
+            # Record cost
+            await cost_tracker.record_usage(
+                key_id=provider,
+                model=routed_model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            
+            logger.info(
+                "✅ %s | latency=%.2fs | tokens=%d/%d",
+                routed_model, latency, input_tokens, output_tokens
+            )
+            
+            if payload.stream:
+                result, _ = await self._stream_anthropic_response(response)
+            else:
+                result = _json_object(response)
+            return result
+            
+        except Exception as e:
+            latency = time.time() - start_time
+            error_str = str(e).lower()
+            
+            # Check if this is a "model not found" error
+            model_tracker = get_model_tracker()
+            if "model" in error_str and ("not found" in error_str or "does not exist" in error_str):
+                # Extract the actual model name (without provider prefix)
+                actual_model = routed_model.split("/", 1)[1] if "/" in routed_model else routed_model
+                await model_tracker.mark_model_unavailable(provider, actual_model)
+                logger.warning(
+                    "🚫 Model %s not available for provider %s, marked as unavailable",
+                    actual_model, provider
+                )
+            
+            await metrics_tracker.record_error(
+                provider=provider,
+                model=routed_model,
+                latency=latency,
+                error=str(e),
+            )
+            logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, e)
+            raise
 
     async def responses(self, payload: GatewayRequest) -> JsonObject | Response:
         config = await self._load_config()
         routed_model = _routed_model(payload, config)
         router = await self._current_router(config)
-        response = await router.aresponses(
-            model=routed_model,
-            input=payload.input,
-            stream=payload.stream,
-        )
-
-        if payload.stream:
-            result, _ = await self._stream_response(
-                response, client_has_tools=bool(payload.tools)
+        
+        # Extract provider from model name
+        provider = routed_model.split("/", 1)[0] if "/" in routed_model else "unknown"
+        
+        # Track metrics
+        metrics_tracker = get_metrics_tracker()
+        rate_limiter = get_rate_limiter()
+        cost_tracker = get_cost_tracker()
+        
+        # Check rate limit
+        if not await rate_limiter.can_use(provider):
+            logger.warning("Rate limit exceeded for provider %s", provider)
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        
+        start_time = time.time()
+        try:
+            response = await router.aresponses(
+                model=routed_model,
+                input=payload.input,
+                stream=payload.stream,
             )
-        else:
-            response_object = _json_object(response)
-            result = response_object
-        return result
+            
+            latency = time.time() - start_time
+            
+            # Record rate limit usage
+            await rate_limiter.record(provider)
+            
+            # Extract tokens from response (if available)
+            input_tokens = 0
+            output_tokens = 0
+            if not payload.stream and hasattr(response, "usage"):
+                usage = response.usage
+                input_tokens = getattr(usage, "prompt_tokens", 0)
+                output_tokens = getattr(usage, "completion_tokens", 0)
+            
+            # Record success metrics
+            await metrics_tracker.record_success(
+                provider=provider,
+                model=routed_model,
+                latency=latency,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            
+            # Record cost
+            await cost_tracker.record_usage(
+                key_id=provider,
+                model=routed_model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            
+            logger.info(
+                "✅ %s | latency=%.2fs | tokens=%d/%d",
+                routed_model, latency, input_tokens, output_tokens
+            )
+            
+            if payload.stream:
+                result, _ = await self._stream_response(response)
+            else:
+                result = _json_object(response)
+            return result
+            
+        except Exception as e:
+            latency = time.time() - start_time
+            error_str = str(e).lower()
+            
+            # Check if this is a "model not found" error
+            model_tracker = get_model_tracker()
+            if "model" in error_str and ("not found" in error_str or "does not exist" in error_str):
+                # Extract the actual model name (without provider prefix)
+                actual_model = routed_model.split("/", 1)[1] if "/" in routed_model else routed_model
+                await model_tracker.mark_model_unavailable(provider, actual_model)
+                logger.warning(
+                    "🚫 Model %s not available for provider %s, marked as unavailable",
+                    actual_model, provider
+                )
+            
+            await metrics_tracker.record_error(
+                provider=provider,
+                model=routed_model,
+                latency=latency,
+                error=str(e),
+            )
+            logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, e)
+            raise
 
     async def models(self) -> JsonObject:
         config = await self._load_config()
@@ -196,7 +393,7 @@ class LiteLLMExecutor:
         return self._router
 
     async def _stream_response(
-        self, response: Any, *, client_has_tools: bool
+        self, response: Any
     ) -> tuple[StreamingResponse, int | None]:
         chunks: list[str] = []
         actual_tokens: int | None = None
@@ -205,19 +402,14 @@ class LiteLLMExecutor:
             chunks.append(f"data: {json.dumps(value, separators=(',', ':'))}\n\n")
             actual_tokens = _usage_tokens(value) or actual_tokens
         chunks.append("data: [DONE]\n\n")
-        protected = protect_openai_sse(
-            "".join(chunks),
-            mode=self._security_mode,
-            client_has_tools=client_has_tools,
-        )
 
         async def body():
-            yield protected.body
+            yield "".join(chunks).encode("utf-8")
 
         return StreamingResponse(body(), media_type="text/event-stream"), actual_tokens
 
     async def _stream_anthropic_response(
-        self, response: Any, *, client_has_tools: bool
+        self, response: Any
     ) -> tuple[StreamingResponse, int | None]:
         chunks: list[str] = []
         input_tokens = 0
@@ -231,14 +423,9 @@ class LiteLLMExecutor:
                 found_usage = True
                 input_tokens = max(input_tokens, _integer(usage.get("input_tokens")))
                 output_tokens = max(output_tokens, _integer(usage.get("output_tokens")))
-        protected = protect_anthropic_sse(
-            "".join(chunks),
-            mode=self._security_mode,
-            client_has_tools=client_has_tools,
-        )
 
         async def body():
-            yield protected.body
+            yield "".join(chunks).encode("utf-8")
 
         actual_tokens = input_tokens + output_tokens if found_usage else None
         return StreamingResponse(body(), media_type="text/event-stream"), actual_tokens

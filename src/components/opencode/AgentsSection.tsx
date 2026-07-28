@@ -5,7 +5,7 @@ import {
   GlassCard, Button, EmptyState, ModelPicker,
 } from '@/components/ui';
 import type { ModelOption } from '@/components/ui';
-import type { OpenCodeConfig, OhMyOpenAgentConfig, AgentConfig } from '@/lib/tauri/modules/opencodeConfig';
+import type { OpenCodeConfig, OhMyOpenAgentConfig, AgentConfig } from '@/lib/backend/modules/opencodeConfig';
 import { AddAgentModal } from './AddAgentModal';
 
 interface AgentsSectionProps {

@@ -1,8 +1,8 @@
 /**
- * Event system — drop-in replacement for `@tauri-apps/api/event`.
+ * Event system — drop-in replacement for `@Backend-apps/api/event`.
  *
  * All frontend components should import from `@/lib/events` instead of
- * `@tauri-apps/api/event`.
+ * `@Backend-apps/api/event`.
  *
  * @example
  * ```ts

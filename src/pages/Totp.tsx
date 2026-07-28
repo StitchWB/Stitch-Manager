@@ -25,7 +25,7 @@ import {
 import { useTotpStore } from '../stores/totp';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
-import type { TotpKey } from '@/lib/tauri/modules/totp';
+import type { TotpKey } from '@/lib/backend/modules/totp';
 import { TotpBadge } from '../components/totp/TotpBadge';
 import { isOtpauthUri, parseOtpauthUri } from '@/lib/otpauth';
 import { cn } from '../lib/utils';

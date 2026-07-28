@@ -6,8 +6,8 @@ import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
 import { useLogsStore } from '../stores/logs';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
-import { getDashboardStats } from '../lib/tauri';
-import { getSettings } from '../lib/tauri/modules/settings';
+import { getDashboardStats } from '../lib/backend';
+import { getSettings } from '../lib/backend/modules/settings';
 import { t } from '../lib/i18n';
 import type { DashboardStats } from '../types/generated';
 import {

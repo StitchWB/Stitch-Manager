@@ -1,9 +1,9 @@
-import type { ProfileSettingsRecord } from '@/lib/tauri/modules/profiles';
+import type { ProfileSettingsRecord } from '@/lib/backend/modules/profiles';
 import {
   getProxyLibraryRuntimeProxyCatalog,
   getProxyLibraryRuntimeProxyMap,
   getProxyLibraryRuntimeProxyUrl,
-} from '@/lib/tauri/modules/proxyLibrary';
+} from '@/lib/backend/modules/proxyLibrary';
 
 export type RunnerConfigBuildResult = {
   config: Record<string, unknown>;

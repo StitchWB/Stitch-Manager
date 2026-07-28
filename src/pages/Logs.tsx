@@ -35,7 +35,7 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 
 
-import { copyToClipboard as copyTextToClipboard } from '@/lib/tauri/modules/utils';
+import { copyToClipboard as copyTextToClipboard } from '@/lib/backend/modules/utils';
 import { Badge, Button, ButtonBase, EmptyState, FilterDropdown, Input, LoadingSpinner, LogGroup, MultiFilterDropdown, TabButton, Toggle } from '@/components/ui';
 
 const LOG_SOURCES = [
@@ -45,12 +45,11 @@ const LOG_SOURCES = [
   'settings',
   'server',
   'system',
-  'ai_proxy.sidecar',
   'ai_proxy.process',
   'python_runner',
 ] as const;
 
-const LOG_CHANNELS = ['all', 'app', 'frontend', 'backend', 'proxy', 'sidecar', 'toast'] as const;
+const LOG_CHANNELS = ['all', 'app', 'frontend', 'backend', 'proxy', 'toast'] as const;
 const DEFAULT_DETAILS_PANE_WIDTH = 360;
 
 const LEVEL_DOT_MAP: Record<string, string> = {
@@ -68,7 +67,6 @@ const CHANNEL_DOT_MAP: Record<string, string> = {
   frontend: 'bg-sky-400',
   backend: 'bg-purple-400',
   proxy: 'bg-emerald-400',
-  sidecar: 'bg-amber-400',
   toast: 'bg-pink-400',
 };
 

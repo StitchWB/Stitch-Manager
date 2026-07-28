@@ -24,7 +24,7 @@ import {
   scanAuthFiles as scanAuthFilesCmd,
   type ProviderCapability,
   type ProviderModelMapping,
-} from '@/lib/tauri/modules/aiProxy';
+} from '@/lib/backend/modules/aiProxy';
 import type { AiProxyAccount, AuthFile, ProxySettings, ProxyStatus } from '../../types/generated';
 import type { ConnectionStateMap, HistorySummary } from '../../components/ai-proxy/sections/types';
 import { useAiProxyStore } from '../../stores/aiProxy';

@@ -23,7 +23,7 @@ jest.mock('../../stores/registration', () => ({
   },
 }));
 
-jest.mock('../../lib/tauri', () => ({
+jest.mock('../../lib/backend', () => ({
   testImapConnection: jest.fn(async () => 'ok'),
   stopRegistration: jest.fn(async () => undefined),
 }));

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { ScenarioRecordItem } from '@/lib/tauri/modules/pythonJobs';
+import type { ScenarioRecordItem } from '@/lib/backend/modules/pythonJobs';
 import type { ReplayListHealthFilter, ReplayListSort } from './replayListPreferences';
 
 type UseReplayScenarioListParams = {

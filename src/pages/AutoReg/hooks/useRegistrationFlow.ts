@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react';
 import { useRegistrationStore } from '../../../stores/registration';
 import { useAppStore } from '../../../stores/app';
-import { stopRegistration } from '../../../lib/tauri';
-import { testInboxConnection } from '../../../lib/tauri/modules/registration';
+import { stopRegistration } from '../../../lib/backend';
+import { testInboxConnection } from '../../../lib/backend/modules/registration';
 import { runRegistration, cancelActiveRegistrationJob } from '../services';
 import type { ProviderName } from '../../../types/ui';
 import type { RegistrationConfig } from '../../../stores/registration/types';

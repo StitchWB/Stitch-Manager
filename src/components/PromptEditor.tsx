@@ -7,7 +7,7 @@ import {
   savePromptContent,
   getDefaultPromptContent,
   resetPromptToDefault } from
-'../lib/tauri';
+'../lib/backend';
 import { Tooltip } from './Tooltip';
 import { Button, LoadingSpinner, Textarea } from '@/components/ui';
 

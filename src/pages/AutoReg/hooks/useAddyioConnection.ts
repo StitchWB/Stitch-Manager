@@ -4,7 +4,7 @@ import {
   testAddyioConnection,
   getAddyioAccount,
   getAddyioDomains,
-} from '../../../lib/tauri';
+} from '../../../lib/backend';
 import { t } from '@/lib/i18n';
 import type { AddyIoAccountDetails } from '../../../types/generated';
 import type { IMAPConfig } from '../../../stores/registration/types';

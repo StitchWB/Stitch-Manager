@@ -293,23 +293,7 @@
         "default": null,
         "title": "Updatedat"
       },
-      "isLlmAccount": {
-        "default": false,
-        "title": "Isllmaccount",
-        "type": "boolean"
-      },
-      "omnirouteConnectionId": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Omnirouteconnectionid"
-      },
+      
       "metadata": {
         "anyOf": [
           {

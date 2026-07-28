@@ -12,7 +12,7 @@ import {
   providerAuthFlowStatus,
   openUrlInBrowser,
   scanAuthFiles,
-} from '@/lib/tauri/modules/aiProxy';
+} from '@/lib/backend/modules/aiProxy';
 
 import type { AuthFile } from '../types/generated';
 import {

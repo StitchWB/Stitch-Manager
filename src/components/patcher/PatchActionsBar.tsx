@@ -1,5 +1,7 @@
-import { Download, Trash2 } from 'lucide-react';
+import { Download, Trash2, Globe } from 'lucide-react';
 import { t } from '@/lib/i18n';
+import { useState } from 'react';
+import { safeInvoke } from '@/lib/backend';
 
 import PatchVersionSelector from './PatchVersionSelector';
 import PatchOptionsPanel from './PatchOptionsPanel';
@@ -49,6 +51,26 @@ export default function PatchActionsBar({
   onToggleOption,
   onToggleAllOptions,
 }: PatchActionsBarProps) {
+  const [proxyRunning, setProxyRunning] = useState(false);
+  const [proxyLoading, setProxyLoading] = useState(false);
+
+  const handleToggleProxy = async () => {
+    setProxyLoading(true);
+    try {
+      if (proxyRunning) {
+        await safeInvoke('stop_kiro_proxy', {});
+        setProxyRunning(false);
+      } else {
+        await safeInvoke('start_kiro_proxy', {});
+        setProxyRunning(true);
+      }
+    } catch (err) {
+      console.error('Failed to toggle proxy:', err);
+    } finally {
+      setProxyLoading(false);
+    }
+  };
+
   return (
     <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl p-4 border border-white/5 shadow-sm">
       <div className="flex flex-wrap items-center gap-4">
@@ -61,6 +83,18 @@ export default function PatchActionsBar({
         />
 
         <div className="flex-1" />
+
+        {/* Proxy Toggle Button */}
+        <Button
+          onClick={handleToggleProxy}
+          disabled={proxyLoading}
+          variant={proxyRunning ? 'success' : 'secondary'}
+          size="md"
+          leftIcon={<Globe size={16} />}
+          className="shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20"
+        >
+          {proxyRunning ? t('patcher.proxyRunning') : t('patcher.startProxy')}
+        </Button>
 
         {/* Main Action Button */}
         {isPatched ? (

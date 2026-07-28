@@ -24,6 +24,8 @@ export type ProviderRegistryId =
   | 'antigravity'
   | 'fireworks'
   | 'zai'
+  | 'freemodel'
+  | 'custom'
   | 'qoder'
   | 'v0_app';
 
@@ -168,6 +170,26 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
     accounts: { matchProviders: ['zai'] },
     aiProxy: { enabled: true },
   },
+  freemodel: {
+    id: 'freemodel',
+    label: 'FreeModel',
+    badge: {
+      bg: 'bg-emerald-500/10',
+      text: 'text-emerald-400',
+      border: 'border-emerald-500/20',
+    },
+    aiProxy: { enabled: true },
+  },
+  custom: {
+    id: 'custom',
+    label: 'Custom',
+    badge: {
+      bg: 'bg-slate-500/10',
+      text: 'text-slate-400',
+      border: 'border-slate-500/20',
+    },
+    aiProxy: { enabled: true },
+  },
   qoder: {
     id: 'qoder',
     label: 'Qoder',
@@ -237,6 +259,8 @@ export const AI_PROXY_PROVIDER_LIST = [
   'antigravity',
   'fireworks',
   'zai',
+  'freemodel',
+  'custom',
 ] as const;
 
 export type AiProxyProviderName = (typeof AI_PROXY_PROVIDER_LIST)[number];
