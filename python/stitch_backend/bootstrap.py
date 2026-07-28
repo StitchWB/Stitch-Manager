@@ -137,6 +137,8 @@ async def bootstrap() -> None:
                 logger.info("iCloud pool service pre-configured for %s", apple_id)
 
         await _load_icloud_settings()
+    except ImportError:
+        logger.debug("iCloud pool service init skipped: autoreg not available")
     except Exception as _exc:
         logger.warning("iCloud pool service init skipped: %s", _exc)
 
