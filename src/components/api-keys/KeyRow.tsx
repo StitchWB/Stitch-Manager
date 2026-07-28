@@ -52,9 +52,13 @@ export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }:
   return (
     <div className="border border-white/10 rounded-lg bg-white/[0.02] overflow-hidden transition-colors hover:bg-white/[0.04]">
       {/* Compact row */}
-      <button
-        className="w-full flex items-center gap-2 px-3 py-2 text-left group"
+      {/* ponytail: div instead of button — inner action buttons cause nesting violation */}
+      <div
+        role="button"
+        tabIndex={0}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left group cursor-pointer"
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
         aria-expanded={expanded}
         aria-label={`${provider} key ${maskKey(entry.key)}`}
       >
@@ -105,7 +109,7 @@ export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }:
           'w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform',
           expanded && 'rotate-180'
         )} />
-      </button>
+      </div>
 
       {/* Expanded details */}
       {expanded && (
