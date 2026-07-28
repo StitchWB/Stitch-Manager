@@ -243,18 +243,6 @@ def _generate_email_by_strategy(strategy: str, imap_user: str = "", domain: str 
         return {"email": f"user_{tag}@example.com", "strategy": strategy}
 
 
-@register_command("email_generate")
-async def cmd_email_generate(params: dict) -> dict:
-    """Generate email based on strategy. Mirrors Rust ``email_generate``."""
-    request = params.get("request", params)
-    strategy = request.get("strategy", "single")
-    imap_user = request.get("imapUser", request.get("imap_user", ""))
-    domain = request.get("domain")
-    email_pool = request.get("emailPool", request.get("email_pool", []))
-    custom_login_name = request.get("customLoginName", request.get("custom_login_name"))
-    return _generate_email_by_strategy(strategy, imap_user, domain, email_pool, custom_login_name)
-
-
 @register_command("email_generate_from_settings")
 async def cmd_email_generate_from_settings(params: dict) -> dict:
     """Generate email from stored settings. Mirrors Rust ``email_generate_from_settings``."""

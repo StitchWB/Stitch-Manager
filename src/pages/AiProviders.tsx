@@ -20,6 +20,7 @@ import { AiMappingsModal } from '../components/ai-proxy/modals/AiMappingsModal';
 import { ProxyStatusBar } from '../components/ai-proxy/sections/ProxyStatusBar';
 import { MonitorOverview } from '../components/ai-proxy/sections/MonitorOverview';
 import { ProxyDebugDrawer } from '../components/ai-proxy/ProxyDebugDrawer';
+import { AiProvidersKeysSection } from '../components/ai-proxy/sections/AiProvidersKeysSection';
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
 import type { ProxySettings, AiProxyAccount } from '../types/generated';
 import {
@@ -31,7 +32,7 @@ import {
   Tooltip,
   FloatingActionBar,
 } from '@/components/ui';
-import { getBackgroundManagerConfig } from '../lib/tauri/modules/backgroundManager';
+import { getBackgroundManagerConfig } from '../lib/backend/modules/backgroundManager';
 import { t } from '../lib/i18n';
 import { useAppStore } from '../stores/app';
 
@@ -353,6 +354,8 @@ export default function AiProviders() {
                     void handleTestConnection(account);
                   }}
                 />
+
+                <AiProvidersKeysSection providerFilter={providerFilter} />
 
                 {selection.selectedCount > 0 && (
                   <FloatingActionBar

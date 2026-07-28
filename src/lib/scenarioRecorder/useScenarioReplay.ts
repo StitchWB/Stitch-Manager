@@ -7,7 +7,7 @@ import {
   sendPythonJobControl,
   appendScenarioRun,
   type PythonJobStartResponse,
-} from '@/lib/tauri/modules/pythonJobs';
+} from '@/lib/backend/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
 import type { ScenarioRunnerMode } from './types';
 

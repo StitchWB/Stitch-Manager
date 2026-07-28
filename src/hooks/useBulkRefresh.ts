@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { checkAccountStatus } from '../lib/tauri';
+import { checkAccountStatus } from '../lib/backend';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
 

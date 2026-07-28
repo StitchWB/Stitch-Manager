@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { startPythonJob, getPythonJobStatus } from '@/lib/tauri/modules/pythonJobs';
+import { startPythonJob, getPythonJobStatus } from '@/lib/backend/modules/pythonJobs';
 
 export type ExtensionBridgeProbeState = {
   checking: boolean;

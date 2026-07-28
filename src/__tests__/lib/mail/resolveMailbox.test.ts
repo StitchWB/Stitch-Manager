@@ -13,7 +13,7 @@ import {
   buildAccountInboxQuery,
   resolveMailboxProfileForAccount,
 } from '@/lib/mail/runtime';
-import type { EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
+import type { EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 
 function makeImapProfile(args: {
   id: string;

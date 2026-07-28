@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FileText, ImageOff, Images, MailOpen, MailSearch, Trash2, X } from 'lucide-react';
 import { Badge, EmptyState, IconButton, LoadingSpinner, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import type { EmailMessage, ProviderCapabilities } from '@/lib/tauri/modules/emailInbox';
+import type { EmailMessage, ProviderCapabilities } from '@/lib/backend/modules/emailInbox';
 import { MailHtmlSandbox } from './MailHtmlSandbox';
 import { VerificationCodeChip } from './VerificationCodeChip';
 

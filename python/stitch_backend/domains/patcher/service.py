@@ -50,6 +50,7 @@ _IDE_SEARCH_PATHS: dict[str, list[str]] = {
         "{LOCALAPPDATA}/Programs/Kiro",
         "/Applications/Kiro.app",
         "{HOME}/.local/share/Kiro",
+        "S:/Kiro",  # Custom installation path
     ],
     "trae": [
         "{LOCALAPPDATA}/Programs/Trae",

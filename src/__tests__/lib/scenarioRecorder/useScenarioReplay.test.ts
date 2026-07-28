@@ -2,7 +2,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useScenarioReplay } from '../../../lib/scenarioRecorder/useScenarioReplay';
 
-jest.mock('../../../lib/tauri/modules/pythonJobs', () => ({
+jest.mock('../../../lib/backend/modules/pythonJobs', () => ({
   startPythonJob: jest.fn(),
   cancelPythonJob: jest.fn(),
   getPythonJobStatus: jest.fn(),
@@ -10,7 +10,7 @@ jest.mock('../../../lib/tauri/modules/pythonJobs', () => ({
   appendScenarioRun: jest.fn(),
 }));
 
-import { startPythonJob } from '../../../lib/tauri/modules/pythonJobs';
+import { startPythonJob } from '../../../lib/backend/modules/pythonJobs';
 
 const startPythonJobMock = startPythonJob as any;
 

@@ -17,7 +17,7 @@ import {
   listFingerprintProfiles,
   deleteFingerprintProfile,
   openStandaloneFingerprintProfileAndRememberUrl,
-} from '@/lib/tauri';
+} from '@/lib/backend';
 import { t } from '../lib/i18n';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
 import { useAccountsActions } from '../hooks/useAccountsActions';
@@ -444,7 +444,7 @@ export default function Accounts() {
 
   const handleRefreshRefUrl = useCallback(async (_accountId: number) => {
     try {
-      // TODO: wire to Tauri command that runs fetch_referral step on existing account
+      // TODO: wire to Backend command that runs fetch_referral step on existing account
       toast.info(t('accounts.account_ref_cell.ref_refresh_pending'));
     } catch {
       toast.error(t('accounts.account_ref_cell.ref_refresh_failed'));

@@ -1,9 +1,9 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useReplayVersioning } from '../../../lib/scenarioRecorder/useReplayVersioning';
-import type { ScenarioRecordItem } from '../../../lib/tauri/modules/pythonJobs';
+import type { ScenarioRecordItem } from '../../../lib/backend/modules/pythonJobs';
 
-jest.mock('../../../lib/tauri/modules/pythonJobs', () => ({
+jest.mock('../../../lib/backend/modules/pythonJobs', () => ({
   listScenarioRevisions: jest.fn(),
   rollbackRecordedScenario: jest.fn(),
 }));
@@ -11,7 +11,7 @@ jest.mock('../../../lib/tauri/modules/pythonJobs', () => ({
 import {
   listScenarioRevisions,
   rollbackRecordedScenario,
-} from '../../../lib/tauri/modules/pythonJobs';
+} from '../../../lib/backend/modules/pythonJobs';
 
 const listScenarioRevisionsMock = listScenarioRevisions as any;
 const rollbackRecordedScenarioMock = rollbackRecordedScenario as any;

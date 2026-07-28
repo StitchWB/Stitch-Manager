@@ -15,24 +15,23 @@ import { t } from '@/lib/i18n';
 import { GlassCard, IconButton, Toggle, Tooltip } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
-import { useAiProxyStore } from '../../stores/aiProxy';
+import { useAiProxyStore, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
 import {
-  getProxyStatus,
   startAiProxy,
   stopAiProxy,
-} from '../../lib/tauri/modules/aiProxy';
-import { getSettings, updateSettings } from '../../lib/tauri/modules/settings';
+} from '../../lib/backend/modules/aiProxy';
+import { getSettings, updateSettings } from '../../lib/backend/modules/settings';
 import {
   getBackgroundManagerConfig,
   updateBackgroundManagerConfig,
   type BackgroundManagerConfig,
-} from '../../lib/tauri/modules/backgroundManager';
+} from '../../lib/backend/modules/backgroundManager';
 import {
   getScheduledTasks,
   getSchedulerStatus,
   startScheduler,
   stopScheduler,
-} from '../../lib/tauri/modules/scheduler';
+} from '../../lib/backend/modules/scheduler';
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -116,15 +115,6 @@ export function SystemStatusStrip() {
   const proxyPort = proxyStatus?.port ?? null;
   const bridgeOnline = true; // Python backend always available
 
-  const refreshProxy = useCallback(async () => {
-    try {
-      const status = await getProxyStatus();
-      setProxyStatus(status);
-    } catch (err) {
-      console.warn('[SystemStatusStrip] proxy status:', err);
-    }
-  }, [setProxyStatus]);
-
   const refreshScheduler = useCallback(async () => {
     try {
       const [running, tasks] = await Promise.all([
@@ -159,16 +149,18 @@ export function SystemStatusStrip() {
   }, []);
 
   useEffect(() => {
-    void refreshProxy();
+    startProxyStatusPolling();
     void refreshScheduler();
     void refreshSettings();
     void refreshBackground();
     const id = window.setInterval(() => {
-      void refreshProxy();
       void refreshScheduler();
     }, POLL_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [refreshProxy, refreshScheduler, refreshSettings, refreshBackground]);
+    return () => {
+      window.clearInterval(id);
+      stopProxyStatusPolling();
+    };
+  }, [refreshScheduler, refreshSettings, refreshBackground]);
 
   const handleToggleProxy = useCallback(async () => {
     setProxyBusy(true);

@@ -3,9 +3,9 @@ import { generateEmail } from '../../../../pages/AutoReg/services/emailGenerator
 import type { IMAPConfig } from '../../../../stores/registration/types';
 
 const mockGetNextCounter = jest.fn() as jest.MockedFunction<
-  typeof import('../../../../lib/tauri').getNextCounter
+  typeof import('../../../../lib/backend').getNextCounter
 >;
-jest.mock('../../../../lib/tauri', () => ({
+jest.mock('../../../../lib/backend', () => ({
   getNextCounter: (...args: Parameters<typeof mockGetNextCounter>) =>
     mockGetNextCounter(...args),
 }));

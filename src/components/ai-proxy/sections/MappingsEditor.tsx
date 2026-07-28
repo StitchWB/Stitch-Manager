@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowRight, Layers, Plus, Save, Trash2 } from 'lucide-react';
 
-import type { ProviderModelMapping } from '../../../lib/tauri/modules/aiProxy';
+import type { ProviderModelMapping } from '../../../lib/backend/modules/aiProxy';
 import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '@/stores/app';

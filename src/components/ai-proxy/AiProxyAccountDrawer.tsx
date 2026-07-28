@@ -5,7 +5,7 @@ import { ButtonBase, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
 import { useAiProxyStore } from '../../stores/aiProxy';
-import { getRequestHistorySafe } from '@/lib/tauri/modules/aiProxy';
+import { getRequestHistorySafe } from '@/lib/backend/modules/aiProxy';
 
 type ConnectionState = {status: 'idle' | 'loading' | 'ok' | 'error';message?: string;};
 

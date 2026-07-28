@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { PythonJobStatus } from '@/lib/tauri/modules/pythonJobs';
+import type { PythonJobStatus } from '@/lib/backend/modules/pythonJobs';
 import type { FlowRouteHistoryEntry } from '../FlowGraphNode';
 
 export function useComposerRunTrace(lastJobStatus: PythonJobStatus | null) {

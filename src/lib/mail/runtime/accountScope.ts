@@ -9,8 +9,8 @@
  */
 
 import type { Account } from '@/types/generated';
-import type { EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
-import { listAccounts } from '@/lib/tauri/modules/accounts';
+import type { EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
+import { listAccounts } from '@/lib/backend/modules/accounts';
 import {
   buildAccountInboxQuery,
   resolveMailboxProfileForAccount,
@@ -31,7 +31,7 @@ export interface AccountScopeContext {
  * its inbox. Returns null when the account does not exist or has no email.
  *
  * Avoids loading all accounts when possible: we still call `listAccounts()`
- * because there is no `getAccountById` Tauri command exposed; this is the
+ * because there is no `getAccountById` Backend command exposed; this is the
  * existing convention in the codebase.
  */
 export async function buildAccountScopeContext(

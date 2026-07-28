@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hmac
+import logging
+import time
 from collections.abc import Callable
 from typing import Any, Protocol, TypedDict, cast
 
@@ -8,6 +10,13 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.responses import Response
+
+from .adaptive_router import get_adaptive_router
+from .cost_tracker import get_cost_tracker
+from .key_metrics import get_metrics_tracker
+from .rate_limiter import get_rate_limiter
+
+logger = logging.getLogger(__name__)
 
 JsonScalar = str | int | float | bool | None
 JsonValue = JsonScalar | dict[str, JsonScalar] | list[JsonScalar | dict[str, JsonScalar]]
@@ -275,13 +284,9 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         )
         return cast(CompletionRouter, router)
 
-    from stitch_backend.domains.ai_proxy.holone_stream import SecurityMode
-
-    mode = SecurityMode(getattr(settings, "holone_mode", "block"))
     executor = LiteLLMExecutor(
         load_keys,
         build_router,
-        security_mode=mode,
         load_config=load_config,
     )
 

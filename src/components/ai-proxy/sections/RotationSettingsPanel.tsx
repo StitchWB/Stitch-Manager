@@ -8,8 +8,8 @@ import {
   getBackgroundManagerConfig,
   updateBackgroundManagerConfig,
   type BackgroundManagerConfig,
-} from '@/lib/tauri/modules/backgroundManager';
-import type { ProviderCapability } from '@/lib/tauri/modules/aiProxy';
+} from '@/lib/backend/modules/backgroundManager';
+import type { ProviderCapability } from '@/lib/backend/modules/aiProxy';
 import { useAppStore } from '@/stores/app';
 import { HealthCheckSettings } from './HealthCheckSettings';
 import { ProviderPriorityList } from './ProviderPriorityList';

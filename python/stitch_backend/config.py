@@ -97,23 +97,8 @@ class Settings(BaseSettings):
             self.database_url = _default_db_url()
         return self
 
-    # ── OmniRoute sidecar (legacy) ──────────────────────────────────────────
-    omniroute_host: str = "127.0.0.1"
-    omniroute_port: int = 20128
-    omniroute_auto_start: bool = False
-
     # ── Native AI gateway ───────────────────────────────────────────────────
-    proxy_port: int = 20128  # ponytail: reuse omniroute_port for compatibility
-
-    # ── HoloNe proxy guard ───────────────────────────────────────────────────
-    holone_enabled: bool = False
-    holone_binary_path: Optional[str] = None
-    holone_listen_host: str = "127.0.0.1"
-    holone_listen_port: int = 8787
-    holone_upstream_url: str = "http://127.0.0.1:20128"
-    holone_mode: str = "monitor"
-    holone_log_path: Optional[str] = None
-    holone_sentinel_interval_seconds: int = 30
+    proxy_port: int = 20128
 
     # ── Email / IMAP ──────────────────────────────────────────────────────────
     imap_host: Optional[str] = None
@@ -135,10 +120,6 @@ class Settings(BaseSettings):
     cloakbrowser_dir: str = str(REPO_ROOT / "resources" / "cloakbrowser")
 
     # ── Helpers ───────────────────────────────────────────────────────────────
-    @property
-    def omniroute_base_url(self) -> str:
-        return f"http://{self.omniroute_host}:{self.omniroute_port}"
-
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

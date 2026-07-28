@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { ScenarioRecordItem } from '@/lib/tauri/modules/pythonJobs';
+import type { ScenarioRecordItem } from '@/lib/backend/modules/pythonJobs';
 
 function isTextInputTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

@@ -1,4 +1,4 @@
-"""Account SQLAlchemy ORM model — 35 fields, single source of truth.
+"""Account SQLAlchemy ORM model — single source of truth.
 
 Field groups:
   - Base             (id, email, password, provider, status, display_name, timestamps)
@@ -10,14 +10,13 @@ Field groups:
                       Kiro v2/v3 client_id + client_secret)
   - Meta             (notes, tags, use_count, success_rate, last_used_at, last_checked_at,
                       registration_source)
-  - OmniRoute        (omniroute_connection_id, is_llm_account, omniroute_synced_at)
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
@@ -165,17 +164,6 @@ class Account(Base):
             "For Kiro v2/v3: {client_id, client_secret, region}. "
             "Keys match provider_metadata in AccountResponse / generated.ts."
         ),
-    )
-
-    # ═══════ OmniRoute Sync ═════════════════════════════════════════════════
-    omniroute_connection_id: Mapped[str | None] = mapped_column(
-        String, comment="Connection ID inside OmniRoute"
-    )
-    is_llm_account: Mapped[bool] = mapped_column(
-        Boolean, default=False, comment="Should sync to OmniRoute"
-    )
-    omniroute_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), comment="Last successful sync timestamp"
     )
 
     # ── Repr ─────────────────────────────────────────────────────────────────

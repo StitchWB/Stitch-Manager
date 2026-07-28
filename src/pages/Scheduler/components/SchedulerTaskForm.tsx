@@ -4,7 +4,7 @@ import { t } from '@/lib/i18n';
 
 import type { Schedule, TaskType } from '../../../types/generated';
 import { SchedulerScenarioPicker } from './SchedulerScenarioPicker';
-import { listComposedFlows, type ComposedFlowItem } from '../../../lib/tauri/modules/pythonJobs';
+import { listComposedFlows, type ComposedFlowItem } from '../../../lib/backend/modules/pythonJobs';
 import { useGoogleSheetsDataset } from '../../../hooks/useGoogleSheetsDataset';
 import { useRegistrationStore } from '../../../stores/registration';
 import {

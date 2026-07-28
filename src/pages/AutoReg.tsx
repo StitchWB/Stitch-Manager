@@ -8,7 +8,7 @@ import { t } from '../lib/i18n';
 
 import { useRegistrationStore } from '../stores/registration';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
-import { checkPythonAutoreg } from '../lib/tauri';
+import { checkPythonAutoreg } from '../lib/backend';
 
 import { useRegistrationFlow } from './AutoReg/hooks/useRegistrationFlow';
 import { useEventListeners } from './AutoReg/hooks/useEventListeners';

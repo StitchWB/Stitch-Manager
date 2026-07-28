@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { safeInvoke } from '../../lib/tauri/core';
+import { safeInvoke } from '../../lib/backend/core';
 import type { RegistrationLog, RegistrationProgress, RegistrationStatus } from '../../types/ui';
 
 // Stage progress data

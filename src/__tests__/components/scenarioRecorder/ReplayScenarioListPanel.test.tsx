@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { render } from '@testing-library/react';
 import { ReplayScenarioListPanel } from '../../../components/scenarioRecorder/replay/ReplayScenarioListPanel';
-import type { ScenarioRecordItem } from '../../../lib/tauri/modules/pythonJobs';
+import type { ScenarioRecordItem } from '../../../lib/backend/modules/pythonJobs';
 
 function makeItem(partial: Partial<ScenarioRecordItem>): ScenarioRecordItem {
   return {

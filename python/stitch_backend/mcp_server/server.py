@@ -78,10 +78,7 @@ CORE_TOOLS = [
     "delete_composed_flow",
     "start_composed_flow_job",
     "mark_composed_flow_ran",
-    # Proxy (8)
-    "start_ai_proxy",
-    "stop_ai_proxy",
-    "get_proxy_status",
+    # Proxy (5)
     "get_proxy_settings",
     "update_proxy_settings",
     "get_ai_proxy_accounts",
@@ -99,10 +96,7 @@ CORE_TOOLS = [
     "get_aws_accounts",
     "create_aws_account",
     "get_aws_accounts_stats",
-    # Omniroute (4)
-    "start_omniroute",
-    "stop_omniroute",
-    "get_omniroute_status",
+    # Usage (1)
     "get_usage_stats",
     # Settings (2)
     "get_settings",

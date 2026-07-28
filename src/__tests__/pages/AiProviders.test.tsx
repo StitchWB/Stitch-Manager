@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AiProviders from '../../pages/AiProviders';
-import * as aiProxyModule from '../../lib/tauri/modules/aiProxy';
+import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
 
 jest.mock('../../components/layout/Header', () => ({
   __esModule: true,
@@ -12,8 +12,8 @@ jest.mock('../../components/layout/Header', () => ({
 
 // Mock the entire aiProxy module so const-exports (fetchAllQuotasSafe etc.)
 // can be replaced — jest.spyOn cannot redefine non-configurable properties.
-jest.mock('../../lib/tauri/modules/aiProxy', () => {
-  const actual = jest.requireActual('../../lib/tauri/modules/aiProxy') as object;
+jest.mock('../../lib/backend/modules/aiProxy', () => {
+  const actual = jest.requireActual('../../lib/backend/modules/aiProxy') as object;
   return {
     ...actual,
     getAiProxyAccounts: jest.fn(),

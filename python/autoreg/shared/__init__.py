@@ -30,7 +30,7 @@ from .session_manager import (
     SessionStatus,
     get_session_manager,
 )
-from .tauri_db import (
+from .stitch_db import (
     get_imap_settings_from_db,
     get_proxy_settings_from_db,
     get_registration_settings_from_db,

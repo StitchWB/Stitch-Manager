@@ -10,7 +10,7 @@ import {
   MetricStrip,
 } from '@/components/ui';
 import { useLogsStore } from '../../../stores/logs';
-import type { ProviderCapability } from '../../../lib/tauri/modules/aiProxy';
+import type { ProviderCapability } from '../../../lib/backend/modules/aiProxy';
 import type { ProxySettings, ProxyStatus } from '../../../types/generated';
 
 export interface MonitorOverviewProps {

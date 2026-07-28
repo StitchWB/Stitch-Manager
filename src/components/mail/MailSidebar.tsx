@@ -29,7 +29,7 @@ import {
 } from '@/components/ui';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { t } from '@/lib/i18n';
-import type { EmailFolder, EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
+import type { EmailFolder, EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 import type { MailProfileSyncState } from '@/stores/mail';
 import { AUTO_REG_MAILBOX_PROFILE_ID } from '@/lib/mail/runtime';
 import { detectMailboxProviderKind, type MailboxProviderKind } from '@/lib/mail/providerPresets';

@@ -11,7 +11,7 @@ Usage
 
     # Subscribe
     @event_bus.on("account.token_refreshed")
-    async def sync_omniroute(event: Event) -> None:
+    async def handle_token_refresh(event: Event) -> None:
         ...
 
     # Emit

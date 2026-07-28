@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Trash2, RefreshCw, Bug } from 'lucide-react';
-import { aiProxy } from '@/lib/tauri';
-import type { ProxyDebugLog } from '@/lib/tauri/modules/aiProxy';
+import { aiProxy } from '@/lib/backend';
+import type { ProxyDebugLog } from '@/lib/backend/modules/aiProxy';
 import { Button, LoadingSpinner } from '@/components/ui';
 
 interface ProxyDebugDrawerProps {

@@ -5,7 +5,7 @@ import { Button, LoadingSpinner, Tooltip } from '@/components/ui';
 import {
   emailInboxListProfiles,
   type EmailInboxProfile,
-} from '@/lib/tauri/modules/emailInbox';
+} from '@/lib/backend/modules/emailInbox';
 import { resolveMailboxProfileForAccount } from '@/lib/mail/runtime';
 import { t } from '@/lib/i18n';
 

@@ -30,7 +30,6 @@ from stitch_backend.domains.accounts.schemas import (
     UpdateAccountMetadataRequest,
     UpdateAccountNotesTagsRequest,
     UpdateAccountTokenRequest,
-    UpdateProviderMetadataRequest,
 )
 from stitch_backend.domains.accounts.service import AccountService
 
@@ -348,25 +347,4 @@ async def cmd_check_kiro_account(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("update_provider_metadata")
-async def cmd_update_provider_metadata(params: dict) -> dict:
-    """Merge or overwrite provider-specific metadata on an account.
 
-    Stores arbitrary key/value pairs in ``account.provider_metadata`` (JSON).
-    For Kiro v2/v3 this is used to persist ``client_id`` + ``client_secret``
-    after registration so the token can be refreshed later without a browser.
-
-    Request: ``{ accountId, metadata: {…}, merge?: true }``
-    Response: ``AccountResponse``
-    """
-    req = _parse(UpdateProviderMetadataRequest, params)
-
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.update_provider_metadata(
-            str(req.account_id),
-            req.metadata,
-            merge=req.merge,
-        )
-
-    return await run_in_session(_op)

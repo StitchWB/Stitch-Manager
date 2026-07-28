@@ -13,8 +13,8 @@ import {
   checkAccountStatus,
   checkFireworksApiKey,
   updateAccountMetadata,
-} from '@/lib/tauri/modules/accounts';
-import { authorizeKiroAccount } from '@/lib/tauri';
+} from '@/lib/backend/modules/accounts';
+import { authorizeKiroAccount } from '@/lib/backend';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
 import {
@@ -178,8 +178,7 @@ export function useAccountsActions({
       toast.info(t('accounts.authorizingKiro'));
       await authorizeKiroAccount(id);
       toast.success(t('accounts.authorizeKiroStarted'));
-      // Note: KiroPoolProxy removed. AI Proxy with sidecar handles Kiro natively
-      // and will pick up the new token automatically on next request.
+      // The native gateway will pick up the new token automatically on next request.
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[Accounts] Failed to authorize Kiro account:', error);

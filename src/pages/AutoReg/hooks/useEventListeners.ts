@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { listen } from '@/lib/events';
 import { useRegistrationStore } from '../../../stores/registration';
-import { listAccounts, updateAccountNotesTags } from '../../../lib/tauri';
+import { listAccounts, updateAccountNotesTags } from '../../../lib/backend';
 import type { ObsEvent } from '@/lib/observability/types';
 import { remapLogLevel } from '../../../lib/logTransform';
 

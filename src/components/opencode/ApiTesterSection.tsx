@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { TestTube, Plus, Loader2, Eye, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { GlassCard, Button, Input, Checkbox, Badge, Textarea, StatusBadge } from '@/components/ui';
-import { testOpenCodeApi, bulkTestOpenCodeApi, type BulkTestKeyResult } from '@/lib/tauri/modules/opencodeConfig';
-import { setOpenAIApiKeys } from '@/lib/tauri/modules/apiKeys';
+import { testOpenCodeApi, bulkTestOpenCodeApi, type BulkTestKeyResult } from '@/lib/backend/modules/opencodeConfig';
+import { setOpenAIApiKeys } from '@/lib/backend/modules/apiKeys';
 
 type ModelInfo = {
   id: string;

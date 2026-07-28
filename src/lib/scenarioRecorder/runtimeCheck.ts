@@ -1,4 +1,4 @@
-import { getPythonJobStatus, startPythonJob } from '@/lib/tauri/modules/pythonJobs';
+import { getPythonJobStatus, startPythonJob } from '@/lib/backend/modules/pythonJobs';
 
 export interface BrowserRuntimeCheckResult {
   installed: boolean | null;

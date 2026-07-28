@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { listen, UnlistenFn } from '@/lib/events';
-import { getLogs, clearAppLogs, exportAppLogs, getLogStats } from '../lib/tauri/modules/logs';
-import { TauriError } from '../lib/tauri/core/types';
+import { getLogs, clearAppLogs, exportAppLogs, getLogStats } from '../lib/backend/modules/logs';
+import { BackendError } from '../lib/backend/core/types';
 
 // ============================================
 // Types
@@ -49,7 +49,7 @@ export interface LogStats {
 }
 
 function normalizeErrorMessage(error: unknown): string {
-  if (error instanceof TauriError) return error.message;
+  if (error instanceof BackendError) return error.message;
   if (error instanceof Error) return error.message;
   return String(error);
 }

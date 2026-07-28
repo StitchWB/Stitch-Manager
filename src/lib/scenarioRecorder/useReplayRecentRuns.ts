@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listScenarioRuns, type ScenarioRunItem } from '@/lib/tauri/modules/pythonJobs';
+import { listScenarioRuns, type ScenarioRunItem } from '@/lib/backend/modules/pythonJobs';
 
 export type ReplayRunStatusFilter = 'all' | 'errors';
 

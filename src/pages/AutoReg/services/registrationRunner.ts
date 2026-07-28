@@ -20,7 +20,7 @@ import {
   registrationControl,
   setAccountProxy,
   getRegistrationJob,
-} from '../../../lib/tauri';
+} from '../../../lib/backend';
 import { createCorrelationId } from '@/lib/observability/client';
 import { generateEmail } from './emailGenerator';
 import { DEFAULT_IMAP_PORT } from '../../../constants/registration';

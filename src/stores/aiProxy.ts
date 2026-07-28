@@ -5,7 +5,8 @@ import type {
   AiProxyAccount,
   AiProxyQuotaInfo,
 } from '../types/generated';
-import type { OpenAiAccountQuota } from '../lib/tauri/modules/aiProxy';
+import type { OpenAiAccountQuota } from '../lib/backend/modules/aiProxy';
+import { getProxyStatus } from '../lib/backend/modules/aiProxy';
 import type { KiroAccountQuota } from '../types/generated';
 
 export type AiProxyAccountDailyUsage = {
@@ -132,3 +133,45 @@ export const useAiProxyStore = create<AiProxyState>(set => ({
   setLoading: loading => set({ loading }),
   setError: error => set({ error }),
 }));
+
+// ─── Proxy Status Polling ────────────────────────────────────────────────────
+// Single polling instance shared by all components
+
+let pollingInterval: ReturnType<typeof setInterval> | null = null;
+let pollingSubscribers = 0;
+const POLL_INTERVAL_MS = 10_000;
+
+async function fetchProxyStatus() {
+  try {
+    const status = await getProxyStatus();
+    useAiProxyStore.getState().setStatus(status);
+  } catch (err) {
+    console.warn('[aiProxy store] proxy status poll failed:', err);
+  }
+}
+
+/** Start polling proxy status. Call on mount of components that need it. */
+export function startProxyStatusPolling() {
+  pollingSubscribers++;
+  if (pollingSubscribers === 1) {
+    fetchProxyStatus();
+    pollingInterval = setInterval(fetchProxyStatus, POLL_INTERVAL_MS);
+  }
+}
+
+/** Stop polling proxy status. Call on unmount. */
+export function stopProxyStatusPolling() {
+  pollingSubscribers = Math.max(0, pollingSubscribers - 1);
+  if (pollingSubscribers === 0 && pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+  }
+}
+
+/** Get proxy status — returns cached value or fetches fresh if not available. */
+export async function fetchProxyStatusNow() {
+  const current = useAiProxyStore.getState().status;
+  if (current) return current;
+  await fetchProxyStatus();
+  return useAiProxyStore.getState().status;
+}

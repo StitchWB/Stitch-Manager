@@ -348,6 +348,7 @@ export interface IDEInfo {
 
 export interface DetectedIDE extends IDEInfo {
   isPatched: boolean;
+  proxyInjected?: boolean;
   patchVersion?: string;
   patchedAt?: string;
   canPatch: boolean;

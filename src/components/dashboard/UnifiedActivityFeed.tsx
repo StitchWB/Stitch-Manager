@@ -11,11 +11,11 @@ import { useAccountsStore } from '../../stores/accounts';
 import {
   getRegistrationJobs,
   clearRegistrationJobs,
-} from '../../lib/tauri/modules/registration';
+} from '../../lib/backend/modules/registration';
 import {
   getScheduledTasks,
   getTaskExecutions,
-} from '../../lib/tauri/modules/scheduler';
+} from '../../lib/backend/modules/scheduler';
 import type { RegistrationJob } from '../../types/ui';
 
 import { ActivityItem } from './ActivityItem';

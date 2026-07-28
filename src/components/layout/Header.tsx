@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Bell, Globe, X, Info, CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
-import { useAiProxyStore } from '../../stores/aiProxy';
-import { getProxyStatus } from '@/lib/tauri';
+import { useAiProxyStore, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
 import { t } from '@/lib/i18n';
 import { ButtonBase, IconButton } from '@/components/ui';
 
@@ -28,25 +27,14 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
   const notifRef = useRef<HTMLDivElement>(null);
   const langRef = useRef<HTMLDivElement>(null);
   const proxyStatus = useAiProxyStore(state => state.status);
-  const setProxyStatus = useAiProxyStore(state => state.setStatus);
 
   const isOnline = proxyStatus?.running ?? false;
 
-  // Poll proxy status so the header indicator is accurate on every page
-  const pollProxyStatus = useCallback(async () => {
-    try {
-      const status = await getProxyStatus();
-      setProxyStatus(status);
-    } catch {
-      // ignore — status will stay at its last known value
-    }
-  }, [setProxyStatus]);
-
+  // Use centralized proxy status polling
   useEffect(() => {
-    pollProxyStatus();
-    const interval = setInterval(pollProxyStatus, 15_000);
-    return () => clearInterval(interval);
-  }, [pollProxyStatus]);
+    startProxyStatusPolling();
+    return () => stopProxyStatusPolling();
+  }, []);
 
   // Close dropdowns when clicking outside
   useEffect(() => {

@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, LayoutGrid, ScrollText, Stethoscope } from 'luc
 import { useUIState } from '@/hooks/useUIState';
 import { Button, Checkbox, ConfirmDialog, Modal, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { getProfileSettings } from '@/lib/tauri/modules/profiles';
+import { getProfileSettings } from '@/lib/backend/modules/profiles';
 import { useScenarioReplay } from '@/lib/scenarioRecorder/useScenarioReplay';
 import { BrowserRuntimeInstallModal } from './BrowserRuntimeInstallModal';
 import {
@@ -14,8 +14,8 @@ import {
   reindexRecordedScenarios,
   type ReplayPreflightResult,
   type ScenarioRecordItem } from
-'@/lib/tauri/modules/pythonJobs';
-import { copyToClipboard, openInFileManager } from '@/lib/tauri/modules/utils';
+'@/lib/backend/modules/pythonJobs';
+import { copyToClipboard, openInFileManager } from '@/lib/backend/modules/utils';
 import { buildRunnerConfigFromProfileSettings } from '@/lib/scenarioRecorder/configBuilder';
 import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';

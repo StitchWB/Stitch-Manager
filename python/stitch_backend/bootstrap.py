@@ -71,8 +71,7 @@ async def bootstrap() -> None:
     import stitch_backend.domains.proxy_library.commands  # noqa: F401
     import stitch_backend.domains.scenarios.commands  # noqa: F401
     import stitch_backend.domains.scheduler.commands  # noqa: F401
-    import stitch_backend.domains.proxy_mgmt.commands  # noqa: F401
-    import stitch_backend.domains.proxy_mgmt.holone_commands  # noqa: F401
+    import stitch_backend.domains.patcher.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.replenishment.commands  # noqa: F401
     import stitch_backend.domains.profiles.commands  # noqa: F401
@@ -98,9 +97,6 @@ async def bootstrap() -> None:
     import stitch_backend.domains.utility.file_dialogs  # noqa: F401
     import stitch_backend.domains.utility.stubs  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
-
-    # EventBus listeners
-    import stitch_backend.domains.proxy_mgmt.event_listeners  # noqa: F401
 
     # ── Registry scan ────────────────────────────────────────────────────────
     from stitch_backend.core.command_registry import list_commands, scan_providers

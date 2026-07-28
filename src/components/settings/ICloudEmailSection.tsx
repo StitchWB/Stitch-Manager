@@ -17,7 +17,7 @@ import {
   configureICloud,
   fillICloudPool,
   getICloudPoolStats,
-} from '@/lib/tauri';
+} from '@/lib/backend';
 import type { ICloudPoolStats } from '@/types/generated';
 
 interface ICloudEmailSectionProps {

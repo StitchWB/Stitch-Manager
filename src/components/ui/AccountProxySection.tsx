@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Globe, Link2, Unlink, ChevronDown, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { setAccountProxy } from '@/lib/tauri';
+import { setAccountProxy } from '@/lib/backend';
 import {
   listProxyLibrary,
   type ProxyLibraryEntry,
-} from '@/lib/tauri/modules/proxyLibrary';
+} from '@/lib/backend/modules/proxyLibrary';
 import { toast } from 'sonner';
 
 interface AccountProxySectionProps {

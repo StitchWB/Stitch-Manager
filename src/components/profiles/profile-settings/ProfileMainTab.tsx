@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";import { Link2, Copy, FolderOpen } from 'lucide-react';
 import { Button, IconButton, Input, Select, Textarea, Toggle } from '@/components/ui';
-import { type ProfileSettingsV1, type ProfileSettingsBrowserWindowMode } from '@/lib/tauri/modules/profiles';
+import { type ProfileSettingsV1, type ProfileSettingsBrowserWindowMode } from '@/lib/backend/modules/profiles';
 import {
   parsePositiveIntOrNull,
   windowModeOptions,

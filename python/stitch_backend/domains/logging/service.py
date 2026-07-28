@@ -32,8 +32,6 @@ def _infer_channel(source: str) -> str:
         return "toast"
     if "frontend" in s:
         return "frontend"
-    if "sidecar" in s:
-        return "sidecar"
     if "proxy" in s or "ai_proxy" in s:
         return "proxy"
     if "rust" in s or "backend" in s:

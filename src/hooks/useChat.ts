@@ -21,7 +21,7 @@ interface UseChatReturn {
 }
 
 // AI Proxy default port - Chat.tsx overrides this with dynamic port from settings.
-// Unified Gateway: all models (sidecar, kiro-pool, freemodel-bridge) route through this endpoint.
+// Unified Gateway: all models route through this endpoint.
 const DEFAULT_API_URL = 'http://localhost:25583/v1/chat/completions';
 
 /** Stable empty array to avoid creating a new [] on every selector call. */

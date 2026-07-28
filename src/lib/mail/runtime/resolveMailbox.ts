@@ -8,7 +8,7 @@
  * page to apply an account-scoped inbox filter.
  */
 
-import type { EmailInboxProfile } from '@/lib/tauri/modules/emailInbox';
+import type { EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 import { AUTO_REG_MAILBOX_PROFILE_ID } from './autoRegProfile';
 
 export type ResolveReason =

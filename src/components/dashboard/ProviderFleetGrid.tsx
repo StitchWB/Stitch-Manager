@@ -9,8 +9,8 @@ import { NumberInput } from '@/components/ui/NumberInput';
 import { cn } from '@/lib/utils';
 
 import type { Account } from '../../types/ui';
-import { getSettings } from '../../lib/tauri/modules/settings';
-import { getRegistrationStatus } from '../../lib/tauri/modules/registration';
+import { getSettings } from '../../lib/backend/modules/settings';
+import { getRegistrationStatus } from '../../lib/backend/modules/registration';
 
 interface ProviderFleetGridProps {
   accounts: Account[];

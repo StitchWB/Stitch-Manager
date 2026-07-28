@@ -4,7 +4,7 @@ import {
   rollbackRecordedScenario,
   type ScenarioRecordItem,
   type ScenarioRevisionItem,
-} from '@/lib/tauri/modules/pythonJobs';
+} from '@/lib/backend/modules/pythonJobs';
 
 type ScenarioRevisionSnapshot = {
   scenarioPath?: string;

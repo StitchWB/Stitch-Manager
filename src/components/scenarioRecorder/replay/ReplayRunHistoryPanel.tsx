@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { SegmentedControl, Button } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import type { ScenarioRunItem } from '@/lib/tauri/modules/pythonJobs';
+import type { ScenarioRunItem } from '@/lib/backend/modules/pythonJobs';
 import {
   isScenarioRunFailure,
   type ReplayRunStatusFilter,

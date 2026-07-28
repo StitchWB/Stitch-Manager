@@ -65,17 +65,23 @@ _META_REGISTRY: dict[str, CommandMeta] = {}
 def _extract_request_model(handler: Callable[..., Any]) -> Type[BaseModel] | None:
     """Extract Pydantic request model from handler source via AST analysis.
     
-    Scans handler source for patterns:
-    1. _parse(ModelClass, params) — most common
-    2. ModelClass.model_validate(params) — alternative
-    3. ModelClass(**params) — rare fallback
+    Checks in order:
+    0. Explicit ``handler._request_model`` attribute (set by dynamic generators)
+    1. ``_parse(ModelClass, params)`` — most common
+    2. ``ModelClass.model_validate(params)`` — alternative
+    3. ``ModelClass(**params)`` — rare fallback
     
     Returns None if no model found (no-arg command).
     """
+    # 0. Explicit model set on handler (for dynamically generated closures)
+    explicit = getattr(handler, "_request_model", None)
+    if explicit is not None:
+        return explicit
+
     try:
         source = inspect.getsource(handler)
         tree = ast.parse(source)
-    except (OSError, TypeError) as e:
+    except (OSError, TypeError, SyntaxError) as e:
         logger.debug(f"Could not get source for {handler.__name__}: {e}")
         return None
     

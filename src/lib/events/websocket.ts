@@ -7,11 +7,11 @@
  * Python EventBus payload format:
  *   { "event": "account.token_refreshed", "data": { ... }, "timestamp": "..." }
  *
- * Frontend Tauri-style:
+ * Frontend Backend-style:
  *   listen("account-created", (event) => { event.payload })
  */
 
-import { safeInvoke } from '@/lib/tauri/core/invoke';
+import { safeInvoke } from '@/lib/backend/core/invoke';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

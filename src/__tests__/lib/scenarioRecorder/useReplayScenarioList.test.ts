@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import { renderHook } from '@testing-library/react';
-import type { ScenarioRecordItem } from '../../../lib/tauri/modules/pythonJobs';
+import type { ScenarioRecordItem } from '../../../lib/backend/modules/pythonJobs';
 import {
   deriveFriendlyScenarioName,
   useReplayScenarioList,

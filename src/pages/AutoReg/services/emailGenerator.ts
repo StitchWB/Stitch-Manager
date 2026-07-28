@@ -3,7 +3,7 @@
  * Handles email generation logic for different strategies (Gmail, custom domain, alias services)
  */
 
-import { getNextCounter } from '../../../lib/tauri';
+import { getNextCounter } from '../../../lib/backend';
 import { RANDOM_NAMES } from '../../../constants/registration';
 import type { ProviderName } from '../../../types/ui';
 import type { IMAPConfig } from '../../../stores/registration/types';

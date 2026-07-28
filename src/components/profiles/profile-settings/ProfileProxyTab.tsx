@@ -1,8 +1,8 @@
 import { Globe } from 'lucide-react';
 import { Button, Select, Toggle } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { type ProfileSettingsProxy } from '@/lib/tauri/modules/profiles';
-import { type ProxyLibraryEntry } from '@/lib/tauri/modules/proxyLibrary';
+import { type ProfileSettingsProxy } from '@/lib/backend/modules/profiles';
+import { type ProxyLibraryEntry } from '@/lib/backend/modules/proxyLibrary';
 
 interface ProfileProxyTabProps {
   proxyEnabled: boolean;

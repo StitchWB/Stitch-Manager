@@ -67,7 +67,6 @@ async def cmd_get_providers(params: dict) -> dict:
         result.append({
             "id": pid,
             "displayName": getattr(cls, "display_name", pid),
-            "isLlmAccount": getattr(cls, "is_llm_account", False),
             "requiresMachineId": getattr(cls, "requires_machine_id", False),
         })
     return {"providers": result}

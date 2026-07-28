@@ -1,7 +1,7 @@
 import { t } from "@/lib/i18n";import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
-import { createAiProxyAccount, updateAiProxyAccount } from '../../lib/tauri/modules/aiProxy';
+import { createAiProxyAccount, updateAiProxyAccount } from '../../lib/backend/modules/aiProxy';
 import OAuthModal from './OAuthModal';
 import type { AiProxyAccount } from '../../types/generated';
 import { Button, Input, Modal, Select, Toggle } from '@/components/ui';

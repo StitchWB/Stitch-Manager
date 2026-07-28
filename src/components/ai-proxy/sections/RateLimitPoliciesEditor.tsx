@@ -14,8 +14,8 @@ import {
   Toggle,
   Tooltip,
 } from '@/components/ui';
-import type { RateLimitPolicy } from '@/lib/tauri/modules/backgroundManager';
-import type { ProviderCapability } from '@/lib/tauri/modules/aiProxy';
+import type { RateLimitPolicy } from '@/lib/backend/modules/backgroundManager';
+import type { ProviderCapability } from '@/lib/backend/modules/aiProxy';
 import { useAppStore } from '@/stores/app';
 
 interface RateLimitPoliciesEditorProps {

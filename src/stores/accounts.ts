@@ -12,8 +12,8 @@ import {
   setActiveAccount as setActiveAccountTauri,
   getActiveAccounts as getActiveAccountsTauri,
   bulkDeleteAccounts,
-  TauriError,
-} from '../lib/tauri';
+  BackendError,
+} from '../lib/backend';
 
 // ============================================
 // Types
@@ -231,7 +231,7 @@ export const useAccountsStore = create<AccountsState>()(
               });
             }
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, loading: false });
             throw error;
           }
@@ -247,7 +247,7 @@ export const useAccountsStore = create<AccountsState>()(
             }));
             return newAccount;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, loading: false });
             throw error;
           }
@@ -267,7 +267,7 @@ export const useAccountsStore = create<AccountsState>()(
           } catch (error) {
             // Rollback on error
             set({ accounts: previousAccounts });
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message });
             throw error;
           }
@@ -292,7 +292,7 @@ export const useAccountsStore = create<AccountsState>()(
           } catch (error) {
             // Rollback on error
             set({ accounts: previousAccounts });
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message });
             throw error;
           }
@@ -323,7 +323,7 @@ export const useAccountsStore = create<AccountsState>()(
             // Rollback on error
             console.error('[Store] bulkDeleteAccounts error, rolling back:', error);
             set({ accounts: previousAccounts });
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message });
             throw error;
           }
@@ -338,7 +338,7 @@ export const useAccountsStore = create<AccountsState>()(
 
             return updatedAccount;
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message });
             throw error;
           }
@@ -363,7 +363,7 @@ export const useAccountsStore = create<AccountsState>()(
 
             set({ accounts: updatedAccounts, loading: false });
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, loading: false });
             throw error;
           }
@@ -373,7 +373,7 @@ export const useAccountsStore = create<AccountsState>()(
           try {
             return await validateAccount({ accountId });
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message });
             throw error;
           }
@@ -396,7 +396,7 @@ export const useAccountsStore = create<AccountsState>()(
               },
             }));
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message });
             throw error;
           }
@@ -595,7 +595,7 @@ export const useAccountsStore = create<AccountsState>()(
 
             set({ accounts: updatedAccounts, loading: false });
           } catch (error) {
-            const message = error instanceof TauriError ? error.message : String(error);
+            const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, loading: false });
             throw error;
           }

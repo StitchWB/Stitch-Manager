@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GoogleSheetsParams } from '@/lib/tauri/modules/googleSheets';
+import type { GoogleSheetsParams } from '@/lib/backend/modules/googleSheets';
 import { useRegistrationStore } from '../stores/registration';
 
 type SheetsTestStatus = 'idle' | 'loading' | 'success' | 'error';

@@ -1,6 +1,6 @@
 import { Button, Checkbox, Input, Textarea } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import type { ReplayPreflightResult } from '@/lib/tauri/modules/pythonJobs';
+import type { ReplayPreflightResult } from '@/lib/backend/modules/pythonJobs';
 import type { ScenarioReplayStatus } from '@/lib/scenarioRecorder/useScenarioReplay';
 import type { ScenarioRunnerMode } from '@/lib/scenarioRecorder/types';
 

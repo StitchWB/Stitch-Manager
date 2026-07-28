@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   listRecordedScenarios,
   type ScenarioRecordItem,
-} from '../../../lib/tauri/modules/pythonJobs';
-import { listFingerprintProfiles } from '../../../lib/tauri/modules/profiles';
+} from '../../../lib/backend/modules/pythonJobs';
+import { listFingerprintProfiles } from '../../../lib/backend/modules/profiles';
 import { formatProfileAlias } from '../../../lib/profiles/displayName';
 import { Button, Input, Select } from '@/components/ui';
 import { t } from '@/lib/i18n';

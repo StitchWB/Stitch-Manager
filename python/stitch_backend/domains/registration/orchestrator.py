@@ -6,8 +6,7 @@ The orchestrator drives a provider through the standard steps:
   3. Launch browser
   4. Execute provider-specific flow (captcha, verification, token extraction)
   5. Store credentials in the database
-  6. Sync to OmniRoute (if LLM account)
-  7. Emit events for progress tracking
+  6. Emit events for progress tracking
 """
 
 from __future__ import annotations
@@ -89,15 +88,7 @@ class RegistrationOrchestrator:
             await _progress("store", 0.7, "Saving account...")
             account_id = await self._store_account(ctx, token_data, provider)
 
-            # Step 6: OmniRoute sync (if applicable)
-            await _progress("sync", 0.85, "Syncing to OmniRoute...")
-            if getattr(provider, "is_llm_account", False):
-                await event_bus.emit("registration.sync_omniroute", {
-                    "account_id": account_id,
-                    "provider_id": ctx.provider_id,
-                })
-
-            # Step 7: Complete
+            # Step 6: Complete
             await _progress("complete", 1.0, "Registration complete!")
             await event_bus.emit("registration.completed", {
                 "account_id": account_id,
@@ -154,7 +145,6 @@ class RegistrationOrchestrator:
             refresh_token=token_data.refresh_token,
             api_key=token_data.api_key,
             display_name=ctx.display_name or f"{ctx.provider_id}:{ctx.email}",
-            is_llm_account=getattr(provider, "is_llm_account", False),
         )
 
         async def _op(session):

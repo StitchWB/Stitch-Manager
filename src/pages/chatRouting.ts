@@ -1,5 +1,5 @@
 import type { ModelInfo } from '../types/generated';
-import { API_BASE_URL } from '../lib/tauri/core/invoke';
+import { API_BASE_URL } from '../lib/backend/core/invoke';
 
 type ChatRouteModel = Pick<ModelInfo, 'id' | 'provider' | 'ownedBy'>;
 

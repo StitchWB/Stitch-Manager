@@ -4,7 +4,7 @@ import { FolderKanban, RefreshCw } from 'lucide-react';
 import Header from '../components/layout/Header';
 
 import { t } from '../lib/i18n';
-import { listFingerprintProfiles, getProfileSettings } from '@/lib/tauri/modules/profiles';
+import { listFingerprintProfiles, getProfileSettings } from '@/lib/backend/modules/profiles';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
 import { ScenarioRecordModal } from '@/components/scenarioRecorder/ScenarioRecordModal';
 import { ScenarioReplayModal } from '@/components/scenarioRecorder/ScenarioReplayModal';

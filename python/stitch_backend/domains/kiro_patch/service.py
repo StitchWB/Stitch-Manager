@@ -31,11 +31,14 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "constantPatching": True,
         "customPrompts": True,
         "requestSpy": False,
+        "proxyInjection": True,
     },
     "machineId": "",
     "accountBindings": {},
     "currentAccountId": None,
     "logLevel": "info",
+    "proxyPort": 5580,
+    "outboundProxy": "",  # Format: host:port:user:pass or socks5://user:pass@host:port
     "constants": {
         "writeLimit": "500 lines",
         "iterationLimit": 1000,
@@ -125,23 +128,105 @@ _PATCH_MARKERS = [
 ]
 
 
+def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
+    """Generate proxy injection code with configurable port."""
+    return f"""/* STITCH_PROXY_INJECT - V1 */
+(function() {{
+  try {{
+    const http = require('http');
+    const https = require('https');
+    const PROXY_HOST = '127.0.0.1';
+    const PROXY_PORT = {proxy_port};
+    
+    const origHttpRequest = http.request;
+    const origHttpsRequest = https.request;
+    
+    function createProxyWrapper(originalFn, defaultProtocol) {{
+      return function(opts, cb) {{
+        // Normalize options
+        if (typeof opts === 'string') opts = new URL(opts);
+        if (opts instanceof URL) {{
+          opts = {{
+            hostname: opts.hostname,
+            port: opts.port,
+            path: opts.pathname + opts.search,
+            protocol: opts.protocol,
+            headers: {{}}
+          }};
+        }}
+        
+        const targetHost = opts.hostname || opts.host;
+        const targetPort = opts.port || (defaultProtocol === 'https:' ? 443 : 80);
+        const targetProtocol = opts.protocol || defaultProtocol;
+        
+        // Preserve original host
+        opts.headers = opts.headers || {{}};
+        opts.headers['X-Forwarded-Host'] = targetHost;
+        opts.headers['X-Forwarded-Proto'] = targetProtocol.replace(':', '');
+        opts.headers['X-Forwarded-Port'] = String(targetPort);
+        
+        // Redirect to proxy
+        opts.hostname = PROXY_HOST;
+        opts.port = PROXY_PORT;
+        opts.protocol = 'http:';
+        
+        // For HTTPS, use absolute URI in path
+        if (targetProtocol === 'https:') {{
+          opts.path = `https://${{targetHost}}:${{targetPort}}${{opts.path}}`;
+        }}
+        
+        return originalFn.call(this, opts, cb);
+      }};
+    }}
+    
+    http.request = createProxyWrapper(origHttpRequest, 'http:');
+    https.request = createProxyWrapper(origHttpsRequest, 'https:');
+    
+    console.log('[Stitch] HTTP/HTTPS proxy enabled: 127.0.0.1:{proxy_port}');
+  }} catch (e) {{
+    console.error('[Stitch] Proxy injection failed:', e);
+  }}
+}})();
+"""
+
+
 def _find_kiro_target_file() -> Path | None:
     """Locate the Kiro IDE main JS file to patch.
 
-    Search strategy (Windows):
-      - ``%LOCALAPPDATA%/Programs/Kiro/resources/app/out/vs/workbench/workbench.desktop.main.js``
+    Search strategy:
+    - Windows: ``%LOCALAPPDATA%/Programs/Kiro/resources/app/out/vs/workbench/workbench.desktop.main.js``
+    - Windows (extension): ``S:/Kiro/resources/app/extensions/kiro.kiro-agent/dist/extension.js``
+    - macOS: ``/Applications/Kiro.app/Contents/Resources/app/out/vs/workbench/workbench.desktop.main.js``
+    - macOS (extension): ``/Applications/Kiro.app/Contents/Resources/app/extensions/kiro.kiro-agent/dist/extension.js``
+    
+    Priority: extension.js (for proxy injection) > workbench.desktop.main.js (legacy)
     """
     import os
     candidates: list[Path] = []
 
+    # Windows paths
     local_app = os.environ.get("LOCALAPPDATA", "")
     if local_app:
+        # Extension path (priority for proxy injection)
+        candidates.append(
+            Path(local_app) / "Programs" / "Kiro" / "resources" / "app" 
+            / "extensions" / "kiro.kiro-agent" / "dist" / "extension.js"
+        )
+        # Legacy workbench path
         candidates.append(
             Path(local_app) / "Programs" / "Kiro" / "resources" / "app" / "out"
             / "vs" / "workbench" / "workbench.desktop.main.js"
         )
+    
+    # Custom Windows path (S:\Kiro)
+    candidates.append(
+        Path("S:/Kiro/resources/app/extensions/kiro.kiro-agent/dist/extension.js")
+    )
 
-    # macOS
+    # macOS paths
+    candidates.append(
+        Path("/Applications/Kiro.app/Contents/Resources/app/extensions/kiro.kiro-agent/dist/extension.js")
+    )
     candidates.append(
         Path("/Applications/Kiro.app/Contents/Resources/app/out/vs/workbench"
              "/workbench.desktop.main.js")
@@ -154,7 +239,7 @@ def _find_kiro_target_file() -> Path | None:
 
 
 def apply_patch_with_config(config: dict[str, Any]) -> str:
-    """Save config then inject patch marker into Kiro's main JS file."""
+    """Save config then inject patch marker + optional proxy injection into Kiro's main JS file."""
     save_config(config)
 
     target = _find_kiro_target_file()
@@ -168,40 +253,84 @@ def apply_patch_with_config(config: dict[str, Any]) -> str:
     if marker in content:
         return "Kiro patch is already applied."
 
-    # Inject at the top of the file
-    patched = f"{marker}\n{content}"
+    # Check if proxy injection is enabled (default: True)
+    modules = config.get("modules", {})
+    proxy_enabled = modules.get("proxyInjection", True)
+    
+    # Get proxy port from config (default: 5580)
+    proxy_port = config.get("proxyPort", 5580)
+    
+    # Build injection code
+    injection_parts = [marker]
+    if proxy_enabled:
+        injection_parts.append(_generate_proxy_inject_code(proxy_port))
+    
+    injection = "\n".join(injection_parts) + "\n"
+    
+    # Find "use strict"; and inject after it
+    strict_prefix = '"use strict";\n'
+    if content.startswith(strict_prefix):
+        patched = f'{strict_prefix}{injection}{content[len(strict_prefix):]}'
+    else:
+        # Fallback: inject at the very top
+        patched = f"{injection}{content}"
+    
     target.write_text(patched, encoding="utf-8")
-    logger.info("Kiro patch applied to %s", target)
-    return f"Kiro patch applied successfully to {target.name}"
+    logger.info("Kiro patch applied to %s (proxy: %s)", target, "enabled" if proxy_enabled else "disabled")
+    return f"Kiro patch applied successfully to {target.name} (proxy: {'enabled' if proxy_enabled else 'disabled'})"
 
 
-def check_patch_status() -> bool:
-    """Return True if Kiro patch marker is found in the target file."""
+def check_patch_status() -> dict[str, bool]:
+    """Return patch status: marker found + proxy injection found."""
     target = _find_kiro_target_file()
     if target is None:
-        return False
+        return {"patched": False, "proxy_injected": False}
     try:
-        # Read only first 2KB for speed (matches Rust)
+        # Read only first 5KB for speed (proxy injection is ~2KB)
         with open(target, encoding="utf-8") as f:
-            head = f.read(2048)
-        return any(m in head for m in _PATCH_MARKERS)
+            head = f.read(5120)
+        
+        marker_found = any(m in head for m in _PATCH_MARKERS)
+        proxy_found = "/* STITCH_PROXY_INJECT - V1 */" in head
+        
+        return {
+            "patched": marker_found,
+            "proxy_injected": proxy_found,
+        }
     except OSError:
-        return False
+        return {"patched": False, "proxy_injected": False}
 
 
 def remove_patch() -> str:
-    """Remove patch markers from Kiro's main JS file."""
+    """Remove patch markers and proxy injection from Kiro's main JS file."""
     target = _find_kiro_target_file()
     if target is None:
         raise RuntimeError("Kiro IDE not found.")
 
     content = target.read_text(encoding="utf-8")
     changed = False
+    
+    # Remove markers
     for marker in _PATCH_MARKERS:
         if marker in content:
             content = content.replace(marker + "\n", "")
             content = content.replace(marker, "")
             changed = True
+    
+    # Remove proxy injection code
+    if "/* STITCH_PROXY_INJECT - V1 */" in content:
+        # Find and remove the entire proxy injection block
+        start_marker = "/* STITCH_PROXY_INJECT - V1 */"
+        end_marker = "})();\n"
+        
+        start_idx = content.find(start_marker)
+        if start_idx != -1:
+            # Find the closing })();
+            end_idx = content.find(end_marker, start_idx)
+            if end_idx != -1:
+                end_idx += len(end_marker)
+                content = content[:start_idx] + content[end_idx:]
+                changed = True
 
     if changed:
         target.write_text(content, encoding="utf-8")

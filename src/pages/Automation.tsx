@@ -8,12 +8,12 @@ import type { AutomationTabId } from '../components/automation/AutomationTopTabs
 import { Button, MetricStrip, PageHeader } from '@/components/ui';
 import type { MetricSegment } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { getScheduledTasks } from '../lib/tauri/modules/scheduler';
-import { getSettings } from '../lib/tauri/modules/settings';
+import { getScheduledTasks } from '../lib/backend/modules/scheduler';
+import { getSettings } from '../lib/backend/modules/settings';
 import {
   getBackgroundManagerConfig,
   type BackgroundManagerConfig,
-} from '../lib/tauri/modules/backgroundManager';
+} from '../lib/backend/modules/backgroundManager';
 import type { ScheduledTask, SettingsData } from '../types/generated';
 
 import Scheduler from './Scheduler';

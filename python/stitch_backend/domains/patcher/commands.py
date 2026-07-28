@@ -31,7 +31,10 @@ PATCH_BACKUP_DIR_NAME = "stitch_backups"
 
 # IDE → extension file name to patch (relative to the extension folder)
 _IDE_EXTENSION_FILES: dict[str, list[str]] = {
-    "kiro": ["dist/extension.js"],
+    "kiro": [
+        "resources/app/extensions/kiro.kiro-agent/dist/extension.js",
+        "dist/extension.js",
+    ],
     "windsurf": ["dist/extension.js"],
     "trae": ["dist/extension.js"],
     "cursor": ["dist/extension.js"],
@@ -112,6 +115,41 @@ def _is_ide_running(ide: str) -> bool:
 
 
 # ── Commands ───────────────────────────────────────────────────────────────
+
+
+@register_command("detect_ides")
+async def cmd_detect_ides(params: dict) -> list:
+    """Detect all installed IDEs and their patch status.
+    
+    Returns list of DetectedIDE objects matching the frontend interface.
+    Uses patcher/detector.py which searches installation directories.
+    """
+    installations = detect_all_ides()
+    
+    ides: list[dict[str, Any]] = []
+    for inst in installations:
+        ext_path = _find_extension_path(inst.ide_id)
+        patch_version = _read_patch_version(ext_path) if ext_path else None
+        running = _is_ide_running(inst.ide_id)
+        
+        ides.append({
+            "id": inst.ide_id,
+            "name": inst.display_name,
+            "displayName": inst.display_name,
+            "type": inst.ide_id,
+            "installed": True,
+            "running": running,
+            "isRunning": running,
+            "path": str(inst.install_path),
+            "dataPath": str(inst.install_path),
+            "installPath": str(inst.install_path),
+            "version": inst.version,
+            "isPatched": patch_version is not None,
+            "patchVersion": patch_version,
+            "canPatch": ext_path is not None and patch_version is None,
+        })
+    
+    return ides
 
 
 @register_command("get_ide_status")
@@ -334,21 +372,6 @@ async def cmd_verify_ide(params: dict) -> bool:
     from stitch_backend.domains.patcher.service import verify_ide
     ide_id = str(params.get("ideId", params.get("ide_id", "")))
     return verify_ide(ide_id)
-
-
-@register_command("patch_trae_storage")
-async def cmd_patch_trae_storage(params: dict) -> dict:
-    """Patch Trae storage.json to enable Pro features (stub)."""
-    from stitch_backend.domains.patcher.service import patch_trae_storage
-    return patch_trae_storage()
-
-
-@register_command("restore_trae_storage")
-async def cmd_restore_trae_storage(params: dict) -> dict:
-    """Restore Trae storage from backup (stub)."""
-    from stitch_backend.domains.patcher.service import restore_trae_storage
-    backup_path = str(params.get("backupPath", params.get("backup_path", "")))
-    return restore_trae_storage(backup_path)
 
 
 @register_command("patch_trae_extension")

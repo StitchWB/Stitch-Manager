@@ -484,20 +484,6 @@ async def cmd_set_enabled_models(params: dict) -> None:
     await run_in_session(_op)
 
 
-@register_command("reset_enabled_models")
-async def cmd_reset_enabled_models(params: dict) -> None:
-    """Reset enabled model IDs to defaults. Mirrors Rust ``reset_enabled_models``."""
-    from stitch_backend.domains.ai_proxy.service import set_settings_kv
-
-    defaults = ["kiro-amazonq-developer", "kiro-amazonq-pro"]
-    value = json.dumps(defaults)
-
-    async def _op(session):
-        await set_settings_kv(session, "enabled_models", value)
-
-    await run_in_session(_op)
-
-
 @register_command("get_provider_model_mappings")
 async def cmd_get_provider_model_mappings(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import get_settings_kv
@@ -611,8 +597,8 @@ async def cmd_restore_ai_proxy_ide_config(params: dict) -> dict:
 
 # ── Quotas ──────────────────────────────────────────────────────────────────
 
-def _sidecar_auth_dirs() -> list:
-    """Return auth directories matching Rust sidecar paths.rs logic."""
+def _auth_dirs() -> list:
+    """Return auth directories matching the canonical paths."""
     import os
     import sys
     dirs = []
@@ -727,7 +713,7 @@ async def cmd_fetch_openai_account_quotas(params: dict) -> list:
     import time
     import httpx
 
-    auth_dirs = _sidecar_auth_dirs()
+    auth_dirs = _auth_dirs()
     auth_files = []
     for d in auth_dirs:
         for p in d.iterdir():
@@ -1088,8 +1074,3 @@ async def cmd_test_provider_connection(params: dict) -> dict:
         "message": f"Connection test for {provider} not yet implemented",
         "latencyMs": 0,
     }
-
-
-# NOTE: start_ai_proxy / stop_ai_proxy are implemented in proxy_mgmt.commands
-# (delegating to omniroute). Do NOT add stubs here — the import order would
-# cause them to overwrite the real implementations.

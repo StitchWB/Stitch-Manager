@@ -1,1 +1,1 @@
-"""Infrastructure: keyring, process management, file utilities."""
+"""Infrastructure: keyring, file utilities."""

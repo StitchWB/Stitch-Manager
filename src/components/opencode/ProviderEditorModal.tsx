@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { TestTube, Loader2, CheckCircle2, XCircle, Server, Key, Link2, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal, Button, Input, Badge, Toggle } from '@/components/ui';
-import { testOpenCodeApi, type ProviderConfig, type ModelConfig } from '@/lib/tauri/modules/opencodeConfig';
+import { testOpenCodeApi, type ProviderConfig, type ModelConfig } from '@/lib/backend/modules/opencodeConfig';
 
 interface ProviderEditorModalProps {
   isOpen: boolean;

@@ -2,8 +2,8 @@ import { t } from "@/lib/i18n";
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, AlertCircle, CheckCircle, Activity, Clock, Hash, ShieldAlert } from 'lucide-react';
 import { Button, Toggle, SectionHeader } from '@/components/ui';
-import { backgroundManager } from '@/lib/tauri';
-import type { BackgroundManagerConfig, BackgroundManagerStatus } from '@/lib/tauri/modules/backgroundManager';
+import { backgroundManager } from '@/lib/backend';
+import type { BackgroundManagerConfig, BackgroundManagerStatus } from '@/lib/backend/modules/backgroundManager';
 
 function formatDuration(iso: string | null): string {
   if (!iso) return 'never';

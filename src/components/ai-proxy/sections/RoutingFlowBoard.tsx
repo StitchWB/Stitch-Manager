@@ -3,7 +3,7 @@ import { ArrowDown, ArrowRight, Network, Power, Route, Server } from 'lucide-rea
 
 import { Button, GlassCard, ProviderLogo, StatusBadge } from '@/components/ui';
 import { useAppStore } from '@/stores/app';
-import type { ProviderModelMapping } from '@/lib/tauri/modules/aiProxy';
+import type { ProviderModelMapping } from '@/lib/backend/modules/aiProxy';
 import type { AiProxyAccount, ProxySettings, ProxyStatus } from '@/types/generated';
 import { cn } from '@/lib/utils';
 

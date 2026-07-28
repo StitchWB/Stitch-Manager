@@ -1,8 +1,8 @@
 import { t } from "@/lib/i18n";import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useAiProxyStore } from '../../stores/aiProxy';
-import { safeInvoke } from '../../lib/tauri/core/invoke';
-import { getEnabledModels, setEnabledModels } from '../../lib/tauri/modules/aiProxy';
+import { safeInvoke } from '../../lib/backend/core/invoke';
+import { getEnabledModels, setEnabledModels } from '../../lib/backend/modules/aiProxy';
 import type { ProxyStatus, ProxySettings } from '../../types/generated';
 import { IdeConfigWizard } from '../ai-proxy/IdeConfigWizard';
 import { Button, Input, LoadingSpinner, Select, Toggle } from '@/components/ui';

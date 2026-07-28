@@ -7,15 +7,23 @@ from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
+from stitch_backend.domains.api_keys.schemas import GetApiKeysRequest, SetApiKeysRequest
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _parse(model_cls, params: dict):
+    """Instantiate a Pydantic model, tolerating camelCase *and* snake_case."""
+    return model_cls.model_validate(params)
 
 
 def _make_get_cmd(provider: str):
     """Create a ``get_*_api_keys`` handler for a provider."""
 
     async def handler(params: dict) -> list:
+        _parse(GetApiKeysRequest, params)
+
         async def _op(session):
             from stitch_backend.domains.api_keys.service import ApiKeysService
 
@@ -24,6 +32,7 @@ def _make_get_cmd(provider: str):
 
         return await run_in_session(_op)
 
+    handler._request_model = GetApiKeysRequest  # ponytail: for AST-immune dynamic generators
     return handler
 
 
@@ -31,19 +40,18 @@ def _make_set_cmd(provider: str):
     """Create a ``set_*_api_keys`` handler for a provider."""
 
     async def handler(params: dict) -> dict:
-        keys = params.get("keys", [])
-        if not isinstance(keys, list):
-            keys = []
+        req = _parse(SetApiKeysRequest, params)
 
         async def _op(session):
             from stitch_backend.domains.api_keys.service import ApiKeysService
 
             svc = ApiKeysService(session)
-            await svc.set_keys(provider, keys)
+            await svc.set_keys(provider, req.keys)
             return {"success": True}
 
         return await run_in_session(_op)
 
+    handler._request_model = SetApiKeysRequest  # ponytail: for AST-immune dynamic generators
     return handler
 
 

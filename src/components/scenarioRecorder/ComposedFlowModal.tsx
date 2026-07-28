@@ -22,7 +22,7 @@ import {
   markComposedFlowRan,
   startComposedFlowJob,
   upsertComposedFlow } from
-'@/lib/tauri/modules/pythonJobs';
+'@/lib/backend/modules/pythonJobs';
 import { useGoogleSheetsDataset } from '@/hooks/useGoogleSheetsDataset';
 import { useRegistrationStore } from '@/stores/registration';
 import { compileComposedFlow } from '@/lib/scenarioFlow/compiler';

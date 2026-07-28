@@ -1,8 +1,11 @@
-import { useState, useCallback } from 'react';
-import { CheckCircle2, XCircle, AlertCircle, Trash2, Copy, RefreshCw, ChevronDown } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { CheckCircle2, XCircle, AlertCircle, Trash2, Copy, RefreshCw, ChevronDown, Activity } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { maskKey } from '../../lib/utils/maskKey';
+import { KeyMetricsDisplay } from './KeyMetricsDisplay';
+import { getProviderKeyMetrics } from '@/api/metrics';
 import type { ApiKeyEntry } from '../../types/apiKeys';
+import type { KeyMetrics } from '@/types/metrics';
 
 interface KeyRowProps {
   entry: ApiKeyEntry;
@@ -34,8 +37,40 @@ function timeAgo(timestamp: number): string {
 
 export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }: KeyRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const [metrics, setMetrics] = useState<KeyMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
   const status = statusConfig[entry.status ?? 'unknown'];
   const StatusIcon = status.icon;
+
+  // Reset pending delete after 2 seconds
+  useEffect(() => {
+    if (pendingDelete) {
+      const timer = setTimeout(() => setPendingDelete(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingDelete]);
+
+  // Load metrics when expanded
+  useEffect(() => {
+    if (expanded && !metrics && !metricsLoading) {
+      setMetricsLoading(true);
+      getProviderKeyMetrics(provider)
+        .then((allMetrics) => {
+          // Find metrics for this specific key
+          const keyMetrics = allMetrics.find(m => m.keyId === entry.key);
+          if (keyMetrics) {
+            setMetrics(keyMetrics);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to load metrics:', err);
+        })
+        .finally(() => {
+          setMetricsLoading(false);
+        });
+    }
+  }, [expanded, metrics, metricsLoading, provider, entry.key]);
 
   const handleCopy = useCallback(() => {
     onCopy(entry);
@@ -46,8 +81,13 @@ export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }:
   }, [entry, onTest]);
 
   const handleDelete = useCallback(() => {
-    onDelete(entry);
-  }, [entry, onDelete]);
+    if (pendingDelete) {
+      onDelete(entry);
+      setPendingDelete(false);
+    } else {
+      setPendingDelete(true);
+    }
+  }, [entry, onDelete, pendingDelete]);
 
   return (
     <div className="border border-white/10 rounded-lg bg-white/[0.02] overflow-hidden transition-colors hover:bg-white/[0.04]">
@@ -96,10 +136,15 @@ export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }:
             <Copy className="w-3.5 h-3.5" />
           </button>
           <button
-            className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-red-400 transition-colors"
+            className={cn(
+              'p-1 rounded hover:bg-white/10 transition-colors',
+              pendingDelete
+                ? 'text-red-400 bg-red-500/10'
+                : 'text-slate-400 hover:text-red-400'
+            )}
             onClick={(e) => { e.stopPropagation(); handleDelete(); }}
             aria-label="Delete key"
-            title="Delete key"
+            title={pendingDelete ? 'Click again to confirm' : 'Delete key'}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -164,6 +209,22 @@ export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }:
               </div>
             )}
           </div>
+
+          {/* Usage Metrics */}
+          {metricsLoading && (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-sky-400" />
+            </div>
+          )}
+          {metrics && (
+            <div className="pt-2 border-t border-white/5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Activity className="w-3.5 h-3.5 text-sky-400" />
+                <span className="text-xs font-semibold text-slate-300">Usage Metrics</span>
+              </div>
+              <KeyMetricsDisplay metrics={metrics} />
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 pt-1">

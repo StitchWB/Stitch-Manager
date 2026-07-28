@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { safeInvoke } from '../lib/tauri/core';
+import { safeInvoke } from '../lib/backend/core';
 import { toast } from 'sonner';
 import type { ScheduledTask, TaskType, Schedule, TaskExecution } from '../types/generated';
-import type { SchedulerTemplate } from '../lib/tauri/modules/scheduler';
+import type { SchedulerTemplate } from '../lib/backend/modules/scheduler';
 
 interface SchedulerState {
   tasks: ScheduledTask[];

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link2, PlugZap } from 'lucide-react';
 import { Button, Checkbox, Input, Modal, Select } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import type { EmailProviderType } from '@/lib/tauri/modules/emailInbox';
+import type { EmailProviderType } from '@/lib/backend/modules/emailInbox';
 import type { MailImapCredentials, MailTmCredentials } from '@/stores/mail';
 import { getPresetForKind, type MailboxProviderKind } from '@/lib/mail/providerPresets';
 
