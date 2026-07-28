@@ -1,0 +1,1936 @@
+{
+  "AccountResponse": {
+    "description": "Wire-compatible with the Rust ``Account`` type in generated.ts.",
+    "properties": {
+      "id": {
+        "title": "Id",
+        "type": "string"
+      },
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "status": {
+        "default": "active",
+        "title": "Status",
+        "type": "string"
+      },
+      "displayName": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Displayname"
+      },
+      "token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Token"
+      },
+      "refreshToken": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Refreshtoken"
+      },
+      "expiresAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Expiresat"
+      },
+      "tokenType": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tokentype"
+      },
+      "apiKey": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Apikey"
+      },
+      "machineId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Machineid"
+      },
+      "patchConfig": {
+        "anyOf": [
+          {},
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Patchconfig"
+      },
+      "browserProfilePath": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Browserprofilepath"
+      },
+      "cookies": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Cookies"
+      },
+      "sessionData": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Sessiondata"
+      },
+      "proxyId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Proxyid"
+      },
+      "notes": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Notes"
+      },
+      "tags": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tags"
+      },
+      "useCount": {
+        "default": 0,
+        "title": "Usecount",
+        "type": "integer"
+      },
+      "successRate": {
+        "default": 1.0,
+        "title": "Successrate",
+        "type": "number"
+      },
+      "lastUsedAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Lastusedat"
+      },
+      "lastCheckedAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Lastcheckedat"
+      },
+      "registrationSource": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Registrationsource"
+      },
+      "refCode": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Refcode"
+      },
+      "refUrl": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Refurl"
+      },
+      "refUsedCount": {
+        "default": 0,
+        "title": "Refusedcount",
+        "type": "integer"
+      },
+      "refMaxCount": {
+        "default": 40,
+        "title": "Refmaxcount",
+        "type": "integer"
+      },
+      "referredById": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Referredbyid"
+      },
+      "createdAt": {
+        "title": "Createdat",
+        "type": "string"
+      },
+      "updatedAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Updatedat"
+      },
+      "isLlmAccount": {
+        "default": false,
+        "title": "Isllmaccount",
+        "type": "boolean"
+      },
+      "omnirouteConnectionId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Omnirouteconnectionid"
+      },
+      "metadata": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Metadata"
+      },
+      "providerType": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Providertype"
+      },
+      "providerSubtype": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Providersubtype"
+      },
+      "providerMetadata": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Providermetadata"
+      },
+      "lastError": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Lasterror"
+      },
+      "errorCount": {
+        "default": 0,
+        "title": "Errorcount",
+        "type": "integer"
+      },
+      "loginCount": {
+        "default": 0,
+        "title": "Logincount",
+        "type": "integer"
+      },
+      "accountRegion": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Accountregion"
+      }
+    },
+    "required": [
+      "id",
+      "email",
+      "provider",
+      "createdAt"
+    ],
+    "type": "object"
+  },
+  "ListAccountsRequest": {
+    "properties": {
+      "provider": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Provider"
+      },
+      "providerType": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Providertype"
+      },
+      "providerSubtype": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Providersubtype"
+      },
+      "showArchived": {
+        "default": false,
+        "title": "Showarchived",
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
+  "AddAccountRequest": {
+    "properties": {
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "password": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Password"
+      },
+      "token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Token"
+      },
+      "refreshToken": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Refreshtoken"
+      },
+      "apiKey": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Apikey"
+      },
+      "displayName": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Displayname"
+      },
+      "metadata": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Metadata"
+      },
+      "isLlmAccount": {
+        "default": false,
+        "title": "Isllmaccount",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "provider",
+      "email"
+    ],
+    "type": "object"
+  },
+  "DeleteAccountRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "Accountid"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "UpdateAccountTokenRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "Accountid"
+      },
+      "token": {
+        "title": "Token",
+        "type": "string"
+      },
+      "refreshToken": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Refreshtoken"
+      },
+      "metadata": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Metadata"
+      }
+    },
+    "required": [
+      "accountId",
+      "token"
+    ],
+    "type": "object"
+  },
+  "UpdateAccountNotesTagsRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "Accountid"
+      },
+      "notes": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Notes"
+      },
+      "tags": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tags"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "UpdateAccountMetadataRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "title": "Accountid"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "SetAccountProxyRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "title": "Accountid"
+      },
+      "proxyId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Proxyid"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "RefreshAccountRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "title": "Accountid"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "GetAccountQuotaRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "title": "Accountid"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "ArchiveAccountRequest": {
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "Accountid"
+      },
+      "archived": {
+        "default": true,
+        "title": "Archived",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "BulkDeleteRequest": {
+    "properties": {
+      "ids": {
+        "items": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "title": "Ids",
+        "type": "array"
+      }
+    },
+    "required": [
+      "ids"
+    ],
+    "type": "object"
+  },
+  "BulkExportRequest": {
+    "properties": {
+      "provider": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Provider"
+      },
+      "ids": {
+        "anyOf": [
+          {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ids"
+      }
+    },
+    "type": "object"
+  },
+  "RefreshKiroTokenRequest": {
+    "description": "Request body for ``refresh_kiro_token`` command.",
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "Accountid"
+      },
+      "proxy": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Proxy"
+      },
+      "force": {
+        "default": false,
+        "title": "Force",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "CheckKiroAccountRequest": {
+    "description": "Request body for ``check_kiro_account`` command.",
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "Accountid"
+      },
+      "proxy": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Proxy"
+      },
+      "autoRefresh": {
+        "default": true,
+        "title": "Autorefresh",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "UpdateProviderMetadataRequest": {
+    "description": "Merge arbitrary key/value pairs into account.provider_metadata.",
+    "properties": {
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "Accountid"
+      },
+      "metadata": {
+        "additionalProperties": true,
+        "default": {},
+        "title": "Metadata",
+        "type": "object"
+      },
+      "merge": {
+        "default": true,
+        "title": "Merge",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "accountId"
+    ],
+    "type": "object"
+  },
+  "BrowserFingerprintProfile": {
+    "description": "Browser fingerprint for spoofing \u2014 matches TS ``BrowserFingerprintProfile``.",
+    "properties": {
+      "userAgent": {
+        "title": "Useragent",
+        "type": "string"
+      },
+      "platform": {
+        "title": "Platform",
+        "type": "string"
+      },
+      "vendor": {
+        "title": "Vendor",
+        "type": "string"
+      },
+      "screenWidth": {
+        "title": "Screenwidth",
+        "type": "integer"
+      },
+      "screenHeight": {
+        "title": "Screenheight",
+        "type": "integer"
+      },
+      "availWidth": {
+        "title": "Availwidth",
+        "type": "integer"
+      },
+      "availHeight": {
+        "title": "Availheight",
+        "type": "integer"
+      },
+      "colorDepth": {
+        "title": "Colordepth",
+        "type": "integer"
+      },
+      "pixelRatio": {
+        "title": "Pixelratio",
+        "type": "number"
+      },
+      "hardwareConcurrency": {
+        "title": "Hardwareconcurrency",
+        "type": "integer"
+      },
+      "deviceMemory": {
+        "title": "Devicememory",
+        "type": "integer"
+      },
+      "maxTouchPoints": {
+        "title": "Maxtouchpoints",
+        "type": "integer"
+      },
+      "webglVendor": {
+        "title": "Webglvendor",
+        "type": "string"
+      },
+      "webglRenderer": {
+        "title": "Webglrenderer",
+        "type": "string"
+      },
+      "timezone": {
+        "title": "Timezone",
+        "type": "string"
+      },
+      "timezoneOffset": {
+        "title": "Timezoneoffset",
+        "type": "integer"
+      },
+      "locale": {
+        "title": "Locale",
+        "type": "string"
+      },
+      "latitude": {
+        "title": "Latitude",
+        "type": "number"
+      },
+      "longitude": {
+        "title": "Longitude",
+        "type": "number"
+      },
+      "accuracy": {
+        "title": "Accuracy",
+        "type": "number"
+      },
+      "noiseSeed": {
+        "title": "Noiseseed",
+        "type": "integer"
+      },
+      "fonts": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Fonts",
+        "type": "array"
+      }
+    },
+    "required": [
+      "userAgent",
+      "platform",
+      "vendor",
+      "screenWidth",
+      "screenHeight",
+      "availWidth",
+      "availHeight",
+      "colorDepth",
+      "pixelRatio",
+      "hardwareConcurrency",
+      "deviceMemory",
+      "maxTouchPoints",
+      "webglVendor",
+      "webglRenderer",
+      "timezone",
+      "timezoneOffset",
+      "locale",
+      "latitude",
+      "longitude",
+      "accuracy",
+      "noiseSeed",
+      "fonts"
+    ],
+    "type": "object"
+  },
+  "GenerateProfileRequest": {
+    "properties": {},
+    "type": "object"
+  },
+  "GetOrCreateProfileRequest": {
+    "properties": {
+      "email": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Email"
+      }
+    },
+    "type": "object"
+  },
+  "LoadProfileRequest": {
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email"
+    ],
+    "type": "object"
+  },
+  "SaveProfileRequest": {
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "profile": {
+        "description": "Browser fingerprint for spoofing \u2014 matches TS ``BrowserFingerprintProfile``.",
+        "properties": {
+          "userAgent": {
+            "title": "Useragent",
+            "type": "string"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          },
+          "screenWidth": {
+            "title": "Screenwidth",
+            "type": "integer"
+          },
+          "screenHeight": {
+            "title": "Screenheight",
+            "type": "integer"
+          },
+          "availWidth": {
+            "title": "Availwidth",
+            "type": "integer"
+          },
+          "availHeight": {
+            "title": "Availheight",
+            "type": "integer"
+          },
+          "colorDepth": {
+            "title": "Colordepth",
+            "type": "integer"
+          },
+          "pixelRatio": {
+            "title": "Pixelratio",
+            "type": "number"
+          },
+          "hardwareConcurrency": {
+            "title": "Hardwareconcurrency",
+            "type": "integer"
+          },
+          "deviceMemory": {
+            "title": "Devicememory",
+            "type": "integer"
+          },
+          "maxTouchPoints": {
+            "title": "Maxtouchpoints",
+            "type": "integer"
+          },
+          "webglVendor": {
+            "title": "Webglvendor",
+            "type": "string"
+          },
+          "webglRenderer": {
+            "title": "Webglrenderer",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "timezoneOffset": {
+            "title": "Timezoneoffset",
+            "type": "integer"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "title": "Longitude",
+            "type": "number"
+          },
+          "accuracy": {
+            "title": "Accuracy",
+            "type": "number"
+          },
+          "noiseSeed": {
+            "title": "Noiseseed",
+            "type": "integer"
+          },
+          "fonts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fonts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "userAgent",
+          "platform",
+          "vendor",
+          "screenWidth",
+          "screenHeight",
+          "availWidth",
+          "availHeight",
+          "colorDepth",
+          "pixelRatio",
+          "hardwareConcurrency",
+          "deviceMemory",
+          "maxTouchPoints",
+          "webglVendor",
+          "webglRenderer",
+          "timezone",
+          "timezoneOffset",
+          "locale",
+          "latitude",
+          "longitude",
+          "accuracy",
+          "noiseSeed",
+          "fonts"
+        ],
+        "title": "BrowserFingerprintProfile",
+        "type": "object"
+      }
+    },
+    "required": [
+      "email",
+      "profile"
+    ],
+    "type": "object"
+  },
+  "DeleteProfileRequest": {
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email"
+    ],
+    "type": "object"
+  },
+  "RenameProfileRequest": {
+    "properties": {
+      "current_alias": {
+        "title": "Current Alias",
+        "type": "string"
+      },
+      "next_alias": {
+        "title": "Next Alias",
+        "type": "string"
+      }
+    },
+    "required": [
+      "current_alias",
+      "next_alias"
+    ],
+    "type": "object"
+  },
+  "ExportBundleRequest": {
+    "properties": {
+      "alias": {
+        "title": "Alias",
+        "type": "string"
+      },
+      "destination_path": {
+        "title": "Destination Path",
+        "type": "string"
+      }
+    },
+    "required": [
+      "alias",
+      "destination_path"
+    ],
+    "type": "object"
+  },
+  "ImportBundleRequest": {
+    "properties": {
+      "source_path": {
+        "title": "Source Path",
+        "type": "string"
+      },
+      "target_alias": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Target Alias"
+      },
+      "overwrite": {
+        "default": false,
+        "title": "Overwrite",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "source_path"
+    ],
+    "type": "object"
+  },
+  "GetProfileSettingsRequest": {
+    "properties": {
+      "alias": {
+        "title": "Alias",
+        "type": "string"
+      }
+    },
+    "required": [
+      "alias"
+    ],
+    "type": "object"
+  },
+  "SaveProfileSettingsRequest": {
+    "properties": {
+      "alias": {
+        "title": "Alias",
+        "type": "string"
+      },
+      "settings": {
+        "description": "Versioned profile settings \u2014 matches TS ``ProfileSettingsV1``.",
+        "properties": {
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          },
+          "network": {
+            "properties": {
+              "proxy": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "enabled": {
+                        "default": false,
+                        "title": "Enabled",
+                        "type": "boolean"
+                      },
+                      "proxyLibraryId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Proxylibraryid"
+                      }
+                    },
+                    "title": "ProfileSettingsProxy",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ProfileSettingsNetwork",
+            "type": "object"
+          },
+          "geo": {
+            "properties": {
+              "timezone": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Timezone"
+              },
+              "locale": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Locale"
+              },
+              "latitude": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Latitude"
+              },
+              "longitude": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Longitude"
+              }
+            },
+            "title": "ProfileSettingsGeo",
+            "type": "object"
+          },
+          "hardware": {
+            "properties": {
+              "userAgent": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Useragent"
+              },
+              "platform": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Platform"
+              },
+              "hardwareConcurrency": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Hardwareconcurrency"
+              },
+              "deviceMemory": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Devicememory"
+              },
+              "screenWidth": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Screenwidth"
+              },
+              "screenHeight": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Screenheight"
+              },
+              "browserWindow": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Mode"
+                      },
+                      "width": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Width"
+                      },
+                      "height": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Height"
+                      },
+                      "maximizeOnStart": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Maximizeonstart"
+                      }
+                    },
+                    "title": "ProfileSettingsBrowserWindow",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ProfileSettingsHardware",
+            "type": "object"
+          },
+          "storage": {
+            "properties": {
+              "cookies": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cookies"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Notes"
+              },
+              "lastUrl": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Lasturl"
+              },
+              "lastScenarioPath": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Lastscenariopath"
+              }
+            },
+            "title": "ProfileSettingsStorage",
+            "type": "object"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Engine"
+          }
+        },
+        "title": "ProfileSettingsV1",
+        "type": "object"
+      }
+    },
+    "required": [
+      "alias",
+      "settings"
+    ],
+    "type": "object"
+  },
+  "ICloudPoolEntryResponse": {
+    "description": "One pool entry as returned to the frontend.",
+    "properties": {
+      "id": {
+        "title": "Id",
+        "type": "integer"
+      },
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "appleAliasId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Applealiasid"
+      },
+      "label": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Label"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "appleId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Appleid"
+      },
+      "usedByAccountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Usedbyaccountid"
+      },
+      "createdAt": {
+        "title": "Createdat",
+        "type": "string"
+      },
+      "reservedAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Reservedat"
+      },
+      "usedAt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Usedat"
+      }
+    },
+    "required": [
+      "id",
+      "email",
+      "status",
+      "createdAt"
+    ],
+    "type": "object"
+  },
+  "ICloudPoolStatsResponse": {
+    "description": "Pool statistics summary.",
+    "properties": {
+      "total": {
+        "title": "Total",
+        "type": "integer"
+      },
+      "available": {
+        "title": "Available",
+        "type": "integer"
+      },
+      "reserved": {
+        "title": "Reserved",
+        "type": "integer"
+      },
+      "used": {
+        "title": "Used",
+        "type": "integer"
+      },
+      "failed": {
+        "title": "Failed",
+        "type": "integer"
+      },
+      "deleted": {
+        "title": "Deleted",
+        "type": "integer"
+      },
+      "rateRemaining": {
+        "title": "Rateremaining",
+        "type": "integer"
+      },
+      "rateSecondsUntilSlot": {
+        "title": "Ratesecondsuntilslot",
+        "type": "number"
+      }
+    },
+    "required": [
+      "total",
+      "available",
+      "reserved",
+      "used",
+      "failed",
+      "deleted",
+      "rateRemaining",
+      "rateSecondsUntilSlot"
+    ],
+    "type": "object"
+  },
+  "FillPoolRequest": {
+    "description": "Request to generate N more aliases and add them to the pool.",
+    "properties": {
+      "count": {
+        "default": 5,
+        "description": "Number of aliases to generate (1-5 per call)",
+        "maximum": 5,
+        "minimum": 1,
+        "title": "Count",
+        "type": "integer"
+      },
+      "labelPrefix": {
+        "default": "Auto-registration",
+        "title": "Labelprefix",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "ClaimPoolEntryRequest": {
+    "description": "Internal \u2014 claim the next available pool entry (sync, used by bridge).",
+    "properties": {},
+    "type": "object"
+  },
+  "ReleasePoolEntryRequest": {
+    "description": "Mark a reserved entry as used or failed.",
+    "properties": {
+      "entryId": {
+        "title": "Entryid",
+        "type": "integer"
+      },
+      "success": {
+        "default": true,
+        "title": "Success",
+        "type": "boolean"
+      },
+      "accountId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Accountid"
+      }
+    },
+    "required": [
+      "entryId"
+    ],
+    "type": "object"
+  },
+  "DeletePoolEntryRequest": {
+    "description": "Delete an alias both from Apple and the pool table.",
+    "properties": {
+      "entryId": {
+        "title": "Entryid",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "entryId"
+    ],
+    "type": "object"
+  },
+  "AuthenticateICloudRequest": {
+    "description": "Trigger iCloud authentication (with optional 2FA code).",
+    "properties": {
+      "verificationCode": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Verificationcode"
+      }
+    },
+    "type": "object"
+  },
+  "StartRegistrationRequest": {
+    "properties": {
+      "providerId": {
+        "title": "Providerid",
+        "type": "string"
+      },
+      "email": {
+        "default": "",
+        "title": "Email",
+        "type": "string"
+      },
+      "password": {
+        "default": "",
+        "title": "Password",
+        "type": "string"
+      },
+      "count": {
+        "default": 1,
+        "title": "Count",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "providerId"
+    ],
+    "type": "object"
+  },
+  "CancelRegistrationRequest": {
+    "properties": {
+      "jobId": {
+        "title": "Jobid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "type": "object"
+  },
+  "GetProgressRequest": {
+    "properties": {
+      "jobId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Jobid"
+      }
+    },
+    "type": "object"
+  },
+  "GetSettingsRequest": {
+    "properties": {},
+    "type": "object"
+  },
+  "UpdateSettingsRequest": {
+    "properties": {
+      "settings": {
+        "additionalProperties": true,
+        "title": "Settings",
+        "type": "object"
+      }
+    },
+    "required": [
+      "settings"
+    ],
+    "type": "object"
+  }
+}
