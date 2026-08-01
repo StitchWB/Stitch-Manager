@@ -7,7 +7,7 @@ Usage:
   python run_quota.py --token <token>    # Use specific token via CW API
   python run_quota.py --token <token> --region eu-central-1
 
-Called from Tauri backend (AccountStatusService::check_kiro_status).
+Called from backend (AccountStatusService::check_kiro_status).
 """
 
 import json

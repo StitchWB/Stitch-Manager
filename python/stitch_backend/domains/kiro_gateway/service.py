@@ -93,8 +93,10 @@ class KiroGatewayService:
 
         Returns the same dict as ``AccountService.refresh_kiro_token``.
         """
+        # ponytail: read proxy per-call so config changes apply without restart
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
         return await self._accounts_service.refresh_kiro_token(
-            account_id, force=force,
+            account_id, force=force, proxy=_get_outbound_proxy(),
         )
 
     async def get_snapshot(self, account_id: str) -> AccountSnapshot | None:

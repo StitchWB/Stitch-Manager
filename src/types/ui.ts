@@ -332,7 +332,7 @@ export interface KiroV2AutoregResult {
   error: string | null;
 }
 
-export type IDEType = 'kiro' | 'windsurf' | 'trae' | 'vscode' | 'vscodium' | 'other';
+export type IDEType = 'kiro' | 'windsurf' | 'trae' | 'cursor' | 'vscode' | 'vscodium' | 'other';
 
 export type PatchStatusType = 'unpatched' | 'patched' | 'outdated' | 'error' | 'unknown';
 
@@ -354,6 +354,9 @@ export interface DetectedIDE extends IDEInfo {
   canPatch: boolean;
   error?: string;
   installed: boolean;
+  displayName?: string;
+  isRunning?: boolean;
+  installPath?: string;
 }
 
 export interface PatchStatus {

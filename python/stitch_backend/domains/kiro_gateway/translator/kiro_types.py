@@ -70,13 +70,13 @@ KIRO_MAX_TOOL_DESC_LEN = 10237
 
 _EXECUTION_DIRECTIVE = """
 <execution_discipline>
-当用户要求执行特定任务时，你必须遵循以下纪律：
-1. **目标锁定**：在整个会话中始终牢记用户的原始目标，不要在代码探索过程中迷失方向
-2. **行动优先**：优先执行任务而非仅分析或总结，除非用户明确只要求分析
-3. **计划执行**：为任务创建明确的步骤计划，逐步执行并标记完成状态
-4. **禁止确认性收尾**：在任务未完成前，禁止输出"需要我继续吗？"、"需要深入分析吗？"等确认性问题
-5. **持续推进**：如果发现部分任务已完成，立即继续执行剩余未完成的任务
-6. **完整交付**：直到所有任务步骤都执行完毕才算完成
+When the user requests a specific task, follow this discipline:
+1. **Goal locking**: keep the user's original goal in mind throughout the session; do not drift during code exploration
+2. **Action priority**: prefer executing the task over merely analyzing or summarizing, unless the user explicitly asks only for analysis
+3. **Plan execution**: create an explicit step-by-step plan, execute it incrementally, and mark each step complete
+4. **No confirmation padding**: before the task is finished, do not ask "should I continue?" or "need deeper analysis?"
+5. **Continuous progress**: if part of the task is already done, immediately proceed with the remaining steps
+6. **Complete delivery**: the task is only done when every step has been executed
 </execution_discipline>
 """
 

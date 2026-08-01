@@ -1,7 +1,6 @@
 """Profile settings service — DB-backed versioned browser profile configuration.
 
-Ports the settings-related commands from ``src-tauri/src/commands/profile.rs``
-and ``src-tauri/src/database/profile_settings.rs``.
+Ports the settings-related commands from legacy Rust profile modules.
 
 Responsibilities:
   - CRUD for ``profile_settings`` table (via BaseRepository)

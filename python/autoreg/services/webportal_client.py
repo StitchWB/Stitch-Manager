@@ -5,7 +5,7 @@ Kiro Web Portal API Client (CBOR RPC).
 Это ЛЕГИТИМНЫЙ способ взаимодействия с Kiro API, который не детектится как bot.
 
 TODO: Временно скопировано из kiro-extension.
-      В будущем можно переписать клиент на Rust и вызывать напрямую из Tauri.
+      В будущем можно переписать клиент на Rust и вызывать напрямую из backend.
 """
 
 import logging
@@ -43,13 +43,17 @@ class KiroWebPortalClient:
     - RefreshToken - обновить токены
     """
 
-    def __init__(self, timeout: int = 30, endpoint: str | None = None):
+    def __init__(self, timeout: int = 30, endpoint: str | None = None, proxy: str | None = None):
         """Args:
         timeout: Таймаут запросов в секундах
         endpoint: Custom endpoint URL (defaults to config/env)
+        proxy: Optional proxy URL (e.g. socks5h://user:pass@host:port) to route requests through
         """
         self.timeout = timeout
         self.session = requests.Session()
+
+        if proxy:
+            self.session.proxies = {"http": proxy, "https": proxy}
 
         # Get endpoint from: parameter > env > default
         if endpoint:

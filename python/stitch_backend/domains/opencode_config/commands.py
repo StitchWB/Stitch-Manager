@@ -1,4 +1,4 @@
-"""OpenCode config commands - Tauri command handlers for config management."""
+"""OpenCode config commands - command handlers for config management."""
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.domains.opencode_config.service import OpenCodeConfigService

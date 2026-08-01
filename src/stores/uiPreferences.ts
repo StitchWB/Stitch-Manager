@@ -58,6 +58,8 @@ interface UIPreferencesState {
   // Global UI preferences
   activeRoute: string;
   setActiveRoute: (route: string) => void;
+  lastAiSection: string;
+  setLastAiSection: (section: string) => void;
 
   // Page-specific preferences
   accountsPage: AccountsPagePreferences;
@@ -163,6 +165,8 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       // Global state
       activeRoute: '/',
       setActiveRoute: route => set({ activeRoute: route }),
+      lastAiSection: 'providers',
+      setLastAiSection: section => set({ lastAiSection: section }),
 
       // Initial state
       accountsPage: defaultAccountsPreferences,
@@ -378,6 +382,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       resetAllPreferences: () => {
         set({
           activeRoute: '/',
+          lastAiSection: 'providers',
           accountsPage: defaultAccountsPreferences,
           logsPage: defaultLogsPreferences,
           autoRegPage: defaultAutoRegPreferences,
@@ -416,6 +421,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       },
       partialize: state => ({
         activeRoute: state.activeRoute,
+        lastAiSection: state.lastAiSection,
         accountsPage: state.accountsPage,
         logsPage: state.logsPage,
         autoRegPage: state.autoRegPage,

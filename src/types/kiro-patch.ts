@@ -5,18 +5,9 @@
  * Each account gets its own unique Machine ID that persists across sessions.
  */
 
+export type PatchPreset = 'standard' | 'performance' | 'privacy' | 'custom';
+
 export interface PatchModules {
-  tokenTypeStripping: boolean; // V4: Strip TokenType header (fixes "Too Many Requests")
-  machineIdSpoofing: boolean;
-  telemetryBlocking: boolean;
-  rateLimitBypass: boolean;
-  errorSuppression: boolean;
-  osSpoofing: boolean;
-  commandSpoofing: boolean;
-  authWatcher: boolean;
-  constantPatching: boolean;
-  customPrompts: boolean;
-  requestSpy: boolean;
   proxyInjection: boolean; // Intercept all HTTP/HTTPS via reverse proxy
 }
 
@@ -33,6 +24,7 @@ export interface PatchConstants {
 
 export interface KiroPatchConfig {
   version: number;
+  preset: PatchPreset; // 'standard' | 'performance' | 'privacy' | 'custom'
   modules: PatchModules;
   machineId: string;
   accountBindings: Record<string, string>; // accountId -> machineId
@@ -49,4 +41,28 @@ export interface AccountBinding {
   accountId: string;
   machineId: string;
   accountName?: string;
+}
+
+// Preset configurations
+export const PRESETS: Record<PatchPreset, Partial<PatchModules>> = {
+  standard: {
+    proxyInjection: true,
+  },
+  performance: {
+    proxyInjection: false,
+  },
+  privacy: {
+    proxyInjection: false,
+  },
+  custom: {}, // User-defined
+};
+
+export function applyPreset(preset: PatchPreset): PatchModules {
+  const presetModules = PRESETS[preset];
+  // Start with standard preset as base
+  const base = PRESETS.standard;
+  return {
+    ...base,
+    ...presetModules,
+  } as PatchModules;
 }

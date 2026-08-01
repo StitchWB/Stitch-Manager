@@ -1,6 +1,6 @@
 """Google Sheets command handlers — registered via ``@register_command``.
 
-Ports all 12 Rust ``google_sheets`` Tauri commands to Python.
+Ports all 12 Rust ``google_sheets`` legacy commands to Python.
 
 Commands:
     - test_google_sheets_connection

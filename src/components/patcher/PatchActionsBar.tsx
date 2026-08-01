@@ -2,6 +2,7 @@ import { Download, Trash2, Globe } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { useState } from 'react';
 import { safeInvoke } from '@/lib/backend';
+import { cn } from '@/lib/utils';
 
 import PatchVersionSelector from './PatchVersionSelector';
 import PatchOptionsPanel from './PatchOptionsPanel';
@@ -88,10 +89,15 @@ export default function PatchActionsBar({
         <Button
           onClick={handleToggleProxy}
           disabled={proxyLoading}
-          variant={proxyRunning ? 'success' : 'secondary'}
+          variant={proxyRunning ? 'primary' : 'secondary'}
           size="md"
           leftIcon={<Globe size={16} />}
-          className="shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20"
+          className={cn(
+            'shadow-lg',
+            proxyRunning
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200 hover:bg-emerald-500/25 shadow-emerald-500/10 hover:shadow-emerald-500/20'
+              : 'shadow-emerald-500/10 hover:shadow-emerald-500/20'
+          )}
         >
           {proxyRunning ? t('patcher.proxyRunning') : t('patcher.startProxy')}
         </Button>
@@ -100,7 +106,7 @@ export default function PatchActionsBar({
         {isPatched ? (
           <Button
             onClick={onUnpatch}
-            disabled={isOperating || !canPatch}
+            disabled={isOperating}
             variant="danger"
             size="md"
             leftIcon={<Trash2 size={16} />}

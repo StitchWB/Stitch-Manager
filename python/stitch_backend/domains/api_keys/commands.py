@@ -1,6 +1,6 @@
 """API Keys command handlers — thin adapters around ApiKeysService.
 
-Each command maps to the corresponding Rust Tauri command.
+Each command maps to the corresponding Rust backend command.
 """
 
 from __future__ import annotations

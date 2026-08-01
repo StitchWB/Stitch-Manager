@@ -761,12 +761,22 @@ class RegistrationService:
             })
 
             # Run blocking provider.register() in a thread
+            # Read outbound proxy from kiro-patch config (prevents IP leak
+            # during token exchange HTTP requests inside the provider)
+            outbound_proxy: str | None = None
+            try:
+                from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+                outbound_proxy = _get_outbound_proxy()
+            except Exception:
+                pass
+
             result = await asyncio.to_thread(
                 provider.register,
                 email=config.get("email"),
                 password=config.get("password"),
                 name=config.get("name"),
                 transport=event_transport,
+                proxy=outbound_proxy,
             )
 
             # Update job state

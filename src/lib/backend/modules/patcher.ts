@@ -30,8 +30,7 @@ export interface UnpatchIDEParams {
 }
 
 export interface RestoreBackupParams {
-  ideType: string;
-  backupPath: string;
+  backupId: string;
 }
 
 export interface UIBackupInfo {
@@ -51,9 +50,10 @@ export interface UIBackupInfo {
 
 /**
  * Detect installed IDEs
+ * @param force - If true, bypass cache and rescan (default: false)
  */
-export async function detectIDEs(): Promise<DetectedIDE[]> {
-  return safeInvoke<DetectedIDE[]>('detect_ides');
+export async function detectIDEs(force: boolean = false): Promise<DetectedIDE[]> {
+  return safeInvoke<DetectedIDE[]>('detect_ides', { force });
 }
 
 /**
@@ -74,6 +74,7 @@ export async function patchIDE(params: PatchIDEParams): Promise<PatchResult> {
   return safeInvoke<PatchResult>('apply_patch', {
     ideType: params.ideId,
     strategy: params.strategy || 'injection', // Default to injection
+    createBackup: params.createBackup ?? true, // Default to true
   });
 }
 
@@ -116,8 +117,7 @@ export async function listBackups(params?: { ideId?: string }): Promise<UIBackup
  */
 export async function restoreBackup(params: RestoreBackupParams): Promise<PatchResult> {
   return safeInvoke<PatchResult>('restore_backup', {
-    ideType: params.ideType,
-    backupPath: params.backupPath,
+    backupId: params.backupId,
   });
 }
 
@@ -158,4 +158,15 @@ export async function isTraeExtensionPatched(): Promise<boolean> {
  */
 export async function isTraeWorkbenchPatched(): Promise<boolean> {
   return safeInvoke<boolean>('is_trae_workbench_patched');
+}
+
+// ============================================
+// IDE Launch
+// ============================================
+
+/**
+ * Launch an IDE
+ */
+export async function launchIDE(ideId: string): Promise<void> {
+  return safeInvoke<void>('launch_ide', { ideId });
 }

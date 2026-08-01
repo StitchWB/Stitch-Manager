@@ -9,8 +9,8 @@ import {
   archiveAccount,
   refreshAccountQuota,
   validateAccount,
-  setActiveAccount as setActiveAccountTauri,
-  getActiveAccounts as getActiveAccountsTauri,
+  setActiveAccount,
+  getActiveAccounts,
   bulkDeleteAccounts,
   BackendError,
 } from '../lib/backend';
@@ -386,7 +386,7 @@ export const useAccountsStore = create<AccountsState>()(
         setActiveAccount: async (provider, accountId) => {
           try {
             // Call backend to persist and apply the active account
-            await setActiveAccountTauri({ provider, accountId });
+            await setActiveAccount({ provider, accountId });
 
             // Update local state
             set(state => ({
@@ -411,7 +411,7 @@ export const useAccountsStore = create<AccountsState>()(
 
         loadActiveAccounts: async () => {
           try {
-            const activeAccounts = await getActiveAccountsTauri();
+            const activeAccounts = await getActiveAccounts();
             // activeAccounts is Record<string, number | null>
             set({ activeAccountIds: activeAccounts });
           } catch (error) {

@@ -13,8 +13,9 @@ class IDEInstallation:
     """Represents a detected IDE installation."""
 
     ide_id: str
+    name: str
     display_name: str
-    install_path: Path
+    install_path: Optional[Path] = None
     version: Optional[str] = None
     executable: Optional[Path] = None
     config_dir: Optional[Path] = None
@@ -33,14 +34,17 @@ _WINDOWS_PATHS: Dict[str, List[str]] = {
     "windsurf": [
         r"%LOCALAPPDATA%\Programs\Windsurf",
         r"%LOCALAPPDATA%\Windsurf",
+        r"S:\Windsurf",  # Custom installation path
     ],
     "cursor": [
         r"%LOCALAPPDATA%\Programs\Cursor",
         r"%LOCALAPPDATA%\Cursor",
+        r"S:\Cursor",  # Custom installation path
     ],
     "trae": [
         r"%LOCALAPPDATA%\Programs\Trae",
         r"%LOCALAPPDATA%\Trae",
+        r"S:\Trae",  # Custom installation path
     ],
 }
 
@@ -98,6 +102,7 @@ def detect_ide(ide_id: str) -> Optional[IDEInstallation]:
         if p.exists():
             return IDEInstallation(
                 ide_id=ide_id,
+                name=ide_id.capitalize(),
                 display_name=_DISPLAY_NAMES.get(ide_id, ide_id),
                 install_path=p,
             )
@@ -105,12 +110,20 @@ def detect_ide(ide_id: str) -> Optional[IDEInstallation]:
 
 
 def detect_all_ides() -> List[IDEInstallation]:
-    """Detect all installed IDEs."""
+    """Detect all supported IDEs (installed or not)."""
     found: List[IDEInstallation] = []
     for ide_id in _DISPLAY_NAMES:
         install = detect_ide(ide_id)
         if install is not None:
             found.append(install)
+        else:
+            # Return placeholder for unsupported IDE
+            found.append(IDEInstallation(
+                ide_id=ide_id,
+                name=ide_id.capitalize(),
+                display_name=_DISPLAY_NAMES.get(ide_id, ide_id),
+                install_path=None,
+            ))
     return found
 
 

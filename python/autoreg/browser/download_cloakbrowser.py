@@ -1,6 +1,6 @@
 """Auto-download CloakBrowser anti-detect browser.
 
-Downloads to resources/cloakbrowser/ so Tauri bundles it into the app installer.
+Downloads to resources/cloakbrowser/ so the backend bundles it into the app installer.
 """
 import os
 import platform

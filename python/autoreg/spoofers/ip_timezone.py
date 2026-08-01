@@ -268,14 +268,16 @@ def get_local_geo_data() -> IPGeoData:
     )
 
 
-def detect_ip_geo(use_external_api: bool = True) -> IPGeoData | None:
+def detect_ip_geo(use_external_api: bool = False, proxy: str | None = None) -> IPGeoData | None:
     """
     Определяет геолокацию по текущему IP.
 
     Args:
         use_external_api: Если True, использует внешние API (ip-api.com и др.)
                          Если False, возвращает данные на основе системного timezone
-                         (не раскрывает реальный IP - для приватности)
+                          (не раскрывает реальный IP - для приватности)
+        proxy: Optional proxy URL (e.g., "socks5h://user:pass@host:port") to route
+               geo-IP requests through. Prevents real IP leak when use_external_api=True.
 
     Returns:
         IPGeoData или None если не удалось определить
@@ -287,17 +289,22 @@ def detect_ip_geo(use_external_api: bool = True) -> IPGeoData | None:
         При use_external_api=True, если все API недоступны,
         автоматически используется fallback на локальные данные.
     """
+    # ponytail: default False to prevent real IP leak via geo-IP APIs
 
     # Если не используем внешние API - возвращаем локальные данные
     if not use_external_api:
         # Silent - using local data
         return get_local_geo_data()
 
+    # ponytail: route geo-IP requests through proxy to prevent real IP leak
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+
     # Попытка 1: ip-api.com (бесплатный, без ключа)
     try:
         resp = requests.get(
             'http://ip-api.com/json/?fields=status,country,countryCode,city,lat,lon,timezone,query',
-            timeout=5
+            timeout=5,
+            proxies=proxies
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -319,7 +326,7 @@ def detect_ip_geo(use_external_api: bool = True) -> IPGeoData | None:
 
     # Попытка 2: ipapi.co (бесплатный лимит)
     try:
-        resp = requests.get('https://ipapi.co/json/', timeout=5)
+        resp = requests.get('https://ipapi.co/json/', timeout=5, proxies=proxies)
         if resp.status_code == 200:
             data = resp.json()
             tz = data.get('timezone', 'America/New_York')
@@ -339,7 +346,7 @@ def detect_ip_geo(use_external_api: bool = True) -> IPGeoData | None:
 
     # Попытка 3: ipinfo.io (бесплатный лимит)
     try:
-        resp = requests.get('https://ipinfo.io/json', timeout=5)
+        resp = requests.get('https://ipinfo.io/json', timeout=5, proxies=proxies)
         if resp.status_code == 200:
             data = resp.json()
             tz = data.get('timezone', 'America/New_York')

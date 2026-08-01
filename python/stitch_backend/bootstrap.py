@@ -97,6 +97,7 @@ async def bootstrap() -> None:
     import stitch_backend.domains.utility.file_dialogs  # noqa: F401
     import stitch_backend.domains.utility.stubs  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
+    import stitch_backend.domains.key_health.commands  # noqa: F401
 
     # ── Registry scan ────────────────────────────────────────────────────────
     from stitch_backend.core.command_registry import list_commands, scan_providers

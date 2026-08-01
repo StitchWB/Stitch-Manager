@@ -11,12 +11,14 @@ import {
   Server,
   Settings2,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import Header from '@/components/layout/Header';
 import { Button, GlassCard, PageHeader } from '@/components/ui';
 import { useAppStore } from '@/stores/app';
+import { useUIPreferencesStore } from '@/stores/uiPreferences';
 import { cn } from '@/lib/utils';
 
 interface HubAction {
@@ -37,6 +39,14 @@ export default function AiOverview() {
   const navigate = useNavigate();
   const language = useAppStore(state => state.language);
   const isRu = language === 'ru';
+  const { lastAiSection } = useUIPreferencesStore();
+
+  // Redirect to last visited AI section if not 'overview'
+  useEffect(() => {
+    if (lastAiSection && lastAiSection !== 'overview') {
+      navigate(`/ai/${lastAiSection}`, { replace: true });
+    }
+  }, [lastAiSection, navigate]);
 
   const groups: HubGroup[] = [
     {

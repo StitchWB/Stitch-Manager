@@ -818,6 +818,14 @@ async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
     if repo_autoreg and repo_autoreg not in sys.path:
         sys.path.insert(0, repo_autoreg)
 
+    # Read outbound proxy from kiro-patch config to avoid leaking real IP
+    outbound_proxy = None
+    try:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        outbound_proxy = _get_outbound_proxy()
+    except Exception as e:
+        logger.debug("[Kiro Quota] Could not read outbound proxy: %s", e)
+
     for account in accounts:
         account_id = account.get("id", 0)
         account_name = account.get("name", "")
@@ -836,8 +844,8 @@ async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
 
         try:
             from autoreg.services.quota_service import QuotaService
-            svc = QuotaService()
-            info = svc.get_quota_from_cw_api(token, "us-east-1")
+            svc = QuotaService(proxy=outbound_proxy)
+            info = svc.get_quota_from_cw_api(token, "us-east-1", proxy=outbound_proxy)
             if info and info.usage:
                 usage = info.usage
                 total_limit = usage.limit + (usage.trial_limit if usage.trial_status == "ACTIVE" else 0)

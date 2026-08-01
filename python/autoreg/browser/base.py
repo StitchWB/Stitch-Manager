@@ -135,13 +135,13 @@ class BaseBrowser:
         possible_paths = []
         
         # --- Priority 1: CloakBrowser (bundled anti-detect browser) ---
-        # 1a. Tauri-bundled path passed via env var (cross-platform)
+        # 1a. Bundled path passed via env var (cross-platform)
         bundled_env = os.environ.get("CLOAKBROWSER_BUNDLED_PATH")
         if bundled_env and Path(bundled_env).exists():
-            logger.info(f"Found CloakBrowser (Tauri bundled): {bundled_env}")
+            logger.info(f"Found CloakBrowser (bundled): {bundled_env}")
             return bundled_env
 
-        # 1b. Tauri resource directory (production layout: <app>/resources/cloakbrowser/)
+        # 1b. Resource directory (production layout: <app>/resources/cloakbrowser/)
         script_dir = Path(__file__).resolve().parent
         project_root = script_dir.parent.parent.parent
         possible_bundled = [

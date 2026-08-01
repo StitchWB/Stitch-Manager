@@ -13,7 +13,6 @@ import {
   getRequestHistory,
   startAiProxy,
   stopAiProxy,
-  getProxyStatus,
   getProxySettings,
   updateProxySettings,
   exportAiProxyAccountsPayload,
@@ -27,7 +26,7 @@ import {
 } from '@/lib/backend/modules/aiProxy';
 import type { AiProxyAccount, AuthFile, ProxySettings, ProxyStatus } from '../../types/generated';
 import type { ConnectionStateMap, HistorySummary } from '../../components/ai-proxy/sections/types';
-import { useAiProxyStore } from '../../stores/aiProxy';
+import { useAiProxyStore, refreshProxyStatus } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
 
 export function maskKey(key: string, visibleTail: number = 4): string {
@@ -152,8 +151,8 @@ export function useAiProvidersController() {
   const refreshProxyInfo = useCallback(async () => {
     try {
       setProxyError(null);
-      const [status, settings] = await Promise.all([getProxyStatus(), getProxySettings()]);
-      setProxyStatus(status);
+      const [status, settings] = await Promise.all([refreshProxyStatus(), getProxySettings()]);
+      if (status) setProxyStatus(status);
       setProxySettings(settings);
       setProxyDraft(settings);
     } catch (e) {

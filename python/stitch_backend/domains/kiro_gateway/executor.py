@@ -67,6 +67,53 @@ class KiroExecutor:
         self._affinity = affinity
         self._stats = stats
         self._http = http_client
+        # ponytail: per-call proxy support — cache proxy client to avoid
+        # recreating on every request, but allow dynamic proxy changes.
+        self._cached_proxy: str | None = None
+        self._cached_proxy_client: httpx.AsyncClient | None = None
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """Return httpx client with current outbound proxy (per-call read).
+        
+        Reads proxy from kiro_patch config on each call. If proxy changed,
+        recreates the cached proxy client. Returns proxy client if proxy
+        is configured, otherwise returns the shared no-proxy client.
+        """
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        
+        current_proxy = _get_outbound_proxy()
+        
+        # If proxy changed, recreate the proxy client
+        if current_proxy != self._cached_proxy:
+            # Close old proxy client if exists
+            if self._cached_proxy_client is not None:
+                # Fire-and-forget close (async close in sync method)
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(self._cached_proxy_client.aclose())
+                    else:
+                        loop.run_until_complete(self._cached_proxy_client.aclose())
+                except Exception:
+                    pass  # Best-effort close
+            
+            # Create new proxy client if proxy is configured
+            if current_proxy is not None:
+                self._cached_proxy_client = httpx.AsyncClient(
+                    timeout=httpx.Timeout(120.0, connect=10.0),
+                    proxy=current_proxy,
+                )
+                # ponytail: mask credentials in logs
+                proxy_display = current_proxy.split("@")[-1] if "@" in current_proxy else current_proxy
+                logger.info("Created new proxy client for %s", proxy_display)
+            else:
+                self._cached_proxy_client = None
+            
+            self._cached_proxy = current_proxy
+        
+        # Return proxy client if available, otherwise shared no-proxy client
+        return self._cached_proxy_client if self._cached_proxy_client is not None else self._http
 
     # ── Protocol methods ────────────────────────────────────────────────────
 
@@ -161,7 +208,7 @@ class KiroExecutor:
                 if stream:
                     return await self._stream(adapter, kiro_payload, account, sh)
                 result: KiroStreamResult = await call_kiro_api(
-                    adapter, kiro_payload, client=self._http,
+                    adapter, kiro_payload, client=self._get_http_client(),
                 )
                 return self._success(result, account, sh, endpoint, body)
 
@@ -256,7 +303,7 @@ class KiroExecutor:
             completed = False
             try:
                 async for event in call_kiro_api_stream(
-                    adapter, payload, client=self._http,
+                    adapter, payload, client=self._get_http_client(),
                 ):
                     chunk = json.dumps(event, separators=(",", ":"))
                     yield f"data: {chunk}\n\n"

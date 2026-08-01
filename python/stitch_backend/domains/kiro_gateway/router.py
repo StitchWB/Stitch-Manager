@@ -47,10 +47,16 @@ def create_kiro_gateway_router(
 
     import httpx
 
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+
     pool = AccountPool()
     affinity = SessionAffinityStore()
     stats = ProxyStats()
-    http_client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0))
+    # ponytail: create client WITHOUT proxy — executor reads proxy per-request
+    # from kiro_patch config, enabling dynamic proxy changes without restart.
+    http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(120.0, connect=10.0),
+    )
 
     def executor_factory() -> KiroExecutor:
         return KiroExecutor(pool, session_factory, affinity, stats, http_client)

@@ -21,7 +21,7 @@ import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
 import { version as appVersion } from '../../../package.json';
-import { ButtonBase } from '@/components/ui';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface NavItemProps {
   to: string;

@@ -10,10 +10,38 @@ export default defineConfig({
     },
   },
   clearScreen: false,
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'zustand',
+      'zustand/middleware',
+      'zustand/shallow',
+      'sonner',
+      'framer-motion',
+      'lucide-react',
+      'reactflow',
+      'cmdk',
+      '@dnd-kit/core',
+      '@dnd-kit/sortable',
+      '@dnd-kit/utilities',
+      'date-fns',
+      'dompurify',
+      'clsx',
+      'tailwind-merge',
+    ],
+    // Force re-optimization on every dev start
+    force: true,
+  },
   server: {
     host: '0.0.0.0',
     port: 5174,
     strictPort: true,
+    // Pre-transform critical modules on startup to reduce waterfall
+    warmup: {
+      clientFiles: ['./src/main.tsx', './src/App.tsx'],
+    },
   },
   build: {
     outDir: 'dist',

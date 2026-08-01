@@ -36,8 +36,6 @@ _ALLOWED_CHAT_ORIGINS = {
     "http://127.0.0.1:25584",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
-    "tauri://localhost",
-    "https://tauri.localhost",
 }
 
 # ── Proxy security (ported from Kiro account-manager ProxyConfig) ──

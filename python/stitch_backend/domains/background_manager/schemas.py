@@ -58,6 +58,16 @@ class BackgroundManagerConfig(BaseModel):
     rate_limit_policies: list[RateLimitPolicy] = Field(
         default_factory=list, alias="rateLimitPolicies", max_length=1_000
     )
+    holone_enabled: bool = Field(False, alias="holoneEnabled")
+    holone_mode: str = Field("monitor", alias="holoneMode")  # "monitor" or "block"
+    compression_enabled: bool = Field(False, alias="compressionEnabled")
+    rtk_enabled: bool = Field(True, alias="rtkEnabled")
+    caveman_enabled: bool = Field(True, alias="cavemanEnabled")
+    caveman_level: str = Field("full", alias="cavemanLevel")  # "lite", "full", or "ultra"
+    input_compression_enabled: bool = Field(True, alias="inputCompressionEnabled")
+    output_compression_enabled: bool = Field(True, alias="outputCompressionEnabled")
+    preserve_system_prompt: bool = Field(True, alias="preserveSystemPrompt")
+    auto_trigger_threshold: int = Field(500, alias="autoTriggerThreshold", ge=0, le=10_000)
 
     @field_validator("provider_priority")
     @classmethod

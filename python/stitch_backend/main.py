@@ -11,7 +11,7 @@ Start the server from the CLI::
 The app exposes:
     GET  /health               — liveness probe
     GET  /api/cmd/             — list registered commands
-    POST /api/{name}           — dispatch a command (analogue of Tauri invoke)
+    POST /api/{name}           — dispatch a command (analogue of backend invoke)
     WS   /api/events           — EventBus broadcast to frontend
 """
 
@@ -131,6 +131,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.utility.file_dialogs           # noqa: F401
     import stitch_backend.domains.utility.stubs                  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands     # noqa: F401
+    import stitch_backend.domains.key_health.commands  # noqa: F401
+    import stitch_backend.domains.ai_gateway.commands  # noqa: F401
+    import stitch_backend.domains.ai_gateway.migration_commands  # noqa: F401
 
     from stitch_backend.core.command_registry import list_commands, scan_providers
     commands = list_commands()
@@ -167,6 +170,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.warning("iCloud pool service init skipped: %s", _exc)
 
+    # Start AI Gateway background workers
+    try:
+        from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
+        from stitch_backend.domains.ai_gateway.probe_worker import ProbeWorker
+        await DiscoveryWorker.start(interval_seconds=3600)
+        await ProbeWorker.start(interval_seconds=300)
+        logger.info("AI Gateway workers started (discovery=3600s, probe=300s)")
+    except Exception as _exc:
+        logger.warning("AI Gateway workers init skipped: %s", _exc)
+
+    # Start KeyHealth worker
+    try:
+        from stitch_backend.domains.key_health.worker import KeyHealthWorker
+        await KeyHealthWorker.start()
+        logger.info("KeyHealth worker started")
+    except Exception as _exc:
+        logger.warning("KeyHealth worker init skipped: %s", _exc)
+
     # Emit a startup event for any domain listeners
     from stitch_backend.core.event_bus import event_bus
     event_bus.set_loop(asyncio.get_event_loop())
@@ -187,6 +208,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Stop scheduled worker
     from stitch_backend.domains.scheduler.worker import get_worker
     await get_worker().stop()
+
+    # Stop AI Gateway workers
+    try:
+        from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
+        from stitch_backend.domains.ai_gateway.probe_worker import ProbeWorker
+        await DiscoveryWorker.stop()
+        await ProbeWorker.stop()
+    except Exception:
+        pass
+
+    # Stop KeyHealth worker
+    try:
+        from stitch_backend.domains.key_health.worker import KeyHealthWorker
+        await KeyHealthWorker.stop()
+    except Exception:
+        pass
 
     await event_bus.emit("app.stopping", {})
     await dispose_engine()

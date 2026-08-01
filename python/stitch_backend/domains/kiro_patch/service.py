@@ -20,17 +20,6 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CONFIG: dict[str, Any] = {
     "version": 4,
     "modules": {
-        "tokenTypeStripping": True,
-        "machineIdSpoofing": True,
-        "telemetryBlocking": True,
-        "rateLimitBypass": False,
-        "errorSuppression": False,
-        "osSpoofing": True,
-        "commandSpoofing": True,
-        "authWatcher": True,
-        "constantPatching": True,
-        "customPrompts": True,
-        "requestSpy": False,
         "proxyInjection": True,
     },
     "machineId": "",
@@ -53,10 +42,16 @@ _DEFAULT_CONFIG: dict[str, Any] = {
 # ── Config file helpers ───────────────────────────────────────────────────────
 
 def _config_dir() -> Path:
-    home = Path.home()
-    d = home / ".stitch-manager"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    """Get config directory, creating it if needed.
+    
+    Caches the result to avoid repeated mkdir() calls.
+    """
+    if not hasattr(_config_dir, '_cache'):
+        home = Path.home()
+        d = home / ".stitch-manager"
+        d.mkdir(parents=True, exist_ok=True)
+        _config_dir._cache = d
+    return _config_dir._cache
 
 
 def _config_path() -> Path:
@@ -124,13 +119,16 @@ def get_account_bindings() -> dict[str, str]:
 # Patch marker strings (V2 and V3)
 _PATCH_MARKERS = [
     "/* STITCH_PATCHED - V3 WITH CONFIGURATION */",
+    "/* STITCH_PATCHED - V3 */",
     "/* STITCH_PATCHED - V2 WITH CONFIGURATION */",
+    "/* STITCH_PATCHED - V2 */",
+    "/* STITCH_PATCHED - V1 */",
 ]
 
 
 def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
-    """Generate proxy injection code with configurable port."""
-    return f"""/* STITCH_PROXY_INJECT - V1 */
+    """Generate proxy injection code with HTTP error handling."""
+    return f"""/* STITCH_PROXY_INJECT - V3 */
 (function() {{
   try {{
     const http = require('http');
@@ -155,27 +153,110 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
           }};
         }}
         
+        // Skip WebSocket upgrade requests — proxy can't handle them
+        const reqHeaders = opts.headers || {{}};
+        if (reqHeaders.Upgrade || reqHeaders.upgrade) {{
+          return originalFn.call(this, opts, cb);
+        }}
+        
         const targetHost = opts.hostname || opts.host;
         const targetPort = opts.port || (defaultProtocol === 'https:' ? 443 : 80);
         const targetProtocol = opts.protocol || defaultProtocol;
         
-        // Preserve original host
-        opts.headers = opts.headers || {{}};
-        opts.headers['X-Forwarded-Host'] = targetHost;
-        opts.headers['X-Forwarded-Proto'] = targetProtocol.replace(':', '');
-        opts.headers['X-Forwarded-Port'] = String(targetPort);
+        // Try proxy first
+        const proxyOpts = {{
+          ...opts,
+          hostname: PROXY_HOST,
+          port: PROXY_PORT,
+          protocol: 'http:',
+          headers: {{
+            ...(opts.headers || {{}}),
+            'X-Forwarded-Host': targetHost,
+            'X-Forwarded-Proto': targetProtocol.replace(':', ''),
+            'X-Forwarded-Port': String(targetPort)
+          }}
+        }};
         
-        // Redirect to proxy
-        opts.hostname = PROXY_HOST;
-        opts.port = PROXY_PORT;
-        opts.protocol = 'http:';
-        
-        // For HTTPS, use absolute URI in path
         if (targetProtocol === 'https:') {{
-          opts.path = `https://${{targetHost}}:${{targetPort}}${{opts.path}}`;
+          proxyOpts.path = `https://${{targetHost}}:${{targetPort}}${{opts.path}}`;
         }}
         
-        return originalFn.call(this, opts, cb);
+        // Make request through proxy with retry
+        let attempt = 0;
+        const maxAttempts = 3;
+        let firstReq = null;
+        let aborted = false;
+        const safeCb = typeof cb === 'function' ? cb : function() {{}};
+        const boundTryProxy = tryProxy.bind(this);
+        
+        function tryProxy() {{
+          if (aborted) return;
+          attempt++;
+          var req;
+          try {{
+            req = originalFn.call(this, proxyOpts, function(res) {{
+              if (aborted) return;
+              if (res.statusCode >= 400) {{
+                if (attempt < maxAttempts) {{
+                  var delay = 500 * Math.pow(2, attempt - 1);
+                  console.log('[Stitch] Proxy returned ' + res.statusCode + ', retrying in ' + delay + 'ms (attempt ' + attempt + '/' + maxAttempts + ')');
+                  setTimeout(boundTryProxy, delay);
+                }} else {{
+                  console.error('[Stitch] Proxy failed after ' + maxAttempts + ' attempts, status ' + res.statusCode);
+                  safeCb(res);
+                }}
+              }} else {{
+                aborted = true;
+                if (attempt > 1) console.log('[Stitch] Proxy connected on attempt ' + attempt);
+                safeCb(res);
+              }}
+            }});
+          }} catch (e) {{
+            if (aborted) return;
+            console.error('[Stitch] originalFn threw: ' + (e && e.message));
+            if (attempt < maxAttempts) {{
+              setTimeout(boundTryProxy, 500);
+            }} else {{
+              safeCb(null);
+            }}
+            return;
+          }}
+          
+          if (!firstReq) firstReq = req;
+          
+          // ponytail: 5s timeout prevents infinite hangs
+          req.setTimeout(5000, function() {{
+            if (!aborted) {{
+              aborted = true;
+              console.error('[Stitch] Request timed out after 5000ms');
+              req.destroy();
+              safeCb(null);
+            }}
+          }});
+          
+          req.on('error', function(err) {{
+            if (aborted) return;
+            if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {{
+              if (attempt < maxAttempts) {{
+                var delay = 500 * Math.pow(2, attempt - 1);
+                console.log('[Stitch] Proxy unavailable (' + err.code + '), retrying in ' + delay + 'ms (attempt ' + attempt + '/' + maxAttempts + ')');
+                setTimeout(boundTryProxy, delay);
+              }} else {{
+                aborted = true;
+                console.error('[Stitch] Proxy failed after ' + maxAttempts + ' attempts: ' + err.code);
+                safeCb(null);
+              }}
+            }} else {{
+              // ponytail: unknown errors still call cb — don't hang caller
+              aborted = true;
+              console.error('[Stitch] Proxy error: ' + err.code);
+              safeCb(null);
+            }}
+          }});
+        }}
+        
+        tryProxy.call(this);
+        return firstReq;
       }};
     }}
     
@@ -247,11 +328,11 @@ def apply_patch_with_config(config: dict[str, Any]) -> str:
         raise RuntimeError("Kiro IDE not found. Please install Kiro first.")
 
     content = target.read_text(encoding="utf-8")
-    marker = _PATCH_MARKERS[0]
-
-    # Already patched?
-    if marker in content:
-        return "Kiro patch is already applied."
+    
+    # Check if any patch marker already exists
+    for m in _PATCH_MARKERS:
+        if m in content:
+            return f"Kiro patch is already applied ({m})."
 
     # Check if proxy injection is enabled (default: True)
     modules = config.get("modules", {})
@@ -261,7 +342,8 @@ def apply_patch_with_config(config: dict[str, Any]) -> str:
     proxy_port = config.get("proxyPort", 5580)
     
     # Build injection code
-    injection_parts = [marker]
+    patch_marker = "/* STITCH_PATCHED - V3 WITH CONFIGURATION */"
+    injection_parts = [patch_marker]
     if proxy_enabled:
         injection_parts.append(_generate_proxy_inject_code(proxy_port))
     
@@ -291,7 +373,14 @@ def check_patch_status() -> dict[str, bool]:
             head = f.read(5120)
         
         marker_found = any(m in head for m in _PATCH_MARKERS)
-        proxy_found = "/* STITCH_PROXY_INJECT - V1 */" in head
+        
+        # Check all proxy injection versions
+        proxy_markers = [
+            "/* STITCH_PROXY_INJECT - V1 */",
+            "/* STITCH_PROXY_INJECT - V2 */",
+            "/* STITCH_PROXY_INJECT - V3 */",
+        ]
+        proxy_found = any(m in head for m in proxy_markers)
         
         return {
             "patched": marker_found,
@@ -310,27 +399,34 @@ def remove_patch() -> str:
     content = target.read_text(encoding="utf-8")
     changed = False
     
-    # Remove markers
+    # Remove all version markers
     for marker in _PATCH_MARKERS:
         if marker in content:
             content = content.replace(marker + "\n", "")
             content = content.replace(marker, "")
             changed = True
     
-    # Remove proxy injection code
-    if "/* STITCH_PROXY_INJECT - V1 */" in content:
-        # Find and remove the entire proxy injection block
-        start_marker = "/* STITCH_PROXY_INJECT - V1 */"
-        end_marker = "})();\n"
-        
-        start_idx = content.find(start_marker)
-        if start_idx != -1:
-            # Find the closing })();
-            end_idx = content.find(end_marker, start_idx)
-            if end_idx != -1:
-                end_idx += len(end_marker)
-                content = content[:start_idx] + content[end_idx:]
-                changed = True
+    # Remove proxy injection code (all versions: V1, V2, V3)
+    proxy_markers = [
+        "/* STITCH_PROXY_INJECT - V1 */",
+        "/* STITCH_PROXY_INJECT - V2 */",
+        "/* STITCH_PROXY_INJECT - V3 */",
+    ]
+    
+    for proxy_marker in proxy_markers:
+        if proxy_marker in content:
+            # Find and remove the entire proxy injection block
+            start_marker = proxy_marker
+            end_marker = "})();\n"
+            
+            start_idx = content.find(start_marker)
+            if start_idx != -1:
+                # Find the closing })();
+                end_idx = content.find(end_marker, start_idx)
+                if end_idx != -1:
+                    end_idx += len(end_marker)
+                    content = content[:start_idx] + content[end_idx:]
+                    changed = True
 
     if changed:
         target.write_text(content, encoding="utf-8")

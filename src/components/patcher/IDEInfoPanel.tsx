@@ -1,8 +1,11 @@
-import { Info, Globe } from 'lucide-react';
+import { Info, Globe, Play } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { truncateMiddle } from '../../lib/patcher';
 import type { DetectedIDE } from '../../types/ui';
 import PatchStatusBadge from './PatchStatusBadge';
+import { Button } from '@/components/ui';
+import { launchIDE } from '@/lib/backend/modules/patcher';
+import { toast } from 'sonner';
 
 interface IDEInfoPanelProps {
   ide: DetectedIDE;
@@ -11,12 +14,33 @@ interface IDEInfoPanelProps {
 }
 
 export default function IDEInfoPanel({ ide, isOperating, operation }: IDEInfoPanelProps) {
+  const handleLaunchIDE = async () => {
+    try {
+      await launchIDE(ide.id);
+      toast.success(`Запущен ${ide.displayName}`);
+    } catch (error) {
+      toast.error(`Не удалось запустить ${ide.displayName}`);
+    }
+  };
+
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-2 px-1">
-        <Info size={14} className="text-primary" />
-        {t('patcher.information')}
-      </h3>
+      <div className="flex items-center justify-between px-1">
+        <h3 className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+          <Info size={14} className="text-primary" />
+          {t('patcher.information')}
+        </h3>
+        {ide.installed && !ide.isRunning && (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleLaunchIDE}
+            leftIcon={<Play size={14} />}
+          >
+            Запустить {ide.displayName}
+          </Button>
+        )}
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/5 rounded-xl p-4 shadow-sm group hover:border-white/10 transition-colors">
           <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5 group-hover:text-slate-400 transition-colors">{t("patcher.i_d_e_info_panel.status")}

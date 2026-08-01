@@ -175,3 +175,9 @@ export async function fetchProxyStatusNow() {
   await fetchProxyStatus();
   return useAiProxyStore.getState().status;
 }
+
+/** Force a fresh proxy status fetch (ignores cache). Use for manual refresh. */
+export async function refreshProxyStatus() {
+  await fetchProxyStatus();
+  return useAiProxyStore.getState().status;
+}

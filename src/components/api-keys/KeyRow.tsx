@@ -3,14 +3,17 @@ import { CheckCircle2, XCircle, AlertCircle, Trash2, Copy, RefreshCw, ChevronDow
 import { cn } from '../../lib/utils';
 import { maskKey } from '../../lib/utils/maskKey';
 import { KeyMetricsDisplay } from './KeyMetricsDisplay';
+import { KeyHealthBadge } from './KeyHealthBadge';
 import { getProviderKeyMetrics } from '@/api/metrics';
 import type { ApiKeyEntry } from '../../types/apiKeys';
 import type { KeyMetrics } from '@/types/metrics';
+import type { KeyHealthStatus } from '@/lib/backend/modules/keyHealth';
 
 interface KeyRowProps {
   entry: ApiKeyEntry;
   provider: string;
   isTesting: boolean;
+  healthStatus?: KeyHealthStatus;
   onTest: (entry: ApiKeyEntry) => void;
   onDelete: (entry: ApiKeyEntry) => void;
   onCopy: (entry: ApiKeyEntry) => void;
@@ -35,7 +38,7 @@ function timeAgo(timestamp: number): string {
   return `${days}d ago`;
 }
 
-export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }: KeyRowProps) {
+export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDelete, onCopy }: KeyRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [metrics, setMetrics] = useState<KeyMetrics | null>(null);
@@ -105,6 +108,7 @@ export function KeyRow({ entry, provider, isTesting, onTest, onDelete, onCopy }:
         <span className={cn('w-2 h-2 rounded-full shrink-0', status.dot)} />
         <code className="text-xs text-slate-300 font-mono">{maskKey(entry.key)}</code>
         <span className={cn('text-xs ml-1', status.iconColor)}>{status.label}</span>
+        {healthStatus && <KeyHealthBadge status={healthStatus} />}
         {entry.models && entry.models.length > 0 && (
           <span className="text-xs text-slate-500 ml-1">{entry.models.length} models</span>
         )}
