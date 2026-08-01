@@ -26,7 +26,6 @@ import { isZaiChatModel, resolveChatCompletionsUrl } from './chatRouting';
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
   getProxySettings,
-  getProxyStatus,
   startAiProxy,
   getProviderCapabilities,
   getProviderModelMappings,
@@ -34,6 +33,7 @@ import {
   getDailyStatsSafe,
   getCostEstimateSafe,
 } from '@/lib/backend/modules/aiProxy';
+import { fetchProxyStatusNow } from '@/stores/aiProxy';
 import {
   getAntigravityApiKeys,
   getGeminiApiKeys,
@@ -153,7 +153,7 @@ export default function Chat() {
 
     try {
       const [proxyStatus, proxySettings] = await Promise.all([
-        getProxyStatus(),
+        fetchProxyStatusNow(),
         getProxySettings(),
       ]);
 
@@ -177,7 +177,7 @@ export default function Chat() {
       const hasAnyConfiguredKey =
         geminiKeys.length > 0 || openaiKeys.length > 0 || antigravityKeys.length > 0 || zaiKeys.length > 0 || !!proxySettings.freemodelApiKey;
 
-      setProxyRunning(proxyStatus.running);
+      setProxyRunning(proxyStatus?.running ?? false);
       setProxyMode(proxySettings.appMode);
       setProxyPort(proxySettings.proxyPort);
 
@@ -208,7 +208,7 @@ export default function Chat() {
         }))
       );
 
-      if (availableModels.length === 0 && proxyStatus.running && hasAnyConfiguredKey) {
+      if (availableModels.length === 0 && (proxyStatus?.running ?? false) && hasAnyConfiguredKey) {
         setSetupError(
           'Proxy is running but returned no models yet. Check provider mappings/accounts or restart AI Proxy.'
         );

@@ -77,16 +77,31 @@ module.exports = {
               "Types barrel is forbidden. Import directly from '@/types/ui', '@/types/generated', or specific type modules.",
           },
         ],
-        patterns: [
-          {
-            group: ['**/components/ui/*'],
-            message: "Import UI primitives from '@/components/ui' only (single entrypoint).",
-          },
-        ],
+        patterns: [],
       },
     ],
   },
   overrides: [
+    {
+      files: ['src/App.tsx', 'src/components/layout/**/*.tsx'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              {
+                name: '@/components/ui',
+                message: 'Critical-path file: use direct import (e.g. @/components/ui/Button) to avoid loading 72 components.',
+              },
+              {
+                name: '@/components/ui/index',
+                message: 'Critical-path file: use direct import (e.g. @/components/ui/Button) to avoid loading 72 components.',
+              },
+            ],
+          },
+        ],
+      },
+    },
     {
       files: ['src/**/*.tsx'],
       excludedFiles: ['src/components/ui/**/*.tsx'],

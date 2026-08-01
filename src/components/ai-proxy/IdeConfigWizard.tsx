@@ -6,13 +6,13 @@ import {
   configureAiProxyIdeForProvider,
   getAiProxyIdeConfigPreviewForProvider,
   restoreAiProxyIdeConfig,
-  getProxyStatus,
   getAvailableModels,
   startAiProxy,
   getProxySettings,
   autoImportAiProxyAuthFiles,
   type AuthImportResult,
 } from '../../lib/backend/modules/aiProxy';
+import { fetchProxyStatusNow } from '../../stores/aiProxy';
 import {
   DEFAULT_PROVIDER_PROFILE_KEY,
   PROVIDER_PROFILES,
@@ -82,11 +82,11 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
     try {
       const [detected, status, proxySettings] = await Promise.all([
         detectAiProxyIdes(),
-        getProxyStatus(),
+        fetchProxyStatusNow(),
         getProxySettings(),
       ]);
       setIdes(detected);
-      setProxyRunning(status.running);
+      setProxyRunning(status?.running ?? false);
       setManualEndpoint(`http://127.0.0.1:${proxySettings.proxyPort}/v1`);
       setStep('select');
     } catch (err) {
@@ -103,26 +103,26 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   }, [isOpen, step, detectIDEs]);
 
   const refreshIdeStates = async () => {
-    const [detected, status] = await Promise.all([detectAiProxyIdes(), getProxyStatus()]);
+    const [detected, status] = await Promise.all([detectAiProxyIdes(), fetchProxyStatusNow()]);
     setIdes(detected);
-    setProxyRunning(status.running);
+    setProxyRunning(status?.running ?? false);
     return detected;
   };
 
   const evaluateSmokeChecks = async (ideNames: string[]): Promise<SmokeCheckResult[]> => {
     const [status, refreshedIdes, models] = await Promise.all([
-      getProxyStatus(),
+      fetchProxyStatusNow(),
       detectAiProxyIdes(),
       getAvailableModels(),
     ]);
 
     setIdes(refreshedIdes);
-    setProxyRunning(status.running);
+    setProxyRunning(status?.running ?? false);
 
     return ideNames.map(ideName => {
       const ide = refreshedIdes.find(item => item.name === ideName);
       const configured = ide?.configured === true;
-      const running = status.running;
+      const running = status?.running ?? false;
       const hasModels = models.length > 0;
 
       let smokePassed = true;

@@ -67,7 +67,7 @@ __all__ = [
     'create_logger',
     'LogLevel',
     'LogStage',
-    # Tauri database interface
+    # Stitch database interface
     'get_imap_settings_from_db',
     'get_proxy_settings_from_db',
     'get_registration_settings_from_db',

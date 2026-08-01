@@ -25,14 +25,14 @@ logger = logging.getLogger(__name__)
 
 def _find_cloakbrowser() -> Path | None:
     """Return the path to CloakBrowser/Chrome executable, or None."""
-    # 1. Env override (set by Tauri or scripts)
+    # 1. Env override (set by backend or scripts)
     env_path = os.environ.get("CLOAKBROWSER_BUNDLED_PATH")
     if env_path:
         p = Path(env_path)
         if p.exists():
             return p
 
-    # 2. Bundled resources (Tauri production layout)
+    # 2. Bundled resources (production layout)
     system = platform.system()
     exe_name = "chrome.exe" if system == "Windows" else "chrome"
     candidates = [

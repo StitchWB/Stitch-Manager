@@ -11,7 +11,9 @@ import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
 import { RotationSettingsPanel } from '../components/ai-proxy/sections/RotationSettingsPanel';
-import { RoutingFlowBoard } from '../components/ai-proxy/sections/RoutingFlowBoard';
+import { CompressionSection } from '../components/ai-proxy/sections/CompressionSection';
+import { HoloneSection } from '../components/ai-proxy/sections/HoloneSection';
+import { RoutingGraphBoard } from '../components/ai-proxy/sections/RoutingGraphBoard';
 import { MappingsEditor } from '../components/ai-proxy/sections/MappingsEditor';
 import { AiProxyAccountsTable } from '../components/ai-proxy/AiProxyAccountsTable';
 import { AiProxyAccountDrawer } from '../components/ai-proxy/AiProxyAccountDrawer';
@@ -35,6 +37,7 @@ import {
 import { getBackgroundManagerConfig } from '../lib/backend/modules/backgroundManager';
 import { t } from '../lib/i18n';
 import { useAppStore } from '../stores/app';
+import { useUIPreferencesStore } from '../stores/uiPreferences';
 
 const CLIENT_API_KEY = 'proxystitch-local';
 
@@ -59,6 +62,13 @@ export default function AiProviders() {
   const [isIdeWizardOpen, setIsIdeWizardOpen] = useState(false);
   const [showDebugDrawer, setShowDebugDrawer] = useState(false);
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState<boolean | null>(null);
+  const [holoneEnabled, setHoloneEnabled] = useState(false);
+  const [holoneMode, setHoloneMode] = useState<'monitor' | 'block'>('monitor');
+  const [holoneRuleCount, setHoloneRuleCount] = useState(0);
+  const [holoneFindingsCount, setHoloneFindingsCount] = useState(0);
+  const [cavemanEnabled, setCavemanEnabled] = useState(false);
+  const [cavemanLevel, setCavemanLevel] = useState<'lite' | 'full' | 'ultra'>('full');
+  const [compressionEnabled, setCompressionEnabled] = useState(false);
   const controller = useAiProvidersController();
   const selection = useSelection();
 
@@ -170,6 +180,12 @@ export default function AiProviders() {
   }, [fetchAccounts, handleModalClose]);
 
   const aiSection = useMemo<AiSection>(() => resolveSection(sectionParam), [sectionParam]);
+  const { setLastAiSection } = useUIPreferencesStore();
+
+  // Remember last visited AI section for redirect on next AI Hub open
+  useEffect(() => {
+    if (aiSection) setLastAiSection(aiSection);
+  }, [aiSection, setLastAiSection]);
 
   // Lightweight fetch of the background-manager autoSwitch flag for the routing flow.
   useEffect(() => {
@@ -189,6 +205,53 @@ export default function AiProviders() {
     };
   }, [aiSection]);
 
+  // Fetch HoloNe security status for routing flow
+  useEffect(() => {
+    if (aiSection !== 'routing') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:25584/api/holone/status');
+        if (!res.ok) throw new Error('holone status fetch failed');
+        const data = await res.json();
+        if (!cancelled) {
+          setHoloneEnabled(data.enabled);
+          setHoloneMode(data.mode);
+          setHoloneRuleCount(data.rule_count);
+          setHoloneFindingsCount(data.findings_count);
+        }
+      } catch {
+        // ponytail: holone may not be running; silently ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [aiSection]);
+
+  // Fetch Caveman/compression status for routing graph
+  useEffect(() => {
+    if (aiSection !== 'routing') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:25584/api/compression/status');
+        if (!res.ok) throw new Error('compression status fetch failed');
+        const data = await res.json();
+        if (!cancelled) {
+          setCavemanEnabled(data.caveman_enabled ?? false);
+          setCavemanLevel(data.caveman_level ?? 'full');
+          setCompressionEnabled(data.compression_enabled ?? false);
+        }
+      } catch {
+        // ponytail: compression may not be running; silently ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [aiSection]);
+
   const setProxyDraftWithUpdater = useCallback(
     (updater: (prev: ProxySettings | null) => ProxySettings | null) => {
       setProxyDraft(prev => updater(prev));
@@ -197,7 +260,9 @@ export default function AiProviders() {
   );
 
   const scrollToRoutingSection = useCallback((sectionId: string) => {
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   }, []);
 
   // === Page header config per section ===
@@ -386,7 +451,7 @@ export default function AiProviders() {
             {/* === ROUTING TAB === */}
             {aiSection === 'routing' && (
               <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3">
-                <RoutingFlowBoard
+                <RoutingGraphBoard
                   accounts={accounts}
                   mappings={modelMappings}
                   proxyStatus={proxyStatus}
@@ -394,10 +459,19 @@ export default function AiProviders() {
                   baseUrl={baseUrl}
                   autoSwitchEnabled={autoSwitchEnabled}
                   proxyBusy={proxyBusy}
+                  holoneEnabled={holoneEnabled}
+                  holoneMode={holoneMode}
+                  holoneRuleCount={holoneRuleCount}
+                  holoneFindingsCount={holoneFindingsCount}
+                  cavemanEnabled={cavemanEnabled}
+                  cavemanLevel={cavemanLevel}
+                  compressionEnabled={compressionEnabled}
+                  onOpenHolone={() => scrollToRoutingSection('routing-holone')}
                   onOpenProviders={() => navigate('/ai/providers')}
                   onOpenMappings={() => scrollToRoutingSection('routing-mappings')}
                   onOpenRotation={() => scrollToRoutingSection('routing-rotation')}
                   onOpenProxy={() => scrollToRoutingSection('routing-proxy')}
+                  onOpenCompression={() => scrollToRoutingSection('routing-compression')}
                   onStartStopProxy={handleStartStopProxy}
                 />
 
@@ -442,6 +516,14 @@ export default function AiProviders() {
                   <div id="routing-rotation" className="min-w-0 scroll-mt-4">
                     <RotationSettingsPanel capabilities={providerCapabilities} visible />
                   </div>
+                </div>
+
+                <div id="routing-compression" className="scroll-mt-4">
+                  <CompressionSection />
+                </div>
+
+                <div id="routing-holone" className="scroll-mt-4">
+                  <HoloneSection />
                 </div>
               </div>
             )}

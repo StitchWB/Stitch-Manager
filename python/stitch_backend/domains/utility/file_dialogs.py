@@ -1,4 +1,4 @@
-"""File dialog and file I/O commands — replaces `@tauri-apps/plugin-dialog`.
+"""File dialog and file I/O commands — replaces legacy plugin dialog.
 
 Uses tkinter (stdlib on Windows) for native file dialogs in a background
 thread so the asyncio event loop is not blocked.

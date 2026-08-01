@@ -777,6 +777,26 @@ tr:hover .action-btn,
 }
 
 /* ============================================
+   Flow Connector Animations
+   ============================================ */
+@keyframes flowPulse {
+  0%, 100% { opacity: 0.15; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+
+@keyframes flowDash {
+  to { background-position: 200% 0; }
+}
+
+.animate-flow-pulse {
+  animation: flowPulse 1.8s ease-in-out infinite;
+}
+
+.animate-flow-dash {
+  animation: flowDash 2s linear infinite;
+}
+
+/* ============================================
    Shimmer Animation
    ============================================ */
 @keyframes shimmer {

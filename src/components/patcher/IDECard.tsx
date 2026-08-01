@@ -35,7 +35,10 @@ export default function IDECard({ ide, isActive, onSelect }: IDECardProps) {
           ${isActive ? `bg-gradient-to-br ${gradient}` : 'bg-white/10'}
         `}
       >
-        {getIDEIcon(ide.type)}
+        {(() => {
+          const Icon = getIDEIcon(ide.type);
+          return <Icon className="w-4 h-4" />;
+        })()}
       </div>
 
       <span className="relative z-10 tracking-wide">{getIDELabel(ide.type)}</span>

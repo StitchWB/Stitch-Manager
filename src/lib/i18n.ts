@@ -560,6 +560,74 @@ export interface Translations {
         oauthTimedOut: string;
       }
     }
+    compression: {
+      advancedSettings: string;
+      autoTriggerThreshold: string;
+      autoTriggerThresholdDescription: string;
+      avgSavings: string;
+      badgeStdout: string;
+      badgeTokens: string;
+      caveman: string;
+      cavemanDescription: string;
+      cavemanEnabled: string;
+      enabled: string;
+      filters: string;
+      inputCompression: string;
+      inputCompressionEnabled: string;
+      level: string;
+      levelFull: string;
+      levelLite: string;
+      levelUltra: string;
+      notConfigured: string;
+      outputCompression: string;
+      outputCompressionEnabled: string;
+      preserveSystemPrompt: string;
+      preserveSystemPromptDescription: string;
+      preserveSystemPromptEnabled: string;
+      rtkDescription: string;
+      rtkEnabled: string;
+      rtkFilters: string;
+      sectionDescription: string;
+      sectionTitle: string;
+      subtitle: string;
+      title: string;
+      tokensSaved: string;
+    }
+    holone: {
+      activeRules: string;
+      block: string;
+      blockMode: string;
+      blockModeDescription: string;
+      disabled: string;
+      enabled: string;
+      excerpt: string;
+      findings: string;
+      findingsLastHour: string;
+      highSeverityBlocked: string;
+      mode: string;
+      monitor: string;
+      monitorMode: string;
+      monitorModeDescription: string;
+      noFindings: string;
+      notConfigured: string;
+      protectionDescription: string;
+      protectionMode: string;
+      protectionTitle: string;
+      recentFindings: string;
+      rule: string;
+      ruleCount: string;
+      save: string;
+      saveChanges: string;
+      severity: string;
+      settings: string;
+      soundDescription: string;
+      soundEnabled: string;
+      soundNotifications: string;
+      testSound: string;
+      timestamp: string;
+      unsavedChanges: string;
+      volume: string;
+    }
     apiKeys: {
       actions: {
         addKey: string;
@@ -855,7 +923,6 @@ export interface Translations {
       topModel: string;
       totalRequests: string;
       totalTokens: string;
-      unavailableTauri: string;
       usageTitle: string;
       usageUnavailable: string;
       used: string;
@@ -1000,6 +1067,14 @@ export interface Translations {
         subtitle: string;
         title: string;
       }
+      holone: {
+        subtitle: string;
+        title: string;
+      }
+      compression: {
+        subtitle: string;
+        title: string;
+      }
     }
     table: {
       account: string;
@@ -1027,6 +1102,9 @@ export interface Translations {
     }
     tabs: {
       antigravity: string;
+      compression: string;
+      tools: string;
+      holone: string;
       apiKeys: string;
       chat: string;
       diagnostics: string;
@@ -1742,7 +1820,20 @@ export interface Translations {
     machineIdTitle: string;
     maxTokens: string;
     modulesTitle: string;
+    presetTitle: string;
+    presetDescription: string;
+    outboundProxy: string;
+    outboundProxyHint: string;
     promptEditorTitle: string;
+    proxyDescription: string;
+    proxyEnabled: string;
+    proxyPort: string;
+    proxyPortDescription: string;
+    proxyPortHint: string;
+    proxyPortTitle: string;
+    proxyStarted: string;
+    proxyStopped: string;
+    proxyTitle: string;
     saveConfig: string;
     saveError: string;
     saveSuccess: string;
@@ -2062,10 +2153,12 @@ export interface Translations {
     advancedSettings: string;
     applyPatch: string;
     backups: string;
+    canPatch: string;
     deleteFailed: string;
     detectedIdes: string;
     i_d_e_info_panel: {
       path: string;
+      proxy: string;
       status: string;
       version: string;
     }
@@ -2080,15 +2173,24 @@ export interface Translations {
       all: string;
       none: string;
     }
+    patched: string;
     patching: string;
+    proxyActive: string;
+    proxyDescription: string;
+    proxyInactive: string;
+    proxyInjection: string;
+    proxyInjectionDesc: string;
+    proxyRunning: string;
     removePatch: string;
     restore: string;
     restoreFailed: string;
     restoring: string;
+    running: string;
     scanDescription: string;
     scanForIdes: string;
     scanning: string;
     settings: string;
+    startProxy: string;
     subtitle: string;
     title: string;
     unpatchFailed: string;

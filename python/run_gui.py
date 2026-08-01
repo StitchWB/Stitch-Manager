@@ -73,7 +73,7 @@ def _kill_port_hog(port: int) -> None:
                 if f":{port}" in line and "LISTENING" in line:
                     pid = int(line.strip().split()[-1])
                     if pid != os.getpid():
-                        print(f"[run_gui] Killing PID {pid} that holds port {port}")
+                        print(f"[run_gui] Killing PID {pid} that holds port {port}", flush=True)
                         os.kill(pid, signal.SIGTERM)
         except Exception:
             pass
@@ -86,7 +86,7 @@ def _kill_port_hog(port: int) -> None:
             for pid_str in pids:
                 pid = int(pid_str)
                 if pid != os.getpid():
-                    print(f"[run_gui] Killing PID {pid} that holds port {port}")
+                    print(f"[run_gui] Killing PID {pid} that holds port {port}", flush=True)
                     os.kill(pid, signal.SIGTERM)
         except Exception:
             pass
@@ -228,13 +228,13 @@ def main() -> None:
     server_thread: threading.Thread | None = None
 
     if args.external_backend:
-        print(f"[run_gui] Using external backend at {HEALTH_URL}")
+        print(f"[run_gui] Using external backend at {HEALTH_URL}", flush=True)
     else:
         # Single-instance desktop app: a busy port means a zombie instance.
         # Starting "anyway" only produces a dead backend + a window attached
         # to the old process, so free the port unconditionally.
         if _port_in_use(API_PORT):
-            print(f"[run_gui] Port {API_PORT} is occupied — killing old instance")
+            print(f"[run_gui] Port {API_PORT} is occupied — killing old instance", flush=True)
             _kill_port_hog(API_PORT)
             time.sleep(1)
 
@@ -244,14 +244,14 @@ def main() -> None:
     # 2. Decide what URL the webview will load
     if args.dev:
         target_url = f"http://localhost:{VITE_DEV_PORT}"
-        print(f"[DEV]  Webview → {target_url}   |   API → http://127.0.0.1:{API_PORT}")
+        print(f"[DEV]  Webview → {target_url}   |   API → http://127.0.0.1:{API_PORT}", flush=True)
     else:
         target_url = f"http://127.0.0.1:{API_PORT}"
-        print(f"[PROD] Webview + API → {target_url}")
+        print(f"[PROD] Webview + API → {target_url}", flush=True)
 
     # 3. Wait for the backend to be ready
     if not _wait_for_server():
-        print("ERROR: Backend did not start in time. Aborting.", file=sys.stderr)
+        print("ERROR: Backend did not start in time. Aborting.", file=sys.stderr, flush=True)
         sys.exit(1)
 
     # 4. Launch pywebview
@@ -262,8 +262,16 @@ def main() -> None:
             "ERROR: pywebview is not installed.\n"
             "       pip install pywebview   (or run without GUI for API-only mode)",
             file=sys.stderr,
+            flush=True,
         )
         sys.exit(1)
+
+    # Disable unnecessary features to speed up startup
+    webview.settings['REMOTE_DEBUGGING_PORT'] = None
+    webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+
+    # Get icon path early for Win32 API calls
+    icon = _icon_path()
 
     window = webview.create_window(
         "Stitch Account Manager",
@@ -271,8 +279,27 @@ def main() -> None:
         width=1280,
         height=800,
         min_size=(1024, 768),
-        background_color="#000000",
+        background_color="#1a1a2e",  # Match app theme for instant visual feedback
     )
+
+    # Windows: set taskbar icon via Win32 API
+    if sys.platform == "win32" and icon:
+        def _on_loaded():
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = user32.FindWindowW(None, "Stitch Account Manager")
+                if hwnd:
+                    LR_LOADFROMFILE = 0x00000010
+                    WM_SETICON = 0x0080
+                    hicon = user32.LoadImageW(None, icon, 1, 32, 32, LR_LOADFROMFILE)
+                    if hicon:
+                        user32.SendMessageW(hwnd, WM_SETICON, 0, hicon)  # ICON_SMALL
+                        user32.SendMessageW(hwnd, WM_SETICON, 1, hicon)  # ICON_BIG
+            except Exception:
+                pass
+
+        window.events.loaded += _on_loaded
 
     # Monitor only a backend owned by this process. The canonical dev launcher
     # supervises its external reloadable backend separately.
@@ -284,11 +311,39 @@ def main() -> None:
         )
         watchdog_thread.start()
 
+    # Use EdgeChromium on Windows for faster startup (4-6s vs 20-30s with CEF)
     start_kwargs: dict = {"debug": args.dev}
-    icon = _icon_path()
+    if sys.platform == "win32":
+        # Try EdgeChromium first (uses system WebView2, much faster)
+        try:
+            import clr  # pythonnet - required for EdgeChromium
+            start_kwargs["gui"] = "edgechromium"
+            print("[run_gui] Using EdgeChromium (WebView2) for fast startup", flush=True)
+        except ImportError:
+            print("[run_gui] WARNING: pythonnet not installed, falling back to CEF (slow)", flush=True)
+            print("[run_gui] Install with: pip install pythonnet", flush=True)
+    
     if icon:
         start_kwargs["icon"] = icon  # taskbar/window icon on Windows
-    webview.start(**start_kwargs)
+
+    print(f"[run_gui] Starting webview with: {start_kwargs}", flush=True)
+    
+    # Add timing to understand where the delay is
+    import time
+    start_time = time.time()
+    
+    def on_loaded():
+        elapsed = time.time() - start_time
+        print(f"[run_gui] Window loaded in {elapsed:.2f}s", flush=True)
+    
+    window.events.loaded += on_loaded
+    
+    try:
+        webview.start(**start_kwargs)
+    except Exception as e:
+        print(f"[run_gui] ERROR: webview.start() failed: {e}", flush=True)
+        print("[run_gui] Falling back to default GUI...", flush=True)
+        webview.start(debug=args.dev)
 
 
 if __name__ == "__main__":

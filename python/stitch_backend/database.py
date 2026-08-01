@@ -57,6 +57,7 @@ def _get_engine() -> AsyncEngine:
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA busy_timeout=5000")
             cursor.close()
 
     return _engine
@@ -142,6 +143,8 @@ async def create_all_tables() -> None:
         import stitch_backend.domains.logging.models           # noqa: F401
         import stitch_backend.domains.totp.models              # noqa: F401
         import stitch_backend.domains.icloud_email_pool.models  # noqa: F401
+        import stitch_backend.domains.key_health.models  # noqa: F401
+        import stitch_backend.domains.ai_gateway.models  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_missing_columns)
 

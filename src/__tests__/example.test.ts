@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import {
   mockBackendInvoke,
-  clearTauriMocks,
+  clearBackendMocks,
   createMockSettings,
   createMockAccount,
   createSuccessMockHandler,
@@ -19,7 +19,7 @@ describe('Example Test Suite', () => {
 
   afterEach(() => {
     // Clean up after each test
-    clearTauriMocks();
+    clearBackendMocks();
   });
 
   it('should create mock settings', () => {

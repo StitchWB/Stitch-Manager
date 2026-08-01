@@ -49,7 +49,7 @@ def _default_db_url() -> str:
 
     Path: ``{data_local_dir}/stitch-manager/stitch.db``
     Falls back to ``REPO_ROOT/stitch.db`` when the canonical dir doesn't exist
-    (e.g. fresh dev checkout without an installed Tauri app).
+    (e.g. fresh dev checkout without an installed backend app).
     """
     canonical = _app_data_dir() / "stitch-manager"
     if canonical.is_dir():
@@ -84,7 +84,10 @@ class Settings(BaseSettings):
     litellm_gateway_model_prefix: str = "/v1"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    cors_origins: str = "*"          # comma-separated or "*"
+    # Restricted to known dev origins. "*" with allow_credentials=True lets any
+    # webpage call this local API (no auth layer yet). Set STITCH_CORS_ORIGINS
+    # (comma-separated) in .env to widen for production / other dev ports.
+    cors_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = ""  # computed dynamically if empty

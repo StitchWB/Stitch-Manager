@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { ChevronDown, Plus, Trash2, RefreshCw, MoreVertical } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, RefreshCw, MoreVertical, ShieldCheck, AlertTriangle, XOctagon, HelpCircle } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { KeyRow } from './KeyRow';
+import { getHealthSummary } from './KeyHealthBadge';
 import type { ApiKeyEntry } from '@/types/apiKeys';
 import type { CustomProvider } from '@/lib/backend/modules/customProviders';
+import type { KeyHealthRecord, KeyHealthStatus } from '@/lib/backend/modules/keyHealth';
 
 interface ProviderCardProps {
   provider: CustomProvider;
   keys: ApiKeyEntry[];
+  keyHealth?: KeyHealthRecord[];
   onAddKeys: () => void;
   onTestAll: () => void;
   onDelete: () => void;
@@ -23,6 +26,7 @@ interface ProviderCardProps {
 export function ProviderCard({
   provider,
   keys,
+  keyHealth,
   onAddKeys,
   onTestAll,
   onDelete,
@@ -37,7 +41,15 @@ export function ProviderCard({
   const totalKeys = keys.length;
   const validKeys = keys.filter(k => k.status === 'ok').length;
   const successRate = totalKeys > 0 ? Math.round((validKeys / totalKeys) * 100) : 0;
-  
+
+  // Health summary - filter by this provider
+  const healthRecords = keyHealth?.filter(r => 
+    r.providerId === provider.name || 
+    r.providerId === provider.id || 
+    r.providerId === `custom_${provider.id}`
+  ) ?? [];
+  const healthSummary = getHealthSummary(healthRecords);
+
   // Calculate average latency (mock for now)
   const avgLatency = '1.2s'; // TODO: get from metrics API
 
@@ -48,6 +60,14 @@ export function ProviderCard({
   });
   const models = Array.from(allModels).slice(0, 5); // Show first 5
   const moreModelsCount = allModels.size - 5;
+
+  const HEALTH_ICONS: Record<KeyHealthStatus, React.ReactNode> = {
+    healthy: <ShieldCheck className="w-3 h-3 text-emerald-400" />,
+    flaky: <AlertTriangle className="w-3 h-3 text-amber-400" />,
+    broken: <XOctagon className="w-3 h-3 text-red-400" />,
+    expired: <HelpCircle className="w-3 h-3 text-slate-400" />,
+    unknown: <HelpCircle className="w-3 h-3 text-slate-500" />,
+  };
 
   return (
     <GlassCard className="overflow-hidden">
@@ -85,6 +105,42 @@ export function ProviderCard({
             <div className="text-sm font-semibold text-sky-400">{avgLatency}</div>
           </div>
         </div>
+
+        {/* Health Summary */}
+        {healthSummary.total > 0 && (
+          <div className="mb-3 flex items-center gap-1.5 flex-wrap">
+            {healthSummary.healthy > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
+                {HEALTH_ICONS.healthy}
+                {healthSummary.healthy}
+              </span>
+            )}
+            {healthSummary.flaky > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-400">
+                {HEALTH_ICONS.flaky}
+                {healthSummary.flaky}
+              </span>
+            )}
+            {healthSummary.broken > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-red-400">
+                {HEALTH_ICONS.broken}
+                {healthSummary.broken}
+              </span>
+            )}
+            {healthSummary.expired > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                {HEALTH_ICONS.expired}
+                {healthSummary.expired}
+              </span>
+            )}
+            {healthSummary.unknown > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                {HEALTH_ICONS.unknown}
+                {healthSummary.unknown}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Models */}
         {models.length > 0 && (

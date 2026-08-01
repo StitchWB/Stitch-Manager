@@ -113,11 +113,11 @@ class QuotaService:
     3. Web Portal API (CBOR) - fallback
     """
 
-    def __init__(self):
+    def __init__(self, proxy: str | None = None):
         self.paths = get_paths()
-        self.client = KiroWebPortalClient()
+        self.client = KiroWebPortalClient(proxy=proxy)
 
-    def get_quota_from_cw_api(self, access_token: str, region: str = 'us-east-1') -> QuotaInfo | None:
+    def get_quota_from_cw_api(self, access_token: str, region: str = 'us-east-1', proxy: str | None = None) -> QuotaInfo | None:
         """
         Получает квоту через CodeWhisperer API.
 
@@ -138,7 +138,10 @@ class QuotaService:
         }
 
         try:
-            response = requests.get(url, headers=headers, timeout=CW_API_TIMEOUT)
+            kwargs = {"headers": headers, "timeout": CW_API_TIMEOUT}
+            if proxy:
+                kwargs["proxies"] = {"http": proxy, "https": proxy}
+            response = requests.get(url, **kwargs)
 
             if response.status_code == 401:
                 # 401 = Token expired or invalid - can be refreshed

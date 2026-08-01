@@ -1,7 +1,6 @@
 """Fingerprint profile service — file-based browser fingerprint management.
 
-Ports ``src-tauri/src/services/profile_generator.rs`` and the file-based
-commands from ``profile.rs`` (save, load, delete, list, get_or_create).
+Ports legacy Rust profile generator and file-based commands (save, load, delete, list, get_or_create).
 
 Profiles are stored as JSON files in ``~/.stitch/tokens/profiles/``.
 Each file is keyed by a "safe" version of the email address.

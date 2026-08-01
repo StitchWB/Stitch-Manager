@@ -1,6 +1,6 @@
 """Command dispatcher — ``POST /api/{name}`` → command registry → handler.
 
-This is the HTTP analogue of Tauri's ``invoke()``.  The frontend adapter calls
+This is the HTTP analogue of the backend's ``invoke()``.  The frontend adapter calls
 ``safeInvoke("get_accounts", {...})`` which is translated to::
 
     POST http://localhost:25584/api/get_accounts
@@ -24,6 +24,7 @@ from stitch_backend.core.command_registry import (
     get_command_handler,
     list_commands,
 )
+from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,10 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         raise   # let FastAPI handle HTTPException directly
     except Exception as exc:
         logger.exception("Command '%s' failed", name)
-        # Domain exceptions expose a `detail` attribute
-        detail = getattr(exc, "detail", None) or str(exc)
+        # Domain exceptions expose a `detail` attribute; sanitize the raw
+        # exception string to strip secret-bearing URL params before it
+        # reaches the client.
+        detail = getattr(exc, "detail", None) or _sanitize_error(exc, secret="")
         raise HTTPException(status_code=400, detail=detail) from exc
 
     # Return

@@ -2,7 +2,7 @@
 
 Frontend calls these via ``safeInvoke('get_logs', …)``, etc.
 Response shapes match ``LogEntry``, ``LogQueryResult``, ``LogStats``
-defined in ``src/lib/tauri/modules/logs.ts``.
+defined in legacy frontend logging module.
 """
 
 from __future__ import annotations

@@ -45,7 +45,7 @@ interface PatcherState {
   traePatchLoading: boolean;
 
   // Actions
-  detectIDEs: () => Promise<DetectedIDE[]>;
+  detectIDEs: (force?: boolean) => Promise<DetectedIDE[]>;
   getAllPatchStatuses: () => Promise<void>;
   applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
@@ -88,14 +88,16 @@ export const usePatcherStore = create<PatcherState>()(
         // IDE Detection
         // ============================================
 
-        detectIDEs: async () => {
+        detectIDEs: async (force: boolean = false) => {
           set({ scanning: true, error: null });
           try {
-            const ides = await detectIDEs();
+            const ides = await detectIDEs(force);
             set({ detectedIDEs: ides, scanning: false });
 
-            // Fetch patch status for all detected IDEs
-            await get().getAllPatchStatuses();
+            // Fetch patch status for all detected IDEs (async, don't wait)
+            get().getAllPatchStatuses().catch(err => {
+              console.error('Failed to fetch patch statuses:', err);
+            });
 
             return ides;
           } catch (error) {
@@ -273,6 +275,9 @@ export const usePatcherStore = create<PatcherState>()(
                   },
                 },
               }));
+              
+              // Refresh IDE detection to update cache
+              await get().detectIDEs();
             }
 
             set(state => ({
@@ -323,7 +328,7 @@ export const usePatcherStore = create<PatcherState>()(
 
         restoreBackup: async (backupId: string) => {
           // Find the IDE and backup info for this backup
-          const { backups, detectedIDEs } = get();
+          const { backups } = get();
           let ideId: string | null = null;
           let backup: UIBackupInfo | null = null;
 
@@ -340,10 +345,6 @@ export const usePatcherStore = create<PatcherState>()(
             throw new Error(`Backup not found: ${backupId}`);
           }
 
-          // Get the IDE type from the detected IDE
-          const ide = detectedIDEs.find((i: DetectedIDE) => i.id === ideId);
-          const ideType = ide?.type || 'kiro';
-
           if (ideId) {
             set(state => ({
               operationInProgress: { ...state.operationInProgress, [ideId!]: 'restoring' },
@@ -352,7 +353,7 @@ export const usePatcherStore = create<PatcherState>()(
           }
 
           try {
-            const result = await restoreBackup({ ideType, backupPath: backup.path });
+            const result = await restoreBackup({ backupId });
 
             if (result.success && ideId) {
               // Update IDE status

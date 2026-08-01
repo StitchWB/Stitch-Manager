@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.responses import Response
 
-from .adaptive_router import get_adaptive_router
 from .cost_tracker import get_cost_tracker
 from .key_metrics import get_metrics_tracker
 from .rate_limiter import get_rate_limiter

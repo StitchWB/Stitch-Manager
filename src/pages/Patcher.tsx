@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { Search, AlertCircle, XCircle, Code, Settings as SettingsIcon, Code2 } from 'lucide-react';
+import { Search, AlertCircle, XCircle, Code, Code2 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
 import { useAppStore } from '../stores/app';
@@ -12,8 +12,8 @@ import {
   IDEInfoPanel,
   PatchActionsBar,
   BackupsList,
-  PatcherSettingsDrawer,
 } from '../components/patcher';
+import KiroConfigPanel from '../components/patcher/KiroConfigPanel';
 
 import { getKiroPatchConfig, saveKiroPatchConfig } from '@/lib/backend';
 import type { KiroPatchConfig } from '../types/kiro-patch';
@@ -42,7 +42,6 @@ export default function PatcherV2() {
   const [selectedIDE, setSelectedIDE] = useState<string | null>(null);
   const [selectedPatchVersion, setSelectedPatchVersion] = useState<Record<string, string>>({});
   const [patchOptions, setPatchOptions] = useState<Record<string, Record<string, boolean>>>({});
-  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [kiroPatchConfig, setKiroPatchConfig] = useState<KiroPatchConfig | null>(null);
 
   const currentIDE = detectedIDEs.find(ide => ide.id === selectedIDE);
@@ -125,8 +124,10 @@ export default function PatcherV2() {
 
   const handleScan = async () => {
     clearError();
-    await scanForIDEs();
-    await listBackups();
+    await Promise.all([
+      scanForIDEs(true), // Force rescan
+      listBackups(),
+    ]);
   };
 
   const handlePatch = async (ideId: string) => {
@@ -269,21 +270,10 @@ export default function PatcherV2() {
         title={t('patcher.title')}
         subtitle={t('patcher.subtitle')}
         icon={<Code size={18} />}
-        actions={
-          <Button
-            onClick={() => setShowSettingsDrawer(true)}
-            variant="primary"
-            size="sm"
-            leftIcon={<SettingsIcon size={14} />}
-            className="shadow-lg shadow-indigo-500/20"
-          >
-            {t('patcher.advancedSettings')}
-          </Button>
-        }
       />
 
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-[1400px] mx-auto flex flex-col gap-6">
+        <div className="max-w-[1600px] mx-auto flex flex-col gap-6">
           {/* Error Alert */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-3">
@@ -320,54 +310,102 @@ export default function PatcherV2() {
             </div>
           </section>
 
+          {/* Skeleton Loading State */}
+          {scanning && detectedIDEs.length === 0 && (
+            <section className="glass-card p-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-white/5 rounded animate-pulse w-1/3" />
+                    <div className="h-3 bg-white/5 rounded animate-pulse w-1/2" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-white/5 rounded animate-pulse w-1/4" />
+                    <div className="h-3 bg-white/5 rounded animate-pulse w-2/5" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-white/5 rounded animate-pulse w-1/3" />
+                    <div className="h-3 bg-white/5 rounded animate-pulse w-1/2" />
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* IDE Tabs and Content */}
           {detectedIDEs.length > 0 && (
-            <section className="glass-card overflow-hidden">
-              <IDEGrid ides={detectedIDEs} selectedIDE={selectedIDE} onSelectIDE={setSelectedIDE} />
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
+              <section className="glass-card overflow-hidden relative">
+                {/* Loading Overlay for Rescan */}
+                {scanning && (
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-sm z-10 flex items-center justify-center">
+                    <div className="flex items-center gap-3 bg-vsc-bg/90 px-4 py-3 rounded-lg border border-white/10">
+                      <Search size={16} className="animate-spin text-primary" />
+                      <span className="text-sm text-white">{t('patcher.scanning')}</span>
+                    </div>
+                  </div>
+                )}
+                
+                <IDEGrid ides={detectedIDEs} selectedIDE={selectedIDE} onSelectIDE={setSelectedIDE} />
 
-              {currentIDE && (
-                <div className="p-6 space-y-6">
-                  {/* Information Section */}
-                  <IDEInfoPanel
-                    ide={currentIDE}
-                    isOperating={isOperating}
-                    operation={operation as 'patching' | 'unpatching' | 'restoring' | null}
-                  />
+                {currentIDE && (
+                  <div className="p-6 space-y-6">
+                    {/* Information Section */}
+                    <IDEInfoPanel
+                      ide={currentIDE}
+                      isOperating={isOperating}
+                      operation={operation as 'patching' | 'unpatching' | 'restoring' | null}
+                    />
 
-                  {/* Patch Actions */}
-                  <PatchActionsBar
-                    isPatched={currentIDE.isPatched}
-                    canPatch={currentIDE.canPatch}
-                    isOperating={isOperating}
-                    availableVersions={availableVersions}
-                    availableOptions={availableOptions}
-                    selectedVersion={selectedPatchVersion[currentIDE.id]}
-                    currentPatchVersion={currentIDE.patchVersion}
-                    selectedOptions={patchOptions[currentIDE.id] || {}}
-                    onPatch={() => handlePatch(currentIDE.id)}
-                    onUnpatch={() => handleUnpatch(currentIDE.id)}
-                    onSelectVersion={versionId =>
-                      setSelectedPatchVersion(prev => ({
-                        ...prev,
-                        [currentIDE.id]: versionId,
-                      }))
-                    }
-                    onToggleOption={optionId => togglePatchOption(currentIDE.id, optionId)}
-                    onToggleAllOptions={toggleAllOptions}
-                  />
+                    {/* Patch Actions */}
+                    <PatchActionsBar
+                      isPatched={currentIDE.isPatched}
+                      canPatch={currentIDE.canPatch}
+                      isOperating={isOperating}
+                      availableVersions={availableVersions}
+                      availableOptions={availableOptions}
+                      selectedVersion={selectedPatchVersion[currentIDE.id]}
+                      currentPatchVersion={currentIDE.patchVersion}
+                      selectedOptions={patchOptions[currentIDE.id] || {}}
+                      onPatch={() => handlePatch(currentIDE.id)}
+                      onUnpatch={() => handleUnpatch(currentIDE.id)}
+                      onSelectVersion={versionId =>
+                        setSelectedPatchVersion(prev => ({
+                          ...prev,
+                          [currentIDE.id]: versionId,
+                        }))
+                      }
+                      onToggleOption={optionId => togglePatchOption(currentIDE.id, optionId)}
+                      onToggleAllOptions={toggleAllOptions}
+                    />
 
-                  {/* Backups Section */}
-                  <BackupsList
-                    backups={currentIDEBackups}
-                    isLoading={backupsLoading}
-                    operationInProgress={operationInProgress}
-                    onRestore={handleRestoreBackup}
-                    onDelete={handleDeleteBackup}
-                    onRefresh={listBackups}
-                  />
-                </div>
+                    {/* Backups Section */}
+                    <BackupsList
+                      backups={currentIDEBackups}
+                      isLoading={backupsLoading}
+                      operationInProgress={operationInProgress}
+                      onRestore={handleRestoreBackup}
+                      onDelete={handleDeleteBackup}
+                      onRefresh={listBackups}
+                    />
+                  </div>
+                )}
+              </section>
+
+              {/* Kiro Config Panel */}
+              {currentIDE?.type === 'kiro' && (
+                <aside className="space-y-4">
+                  <KiroConfigPanel />
+                </aside>
               )}
-            </section>
+            </div>
           )}
 
           {/* Empty State */}
@@ -387,12 +425,6 @@ export default function PatcherV2() {
           )}
         </div>
       </div>
-
-      {/* Patcher Settings Drawer */}
-      <PatcherSettingsDrawer
-        isOpen={showSettingsDrawer}
-        onClose={() => setShowSettingsDrawer(false)}
-      />
     </div>
   );
 }

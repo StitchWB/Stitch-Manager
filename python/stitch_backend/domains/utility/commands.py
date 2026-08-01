@@ -1,6 +1,6 @@
 """Utility command handlers — app metadata, clipboard, browser, API key validation.
 
-These commands replace the Tauri utility commands:
+These commands replace the legacy utility commands:
     get_app_version, copy_to_clipboard, open_in_browser, open_url_in_browser,
     get_database_path, get_backend_health, check_fireworks_api_key_rust.
 """
@@ -251,6 +251,52 @@ async def cmd_obs_timeline(params: dict) -> list:
     return await run_in_session(
         lambda s: LoggingService(s).query_logs(filter_)
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# App initialization
+# ═════════════════════════════════════════════════════════════════════════════
+
+@register_command("initialize_app")
+async def cmd_initialize_app(params: dict) -> dict:
+    """Return all essential startup data in a single response."""
+    from stitch_backend.domains.settings.service import SettingsService
+    from stitch_backend.domains.accounts.service import AccountService
+    from stitch_backend.database import run_in_session
+    from sqlalchemy import select, func
+    from stitch_backend.domains.accounts.models import Account
+    
+    async def _op(session):
+        # Get settings
+        settings = await SettingsService(session).get_all()
+        
+        # Get accounts and serialize manually
+        accounts_list = await AccountService(session).list_accounts()
+        accounts = [acc.model_dump(mode="json", by_alias=True) for acc in accounts_list]
+        
+        # Get dashboard stats
+        total = await session.execute(select(func.count(Account.id)))
+        active = await session.execute(
+            select(func.count(Account.id)).where(Account.status == "active")
+        )
+        total_accounts = total.scalar() or 0
+        active_accounts_count = active.scalar() or 0
+        
+        return {
+            "settings": settings,
+            "accounts": accounts,
+            "activeAccounts": dict(_ACTIVE_ACCOUNTS),
+            "dashboardStats": {
+                "totalAccounts": total_accounts,
+                "activeAccounts": active_accounts_count,
+                "totalProviders": 0,
+                "registrationsToday": 0,
+            },
+            "totpKeys": [],
+            "status": "ok",
+        }
+    
+    return await run_in_session(_op)
 
 
 # =============================================================================

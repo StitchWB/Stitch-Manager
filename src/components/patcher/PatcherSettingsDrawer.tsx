@@ -37,6 +37,7 @@ import {
 } from '@/lib/backend';
 import { usePatcherStore } from '../../stores/patcher';
 import type { KiroPatchConfig } from '../../types/kiro-patch';
+import { applyPreset } from '../../types/kiro-patch';
 import type { Account } from '../../types/generated';
 import type { SettingsData } from '../../types/generated';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
@@ -460,6 +461,42 @@ export default function PatcherSettingsDrawer({
                         {t('kiroPatch.outboundProxyHint')}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Preset Section */}
+                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center gap-2 px-1">
+                      <Zap className="w-4 h-4 text-yellow-400" />
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                        {t('kiroPatch.presetTitle')}
+                      </h3>
+                      <Tooltip content={t('kiroPatch.presetDescription')}>
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-slate-400 cursor-help transition-colors" />
+                      </Tooltip>
+                    </div>
+                    <SegmentedControl
+                      size="sm"
+                      options={[
+                        { label: 'Standard', value: 'standard' },
+                        { label: 'Performance', value: 'performance' },
+                        { label: 'Privacy', value: 'privacy' },
+                      ]}
+                      value={config.preset || 'standard'}
+                      onChange={preset => {
+                        if (preset === 'standard' || preset === 'performance' || preset === 'privacy') {
+                          setConfig(prev => prev ? {
+                            ...prev,
+                            preset,
+                            modules: applyPreset(preset),
+                          } : null);
+                        }
+                      }}
+                    />
+                    <p className="text-[10px] text-slate-500 px-1">
+                      {config.preset === 'standard' && 'Balanced: proxy + telemetry blocking + machine ID spoofing'}
+                      {config.preset === 'performance' && 'Fast: rate limit bypass + error suppression'}
+                      {config.preset === 'privacy' && 'Private: machine ID + OS spoofing + telemetry blocking'}
+                    </p>
                   </div>
 
                   {/* Account Bindings Section */}

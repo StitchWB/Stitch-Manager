@@ -38,7 +38,7 @@ def find_cloakbrowser(
 
     Search order (first hit wins):
 
-    1. ``CLOAKBROWSER_BUNDLED_PATH`` env var (passed by Tauri).
+    1. ``CLOAKBROWSER_BUNDLED_PATH`` env var (passed by backend).
     2. ``<project_root>/resources/cloakbrowser/<binary>`` (dev layout).
     3. ``<exe_dir>/resources/cloakbrowser/<binary>`` (production, next to Python).
     4. ``<exe_dir>/../resources/cloakbrowser/<binary>`` (PyInstaller layout).

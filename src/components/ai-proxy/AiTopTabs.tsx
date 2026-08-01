@@ -4,9 +4,11 @@ import {
   Cable,
   LayoutDashboard,
   MessageSquare,
+  Network,
   Orbit,
   Route,
   Server,
+  Wrench,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -17,10 +19,12 @@ import { useAppStore } from '@/stores/app';
 type AiTabId =
   | 'overview'
   | 'providers'
+  | 'gateway'
   | 'routing'
   | 'connections'
   | 'monitor'
   | 'chat'
+  | 'tools'
   | 'antigravity';
 
 interface AiTab {
@@ -33,15 +37,18 @@ interface AiTab {
 const AI_TABS: AiTab[] = [
   { id: 'overview', label: 'Overview', to: '/ai', icon: LayoutDashboard },
   { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers', icon: Server },
+  { id: 'gateway', label: 'Gateway', to: '/ai/gateway', icon: Network },
   { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity', icon: Orbit },
   { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
   { id: 'connections', label: 'Connections', to: '/ai/integrations', icon: Cable },
   { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
   { id: 'chat', label: 'aiHub.tabs.chat', to: '/ai/chat', icon: MessageSquare },
+  { id: 'tools', label: 'aiHub.tabs.tools', to: '/ai/tools', icon: Wrench },
 ];
 
 function activeTab(pathname: string): AiTabId {
   if (pathname === '/ai' || pathname === '/ai/overview') return 'overview';
+  if (pathname.startsWith('/ai/gateway')) return 'gateway';
   if (pathname.startsWith('/ai/routing')) return 'routing';
   if (pathname.startsWith('/ai/integrations') || pathname.startsWith('/ai/opencode-config')) {
     return 'connections';
@@ -49,6 +56,7 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/monitor') || pathname.startsWith('/ai/analytics')) return 'monitor';
   if (pathname.startsWith('/ai/chat')) return 'chat';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
+  if (pathname.startsWith('/ai/tools') || pathname.startsWith('/ai/holone')) return 'tools';
   // Redirect old api-keys route to providers
   if (pathname.startsWith('/ai/api-keys')) return 'providers';
   return 'providers';

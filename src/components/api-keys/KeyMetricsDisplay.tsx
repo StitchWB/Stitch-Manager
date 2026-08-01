@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Activity, AlertCircle, CheckCircle2, Clock, DollarSign, Zap } from 'lucide-react';
+import { Activity, AlertCircle, CheckCircle2, Clock, Zap } from 'lucide-react';
 import type { KeyMetrics } from '@/types/metrics';
 
 interface KeyMetricsDisplayProps {

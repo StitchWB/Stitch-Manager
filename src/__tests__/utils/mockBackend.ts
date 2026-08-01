@@ -20,7 +20,7 @@ export function mockBackendInvoke(handler: InvokeHandler) {
 /**
  * Clear all Backend mocks
  */
-export function clearTauriMocks() {
+export function clearBackendMocks() {
   mockInvokeHandler = null;
 }
 

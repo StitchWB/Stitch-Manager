@@ -9,7 +9,8 @@ import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
 import { useUIPreferencesStore } from './stores/uiPreferences';
 import { useTotpStore } from './stores/totp';
-import { CommandPalette } from '@/components/ui';
+import { CommandPalette } from '@/components/ui/CommandPalette';
+import { safeInvoke } from './lib/backend';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Accounts = lazy(() => import('./pages/Accounts'));
@@ -18,6 +19,8 @@ const AiProviders = lazy(() => import('./pages/AiProviders'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
 const AiAnalytics = lazy(() => import('./pages/AiAnalytics'));
 const Antigravity = lazy(() => import('./pages/Antigravity'));
+const HoloneSecurity = lazy(() => import('./pages/HoloneSecurity'));
+const ToolsPage = lazy(() => import('./pages/ToolsPage'));
 const Patcher = lazy(() => import('./pages/Patcher'));
 const Scheduler = lazy(() => import('./pages/Scheduler'));
 const Mail = lazy(() => import('./pages/Mail'));
@@ -30,6 +33,7 @@ const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Tools = lazy(() => import('./pages/Tools'));
 const Automation = lazy(() => import('./pages/Automation'));
 const Totp = lazy(() => import('./pages/Totp'));
+const AiGateway = lazy(() => import('./pages/AiGateway'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -90,6 +94,7 @@ function RouteTracker() {
         '/ai',
         '/ai/antigravity',
         '/ai/api-keys',
+        '/ai/tools',
         '/ai/chat',
         '/ai/:section',
         '/ai-analytics',
@@ -172,17 +177,40 @@ function App() {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    // Load settings from database (includes UI scale)
-    loadSettings();
+    // Use single initialization endpoint instead of multiple concurrent calls
+    const initializeApp = async () => {
+      try {
+        const data = await safeInvoke<{
+          settings: Record<string, unknown>;
+          accounts: unknown[];
+          activeAccounts: Record<string, string>;
+          dashboardStats: Record<string, unknown>;
+          totpKeys: unknown[];
+        }>('initialize_app');
+        
+        // Subscribe to real-time log events from backend
+        subscribeToLogs();
+        
+        // Fetch initial logs from database (not included in init response)
+        fetchLogs();
+        
+        // Pre-fetch TOTP keys if not included in init response
+        if (data.totpKeys && data.totpKeys.length > 0) {
+          // TOTP keys already loaded from init
+        } else {
+          void fetchTotpKeys().catch(() => { });
+        }
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        // Fallback to individual API calls if initialization fails
+        loadSettings();
+        subscribeToLogs();
+        fetchLogs();
+        void fetchTotpKeys().catch(() => { });
+      }
+    };
 
-    // Subscribe to real-time log events from backend
-    subscribeToLogs();
-
-    // Fetch initial logs from database
-    fetchLogs();
-
-    // Pre-fetch TOTP keys so account rows can show codes immediately
-    void fetchTotpKeys().catch(() => { });
+    void initializeApp();
 
     return () => {
       unsubscribeFromLogs();
@@ -264,10 +292,13 @@ function App() {
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai/antigravity" element={<Antigravity />} />
+            <Route path="/ai/holone" element={<HoloneSecurity />} />
+            <Route path="/ai/tools" element={<ToolsPage />} />
             <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
             <Route path="/ai/chat" element={<Chat />} />
             <Route path="/ai/analytics" element={<AiAnalytics />} />
+            <Route path="/ai/gateway" element={<AiGateway />} />
             <Route path="/ai/:section" element={<AiProviders />} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />

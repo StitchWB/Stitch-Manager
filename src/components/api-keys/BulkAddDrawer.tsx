@@ -17,6 +17,9 @@ interface BulkAddDrawerProps {
   onAddKey: (entry: ApiKeyEntry) => void;
   onAddAllValid: (entries: ApiKeyEntry[]) => void;
   prefillKeys?: string[];
+  /** When true, shows name field and creates provider on submit */
+  createProviderMode?: boolean;
+  onCreateProvider?: (name: string, baseUrl: string, validKeys: ApiKeyEntry[]) => Promise<void>;
 }
 
 type TestResultEntry = {
@@ -36,11 +39,15 @@ export function BulkAddDrawer({
   onAddKey,
   onAddAllValid,
   prefillKeys = [],
+  createProviderMode = false,
+  onCreateProvider,
 }: BulkAddDrawerProps) {
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl);
+  const [providerName, setProviderName] = useState('');
   const [rawKeys, setRawKeys] = useState('');
   const [results, setResults] = useState<TestResultEntry[]>([]);
   const [isTesting, setIsTesting] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
 
   // Pre-fill keys when drawer opens with prefillKeys
@@ -167,6 +174,41 @@ export function BulkAddDrawer({
     setAddedKeys(prev => new Set(prev).add(entry.key));
   }, [baseUrl, onAddKey]);
 
+  const handleCreateProvider = useCallback(async () => {
+    if (!onCreateProvider) return;
+    const name = providerName.trim();
+    if (!name) {
+      toast.error('Provider name is required');
+      return;
+    }
+    const valid = results
+      .filter(r => r.status === 'ok')
+      .map(r => ({
+        key: r.key,
+        baseUrl: baseUrl || undefined,
+        addedAt: Date.now(),
+        status: 'ok' as const,
+        models: r.models,
+        lastTested: Date.now(),
+      }));
+    if (valid.length === 0) {
+      toast.error('No valid keys to add');
+      return;
+    }
+    setIsCreating(true);
+    try {
+      await onCreateProvider(name, baseUrl, valid);
+      setProviderName('');
+      setRawKeys('');
+      setResults([]);
+      setAddedKeys(new Set());
+    } catch (error) {
+      toast.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsCreating(false);
+    }
+  }, [providerName, baseUrl, results, onCreateProvider]);
+
   const handleAddAllValid = useCallback(() => {
     const valid = results
       .filter(r => r.status === 'ok' && !existingKeySet.has(r.key))
@@ -215,7 +257,9 @@ export function BulkAddDrawer({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <div>
-            <h2 className="text-sm font-semibold text-slate-200">Add {provider} Keys</h2>
+            <h2 className="text-sm font-semibold text-slate-200">
+              {createProviderMode ? 'Add New Provider' : `Add ${provider} Keys`}
+            </h2>
             {baseUrl && (
               <p className="text-xs text-slate-500 truncate max-w-[280px] mt-0.5">{baseUrl}</p>
             )}
@@ -231,6 +275,20 @@ export function BulkAddDrawer({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {/* Provider Name (create mode) */}
+          {createProviderMode && (
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Name</label>
+              <input
+                type="text"
+                value={providerName}
+                onChange={(e) => setProviderName(e.target.value)}
+                placeholder="My Provider"
+                className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50"
+              />
+            </div>
+          )}
+
           {/* Base URL */}
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Base URL</label>
@@ -341,18 +399,37 @@ export function BulkAddDrawer({
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-white/10">
-          <button
-            onClick={handleAddAllValid}
-            disabled={validCount === 0}
-            className={cn(
-              'w-full inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
-              'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            Add All Valid ({validCount})
-          </button>
+          {createProviderMode ? (
+            <button
+              onClick={handleCreateProvider}
+              disabled={validCount === 0 || isCreating}
+              className={cn(
+                'w-full inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            >
+              {isCreating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+              {isCreating ? 'Creating...' : `Create Provider & Add Keys (${validCount})`}
+            </button>
+          ) : (
+            <button
+              onClick={handleAddAllValid}
+              disabled={validCount === 0}
+              className={cn(
+                'w-full inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Add All Valid ({validCount})
+            </button>
+          )}
         </div>
       </div>
     </>

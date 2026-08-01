@@ -2,7 +2,7 @@
 
 Ported from Rust ``kiro_patch.rs`` prompt commands.
 User prompts live in ``~/.stitch-manager/prompts/``.
-Default prompts live in ``src-tauri/resources/default-prompts/``.
+Default prompts live in ``resources/default-prompts/``.
 """
 
 from __future__ import annotations
@@ -39,9 +39,9 @@ def _prompts_dir() -> Path:
 
 def _default_prompts_dir() -> Path:
     """Default prompts shipped with the app."""
-    # Try src-tauri/resources/default-prompts (dev)
+    # Try resources/default-prompts (dev)
     from stitch_backend.config import REPO_ROOT
-    dev_path = REPO_ROOT / "src-tauri" / "resources" / "default-prompts"
+    dev_path = REPO_ROOT / "resources" / "default-prompts"
     if dev_path.is_dir():
         return dev_path
     # Fallback: resources/default-prompts next to exe (production)
