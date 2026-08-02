@@ -170,7 +170,9 @@ async def _fetch_openai_compatible_models(
     base_url = key.get("baseUrl") or _PROVIDER_BASE_URLS.get(provider, "https://api.openai.com")
     url = f"{base_url.rstrip('/')}/v1/models"
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+    proxy_url = _get_outbound_proxy()
+    async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
         if resp.status_code != 200:
             return []
@@ -197,7 +199,9 @@ async def _fetch_anthropic_models(keys: list[dict]) -> list[dict[str, str]]:
         "anthropic-version": "2023-06-01",
     }
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+    proxy_url = _get_outbound_proxy()
+    async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
         resp = await client.get(url, headers=headers)
         if resp.status_code != 200:
             return []
@@ -220,7 +224,9 @@ async def _fetch_gemini_models(keys: list[dict]) -> list[dict[str, str]]:
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+    proxy_url = _get_outbound_proxy()
+    async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
         resp = await client.get(url)
         if resp.status_code != 200:
             return []
@@ -272,7 +278,9 @@ async def _fetch_kiro_models(accounts: list[dict]) -> list[dict[str, str]]:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        proxy_url = _get_outbound_proxy()
+        async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
             models = await fetch_kiro_models(proxy_account, client)
             return [
                 {
@@ -300,7 +308,9 @@ async def _fetch_freemodel_models() -> list[dict[str, str]]:
             return []
 
         url = f"http://127.0.0.1:{port}/v1/models"
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        proxy_url = _get_outbound_proxy()
+        async with httpx.AsyncClient(timeout=5.0, proxy=proxy_url) as client:
             resp = await client.get(url)
             if resp.status_code != 200:
                 return []
@@ -726,7 +736,9 @@ async def cmd_fetch_openai_account_quotas(params: dict) -> list:
     now_ts = int(time.time())
     results = []
 
-    async with httpx.AsyncClient(timeout=12.0) as client:
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+    proxy_url = _get_outbound_proxy()
+    async with httpx.AsyncClient(timeout=12.0, proxy=proxy_url) as client:
         for fpath in auth_files:
             account_name = fpath.stem
             try:
@@ -844,8 +856,8 @@ async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
 
         try:
             from autoreg.services.quota_service import QuotaService
-            svc = QuotaService(proxy=outbound_proxy)
-            info = svc.get_quota_from_cw_api(token, "us-east-1", proxy=outbound_proxy)
+            with QuotaService(proxy=outbound_proxy) as svc:
+                info = svc.get_quota_from_cw_api(token, "us-east-1", proxy=outbound_proxy)
             if info and info.usage:
                 usage = info.usage
                 total_limit = usage.limit + (usage.trial_limit if usage.trial_status == "ACTIVE" else 0)

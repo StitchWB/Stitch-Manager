@@ -57,7 +57,7 @@ def generate_cvv(bin_prefix: str) -> str:
     return ''.join(str(random.randint(0, 9)) for _ in range(length))
 
 
-def check_card(card_data: str, timeout: int = 15) -> dict:
+def check_card(card_data: str, timeout: int = 15, proxy: str | None = None) -> dict:
     """Check card via chkr.cc API."""
     try:
         response = requests.post(
@@ -70,6 +70,7 @@ def check_card(card_data: str, timeout: int = 15) -> dict:
             },
             json={'data': card_data, 'charge': False},
             timeout=timeout,
+            proxies={"http": proxy, "https": proxy} if proxy else None,
         )
         
         if response.status_code == 429:
@@ -101,9 +102,10 @@ def generate_card_from_bin(bin_prefix: str, month: Optional[str] = None, year: O
 class LiveCardFinder:
     """Background card finder — generates and checks cards until Live found."""
     
-    def __init__(self, bin_prefix: str, max_attempts: int = 100):
+    def __init__(self, bin_prefix: str, max_attempts: int = 100, proxy: str | None = None):
         self.bin_prefix = bin_prefix
         self.max_attempts = max_attempts
+        self.proxy = proxy
         self.live_card: Optional[str] = None
         self.attempts = 0
         self._stop_event = threading.Event()
@@ -125,7 +127,7 @@ class LiveCardFinder:
             card_data = generate_card_from_bin(self.bin_prefix)
             
             logger.debug(f"[LiveCardFinder] Checking card {attempt + 1}/{self.max_attempts}")
-            result = check_card(card_data)
+            result = check_card(card_data, proxy=self.proxy)
             
             if callback:
                 callback(card_data, result)
@@ -163,7 +165,8 @@ _current_finder: Optional[LiveCardFinder] = None
 
 
 def start_live_card_search(bin_prefix: str, max_attempts: int = 100, 
-                           callback: Optional[Callable[[str, dict], None]] = None) -> LiveCardFinder:
+                           callback: Optional[Callable[[str, dict], None]] = None,
+                           proxy: str | None = None) -> LiveCardFinder:
     """Start background search for Live card."""
     global _current_finder
     
@@ -172,7 +175,7 @@ def start_live_card_search(bin_prefix: str, max_attempts: int = 100,
         _current_finder.stop()
         _current_finder.wait(timeout=2)
     
-    _current_finder = LiveCardFinder(bin_prefix, max_attempts)
+    _current_finder = LiveCardFinder(bin_prefix, max_attempts, proxy=proxy)
     _current_finder.start(callback)
     return _current_finder
 

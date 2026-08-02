@@ -27,15 +27,18 @@ class ZaiSessionHttpClient(Protocol):
 
 
 class HttpxZaiSessionClient:
+    def __init__(self, proxy: str | None = None):
+        self._proxy = proxy
+    
     async def get(self, url: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
         import httpx
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, proxy=self._proxy) as client:
             resp = await client.get(url, headers=headers or {})
             return resp.status_code, resp.text
 
     async def post(self, url: str, body: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
         import httpx
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, proxy=self._proxy) as client:
             resp = await client.post(url, content=body, headers=headers or {})
             return resp.status_code, resp.text
 
@@ -90,7 +93,8 @@ async def initialize_session(
       3. Retry guest endpoint if needed
     """
     if client is None:
-        client = HttpxZaiSessionClient()
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        client = HttpxZaiSessionClient(proxy=_get_outbound_proxy())
 
     headers = {
         "Origin": ZAI_BASE_URL,

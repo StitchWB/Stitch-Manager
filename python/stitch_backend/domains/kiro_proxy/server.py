@@ -16,13 +16,16 @@ Outbound proxy support:
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,55 @@ ALLOWED_DOMAINS = {
     "signin.aws",
     "awsapps.com",
 }
+
+# Upstream headers stripped before forwarding to the client to avoid leaking
+# auth tokens, session cookies, or AWS request signatures.
+# ponytail: static blocklist — add headers here if new leaks appear.
+_BLOCKED_UPSTREAM_HEADERS = frozenset({
+    "set-cookie",
+    "www-authenticate",
+    "authorization",
+    "x-amz-request-id",
+})
+
+# Rate limiting — per-client-IP sliding window counter.
+# ponytail: in-memory sliding window, no external deps. Sufficient for a
+# single-process local proxy; one client cannot starve others (per-IP keys).
+# Upgrade to a token bucket or shared store if multi-process sharding lands.
+_rate_limiter: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX_REQUESTS = 100  # requests per window per client IP
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP — prefer X-Forwarded-For (first hop), fall back to socket peer."""
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        # X-Forwarded-For may be a chain; the leftmost entry is the original client.
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(client_ip: str) -> bool:
+    """Sliding-window rate limit check. Returns True if request is allowed.
+
+    Records the request timestamp on a per-IP list and prunes entries older
+    than the window. If the IP already has _RATE_LIMIT_MAX_REQUESTS entries
+    in the window, the request is rejected (caller returns 429).
+    """
+    now = time.time()
+    window_start = now - _RATE_LIMIT_WINDOW
+
+    # Prune expired entries (keeps memory bounded under sustained load).
+    _rate_limiter[client_ip] = [
+        ts for ts in _rate_limiter[client_ip] if ts > window_start
+    ]
+
+    if len(_rate_limiter[client_ip]) >= _RATE_LIMIT_MAX_REQUESTS:
+        return False
+
+    _rate_limiter[client_ip].append(now)
+    return True
 
 
 def _parse_proxy_url(proxy_string: str) -> str | None:
@@ -98,20 +150,52 @@ def _parse_proxy_url(proxy_string: str) -> str | None:
 
 
 def _get_outbound_proxy() -> str | None:
-    """Read outbound proxy from kiro-patch config."""
+    """Read outbound proxy from kiro-patch config.
+    
+    ponytail: cache with 5s TTL to avoid per-call disk I/O.
+    """
+    import time
+    
+    # Module-level cache
+    if not hasattr(_get_outbound_proxy, '_cache'):
+        _get_outbound_proxy._cache = None
+        _get_outbound_proxy._cache_time = 0
+    
+    # Return cached value if fresh (< 5 seconds old)
+    now = time.time()
+    if now - _get_outbound_proxy._cache_time < 5.0:
+        return _get_outbound_proxy._cache
+    
+    # Read from config and update cache
     try:
         from stitch_backend.domains.kiro_patch.service import get_config
         config = get_config()
         proxy_string = config.get("outboundProxy", "")
-        return _parse_proxy_url(proxy_string)
+        result = _parse_proxy_url(proxy_string)
+        _get_outbound_proxy._cache = result
+        _get_outbound_proxy._cache_time = now
+        return result
     except Exception as exc:
         logger.warning("Failed to read outbound proxy config: %s", exc)
-        return None
+        return _get_outbound_proxy._cache  # Return stale cache on error
 
 
 def _is_allowed_domain(host: str) -> bool:
     """Check if the target host is in our allowlist."""
     host_lower = host.lower()
+
+    # Block all IP addresses (IPv4 and IPv6) to prevent SSRF.
+    # Attackers can bypass a domain allowlist by pointing at IP literals,
+    # e.g. 169.254.169.254 (AWS/cloud metadata), 127.0.0.1, ::1, or
+    # link-local fe80::1. urlparse().hostname strips IPv6 brackets, but
+    # strip them defensively in case a caller passes a raw Host header.
+    host_for_ip = host_lower[1:-1] if host_lower.startswith("[") and host_lower.endswith("]") else host_lower
+    try:
+        ipaddress.ip_address(host_for_ip)
+        return False
+    except ValueError:
+        pass  # Not an IP literal — fall through to domain check
+
     # ponytail: require dot prefix to prevent SSRF via subdomain confusion
     # e.g., "evilkiro.dev" should NOT match "kiro.dev"
     return any(host_lower == d or host_lower.endswith("." + d) for d in ALLOWED_DOMAINS)
@@ -146,7 +230,7 @@ def _clean_headers(headers: dict[str, str]) -> dict[str, str]:
         "x-forwarded-for", "accept-language",
         # ponytail: strip Client Hints and other geo-leak vectors
         "sec-ch-ua", "sec-ch-ua-platform", "sec-ch-ua-mobile",
-        "referer", "accept-encoding",
+        "referer",
     }
     
     for key, value in headers.items():
@@ -199,6 +283,16 @@ app = FastAPI(title="Kiro Proxy", docs_url=None, redoc_url=None, lifespan=lifesp
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
 async def proxy_request(request: Request, path: str) -> Response:
     """Catch-all route that proxies requests to the original upstream."""
+    # Rate limit per client IP to prevent abuse / resource exhaustion.
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        logger.warning("Rate limit exceeded for client %s", client_ip)
+        return Response(
+            content="Too Many Requests",
+            status_code=429,
+            headers={"Retry-After": str(_RATE_LIMIT_WINDOW)},
+        )
+
     upstream_url = _build_upstream_url(request)
     
     # Security: only allow known domains
@@ -247,10 +341,14 @@ async def proxy_request(request: Request, path: str) -> Response:
                 headers=headers,
                 content=body,
             ) as upstream_response:
+                safe_headers = {
+                    k: v for k, v in upstream_response.headers.items()
+                    if k.lower() not in _BLOCKED_UPSTREAM_HEADERS
+                }
                 return StreamingResponse(
                     content=upstream_response.aiter_bytes(),
                     status_code=upstream_response.status_code,
-                    headers=dict(upstream_response.headers),
+                    headers=safe_headers,
                     media_type=upstream_response.headers.get("content-type"),
                 )
         else:
@@ -265,7 +363,10 @@ async def proxy_request(request: Request, path: str) -> Response:
             return Response(
                 content=upstream_response.content,
                 status_code=upstream_response.status_code,
-                headers=dict(upstream_response.headers),
+                headers={
+                    k: v for k, v in upstream_response.headers.items()
+                    if k.lower() not in _BLOCKED_UPSTREAM_HEADERS
+                },
                 media_type=upstream_response.headers.get("content-type"),
             )
             
@@ -281,168 +382,3 @@ async def proxy_request(request: Request, path: str) -> Response:
 async def health() -> dict[str, Any]:
     """Health check endpoint."""
     return {"status": "ok", "service": "kiro-proxy"}
-
-
-async def _proxy_websocket_via_socks5(
-    websocket: WebSocket,
-    target_host: str,
-    target_port: int,
-    proxy_url: str,
-    path: str,
-) -> None:
-    """Proxy WebSocket connection through SOCKS5 proxy using aiohttp + aiohttp-socks.
-    
-    Establishes a WebSocket connection through the SOCKS5 proxy and performs
-    bidirectional message forwarding between the client and upstream.
-    """
-    import asyncio
-    import aiohttp
-    from aiohttp_socks import ProxyConnector
-    
-    # Build WebSocket URL
-    ws_url = f"wss://{target_host}:{target_port}/{path}"
-    
-    # Create SOCKS proxy connector
-    connector = ProxyConnector.from_url(proxy_url)
-    
-    try:
-        await websocket.accept()
-        
-        async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.ws_connect(ws_url) as upstream_ws:
-                async def forward_client_to_upstream():
-                    try:
-                        while True:
-                            message = await websocket.receive()
-                            if message["type"] == "websocket.receive":
-                                if "bytes" in message and message["bytes"]:
-                                    await upstream_ws.send_bytes(message["bytes"])
-                                elif "text" in message and message["text"]:
-                                    await upstream_ws.send_str(message["text"])
-                            elif message["type"] == "websocket.disconnect":
-                                await upstream_ws.close()
-                                break
-                    except Exception as e:
-                        logger.debug("Client→upstream forwarding ended: %s", e)
-                
-                async def forward_upstream_to_client():
-                    try:
-                        async for msg in upstream_ws:
-                            if msg.type == aiohttp.WSMsgType.BINARY:
-                                await websocket.send_bytes(msg.data)
-                            elif msg.type == aiohttp.WSMsgType.TEXT:
-                                await websocket.send_text(msg.data)
-                            elif msg.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSING, aiohttp.WSMsgType.CLOSED):
-                                break
-                            elif msg.type == aiohttp.WSMsgType.ERROR:
-                                logger.error("Upstream WebSocket error: %s", upstream_ws.exception())
-                                break
-                    except Exception as e:
-                        logger.debug("Upstream→client forwarding ended: %s", e)
-                
-                # Run both directions concurrently
-                await asyncio.gather(
-                    forward_client_to_upstream(),
-                    forward_upstream_to_client(),
-                    return_exceptions=True,
-                )
-    
-    except Exception as e:
-        logger.error("SOCKS5 WebSocket proxy failed: %s", e)
-        try:
-            await websocket.close(code=1011, reason=f"Proxy error: {e}")
-        except Exception:
-            pass
-
-
-@app.websocket("/{path:path}")
-async def websocket_proxy(websocket: WebSocket, path: str) -> None:
-    """WebSocket proxy endpoint that routes through outbound proxy.
-    
-    Accepts WebSocket upgrade from Kiro IDE, establishes CONNECT tunnel
-    through the configured outbound proxy, and performs bidirectional
-    message forwarding.
-    """
-    # Extract target host from X-Forwarded headers (set by JS inject)
-    target_host = websocket.headers.get("x-forwarded-host", "")
-    target_proto = websocket.headers.get("x-forwarded-proto", "wss")
-    target_port_str = websocket.headers.get("x-forwarded-port", "443")
-    
-    if not target_host:
-        # Fallback: use Host header
-        target_host = websocket.headers.get("host", "runtime.us-east-1.kiro.dev")
-    
-    try:
-        target_port = int(target_port_str)
-    except ValueError:
-        target_port = 443
-    
-    # Security: only allow known domains
-    if not _is_allowed_domain(target_host):
-        logger.warning("Blocked WebSocket to disallowed domain: %s", target_host)
-        await websocket.close(code=1008, reason="Domain not in allowlist")
-        return
-    
-    # Get outbound proxy config
-    outbound_proxy = _get_outbound_proxy()
-    
-    logger.info(
-        "WebSocket proxy: %s:%d → %s",
-        target_host, target_port,
-        outbound_proxy or "direct"
-    )
-    
-    if outbound_proxy and outbound_proxy.startswith(("socks5://", "socks5h://")):
-        # Use SOCKS5 proxy for WebSocket
-        await _proxy_websocket_via_socks5(
-            websocket, target_host, target_port, outbound_proxy, path
-        )
-    else:
-        # Direct connection (no proxy or HTTP proxy - HTTP proxy doesn't support WS)
-        if outbound_proxy and outbound_proxy.startswith(("http://", "https://")):
-            # ponytail: block WebSocket when HTTP proxy configured to prevent IP leak
-            # HTTP proxies don't support WebSocket CONNECT tunnel, so we can't proxy WS
-            # Blocking is safer than falling back to direct (which would leak real IP)
-            logger.error(
-                "WebSocket blocked: HTTP proxy doesn't support WS tunneling. "
-                "Use SOCKS5 proxy for WebSocket support."
-            )
-            await websocket.close(code=1008, reason="HTTP proxy incompatible with WebSocket")
-            return
-        
-        try:
-            # Use websockets library for direct connection (no proxy configured)
-            import websockets
-            
-            await websocket.accept()
-            
-            ws_url = f"{target_proto}://{target_host}:{target_port}/{path}"
-            
-            async with websockets.connect(ws_url) as upstream_ws:
-                async def forward_client():
-                    try:
-                        async for message in websocket:
-                            await upstream_ws.send(message)
-                    except WebSocketDisconnect:
-                        pass
-                
-                async def forward_upstream():
-                    try:
-                        async for message in upstream_ws:
-                            await websocket.send(message)
-                    except websockets.exceptions.ConnectionClosed:
-                        pass
-                
-                import asyncio
-                await asyncio.gather(
-                    forward_client(),
-                    forward_upstream(),
-                    return_exceptions=True,
-                )
-        
-        except Exception as e:
-            logger.error("Direct WebSocket proxy failed: %s", e)
-            try:
-                await websocket.close(code=1011, reason=f"Proxy error: {e}")
-            except Exception:
-                pass

@@ -323,15 +323,25 @@ class BaseBrowser:
                 host = self._proxy_url
                 port = '8080'  # default
             
-            # Build proxy string based on type
+            # Build proxy string based on type.
+            # socks5h:// resolves DNS on the proxy side (remote), preventing DNS
+            # leaks. socks5:// resolves DNS locally via the system resolver,
+            # leaking target domains.
+            #
+            # Chrome limitation: Chrome's --proxy-server flag does NOT recognize
+            # the socks5h:// scheme (only http/socks/socks4/socks5). However,
+            # Chrome's SOCKS5 implementation already does remote DNS resolution
+            # by default, so socks5:// in Chrome is already leak-free. The
+            # socks5h:// scheme is honoured by Playwright/patchright (ShardBrowser
+            # engine) and Python HTTP clients (aiohttp, requests).
             if self._proxy_username and self._proxy_password:
                 if self._proxy_type == 'socks5':
-                    proxy_str = f"socks5://{self._proxy_username}:{self._proxy_password}@{host}:{port}"
+                    proxy_str = f"socks5h://{self._proxy_username}:{self._proxy_password}@{host}:{port}"
                 else:  # http
                     proxy_str = f"http://{self._proxy_username}:{self._proxy_password}@{host}:{port}"
             else:
                 if self._proxy_type == 'socks5':
-                    proxy_str = f"socks5://{host}:{port}"
+                    proxy_str = f"socks5h://{host}:{port}"
                 else:  # http
                     proxy_str = f"http://{host}:{port}"
             
@@ -431,13 +441,15 @@ class BaseBrowser:
             )
 
         # Build proxy URL: ShardBrowser expects a full URI like
-        # "socks5://user:pass@host:port" or "http://host:port"
+        # "socks5h://user:pass@host:port" or "http://host:port".
+        # socks5h:// resolves DNS on the proxy side (remote), preventing DNS
+        # leaks. Playwright/patchright supports socks5h:// natively.
         proxy_uri: Optional[str] = None
         if self._proxy_enabled and self._proxy_url:
             if "://" in self._proxy_url:
                 proxy_uri = self._proxy_url  # already a full URI
             else:
-                scheme = "socks5" if self._proxy_type == "socks5" else "http"
+                scheme = "socks5h" if self._proxy_type == "socks5" else "http"
                 if self._proxy_username and self._proxy_password:
                     proxy_uri = (
                         f"{scheme}://{self._proxy_username}:{self._proxy_password}"

@@ -117,6 +117,16 @@ class QuotaService:
         self.paths = get_paths()
         self.client = KiroWebPortalClient(proxy=proxy)
 
+    def close(self) -> None:
+        """Close the underlying Web Portal client and its requests.Session."""
+        self.client.close()
+
+    def __enter__(self) -> "QuotaService":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     def get_quota_from_cw_api(self, access_token: str, region: str = 'us-east-1', proxy: str | None = None) -> QuotaInfo | None:
         """
         Получает квоту через CodeWhisperer API.
@@ -290,12 +300,11 @@ class QuotaService:
                 logger.warning("[Quota] Kiro state.vscdb not found")
                 return None
 
-            conn = sqlite3.connect(str(db_path))
-            cursor = conn.cursor()
-
-            cursor.execute("SELECT value FROM ItemTable WHERE key = ?", ('kiro.kiroAgent',))
-            result = cursor.fetchone()
-            conn.close()
+            # ponytail: use context manager to prevent connection leak on exception
+            with sqlite3.connect(str(db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT value FROM ItemTable WHERE key = ?", ('kiro.kiroAgent',))
+                result = cursor.fetchone()
 
             if not result:
                 logger.warning("[Quota] kiro.kiroAgent key not found in state.vscdb")

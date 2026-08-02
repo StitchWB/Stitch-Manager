@@ -57,7 +57,7 @@ class ZaiChatResult:
 
 
 class ZaiHttpClient(Protocol):
-    async def send(self, request: ZaiHttpRequest) -> ZaiHttpResponse: ...
+    async def send(self, request: ZaiHttpRequest, proxy: str | None = None) -> ZaiHttpResponse: ...
 
 
 class ZaiAdapterError(RuntimeError):
@@ -67,10 +67,10 @@ class ZaiAdapterError(RuntimeError):
 
 
 class HttpxZaiHttpClient:
-    async def send(self, request: ZaiHttpRequest) -> ZaiHttpResponse:
+    async def send(self, request: ZaiHttpRequest, proxy: str | None = None) -> ZaiHttpResponse:
         import httpx
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, proxy=proxy) as client:
             response = await client.post(request.url, headers=request.headers, json=request.json_body)
         return ZaiHttpResponse(status_code=response.status_code, text=response.text)
 

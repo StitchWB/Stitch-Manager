@@ -27,12 +27,12 @@ def _headers(api_token: str) -> dict[str, str]:
     }
 
 
-async def test_connection(api_token: str) -> dict[str, Any]:
+async def test_connection(api_token: str, proxy: str | None = None) -> dict[str, Any]:
     """Test Addy.io token — returns token details.
 
     Equivalent to Rust ``test_addyio_connection``.
     """
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=proxy) as client:
         resp = await client.get(
             f"{_ADDY_BASE}/api-token-details",
             headers=_headers(api_token),
@@ -41,12 +41,12 @@ async def test_connection(api_token: str) -> dict[str, Any]:
         return resp.json()
 
 
-async def get_account(api_token: str) -> dict[str, Any]:
+async def get_account(api_token: str, proxy: str | None = None) -> dict[str, Any]:
     """Get Addy.io account details.
 
     Equivalent to Rust ``get_addyio_account``.
     """
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=proxy) as client:
         resp = await client.get(
             f"{_ADDY_BASE}/account-details",
             headers=_headers(api_token),
@@ -56,12 +56,12 @@ async def get_account(api_token: str) -> dict[str, Any]:
         return data.get("data", data)
 
 
-async def get_domains(api_token: str) -> dict[str, Any]:
+async def get_domains(api_token: str, proxy: str | None = None) -> dict[str, Any]:
     """Get Addy.io domain options.
 
     Equivalent to Rust ``get_addyio_domains``.
     """
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=proxy) as client:
         resp = await client.get(
             f"{_ADDY_BASE}/domain-options",
             headers=_headers(api_token),
@@ -70,12 +70,12 @@ async def get_domains(api_token: str) -> dict[str, Any]:
         return resp.json()
 
 
-async def get_recipients(api_token: str) -> list[dict[str, Any]]:
+async def get_recipients(api_token: str, proxy: str | None = None) -> list[dict[str, Any]]:
     """Get verified Addy.io recipients.
 
     Equivalent to Rust ``get_addyio_recipients``.
     """
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=proxy) as client:
         resp = await client.get(
             f"{_ADDY_BASE}/recipients?filter[verified]=true",
             headers=_headers(api_token),

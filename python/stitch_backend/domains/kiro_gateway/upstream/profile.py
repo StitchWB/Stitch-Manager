@@ -51,7 +51,12 @@ async def fetch_enterprise_profile_arn(
     headers = _make_headers(account)
     fallback = _region_fallback_arn(account.get("region"))
 
-    resolved_client = client or httpx.AsyncClient()
+    if client is None:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        proxy_url = _get_outbound_proxy()
+        resolved_client = httpx.AsyncClient(proxy=proxy_url)
+    else:
+        resolved_client = client
 
     async def _do_request() -> str | None:
         try:

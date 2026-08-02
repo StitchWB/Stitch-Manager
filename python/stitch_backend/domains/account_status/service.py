@@ -329,7 +329,9 @@ async def _check_windsurf_quota(api_key: str, installation_id: str) -> dict[str,
     body = {"metadata": {"installationId": installation_id}}
 
     try:
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        proxy_url = _get_outbound_proxy()
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, proxy=proxy_url) as client:
             resp = await client.post(url, json=body, headers=headers)
             if resp.status_code >= 400:
                 return _status_info(
@@ -371,7 +373,9 @@ async def _check_kiro_quota(token: str) -> dict[str, Any]:
         "Content-Type": "application/json",
     }
     try:
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        proxy_url = _get_outbound_proxy()
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, proxy=proxy_url) as client:
             resp = await client.get(
                 "https://api.us-east-1.codewhisperer.amazonaws.com/quota",
                 headers=headers,

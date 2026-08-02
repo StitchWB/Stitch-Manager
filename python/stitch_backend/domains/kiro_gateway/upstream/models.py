@@ -134,7 +134,12 @@ async def fetch_kiro_models(
 
     all_models: list[KiroModel] = []
     next_token: str | None = None
-    resolved_client = client or httpx.AsyncClient()
+    if client is None:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        proxy_url = _get_outbound_proxy()
+        resolved_client = httpx.AsyncClient(proxy=proxy_url)
+    else:
+        resolved_client = client
 
     async def _do_request() -> list[KiroModel]:
         nonlocal next_token

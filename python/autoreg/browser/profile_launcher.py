@@ -426,7 +426,10 @@ async def _fetch_json_with_optional_proxy(
         except Exception as e:  # pragma: no cover
             raise RuntimeError("aiohttp-socks is required for socks proxies") from e
 
-        connector = ProxyConnector.from_url(proxy.to_url(include_auth=True))
+        # socks5h:// resolves DNS on the proxy side (remote), preventing DNS leaks.
+        # socks5:// resolves DNS locally via the system resolver, leaking target domains.
+        proxy_url = proxy.to_url(include_auth=True).replace("socks5://", "socks5h://", 1)
+        connector = ProxyConnector.from_url(proxy_url)
         async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             async with session.get(url, headers={"Accept": "application/json"}) as resp:
                 data = await resp.json(content_type=None)

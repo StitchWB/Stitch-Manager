@@ -57,7 +57,7 @@ JsonObject: TypeAlias = dict[str, JsonValue]
 
 
 class CaptchaHttpClient(Protocol):
-    async def post(self, url: str, body: str, extra_headers: dict[str, str] | None = None) -> str: ...
+    async def post(self, url: str, body: str, extra_headers: dict[str, str] | None = None, proxy: str | None = None) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,13 +72,13 @@ class CaptchaError(RuntimeError):
 
 
 class HttpxCaptchaClient:
-    async def post(self, url: str, body: str, extra_headers: dict[str, str] | None = None) -> str:
+    async def post(self, url: str, body: str, extra_headers: dict[str, str] | None = None, proxy: str | None = None) -> str:
         import httpx
 
         headers: dict[str, str] = {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}
         if extra_headers:
             headers.update(extra_headers)
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
             resp = await client.post(url, content=body, headers=headers)
             return resp.text
 
