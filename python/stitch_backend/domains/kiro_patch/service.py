@@ -7,11 +7,15 @@ Patch injection/removal delegates to a helper module.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
 import uuid
 from pathlib import Path
 from typing import Any
+
+from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +62,44 @@ def _config_path() -> Path:
     return _config_dir() / "kiro-patch-config.json"
 
 
+# ── Proxy credential encryption ───────────────────────────────────────────────
+# Strategy: outbound proxy credentials (user:pass@host:port) are encrypted at
+# rest in the JSON config using Fernet symmetric encryption. The key is derived
+# via SHA-256 from the config's machineId (a per-installation UUID). This
+# prevents casual inspection of the config file but not a determined attacker
+# with machine access. Backward compat: plaintext proxies (no "gAAAA" prefix)
+# pass through unchanged on read, and are encrypted on next save.
+
+def _get_encryption_key(machine_id: str) -> bytes:
+    """Derive a Fernet key from the machine ID (deterministic per installation)."""
+    key = hashlib.sha256(machine_id.encode()).digest()
+    return base64.urlsafe_b64encode(key)
+
+
+def _encrypt_proxy(proxy: str, machine_id: str) -> str:
+    """Encrypt proxy credentials. Returns plaintext if no credentials or already encrypted."""
+    # No proxy, or no @ (no credentials, or already a Fernet token — those have no @)
+    if not proxy or "@" not in proxy:
+        return proxy
+    if not machine_id:
+        return proxy  # Cannot encrypt without a machine ID
+    key = _get_encryption_key(machine_id)
+    return Fernet(key).encrypt(proxy.encode()).decode()
+
+
+def _decrypt_proxy(encrypted: str, machine_id: str) -> str:
+    """Decrypt proxy credentials. Returns plaintext if not encrypted (backward compat)."""
+    if not encrypted or not encrypted.startswith("gAAAA"):
+        return encrypted  # Not encrypted — plaintext from old config
+    if not machine_id:
+        return encrypted  # Cannot decrypt without a machine ID
+    try:
+        key = _get_encryption_key(machine_id)
+        return Fernet(key).decrypt(encrypted.encode()).decode()
+    except Exception:
+        return encrypted  # Decryption failed, return as-is
+
+
 def get_config() -> dict[str, Any]:
     """Read config from disk or return defaults."""
     path = _config_path()
@@ -70,6 +112,10 @@ def get_config() -> dict[str, Any]:
         # Ensure machineId exists
         if not data.get("machineId"):
             data["machineId"] = str(uuid.uuid4())
+        # Decrypt outbound proxy if encrypted (backward compat: plaintext passes through)
+        data["outboundProxy"] = _decrypt_proxy(
+            data.get("outboundProxy", ""), data["machineId"]
+        )
         return data
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to read kiro config: %s", exc)
@@ -81,7 +127,14 @@ def get_config() -> dict[str, Any]:
 def save_config(config: dict[str, Any]) -> None:
     """Write config to disk."""
     path = _config_path()
-    path.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Encrypt outbound proxy credentials at rest; work on a copy so the
+    # caller's dict retains plaintext for runtime use.
+    to_write = dict(config)
+    machine_id = config.get("machineId", "")
+    to_write["outboundProxy"] = _encrypt_proxy(
+        config.get("outboundProxy", ""), machine_id
+    )
+    path.write_text(json.dumps(to_write, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 # ── Machine ID ────────────────────────────────────────────────────────────────
@@ -433,3 +486,20 @@ def remove_patch() -> str:
         logger.info("Kiro patch removed from %s", target)
         return "Kiro patch removed successfully."
     return "No Kiro patch found to remove."
+
+
+if __name__ == "__main__":
+    # ponytail: self-check for encrypt/decrypt round-trip + backward compat
+    mid = "test-machine-id-1234"
+    proxy = "socks5://user:p@ss@host:1080"
+    enc = _encrypt_proxy(proxy, mid)
+    assert enc != proxy and enc.startswith("gAAAA"), "encryption failed"
+    assert _decrypt_proxy(enc, mid) == proxy, "decryption failed"
+    # Backward compat: plaintext passes through unchanged
+    assert _decrypt_proxy(proxy, mid) == proxy, "plaintext should pass through"
+    # No credentials (no @) — not encrypted
+    assert _encrypt_proxy("host:1080", mid) == "host:1080", "no-cred should not encrypt"
+    # Empty / no machine_id — returned as-is
+    assert _encrypt_proxy("", mid) == ""
+    assert _encrypt_proxy(proxy, "") == proxy
+    print("OK: proxy encryption round-trip + backward compat")

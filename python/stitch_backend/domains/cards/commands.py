@@ -24,16 +24,20 @@ async def cmd_generate_cards(params: dict) -> list:
 async def cmd_check_card_rust(params: dict) -> dict:
     """Check a card via BIN lookup API."""
     from stitch_backend.domains.cards import service
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
     card_data = params.get("cardData", params.get("card_data", ""))
-    return await service.check_card(card_data)
+    return await service.check_card(card_data, proxy=_get_outbound_proxy())
 
 
 @register_command("find_live_card")
 async def cmd_find_live_card(params: dict) -> dict | None:
     """Generate and check cards until a live one is found."""
     from stitch_backend.domains.cards import service
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
     bin_str = params.get("bin", "")
     max_attempts = int(params.get("maxAttempts", params.get("max_attempts", 50)))
     month = params.get("month")
     year = params.get("year")
-    return await service.find_live_card(bin_str, max_attempts, month, year)
+    return await service.find_live_card(
+        bin_str, max_attempts, month, year, proxy=_get_outbound_proxy(),
+    )

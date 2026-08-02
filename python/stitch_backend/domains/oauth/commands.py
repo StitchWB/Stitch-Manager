@@ -31,6 +31,7 @@ async def cmd_start_oauth_pkce(params: dict) -> dict:
 async def cmd_exchange_oauth_code(params: dict) -> dict:
     """Exchange an authorization code for tokens."""
     from stitch_backend.domains.oauth.pkce import PKCEFlow
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
 
     flow = PKCEFlow(
         authorize_url=params.get("authorizeUrl", ""),
@@ -38,7 +39,8 @@ async def cmd_exchange_oauth_code(params: dict) -> dict:
         client_id=params.get("clientId", ""),
     )
     flow.code_verifier = params.get("codeVerifier", "")
-    tokens = await flow.exchange_code(params.get("code", ""))
+    proxy = _get_outbound_proxy()
+    tokens = await flow.exchange_code(params.get("code", ""), proxy=proxy)
     return tokens
 
 
@@ -111,7 +113,9 @@ async def cmd_refresh_oauth_token(params: dict) -> dict:
         payload["client_secret"] = client_secret
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+        proxy_url = _get_outbound_proxy()
+        async with httpx.AsyncClient(timeout=30, proxy=proxy_url) as client:
             resp = await client.post(token_url, data=payload)
             resp.raise_for_status()
             data = resp.json()

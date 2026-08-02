@@ -11,7 +11,7 @@ import json
 import logging
 import time
 import types
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import httpx
@@ -57,7 +57,7 @@ class KiroExecutor:
     def __init__(
         self,
         pool: AccountPool,
-        session_factory: Callable[[], AsyncSession],
+        session_factory: Callable[[], Awaitable[AsyncSession]],
         affinity: SessionAffinityStore,
         stats: ProxyStats,
         http_client: httpx.AsyncClient,
@@ -87,16 +87,21 @@ class KiroExecutor:
         if current_proxy != self._cached_proxy:
             # Close old proxy client if exists
             if self._cached_proxy_client is not None:
-                # Fire-and-forget close (async close in sync method)
+                # ponytail: fire-and-forget close with error logging
                 import asyncio
                 try:
                     loop = asyncio.get_event_loop()
+                    old_client = self._cached_proxy_client
                     if loop.is_running():
-                        loop.create_task(self._cached_proxy_client.aclose())
+                        task = loop.create_task(old_client.aclose())
+                        task.add_done_callback(
+                            lambda t: logger.warning("Proxy client close failed: %s", t.exception())
+                            if t.exception() else None
+                        )
                     else:
-                        loop.run_until_complete(self._cached_proxy_client.aclose())
-                except Exception:
-                    pass  # Best-effort close
+                        loop.run_until_complete(old_client.aclose())
+                except Exception as e:
+                    logger.debug("Proxy client close error: %s", e)
             
             # Create new proxy client if proxy is configured
             if current_proxy is not None:
@@ -147,7 +152,8 @@ class KiroExecutor:
     async def _make_svc(self) -> KiroGatewayService:
         from stitch_backend.domains.kiro_gateway.service import KiroGatewayService
 
-        return KiroGatewayService(self._session_factory(), self._pool)
+        db = await self._session_factory()
+        return KiroGatewayService(db, self._pool)
 
     # ── Pipeline ────────────────────────────────────────────────────────────
 

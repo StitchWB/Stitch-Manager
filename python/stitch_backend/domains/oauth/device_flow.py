@@ -30,13 +30,13 @@ class DeviceFlow:
         self.client_id = client_id
         self.scope = scope
 
-    async def request_device_code(self) -> dict[str, Any]:
+    async def request_device_code(self, proxy: str | None = None) -> dict[str, Any]:
         """Request a device code from the authorization server."""
         payload = {"client_id": self.client_id}
         if self.scope:
             payload["scope"] = self.scope
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(proxy=proxy) as client:
             resp = await client.post(self.device_auth_url, data=payload)
             resp.raise_for_status()
             data = resp.json()
@@ -51,6 +51,7 @@ class DeviceFlow:
         device_code: str,
         interval: int = 5,
         expires_in: int = 900,
+        proxy: str | None = None,
     ) -> dict[str, Any]:
         """Poll the token endpoint until the user authorizes or timeout."""
         elapsed = 0
@@ -60,7 +61,7 @@ class DeviceFlow:
             "client_id": self.client_id,
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(proxy=proxy) as client:
             while elapsed < expires_in:
                 resp = await client.post(self.token_url, data=payload)
                 data = resp.json()

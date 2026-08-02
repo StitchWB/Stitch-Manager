@@ -111,7 +111,7 @@ def generate_cards(
 
 # ── Card check ────────────────────────────────────────────────────────────────
 
-async def check_card(card_data: str) -> dict[str, Any]:
+async def check_card(card_data: str, proxy: str | None = None) -> dict[str, Any]:
     """Check a card via BIN lookup API.
 
     *card_data* format: ``number|month|year|cvv`` or just ``number``.
@@ -132,7 +132,7 @@ async def check_card(card_data: str) -> dict[str, Any]:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, proxy=proxy) as client:
             resp = await client.get(
                 _BIN_CHECK_URL,
                 params={"bin": bin_prefix},
@@ -175,13 +175,14 @@ async def find_live_card(
     max_attempts: int = 50,
     month: str | None = None,
     year: str | None = None,
+    proxy: str | None = None,
 ) -> dict[str, Any] | None:
     """Generate and check cards until a 'live' one is found or max_attempts."""
     max_attempts = max(1, min(max_attempts, 200))
     for _ in range(max_attempts):
         cards = generate_cards(bin_str, 1, month, year)
         card = cards[0]
-        result = await check_card(card["format"])
+        result = await check_card(card["format"], proxy=proxy)
         if result.get("success") and result.get("status") == "Live":
             return card
     return None

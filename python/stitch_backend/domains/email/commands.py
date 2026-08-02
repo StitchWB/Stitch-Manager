@@ -55,12 +55,13 @@ async def cmd_poll_verification_link(params: dict) -> dict:
 async def cmd_test_addyio_connection(params: dict) -> dict:
     """Test Addy.io API token — returns token details."""
     from stitch_backend.domains.email import addyio
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
 
     api_token = (params.get("apiToken") or params.get("api_token") or "").strip()
     if not api_token:
         return {"error": "apiToken is required"}
     try:
-        return await addyio.test_connection(api_token)
+        return await addyio.test_connection(api_token, proxy=_get_outbound_proxy())
     except Exception as exc:
         return {"error": f"Addy.io connection failed: {exc}"}
 
@@ -69,12 +70,13 @@ async def cmd_test_addyio_connection(params: dict) -> dict:
 async def cmd_get_addyio_account(params: dict) -> dict:
     """Get Addy.io account details."""
     from stitch_backend.domains.email import addyio
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
 
     api_token = (params.get("apiToken") or params.get("api_token") or "").strip()
     if not api_token:
         return {"error": "apiToken is required"}
     try:
-        return await addyio.get_account(api_token)
+        return await addyio.get_account(api_token, proxy=_get_outbound_proxy())
     except Exception as exc:
         return {"error": f"Addy.io request failed: {exc}"}
 
@@ -83,12 +85,13 @@ async def cmd_get_addyio_account(params: dict) -> dict:
 async def cmd_get_addyio_domains(params: dict) -> dict:
     """Get Addy.io domain options."""
     from stitch_backend.domains.email import addyio
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
 
     api_token = (params.get("apiToken") or params.get("api_token") or "").strip()
     if not api_token:
         return {"error": "apiToken is required"}
     try:
-        return await addyio.get_domains(api_token)
+        return await addyio.get_domains(api_token, proxy=_get_outbound_proxy())
     except Exception as exc:
         return {"error": f"Addy.io request failed: {exc}"}
 
@@ -97,12 +100,13 @@ async def cmd_get_addyio_domains(params: dict) -> dict:
 async def cmd_get_addyio_recipients(params: dict) -> list:
     """Get verified Addy.io recipients."""
     from stitch_backend.domains.email import addyio
+    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
 
     api_token = (params.get("apiToken") or params.get("api_token") or "").strip()
     if not api_token:
         return []
     try:
-        return await addyio.get_recipients(api_token)
+        return await addyio.get_recipients(api_token, proxy=_get_outbound_proxy())
     except Exception as exc:
         return [{"error": f"Addy.io request failed: {exc}"}]
 

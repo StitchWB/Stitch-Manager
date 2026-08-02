@@ -132,12 +132,13 @@ def _get_endpoints(preferred: str | None = None) -> list[_Endpoint]:
 
 def _build_headers(account: AccountLike, endpoint: _Endpoint) -> dict[str, str]:
     """Build request headers matching the official Kiro IDE fingerprint."""
-    machine_id = account.machineId or ""
+    # machine_id intentionally omitted from User-Agent — including it lets AWS
+    # fingerprint and correlate requests across installations/accounts.
     request_id = str(uuid.uuid4())
     return {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {account.accessToken}",
-        "x-amz-user-agent": f"aws-sdk-js/1.0.34 api/codewhisperer os/windows lang/js md/nodejs/{machine_id}",
+        "x-amz-user-agent": "aws-sdk-js/1.0.34 api/codewhisperer os/windows lang/js",
         "user-agent": "aws-sdk-js/1.0.34 os/windows lang/js",
         "amz-sdk-invocation-id": request_id,
         "amz-sdk-request": "attempt=1; max=1",

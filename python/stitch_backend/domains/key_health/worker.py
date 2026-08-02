@@ -225,9 +225,12 @@ class KeyHealthWorker:
         except KeyError:
             # Unknown adapter type — fall back to legacy httpx
             try:
+                from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
                 url = f"{test_url}/v1/models"
                 headers = {"Authorization": f"Bearer {api_key}"}
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(
+                    timeout=10.0, proxy=_get_outbound_proxy(),
+                ) as client:
                     resp = await client.get(url, headers=headers)
                     http_status = resp.status_code
                     if resp.status_code == 200:

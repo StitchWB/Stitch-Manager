@@ -64,7 +64,7 @@ class PKCEFlow:
         query = "&".join(f"{k}={v}" for k, v in params.items())
         return f"{self.authorize_url}?{query}"
 
-    async def exchange_code(self, code: str) -> dict[str, Any]:
+    async def exchange_code(self, code: str, proxy: str | None = None) -> dict[str, Any]:
         """Exchange the authorization code for tokens."""
         payload = {
             "grant_type": "authorization_code",
@@ -73,7 +73,7 @@ class PKCEFlow:
             "client_id": self.client_id,
             "code_verifier": self.code_verifier,
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(proxy=proxy) as client:
             resp = await client.post(self.token_url, data=payload)
             resp.raise_for_status()
             tokens = resp.json()
