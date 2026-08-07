@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 
-from stitch_backend.database import run_in_session, run_in_read_session
+from stitch_backend.database import run_in_session
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.scheduler.service import (
     ScheduledTask,
@@ -103,6 +103,10 @@ class SchedulerWorker:
         
         await run_in_session(_op)
         logger.debug("[Scheduler] batch persisted %d results", len(results))
+        try:
+            await event_bus.emit("scheduler.tasks_changed", {"count": len(results)})
+        except Exception:
+            logger.debug("[Scheduler] failed to emit tasks_changed", exc_info=True)
 
     async def _run_task(self, task: ScheduledTask) -> str:
         """Execute the actual task logic."""
