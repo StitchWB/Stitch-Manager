@@ -44,7 +44,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(getGeminiApiKeys()).resolves.toEqual(keys);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_gemini_api_keys',
+      '/api/get_gemini_api_keys',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -55,7 +55,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(setGeminiApiKeys(keys)).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/set_gemini_api_keys',
+      '/api/set_gemini_api_keys',
       expect.objectContaining({ body: JSON.stringify({ keys }) }),
     );
   });
@@ -66,7 +66,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(getOpenAIApiKeys()).resolves.toEqual(keys);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_openai_api_keys',
+      '/api/get_openai_api_keys',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -77,7 +77,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(setOpenAIApiKeys(keys)).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/set_openai_api_keys',
+      '/api/set_openai_api_keys',
       expect.objectContaining({ body: JSON.stringify({ keys }) }),
     );
   });
@@ -88,7 +88,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(getAntigravityApiKeys()).resolves.toEqual(keys);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_antigravity_api_keys',
+      '/api/get_antigravity_api_keys',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -99,7 +99,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(setAntigravityApiKeys(keys)).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/set_antigravity_api_keys',
+      '/api/set_antigravity_api_keys',
       expect.objectContaining({ body: JSON.stringify({ keys }) }),
     );
   });
@@ -110,7 +110,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(getZaiApiKeys()).resolves.toEqual(keys);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_zai_api_keys',
+      '/api/get_zai_api_keys',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -121,7 +121,7 @@ describe('lib/Backend/modules/apiKeys', () => {
 
     await expect(setZaiApiKeys(keys)).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/set_zai_api_keys',
+      '/api/set_zai_api_keys',
       expect.objectContaining({ body: JSON.stringify({ keys }) }),
     );
   });

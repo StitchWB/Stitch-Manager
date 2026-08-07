@@ -40,7 +40,7 @@ describe('safeInvoke', () => {
 
     expect(result).toEqual(mockResult);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_account',
+      '/api/get_account',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ id: 1 }),
@@ -73,7 +73,7 @@ describe('safeInvoke', () => {
     await safeInvoke('list_accounts', args);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/list_accounts',
+      '/api/list_accounts',
       expect.objectContaining({
         body: JSON.stringify(args),
       }),
@@ -87,7 +87,7 @@ describe('safeInvoke', () => {
 
     expect(result).toEqual({ status: 'ok' });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_status',
+      '/api/get_status',
       expect.objectContaining({
         body: JSON.stringify({}),
       }),
@@ -119,7 +119,7 @@ describe('safeInvokeWithRetry', () => {
     const mockResult = { success: true };
     globalThis.fetch = mockFetchOk(mockResult) as typeof fetch;
 
-    const result = await safeInvokeWithRetry('test_command', {}, 3, 1000);
+    const result = await safeInvokeWithRetry('test_command_ok', {}, 3, 1000);
 
     expect(result).toEqual(mockResult);
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
@@ -135,7 +135,7 @@ describe('safeInvokeWithRetry', () => {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) });
     }) as unknown as typeof fetch;
 
-    const promise = safeInvokeWithRetry('test_command', {}, 3, 1000);
+    const promise = safeInvokeWithRetry('test_command_retry', {}, 3, 1000);
 
     // Fast-forward through retry delays
     await jest.runAllTimersAsync();
@@ -149,7 +149,7 @@ describe('safeInvokeWithRetry', () => {
   it('should throw after max retries exceeded', async () => {
     globalThis.fetch = mockFetchError(500, { message: 'Persistent failure' }) as typeof fetch;
 
-    const promise = safeInvokeWithRetry('test_command', {}, 2, 500);
+    const promise = safeInvokeWithRetry('test_command_fail', {}, 2, 500);
 
     const assertion = expect(promise).rejects.toThrow(BackendError);
 
@@ -183,9 +183,9 @@ describe('batchInvoke', () => {
     }) as typeof fetch;
 
     const commands = [
-      { command: 'get_account', args: { id: 1 } },
-      { command: 'get_account', args: { id: 2 } },
-      { command: 'get_account', args: { id: 3 } },
+      { command: 'batch_get_account', args: { id: 1 } },
+      { command: 'batch_get_account', args: { id: 2 } },
+      { command: 'batch_get_account', args: { id: 3 } },
     ];
 
     const batchResults = await batchInvoke(commands);

@@ -57,7 +57,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       link: [{ key: 'from_account_provider', value: 'gmail' }],
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/upsert_google_sheets_account_link',
+      '/api/upsert_google_sheets_account_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -73,7 +73,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       accountLinkId: 'al-1',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/delete_google_sheets_account_link',
+      '/api/delete_google_sheets_account_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -89,7 +89,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       link: [{ key: 'profile_alias', value: 'profile-main' }],
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/upsert_google_sheets_profile_link',
+      '/api/upsert_google_sheets_profile_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -105,7 +105,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       profileLinkId: 'pl-1',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/delete_google_sheets_profile_link',
+      '/api/delete_google_sheets_profile_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -121,7 +121,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       method: [{ key: 'auth_type', value: 'api_key' }],
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/upsert_google_sheets_auth_method',
+      '/api/upsert_google_sheets_auth_method',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -137,7 +137,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       authMethodId: 'am-1',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/delete_google_sheets_auth_method',
+      '/api/delete_google_sheets_auth_method',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -153,7 +153,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       link: [{ key: 'auth_method_id', value: 'am-1' }],
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/upsert_google_sheets_account_auth_link',
+      '/api/upsert_google_sheets_account_auth_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -169,7 +169,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       accountAuthLinkId: 'aal-1',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/delete_google_sheets_account_auth_link',
+      '/api/delete_google_sheets_account_auth_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -188,17 +188,21 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
     mockFetchSequence([
       [{ key: 'link_id', value: 'l-1' }],
       true,
-      { spreadsheetTitle: 'sheet', discoveredSheets: [], warnings: [] },
+      { ok: true, spreadsheetId: normalizedId, title: 'sheet', sheets: [], warnings: [] },
       {
+        spreadsheetId: normalizedId,
+        title: 'sheet',
         identities: [],
         links: [],
         accountLinks: [],
         profileLinks: [],
         authMethods: [],
         accountAuthLinks: [],
-        serviceSheets: [],
+        services: [],
+        invalidRows: [],
+        schemaIssues: [],
       },
-      { spreadsheetTitle: 'sheet', discoveredSheets: [], warnings: [] },
+      { ok: true, spreadsheetId: normalizedId, title: 'sheet', sheets: [], warnings: [] },
     ]);
 
     await upsertGoogleSheetsLink({
@@ -207,7 +211,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       link: [{ key: 'from_provider', value: 'gmail' }],
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/upsert_google_sheets_link',
+      '/api/upsert_google_sheets_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -223,7 +227,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       linkId: 'l-1',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/delete_google_sheets_link',
+      '/api/delete_google_sheets_link',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -238,7 +242,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       serviceAccountJson: '{}',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/test_google_sheets_connection',
+      '/api/test_google_sheets_connection',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -252,7 +256,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       serviceAccountJson: '{}',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/fetch_google_sheets_dataset',
+      '/api/fetch_google_sheets_dataset',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
@@ -266,7 +270,7 @@ describe('lib/Backend/modules/googleSheets relation commands', () => {
       serviceAccountJson: '{}',
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/init_google_sheets_schema',
+      '/api/init_google_sheets_schema',
       expect.objectContaining({
         body: JSON.stringify({
           spreadsheetId: normalizedId,
