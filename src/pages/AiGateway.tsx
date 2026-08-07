@@ -274,7 +274,7 @@ export default function AiGateway() {
 
       {/* Forms */}
       <ProviderEndpointForm
-        key={endpointDialog.editingItem?.id ?? 'new'}
+        key={`endpoint-${endpointDialog.editingItem?.id ?? 'new'}`}
         endpoint={endpointDialog.editingItem}
         open={endpointDialog.isOpen}
         onClose={endpointDialog.close}
@@ -283,7 +283,7 @@ export default function AiGateway() {
       {currentEndpoint && (
         <>
           <CredentialForm
-            key={credentialDialog.editingItem?.id ?? 'new'}
+            key={`credential-${credentialDialog.editingItem?.id ?? 'new'}`}
             endpoint={currentEndpoint}
             credential={credentialDialog.editingItem}
             open={credentialDialog.isOpen}
@@ -291,7 +291,7 @@ export default function AiGateway() {
           />
 
           <UpstreamModelForm
-            key={upstreamDialog.editingItem?.id ?? 'new'}
+            key={`upstream-${upstreamDialog.editingItem?.id ?? 'new'}`}
             endpoint={currentEndpoint}
             model={upstreamDialog.editingItem}
             open={upstreamDialog.isOpen}
@@ -301,7 +301,7 @@ export default function AiGateway() {
       )}
 
       <PublicModelForm
-        key={publicModelDialog.editingItem?.id ?? 'new'}
+        key={`public-${publicModelDialog.editingItem?.id ?? 'new'}`}
         model={publicModelDialog.editingItem}
         open={publicModelDialog.isOpen}
         onClose={publicModelDialog.close}
@@ -309,7 +309,7 @@ export default function AiGateway() {
 
       {currentPublicModel && (
         <RouteTargetForm
-          key={routeTargetDialog.editingItem?.id ?? 'new'}
+          key={`target-${routeTargetDialog.editingItem?.id ?? 'new'}`}
           publicModel={currentPublicModel}
           target={routeTargetDialog.editingItem}
           open={routeTargetDialog.isOpen}
