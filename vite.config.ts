@@ -14,6 +14,8 @@ export default defineConfig({
     include: [
       'react',
       'react-dom',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
       'react-router-dom',
       'zustand',
       'zustand/middleware',
@@ -31,13 +33,18 @@ export default defineConfig({
       'clsx',
       'tailwind-merge',
     ],
-    // Force re-optimization on every dev start
-    force: true,
   },
   server: {
     host: '0.0.0.0',
     port: 5174,
     strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:25584',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
     // Pre-transform critical modules on startup to reduce waterfall
     warmup: {
       clientFiles: ['./src/main.tsx', './src/App.tsx'],

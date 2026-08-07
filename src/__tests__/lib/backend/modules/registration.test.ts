@@ -49,7 +49,7 @@ describe('lib/Backend/modules/registration OpenAI contract', () => {
 
     await expect(startOpenAIAutoregJob(config)).resolves.toEqual(result);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/start_openai_autoreg_job',
+      '/api/start_openai_autoreg_job',
       expect.objectContaining({
         body: JSON.stringify({ config }),
       }),

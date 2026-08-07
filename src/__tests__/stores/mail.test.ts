@@ -9,7 +9,7 @@ const originalFetch = globalThis.fetch;
  */
 const mockFetchDispatch = (handler: (cmd: string) => unknown) => {
   globalThis.fetch = jest.fn<any>().mockImplementation((url: string) => {
-    const cmd = url.replace('http://localhost:25584/api/', '');
+    const cmd = url.replace('/api/', '');
     const data = handler(cmd);
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) });
   }) as unknown as typeof fetch;
@@ -276,7 +276,7 @@ describe('mail store', () => {
 
       // For this test, upsert_profile should fail
       globalThis.fetch = jest.fn<any>().mockImplementation((url: string, opts: { body: string }) => {
-        const cmd = url.replace('http://localhost:25584/api/', '');
+        const cmd = url.replace('/api/', '');
         if (cmd === 'email_inbox_connect') {
           return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(session) });
         }

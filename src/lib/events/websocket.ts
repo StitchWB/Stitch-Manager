@@ -1,7 +1,7 @@
 /**
  * WebSocket Event Adapter — connects to the Python EventBus.
  *
- * Connects to the Python EventBus via `ws://localhost:25584/api/events`
+ * Connects to the Python EventBus via the WebSocket URL resolved by getWsUrl()
  * and exposes a `listen()` / `emit()` API for frontend components.
  *
  * Python EventBus payload format:
@@ -12,6 +12,7 @@
  */
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
+import { getWsUrl } from '@/lib/backend/core/url';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ const PYTHON_TO_FRONTEND: Record<string, string> = {
 
 // ── Singleton WebSocket connection ───────────────────────────────────────────
 
-const WS_URL = `ws://${window.location.hostname || 'localhost'}:25584/api/events`;
+const WS_URL = getWsUrl();
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const MAX_LISTENERS_PER_EVENT = 500;

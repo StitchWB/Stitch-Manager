@@ -59,7 +59,7 @@ describe('lib/Backend/modules/aiProxy', () => {
 
     await expect(createAiProxyAccount(account)).resolves.toBe(123);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/create_ai_proxy_account',
+      '/api/create_ai_proxy_account',
       expect.objectContaining({
         method: 'POST',
       }),
@@ -75,7 +75,7 @@ describe('lib/Backend/modules/aiProxy', () => {
 
     await expect(getAvailableModels()).resolves.toEqual([]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_available_models',
+      '/api/get_available_models',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -85,7 +85,7 @@ describe('lib/Backend/modules/aiProxy', () => {
 
     await expect(getProviderCapabilities()).resolves.toEqual([]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_provider_capabilities',
+      '/api/get_provider_capabilities',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -95,7 +95,7 @@ describe('lib/Backend/modules/aiProxy', () => {
 
     await expect(getProviderModelMappings()).resolves.toEqual([]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_provider_model_mappings',
+      '/api/get_provider_model_mappings',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -106,7 +106,7 @@ describe('lib/Backend/modules/aiProxy', () => {
 
     await expect(setProviderModelMappings(mappings)).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/set_provider_model_mappings',
+      '/api/set_provider_model_mappings',
       expect.objectContaining({ body: JSON.stringify({ mappings }) }),
     );
   });
@@ -122,7 +122,7 @@ describe('lib/Backend/modules/aiProxy', () => {
 
     await expect(testProviderConnection('openai', 'gpt-4-turbo')).resolves.toEqual(result);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/test_provider_connection',
+      '/api/test_provider_connection',
       expect.objectContaining({
         body: JSON.stringify({ provider: 'openai', model_id: 'gpt-4-turbo' }),
       }),
@@ -134,7 +134,7 @@ describe('lib/Backend/modules/aiProxy', () => {
 
     await expect(scanAuthFiles()).resolves.toEqual([]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/scan_auth_files',
+      '/api/scan_auth_files',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });

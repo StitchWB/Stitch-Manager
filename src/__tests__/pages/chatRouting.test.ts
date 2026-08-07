@@ -11,7 +11,7 @@ describe('chat routing', () => {
     };
 
     expect(isZaiChatModel(model)).toBe(true);
-    expect(resolveChatCompletionsUrl(model, 25583)).toBe('http://localhost:25584/api/v1/chat/completions');
+    expect(resolveChatCompletionsUrl(model, 25583)).toBe('/api/v1/chat/completions');
   });
 
   it('routes Qoder models to the native Stitch endpoint', () => {
@@ -22,7 +22,7 @@ describe('chat routing', () => {
       source: 'aiProxy',
     };
 
-    expect(resolveChatCompletionsUrl(model, 25584)).toBe('http://localhost:25584/api/v1/chat/completions');
+    expect(resolveChatCompletionsUrl(model, 25584)).toBe('/api/v1/chat/completions');
   });
 
   it('routes other models via the unified gateway', () => {
