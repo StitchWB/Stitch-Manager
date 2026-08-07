@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.event_bus import event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +92,14 @@ async def cmd_start_kiro_proxy(params: dict) -> dict:
     
     # Give it a moment to start
     await asyncio.sleep(0.5)
-    
+
+    running = thread.is_alive()
+    await event_bus.emit("proxy.status_changed", {"running": running, "port": port})
+
     return {
         "success": True,
         "port": port,
-        "running": thread.is_alive(),
+        "running": running,
         "message": f"Kiro proxy started on port {port}",
     }
 

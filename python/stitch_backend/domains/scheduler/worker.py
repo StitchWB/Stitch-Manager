@@ -10,7 +10,8 @@ import asyncio
 import json
 import logging
 
-from stitch_backend.database import get_session_factory
+from stitch_backend.database import run_in_session, run_in_read_session
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.scheduler.service import (
     ScheduledTask,
     complete_execution,
@@ -42,6 +43,7 @@ class SchedulerWorker:
         self._running = True
         self._task = asyncio.create_task(self._loop())
         logger.info("[Scheduler] Worker started (poll every %ds)", POLL_INTERVAL_SECONDS)
+        await event_bus.emit("scheduler.status_changed", {"running": True})
 
     async def stop(self) -> None:
         self._running = False
@@ -53,6 +55,7 @@ class SchedulerWorker:
                 pass
             self._task = None
         logger.info("[Scheduler] Worker stopped")
+        await event_bus.emit("scheduler.status_changed", {"running": False})
 
     async def _loop(self) -> None:
         while self._running:
@@ -74,26 +77,32 @@ class SchedulerWorker:
                 await session.rollback()
                 raise
 
-    async def _execute_task(self, session, task: ScheduledTask) -> None:
+    async def _execute_task(self, task: ScheduledTask) -> str:
         logger.info("[Scheduler] Executing task: %s (id=%d, type=%s)", task.name, task.id, task.task_type.type)
-
-        exec_id = await start_execution(session, task.id)
-        await session.flush()
-
-        try:
-            result = await self._run_task(task)
-            await complete_execution(session, exec_id, task.id, "Success", result, None)
-        except Exception as exc:
-            logger.error("[Scheduler] Task %d failed: %s", task.id, exc)
-            await complete_execution(session, exec_id, task.id, "Failed", None, str(exc))
-
-        # Reschedule (for interval/daily) or disable (for once)
-        if task.schedule.type == "once":
-            task.enabled = False
-            await session.flush()
-        else:
-            await update_next_run(session, task.id, task.schedule)
-            await session.flush()
+        return await self._run_task(task)
+    
+    async def _batch_persist_results(self, results: list[tuple[ScheduledTask, str | None, str | None]]) -> None:
+        """Persist all task execution results in one transaction."""
+        async def _op(session):
+            for task, result, error in results:
+                exec_id = await start_execution(session, task.id)
+                await session.flush()
+                
+                if error is None:
+                    await complete_execution(session, exec_id, task.id, "Success", result, None)
+                else:
+                    await complete_execution(session, exec_id, task.id, "Failed", None, error)
+                
+                # Reschedule (for interval/daily) or disable (for once)
+                if task.schedule.type == "once":
+                    task.enabled = False
+                    await session.flush()
+                else:
+                    await update_next_run(session, task.id, task.schedule)
+                    await session.flush()
+        
+        await run_in_session(_op)
+        logger.debug("[Scheduler] batch persisted %d results", len(results))
 
     async def _run_task(self, task: ScheduledTask) -> str:
         """Execute the actual task logic."""
@@ -157,21 +166,23 @@ class SchedulerWorker:
             raise RuntimeError(f"Script execution failed: {exc}") from exc
 
 
-async def execute_task_now(session, task: ScheduledTask) -> str:
+async def execute_task_now(task: ScheduledTask) -> str:
     """Execute a task immediately (called from command handler)."""
     worker = SchedulerWorker()
-    exec_id = await start_execution(session, task.id)
-    await session.flush()
-
-    try:
-        result = await worker._run_task(task)
-        await complete_execution(session, exec_id, task.id, "Success", result, None)
-        await session.commit()
-        return result
-    except Exception as exc:
-        await complete_execution(session, exec_id, task.id, "Failed", None, str(exc))
-        await session.commit()
-        raise
+    
+    async def _op(session):
+        exec_id = await start_execution(session, task.id)
+        await session.flush()
+        
+        try:
+            result = await worker._run_task(task)
+            await complete_execution(session, exec_id, task.id, "Success", result, None)
+            return result
+        except Exception as exc:
+            await complete_execution(session, exec_id, task.id, "Failed", None, str(exc))
+            raise
+    
+    return await run_in_session(_op)
 
 
 # Singleton
