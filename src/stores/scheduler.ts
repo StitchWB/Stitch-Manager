@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { safeInvoke } from '../lib/backend/core';
+import { listen, type UnlistenFn } from '../lib/events';
 import { toast } from 'sonner';
 import type { ScheduledTask, TaskType, Schedule, TaskExecution } from '../types/generated';
 import type { SchedulerTemplate } from '../lib/backend/modules/scheduler';
@@ -227,3 +228,106 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
     }
   },
 }));
+
+// ─── Task Polling ─────────────────────────────────────────────────────────────
+// Single ref-counted polling instance shared by all components, so multiple
+// Dashboard widgets don't each fire their own get_scheduled_tasks request.
+// Mirrors the startProxyStatusPolling/stopProxyStatusPolling pattern in aiProxy.
+
+let taskPollingInterval: ReturnType<typeof setInterval> | null = null;
+let taskPollingSubscribers = 0;
+const TASK_POLL_INTERVAL_MS = 10_000;
+
+/** Start polling scheduled tasks. Call on mount of components that need it. */
+export function startTaskPolling() {
+  taskPollingSubscribers++;
+  if (taskPollingSubscribers === 1) {
+    void useSchedulerStore.getState().fetchTasks();
+    taskPollingInterval = setInterval(
+      () => void useSchedulerStore.getState().fetchTasks(),
+      TASK_POLL_INTERVAL_MS
+    );
+  }
+}
+
+/** Stop polling scheduled tasks. Call on unmount. */
+export function stopTaskPolling() {
+  taskPollingSubscribers = Math.max(0, taskPollingSubscribers - 1);
+  if (taskPollingSubscribers === 0 && taskPollingInterval) {
+    clearInterval(taskPollingInterval);
+    taskPollingInterval = null;
+  }
+}
+
+// ─── Scheduler Status: WS-driven + heartbeat ───────────────────────────────
+// Single instance shared by all components.
+// WS event 'scheduler.status_changed' is the primary update path; the 60s
+// heartbeat is a safety net (paused when the window is hidden).
+
+let statusSubscribers = 0;
+let statusHeartbeat: ReturnType<typeof setInterval> | null = null;
+let statusUnlistenPromise: Promise<UnlistenFn> | null = null;
+const STATUS_HEARTBEAT_INTERVAL_MS = 60_000;
+
+async function fetchSchedulerStatus() {
+  try {
+    await useSchedulerStore.getState().getSchedulerStatus();
+  } catch (err) {
+    console.warn('[scheduler store] status fetch failed:', err);
+  }
+}
+
+function startStatusHeartbeat() {
+  if (statusHeartbeat) return;
+  statusHeartbeat = setInterval(fetchSchedulerStatus, STATUS_HEARTBEAT_INTERVAL_MS);
+}
+
+function stopStatusHeartbeat() {
+  if (statusHeartbeat) {
+    clearInterval(statusHeartbeat);
+    statusHeartbeat = null;
+  }
+}
+
+// Pause/resume heartbeat on visibility change (registered once, module-level)
+let statusVisibilityRegistered = false;
+function ensureStatusVisibilityListener() {
+  if (statusVisibilityRegistered) return;
+  statusVisibilityRegistered = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stopStatusHeartbeat();
+    } else if (statusSubscribers > 0) {
+      void fetchSchedulerStatus();
+      startStatusHeartbeat();
+    }
+  });
+}
+
+/** Start scheduler status updates. Call on mount of components that need it. */
+export function startSchedulerStatusPolling() {
+  statusSubscribers++;
+  if (statusSubscribers === 1) {
+    ensureStatusVisibilityListener();
+    void fetchSchedulerStatus();
+    statusUnlistenPromise = listen<{ running: boolean }>(
+      'scheduler.status_changed',
+      (event) => {
+        useSchedulerStore.setState({ isRunning: event.payload.running });
+      },
+    );
+    startStatusHeartbeat();
+  }
+}
+
+/** Stop scheduler status updates. Call on unmount. */
+export function stopSchedulerStatusPolling() {
+  statusSubscribers = Math.max(0, statusSubscribers - 1);
+  if (statusSubscribers === 0) {
+    stopStatusHeartbeat();
+    if (statusUnlistenPromise) {
+      statusUnlistenPromise.then((fn) => fn());
+      statusUnlistenPromise = null;
+    }
+  }
+}

@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Bug, MessageSquare, Plus, RefreshCw, Search, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelection } from '../hooks/useSelection';
+import { API_BASE_URL } from '@/lib/backend/core/invoke';
 
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
@@ -47,6 +48,44 @@ function resolveSection(param: string | undefined): AiSection {
   if (param === 'routing' || param === 'integrations') return 'routing';
   if (param === 'monitor' || param === 'usage' || param === 'diagnostics') return 'monitor';
   return 'providers';
+}
+
+/** Lazy-mount wrapper: renders a placeholder until an IntersectionObserver
+ *  detects the section is near the viewport, then mounts children permanently.
+ *  Falls back to immediate mount when IntersectionObserver is unavailable
+ *  (jsdom, old engines). */
+function LazyMount({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(
+    () => typeof IntersectionObserver === 'undefined',
+  );
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (mounted) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setMounted(true);
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setMounted(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '400px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [mounted]);
+
+  return (
+    <div id="routing-holone" className="scroll-mt-4" ref={ref}>
+      {mounted ? children : null}
+    </div>
+  );
 }
 
 export default function AiProviders() {
@@ -211,7 +250,7 @@ export default function AiProviders() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('http://localhost:25584/api/holone/status');
+        const res = await fetch(`${API_BASE_URL}/api/holone/status`);
         if (!res.ok) throw new Error('holone status fetch failed');
         const data = await res.json();
         if (!cancelled) {
@@ -235,7 +274,7 @@ export default function AiProviders() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('http://localhost:25584/api/compression/status');
+        const res = await fetch(`${API_BASE_URL}/api/compression/status`);
         if (!res.ok) throw new Error('compression status fetch failed');
         const data = await res.json();
         if (!cancelled) {
@@ -522,9 +561,9 @@ export default function AiProviders() {
                   <CompressionSection />
                 </div>
 
-                <div id="routing-holone" className="scroll-mt-4">
+                <LazyMount>
                   <HoloneSection />
-                </div>
+                </LazyMount>
               </div>
             )}
 
