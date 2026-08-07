@@ -8,6 +8,7 @@ import {
   deleteAccount,
   archiveAccount,
   refreshAccountQuota,
+  refreshAccounts,
   validateAccount,
   setActiveAccount,
   getActiveAccounts,
@@ -203,32 +204,37 @@ export const useAccountsStore = create<AccountsState>()(
             // Load active accounts after fetching
             await get().loadActiveAccounts();
 
-            // Auto-refresh quota for accounts that have a token but no quota info
-            // This runs asynchronously and doesn't block the UI
+            // Auto-refresh quota for accounts that have a token but no quota info.
+            // Uses the single batch `refresh_accounts` command (bounded concurrency
+            // on the backend) instead of fanning out N parallel single-account
+            // calls. Fire-and-forget — does not block the UI.
             const accountsNeedingQuota = accounts.filter(
               a => a.token && a.quota?.limit === 0 && a.quota?.used === 0
             );
             if (accountsNeedingQuota.length > 0) {
-              // Fire and forget - update as results come in
-              Promise.allSettled(
-                accountsNeedingQuota.map(account =>
-                  refreshAccountQuota({ accountId: account.id })
-                )
-              ).then(results => {
-                const updatedMap = new Map<number, Account>();
-                results.forEach((result, index) => {
-                  if (result.status === 'fulfilled') {
-                    updatedMap.set(accountsNeedingQuota[index].id, result.value);
+              refreshAccounts({
+                accountIds: accountsNeedingQuota.map(a => a.id),
+              })
+                .then(result => {
+                  const updatedMap = new Map<string, Account>();
+                  for (const r of result.results) {
+                    if (r.ok && r.account) {
+                      updatedMap.set(String(r.accountId), r.account);
+                    }
                   }
+                  if (updatedMap.size > 0) {
+                    set(state => ({
+                      accounts: state.accounts.map(a =>
+                        updatedMap.has(String(a.id))
+                          ? (updatedMap.get(String(a.id)) as Account)
+                          : a
+                      ),
+                    }));
+                  }
+                })
+                .catch(() => {
+                  // Non-fatal: background quota refresh failure — UI stays usable
                 });
-                if (updatedMap.size > 0) {
-                  set(state => ({
-                    accounts: state.accounts.map(a =>
-                      updatedMap.has(a.id) ? updatedMap.get(a.id)! : a
-                    ),
-                  }));
-                }
-              });
             }
           } catch (error) {
             const message = error instanceof BackendError ? error.message : String(error);
@@ -346,25 +352,39 @@ export const useAccountsStore = create<AccountsState>()(
 
         refreshAllAccounts: async () => {
           const { accounts } = get();
+          if (accounts.length === 0) return;
+
           set({ loading: true, error: null });
 
-          try {
-            const results = await Promise.allSettled(
-              accounts.map(account => refreshAccountQuota({ accountId: account.id }))
-            );
+          // Mark all accounts as "checking" for progress UI
+          const checkingMap: Record<number, boolean> = {};
+          for (const a of accounts) checkingMap[Number(a.id)] = true;
+          set({ quotaCheckProgress: checkingMap });
 
-            const updatedAccounts = accounts.map((account, index) => {
-              const result = results[index];
-              if (result.status === 'fulfilled') {
-                return result.value;
-              }
-              return account;
+          void _ensureRefreshProgressListener();
+
+          try {
+            const result = await refreshAccounts({
+              accountIds: accounts.map(a => a.id),
             });
 
-            set({ accounts: updatedAccounts, loading: false });
+            const updatedMap = new Map<string, Account>();
+            for (const r of result.results) {
+              if (r.ok && r.account) {
+                updatedMap.set(String(r.accountId), r.account);
+              }
+            }
+
+            set(state => ({
+              accounts: state.accounts.map(a =>
+                updatedMap.has(String(a.id)) ? (updatedMap.get(String(a.id)) as Account) : a
+              ),
+              loading: false,
+              quotaCheckProgress: {},
+            }));
           } catch (error) {
             const message = error instanceof BackendError ? error.message : String(error);
-            set({ error: message, loading: false });
+            set({ error: message, loading: false, quotaCheckProgress: {} });
             throw error;
           }
         },
@@ -577,26 +597,35 @@ export const useAccountsStore = create<AccountsState>()(
 
           set({ loading: true, error: null });
 
+          // Mark expired accounts as "checking" for progress UI
+          const checkingMap: Record<number, boolean> = {};
+          for (const a of expiredAccounts) checkingMap[Number(a.id)] = true;
+          set({ quotaCheckProgress: checkingMap });
+
+          void _ensureRefreshProgressListener();
+
           try {
-            const results = await Promise.allSettled(
-              expiredAccounts.map(account => refreshAccountQuota({ accountId: account.id }))
-            );
-
-            const updatedAccounts = accounts.map(account => {
-              const expiredIndex = expiredAccounts.findIndex(a => a.id === account.id);
-              if (expiredIndex === -1) return account;
-
-              const result = results[expiredIndex];
-              if (result.status === 'fulfilled') {
-                return result.value;
-              }
-              return account;
+            const result = await refreshAccounts({
+              accountIds: expiredAccounts.map(a => a.id),
             });
 
-            set({ accounts: updatedAccounts, loading: false });
+            const updatedMap = new Map<string, Account>();
+            for (const r of result.results) {
+              if (r.ok && r.account) {
+                updatedMap.set(String(r.accountId), r.account);
+              }
+            }
+
+            set(state => ({
+              accounts: state.accounts.map(a =>
+                updatedMap.has(String(a.id)) ? (updatedMap.get(String(a.id)) as Account) : a
+              ),
+              loading: false,
+              quotaCheckProgress: {},
+            }));
           } catch (error) {
             const message = error instanceof BackendError ? error.message : String(error);
-            set({ error: message, loading: false });
+            set({ error: message, loading: false, quotaCheckProgress: {} });
             throw error;
           }
         },
@@ -617,3 +646,39 @@ export const useAccountsStore = create<AccountsState>()(
     { name: 'accounts-store' }
   )
 );
+
+// ── Batch refresh progress listener ──────────────────────────────────────────
+// Module-level listener for `accounts.refresh_progress` WS events emitted by
+// the backend `refresh_accounts` command. Guarded against double-registration
+// so multiple calls to refreshAllAccounts/refreshExpiredAccounts don't stack
+// listeners. Updates `quotaCheckProgress` / `quotaCheckErrors` live as each
+// account completes.
+
+let _refreshProgressListenerRegistered = false;
+
+async function _ensureRefreshProgressListener(): Promise<void> {
+  if (_refreshProgressListenerRegistered) return;
+  _refreshProgressListenerRegistered = true;
+
+  const { listen } = await import('../lib/events/websocket');
+  await listen<{
+    accountId: string;
+    done: number;
+    total: number;
+    ok: boolean;
+    error?: string;
+  }>('accounts.refresh_progress', event => {
+    const { accountId, ok, error } = event.payload;
+    const id = Number(accountId);
+    useAccountsStore.setState(state => {
+      const nextProgress = { ...state.quotaCheckProgress };
+      delete nextProgress[id];
+      if (!ok) {
+        const nextErrors = { ...state.quotaCheckErrors };
+        nextErrors[id] = error ?? 'Refresh failed';
+        return { quotaCheckProgress: nextProgress, quotaCheckErrors: nextErrors };
+      }
+      return { quotaCheckProgress: nextProgress };
+    });
+  });
+}

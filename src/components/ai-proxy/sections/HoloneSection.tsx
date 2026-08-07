@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
+import { listen, type UnlistenFn } from '@/lib/events';
 import { t } from '@/lib/i18n';
 import { Eye, Shield, ShieldAlert, Volume2, VolumeX } from 'lucide-react';
 import { Button, EmptyState, GlassCard, PageHeader, RangeSlider, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Toggle } from '@/components/ui';
@@ -74,8 +75,7 @@ export function HoloneSection() {
     return saved ? parseFloat(saved) : 0.5;
   });
 
-  const statusTimer = useRef<ReturnType<typeof setInterval>>();
-  const findingsTimer = useRef<ReturnType<typeof setInterval>>();
+  const heartbeatTimer = useRef<ReturnType<typeof setInterval>>();
   const lastHighFindingCount = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -140,16 +140,54 @@ export function HoloneSection() {
     }
   }, []);
 
-  // ── Polling ────────────────────────────────────────────────────────────
+  // ── WS-driven updates + heartbeat ────────────────────────────────────
 
   useEffect(() => {
+    let disposed = false;
+
+    // Initial fetch — WS may connect after the change happened
     fetchStatus();
     fetchFindings();
-    statusTimer.current = setInterval(fetchStatus, 5000);
-    findingsTimer.current = setInterval(fetchFindings, 10000);
+
+    // WS event listeners (primary update path)
+    const statusPromise = listen<HoloneStatus>('holone.status_changed', (event) => {
+      if (disposed) return;
+      setStatus(event.payload);
+    });
+    const findingsPromise = listen<{ findings: Finding[] }>('holone.findings_changed', (event) => {
+      if (disposed) return;
+      setFindings(event.payload.findings);
+    });
+
+    // 60s heartbeat — safety net (paused when window hidden)
+    const tick = () => {
+      fetchStatus();
+      fetchFindings();
+    };
+    heartbeatTimer.current = setInterval(tick, 60_000);
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (heartbeatTimer.current) {
+          clearInterval(heartbeatTimer.current);
+          heartbeatTimer.current = undefined;
+        }
+      } else {
+        tick();
+        heartbeatTimer.current = setInterval(tick, 60_000);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
-      clearInterval(statusTimer.current);
-      clearInterval(findingsTimer.current);
+      disposed = true;
+      if (heartbeatTimer.current) {
+        clearInterval(heartbeatTimer.current);
+        heartbeatTimer.current = undefined;
+      }
+      document.removeEventListener('visibilitychange', onVisibility);
+      statusPromise.then((fn: UnlistenFn) => fn());
+      findingsPromise.then((fn: UnlistenFn) => fn());
     };
   }, [fetchStatus, fetchFindings]);
 

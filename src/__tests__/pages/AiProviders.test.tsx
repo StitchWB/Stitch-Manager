@@ -43,6 +43,14 @@ jest.mock(
   { virtual: true },
 );
 
+// HoloneSection now uses WS subscriptions via `listen` from '@/lib/events'
+// (holone.status_changed / holone.findings_changed + 60s heartbeat).
+// Mock it to isolate the page test from the WS architecture.
+jest.mock('../../components/ai-proxy/sections/HoloneSection', () => ({
+  __esModule: true,
+  HoloneSection: () => null,
+}));
+
 const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
 
 const testAccount = {

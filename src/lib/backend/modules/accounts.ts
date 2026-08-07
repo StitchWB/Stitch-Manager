@@ -183,7 +183,41 @@ export async function refreshAccountToken(params: {
  * Refresh account quota information
  */
 export async function refreshAccountQuota(params: RefreshAccountParams): Promise<Account> {
-  return safeInvoke<Account>('refresh_account', { id: Number(params.accountId) });
+  return safeInvoke<Account>('refresh_account', { accountId: Number(params.accountId) });
+}
+
+// ============================================
+// Batch Refresh
+// ============================================
+
+export interface RefreshAccountResultItem {
+  accountId: string;
+  ok: boolean;
+  account?: Account;
+  error?: string;
+}
+
+export interface RefreshAccountsResult {
+  total: number;
+  updated: number;
+  failed: number;
+  results: RefreshAccountResultItem[];
+}
+
+/**
+ * Batch-refresh quota/status for multiple accounts with bounded concurrency.
+ *
+ * The backend processes up to 4 accounts concurrently (Semaphore(4)) and
+ * emits `accounts.refresh_progress` events after each account completes.
+ * Each result item carries the updated account object when `ok` is true,
+ * so the store can replace rows without refetching.
+ */
+export async function refreshAccounts(params: {
+  accountIds: number[];
+}): Promise<RefreshAccountsResult> {
+  return safeInvoke<RefreshAccountsResult>('refresh_accounts', {
+    accountIds: params.accountIds,
+  });
 }
 
 // ============================================
