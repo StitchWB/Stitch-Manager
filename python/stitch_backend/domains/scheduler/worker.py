@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 
-from stitch_backend.database import run_in_session
+from stitch_backend.database import get_session_factory, run_in_session
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.scheduler.service import (
     ScheduledTask,
@@ -68,14 +68,18 @@ class SchedulerWorker:
     async def _tick(self) -> None:
         factory = get_session_factory()
         async with factory() as session:
+            pending = await get_pending_tasks(session)
+
+        results: list[tuple[ScheduledTask, str | None, str | None]] = []
+        for task in pending:
             try:
-                pending = await get_pending_tasks(session)
-                for task in pending:
-                    await self._execute_task(session, task)
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
+                result = await self._execute_task(task)
+                results.append((task, result, None))
+            except Exception as exc:
+                logger.exception("[Scheduler] Task %d failed", task.id)
+                results.append((task, None, str(exc)))
+        if results:
+            await self._batch_persist_results(results)
 
     async def _execute_task(self, task: ScheduledTask) -> str:
         logger.info("[Scheduler] Executing task: %s (id=%d, type=%s)", task.name, task.id, task.task_type.type)

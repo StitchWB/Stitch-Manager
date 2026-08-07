@@ -168,17 +168,24 @@ async def cmd_toggle_task(params: dict) -> dict:
 # ── Execution ─────────────────────────────────────────────────────────────────
 
 
-@register_command("execute_task_now")
+@register_command("execute_task_now", timeout=-1)
 async def cmd_execute_now(params: dict) -> str:
-    """Execute a task immediately."""
+    """Execute a task immediately.
+
+    The task itself runs OUTSIDE the lookup session: ``execute_task_now``
+    opens its own write session, and nesting it inside another write session
+    would deadlock on the size-1 write pool.
+    """
     task_id = int(params.get("taskId", params.get("task_id", 0)))
 
     async def _op(db):
         task = await get_task_by_id(db, task_id)
         if not task:
             raise ValueError(f"Task {task_id} not found")
-        return await execute_task_now(db, task)
-    result = await run_in_session(_op)
+        return task
+
+    task = await run_in_session(_op)
+    result = await execute_task_now(task)
     try:
         await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
     except Exception:
