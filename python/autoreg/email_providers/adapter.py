@@ -9,21 +9,20 @@ migration of existing code without breaking changes.
 import logging
 from typing import Any
 
+from ..shared.models import EmailStrategy
 from .base import EmailContext
 from .generators import (
     AddyIoEmailGenerator,
     CounterEmailGenerator,
     StaticEmailGenerator,
-    MailTmEmailGenerator,
 )
 from .strategies import (
     AddyIoImapStrategy,
     CounterImapStrategy,
-    StaticImapStrategy,
     MailTmStrategy,
+    StaticImapStrategy,
 )
 from .verifiers import ImapVerifier
-from ..shared.models import EmailStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +30,10 @@ logger = logging.getLogger(__name__)
 class LegacyEmailContext:
     """
     Legacy EmailContext for backward compatibility.
-    
+
     This class mimics the old EmailContext interface that existing code expects.
     """
-    
+
     def __init__(
         self,
         email: str,
@@ -44,7 +43,7 @@ class LegacyEmailContext:
     ):
         """
         Initialize legacy email context.
-        
+
         Args:
             email: Email address
             alias_id: Alias ID (for cleanup)
@@ -60,11 +59,11 @@ class LegacyEmailContext:
 class EmailManagerAdapter:
     """
     Adapter for old EmailManager API.
-    
+
     This adapter provides the old EmailManager interface while using the new
     email_providers system internally. This allows existing code to continue
     working without modifications while benefiting from the new architecture.
-    
+
     Example:
         >>> # Old code using EmailManager
         >>> manager = EmailManagerAdapter(
@@ -76,7 +75,7 @@ class EmailManagerAdapter:
         >>> print(ctx.email)  # test+1@example.com
         >>> manager.cleanup_email(ctx)
     """
-    
+
     def __init__(
         self,
         strategy: EmailStrategy,
@@ -87,7 +86,7 @@ class EmailManagerAdapter:
     ):
         """
         Initialize adapter with old EmailManager parameters.
-        
+
         Args:
             strategy: EmailStrategy enum (STATIC, COUNTER, ADDYIO)
             base_email: Base email address
@@ -98,52 +97,52 @@ class EmailManagerAdapter:
         self.strategy_type = strategy
         self.base_email = base_email
         self.counter = counter
-        
+
         # Create verifier if IMAP config provided
         verifier = ImapVerifier(imap_config) if imap_config else None
-        
+
         # Create strategy based on type
         if strategy == EmailStrategy.STATIC:
             generator = StaticEmailGenerator(base_email)
             self.strategy = StaticImapStrategy(generator, verifier) if verifier else None
             self.generator = generator
-        
+
         elif strategy == EmailStrategy.COUNTER:
             generator = CounterEmailGenerator(base_email, start=counter)
             self.strategy = CounterImapStrategy(generator, verifier) if verifier else None
             self.generator = generator
-        
+
         elif strategy == EmailStrategy.ADDYIO:
             if not addyio_config:
                 raise ValueError("addyio_config required for ADDYIO strategy")
             generator = AddyIoEmailGenerator(addyio_config)
             self.strategy = AddyIoImapStrategy(generator, verifier) if verifier else None
             self.generator = generator
-        
+
         elif strategy == EmailStrategy.MAILTM:
             # Mail.tm doesn't need base_email or config
             from ...services.mailtm import MailTmConfig
             mailtm_config = MailTmConfig()
             self.strategy = MailTmStrategy(mailtm_config)
             self.generator = self.strategy.generator
-        
+
         else:
             raise ValueError(f"Unsupported strategy: {strategy}")
-        
+
         logger.info(f"EmailManagerAdapter initialized with {strategy} strategy")
-    
+
     def generate_email(self, description: str | None = None) -> LegacyEmailContext:
         """
         Generate email using old API.
-        
+
         Args:
             description: Optional description for the email
-            
+
         Returns:
             LegacyEmailContext with generated email
         """
         new_ctx = self.generator.generate(description)
-        
+
         # Convert to legacy format
         return LegacyEmailContext(
             email=new_ctx.email,
@@ -151,11 +150,11 @@ class EmailManagerAdapter:
             should_cleanup=new_ctx.should_cleanup,
             metadata=new_ctx.metadata
         )
-    
+
     def cleanup_email(self, context: LegacyEmailContext):
         """
         Cleanup email using old API.
-        
+
         Args:
             context: LegacyEmailContext to cleanup
         """
@@ -166,9 +165,9 @@ class EmailManagerAdapter:
             should_cleanup=context.should_cleanup,
             metadata=context.metadata
         )
-        
+
         self.generator.cleanup(new_ctx)
-    
+
     def close(self):
         """Close resources"""
         if self.strategy:

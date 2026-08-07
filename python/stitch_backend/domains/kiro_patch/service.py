@@ -47,7 +47,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
 
 def _config_dir() -> Path:
     """Get config directory, creating it if needed.
-    
+
     Caches the result to avoid repeated mkdir() calls.
     """
     if not hasattr(_config_dir, '_cache'):
@@ -188,10 +188,10 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
     const https = require('https');
     const PROXY_HOST = '127.0.0.1';
     const PROXY_PORT = {proxy_port};
-    
+
     const origHttpRequest = http.request;
     const origHttpsRequest = https.request;
-    
+
     function createProxyWrapper(originalFn, defaultProtocol) {{
       return function(opts, cb) {{
         // Normalize options
@@ -205,17 +205,17 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
             headers: {{}}
           }};
         }}
-        
+
         // Skip WebSocket upgrade requests — proxy can't handle them
         const reqHeaders = opts.headers || {{}};
         if (reqHeaders.Upgrade || reqHeaders.upgrade) {{
           return originalFn.call(this, opts, cb);
         }}
-        
+
         const targetHost = opts.hostname || opts.host;
         const targetPort = opts.port || (defaultProtocol === 'https:' ? 443 : 80);
         const targetProtocol = opts.protocol || defaultProtocol;
-        
+
         // Try proxy first
         const proxyOpts = {{
           ...opts,
@@ -229,11 +229,11 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
             'X-Forwarded-Port': String(targetPort)
           }}
         }};
-        
+
         if (targetProtocol === 'https:') {{
           proxyOpts.path = `https://${{targetHost}}:${{targetPort}}${{opts.path}}`;
         }}
-        
+
         // Make request through proxy with retry
         let attempt = 0;
         const maxAttempts = 3;
@@ -241,7 +241,7 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
         let aborted = false;
         const safeCb = typeof cb === 'function' ? cb : function() {{}};
         const boundTryProxy = tryProxy.bind(this);
-        
+
         function tryProxy() {{
           if (aborted) return;
           attempt++;
@@ -274,9 +274,9 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
             }}
             return;
           }}
-          
+
           if (!firstReq) firstReq = req;
-          
+
           // ponytail: 5s timeout prevents infinite hangs
           req.setTimeout(5000, function() {{
             if (!aborted) {{
@@ -286,7 +286,7 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
               safeCb(null);
             }}
           }});
-          
+
           req.on('error', function(err) {{
             if (aborted) return;
             if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {{
@@ -307,15 +307,15 @@ def _generate_proxy_inject_code(proxy_port: int = 5580) -> str:
             }}
           }});
         }}
-        
+
         tryProxy.call(this);
         return firstReq;
       }};
     }}
-    
+
     http.request = createProxyWrapper(origHttpRequest, 'http:');
     https.request = createProxyWrapper(origHttpsRequest, 'https:');
-    
+
     console.log('[Stitch] HTTP/HTTPS proxy enabled: 127.0.0.1:{proxy_port}');
   }} catch (e) {{
     console.error('[Stitch] Proxy injection failed:', e);
@@ -332,7 +332,7 @@ def _find_kiro_target_file() -> Path | None:
     - Windows (extension): ``S:/Kiro/resources/app/extensions/kiro.kiro-agent/dist/extension.js``
     - macOS: ``/Applications/Kiro.app/Contents/Resources/app/out/vs/workbench/workbench.desktop.main.js``
     - macOS (extension): ``/Applications/Kiro.app/Contents/Resources/app/extensions/kiro.kiro-agent/dist/extension.js``
-    
+
     Priority: extension.js (for proxy injection) > workbench.desktop.main.js (legacy)
     """
     import os
@@ -343,7 +343,7 @@ def _find_kiro_target_file() -> Path | None:
     if local_app:
         # Extension path (priority for proxy injection)
         candidates.append(
-            Path(local_app) / "Programs" / "Kiro" / "resources" / "app" 
+            Path(local_app) / "Programs" / "Kiro" / "resources" / "app"
             / "extensions" / "kiro.kiro-agent" / "dist" / "extension.js"
         )
         # Legacy workbench path
@@ -351,7 +351,7 @@ def _find_kiro_target_file() -> Path | None:
             Path(local_app) / "Programs" / "Kiro" / "resources" / "app" / "out"
             / "vs" / "workbench" / "workbench.desktop.main.js"
         )
-    
+
     # Custom Windows path (S:\Kiro)
     candidates.append(
         Path("S:/Kiro/resources/app/extensions/kiro.kiro-agent/dist/extension.js")
@@ -381,7 +381,7 @@ def apply_patch_with_config(config: dict[str, Any]) -> str:
         raise RuntimeError("Kiro IDE not found. Please install Kiro first.")
 
     content = target.read_text(encoding="utf-8")
-    
+
     # Check if any patch marker already exists
     for m in _PATCH_MARKERS:
         if m in content:
@@ -390,18 +390,18 @@ def apply_patch_with_config(config: dict[str, Any]) -> str:
     # Check if proxy injection is enabled (default: True)
     modules = config.get("modules", {})
     proxy_enabled = modules.get("proxyInjection", True)
-    
+
     # Get proxy port from config (default: 5580)
     proxy_port = config.get("proxyPort", 5580)
-    
+
     # Build injection code
     patch_marker = "/* STITCH_PATCHED - V3 WITH CONFIGURATION */"
     injection_parts = [patch_marker]
     if proxy_enabled:
         injection_parts.append(_generate_proxy_inject_code(proxy_port))
-    
+
     injection = "\n".join(injection_parts) + "\n"
-    
+
     # Find "use strict"; and inject after it
     strict_prefix = '"use strict";\n'
     if content.startswith(strict_prefix):
@@ -409,7 +409,7 @@ def apply_patch_with_config(config: dict[str, Any]) -> str:
     else:
         # Fallback: inject at the very top
         patched = f"{injection}{content}"
-    
+
     target.write_text(patched, encoding="utf-8")
     logger.info("Kiro patch applied to %s (proxy: %s)", target, "enabled" if proxy_enabled else "disabled")
     return f"Kiro patch applied successfully to {target.name} (proxy: {'enabled' if proxy_enabled else 'disabled'})"
@@ -424,9 +424,9 @@ def check_patch_status() -> dict[str, bool]:
         # Read only first 5KB for speed (proxy injection is ~2KB)
         with open(target, encoding="utf-8") as f:
             head = f.read(5120)
-        
+
         marker_found = any(m in head for m in _PATCH_MARKERS)
-        
+
         # Check all proxy injection versions
         proxy_markers = [
             "/* STITCH_PROXY_INJECT - V1 */",
@@ -434,7 +434,7 @@ def check_patch_status() -> dict[str, bool]:
             "/* STITCH_PROXY_INJECT - V3 */",
         ]
         proxy_found = any(m in head for m in proxy_markers)
-        
+
         return {
             "patched": marker_found,
             "proxy_injected": proxy_found,
@@ -451,27 +451,27 @@ def remove_patch() -> str:
 
     content = target.read_text(encoding="utf-8")
     changed = False
-    
+
     # Remove all version markers
     for marker in _PATCH_MARKERS:
         if marker in content:
             content = content.replace(marker + "\n", "")
             content = content.replace(marker, "")
             changed = True
-    
+
     # Remove proxy injection code (all versions: V1, V2, V3)
     proxy_markers = [
         "/* STITCH_PROXY_INJECT - V1 */",
         "/* STITCH_PROXY_INJECT - V2 */",
         "/* STITCH_PROXY_INJECT - V3 */",
     ]
-    
+
     for proxy_marker in proxy_markers:
         if proxy_marker in content:
             # Find and remove the entire proxy injection block
             start_marker = proxy_marker
             end_marker = "})();\n"
-            
+
             start_idx = content.find(start_marker)
             if start_idx != -1:
                 # Find the closing })();

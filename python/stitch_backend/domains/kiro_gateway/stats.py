@@ -8,8 +8,10 @@ from __future__ import annotations
 import threading
 import time
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
-from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonObject
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonObject
 
 
 class ProxyStats:

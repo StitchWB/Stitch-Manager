@@ -15,18 +15,17 @@ import string
 import threading
 import time
 import uuid as uuid_module
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class TemplateState:
     """Thread-safe state for template rendering."""
-    
+
     def __init__(self, start_counter: int = 0):
         self._counter = start_counter
         self._lock = threading.Lock()
-    
+
     def next_counter(self) -> int:
         with self._lock:
             current = self._counter
@@ -95,15 +94,15 @@ def render_template(
         '5-1700000000'
     """
     import re
-    
+
     result = template
-    
+
     # {rndN} — random N chars
     for match in re.finditer(r'\{rnd(\d+)\}', template):
         full_match = match.group(0)
         n = int(match.group(1))
         result = result.replace(full_match, _get_rnd(n), 1)
-    
+
     # {counter}
     if '{counter}' in result:
         if state is None:
@@ -112,21 +111,21 @@ def render_template(
         else:
             counter_val = state.next_counter()
         result = result.replace('{counter}', str(counter_val), 1)
-    
+
     # {time}
     if '{time}' in result:
         result = result.replace('{time}', _get_time(), 1)
-    
+
     # {name}
     if '{name}' in result:
         result = result.replace('{name}', _get_name(description), 1)
-    
+
     # {uuid4}
     if '{uuid4}' in result:
         result = result.replace('{uuid4}', _get_uuid(full=True), 1)
-    
+
     # {uuid4_8}
     if '{uuid4_8}' in result:
         result = result.replace('{uuid4_8}', _get_uuid(full=False), 1)
-    
+
     return result

@@ -7,7 +7,7 @@ Provides methods to simulate realistic human interactions with web pages.
 import logging
 import random
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from DrissionPage import ChromiumPage
@@ -31,7 +31,7 @@ class HumanBehaviorMixin:
         element,
         text: str,
         field_type: str = "default",
-        fast: Optional[bool] = None,
+        fast: bool | None = None,
     ) -> None:
         """
         Type text with human-like delays and patterns.

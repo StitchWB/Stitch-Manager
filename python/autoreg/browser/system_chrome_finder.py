@@ -11,12 +11,12 @@ from __future__ import annotations
 import logging
 import os
 import platform
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 
 
-def find_system_chrome() -> Optional[str]:
+def find_system_chrome() -> str | None:
     """Locate Chrome / Chromium / Edge on the host system.
 
     Returns:
@@ -31,7 +31,7 @@ def find_system_chrome() -> Optional[str]:
     return _find_chrome_linux()
 
 
-def _find_chrome_windows() -> Optional[str]:
+def _find_chrome_windows() -> str | None:
     try:
         import winreg
 
@@ -64,7 +64,7 @@ def _find_chrome_windows() -> Optional[str]:
     )
 
 
-def _find_chrome_macos() -> Optional[str]:
+def _find_chrome_macos() -> str | None:
     return _first_existing(
         [
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -74,7 +74,7 @@ def _find_chrome_macos() -> Optional[str]:
     )
 
 
-def _find_chrome_linux() -> Optional[str]:
+def _find_chrome_linux() -> str | None:
     return _first_existing(
         [
             "/usr/bin/google-chrome",
@@ -86,7 +86,7 @@ def _find_chrome_linux() -> Optional[str]:
     )
 
 
-def _first_existing(paths: Iterable[str]) -> Optional[str]:
+def _first_existing(paths: Iterable[str]) -> str | None:
     for path in paths:
         if path and os.path.exists(path):
             logger.debug("Chrome at: %s", path)

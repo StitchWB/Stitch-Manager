@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +74,7 @@ class KeyRateLimiter:
         if key_id in self.limiters:
             await self.limiters[key_id].record()
 
-    def get_remaining(self, key_id: str) -> Optional[int]:
+    def get_remaining(self, key_id: str) -> int | None:
         """Получить оставшиеся запросы."""
         if key_id in self.limiters:
             return self.limiters[key_id].remaining
@@ -83,7 +82,7 @@ class KeyRateLimiter:
 
 
 # Singleton instance
-_rate_limiter: Optional[KeyRateLimiter] = None
+_rate_limiter: KeyRateLimiter | None = None
 
 
 def get_rate_limiter() -> KeyRateLimiter:

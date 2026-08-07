@@ -1,10 +1,11 @@
 """IMAP-based email verifier with connection pooling"""
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
+
+from ...shared.email_verification import get_verification_code_from_imap
 from ..base import IEmailVerifier
 from .imap_pool import ImapConnectionPool
-from ...shared.email_verification import get_verification_code_from_imap
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 class ImapVerifier(IEmailVerifier):
     """IMAP-based email verifier with connection pooling"""
 
-    def __init__(self, imap_config: Dict[str, Any], pool_size: int = 3):
+    def __init__(self, imap_config: dict[str, Any], pool_size: int = 3):
         """
         Initialize IMAP verifier
 
@@ -22,7 +23,7 @@ class ImapVerifier(IEmailVerifier):
         """
         self.config = imap_config
         # Lazy-initialize pool so startup IMAP errors don't abort registration
-        self._pool: Optional[ImapConnectionPool] = None
+        self._pool: ImapConnectionPool | None = None
         self._pool_size = pool_size
 
     @property
@@ -37,9 +38,9 @@ class ImapVerifier(IEmailVerifier):
         target_email: str,
         sender_keywords: list,
         max_wait: int = 120,
-        session_id: Optional[str] = None,
-        code_pattern: Optional[str] = None,
-    ) -> Optional[str]:
+        session_id: str | None = None,
+        code_pattern: str | None = None,
+    ) -> str | None:
         """
         Get verification code from IMAP inbox.
 
@@ -80,8 +81,8 @@ class ImapVerifier(IEmailVerifier):
         sender_keywords: list,
         url_pattern: str,
         max_wait: int = 120,
-        session_id: Optional[str] = None,
-    ) -> Optional[str]:
+        session_id: str | None = None,
+    ) -> str | None:
         """
         Get confirmation URL from IMAP inbox (for email-link-based verification like Fireworks).
 

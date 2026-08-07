@@ -13,11 +13,11 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
-
 
 logger = logging.getLogger(__name__)
 
@@ -695,5 +695,5 @@ async def import_accounts_payload(session: Any, payload_str: str) -> int:
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _iso_now() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
+    from datetime import datetime
+    return datetime.now(UTC).isoformat()

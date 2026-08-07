@@ -11,13 +11,11 @@ current wildcard LiteLLM deployment selection.
 from __future__ import annotations
 
 import logging
-import random
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.domains.ai_gateway import circuit_breaker, credential_state
 from stitch_backend.domains.ai_gateway.adapters.base import (
@@ -40,6 +38,9 @@ from stitch_backend.domains.ai_gateway.service import (
     RouteTargetService,
     UpstreamModelService,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +203,7 @@ class RoutingEngine:
         now = _utcnow()
         results: list[RoutingResult] = []
 
-        for target, upstream in candidates:
+        for _target, upstream in candidates:
             # Query credentials with model access.
             result = await session.execute(
                 select(Credential)
@@ -240,7 +241,7 @@ class RoutingEngine:
             # 7. Select credential (round-robin via least-recently-used).
             cred = min(
                 eligible_creds,
-                key=lambda c: c.last_success_at or datetime.min.replace(tzinfo=timezone.utc),
+                key=lambda c: c.last_success_at or datetime.min.replace(tzinfo=UTC),
             )
 
             # 8. Get endpoint, secret, adapter.

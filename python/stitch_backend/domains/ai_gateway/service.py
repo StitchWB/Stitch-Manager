@@ -20,10 +20,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.core.base_repository import BaseRepository
 from stitch_backend.domains.ai_gateway.models import (

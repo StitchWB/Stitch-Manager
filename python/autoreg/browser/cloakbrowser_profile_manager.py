@@ -16,20 +16,18 @@ import logging
 import os
 import platform
 import re
-import shutil
 import socket
 import subprocess as sp
 import sys
 import tempfile
 import time
-import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from DrissionPage import ChromiumPage
 
-from ..core.paths import get_paths
 from ..core.auth_proxy_server import AuthProxyServer
+from ..core.paths import get_paths
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +152,7 @@ class CloakBrowserProfileManager:
         self._lock: Any | None = None
         self._auth_proxy_server: AuthProxyServer | None = None
 
-    def __enter__(self) -> "CloakBrowserProfileManager":
+    def __enter__(self) -> CloakBrowserProfileManager:
         self.start()
         return self
 
@@ -466,7 +464,7 @@ class CloakBrowserProfileManager:
             if out != sp.DEVNULL:
                 try:
                     out.flush()
-                    with open(launch_log, "r", encoding="utf-8", errors="ignore") as f:
+                    with open(launch_log, encoding="utf-8", errors="ignore") as f:
                         stderr_text = f.read(2000)
                 except Exception:
                     pass
@@ -479,7 +477,7 @@ class CloakBrowserProfileManager:
             if out != sp.DEVNULL:
                 try:
                     out.flush()
-                    with open(launch_log, "r", encoding="utf-8", errors="ignore") as f:
+                    with open(launch_log, encoding="utf-8", errors="ignore") as f:
                         stderr_text = f.read(2000)
                 except Exception:
                     pass

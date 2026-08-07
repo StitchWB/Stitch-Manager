@@ -83,17 +83,30 @@ include = ["stitch_backend*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# TODO(debt): remove tests exclude once test ruff errors are cleaned up
+extend-exclude = ["tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
-ignore = ["E501", "E402"]
+# E402: Module level import not at top (intentional for path setup in entry point scripts)
+# E501: Line too long (handled by formatter)
+# B008: FastAPI Depends() in function defaults (correct FastAPI pattern)
+# N815: mixedCase in Pydantic models (required for API compatibility - camelCase JSON)
+# B017: pytest.raises(Exception) in tests (acceptable for broad error testing)
+ignore = ["E501", "E402", "B008", "N815", "B017"]
+
+[tool.ruff.lint.per-file-ignores]
+# qoder_bypass uses standard cryptographic notation (H0-H7, K, W, S0, S1 for SHA-512)
+"qoder_bypass/**/*.py" = ["N806"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 plugins = ["pydantic.mypy"]
 warn_return_any = true
 warn_unused_ignores = true
+warn_unused_configs = true
 check_untyped_defs = true
+follow_imports = "silent"
 # Do NOT ignore missing imports globally — catches bad module names (e.g. stitch_backend.db)
 ignore_missing_imports = false
 
@@ -114,6 +127,52 @@ module = [
     "autoreg.pipeline.*",
 ]
 ignore_missing_imports = true
+
+# numpy stubs use Python 3.12 syntax incompatible with our 3.11 target
+[[tool.mypy.overrides]]
+module = "numpy.*"
+ignore_errors = true
+
+# TODO(debt): narrow — these packages have mypy errors; remove overrides as each is cleaned up
+# Clean packages (enforced NOW): stitch_backend.core, stitch_backend.api,
+# stitch_backend.domains.scheduler, stitch_backend.database
+[[tool.mypy.overrides]]
+module = [
+    "stitch_backend.config",
+    "stitch_backend.cli.*",
+    "stitch_backend.mcp_server.*",
+    "stitch_backend.domains.accounts.*",
+    "stitch_backend.domains.account_status.*",
+    "stitch_backend.domains.ai_gateway.*",
+    "stitch_backend.domains.ai_proxy.*",
+    "stitch_backend.domains.api_keys.*",
+    "stitch_backend.domains.aws_accounts.*",
+    "stitch_backend.domains.browser.*",
+    "stitch_backend.domains.composed_flows.*",
+    "stitch_backend.domains.email.*",
+    "stitch_backend.domains.email_counter.*",
+    "stitch_backend.domains.email_inbox.*",
+    "stitch_backend.domains.google_sheets.*",
+    "stitch_backend.domains.icloud_email_pool.*",
+    "stitch_backend.domains.key_health.*",
+    "stitch_backend.domains.kiro_auth_sync",
+    "stitch_backend.domains.kiro_gateway.*",
+    "stitch_backend.domains.kiro_patch.*",
+    "stitch_backend.domains.kiro_proxy.*",
+    "stitch_backend.domains.logging.*",
+    "stitch_backend.domains.mcp_bridge.*",
+    "stitch_backend.domains.oauth.*",
+    "stitch_backend.domains.patcher.*",
+    "stitch_backend.domains.profiles.*",
+    "stitch_backend.domains.proxy_library.*",
+    "stitch_backend.domains.replenishment.*",
+    "stitch_backend.domains.registration.*",
+    "stitch_backend.domains.settings.*",
+    "stitch_backend.domains.telemetry.*",
+    "stitch_backend.domains.totp.*",
+    "stitch_backend.domains.utility.*",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

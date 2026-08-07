@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
-from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonObject, JsonValue
 from stitch_backend.domains.kiro_gateway.translator.openai_types import (
     OpenAIChatRequest,
     OpenAIChatResponse,
@@ -12,6 +12,9 @@ from stitch_backend.domains.kiro_gateway.translator.openai_types import (
     OpenAIResponsesRequest,
     OpenAIResponsesResponse,
 )
+
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonObject, JsonValue
 
 
 def _convert_response_input_content(

@@ -9,9 +9,9 @@ modular system split across log_levels.py, log_formatters.py, and this file.
 """
 
 import time
-from typing import Optional, Dict
-from .log_levels import LogLevel, LogStage
+
 from .log_formatters import format_log_entry, format_progress
+from .log_levels import LogLevel
 from .logging_utils import safe_log
 
 
@@ -51,7 +51,7 @@ class StructuredLogger:
         """
         self.account_id = account_id
         self.log_level = log_level if not verbose else LogLevel.VERBOSE
-        self.stage_timers: Dict[str, float] = {}  # Track start time for each stage
+        self.stage_timers: dict[str, float] = {}  # Track start time for each stage
         self.start_time = time.time()
 
     def _should_log(self, level: LogLevel) -> bool:
@@ -82,7 +82,7 @@ class StructuredLogger:
         if stage not in self.stage_timers:
             self.stage_timers[stage] = time.time()
 
-    def _get_stage_duration(self, stage: str) -> Optional[float]:
+    def _get_stage_duration(self, stage: str) -> float | None:
         """
         Get duration since stage started.
 
@@ -116,7 +116,7 @@ class StructuredLogger:
         safe_message = safe_log(message)
         print(safe_message, flush=True)
 
-    def info(self, stage: str, message: str, duration: Optional[float] = None) -> None:
+    def info(self, stage: str, message: str, duration: float | None = None) -> None:
         """
         Log info message (NORMAL level).
 
@@ -146,7 +146,7 @@ class StructuredLogger:
         formatted = format_log_entry(self.account_id, stage, "debug", message, None, "info")
         self._safe_print(formatted)
 
-    def success(self, stage: str, message: str, duration: Optional[float] = None) -> None:
+    def success(self, stage: str, message: str, duration: float | None = None) -> None:
         """
         Log success message (NORMAL level).
 
@@ -175,8 +175,8 @@ class StructuredLogger:
         self,
         stage: str,
         message: str,
-        error: Optional[Exception] = None,
-        duration: Optional[float] = None,
+        error: Exception | None = None,
+        duration: float | None = None,
     ) -> None:
         """
         Log error message (always shown, regardless of log level).
@@ -230,7 +230,7 @@ class StructuredLogger:
         )
         self._safe_print(formatted)
 
-    def minimal(self, stage: str, message: str, duration: Optional[float] = None) -> None:
+    def minimal(self, stage: str, message: str, duration: float | None = None) -> None:
         """
         Log minimal message (MINIMAL level - only critical steps).
 
@@ -256,7 +256,7 @@ class StructuredLogger:
         """
         return time.time() - self.start_time
 
-    def get_stage_duration(self, stage: str) -> Optional[float]:
+    def get_stage_duration(self, stage: str) -> float | None:
         """
         Get duration for a specific stage (public method).
 

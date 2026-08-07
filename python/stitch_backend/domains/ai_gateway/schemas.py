@@ -20,20 +20,22 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from stitch_backend.domains.ai_gateway.models import (
-    Credential,
-    CredentialModelAccess,
-    ProviderEndpoint,
-    PublicModel,
-    RouteTarget,
-    UpstreamModel,
-)
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from stitch_backend.domains.ai_gateway.models import (
+        Credential,
+        CredentialModelAccess,
+        ProviderEndpoint,
+        PublicModel,
+        RouteTarget,
+        UpstreamModel,
+    )
 
 # ── Input validation allow-lists (ponytail: set-based; extend when new types land) ─
 _VALID_ADAPTER_TYPES = {"openai_compatible", "anthropic", "gemini"}
@@ -118,21 +120,21 @@ class ProviderEndpointCreateRequest(BaseModel):
                 "http:// base_url is only allowed for localhost or 127.0.0.1; "
                 "use https:// for other hosts"
             )
-        
+
         # DNS-resolution SSRF guard: resolve hostname and block private/reserved IPs for HTTPS.
         # This prevents SSRF via DNS rebinding (e.g., domain that resolves to 169.254.169.254).
         # ponytail: upgrade path — add explicit allowlist for dev/test environments.
         if parsed.scheme.lower() == "https":
             try:
-                import socket
                 import ipaddress
-                
+                import socket
+
                 # Resolve hostname to IP addresses
                 addrinfos = socket.getaddrinfo(parsed.hostname, None)
                 for addrinfo in addrinfos:
                     ip_str = addrinfo[4][0]
                     ip = ipaddress.ip_address(ip_str)
-                    
+
                     # Block private/reserved IPs for HTTPS
                     if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
                         raise ValueError(
@@ -144,8 +146,8 @@ class ProviderEndpointCreateRequest(BaseModel):
                 if "private/reserved IP" in str(e):
                     raise
                 # DNS resolution failed — block it to be safe
-                raise ValueError(f"base_url hostname could not be resolved: {parsed.hostname}")
-        
+                raise ValueError(f"base_url hostname could not be resolved: {parsed.hostname}") from None
+
         return v.rstrip("/")
 
     @field_validator("default_headers")
@@ -259,7 +261,7 @@ class ProviderEndpointResponse(BaseModel):
     updated_at: datetime | None = Field(None, alias="updatedAt")
 
     @classmethod
-    def from_orm_model(cls, obj: ProviderEndpoint) -> "ProviderEndpointResponse":
+    def from_orm_model(cls, obj: ProviderEndpoint) -> ProviderEndpointResponse:
         return cls(
             id=obj.id,
             name=obj.name,
@@ -389,7 +391,7 @@ class CredentialResponse(BaseModel):
     updated_at: datetime | None = Field(None, alias="updatedAt")
 
     @classmethod
-    def from_orm_model(cls, obj: Credential) -> "CredentialResponse":
+    def from_orm_model(cls, obj: Credential) -> CredentialResponse:
         return cls(
             id=obj.id,
             provider_endpoint_id=obj.provider_endpoint_id,
@@ -497,7 +499,7 @@ class UpstreamModelResponse(BaseModel):
     updated_at: datetime | None = Field(None, alias="updatedAt")
 
     @classmethod
-    def from_orm_model(cls, obj: UpstreamModel) -> "UpstreamModelResponse":
+    def from_orm_model(cls, obj: UpstreamModel) -> UpstreamModelResponse:
         return cls(
             id=obj.id,
             provider_endpoint_id=obj.provider_endpoint_id,
@@ -578,7 +580,7 @@ class CredentialModelAccessResponse(BaseModel):
     updated_at: datetime | None = Field(None, alias="updatedAt")
 
     @classmethod
-    def from_orm_model(cls, obj: CredentialModelAccess) -> "CredentialModelAccessResponse":
+    def from_orm_model(cls, obj: CredentialModelAccess) -> CredentialModelAccessResponse:
         return cls(
             id=obj.id,
             credential_id=obj.credential_id,
@@ -663,7 +665,7 @@ class PublicModelResponse(BaseModel):
     updated_at: datetime | None = Field(None, alias="updatedAt")
 
     @classmethod
-    def from_orm_model(cls, obj: PublicModel) -> "PublicModelResponse":
+    def from_orm_model(cls, obj: PublicModel) -> PublicModelResponse:
         return cls(
             id=obj.id,
             display_name=obj.display_name,
@@ -736,7 +738,7 @@ class RouteTargetResponse(BaseModel):
     updated_at: datetime | None = Field(None, alias="updatedAt")
 
     @classmethod
-    def from_orm_model(cls, obj: RouteTarget) -> "RouteTargetResponse":
+    def from_orm_model(cls, obj: RouteTarget) -> RouteTargetResponse:
         return cls(
             id=obj.id,
             public_model_id=obj.public_model_id,

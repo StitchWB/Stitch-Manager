@@ -134,8 +134,8 @@ class RegistrationOrchestrator:
     ) -> str:
         """Persist the new account to the database."""
         from stitch_backend.database import run_in_session
-        from stitch_backend.domains.accounts.service import AccountService
         from stitch_backend.domains.accounts.schemas import AddAccountRequest
+        from stitch_backend.domains.accounts.service import AccountService
 
         req = AddAccountRequest(
             provider=ctx.provider_id,

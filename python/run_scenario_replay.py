@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Scenario Replay Runner (MVP)
 
 Replays a previously recorded scenario JSON against a CloakBrowser persistent profile.
@@ -83,7 +82,7 @@ def _result(
     )
 
 
-class ReplayAbort(Exception):
+class ReplayAbort(Exception):  # noqa: N818 — established control-flow name
     pass
 
 
@@ -1027,8 +1026,8 @@ async def main_async() -> int:
     args = _parse_args()
 
     try:
-        from autoreg.core.paths import get_paths
         from autoreg.browser.profile_launcher import ProfileLauncher
+        from autoreg.core.paths import get_paths
     except Exception as e:
         _result(False, error={"code": "import_error", "message": str(e)})
         return 1

@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ class CostTracker:
         self.costs: dict[str, float] = {}  # key_id -> total_cost
         self.lock = asyncio.Lock()
 
-    def get_pricing(self, model: str) -> Optional[ModelPricing]:
+    def get_pricing(self, model: str) -> ModelPricing | None:
         """Получить цены для модели."""
         # Попробовать точное совпадение
         if model in self.PRICING:
@@ -95,7 +94,7 @@ class CostTracker:
 
 
 # Singleton instance
-_cost_tracker: Optional[CostTracker] = None
+_cost_tracker: CostTracker | None = None
 
 
 def get_cost_tracker() -> CostTracker:

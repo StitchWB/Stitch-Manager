@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 """Scenario Recorder (MVP)
@@ -23,6 +22,7 @@ import os
 import sys
 import time
 
+
 def _safe_stderr(msg: str) -> None:
     """Write to stderr with encoding error handling for Windows."""
     try:
@@ -40,11 +40,13 @@ _safe_stderr(f"[run_scenario_record.py] Starting at {time.strftime('%Y-%m-%d %H:
 import argparse
 import asyncio
 import json
-import os
-from urllib.parse import urlsplit
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
+
+if TYPE_CHECKING:
+    from playwright.async_api import Page
 
 # Ensure project imports work regardless of cwd.
 # NOTE: Our python package root is the "python/" directory.
@@ -1247,13 +1249,11 @@ async def main_async() -> int:
     overlay_enabled = not bool(args.no_overlay)
 
     # Enhanced error logging for debugging startup failures
-    import_error_details = None
     try:
-        from playwright.async_api import Page
-        from autoreg.core.paths import get_paths
+
         from autoreg.browser.profile_launcher import ProfileLauncher
+        from autoreg.core.paths import get_paths
     except Exception as e:
-        import_error_details = str(e)
         import traceback
         _log("error", f"Import error: {e}", step="init")
         sys.stderr.write(f"IMPORT ERROR: {e}\n")

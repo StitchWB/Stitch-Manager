@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
 
-
 # =============================================================================
 # Misc stubs for commonly-called commands (not yet ported)
 # =============================================================================

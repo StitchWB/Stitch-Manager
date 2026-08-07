@@ -14,13 +14,13 @@ from sqlalchemy import text as sql_text
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session
 from stitch_backend.domains.mcp_bridge.service import (
+    account_persist_allowed,
     append_critical_journal,
     autonomy_enabled,
+    critical_journal_path,
     dry_run_enabled,
-    account_persist_allowed,
     ensure_write_allowed,
     kill_switch_path,
-    critical_journal_path,
     scenario_roots,
     validate_scenario_path,
 )
@@ -208,6 +208,7 @@ async def cmd_mcp_wait_python_job(params: dict) -> dict | None:
     Mirrors Rust ``mcp_wait_python_job`` — polls at configurable intervals.
     """
     import asyncio as _asyncio
+
     from stitch_backend.domains.python_jobs.service import get_job_manager
 
     job_id = params.get("jobId", params.get("job_id", ""))

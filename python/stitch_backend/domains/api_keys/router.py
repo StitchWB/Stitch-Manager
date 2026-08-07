@@ -9,8 +9,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from stitch_backend.database import run_in_session
-from stitch_backend.domains.api_keys.service import ApiKeysService
 from stitch_backend.domains.api_keys.schemas import PROVIDER_SCHEMAS
+from stitch_backend.domains.api_keys.service import ApiKeysService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/api-keys", tags=["api-keys"])

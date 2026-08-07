@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from stitch_backend.config import REPO_ROOT
@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 def _resolve_imap_password_from_db(host: str) -> str:
     """Synchronously resolve the real IMAP/Gmail password from the settings DB."""
     import sqlite3 as _sqlite3
-    from stitch_backend.config import _app_data_dir, PYTHON_DIR
+
+    from stitch_backend.config import PYTHON_DIR, _app_data_dir
     # Mirror the same DB-path logic as _default_db_url()
     canonical = _app_data_dir() / "stitch-manager"
     if canonical.is_dir():
@@ -161,7 +162,7 @@ def _build_provider(provider_name: str, config: dict):
     """
     import sys as _sys
 
-    _RELOAD_PREFIXES = (
+    _RELOAD_PREFIXES = (  # noqa: N806 — constant tuple
         "autoreg.providers.kiro_v2",
         "autoreg.providers.fireworks",
         "autoreg.providers.qoder",
@@ -202,7 +203,7 @@ def _build_provider(provider_name: str, config: dict):
 
     if provider_name in ("kiro", "kiro_v2"):
         from autoreg.providers.kiro_v2 import KiroV2Provider
-        from autoreg.shared.logging_system import StructuredLogger, LogLevel
+        from autoreg.shared.logging_system import LogLevel, StructuredLogger
         debug = bool(config.get("debug") or config.get("debugMode"))
         level = LogLevel.DEBUG if debug else LogLevel.NORMAL
         struct_logger = StructuredLogger(account_id="kiro_v2", log_level=level)
@@ -301,7 +302,7 @@ class _LogBridgeHandler(logging.Handler):
     # hot-reloads (where isinstance() fails because the class object differs).
     _is_stitch_log_bridge = True
 
-    def __init__(self, callback: "callable[[str], None]") -> None:
+    def __init__(self, callback: callable[[str], None]) -> None:
         super().__init__(level=logging.DEBUG)
         self._callback = callback
 
@@ -317,7 +318,7 @@ class _LogBridgeHandler(logging.Handler):
 _BRIDGE_LOGGER_NAMES = ("autoreg",)
 
 
-def _install_log_bridge(callback: "callable[[str], None]") -> list[_LogBridgeHandler]:
+def _install_log_bridge(callback: callable[[str], None]) -> list[_LogBridgeHandler]:
     """Attach ``_LogBridgeHandler`` to all autoreg/pipeline loggers.
 
     Idempotent: any previously-attached bridge handlers are removed first so
@@ -467,7 +468,7 @@ def _build_log_callback(job_id: str, provider_name: str):
 
         log_entry = LogEntryPayload(
             id=f"reg_{uuid.uuid4().hex[:12]}",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             level=level,
             source="registration",
             message=message,
@@ -493,7 +494,7 @@ class RegistrationService:
         ``registration.completed`` or ``registration.failed``.
         """
         job_id = uuid.uuid4().hex[:12]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         task = asyncio.create_task(self._run(job_id, provider_name, config))
         self._jobs[job_id] = {
             "id": job_id,
@@ -539,7 +540,7 @@ class RegistrationService:
         Useful for simple callers that want to wait for the result.
         """
         job_id = uuid.uuid4().hex[:12]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         task = asyncio.create_task(self._run(job_id, provider_name, config))
         self._jobs[job_id] = {
             "id": job_id,
@@ -786,7 +787,7 @@ class RegistrationService:
                 job["step"] = "done"
                 job["progress"] = 100
                 job["result"] = result
-                job["completed_at"] = datetime.now(timezone.utc).isoformat()
+                job["completed_at"] = datetime.now(UTC).isoformat()
                 if result.get("email"):
                     job["email"] = result["email"]
 
@@ -803,8 +804,8 @@ class RegistrationService:
                 account_id: str | None = None
                 reg_email = result.get("email") or config.get("email") or ""
                 try:
-                    from stitch_backend.domains.accounts.service import AccountService
                     from stitch_backend.database import run_in_session
+                    from stitch_backend.domains.accounts.service import AccountService
 
                     _donor_id_for_increment = _donor_id  # capture for closure
 
@@ -850,6 +851,7 @@ class RegistrationService:
                     if totp_key_id and account_id:
                         try:
                             import sqlite3 as _sqlite3
+
                             from stitch_backend.config import get_settings as _get_settings
                             _db_path = _get_settings().database_url.split("///", 1)[-1]
                             with _sqlite3.connect(_db_path) as _conn:
@@ -874,6 +876,7 @@ class RegistrationService:
                     if _profile_path and account_id:
                         try:
                             import sqlite3 as _sqlite3
+
                             from stitch_backend.config import get_settings as _get_settings
                             _db_path = _get_settings().database_url.split("///", 1)[-1]
                             with _sqlite3.connect(_db_path) as _conn:
@@ -938,7 +941,7 @@ class RegistrationService:
                 job["state"] = "cancelled"
                 job["step"] = "cancelled"
                 job["error"] = "Cancelled by user"
-                job["completed_at"] = datetime.now(timezone.utc).isoformat()
+                job["completed_at"] = datetime.now(UTC).isoformat()
             return {"success": False, "error": "Cancelled by user", "provider": provider_name}
 
         except Exception as exc:
@@ -948,7 +951,7 @@ class RegistrationService:
                 job["state"] = "failed"
                 job["step"] = "error"
                 job["error"] = str(exc)
-                job["completed_at"] = datetime.now(timezone.utc).isoformat()
+                job["completed_at"] = datetime.now(UTC).isoformat()
 
             await event_bus.emit("registration.failed", {
                 "jobId": job_id,

@@ -8,19 +8,21 @@ circuit-breaker / suspension state back to the database.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from stitch_backend.domains.accounts.models import Account
 from stitch_backend.domains.accounts.service import AccountService
 from stitch_backend.domains.kiro_gateway.pool import AccountPool, AccountSnapshot
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _to_unix_ms(dt: datetime | None) -> float:
@@ -132,7 +134,7 @@ class KiroGatewayService:
         acc = await self._accounts_service.get_account(account_id)
         acc.consecutive_errors = snapshot._error_count
         acc.cooldown_until = (
-            datetime.fromtimestamp(snapshot._cooldown_until / 1000, tz=timezone.utc)
+            datetime.fromtimestamp(snapshot._cooldown_until / 1000, tz=UTC)
             if snapshot._cooldown_until > 0
             else None
         )
@@ -146,7 +148,7 @@ class KiroGatewayService:
             return
         acc = await self._accounts_service.get_account(account_id)
         acc.suspended_at = (
-            datetime.fromtimestamp(snapshot._suspended_at / 1000, tz=timezone.utc)
+            datetime.fromtimestamp(snapshot._suspended_at / 1000, tz=UTC)
             if snapshot._suspended_at > 0
             else None
         )

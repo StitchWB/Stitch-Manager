@@ -6,8 +6,7 @@ Provides methods to avoid detection by anti-bot systems like AWS FWCIM.
 
 import logging
 import os
-import sys
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from DrissionPage import ChromiumPage
@@ -24,9 +23,9 @@ class AntiDetectionMixin:
     def apply_anti_detection(
         self,
         page: "ChromiumPage",
-        email: Optional[str] = None,
-        profile_storage_dir: Optional[str] = None,
-    ) -> Optional[CDPSpoofer]:
+        email: str | None = None,
+        profile_storage_dir: str | None = None,
+    ) -> CDPSpoofer | None:
         """
         Apply anti-fingerprinting spoofing to the browser.
 
@@ -212,7 +211,7 @@ class AntiDetectionMixin:
 
     def _load_or_create_profile(
         self, email: str, profile_storage_dir: str
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Load existing profile or create new one for consistent fingerprinting.
 

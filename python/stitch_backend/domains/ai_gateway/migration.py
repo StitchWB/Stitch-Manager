@@ -47,10 +47,9 @@ create a duplicate. This migration does NOT reimplement that logic inline.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.domains.ai_gateway.models import Credential, ProviderEndpoint
 from stitch_backend.domains.ai_gateway.service import (
@@ -58,6 +57,9 @@ from stitch_backend.domains.ai_gateway.service import (
     UpstreamModelService,  # noqa: F401  (imported per contract; not used in this pass — see docstring)
     compute_fingerprint,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

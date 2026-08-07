@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -316,7 +315,7 @@ class ICloudAuthError(ICloudError):
     """Authentication failed (bad credentials or 2FA code)."""
 
 
-class TwoFactorRequired(ICloudError):
+class TwoFactorRequired(ICloudError):  # noqa: N818 — established API name
     """Apple requires 2FA/2SA to continue. Caller must supply a code."""
 
 

@@ -9,19 +9,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.ttl_cache import TTLCache, TTLCacheDict
 from stitch_backend.domains.patcher.detector import detect_all_ides, detect_ide, get_config_dir
-from stitch_backend.domains.patcher.verifier import file_checksum
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +68,12 @@ def _invalidate_ide_cache(ide_type: str) -> None:
 
 def _get_backup_dir(ide: str) -> Path:
     """Return the backup directory for a given IDE.
-    
+
     Caches the result to avoid repeated mkdir() calls.
     """
     if not hasattr(_get_backup_dir, '_cache'):
         _get_backup_dir._cache = {}
-    
+
     if ide not in _get_backup_dir._cache:
         config_dir = get_config_dir(ide)
         if config_dir is None:
@@ -83,7 +81,7 @@ def _get_backup_dir(ide: str) -> Path:
         backup_dir = config_dir / PATCH_BACKUP_DIR_NAME
         backup_dir.mkdir(parents=True, exist_ok=True)
         _get_backup_dir._cache[ide] = backup_dir
-    
+
     return _get_backup_dir._cache[ide]
 
 
@@ -127,20 +125,20 @@ def _get_running_processes() -> set[str]:
     if not hasattr(_get_running_processes, '_cache'):
         _get_running_processes._cache = None
         _get_running_processes._cache_time = 0
-    
+
     current_time = time.time()
     if _get_running_processes._cache is None or current_time - _get_running_processes._cache_time > 30:
         try:
             import psutil
             _get_running_processes._cache = {
-                proc.info["name"].lower() 
-                for proc in psutil.process_iter(["name"]) 
+                proc.info["name"].lower()
+                for proc in psutil.process_iter(["name"])
                 if proc.info["name"]
             }
             _get_running_processes._cache_time = current_time
         except Exception:
             _get_running_processes._cache = set()
-    
+
     return _get_running_processes._cache
 
 
@@ -152,10 +150,10 @@ def _is_ide_running(ide: str) -> bool:
         "cursor": ["cursor", "Cursor"],
         "trae": ["trae", "Trae"],
     }
-    
+
     names = process_names.get(ide, [ide])
     running_processes = _get_running_processes()
-    
+
     return any(
         any(name.lower() in proc_name for name in names)
         for proc_name in running_processes
@@ -169,7 +167,7 @@ def _scan_single_ide(inst) -> dict[str, Any]:
     installed = inst.install_path is not None and inst.install_path.exists()
     ext_path = _find_extension_path(inst.ide_id) if installed else None
     patch_version = _read_patch_version(ext_path) if ext_path else None
-    
+
     return {
         "id": inst.ide_id,
         "name": inst.name,
@@ -190,15 +188,15 @@ def _scan_single_ide(inst) -> dict[str, Any]:
 def _sync_detect_all() -> list[dict[str, Any]]:
     """Synchronous IDE detection with parallel scanning (runs in thread)."""
     installations = detect_all_ides()
-    
+
     # Scan all IDEs in parallel using thread pool
     with ThreadPoolExecutor(max_workers=min(len(installations), 4)) as executor:
         # Submit all scan tasks
         future_to_inst = {
-            executor.submit(_scan_single_ide, inst): inst 
+            executor.submit(_scan_single_ide, inst): inst
             for inst in installations
         }
-        
+
         # Collect results as they complete
         result = []
         for future in as_completed(future_to_inst):
@@ -224,7 +222,7 @@ def _sync_detect_all() -> list[dict[str, Any]]:
                     "installed": False,
                     "error": str(e),
                 })
-    
+
     return result
 
 
@@ -233,15 +231,15 @@ def _sync_get_patch_status(ide_type: str) -> dict[str, Any]:
     inst = detect_ide(ide_type)
     if not inst:
         return {"ideType": ide_type, "status": "not_installed", "patchVersion": None}
-    
+
     ext_path = _find_extension_path(ide_type)
     if not ext_path:
         return {"ideType": ide_type, "status": "no_extension", "patchVersion": None}
-    
+
     patch_version = _read_patch_version(ext_path)
     backup_dir = _get_backup_dir(ide_type)
     has_backup = any(backup_dir.glob("*.bak"))
-    
+
     return {
         "ideType": ide_type,
         "status": "patched" if patch_version else "not_patched",
@@ -261,7 +259,7 @@ def _sync_list_backups(ide_type: str) -> list[dict[str, Any]]:
             "id": backup_file.name,
             "path": str(backup_file),
             "size": stat.st_size,
-            "createdAt": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            "createdAt": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
         })
     return backups
 
@@ -274,16 +272,16 @@ def _sync_read_config() -> dict[str, Any]:
 
 def _sync_launch_ide(ide_id: str) -> dict[str, Any]:
     """Synchronous IDE launch (runs in thread)."""
-    import subprocess
     import platform
-    
+    import subprocess
+
     inst = detect_ide(ide_id)
     if not inst or not inst.install_path:
         return {"success": False, "error": f"IDE {ide_id} not found"}
-    
+
     install_path = inst.install_path
     system = platform.system()
-    
+
     try:
         if system == "Windows":
             # Windows: find executable in install path
@@ -293,34 +291,34 @@ def _sync_launch_ide(ide_id: str) -> dict[str, Any]:
                 "windsurf": ["Windsurf.exe"],
                 "trae": ["Trae.exe"],
             }
-            
+
             candidates = exe_candidates.get(ide_id, [])
             exe_path = None
-            
+
             for candidate in candidates:
                 potential_path = install_path / candidate
                 if potential_path.exists():
                     exe_path = potential_path
                     break
-            
+
             if not exe_path:
                 return {"success": False, "error": f"Executable not found for {ide_id}"}
-            
+
             subprocess.Popen([str(exe_path)], cwd=str(install_path))
             return {"success": True, "message": f"Launched {ide_id}"}
-            
+
         elif system == "Darwin":
             # macOS: use open command
             app_path = install_path
             if not str(app_path).endswith(".app"):
                 app_path = install_path / f"{ide_id.capitalize()}.app"
-            
+
             if not app_path.exists():
                 return {"success": False, "error": f"App not found for {ide_id}"}
-            
+
             subprocess.Popen(["open", str(app_path)])
             return {"success": True, "message": f"Launched {ide_id}"}
-            
+
         else:
             # Linux: find executable
             exe_candidates = {
@@ -329,22 +327,22 @@ def _sync_launch_ide(ide_id: str) -> dict[str, Any]:
                 "windsurf": ["windsurf"],
                 "trae": ["trae"],
             }
-            
+
             candidates = exe_candidates.get(ide_id, [ide_id])
             exe_path = None
-            
+
             for candidate in candidates:
                 potential_path = install_path / candidate
                 if potential_path.exists():
                     exe_path = potential_path
                     break
-            
+
             if not exe_path:
                 return {"success": False, "error": f"Executable not found for {ide_id}"}
-            
+
             subprocess.Popen([str(exe_path)], cwd=str(install_path))
             return {"success": True, "message": f"Launched {ide_id}"}
-            
+
     except Exception as e:
         return {"success": False, "error": f"Failed to launch {ide_id}: {str(e)}"}
 
@@ -366,16 +364,16 @@ def _sync_apply_patch(ide_type: str, create_backup: bool) -> dict[str, Any]:
                     backup_path = backup_dir / backup_filename
                     shutil.copy2(ext_path, backup_path)
                     logger.info("Created backup: %s", backup_path)
-        
+
         config = get_config()
         result = apply_patch_with_config(config)
-        
+
         # Invalidate backups cache since we may have created a new backup
         if backup_path:
             _backups_cache.invalidate(ide_type)
-        
+
         return {
-            "success": True, 
+            "success": True,
             "message": result,
             "backupPath": str(backup_path) if backup_path else None
         }
@@ -401,33 +399,33 @@ def _sync_restore_backup(backup_id: str) -> dict[str, Any]:
         parts = backup_id.split('_extension_')
         if len(parts) != 2:
             return {"success": False, "error": f"Invalid backup ID format: {backup_id}"}
-        
+
         ide_type = parts[0]
-        
+
         # Find the IDE installation
         inst = detect_ide(ide_type)
         if not inst or not inst.install_path:
             return {"success": False, "error": f"IDE {ide_type} not found"}
-        
+
         # Find extension file
         ext_path = _find_extension_path(ide_type)
         if not ext_path:
             return {"success": False, "error": f"Extension file not found for {ide_type}"}
-        
+
         # Find backup file
         backup_dir = _get_backup_dir(ide_type)
         backup_path = backup_dir / backup_id
-        
+
         if not backup_path.exists():
             return {"success": False, "error": f"Backup file not found: {backup_id}"}
-        
+
         # Restore backup
         shutil.copy2(backup_path, ext_path)
         logger.info("Restored %s from backup %s", ext_path, backup_id)
-        
+
         # Invalidate caches
         _invalidate_ide_cache(ide_type)
-        
+
         return {
             "success": True,
             "message": f"Restored {ide_type} from backup {backup_id}",
@@ -443,17 +441,17 @@ def _sync_restore_backup(backup_id: str) -> dict[str, Any]:
 @register_command("detect_ides")
 async def cmd_detect_ides(params: dict) -> list[dict[str, Any]]:
     """Detect all installed IDEs and their patch status.
-    
+
     Args:
         force: If True, bypass cache and rescan (default: False)
     """
     force = params.get("force", False)
-    
+
     if not force:
         cached = _detect_cache.get()
         if cached is not None:
             return cached
-    
+
     result = await asyncio.to_thread(_sync_detect_all)
     _detect_cache.set(result)
     return result
@@ -465,11 +463,11 @@ async def cmd_get_patch_status(params: dict) -> dict[str, Any]:
     ide_type = params.get("ideType", "")
     if not ide_type:
         return {"error": "ideType required"}
-    
+
     cached = _patch_status_cache.get(ide_type)
     if cached is not None:
         return cached
-    
+
     result = await asyncio.to_thread(_sync_get_patch_status, ide_type)
     _patch_status_cache.set(ide_type, result)
     return result
@@ -481,11 +479,11 @@ async def cmd_list_backups(params: dict) -> list[dict[str, Any]]:
     ide_type = params.get("ideType", "")
     if not ide_type:
         return []
-    
+
     cached = _backups_cache.get(ide_type)
     if cached is not None:
         return cached
-    
+
     result = await asyncio.to_thread(_sync_list_backups, ide_type)
     _backups_cache.set(ide_type, result)
     return result
@@ -497,7 +495,7 @@ async def cmd_get_kiro_patch_config(params: dict) -> dict[str, Any]:
     cached = _config_cache.get()
     if cached is not None:
         return cached
-    
+
     result = await asyncio.to_thread(_sync_read_config)
     _config_cache.set(result)
     return result
@@ -508,10 +506,10 @@ async def cmd_apply_patch(params: dict) -> dict[str, Any]:
     """Apply patch to an IDE."""
     ide_type = params.get("ideType", "")
     create_backup = params.get("createBackup", True)
-    
+
     if not ide_type:
         return {"success": False, "error": "ideType required"}
-    
+
     result = await asyncio.to_thread(_sync_apply_patch, ide_type, create_backup)
     if result.get("success"):
         _invalidate_ide_cache(ide_type)
@@ -523,10 +521,10 @@ async def cmd_remove_patch(params: dict) -> dict[str, Any]:
     """Remove patch from an IDE."""
     ide_type = params.get("ideType", "")
     restore_backup = params.get("restoreBackup", False)
-    
+
     if not ide_type:
         return {"success": False, "error": "ideType required"}
-    
+
     result = await asyncio.to_thread(_sync_remove_patch, ide_type, restore_backup)
     if result.get("success"):
         _invalidate_ide_cache(ide_type)
@@ -537,10 +535,10 @@ async def cmd_remove_patch(params: dict) -> dict[str, Any]:
 async def cmd_restore_backup(params: dict) -> dict[str, Any]:
     """Restore a backup."""
     backup_id = params.get("backupId", "")
-    
+
     if not backup_id:
         return {"success": False, "error": "backupId required"}
-    
+
     result = await asyncio.to_thread(_sync_restore_backup, backup_id)
     if result.get("success"):
         _invalidate_all_caches()
@@ -551,9 +549,9 @@ async def cmd_restore_backup(params: dict) -> dict[str, Any]:
 async def cmd_launch_ide(params: dict) -> dict[str, Any]:
     """Launch an IDE."""
     ide_id = params.get("ideId", "")
-    
+
     if not ide_id:
         return {"success": False, "error": "ideId required"}
-    
+
     result = await asyncio.to_thread(_sync_launch_ide, ide_id)
     return result

@@ -12,11 +12,10 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import List, Union
 
 logger = logging.getLogger(__name__)
 
-PathLike = Union[str, Path]
+PathLike = str | Path
 
 
 def kill_chrome_for_profile(
@@ -63,7 +62,7 @@ def kill_chrome_for_profile(
     return killed
 
 
-def capture_chrome_pids_for_profile(profile_dir: PathLike) -> List[int]:
+def capture_chrome_pids_for_profile(profile_dir: PathLike) -> list[int]:
     """Return PIDs of Chrome processes using the given profile directory.
 
     Used to track *our* Chrome instance so later cleanup can target only
@@ -81,7 +80,7 @@ def capture_chrome_pids_for_profile(profile_dir: PathLike) -> List[int]:
         return []
 
     profile_str = str(profile_dir)
-    pids: List[int] = []
+    pids: list[int] = []
 
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:

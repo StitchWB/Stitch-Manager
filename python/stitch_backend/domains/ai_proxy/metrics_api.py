@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from .key_metrics import get_metrics_tracker
 from .cost_tracker import get_cost_tracker
+from .key_metrics import get_metrics_tracker
 
 router = APIRouter(prefix="/metrics", tags=["Key Metrics"])
 

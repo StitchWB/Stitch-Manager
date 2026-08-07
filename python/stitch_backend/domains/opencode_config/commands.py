@@ -1,8 +1,8 @@
 """OpenCode config commands - command handlers for config management."""
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.domains.opencode_config.service import OpenCodeConfigService
 from stitch_backend.domains.opencode_config.api_tester import OpenCodeApiTester
+from stitch_backend.domains.opencode_config.service import OpenCodeConfigService
 
 
 @register_command("get_opencode_config")
@@ -42,10 +42,10 @@ async def test_opencode_api(params: dict) -> dict:
     """Test API endpoint and discover available models."""
     base_url = params.get("baseUrl", "")
     api_key = params.get("apiKey", "")
-    
+
     if not base_url or not api_key:
         return {"success": False, "error": "baseUrl and apiKey are required"}
-    
+
     tester = OpenCodeApiTester()
     return await tester.test_api(base_url, api_key)
 
@@ -56,11 +56,11 @@ async def bulk_test_opencode_api(params: dict) -> dict:
     base_url = params.get("baseUrl", "")
     api_keys = params.get("apiKeys", [])
     concurrency = params.get("concurrency", 10)
-    
+
     if not base_url:
         return {"success": False, "error": "baseUrl is required"}
     if not api_keys or not isinstance(api_keys, list):
         return {"success": False, "error": "apiKeys must be a non-empty list"}
-    
+
     tester = OpenCodeApiTester()
     return await tester.bulk_test_api(base_url, api_keys, concurrency=concurrency)

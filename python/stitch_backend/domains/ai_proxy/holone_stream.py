@@ -82,7 +82,7 @@ def protect_anthropic_response(
     content = payload.get("content")
     if not isinstance(content, list):
         return payload, (), False
-    
+
     for block in content:
         if not isinstance(block, dict):
             continue
@@ -102,16 +102,16 @@ def protect_anthropic_response(
                         source=f"tool_use:{name}",
                     )
                 )
-    
+
     if saw_tool and not client_has_tools:
         findings.append(_unsolicited("tool_use"))
-    
+
     drop = saw_tool and (
         not client_has_tools or any(item.severity is Severity.HIGH for item in findings)
     )
     if mode is SecurityMode.MONITOR or not drop:
         return payload, tuple(findings), False
-    
+
     reason = _block_reason(findings)
     new_content = []
     for block in content:

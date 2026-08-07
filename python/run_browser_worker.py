@@ -7,13 +7,13 @@ when the module import doesn't work (e.g., when PYTHONPATH isn't set).
 
 Usage:
     python run_browser_worker.py
-    
+
 Or from Rust:
     python python/run_browser_worker.py
 """
 
-import sys
 import os
+import sys
 
 # Add the python directory to the path so imports work
 script_dir = os.path.dirname(os.path.abspath(__file__))

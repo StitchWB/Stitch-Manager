@@ -12,11 +12,13 @@ import json
 import logging
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +153,7 @@ def _calculate_next_run(schedule: Schedule, from_time: int | None = None) -> int
     if schedule.type == "daily":
         hour = schedule.hour or 0
         minute = schedule.minute or 0
-        dt = datetime.fromtimestamp(now, tz=timezone.utc)
+        dt = datetime.fromtimestamp(now, tz=UTC)
         target = dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if target.timestamp() <= now:
             target += timedelta(days=1)

@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -25,8 +24,8 @@ class ProxyConfig:
     scheme: str = "http"  # ``http`` or ``socks5``
     host: str = ""
     port: int = 0
-    username: Optional[str] = None
-    password: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
 
     def has_auth(self) -> bool:
         return bool(self.username and self.password)
@@ -51,9 +50,9 @@ class ProxyConfig:
 def proxy_from_params(
     enabled: bool = False,
     proxy_type: str = "http",
-    proxy_url: Optional[str] = None,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
+    proxy_url: str | None = None,
+    username: str | None = None,
+    password: str | None = None,
 ) -> ProxyConfig:
     """Build :class:`ProxyConfig` from individual parameters.
 
@@ -105,7 +104,7 @@ def proxy_from_env() -> ProxyConfig:
 
 def _parse_proxy_url(
     url: str,
-) -> Tuple[str, int, Optional[str], Optional[str], Optional[str]]:
+) -> tuple[str, int, str | None, str | None, str | None]:
     """Parse a proxy URL into ``(host, port, scheme, user, password)``.
 
     Accepts forms like ``host:port``, ``user:pass@host:port``, or
@@ -124,8 +123,8 @@ def _parse_proxy_url(
         password = parsed.password
         return host, port, scheme, user, password
 
-    user: Optional[str] = None
-    password: Optional[str] = None
+    user: str | None = None
+    password: str | None = None
     if "@" in url:
         auth_part, host_part = url.rsplit("@", 1)
         if ":" in auth_part:

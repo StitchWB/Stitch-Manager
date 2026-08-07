@@ -9,13 +9,11 @@ Card pool manager — парсинг и хранение карт для про�
 """
 
 import logging
-import os
 import random
 import re
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ class CardParser:
     _CARD_NUMBER_RE = re.compile(r'\b(\d{13,19})\b')
 
     @staticmethod
-    def parse_line(line: str) -> Optional[Card]:
+    def parse_line(line: str) -> Card | None:
         """Parse a single line into a Card, trying multiple formats."""
         line = line.strip()
         if not line:
@@ -95,7 +93,7 @@ class CardParser:
         return cards
 
     @staticmethod
-    def _parse_pipe_format(line: str) -> Optional[Card]:
+    def _parse_pipe_format(line: str) -> Card | None:
         """Parse: number|MM|YYYY|CVV or number|MM|YY|CVV"""
         # Clean up spaces around pipes
         parts = [p.strip() for p in line.split('|')]
@@ -120,7 +118,7 @@ class CardParser:
         return None
 
     @staticmethod
-    def _parse_live_format(line: str) -> Optional[Card]:
+    def _parse_live_format(line: str) -> Card | None:
         """Parse: Live | number|MM|YYYY|CVV | [BIN: ...] | ..."""
         lower = line.lower()
         if not any(kw in lower for kw in ['live', 'charge ok', 'gate', 'bin:']):
@@ -129,7 +127,7 @@ class CardParser:
         return CardParser._parse_pipe_format(line)
 
     @staticmethod
-    def _parse_csv_format(line: str) -> Optional[Card]:
+    def _parse_csv_format(line: str) -> Card | None:
         """Parse: number,MM,YYYY,CVV"""
         parts = [p.strip() for p in line.split(',')]
         if len(parts) < 4:
@@ -146,7 +144,7 @@ class CardParser:
         return None
 
     @staticmethod
-    def _parse_space_format(line: str) -> Optional[Card]:
+    def _parse_space_format(line: str) -> Card | None:
         """Parse: number MM/YY CVV or number MMYY CVV"""
         match = re.match(r'(\d{13,19})\s+(\d{2})/(\d{2,4})\s+(\d{3,4})', line)
         if match:
@@ -185,44 +183,44 @@ class CardPool:
         cards = CardParser.parse_file(filepath)
         self.load_cards(provider, cards)
 
-    def get_card(self, provider: str) -> Optional[Card]:
+    def get_card(self, provider: str) -> Card | None:
         """Get next unused card for a provider. If all used, resets and reuses them."""
         with self._lock:
             pool = self._pools.get(provider, [])
             if not pool:
                 logger.warning(f"No cards available for provider '{provider}'")
                 return None
-                
+
             for card in pool:
                 if not card.used:
                     card.used = True
                     logger.info(f"Card allocated for '{provider}': ****{card.number[-4:]}")
                     return card
-                    
+
             # All cards used, reset and cycle
             for c in pool:
                 c.used = False
-                
+
             card = pool[0]
             card.used = True
             logger.info(f"Card (reused) allocated for '{provider}': ****{card.number[-4:]}")
             return card
 
-    def get_random_card(self, provider: str) -> Optional[Card]:
+    def get_random_card(self, provider: str) -> Card | None:
         """Get a random card for a provider (infinite reuse)."""
         with self._lock:
             pool = self._pools.get(provider, [])
             if not pool:
                 logger.warning(f"No cards available for provider '{provider}'")
                 return None
-                
+
             unused = [c for c in pool if not c.used]
             if not unused:
                 # All used, reset
                 for c in pool:
                     c.used = False
                 unused = pool
-                
+
             card = random.choice(unused)
             card.used = True
             logger.info(f"Random card allocated for '{provider}': ****{card.number[-4:]}")

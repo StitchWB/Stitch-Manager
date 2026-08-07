@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -104,7 +104,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
                 result = await asyncio.wait_for(
                     handler(body), timeout=effective_timeout
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error(
                     "Command '%s' timed out after %.1fs", name, effective_timeout
                 )
@@ -118,7 +118,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         raise  # let FastAPI handle HTTPException directly
     except ValidationError as exc:
         errors = exc.errors()
-        first = errors[0] if errors else {}
+        first: dict[str, Any] = cast("dict[str, Any]", errors[0]) if errors else {}
         loc = ".".join(str(p) for p in first.get("loc", ()))
         msg = first.get("msg", "")
         summary = f"{loc}: {msg}"[:200]

@@ -66,5 +66,6 @@ async def cmd_generate_new_machine_id(params: dict) -> str:
 async def cmd_get_kiro_patch_config(params: dict) -> dict:
     """Read Kiro Patch V3 configuration from disk."""
     import asyncio
+
     from stitch_backend.domains.kiro_patch import service
     return await asyncio.to_thread(service.get_config)

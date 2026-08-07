@@ -1,13 +1,14 @@
 import logging
 from abc import ABC
-from ..base import IEmailStrategy, IEmailGenerator, IEmailVerifier, EmailContext
+
+from ..base import EmailContext, IEmailGenerator, IEmailStrategy, IEmailVerifier
 
 logger = logging.getLogger(__name__)
 
 
 class BaseStrategy(IEmailStrategy, ABC):
     """Base strategy combining generator and verifier"""
-    
+
     def __init__(
         self,
         generator: IEmailGenerator,
@@ -15,14 +16,14 @@ class BaseStrategy(IEmailStrategy, ABC):
     ):
         """
         Initialize strategy
-        
+
         Args:
             generator: Email generator
             verifier: Optional email verifier (for getting codes)
         """
         self.generator = generator
         self.verifier = verifier
-    
+
     def generate_and_verify(
         self,
         description: str | None = None,
@@ -33,20 +34,20 @@ class BaseStrategy(IEmailStrategy, ABC):
     ) -> tuple[EmailContext, str | None]:
         """
         Generate email and optionally verify
-        
+
         Args:
             description: Description for email generation
             sender_keywords: Keywords to match in sender (for verification)
             max_wait: Maximum seconds to wait for verification code
             session_id: Optional session ID for logging
             url_pattern: Regex pattern to extract URL instead of code (e.g. for Fireworks)
-            
+
         Returns:
             Tuple of (EmailContext, verification_code or URL or None)
         """
         # Generate email
         email_ctx = self.generator.generate(description)
-        
+
         result = None
         if self.verifier and sender_keywords:
             # If url_pattern provided, try to get confirmation URL
@@ -66,9 +67,9 @@ class BaseStrategy(IEmailStrategy, ABC):
                     max_wait=max_wait,
                     session_id=session_id,
                 )
-        
+
         return email_ctx, result
-    
+
     def verify(
         self,
         context: EmailContext,
@@ -79,20 +80,20 @@ class BaseStrategy(IEmailStrategy, ABC):
     ) -> str | None:
         """
         Verify email after generation (wait for incoming email).
-        
+
         Args:
             context: EmailContext from generate()
             sender_keywords: Keywords to match in sender
             max_wait: Maximum seconds to wait
             session_id: Optional session ID for logging
             url_pattern: Regex pattern to extract URL instead of code
-            
+
         Returns:
             Verification code or URL or None
         """
         if not self.verifier:
             return None
-        
+
         # Try direct verify() first (useful for Mail.tm which needs context)
         if hasattr(self.verifier, 'verify'):
             try:
@@ -106,7 +107,7 @@ class BaseStrategy(IEmailStrategy, ABC):
             except TypeError:
                 # If verify doesn't take context as first arg, fallback
                 pass
-        
+
         # If url_pattern provided and verifier supports it, get URL
         if url_pattern and hasattr(self.verifier, 'get_confirmation_url'):
             return self.verifier.get_confirmation_url(
@@ -116,7 +117,7 @@ class BaseStrategy(IEmailStrategy, ABC):
                 max_wait=max_wait,
                 session_id=session_id,
             )
-        
+
         # Otherwise get verification code
         return self.verifier.get_verification_code(
             target_email=context.email,
@@ -124,7 +125,7 @@ class BaseStrategy(IEmailStrategy, ABC):
             max_wait=max_wait,
             session_id=session_id,
         )
-    
+
     def close(self):
         """Close resources"""
         self.generator.close()

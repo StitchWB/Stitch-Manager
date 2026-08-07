@@ -148,6 +148,7 @@ async def cmd_test_imap_connection(params: dict) -> str:
     setting_key = "gmailAppPassword" if is_gmail else "imapPassword"
     if password in ("••••••••", "********", ""):
         from sqlalchemy import text as sql_text
+
         from stitch_backend.database import run_in_read_session
 
         async def _fetch_pwd(session):
@@ -251,6 +252,7 @@ def _generate_email_by_strategy(strategy: str, imap_user: str = "", domain: str 
 async def cmd_email_generate_from_settings(params: dict) -> dict:
     """Generate email from stored settings. Mirrors Rust ``email_generate_from_settings``."""
     from sqlalchemy import text as sql_text
+
     from stitch_backend.database import run_in_read_session
 
     async def _fetch(session):
@@ -270,6 +272,7 @@ async def cmd_email_generate_from_settings(params: dict) -> dict:
 async def cmd_email_generate_from_settings_persistent(params: dict) -> dict:
     """Generate email from settings with persistent counter. Mirrors Rust equivalent."""
     from sqlalchemy import text as sql_text
+
     from stitch_backend.database import run_in_session
 
     provider = params.get("provider", "default")

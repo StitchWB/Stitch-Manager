@@ -8,7 +8,8 @@ Responses API converters live in `responses_conv.py`.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     _EXECUTION_DIRECTIVE,
@@ -28,16 +29,19 @@ from stitch_backend.domains.kiro_gateway.translator.openai_extract import (
     convert_openai_tools,
     extract_openai_content,
 )
-from stitch_backend.domains.kiro_gateway.translator.openai_types import (
-    OpenAIChatRequest,
-    OpenAIMessage,
-)
 
 # ── Cross-agent imports ────────────────────────────────────────────────────
-
-from stitch_backend.domains.kiro_gateway.translator.thinking import build_thinking_fields  # noqa: E402
+from stitch_backend.domains.kiro_gateway.translator.thinking import (
+    build_thinking_fields,  # noqa: E402
+)
 from stitch_backend.domains.kiro_gateway.upstream.models import map_model_id  # noqa: E402
 from stitch_backend.domains.kiro_gateway.upstream.payload import build_kiro_payload  # noqa: E402
+
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.translator.openai_types import (
+        OpenAIChatRequest,
+        OpenAIMessage,
+    )
 
 
 def _mk_uim(
@@ -72,7 +76,9 @@ def openai_to_kiro(
 ) -> JsonObject:
     """Convert an OpenAI /v1/chat/completions request to a Kiro payload."""
     if tool_name_registry is None:
-        from stitch_backend.domains.kiro_gateway.translator.tool_norm import default_tool_name_registry  # noqa: E402
+        from stitch_backend.domains.kiro_gateway.translator.tool_norm import (
+            default_tool_name_registry,  # noqa: E402
+        )
         tool_name_registry = default_tool_name_registry()
 
     model_id = map_model_id(request["model"])
@@ -97,7 +103,7 @@ def openai_to_kiro(
         else:
             non_system.append(msg)
 
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     system_prompt = f"[Context: Current time is {timestamp}]\n\n{system_prompt}\n\n{_EXECUTION_DIRECTIVE}"
 
     # ── Build history ──────────────────────────────────────────────────────

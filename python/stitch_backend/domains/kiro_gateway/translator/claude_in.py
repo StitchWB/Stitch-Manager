@@ -6,14 +6,14 @@ Kiro types/helpers in `kiro_types.py`, inbound models in `claude_types.py`.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from stitch_backend.domains.kiro_gateway.translator.claude_extract import (
     convert_claude_tools,
     extract_claude_assistant_content,
     extract_claude_content,
 )
-from stitch_backend.domains.kiro_gateway.translator.claude_types import ClaudeRequest
 from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     _EXECUTION_DIRECTIVE,
     JsonObject,
@@ -29,10 +29,14 @@ from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
 
 # ── Cross-agent imports ──────────────────────────────────────────────────────
 # ponytail: build_thinking_fields (sibling), map_model_id + build_kiro_payload (Wave 3).
-
-from stitch_backend.domains.kiro_gateway.translator.thinking import build_thinking_fields  # noqa: E402
+from stitch_backend.domains.kiro_gateway.translator.thinking import (
+    build_thinking_fields,  # noqa: E402
+)
 from stitch_backend.domains.kiro_gateway.upstream.models import map_model_id  # noqa: E402
 from stitch_backend.domains.kiro_gateway.upstream.payload import build_kiro_payload  # noqa: E402
+
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.translator.claude_types import ClaudeRequest
 
 
 def _mk_uim(
@@ -63,7 +67,9 @@ def claude_to_kiro(
 ) -> JsonObject:
     """Convert a Claude /v1/messages request to a Kiro payload."""
     if tool_name_registry is None:
-        from stitch_backend.domains.kiro_gateway.translator.tool_norm import default_tool_name_registry  # noqa: E402
+        from stitch_backend.domains.kiro_gateway.translator.tool_norm import (
+            default_tool_name_registry,  # noqa: E402
+        )
         tool_name_registry = default_tool_name_registry()
 
     model_id = map_model_id(request["model"])
@@ -81,7 +87,7 @@ def claude_to_kiro(
             scp = merge_cache_points(scp, to_kiro_cache_point(b.get("cache_control")))
             parts.append(str(b.get("text", "")))
         sp = "\n".join(parts)
-    sp = f"[Context: Current time is {datetime.now(timezone.utc).isoformat()}]\n\n{sp}\n\n{_EXECUTION_DIRECTIVE}"
+    sp = f"[Context: Current time is {datetime.now(UTC).isoformat()}]\n\n{sp}\n\n{_EXECUTION_DIRECTIVE}"
 
     # Build history
     history: list[KiroHistoryMessage] = []

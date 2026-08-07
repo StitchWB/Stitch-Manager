@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.domains.key_health.models import KeyHealth
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ def hash_key(provider: str, secret: str) -> str:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class KeyHealthService:
@@ -99,7 +101,7 @@ class KeyHealthService:
     ) -> list[KeyHealth]:
         """Get records whose last_checked_at is older than stale_seconds."""
         cutoff = datetime.fromtimestamp(
-            _utcnow().timestamp() - stale_seconds, tz=timezone.utc,
+            _utcnow().timestamp() - stale_seconds, tz=UTC,
         )
         result = await self._db.execute(
             select(KeyHealth).where(

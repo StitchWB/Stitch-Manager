@@ -11,14 +11,16 @@ import io
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, func, select
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.logging.models import AppLog
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ class LoggingService:
         context: Any = None,
     ) -> dict[str, Any]:
         """Insert a log entry and return it as a dict."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         log_id = uuid.uuid4().hex
 
         level = level.lower() if level.lower() in VALID_LEVELS else "info"

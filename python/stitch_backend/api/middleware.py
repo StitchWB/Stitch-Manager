@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from stitch_backend.core.exceptions import StitchError
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI, Request
 
 logger = logging.getLogger(__name__)
 

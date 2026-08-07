@@ -32,7 +32,7 @@ ZERO_WIDTH_CHARS = {
 
 def _entropy(s: str) -> float:
     """Calculate Shannon entropy (bits per character).
-    
+
     Base64: ~6 bits/char, hex: ~4 bits/char, plain text: ~3-4 bits/char
     """
     if not s or len(s) < 20:
@@ -60,7 +60,7 @@ def _extract_file_path(args: str) -> str | None:
 def _analyze_content(text: str, source: str) -> list[Finding]:
     """Analyze text for encoded/hidden content."""
     findings = []
-    
+
     # 1. High entropy (encoded content)
     entropy = _entropy(text)
     if entropy > 4.5 and len(text) > 50:
@@ -73,7 +73,7 @@ def _analyze_content(text: str, source: str) -> list[Finding]:
             source=source,
             description="High-entropy content detected (potential encoded instructions)"
         ))
-    
+
     # 2. Invisible characters (steganography)
     invisible_count = sum(1 for c in text if c in ZERO_WIDTH_CHARS)
     if invisible_count > 5:
@@ -86,10 +86,10 @@ def _analyze_content(text: str, source: str) -> list[Finding]:
             source=source,
             description="Invisible characters detected (potential steganography)"
         ))
-    
+
     # 3. Non-printable characters (control codes)
     non_printable = sum(
-        1 for c in text 
+        1 for c in text
         if unicodedata.category(c).startswith('C')
     )
     if non_printable > 10:
@@ -102,7 +102,7 @@ def _analyze_content(text: str, source: str) -> list[Finding]:
             source=source,
             description="Non-printable characters detected"
         ))
-    
+
     return findings
 
 
@@ -110,7 +110,7 @@ def _analyze_tool_call(name: str, args: str) -> list[Finding]:
     """Analyze tool call for suspicious behavior."""
     findings = []
     text = f"{name} {args}"
-    
+
     # 1. Network access (any URL)
     if "://" in text or "Invoke-Web" in text.lower():
         findings.append(Finding(
@@ -122,7 +122,7 @@ def _analyze_tool_call(name: str, args: str) -> list[Finding]:
             source=f"tool_call:{name}",
             description="Network access detected in tool call"
         ))
-    
+
     # 2. High entropy (encoded content in arguments)
     entropy = _entropy(args)
     if entropy > 4.5 and len(args) > 50:
@@ -135,7 +135,7 @@ def _analyze_tool_call(name: str, args: str) -> list[Finding]:
             source=f"tool_call:{name}",
             description="High-entropy arguments detected (potential encoded payload)"
         ))
-    
+
     return findings
 
 
@@ -187,32 +187,32 @@ class HoloneService:
     ) -> tuple[dict[str, Any], list[Finding], bool]:
         if not self.config.enabled:
             return response, [], False
-        
+
         # Heuristic analysis first
         findings: list[Finding] = []
         for choice in response.get("choices", []):
             message = choice.get("message", {})
-            
+
             # Analyze response content
             content = message.get("content", "")
             if isinstance(content, str):
                 findings.extend(_analyze_content(content, source="response"))
-            
+
             # Analyze tool calls
             tool_calls = message.get("tool_calls", [])
             for call in tool_calls:
                 func = call.get("function", {})
                 name = func.get("name", "")
                 args = func.get("arguments", "")
-                
+
                 # Heuristic tool call analysis
                 findings.extend(_analyze_tool_call(name, args))
-                
+
                 # File write tracking
                 path = _extract_file_path(args)
                 if path:
                     self._session_file_writes.add(path)
-                
+
                 # File write + execute chain detection
                 for written_path in self._session_file_writes:
                     if written_path in f"{name} {args}":
@@ -227,16 +227,16 @@ class HoloneService:
                                 source=f"tool_call:{name}",
                                 description=f"Executing previously written file: {written_path}"
                             ))
-        
+
         # Existing rule-based protection
         result, findings_tuple, blocked = protect_openai_response(
             response, mode=self.config.security_mode, client_has_tools=client_has_tools
         )
         findings.extend(findings_tuple)
-        
+
         if findings:
             self._record(findings)
-        
+
         # Block if HIGH severity findings in block mode
         has_high = any(f.severity == Severity.HIGH for f in findings)
         if has_high and self.config.mode == "block":
@@ -245,7 +245,7 @@ class HoloneService:
                 message.pop("tool_calls", None)
                 message["content"] = "[HoloNe blocked suspicious content]"
             return result, findings, True
-        
+
         return result, findings, blocked
 
     def inspect_response_anthropic(
@@ -253,7 +253,7 @@ class HoloneService:
     ) -> tuple[dict[str, Any], list[Finding], bool]:
         if not self.config.enabled:
             return response, [], False
-        
+
         # Heuristic analysis first
         findings: list[Finding] = []
         content_blocks = response.get("content", [])
@@ -261,27 +261,27 @@ class HoloneService:
             for block in content_blocks:
                 if not isinstance(block, dict):
                     continue
-                
+
                 # Analyze text blocks
                 if block.get("type") == "text":
                     text = block.get("text", "")
                     if isinstance(text, str):
                         findings.extend(_analyze_content(text, source="response"))
-                
+
                 # Analyze tool_use blocks
                 elif block.get("type") == "tool_use":
                     name = block.get("name", "")
                     input_data = block.get("input", {})
                     args_str = str(input_data) if input_data else ""
-                    
+
                     # Heuristic tool call analysis
                     findings.extend(_analyze_tool_call(name, args_str))
-                    
+
                     # File write tracking
                     path = _extract_file_path(args_str)
                     if path:
                         self._session_file_writes.add(path)
-                    
+
                     # File write + execute chain detection
                     for written_path in self._session_file_writes:
                         if written_path in f"{name} {args_str}":
@@ -296,16 +296,16 @@ class HoloneService:
                                     source=f"tool_use:{name}",
                                     description=f"Executing previously written file: {written_path}"
                                 ))
-        
+
         # Existing rule-based protection
         result, findings_tuple, blocked = protect_anthropic_response(
             response, mode=self.config.security_mode, client_has_tools=client_has_tools
         )
         findings.extend(findings_tuple)
-        
+
         if findings:
             self._record(findings)
-        
+
         # Block if HIGH severity findings in block mode
         has_high = any(f.severity == Severity.HIGH for f in findings)
         if has_high and self.config.mode == "block":
@@ -322,7 +322,7 @@ class HoloneService:
             if result.get("stop_reason") == "tool_use":
                 result["stop_reason"] = "end_turn"
             return result, findings, True
-        
+
         return result, findings, blocked
 
     # ── Stream inspection ──────────────────────────────────────────────────

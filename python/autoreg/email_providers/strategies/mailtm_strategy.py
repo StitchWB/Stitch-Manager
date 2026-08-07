@@ -1,9 +1,9 @@
 """Mail.tm email strategy"""
 import logging
-from ..base import IEmailStrategy, EmailContext
+
+from ...services.mailtm import MailTmConfig
 from ..generators.mailtm import MailTmEmailGenerator
 from ..verifiers.mailtm_verifier import MailTmVerifier
-from ...services.mailtm import MailTmConfig
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +16,15 @@ logger = logging.getLogger(__name__)
 class MailTmStrategy(BaseStrategy):
     """
     Strategy for Mail.tm temporary emails with verification
-    
+
     This strategy combines Mail.tm email generation and verification
     into a single workflow.
     """
-    
+
     def __init__(self, config: MailTmConfig | None = None):
         """
         Initialize Mail.tm strategy
-        
+
         Args:
             config: MailTmConfig object (uses defaults if None)
         """
@@ -33,9 +33,9 @@ class MailTmStrategy(BaseStrategy):
             generator=MailTmEmailGenerator(self.config),
             verifier=MailTmVerifier(self.config)
         )
-    
+
     # BaseStrategy provides generate_and_verify and verify implementations
-    
+
     def close(self):
         """Close resources"""
         self.generator.close()

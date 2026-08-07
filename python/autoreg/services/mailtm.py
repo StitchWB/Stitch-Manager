@@ -6,11 +6,9 @@ API Documentation: https://api.mail.tm/
 """
 
 import logging
-import requests
-import random
-import string
-from typing import Dict, List, Optional
 from dataclasses import dataclass
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ class MailTmConfig:
 class MailTmService:
     """Service for interacting with Mail.tm API"""
 
-    def __init__(self, config: Optional[MailTmConfig] = None):
+    def __init__(self, config: MailTmConfig | None = None):
         """
         Initialize Mail.tm service
 
@@ -38,10 +36,10 @@ class MailTmService:
         self.session.headers.update(
             {"Content-Type": "application/json", "Accept": "application/json"}
         )
-        self.token: Optional[str] = None
-        self.account_id: Optional[str] = None
+        self.token: str | None = None
+        self.account_id: str | None = None
 
-    def get_domains(self) -> List[Dict]:
+    def get_domains(self) -> list[dict]:
         """
         Get available domains for email creation
 
@@ -71,7 +69,7 @@ class MailTmService:
         logger.info(f"Retrieved {len(domains)} available domains")
         return domains
 
-    def create_account(self, address: str, password: str) -> Dict:
+    def create_account(self, address: str, password: str) -> dict:
         """
         Create new Mail.tm account
 
@@ -128,7 +126,7 @@ class MailTmService:
         # self.token is guaranteed to be set by the check above
         return self.token  # type: ignore[return-value]
 
-    def get_messages(self, page: int = 1) -> List[Dict]:
+    def get_messages(self, page: int = 1) -> list[dict]:
         """
         Get messages for authenticated account
 
@@ -169,7 +167,7 @@ class MailTmService:
         logger.debug(f"Retrieved {len(messages)} messages (page {page})")
         return messages
 
-    def get_message(self, message_id: str) -> Dict:
+    def get_message(self, message_id: str) -> dict:
         """
         Get full message details including body
 

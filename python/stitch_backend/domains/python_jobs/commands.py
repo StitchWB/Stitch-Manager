@@ -114,7 +114,7 @@ async def cmd_run_python_script(params: dict) -> str:
         if proc.returncode != 0:
             return stderr.decode("utf-8", errors="replace")[:2000]
         return stdout.decode("utf-8", errors="replace")
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return f"error: script timed out after {timeout_secs:.0f}s"
     except FileNotFoundError:
         return f"error: Python binary not found: {python_binary}"

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Protocol, TypeAlias
+from typing import TYPE_CHECKING, Protocol, TypeAlias
 
 from stitch_backend.domains.ai_proxy.zai_adapter import (
     DEFAULT_FE_VERSION,
@@ -13,6 +11,10 @@ from stitch_backend.domains.ai_proxy.zai_adapter import (
     ZaiChatResult,
     ZaiMessage,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | dict[str, "JsonValue"] | list["JsonValue"]

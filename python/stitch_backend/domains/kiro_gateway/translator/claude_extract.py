@@ -7,10 +7,8 @@ Kiro tool wrappers.
 
 from __future__ import annotations
 
-from stitch_backend.domains.kiro_gateway.translator.claude_types import (
-    ClaudeMessage,
-    ClaudeTool,
-)
+from typing import TYPE_CHECKING
+
 from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     KIRO_MAX_TOOL_DESC_LEN,
     JsonValue,
@@ -23,6 +21,12 @@ from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     parse_claude_document_source,
     to_kiro_cache_point,
 )
+
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.translator.claude_types import (
+        ClaudeMessage,
+        ClaudeTool,
+    )
 
 
 def extract_claude_content(

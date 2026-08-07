@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import random
-import time
 from typing import Any
 
 import httpx
@@ -19,6 +18,7 @@ logger = logging.getLogger(__name__)
 # ── BIN check API ─────────────────────────────────────────────────────────────
 # Configurable via environment variable; falls back to a free BIN lookup.
 import os
+
 _BIN_CHECK_URL = os.environ.get(
     "BIN_CHECK_API_URL",
     "https://bincheck.io/api/v1/card",

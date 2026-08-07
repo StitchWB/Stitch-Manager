@@ -13,9 +13,8 @@ State is stored in-memory (restart resets quotas).
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
-
 
 # Tier limits: (max_requests, max_tokens)
 _TIER_LIMITS: dict[str, tuple[int, int]] = {

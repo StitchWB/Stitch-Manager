@@ -14,7 +14,7 @@ Field groups:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -23,7 +23,7 @@ from stitch_backend.database import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Account(Base):
@@ -137,6 +137,31 @@ class Account(Base):
     )
     registration_source: Mapped[str | None] = mapped_column(
         String, comment="manual | auto | import"
+    )
+
+    # ═══════ Quota ═════════════════════════════════════════════════════════
+    quota_used: Mapped[int] = mapped_column(
+        Integer, default=0, comment="Provider quota used (credits/tokens)"
+    )
+    quota_limit: Mapped[int] = mapped_column(
+        Integer, default=0, comment="Provider quota limit (0 = unknown)"
+    )
+    quota_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Last time quota was fetched from provider"
+    )
+
+    # ═══════ Usage stats ═════════════════════════════════════════════════════
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Last successful login (profile session confirm)"
+    )
+    login_count: Mapped[int] = mapped_column(
+        Integer, default=0, comment="Total successful logins"
+    )
+    error_count: Mapped[int] = mapped_column(
+        Integer, default=0, comment="Total failed check/refresh attempts"
+    )
+    last_error: Mapped[str | None] = mapped_column(
+        Text, comment="Last error message from a failed check/refresh"
     )
 
     # ═══════ Referral (v0 quota system) ═════════════════════════════════════

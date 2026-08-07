@@ -106,7 +106,10 @@ const createMimeType = (type, suffixes, description, enabledPlugin) => {{
         type: {{ value: type, enumerable: true }},
         suffixes: {{ value: suffixes, enumerable: true }},
         description: {{ value: description, enumerable: true }},
-        enabledPlugin: {{ value: enabledPlugin, enumerable: true }}
+        // configurable: the enabledPlugin back-reference is set below once
+        // the Plugin object exists (non-configurable here used to throw
+        // "Cannot redefine property: enabledPlugin" and kill the whole chain)
+        enabledPlugin: {{ value: enabledPlugin, enumerable: true, configurable: true }}
     }});
     return mt;
 }};
@@ -191,13 +194,16 @@ Object.defineProperty(navigator, 'mimeTypes', {{
 
 // ============================================
 // PERMISSIONS API FIX
-// Headless browsers often have 'denied' for notifications
+// Headless browsers often have 'denied' for notifications.
+// We override query() but ALSO spoof its toString so anti-bot that checks
+// whether query.toString() returns the "[native code]" signature still sees
+// a native function (a bare JS override would reveal itself).
 // ============================================
 if (navigator.permissions && navigator.permissions.query) {{
     const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-    navigator.permissions.query = function(params) {{
+    const spoofedQuery = function query(params) {{
         // For notifications return 'prompt' instead of 'denied'
-        if (params.name === 'notifications') {{
+        if (params && params.name === 'notifications') {{
             return Promise.resolve({{
                 state: 'prompt',
                 onchange: null,
@@ -208,6 +214,16 @@ if (navigator.permissions && navigator.permissions.query) {{
         }}
         return originalQuery(params);
     }};
+    // Make the override indistinguishable from the native method by signature.
+    try {{
+        Object.defineProperty(spoofedQuery, 'toString', {{
+            value: () => 'function query() {{ [native code] }}',
+            configurable: true, writable: true
+        }});
+        Object.defineProperty(spoofedQuery, 'name', {{ value: 'query', configurable: true }});
+        Object.defineProperty(spoofedQuery, 'length', {{ value: 1, configurable: true }});
+    }} catch(e) {{}}
+    navigator.permissions.query = spoofedQuery;
 }}
 
 // Also spoof Notification.permission
@@ -255,20 +271,24 @@ if (!videoElement.canPlayType) {{
 }}
 
 // 2. Ensure localStorage is available
-if (!window.localStorage) {{
-    try {{
-        Object.defineProperty(window, 'localStorage', {{
-            value: {{
-                getItem: () => null,
-                setItem: () => {{}},
-                removeItem: () => {{}},
-                clear: () => {{}},
-                length: 0
-            }},
-            configurable: true
-        }});
-    }} catch(e) {{}}
-}}
+// (reading window.localStorage throws SecurityError on about:blank and in
+// sandboxed iframes — guard the read itself, not just the fallback)
+try {{
+    if (!window.localStorage) {{
+        try {{
+            Object.defineProperty(window, 'localStorage', {{
+                value: {{
+                    getItem: () => null,
+                    setItem: () => {{}},
+                    removeItem: () => {{}},
+                    clear: () => {{}},
+                    length: 0
+                }},
+                configurable: true
+            }});
+        }} catch(e) {{}}
+    }}
+}} catch(e) {{}}
 
 // 3. Touch - DON'T add ontouchend for desktop
 // Amazon checks 'ontouchend' in window

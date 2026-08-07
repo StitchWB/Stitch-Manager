@@ -16,6 +16,8 @@ from pydantic import ValidationError
 
 from stitch_backend.core.command_registry import (
     CommandNotFoundError as RegistryCommandNotFoundError,
+)
+from stitch_backend.core.command_registry import (
     get_command_handler,
 )
 from stitch_backend.core.errors import (
@@ -69,7 +71,7 @@ WRITE_COMMANDS: set[str] = {
 
 def serialise(value: Any) -> Any:
     """Coerce handler return value into JSON-safe data.
-    
+
     Handles:
     - None → {}
     - Pydantic models → dict (with by_alias=True for camelCase)
@@ -87,7 +89,7 @@ def serialise(value: Any) -> Any:
 
 async def invoke_command(name: str, args: dict) -> Any:
     """Invoke a command handler by name, with safety guards for writes.
-    
+
     Raises:
         CommandNotFoundError: If command is not registered
         WriteBlockedError: If write command is blocked by safety guards
@@ -98,35 +100,35 @@ async def invoke_command(name: str, args: dict) -> Any:
     try:
         handler = get_command_handler(name)
     except RegistryCommandNotFoundError:
-        raise CommandNotFoundError(name)
-    
+        raise CommandNotFoundError(name) from None
+
     # Safety guards for write commands
     if name in WRITE_COMMANDS:
         try:
             ensure_write_allowed(name)
         except Exception as e:
-            raise WriteBlockedError(name, str(e))
-    
+            raise WriteBlockedError(name, str(e)) from None
+
     # Dry-run mode: return preview without executing
     if dry_run_enabled():
         result = {"dryRun": True, "command": name, "args": args}
         append_critical_journal(name, args, result)
         return result
-    
+
     # Execute handler
     result = await handler(args)
     result = serialise(result)
-    
+
     # Journal write commands
     if name in WRITE_COMMANDS:
         append_critical_journal(name, args, result)
-    
+
     return result
 
 
 async def invoke_command_safe(name: str, args: dict) -> dict[str, Any]:
     """Invoke a command and return structured result (ok/error).
-    
+
     Returns:
         {"ok": True, "data": ...} on success
         {"ok": False, "error": {"code": ..., "message": ..., "details": ...}} on failure
@@ -134,11 +136,11 @@ async def invoke_command_safe(name: str, args: dict) -> dict[str, Any]:
     try:
         result = await invoke_command(name, args)
         return {"ok": True, "data": result}
-    
+
     except StitchError as e:
         # Already structured (CommandNotFoundError, WriteBlockedError)
         return {"ok": False, "error": e.to_dict()}
-    
+
     except ValidationError as e:
         # Pydantic validation errors → structured details
         return {
@@ -149,7 +151,7 @@ async def invoke_command_safe(name: str, args: dict) -> dict[str, Any]:
                 "details": e.errors(),
             },
         }
-    
+
     except Exception as e:
         # Unexpected errors
         logger.exception(f"Unexpected error in command '{name}'")

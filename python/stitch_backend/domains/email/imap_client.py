@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ class ImapClient:
         self._user = user
         self._password = password
         self._use_ssl = use_ssl
-        self._client: Optional[object] = None  # aioimaplib.IMAP4_SSL
+        self._client: object | None = None  # aioimaplib.IMAP4_SSL
 
     async def connect(self) -> None:
         if not _HAS_AIOIMAPLIB:

@@ -8,7 +8,6 @@ from __future__ import annotations
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
 
-
 # ── Status checks ─────────────────────────────────────────────────────────────
 
 @register_command("check_account_status")

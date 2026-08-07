@@ -1,13 +1,13 @@
 """Email generators for creating email addresses"""
 
-from .base import IEmailGenerator, EmailContext
-from .static import StaticEmailGenerator
-from .counter import CounterEmailGenerator
 from .addyio import AddyIoEmailGenerator
-from .thirtythreemail import ThirtyThreeMailGenerator
-from .mailtm import MailTmEmailGenerator
+from .base import EmailContext, IEmailGenerator
+from .counter import CounterEmailGenerator
 from .icloud import ICloudPoolEmailGenerator
-from .template_utils import render_template, TemplateState
+from .mailtm import MailTmEmailGenerator
+from .static import StaticEmailGenerator
+from .template_utils import TemplateState, render_template
+from .thirtythreemail import ThirtyThreeMailGenerator
 
 __all__ = [
     'IEmailGenerator',

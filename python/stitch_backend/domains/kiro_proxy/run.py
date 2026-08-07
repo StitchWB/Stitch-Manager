@@ -3,7 +3,7 @@
 Run the reverse proxy server:
 
     python -m stitch_backend.domains.kiro_proxy.run
-    
+
 Or via the installed script:
 
     kiro-proxy
@@ -55,7 +55,8 @@ def _ensure_socksio() -> None:
             try:
                 import socksio  # noqa: F401
             except ImportError:
-                import subprocess, sys
+                import subprocess
+                import sys
                 logger.info("Auto-installing socksio for SOCKS5 support...")
                 subprocess.check_call(
                     [sys.executable, "-m", "pip", "install", "socksio>=1.0.0", "-q"],
@@ -71,12 +72,12 @@ def main() -> None:
     """Entry point for the Kiro proxy server."""
     _configure_logging()
     _ensure_socksio()
-    
+
     port = _get_proxy_port()
-    
+
     logger.info("Kiro Proxy starting on port %d", port)
     logger.info("Forwarding requests to upstream based on X-Forwarded-* headers")
-    
+
     uvicorn.run(
         app,
         host="127.0.0.1",

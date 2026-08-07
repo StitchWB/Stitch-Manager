@@ -126,17 +126,19 @@ class ClientHintsSpoofModule(BaseSpoofModule):
     const ARCHITECTURE = '{architecture}';
     const BITNESS = '{bitness}';
 
-    // Brands array (как в реальном Chrome)
+    // Brands array — MUST match the userAgentMetadata passed to
+    // Emulation.setUserAgentOverride (see cdp_spoofer.build_user_agent_metadata),
+    // otherwise the JS-level userAgentData diverges from the sec-ch-ua headers.
     const brands = [
+        {{ brand: 'Not A(Brand', version: '99' }},
         {{ brand: 'Google Chrome', version: CHROME_VERSION }},
-        {{ brand: 'Chromium', version: CHROME_VERSION }},
-        {{ brand: 'Not_A Brand', version: '24' }}
+        {{ brand: 'Chromium', version: CHROME_VERSION }}
     ];
 
     const fullVersionList = [
+        {{ brand: 'Not A(Brand', version: '99.0.0.0' }},
         {{ brand: 'Google Chrome', version: CHROME_VERSION + '.0.0.0' }},
-        {{ brand: 'Chromium', version: CHROME_VERSION + '.0.0.0' }},
-        {{ brand: 'Not_A Brand', version: '24.0.0.0' }}
+        {{ brand: 'Chromium', version: CHROME_VERSION + '.0.0.0' }}
     ];
 
     // Создаём fake userAgentData с правильным prototype

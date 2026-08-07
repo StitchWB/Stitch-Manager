@@ -14,6 +14,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -168,7 +169,7 @@ class PythonJobManager:
                     job.result_payload = json.loads(out)
                 except json.JSONDecodeError:
                     job.result_payload = out
-        except asyncio.TimeoutError:
+        except TimeoutError:
             job.state = "timedout"
             job.error = f"Job timed out after {timeout_secs:.0f}s"
             try:
@@ -197,5 +198,5 @@ def get_job_manager() -> PythonJobManager:
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _iso_now() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
+    from datetime import datetime
+    return datetime.now(UTC).isoformat()

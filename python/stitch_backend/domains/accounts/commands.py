@@ -345,8 +345,9 @@ async def cmd_bulk_refresh_quota(params: dict) -> dict:
     successfully refreshed accounts.
     """
     from sqlalchemy import select
-    from stitch_backend.domains.accounts.models import Account
+
     from stitch_backend.database import get_session_factory
+    from stitch_backend.domains.accounts.models import Account
 
     factory = get_session_factory()
     async with factory() as session:
@@ -406,6 +407,7 @@ async def cmd_get_windsurf_token(params: dict) -> dict:
 async def cmd_import_accounts_payload(params: dict) -> dict:
     """Import accounts from JSON payload with dedup."""
     import json as _json
+
     from sqlalchemy import text as sql_text
 
     accounts_json = params.get("accountsJson", params.get("accounts_json", ""))

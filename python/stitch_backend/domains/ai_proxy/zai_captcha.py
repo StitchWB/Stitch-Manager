@@ -15,15 +15,15 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import sqlite3
 import time
 import uuid
 import zlib
-from collections.abc import Callable, Awaitable
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Protocol, TypeAlias
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

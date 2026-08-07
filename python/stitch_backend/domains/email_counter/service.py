@@ -6,14 +6,16 @@ Ported from Rust ``email_counter.rs`` and ``email_counter_diagnostics.rs``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from stitch_backend.domains.email_counter.models import EmailCounter
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,7 @@ class EmailCounterService:
         self, provider: str, strategy: str, value: int,
     ) -> None:
         """Set counter to a specific value (upsert)."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         stmt = sqlite_insert(EmailCounter).values(
             provider=provider, strategy=strategy, counter=value, updated_at=now,
         )
@@ -65,7 +67,7 @@ class EmailCounterService:
         Uses INSERT … ON CONFLICT DO UPDATE with ``counter + 1``
         to match Rust's transactional guarantee.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         stmt = sqlite_insert(EmailCounter).values(
             provider=provider, strategy=strategy, counter=1, updated_at=now,
         )

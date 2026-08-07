@@ -388,8 +388,9 @@ async def cmd_get_registration_status(params: dict) -> dict:
 @register_command("get_cloakbrowser_path")
 async def cmd_get_cloakbrowser_path(params: dict) -> str | None:
     """Resolve bundled CloakBrowser executable path."""
-    from stitch_backend.config import get_settings
     import os
+
+    from stitch_backend.config import get_settings
     settings = get_settings()
     cloak_dir = settings.cloakbrowser_dir
     exe_name = "chrome.exe" if os.name == "nt" else "chrome"
@@ -456,6 +457,7 @@ async def cmd_start_registration_v2(params: dict) -> dict:
 async def cmd_get_next_counter(params: dict) -> int:
     """Get next counter value for email generation."""
     from sqlalchemy import text as sql_text
+
     from stitch_backend.database import run_in_session
 
     provider = params.get("provider", "")

@@ -10,8 +10,8 @@ from stitch_backend.domains.ai_proxy.chat_router import chat_router
 from stitch_backend.domains.ai_proxy.compression.api import router as compression_router
 from stitch_backend.domains.ai_proxy.holone_api import router as holone_router
 from stitch_backend.domains.ai_proxy.metrics_api import router as metrics_router
-from stitch_backend.domains.profiles.router import profiles_router
 from stitch_backend.domains.api_keys.router import router as api_keys_router
+from stitch_backend.domains.profiles.router import profiles_router
 
 api_router = APIRouter(prefix="/api")
 

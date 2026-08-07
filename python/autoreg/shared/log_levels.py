@@ -24,6 +24,6 @@ class LogStage(Enum):
     OAUTH = "OAuth"
     AWS = "AWS"
     SYSTEM = "System"
-    
+
     def __str__(self) -> str:
         return self.value

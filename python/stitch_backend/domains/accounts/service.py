@@ -11,10 +11,10 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.core.exceptions import AccountNotFoundError
 from stitch_backend.domains.accounts.models import Account
@@ -23,13 +23,16 @@ from stitch_backend.domains.accounts.schemas import (
     AddAccountRequest,
 )
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 logger = logging.getLogger(__name__)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _to_response(account: Account) -> AccountResponse:
@@ -119,18 +122,81 @@ class AccountService:
     ) -> Account:
         """Persist an auto-registered account (registration_source='auto').
 
-        Uses a raw INSERT that is compatible with both the legacy Rust-era schema
-        (id INTEGER autoincrement, password NOT NULL, etc.) and the newer Python
-        ORM schema.  The ORM object is re-loaded after INSERT so callers can
-        access account.id regardless of schema.
+        Schema-adaptive: introspects the ``accounts`` table via
+        ``PRAGMA table_info`` to detect whether it uses the legacy Rust-era
+        schema (``id INTEGER PRIMARY KEY AUTOINCREMENT``, ``quota_used``
+        column present) or the newer Python ORM schema (``id`` String/UUID,
+        no ``quota_used``), then builds the INSERT to match.  On the legacy
+        schema the ``id`` column is omitted so SQLite auto-assigns the next
+        integer rowid; the actual assigned id is read back via
+        ``last_insert_rowid()``.
         """
         from sqlalchemy import text as _text
 
         now_str = _utcnow().isoformat()
-        new_id = str(uuid.uuid4())
+        new_uuid = str(uuid.uuid4())
 
-        common_params = {
-            "id": new_id,
+        # ── Introspect the accounts table schema ───────────────────────
+        pragma_result = await self._db.execute(
+            _text("PRAGMA table_info(accounts)")
+        )
+        col_rows = pragma_result.fetchall()
+        col_types = {row[1]: (row[2] or "") for row in col_rows}
+
+        id_type_upper = col_types.get("id", "").upper()
+        is_legacy_id = "INT" in id_type_upper
+        has_quota_used = "quota_used" in col_types
+        has_quota_limit = "quota_limit" in col_types
+        has_login_count = "login_count" in col_types
+        has_error_count = "error_count" in col_types
+
+        # ── Build INSERT column/value pairs ────────────────────────────
+        # Constant values are inlined as SQL literals; variable values use
+        # named parameters (:name).
+        col_value_pairs: list[tuple[str, str]] = []
+
+        if not is_legacy_id:
+            # ORM schema: id is String/UUID NOT NULL — supply it.
+            col_value_pairs.append(("id", ":id"))
+
+        col_value_pairs.extend([
+            ("provider", ":provider"),
+            ("email", ":email"),
+            ("password", ":password"),
+            ("token", ":token"),
+            ("refresh_token", ":refresh_token"),
+            ("status", "'active'"),
+            ("display_name", ":display_name"),
+            ("api_key", ":api_key"),
+            ("registration_source", "'auto'"),
+            ("ref_code", ":ref_code"),
+            ("ref_url", ":ref_url"),
+            ("ref_used_count", "0"),
+            ("ref_max_count", ":ref_max_count"),
+            ("referred_by_id", ":referred_by_id"),
+            ("notes", ":notes"),
+            ("tags", "'[]'"),
+            ("use_count", "0"),
+            ("success_rate", "1.0"),
+            ("created_at", ":created_at"),
+        ])
+
+        if has_quota_used:
+            col_value_pairs.append(("quota_used", "0"))
+
+        if has_quota_limit:
+            col_value_pairs.append(("quota_limit", "0"))
+
+        if has_login_count:
+            col_value_pairs.append(("login_count", "0"))
+
+        if has_error_count:
+            col_value_pairs.append(("error_count", "0"))
+
+        col_names = ", ".join(pair[0] for pair in col_value_pairs)
+        col_values = ", ".join(pair[1] for pair in col_value_pairs)
+
+        params: dict[str, str | int | None] = {
             "provider": provider,
             "email": email,
             "password": password or "",
@@ -145,52 +211,29 @@ class AccountService:
             "notes": (f"plan={account_type}" if account_type else None),
             "created_at": now_str,
         }
+        if not is_legacy_id:
+            params["id"] = new_uuid
 
-        # Build INSERT targeting only columns that exist in both schemas.
-        # Always include `id` — the current ORM schema uses UUID String (NOT NULL).
-        # Try with quota_used first (exists in legacy Rust schema), fall back without.
-        try:
-            await self._db.execute(
-                _text("""
-                    INSERT INTO accounts
-                        (id, provider, email, password, token, refresh_token, status,
-                         display_name, api_key, registration_source,
-                         ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
-                         notes, tags, use_count, success_rate,
-                         created_at, quota_used)
-                    VALUES
-                        (:id, :provider, :email, :password, :token, :refresh_token, 'active',
-                         :display_name, :api_key, 'auto',
-                         :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
-                         :notes, '[]', 0, 1.0,
-                         :created_at, 0)
-                """),
-                common_params,
+        insert_sql = (
+            f"INSERT INTO accounts ({col_names}) VALUES ({col_values})"
+        )
+        await self._db.execute(_text(insert_sql), params)
+
+        # ── Determine the actual assigned id ──────────────────────────
+        if is_legacy_id:
+            # SQLite auto-assigned the next INTEGER rowid — read it back.
+            row_result = await self._db.execute(
+                _text("SELECT last_insert_rowid()")
             )
-        except Exception:
-            # Fallback without quota_used (newer ORM-only schema)
-            await self._db.execute(
-                _text("""
-                    INSERT INTO accounts
-                        (id, provider, email, password, token, refresh_token, status,
-                         display_name, api_key, registration_source,
-                         ref_code, ref_url, ref_used_count, ref_max_count, referred_by_id,
-                         notes, tags, use_count, success_rate,
-                         created_at)
-                    VALUES
-                        (:id, :provider, :email, :password, :token, :refresh_token, 'active',
-                         :display_name, :api_key, 'auto',
-                         :ref_code, :ref_url, 0, :ref_max_count, :referred_by_id,
-                         :notes, '[]', 0, 1.0,
-                         :created_at)
-                """),
-                common_params,
-            )
+            actual_id = row_result.scalar()
+        else:
+            actual_id = new_uuid
+
         await self._db.flush()
 
         logger.info(
             "Registered account saved: %s (%s) id=%s referred_by=%s",
-            email, provider, new_id, referred_by_id,
+            email, provider, actual_id, referred_by_id,
         )
 
         # Return a lightweight namespace — callers only need .id
@@ -198,7 +241,7 @@ class AccountService:
         # and causes '_sa_instance_state' AttributeError on any attr access.)
         from types import SimpleNamespace
         account = SimpleNamespace(
-            id=new_id,
+            id=actual_id,
             email=email,
             provider=provider,
             status="active",
@@ -438,10 +481,24 @@ class AccountService:
         if not account.token:
             return {"alive": False, "error": "no access_token stored"}
 
-        health = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
-        )
+        try:
+            health = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
+            )
+        except Exception as exc:
+            # Network/parse failure — record error, fall back to stale quota
+            account.error_count = (account.error_count or 0) + 1
+            account.last_error = str(exc)
+            account.last_checked_at = _utcnow()
+            account.updated_at = _utcnow()
+            await self._db.flush()
+            await self._db.refresh(account)
+            return {
+                "alive": False,
+                "error": str(exc),
+                "account": _to_response(account),
+            }
 
         # Token expired — try refresh once
         if not health.alive and "401" in health.error and auto_refresh and account.refresh_token:
@@ -450,19 +507,42 @@ class AccountService:
             if refresh_result.get("success") and refresh_result.get("refreshed"):
                 # Re-read the updated account and retry health check
                 account = await self.get_account(account_id)
-                health = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
-                )
+                try:
+                    health = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
+                    )
+                except Exception as exc:
+                    account.error_count = (account.error_count or 0) + 1
+                    account.last_error = str(exc)
+                    account.last_checked_at = _utcnow()
+                    account.updated_at = _utcnow()
+                    await self._db.flush()
+                    await self._db.refresh(account)
+                    return {
+                        "alive": False,
+                        "error": str(exc),
+                        "account": _to_response(account),
+                    }
 
-        # Update last_checked_at and status
+        # Update last_checked_at, status, quota, and error tracking
         account.last_checked_at = _utcnow()
         if health.suspended:
             account.status = "banned"
+            account.error_count = (account.error_count or 0) + 1
+            account.last_error = health.error
         elif not health.alive and "expired" in health.error:
             account.status = "expired"
+            account.error_count = (account.error_count or 0) + 1
+            account.last_error = health.error
         elif health.alive:
             account.status = "active"
+            # Persist quota from the health check
+            account.quota_used = int(health.credit_used)
+            account.quota_limit = int(health.credit_limit)
+            account.quota_checked_at = _utcnow()
+            # Clear error on success
+            account.last_error = None
         account.updated_at = _utcnow()
         await self._db.flush()
         await self._db.refresh(account)
@@ -494,3 +574,45 @@ class AccountService:
                 stmt = stmt.where(Account.provider == provider)
         result = await self._db.execute(stmt)
         return [_to_response(a) for a in result.scalars().all()]
+
+    # ── Refresh account (status + quota check) ────────────────────────────────
+
+    async def refresh_account(self, account_id: str) -> AccountResponse:
+        """Run a provider status/quota check and return the updated account.
+
+        Delegates to ``account_status.service.check_account_status`` for
+        provider-dispatched quota fetching.  On network failure, falls back
+        to a timestamp-only update with ``success=True`` and stale quota.
+        """
+        from stitch_backend.domains.account_status import service as status_service
+
+        account = await self.get_account(account_id)
+
+        # check_account_status expects an int account_id; coerce from str
+        try:
+            numeric_id = int(account_id)
+        except (ValueError, TypeError):
+            # UUID-style id — the account_status service uses raw SQL with
+            # the id column, which works for both int and str ids.
+            numeric_id = account_id  # type: ignore[assignment]
+
+        try:
+            await status_service.check_account_status(self._db, numeric_id)
+        except Exception as exc:
+            # Network failure — fall back to timestamp-only, success=True
+            logger.warning(
+                "refresh_account: status check failed for %s: %s — "
+                "falling back to timestamp-only update",
+                account_id, exc,
+            )
+            account.last_checked_at = _utcnow()
+            account.error_count = (account.error_count or 0) + 1
+            account.last_error = str(exc)
+            account.updated_at = _utcnow()
+            await self._db.flush()
+            await self._db.refresh(account)
+        else:
+            # Re-read the account to pick up changes made by status_service
+            await self._db.refresh(account)
+
+        return _to_response(account)

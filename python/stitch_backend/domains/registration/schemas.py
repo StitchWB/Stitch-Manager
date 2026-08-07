@@ -24,7 +24,7 @@ class StartRegistrationRequest(BaseModel):
             raise ValueError(
                 f"Unknown provider id: {v!r}. "
                 f"Valid values: {[p.value for p in ProviderId]}"
-            )
+            ) from None
         return v
 
 

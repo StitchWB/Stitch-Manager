@@ -3,17 +3,16 @@ from __future__ import annotations
 import hmac
 import logging
 import time
-from collections.abc import Callable
-from typing import Any, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
-from starlette.responses import Response
 
-from .cost_tracker import get_cost_tracker
-from .key_metrics import get_metrics_tracker
-from .rate_limiter import get_rate_limiter
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +195,6 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
 
     import asyncio
     import json
-    import time
 
     from sqlalchemy import text
 
@@ -274,14 +272,14 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
             "priority": "simple-shuffle",
         }[selected_strategy]
         router = Router(
-            model_list=cast(list[dict[str, Any]], deployments),
+            model_list=cast("list[dict[str, Any]]", deployments),
             num_retries=2,
             max_fallbacks=max(1, len(deployments) - 1),
             cooldown_time=30,
             allowed_fails=2,
             routing_strategy=routing_strategy,
         )
-        return cast(CompletionRouter, router)
+        return cast("CompletionRouter", router)
 
     executor = LiteLLMExecutor(
         load_keys,

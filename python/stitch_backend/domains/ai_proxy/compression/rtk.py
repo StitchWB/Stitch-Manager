@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-
 # ── Constants (from rtk src/core/truncate.rs) ─────────────────────────────────
 
 CAP_ERRORS = 20

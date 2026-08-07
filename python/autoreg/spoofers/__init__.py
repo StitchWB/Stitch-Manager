@@ -48,11 +48,12 @@ from .math import MathSpoofModule
 from .media_spoofer import MediaSpoofModule
 from .navigator_spoofer import NavigatorSpoofModule
 from .profile import PROFILES, SpoofProfile, generate_random_profile
+from .speech import SpeechSpoofModule
 from .storage import StorageSpoofModule
 from .timezone import TimezoneSpoofModule
 from .webrtc import WebRTCSpoofModule
 
-# Все JS-модули (consolidated to 15 modules)
+# Все JS-модули (consolidated to 16 modules)
 ALL_JS_MODULES = [
     AutomationSpoofModule,
     CDPHideSpoofModule,
@@ -69,6 +70,7 @@ ALL_JS_MODULES = [
     MathSpoofModule,
     HistorySpoofModule,
     StorageSpoofModule,
+    SpeechSpoofModule,
 ]
 
 

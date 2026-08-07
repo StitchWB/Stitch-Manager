@@ -9,7 +9,6 @@ import base64
 import json
 import logging
 import re
-import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -29,7 +28,7 @@ class ZaiSessionHttpClient(Protocol):
 class HttpxZaiSessionClient:
     def __init__(self, proxy: str | None = None):
         self._proxy = proxy
-    
+
     async def get(self, url: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
         import httpx
         async with httpx.AsyncClient(timeout=15.0, proxy=self._proxy) as client:

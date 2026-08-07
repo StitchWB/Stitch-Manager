@@ -19,11 +19,13 @@ import asyncio
 import logging
 import secrets
 import string
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +56,12 @@ class ReplenishmentStatus:
     """Current status of the replenishment service."""
 
     is_running: bool = False
-    provider: Optional[str] = None
-    step: Optional[str] = None
-    email: Optional[str] = None
-    error: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    provider: str | None = None
+    step: str | None = None
+    email: str | None = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -80,7 +82,7 @@ class ReplenishmentService:
 
     def __init__(self) -> None:
         self._status = ReplenishmentStatus()
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
 
     @property
@@ -94,10 +96,10 @@ class ReplenishmentService:
     def _update_status(
         self,
         is_running: bool = False,
-        provider: Optional[str] = None,
-        step: Optional[str] = None,
-        email: Optional[str] = None,
-        error: Optional[str] = None,
+        provider: str | None = None,
+        step: str | None = None,
+        email: str | None = None,
+        error: str | None = None,
     ) -> None:
         import time
         self._status.is_running = is_running
@@ -150,7 +152,7 @@ class ReplenishmentService:
                 # Wait 60s or until stop
                 try:
                     await asyncio.wait_for(self._stop_event.wait(), timeout=60.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass  # Normal: 60s elapsed, loop again
         except asyncio.CancelledError:
             pass
@@ -159,7 +161,6 @@ class ReplenishmentService:
 
     async def _check_and_replenish(self) -> None:
         """Check all providers and trigger registration if needed."""
-        from stitch_backend.database import run_in_session
 
         settings = await self._load_settings()
 
@@ -291,7 +292,7 @@ class ReplenishmentService:
 
 # ── Singleton ────────────────────────────────────────────────────────────────
 
-_service: Optional[ReplenishmentService] = None
+_service: ReplenishmentService | None = None
 
 
 def get_replenishment_service() -> ReplenishmentService:

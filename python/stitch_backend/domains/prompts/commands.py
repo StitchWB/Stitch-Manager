@@ -64,7 +64,7 @@ async def cmd_get_prompt_content(params: dict) -> str:
 @register_command("get_default_prompt_content")
 async def cmd_get_default_prompt_content(params: dict) -> str:
     """Read a default prompt's content. Mirrors Rust ``get_default_prompt_content``."""
-    from stitch_backend.domains.prompts.service import PromptsService, _default_prompt_file_path
+    from stitch_backend.domains.prompts.service import _default_prompt_file_path
 
     prompt_name = (params.get("promptName") or params.get("prompt_name") or "").strip()
     if not prompt_name:

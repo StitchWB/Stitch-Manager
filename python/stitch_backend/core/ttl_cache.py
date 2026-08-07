@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import time
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 T = TypeVar("T")
 
@@ -75,7 +78,7 @@ def cached_sync(ttl_seconds: float = 60.0):
         def wrapper(*args: Any, **kwargs: Any) -> T:
             result = cache.get()
             if result is not None:
-                return result
+                return cast("T", result)
             result = func(*args, **kwargs)
             cache.set(result)
             return result

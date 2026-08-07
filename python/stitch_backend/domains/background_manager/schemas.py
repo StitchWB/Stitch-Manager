@@ -80,7 +80,7 @@ class BackgroundManagerConfig(BaseModel):
         return providers
 
     @model_validator(mode="after")
-    def validate_unique_rate_policies(self) -> "BackgroundManagerConfig":
+    def validate_unique_rate_policies(self) -> BackgroundManagerConfig:
         providers = [policy.provider.casefold() for policy in self.rate_limit_policies]
         if len(set(providers)) != len(providers):
             raise ValueError("rateLimitPolicies providers must be unique")

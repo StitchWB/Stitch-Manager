@@ -21,12 +21,15 @@ import logging
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +94,7 @@ def _check_rate_limit(client_ip: str) -> bool:
 
 def _parse_proxy_url(proxy_string: str) -> str | None:
     """Parse proxy string in various formats and return a normalized URL.
-    
+
     Supported formats:
         - http://user:pass@host:port
         - socks5://user:pass@host:port (DNS resolved locally — NOT recommended)
@@ -99,24 +102,24 @@ def _parse_proxy_url(proxy_string: str) -> str | None:
         - host:port:user:pass → socks5h://user:pass@host:port (auto-converts to remote DNS)
         - host:port (no auth) → socks5h://host:port
         - user:pass@host:port → socks5h://user:pass@host:port
-    
+
     Returns:
         Normalized proxy URL (e.g., "socks5h://user:pass@host:port") or None if invalid.
-    
+
     Note:
         Always prefer socks5h:// over socks5:// to prevent DNS leaks.
         socks5h resolves DNS on the proxy side, hiding domain queries from local DNS.
     """
     if not proxy_string or not proxy_string.strip():
         return None
-    
+
     proxy_string = proxy_string.strip()
-    
+
     # Already has scheme — check if it's socks5 (local DNS) and upgrade to socks5h (remote DNS)
     if proxy_string.startswith("socks5://"):
         logger.warning("Proxy uses socks5:// (local DNS) — upgrading to socks5h:// (remote DNS) to prevent DNS leak")
         return proxy_string.replace("socks5://", "socks5h://", 1)
-    
+
     if proxy_string.startswith(("http://", "https://")):
         # ponytail: warn about DNS leak with HTTP proxies
         logger.warning(
@@ -124,48 +127,48 @@ def _parse_proxy_url(proxy_string: str) -> str | None:
             "potentially leaking target domains. Consider using SOCKS5h for remote DNS resolution."
         )
         return proxy_string
-    
+
     if proxy_string.startswith("socks5h://"):
         return proxy_string
-    
+
     # Format: host:port:user:pass
     parts = proxy_string.split(":")
     if len(parts) == 4:
         host, port, user, password = parts
         # Use SOCKS5h for remote DNS resolution (prevents DNS leak)
         return f"socks5h://{user}:{password}@{host}:{port}"
-    
+
     # Format: host:port (no auth)
     if len(parts) == 2:
         host, port = parts
         return f"socks5h://{host}:{port}"
-    
+
     # Format: user:pass@host:port
     if "@" in proxy_string:
         # Use SOCKS5h if no scheme
         return f"socks5h://{proxy_string}"
-    
+
     logger.warning("Could not parse proxy string: %s", proxy_string)
     return None
 
 
 def _get_outbound_proxy() -> str | None:
     """Read outbound proxy from kiro-patch config.
-    
+
     ponytail: cache with 5s TTL to avoid per-call disk I/O.
     """
     import time
-    
+
     # Module-level cache
     if not hasattr(_get_outbound_proxy, '_cache'):
         _get_outbound_proxy._cache = None
         _get_outbound_proxy._cache_time = 0
-    
+
     # Return cached value if fresh (< 5 seconds old)
     now = time.time()
     if now - _get_outbound_proxy._cache_time < 5.0:
         return _get_outbound_proxy._cache
-    
+
     # Read from config and update cache
     try:
         from stitch_backend.domains.kiro_patch.service import get_config
@@ -206,18 +209,18 @@ def _build_upstream_url(request: Request) -> str:
     forwarded_host = request.headers.get("X-Forwarded-Host", "")
     forwarded_proto = request.headers.get("X-Forwarded-Proto", "https")
     forwarded_port = request.headers.get("X-Forwarded-Port", "443")
-    
+
     if not forwarded_host:
         # Fallback: use the Host header (shouldn't happen with our inject)
         forwarded_host = request.headers.get("Host", "runtime.us-east-1.kiro.dev")
-    
+
     # Build URL
     port_suffix = f":{forwarded_port}" if forwarded_port not in ("80", "443") else ""
     url = f"{forwarded_proto}://{forwarded_host}{port_suffix}{request.url.path}"
-    
+
     if request.url.query:
         url += f"?{request.url.query}"
-    
+
     return url
 
 
@@ -232,11 +235,11 @@ def _clean_headers(headers: dict[str, str]) -> dict[str, str]:
         "sec-ch-ua", "sec-ch-ua-platform", "sec-ch-ua-mobile",
         "referer",
     }
-    
+
     for key, value in headers.items():
         if key.lower() not in skip_headers:
             cleaned[key] = value
-    
+
     return cleaned
 
 
@@ -294,9 +297,8 @@ async def proxy_request(request: Request, path: str) -> Response:
         )
 
     upstream_url = _build_upstream_url(request)
-    
+
     # Security: only allow known domains
-    from urllib.parse import urlparse
     parsed = urlparse(upstream_url)
     if not _is_allowed_domain(parsed.hostname or ""):
         logger.warning("Blocked proxy request to disallowed domain: %s", parsed.hostname)
@@ -304,7 +306,7 @@ async def proxy_request(request: Request, path: str) -> Response:
             content=f"Blocked: domain {parsed.hostname} not in allowlist",
             status_code=403,
         )
-    
+
     # WebSocket upgrade requests bypass the proxy (inject code routes them direct)
     upgrade = request.headers.get("upgrade", "")
     if "websocket" in upgrade.lower():
@@ -316,15 +318,15 @@ async def proxy_request(request: Request, path: str) -> Response:
 
     # Clean headers
     headers = _clean_headers(dict(request.headers))
-    
+
     # Read body
     body = await request.body()
-    
+
     logger.debug(
         "Proxying %s %s → %s",
         request.method, request.url.path, upstream_url
     )
-    
+
     # Forward request — shared client created at startup (connection pooling,
     # outbound proxy + SOCKS check + follow_redirects=False all set in lifespan)
     client = request.app.state.http_client
@@ -332,7 +334,7 @@ async def proxy_request(request: Request, path: str) -> Response:
         # Check if response is streaming (SSE)
         accept = request.headers.get("accept", "")
         is_streaming = "text/event-stream" in accept or "stream" in path.lower()
-        
+
         if is_streaming:
             # Stream response back
             async with client.stream(
@@ -359,7 +361,7 @@ async def proxy_request(request: Request, path: str) -> Response:
                 headers=headers,
                 content=body,
             )
-            
+
             return Response(
                 content=upstream_response.content,
                 status_code=upstream_response.status_code,
@@ -369,7 +371,7 @@ async def proxy_request(request: Request, path: str) -> Response:
                 },
                 media_type=upstream_response.headers.get("content-type"),
             )
-            
+
     except httpx.RequestError as exc:
         logger.error("Proxy request failed: %s → %s", upstream_url, exc)
         return Response(

@@ -58,7 +58,7 @@ class CookieHandlingMixin:
         try:
             from DrissionPage.errors import ContextLostError
         except ImportError:
-            ContextLostError = RuntimeError
+            ContextLostError = RuntimeError  # noqa: N806 — class alias for fallback
 
         for attempt in range(3):
             try:

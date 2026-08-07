@@ -12,11 +12,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import platform
-import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -84,7 +82,7 @@ class TelemetryService:
     def backup_telemetry() -> dict[str, Any]:
         data = _load_telemetry()
         _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         backup_path = _BACKUP_DIR / f"telemetry_{ts}.json"
         backup_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return {
@@ -113,7 +111,6 @@ class TelemetryService:
         except Exception as exc:
             return {"success": False, "message": f"Failed to read backup: {exc}"}
 
-        old = _load_telemetry()
         _save_telemetry(restored)
         return {
             "success": True,

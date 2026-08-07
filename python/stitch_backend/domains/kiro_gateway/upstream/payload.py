@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -21,7 +22,9 @@ from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
 )
 
 if TYPE_CHECKING:
-    from stitch_backend.domains.kiro_gateway.upstream.sanitize import sanitize_conversation  # noqa: F401
+    from stitch_backend.domains.kiro_gateway.upstream.sanitize import (
+        sanitize_conversation,  # noqa: F401
+    )
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -112,9 +115,9 @@ def inject_system_prompts(
     if is_agentic:
         result = result + "\n\n" + AGENTIC_SYSTEM_PROMPT
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     timestamp_prompt = f"Current time: {timestamp}"
     result = timestamp_prompt + "\n\n" + result
 
@@ -238,7 +241,9 @@ def build_kiro_payload(
     )
 
     # ── Sanitize ───────────────────────────────────────────────────────────
-    from stitch_backend.domains.kiro_gateway.upstream.sanitize import sanitize_conversation  # noqa: E402
+    from stitch_backend.domains.kiro_gateway.upstream.sanitize import (
+        sanitize_conversation,  # noqa: E402
+    )
 
     all_messages = [*history, current_message]
     sanitized = sanitize_conversation(all_messages)
