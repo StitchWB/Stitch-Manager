@@ -6,7 +6,7 @@ Mirrors Rust ``commands/aws_accounts.rs``.
 from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 
 
 @register_command("get_aws_accounts")
@@ -146,7 +146,7 @@ async def cmd_get_account_bindings(params: dict) -> dict:
         return {}
 
 
-@register_command("refresh_account_token")
+@register_command("refresh_account_token", readonly=True)
 async def cmd_refresh_account_token(params: dict) -> dict:
     """Manually refresh an account's token.
 
@@ -154,7 +154,6 @@ async def cmd_refresh_account_token(params: dict) -> dict:
     via the accounts table refresh_token column.
     """
     from sqlalchemy import text as sql_text
-    from stitch_backend.database import run_in_session
 
     account_id = int(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
@@ -188,4 +187,4 @@ async def cmd_refresh_account_token(params: dict) -> dict:
             "provider": row[2],
         }
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)

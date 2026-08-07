@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.proxy_library.service import (
     ProxyLibraryDraft,
     ProxyLibraryEntry,
@@ -77,13 +77,13 @@ def _import_result_to_response(r: ProxyLibraryImportResult) -> dict[str, Any]:
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 
-@register_command("list_proxy_library")
+@register_command("list_proxy_library", readonly=True)
 async def cmd_list_proxy_library(params: dict) -> list[dict]:
     """List all proxy library entries."""
     async def _op(db):
         items = await load_proxy_library(db)
         return [_entry_to_response(e) for e in items]
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("create_proxy_library_entry")
@@ -182,7 +182,7 @@ async def cmd_import_bulk(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("preview_proxy_library_bulk")
+@register_command("preview_proxy_library_bulk", readonly=True)
 async def cmd_preview_bulk(params: dict) -> dict:
     """Preview bulk import without saving."""
     req = params.get("request", params)
@@ -197,13 +197,13 @@ async def cmd_preview_bulk(params: dict) -> dict:
         result = import_lines(copy, raw_text, default_type, default_enabled)
         return _import_result_to_response(result)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── Runtime URLs ──────────────────────────────────────────────────────────────
 
 
-@register_command("get_proxy_library_runtime_proxy_url")
+@register_command("get_proxy_library_runtime_proxy_url", readonly=True)
 async def cmd_get_runtime_url(params: dict) -> str | None:
     """Resolve a proxy library entry ID to a proxy URL."""
     entry_id = str(params.get("id", ""))
@@ -215,17 +215,17 @@ async def cmd_get_runtime_url(params: dict) -> str | None:
                 return entry_to_proxy_url(entry)
         return None
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_proxy_library_runtime_proxy_map")
+@register_command("get_proxy_library_runtime_proxy_map", readonly=True)
 async def cmd_get_runtime_map(params: dict) -> dict[str, str]:
     """Get a map of entry ID → proxy URL for all enabled entries."""
     async def _op(db):
         items = await load_proxy_library(db)
         return {e.id: entry_to_proxy_url(e) for e in items if e.enabled}
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── Usage ─────────────────────────────────────────────────────────────────────
@@ -322,7 +322,7 @@ async def _persist_test_result(
 # ── Save guard ────────────────────────────────────────────────────────────────
 
 
-@register_command("ensure_proxy_save_use_allowed")
+@register_command("ensure_proxy_save_use_allowed", readonly=True)
 async def cmd_ensure_save_allowed(params: dict) -> bool:
     """Check if a proxy was recently tested OK (save guard)."""
     req = params.get("request", params)
@@ -347,7 +347,7 @@ async def cmd_ensure_save_allowed(params: dict) -> bool:
                     return False
         return False
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── Parse ─────────────────────────────────────────────────────────────────────

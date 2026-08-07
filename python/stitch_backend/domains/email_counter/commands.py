@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 
 
-@register_command("get_email_counter")
+@register_command("get_email_counter", readonly=True)
 async def cmd_get_email_counter(params: dict) -> int:
     """Return counter for a provider + strategy pair."""
     from stitch_backend.domains.email_counter.service import EmailCounterService
@@ -23,7 +23,7 @@ async def cmd_get_email_counter(params: dict) -> int:
         svc = EmailCounterService(session)
         return await svc.get_counter(provider, strategy)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("set_email_counter")
@@ -80,7 +80,7 @@ async def cmd_increment_email_counter(params: dict) -> int:
     return await run_in_session(_op)
 
 
-@register_command("get_email_counter_diagnostics")
+@register_command("get_email_counter_diagnostics", readonly=True)
 async def cmd_get_email_counter_diagnostics(params: dict) -> dict:
     """Return comprehensive email counter diagnostics."""
     from stitch_backend.domains.email_counter.service import EmailCounterService
@@ -89,10 +89,10 @@ async def cmd_get_email_counter_diagnostics(params: dict) -> dict:
         svc = EmailCounterService(session)
         return await svc.get_diagnostics()
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("test_email_generation")
+@register_command("test_email_generation", readonly=True)
 async def cmd_test_email_generation(params: dict) -> dict:
     """Test email generation without persisting state changes.
 
@@ -130,4 +130,4 @@ async def cmd_test_email_generation(params: dict) -> dict:
             "counterBefore": counter_before,
         }
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)

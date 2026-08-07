@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 
 
 # ── Session commands (8) ──────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ async def cmd_get_provider_catalog(params: dict) -> list:
 
 # ── Profile commands (5) ─────────────────────────────────────────────────────
 
-@register_command("email_inbox_list_profiles")
+@register_command("email_inbox_list_profiles", readonly=True)
 async def cmd_list_profiles(params: dict) -> list:
     """List saved inbox profiles."""
     from stitch_backend.domains.email_inbox import service
@@ -122,10 +122,10 @@ async def cmd_list_profiles(params: dict) -> list:
     async def _op(db):
         return await service.list_profiles(db)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("email_inbox_get_profile")
+@register_command("email_inbox_get_profile", readonly=True)
 async def cmd_get_profile(params: dict) -> dict | None:
     """Get a profile by ID."""
     from stitch_backend.domains.email_inbox import service
@@ -134,7 +134,7 @@ async def cmd_get_profile(params: dict) -> dict | None:
     async def _op(db):
         return await service.get_profile(db, profile_id)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("email_inbox_upsert_profile")
@@ -161,7 +161,7 @@ async def cmd_delete_profile(params: dict) -> bool:
     return await run_in_session(_op)
 
 
-@register_command("email_inbox_connect_profile")
+@register_command("email_inbox_connect_profile", readonly=True)
 async def cmd_connect_profile(params: dict) -> dict:
     """Connect using a saved profile."""
     from stitch_backend.domains.email_inbox import service
@@ -170,12 +170,12 @@ async def cmd_connect_profile(params: dict) -> dict:
     async def _op(db):
         return await service.connect_profile(db, profile_id)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── Sync state commands (2) ──────────────────────────────────────────────────
 
-@register_command("email_inbox_get_sync_state")
+@register_command("email_inbox_get_sync_state", readonly=True)
 async def cmd_get_sync_state(params: dict) -> dict | None:
     """Get sync state for a profile."""
     from stitch_backend.domains.email_inbox import service
@@ -184,7 +184,7 @@ async def cmd_get_sync_state(params: dict) -> dict | None:
     async def _op(db):
         return await service.get_sync_state(db, profile_id)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("email_inbox_upsert_sync_state")

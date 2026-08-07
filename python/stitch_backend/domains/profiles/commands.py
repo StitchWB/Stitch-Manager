@@ -90,7 +90,7 @@ async def cmd_delete_profile(params: dict) -> dict:
     return {"success": True}
 
 
-@register_command("list_profiles_rust")
+@register_command("list_profiles_rust", readonly=True)
 async def cmd_list_profiles(params: dict) -> list[str]:
     return FingerprintService.list_aliases()
 

@@ -7,15 +7,13 @@ defined in legacy frontend logging module.
 
 from __future__ import annotations
 
-from typing import Any
-
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 
 
 # ── Query operations ─────────────────────────────────────────────────────────
 
-@register_command("get_logs")
+@register_command("get_logs", readonly=True)
 async def cmd_get_logs(params: dict) -> dict:
     """Get logs with optional filtering.
 
@@ -25,12 +23,12 @@ async def cmd_get_logs(params: dict) -> dict:
     from stitch_backend.domains.logging.service import LoggingService
 
     filter_ = params.get("filter")
-    return await run_in_session(
+    return await run_in_read_session(
         lambda s: LoggingService(s).query_logs(filter_)
     )
 
 
-@register_command("get_log_stats")
+@register_command("get_log_stats", readonly=True)
 async def cmd_get_log_stats(params: dict) -> dict:
     """Get log statistics.
 
@@ -38,7 +36,7 @@ async def cmd_get_log_stats(params: dict) -> dict:
     """
     from stitch_backend.domains.logging.service import LoggingService
 
-    return await run_in_session(
+    return await run_in_read_session(
         lambda s: LoggingService(s).get_stats()
     )
 
@@ -100,7 +98,7 @@ async def cmd_clear_app_logs(params: dict) -> int:
 
 # ── Export operations ────────────────────────────────────────────────────────
 
-@register_command("export_logs")
+@register_command("export_logs", readonly=True)
 async def cmd_export_logs(params: dict) -> str:
     """Export logs to string (JSON, CSV, or TXT format).
 
@@ -111,12 +109,12 @@ async def cmd_export_logs(params: dict) -> str:
 
     filter_ = params.get("filter")
     fmt = params.get("format", "json")
-    return await run_in_session(
+    return await run_in_read_session(
         lambda s: LoggingService(s).export_logs(filter_, fmt)
     )
 
 
-@register_command("export_app_logs")
+@register_command("export_app_logs", readonly=True)
 async def cmd_export_app_logs(params: dict) -> str:
     """Compatibility alias for ``export_logs``."""
     return await cmd_export_logs(params)

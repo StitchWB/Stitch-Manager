@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.icloud_email_pool.schemas import (
     AuthenticateICloudRequest,
     DeletePoolEntryRequest,
@@ -46,7 +46,7 @@ def _entry_to_dict(entry) -> dict:
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
-@register_command("icloud_pool_get_stats")
+@register_command("icloud_pool_get_stats", readonly=True)
 async def cmd_get_stats(params: dict) -> dict:
     """Return pool statistics (counts by status + rate limit info)."""
     svc = get_icloud_pool_service()
@@ -55,12 +55,12 @@ async def cmd_get_stats(params: dict) -> dict:
         stats = await svc.get_stats(session)
         return stats.model_dump(by_alias=True)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── List entries ──────────────────────────────────────────────────────────────
 
-@register_command("icloud_pool_list_entries")
+@register_command("icloud_pool_list_entries", readonly=True)
 async def cmd_list_entries(params: dict) -> list:
     """List pool entries with optional status filter and pagination."""
     status = params.get("status")
@@ -72,7 +72,7 @@ async def cmd_list_entries(params: dict) -> list:
         entries = await svc.list_entries(session, status=status, limit=limit, offset=offset)
         return [_entry_to_dict(e) for e in entries]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── Fill pool ─────────────────────────────────────────────────────────────────

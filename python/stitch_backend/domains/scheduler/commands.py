@@ -10,7 +10,7 @@ import logging
 from typing import Any
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.scheduler.service import (
     Schedule,
     TaskType,
@@ -68,13 +68,13 @@ def _parse_task_type(d: dict[str, Any] | Any) -> TaskType:
 # ── Task CRUD ─────────────────────────────────────────────────────────────────
 
 
-@register_command("get_scheduled_tasks")
+@register_command("get_scheduled_tasks", readonly=True)
 async def cmd_get_tasks(params: dict) -> list[dict]:
     """Get all scheduled tasks."""
     async def _op(db):
         tasks = await get_tasks(db)
         return [task_to_dict(t) for t in tasks]
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("create_scheduled_task")
@@ -160,7 +160,7 @@ async def cmd_execute_now(params: dict) -> str:
     return await run_in_session(_op)
 
 
-@register_command("get_task_executions")
+@register_command("get_task_executions", readonly=True)
 async def cmd_get_executions(params: dict) -> list[dict]:
     """Get execution history for a task."""
     task_id = int(params.get("taskId", params.get("task_id", 0)))
@@ -169,7 +169,7 @@ async def cmd_get_executions(params: dict) -> list[dict]:
     async def _op(db):
         execs = await get_executions(db, task_id, limit)
         return [execution_to_dict(e) for e in execs]
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── Scheduler service control ─────────────────────────────────────────────────
@@ -191,7 +191,7 @@ async def cmd_stop_scheduler(params: dict) -> dict:
     return {"running": False}
 
 
-@register_command("get_scheduler_status")
+@register_command("get_scheduler_status", readonly=True)
 async def cmd_scheduler_status(params: dict) -> bool:
     """Check if the scheduler is running."""
     return get_worker().is_running
@@ -200,13 +200,13 @@ async def cmd_scheduler_status(params: dict) -> bool:
 # ── Templates ─────────────────────────────────────────────────────────────────
 
 
-@register_command("get_scheduler_templates")
+@register_command("get_scheduler_templates", readonly=True)
 async def cmd_get_templates(params: dict) -> list[dict]:
     """Get all scheduler templates."""
     async def _op(db):
         templates = await get_templates(db)
         return [template_to_dict(t) for t in templates]
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("create_scheduler_template")

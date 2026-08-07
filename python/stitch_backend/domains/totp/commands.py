@@ -15,7 +15,7 @@ import uuid
 from typing import Any
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.totp.models import TotpKey
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def _key_to_dict(key: TotpKey, *, include_secret: bool = False) -> dict[str, Any
 # list_totp_keys
 # ═════════════════════════════════════════════════════════════════════════════
 
-@register_command("list_totp_keys")
+@register_command("list_totp_keys", readonly=True)
 async def cmd_list_totp_keys(params: dict) -> list[dict]:
     """Return all TOTP keys with secrets included (needed for frontend TOTP generation)."""
     from sqlalchemy import select
@@ -55,7 +55,7 @@ async def cmd_list_totp_keys(params: dict) -> list[dict]:
         keys = result.scalars().all()
         return [_key_to_dict(k, include_secret=True) for k in keys]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

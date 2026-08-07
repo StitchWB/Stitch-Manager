@@ -12,10 +12,9 @@ Commands:
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +73,7 @@ async def cmd_get_settings(params: dict) -> dict:
     }
 
 
-@register_command("get_active_account_counts")
+@register_command("get_active_account_counts", readonly=True)
 async def cmd_get_counts(params: dict) -> list:
     """Count active accounts grouped by provider."""
     from sqlalchemy import text
@@ -92,4 +91,4 @@ async def cmd_get_counts(params: dict) -> list:
             for row in rows
         ]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)

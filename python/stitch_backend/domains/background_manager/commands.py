@@ -9,7 +9,7 @@ from typing import cast
 from sqlalchemy import text
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.background_manager.schemas import (
     BackgroundManagerConfig,
     normalise_background_manager_config,
@@ -42,10 +42,10 @@ async def _load_config() -> BackgroundManagerConfig:
             return BackgroundManagerConfig.model_validate({})
         return normalise_background_manager_config(value)
 
-    return cast(BackgroundManagerConfig, await run_in_session(_op))
+    return cast(BackgroundManagerConfig, await run_in_read_session(_op))
 
 
-@register_command("get_background_manager_status")
+@register_command("get_background_manager_status", readonly=True)
 async def cmd_get_background_manager_status(params: dict) -> dict:
     """Return static worker status with the effective persisted config."""
     config = await _load_config()
@@ -55,7 +55,7 @@ async def cmd_get_background_manager_status(params: dict) -> dict:
     }
 
 
-@register_command("get_background_manager_config")
+@register_command("get_background_manager_config", readonly=True)
 async def cmd_get_background_manager_config(params: dict) -> dict:
     """Return a validated, default-complete background manager config."""
     config = await _load_config()

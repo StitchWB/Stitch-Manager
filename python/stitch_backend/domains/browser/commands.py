@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import text
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 
 logger = logging.getLogger(__name__)
 
@@ -122,14 +122,14 @@ async def cmd_save_browser_session(params: dict) -> dict:
     return {"success": True}
 
 
-@register_command("load_browser_session")
+@register_command("load_browser_session", readonly=True)
 async def cmd_load_browser_session(params: dict) -> dict | None:
     """Load saved browser session data for an account."""
     account_id = int(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
         return None
 
-    result: dict[str, str] | None = await run_in_session(lambda db: _load_session(db, account_id))
+    result: dict[str, str] | None = await run_in_read_session(lambda db: _load_session(db, account_id))
     return result
 
 
@@ -149,7 +149,7 @@ async def cmd_clear_browser_session(params: dict) -> dict:
     return {"success": True}
 
 
-@register_command("open_account_browser")
+@register_command("open_account_browser", readonly=True)
 async def cmd_open_account_browser(params: dict) -> dict:
     """Launch CloakBrowser/Chrome with the account's persistent profile.
 
@@ -161,11 +161,11 @@ async def cmd_open_account_browser(params: dict) -> dict:
         return {"success": False, "error": "No accountId specified"}
 
     # Load account + session from DB
-    info = await run_in_session(lambda db: _get_account_info(db, account_id))
+    info = await run_in_read_session(lambda db: _get_account_info(db, account_id))
     if not info:
         return {"success": False, "error": f"Account {account_id} not found"}
 
-    session = await run_in_session(lambda db: _load_session(db, account_id))
+    session = await run_in_read_session(lambda db: _load_session(db, account_id))
     profile_path = session["profilePath"] if session else None
     cookies = session["cookies"] if session else None
 

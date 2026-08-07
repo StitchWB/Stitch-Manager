@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import webbrowser
@@ -220,14 +219,14 @@ async def cmd_start_v0_app_autoreg_job(params: dict) -> dict:
     return await _start_autoreg_job("v0_app", params)
 
 
-@register_command("get_referral_donors")
+@register_command("get_referral_donors", readonly=True)
 async def cmd_get_referral_donors(params: dict) -> dict:
     """List v0_app referral donors and identify the active auto-pick donor.
 
     Powers the donor-picker on the registration page.  ``activeDonorId`` is the
     donor that auto-selection would use next (oldest with slots remaining).
     """
-    from stitch_backend.database import run_in_session
+    from stitch_backend.database import run_in_read_session
     from stitch_backend.domains.registration.referral_pool import ReferralPoolService
 
     async def _load(session):
@@ -235,7 +234,7 @@ async def cmd_get_referral_donors(params: dict) -> dict:
         active = await ReferralPoolService.get_active_donor(session)
         return donors, active
 
-    donors, active = await run_in_session(_load)
+    donors, active = await run_in_read_session(_load)
     return {
         "donors": donors,
         "activeDonorId": active.get("id") if active else None,
@@ -292,7 +291,7 @@ async def cmd_stop_registration(params: dict) -> None:
 
 # ── Registration Jobs (query/clear) ─────────────────────────────────────
 
-@register_command("get_registration_jobs")
+@register_command("get_registration_jobs", readonly=True)
 async def cmd_get_registration_jobs(params: dict) -> list:
     """Get all registration jobs.
 
@@ -485,7 +484,7 @@ async def cmd_get_next_counter(params: dict) -> int:
     return await run_in_session(_op)
 
 
-@register_command("check_python_autoreg")
+@register_command("check_python_autoreg", readonly=True)
 async def cmd_check_python_autoreg(params: dict) -> bool:
     """Check if Python and DrissionPage are available for autoreg."""
     return shutil.which("python") is not None or shutil.which("python3") is not None
