@@ -15,7 +15,13 @@ import {
   Pencil,
 } from 'lucide-react';
 
-import { useSchedulerStore } from '../stores/scheduler';
+import {
+  useSchedulerStore,
+  startSchedulerStatusPolling,
+  stopSchedulerStatusPolling,
+  startTaskPolling,
+  stopTaskPolling,
+} from '../stores/scheduler';
 import { TaskType, Schedule } from '../types/generated';
 import { CreateTaskModal } from './Scheduler/components/CreateTaskModal';
 import { EditTaskModal } from './Scheduler/components/EditTaskModal';
@@ -238,13 +244,13 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
     fetchTasks();
     fetchTemplates();
     getSchedulerStatus();
+    startSchedulerStatusPolling();
+    startTaskPolling();
 
-    // Poll status every 10 seconds
-    const interval = setInterval(() => {
-      getSchedulerStatus();
-    }, 10000);
-
-    return () => clearInterval(interval);
+    return () => {
+      stopSchedulerStatusPolling();
+      stopTaskPolling();
+    };
   }, [fetchTasks, fetchTemplates, getSchedulerStatus]);
 
   const handleToggleScheduler = async () => {
