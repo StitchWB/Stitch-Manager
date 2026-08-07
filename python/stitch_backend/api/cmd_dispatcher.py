@@ -61,6 +61,8 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
       - Unknown command   → 404
       - Validation error  → 400  (pydantic ``ValidationError``, one-line warning)
       - Domain error      → 400  (``StitchError``, one-line warning)
+      - Input rejection   → 400  (``ValueError`` from domain hand-validation,
+        one-line warning, no traceback)
       - Timeout           → 504  (command exceeded its per-command or default timeout)
       - Unexpected error  → 400  (full traceback logged; 400 is the established
         contract — frontend and e2e tests treat any command error as 4xx)
@@ -125,6 +127,11 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     except StitchError as exc:
         logger.warning("Command '%s' domain error: %s", name, str(exc.detail)[:200])
         raise HTTPException(status_code=400, detail=exc.detail) from exc
+    except ValueError as exc:
+        # Domains raise ValueError for expected input-validation failures
+        # (e.g. "TOTP secret is required") — one line, no traceback spam.
+        logger.warning("Command '%s' rejected input: %s", name, str(exc)[:200])
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Command '%s' failed", name)
         # Domain exceptions expose a `detail` attribute; sanitize the raw
