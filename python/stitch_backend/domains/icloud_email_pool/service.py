@@ -13,25 +13,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.database import get_session_factory
 from stitch_backend.domains.icloud_email_pool.models import ICloudEmailPoolEntry
 from stitch_backend.domains.icloud_email_pool.schemas import ICloudPoolStatsResponse
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 
 # ── Singleton service instance (holds the live iCloud session) ─────────────
 
-_instance: "ICloudPoolService | None" = None
+_instance: ICloudPoolService | None = None
 
 
-def get_icloud_pool_service() -> "ICloudPoolService":
+def get_icloud_pool_service() -> ICloudPoolService:
     """Return the singleton service, creating it if necessary."""
     global _instance  # noqa: PLW0603
     if _instance is None:
@@ -193,7 +195,7 @@ class ICloudPoolService:
         account_id: str | None = None,
     ) -> None:
         """Mark a reserved entry as ``used`` or ``failed``."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         new_status = "used" if success else "failed"
         values: dict = {"status": new_status}
         if success:
@@ -224,6 +226,112 @@ class ICloudPoolService:
             except Exception as exc:
                 logger.warning("Could not delete Apple alias %s: %s", entry.apple_alias_id, exc)
 
+        entry.status = "deleted"
+        db.add(entry)
+
+    # ── Apple-only helpers (NO DB access) ──────────────────────────────────────
+
+    def generate_aliases(
+        self,
+        count: int = 5,
+        label_prefix: str = "Auto-registration",
+    ) -> list[dict[str, Any]]:
+        """
+        Generate ``count`` new Hide My Email aliases via Apple's API.
+
+        Pure Apple I/O — no DB session.  Call this OUTSIDE ``run_in_session``
+        and persist results separately via :meth:`persist_aliases`.
+
+        Respects Apple's rate limit — stops early if exhausted.
+        Returns a list of ``{"email", "apple_alias_id", "label"}`` dicts.
+        """
+        from autoreg.services.icloud import RateLimitError
+
+        if not self.is_authenticated():
+            raise RuntimeError(
+                "iCloud session not authenticated. "
+                "Go to Settings → Email Services → iCloud and authenticate first."
+            )
+
+        aliases: list[dict[str, Any]] = []
+        for i in range(count):
+            label = f"{label_prefix} #{i + 1}"
+            try:
+                alias = self._icloud.generate_alias(label)
+            except RateLimitError as exc:
+                logger.warning(
+                    "Rate limit hit after %d/%d aliases: %s", i, count, exc
+                )
+                break
+            aliases.append({
+                "email": alias["email"],
+                "apple_alias_id": alias.get("id"),
+                "label": label,
+            })
+            logger.info("Pool += %s", alias["email"])
+        return aliases
+
+    async def persist_aliases(
+        self,
+        db: AsyncSession,
+        aliases: list[dict[str, Any]],
+    ) -> list[ICloudEmailPoolEntry]:
+        """
+        Persist pre-generated aliases to the pool (DB only — no Apple API).
+
+        Pair with :meth:`generate_aliases` so Apple I/O happens outside the
+        write session.
+        """
+        created: list[ICloudEmailPoolEntry] = []
+        for alias in aliases:
+            entry = ICloudEmailPoolEntry(
+                email=alias["email"],
+                apple_alias_id=alias.get("apple_alias_id"),
+                label=alias["label"],
+                status="available",
+                apple_id=self._cfg.apple_id if self._cfg else None,
+            )
+            db.add(entry)
+            created.append(entry)
+
+        await db.flush()
+        return created
+
+    def delete_alias_apple(self, apple_alias_id: str | None) -> None:
+        """
+        Deactivate an alias on Apple's side (pure Apple I/O — no DB session).
+
+        Call this OUTSIDE ``run_in_session`` and persist the DB status change
+        separately via :meth:`mark_entry_deleted`.
+        """
+        if self.is_authenticated() and apple_alias_id:
+            try:
+                self._icloud.delete_alias(apple_alias_id)
+            except Exception as exc:
+                logger.warning(
+                    "Could not delete Apple alias %s: %s", apple_alias_id, exc
+                )
+
+    async def get_entry_apple_alias_id(
+        self, db: AsyncSession, entry_id: int,
+    ) -> str | None:
+        """Return the ``apple_alias_id`` for an entry (read-only)."""
+        result = await db.execute(
+            select(ICloudEmailPoolEntry).where(ICloudEmailPoolEntry.id == entry_id)
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            raise ValueError(f"Pool entry {entry_id} not found")
+        return entry.apple_alias_id
+
+    async def mark_entry_deleted(self, db: AsyncSession, entry_id: int) -> None:
+        """Mark a pool entry as ``deleted`` (DB only — no Apple API)."""
+        result = await db.execute(
+            select(ICloudEmailPoolEntry).where(ICloudEmailPoolEntry.id == entry_id)
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            raise ValueError(f"Pool entry {entry_id} not found")
         entry.status = "deleted"
         db.add(entry)
 
@@ -284,7 +392,7 @@ class ICloudPoolService:
                 if entry is None:
                     return None
 
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 entry.status = "reserved"
                 entry.reserved_at = now
                 await session.commit()

@@ -83,12 +83,19 @@ async def cmd_fill_pool(params: dict) -> dict:
     Generate up to N new Hide My Email aliases and add them to the pool.
 
     Apple allows ~5 aliases per 30 minutes — ``count`` is capped at 5.
+
+    Apple API calls happen OUTSIDE the write session so the single write
+    connection is not held hostage during network I/O.
     """
     req = FillPoolRequest.model_validate(params)
     svc = get_icloud_pool_service()
 
+    # Apple I/O — outside any DB session
+    aliases = svc.generate_aliases(count=req.count, label_prefix=req.label_prefix)
+
+    # Persist in a short write session
     async def _op(session):
-        entries = await svc.fill_pool(session, count=req.count, label_prefix=req.label_prefix)
+        entries = await svc.persist_aliases(session, aliases)
         return {
             "created": len(entries),
             "entries": [_entry_to_dict(e) for e in entries],
@@ -121,12 +128,26 @@ async def cmd_release_entry(params: dict) -> dict:
 
 @register_command("icloud_pool_delete_entry")
 async def cmd_delete_entry(params: dict) -> dict:
-    """Deactivate alias on Apple's side and mark the pool entry as deleted."""
+    """Deactivate alias on Apple's side and mark the pool entry as deleted.
+
+    Apple API call happens OUTSIDE the write session so the single write
+    connection is not held hostage during network I/O.
+    """
     req = DeletePoolEntryRequest.model_validate(params)
     svc = get_icloud_pool_service()
 
+    # 1. Read apple_alias_id (read session — closes before Apple call)
+    async def _read(session):
+        return await svc.get_entry_apple_alias_id(session, req.entry_id)
+
+    apple_alias_id = await run_in_read_session(_read)
+
+    # 2. Delete alias on Apple's side (OUTSIDE any DB session)
+    svc.delete_alias_apple(apple_alias_id)
+
+    # 3. Mark entry as deleted (short write session)
     async def _op(session):
-        await svc.delete_entry(session, entry_id=req.entry_id)
+        await svc.mark_entry_deleted(session, req.entry_id)
         return {"ok": True}
 
     return await run_in_session(_op)

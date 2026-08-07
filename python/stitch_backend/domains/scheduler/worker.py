@@ -10,8 +10,8 @@ import asyncio
 import json
 import logging
 
-from stitch_backend.database import get_session_factory, run_in_session
 from stitch_backend.core.event_bus import event_bus
+from stitch_backend.database import get_session_factory, run_in_session
 from stitch_backend.domains.scheduler.service import (
     ScheduledTask,
     complete_execution,
@@ -84,19 +84,19 @@ class SchedulerWorker:
     async def _execute_task(self, task: ScheduledTask) -> str:
         logger.info("[Scheduler] Executing task: %s (id=%d, type=%s)", task.name, task.id, task.task_type.type)
         return await self._run_task(task)
-    
+
     async def _batch_persist_results(self, results: list[tuple[ScheduledTask, str | None, str | None]]) -> None:
         """Persist all task execution results in one transaction."""
         async def _op(session):
             for task, result, error in results:
                 exec_id = await start_execution(session, task.id)
                 await session.flush()
-                
+
                 if error is None:
                     await complete_execution(session, exec_id, task.id, "Success", result, None)
                 else:
                     await complete_execution(session, exec_id, task.id, "Failed", None, error)
-                
+
                 # Reschedule (for interval/daily) or disable (for once)
                 if task.schedule.type == "once":
                     task.enabled = False
@@ -104,7 +104,7 @@ class SchedulerWorker:
                 else:
                     await update_next_run(session, task.id, task.schedule)
                     await session.flush()
-        
+
         await run_in_session(_op)
         logger.debug("[Scheduler] batch persisted %d results", len(results))
         try:
@@ -132,21 +132,23 @@ class SchedulerWorker:
         logger.info("[TaskExecutor] Registering provider: %s", provider)
         from stitch_backend.core.command_registry import get_command_handler
         try:
-            handler = get_command_handler("register_provider")
-            result = await handler(config)
+            # "register_provider" is not registered — use the real
+            # equivalent "start_registration" which expects providerId + count.
+            handler = get_command_handler("start_registration")
+            params = {"providerId": provider, "count": config.get("count", 1), **config}
+            result = await handler(params)
             return json.dumps(result)
         except Exception as exc:
             raise RuntimeError(f"Registration failed: {exc}") from exc
 
     async def _execute_login(self, account_id: int, config: dict) -> str:
         logger.info("[TaskExecutor] Login account: %d", account_id)
-        from stitch_backend.core.command_registry import get_command_handler
-        try:
-            handler = get_command_handler("login_account")
-            result = await handler({"accountId": account_id, **config})
-            return json.dumps(result)
-        except Exception as exc:
-            raise RuntimeError(f"Login failed: {exc}") from exc
+        # No registered command handler for "login_account" — the closest
+        # equivalent "auto_login" needs email/password, not account_id.
+        raise RuntimeError(
+            "unsupported task type: loginAccount — "
+            "no registered command handler 'login_account'"
+        )
 
     async def _execute_refresh(self, account_id: int, config: dict) -> str:
         logger.info("[TaskExecutor] Refresh token for account: %d", account_id)
@@ -168,29 +170,51 @@ class SchedulerWorker:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
             return stdout.decode(errors="replace")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise RuntimeError("Script timed out after 300s") from None
         except Exception as exc:
             raise RuntimeError(f"Script execution failed: {exc}") from exc
 
 
 async def execute_task_now(task: ScheduledTask) -> str:
-    """Execute a task immediately (called from command handler)."""
+    """Execute a task immediately (called from command handler).
+
+    The task itself runs OUTSIDE any DB session so the single write
+    connection is not held hostage during long-running operations
+    (subprocess up to 300s, HTTP token refresh up to 30s).
+
+    Flow:
+      1. WRITE session #1 — ``start_execution`` → close.
+      2. OUTSIDE session — ``worker._run_task(task)``.
+      3. WRITE session #2 — ``complete_execution(success/failure)`` → close.
+    """
     worker = SchedulerWorker()
-    
-    async def _op(session):
+
+    # Session #1: record start
+    async def _start(session):
         exec_id = await start_execution(session, task.id)
         await session.flush()
-        
-        try:
-            result = await worker._run_task(task)
-            await complete_execution(session, exec_id, task.id, "Success", result, None)
-            return result
-        except Exception as exc:
-            await complete_execution(session, exec_id, task.id, "Failed", None, str(exc))
-            raise
-    
-    return await run_in_session(_op)
+        return exec_id
+
+    exec_id = await run_in_session(_start)
+
+    # Run task OUTSIDE any DB session
+    try:
+        result = await worker._run_task(task)
+    except Exception as exc:
+        error = str(exc)
+        # Session #2: record failure
+        async def _fail(session):
+            await complete_execution(session, exec_id, task.id, "Failed", None, error)
+        await run_in_session(_fail)
+        raise
+
+    # Session #2: record success
+    async def _success(session):
+        await complete_execution(session, exec_id, task.id, "Success", result, None)
+
+    await run_in_session(_success)
+    return result
 
 
 # Singleton

@@ -7,7 +7,7 @@ to the frontend via the command registry.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.event_bus import event_bus
@@ -88,7 +88,7 @@ async def cmd_create_task(params: dict) -> int:
 
     async def _op(db):
         return await create_task(db, name, task_type, schedule, config)
-    task_id = await run_in_session(_op)
+    task_id = cast("int", await run_in_session(_op))
     try:
         await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
     except Exception:
@@ -120,13 +120,12 @@ async def cmd_update_task(params: dict) -> dict:
         await update_task(db, existing)
         return task_to_dict(existing)
 
-    result = await run_in_session(_op)
+    result = cast("dict", await run_in_session(_op))
     try:
         await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
     except Exception:
         logger.debug("[scheduler] failed to emit tasks_changed", exc_info=True)
     return result
-
 
 @register_command("delete_scheduled_task")
 async def cmd_delete_task(params: dict) -> dict:
@@ -136,7 +135,7 @@ async def cmd_delete_task(params: dict) -> dict:
     async def _op(db):
         await delete_task(db, task_id)
         return {"deleted": task_id}
-    result = await run_in_session(_op)
+    result = cast("dict", await run_in_session(_op))
     try:
         await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
     except Exception:
@@ -157,7 +156,7 @@ async def cmd_toggle_task(params: dict) -> dict:
         task.enabled = enabled
         await update_task(db, task)
         return task_to_dict(task)
-    result = await run_in_session(_op)
+    result = cast("dict", await run_in_session(_op))
     try:
         await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
     except Exception:
@@ -309,7 +308,7 @@ async def cmd_create_from_template(params: dict) -> int:
         name = (name_override or "").strip() or tmpl.name
         return await create_task(db, name, tmpl.task_type, tmpl.schedule, tmpl.config)
 
-    task_id = await run_in_session(_op)
+    task_id = cast("int", await run_in_session(_op))
     try:
         await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
     except Exception:
