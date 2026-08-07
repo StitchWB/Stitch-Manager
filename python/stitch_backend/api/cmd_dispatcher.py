@@ -13,22 +13,33 @@ calls it with the JSON body, and returns the result as JSON.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from stitch_backend.core.command_registry import (
     CommandNotFoundError,
     get_command_handler,
+    get_command_meta,
     list_commands,
 )
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 
 logger = logging.getLogger(__name__)
 
 cmd_router = APIRouter(tags=["Commands"])
+
+#: Default timeout for command execution (seconds).
+#:
+#: Chosen to be below the SQLAlchemy write pool timeout (30s) so the
+#: dispatcher kills stuck commands *before* the pool timeout cascades
+#: and every other command fails with a 30s pool-timeout traceback.
+DEFAULT_COMMAND_TIMEOUT: float = 25.0
 
 
 # ── Discover available commands ───────────────────────────────────────────────
@@ -46,10 +57,13 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     """Dispatch a named command with the JSON body as params.
 
     Errors are mapped to HTTP status codes:
+
       - Unknown command   → 404
-      - Validation error  → 422
-      - Domain error      → 400  (with ``detail`` field)
-      - Unexpected error  → 500
+      - Validation error  → 400  (pydantic ``ValidationError``, one-line warning)
+      - Domain error      → 400  (``StitchError``, one-line warning)
+      - Timeout           → 504  (command exceeded its per-command or default timeout)
+      - Unexpected error  → 400  (full traceback logged; 400 is the established
+        contract — frontend and e2e tests treat any command error as 4xx)
     """
     # Parse body (empty body is fine → {})
     try:
@@ -69,16 +83,55 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
             detail=f"Unknown command: '{name}'",
         ) from None
 
+    # Determine effective timeout from command metadata.
+    #   None  → use DEFAULT_COMMAND_TIMEOUT
+    #   -1    → opt out (no timeout)
+    #   float → per-command timeout
+    meta = get_command_meta(name)
+    if meta.timeout == -1:
+        effective_timeout: float | None = None
+    elif meta.timeout is None:
+        effective_timeout = DEFAULT_COMMAND_TIMEOUT
+    else:
+        effective_timeout = meta.timeout
+
     # Execute
     try:
-        result = await handler(body)
+        if effective_timeout is not None:
+            try:
+                result = await asyncio.wait_for(
+                    handler(body), timeout=effective_timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Command '%s' timed out after %.1fs", name, effective_timeout
+                )
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"Command '{name}' timed out after {effective_timeout}s",
+                ) from None
+        else:
+            result = await handler(body)
     except HTTPException:
-        raise   # let FastAPI handle HTTPException directly
+        raise  # let FastAPI handle HTTPException directly
+    except ValidationError as exc:
+        errors = exc.errors()
+        first = errors[0] if errors else {}
+        loc = ".".join(str(p) for p in first.get("loc", ()))
+        msg = first.get("msg", "")
+        summary = f"{loc}: {msg}"[:200]
+        logger.warning("Command '%s' validation error: %s", name, summary)
+        raise HTTPException(status_code=400, detail=summary) from exc
+    except StitchError as exc:
+        logger.warning("Command '%s' domain error: %s", name, str(exc.detail)[:200])
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
     except Exception as exc:
         logger.exception("Command '%s' failed", name)
         # Domain exceptions expose a `detail` attribute; sanitize the raw
         # exception string to strip secret-bearing URL params before it
         # reaches the client.
+        # NOTE: status stays 400 (not 500) — the established contract that
+        # the frontend and the e2e test suite rely on for command errors.
         detail = getattr(exc, "detail", None) or _sanitize_error(exc, secret="")
         raise HTTPException(status_code=400, detail=detail) from exc
 

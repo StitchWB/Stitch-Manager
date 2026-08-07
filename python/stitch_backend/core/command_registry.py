@@ -41,7 +41,7 @@ import importlib
 import logging
 import pkgutil
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Type
+from typing import Any, Callable, Coroutine, NamedTuple, Type
 
 logger = logging.getLogger(__name__)
 
@@ -50,18 +50,52 @@ logger = logging.getLogger(__name__)
 CommandHandler = Callable[..., Coroutine[Any, Any, Any]]
 
 _COMMAND_REGISTRY: dict[str, CommandHandler] = {}
+_COMMAND_META: dict[str, CommandMeta] = {}
 
 
-def register_command(name: str) -> Callable[[CommandHandler], CommandHandler]:
+class CommandMeta(NamedTuple):
+    """Per-command policy metadata.
+
+    Attributes:
+        readonly: True if the command performs no writes and is safe to
+            run concurrently with write commands.  Defaults to False.
+        timeout: Maximum execution time in seconds.
+
+            * ``None`` (default) — use the dispatcher's default timeout
+              (25.0s, chosen to be below the SQLAlchemy write pool timeout
+              of 30s so stuck commands are killed *before* the pool cascade).
+            * ``-1`` — disable the timeout entirely (opt out).  Use for
+              long-running commands that legitimately exceed the default.
+            * A positive float — per-command timeout in seconds.
+    """
+
+    readonly: bool = False
+    timeout: float | None = None
+
+
+def register_command(
+    name: str,
+    *,
+    readonly: bool = False,
+    timeout: float | None = None,
+) -> Callable[[CommandHandler], CommandHandler]:
     """Decorator: register *handler* as the handler for command *name*.
 
     The handler signature should be ``async def handler(params: dict) -> Any``.
+
+    Args:
+        name: Command name (used in the URL: ``POST /api/{name}``).
+        readonly: If True, the command does not modify state.  Defaults to
+            False.
+        timeout: Per-command timeout in seconds.  ``None`` (default) uses
+            the dispatcher default (25.0s).  ``-1`` disables the timeout.
     """
 
     def decorator(handler: CommandHandler) -> CommandHandler:
         if name in _COMMAND_REGISTRY:
             logger.warning("Command '%s' already registered — overwriting", name)
         _COMMAND_REGISTRY[name] = handler
+        _COMMAND_META[name] = CommandMeta(readonly=readonly, timeout=timeout)
         return handler
 
     return decorator
@@ -73,6 +107,16 @@ def get_command_handler(name: str) -> CommandHandler:
         return _COMMAND_REGISTRY[name]
     except KeyError:
         raise CommandNotFoundError(name) from None
+
+
+def get_command_meta(name: str) -> CommandMeta:
+    """Return the policy metadata for command *name*.
+
+    Raises :class:`CommandNotFoundError` if the command is not registered.
+    """
+    if name not in _COMMAND_REGISTRY:
+        raise CommandNotFoundError(name) from None
+    return _COMMAND_META.get(name, CommandMeta())
 
 
 def list_commands() -> list[str]:

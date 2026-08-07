@@ -64,6 +64,12 @@ def _configure_logging(level: str) -> None:
     # Reduce noise from command_registry warnings (expected in dev mode with --reload)
     logging.getLogger("stitch_backend.core.command_registry").setLevel(logging.ERROR)
 
+    # Suppress uvicorn's access log — the custom timing_middleware is the
+    # replacement access log and produces richer, deduplicated output.
+    # This MUST happen here (not in run()) because dev mode launches uvicorn
+    # via CLI which never calls run() — lifespan calls _configure_logging.
+    logging.getLogger("uvicorn.access").disabled = True
+
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
@@ -105,6 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.scheduler.commands       # noqa: F401
     import stitch_backend.domains.patcher.commands         # noqa: F401
     import stitch_backend.domains.google_sheets.commands      # noqa: F401
+    import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.replenishment.commands       # noqa: F401
     import stitch_backend.domains.profiles.commands              # noqa: F401
     import stitch_backend.domains.api_keys.commands               # noqa: F401
@@ -135,9 +142,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.ai_gateway.commands  # noqa: F401
     import stitch_backend.domains.ai_gateway.migration_commands  # noqa: F401
 
-    from stitch_backend.core.command_registry import list_commands, scan_providers
+    from stitch_backend.core.command_registry import get_command_meta, list_commands, scan_providers
     commands = list_commands()
-    logger.info("Registered %d command(s)", len(commands))
+    readonly_count = sum(1 for c in commands if get_command_meta(c).readonly)
+    logger.info("Registered %d command(s), %d readonly", len(commands), readonly_count)
     logger.debug("Registered commands: %s", commands)
 
     # Auto-discover provider plugins
@@ -310,6 +318,7 @@ def run() -> None:
         port=settings.port,
         reload=settings.debug,
         log_level=settings.log_level.lower(),
+        access_log=False,
     )
 
 
