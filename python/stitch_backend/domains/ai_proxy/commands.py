@@ -12,14 +12,15 @@ import webbrowser
 from pathlib import Path
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.core.http_gateway import ProxyUnavailableError, gateway
+from stitch_backend.database import run_in_read_session, run_in_session
 
 logger = logging.getLogger(__name__)
 
 
 # ── Account CRUD ────────────────────────────────────────────────────────────
 
-@register_command("get_ai_proxy_accounts")
+@register_command("get_ai_proxy_accounts", readonly=True)
 async def cmd_get_ai_proxy_accounts(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
 
@@ -97,9 +98,9 @@ async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
 
 # ── Models ──────────────────────────────────────────────────────────────────
 
-# Simple in-memory cache for model discovery (60s TTL)
+# Simple in-memory cache for model discovery (300s TTL)
 _models_cache: dict = {"data": None, "expires": 0}
-_CACHE_TTL = 60  # seconds
+_CACHE_TTL = 300  # seconds
 
 # Fallback models for providers with no public API or when API fails
 _FALLBACK_MODELS: dict[str, list[dict[str, str]]] = {
@@ -160,8 +161,6 @@ async def _fetch_openai_compatible_models(
     provider: str, keys: list[dict],
 ) -> list[dict[str, str]]:
     """Fetch models from OpenAI-compatible /v1/models endpoint."""
-    import httpx
-
     key = keys[0]
     api_key = key.get("apiKey")
     if not api_key:
@@ -170,9 +169,11 @@ async def _fetch_openai_compatible_models(
     base_url = key.get("baseUrl") or _PROVIDER_BASE_URLS.get(provider, "https://api.openai.com")
     url = f"{base_url.rstrip('/')}/v1/models"
 
-    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
-    proxy_url = _get_outbound_proxy()
-    async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
+    try:
+        client = await gateway().make_client(timeout=10.0)
+    except ProxyUnavailableError:
+        return []
+    async with client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
         if resp.status_code != 200:
             return []
@@ -186,8 +187,6 @@ async def _fetch_openai_compatible_models(
 
 async def _fetch_anthropic_models(keys: list[dict]) -> list[dict[str, str]]:
     """Fetch models from Anthropic /v1/models endpoint."""
-    import httpx
-
     key = keys[0]
     api_key = key.get("apiKey")
     if not api_key:
@@ -199,9 +198,11 @@ async def _fetch_anthropic_models(keys: list[dict]) -> list[dict[str, str]]:
         "anthropic-version": "2023-06-01",
     }
 
-    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
-    proxy_url = _get_outbound_proxy()
-    async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
+    try:
+        client = await gateway().make_client(timeout=10.0)
+    except ProxyUnavailableError:
+        return []
+    async with client:
         resp = await client.get(url, headers=headers)
         if resp.status_code != 200:
             return []
@@ -215,8 +216,6 @@ async def _fetch_anthropic_models(keys: list[dict]) -> list[dict[str, str]]:
 
 async def _fetch_gemini_models(keys: list[dict]) -> list[dict[str, str]]:
     """Fetch models from Gemini API."""
-    import httpx
-
     key = keys[0]
     api_key = key.get("apiKey")
     if not api_key:
@@ -224,9 +223,11 @@ async def _fetch_gemini_models(keys: list[dict]) -> list[dict[str, str]]:
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
 
-    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
-    proxy_url = _get_outbound_proxy()
-    async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
+    try:
+        client = await gateway().make_client(timeout=10.0)
+    except ProxyUnavailableError:
+        return []
+    async with client:
         resp = await client.get(url)
         if resp.status_code != 200:
             return []
@@ -251,7 +252,6 @@ async def _fetch_zai_models(keys: list[dict]) -> list[dict[str, str]]:
 
 async def _fetch_kiro_models(accounts: list[dict]) -> list[dict[str, str]]:
     """Fetch models from Kiro API using enabled accounts."""
-    import httpx
     from stitch_backend.domains.kiro_gateway.upstream.models import fetch_kiro_models
 
     kiro_accounts = [
@@ -278,9 +278,11 @@ async def _fetch_kiro_models(accounts: list[dict]) -> list[dict[str, str]]:
     }
 
     try:
-        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
-        proxy_url = _get_outbound_proxy()
-        async with httpx.AsyncClient(timeout=10.0, proxy=proxy_url) as client:
+        client = await gateway().make_client(timeout=10.0)
+    except ProxyUnavailableError:
+        return []
+    try:
+        async with client:
             models = await fetch_kiro_models(proxy_account, client)
             return [
                 {
@@ -296,7 +298,6 @@ async def _fetch_kiro_models(accounts: list[dict]) -> list[dict[str, str]]:
 
 async def _fetch_freemodel_models() -> list[dict[str, str]]:
     """Fetch models from FreeModel bridge if running."""
-    import httpx
     from stitch_backend.domains.freemodel_bridge.service import FreemodelBridgeService
 
     try:
@@ -308,9 +309,9 @@ async def _fetch_freemodel_models() -> list[dict[str, str]]:
             return []
 
         url = f"http://127.0.0.1:{port}/v1/models"
-        from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
-        proxy_url = _get_outbound_proxy()
-        async with httpx.AsyncClient(timeout=5.0, proxy=proxy_url) as client:
+        # localhost — bypass the outbound proxy (use_proxy=False)
+        client = await gateway().make_client(timeout=5.0, use_proxy=False)
+        async with client:
             resp = await client.get(url)
             if resp.status_code != 200:
                 return []
@@ -325,45 +326,42 @@ async def _fetch_freemodel_models() -> list[dict[str, str]]:
 
 
 async def _fetch_all_provider_models(
-    session, enabled_providers: set[str],
+    accounts: list[dict],
+    api_keys: dict[str, list[dict]],
+    enabled_providers: set[str],
 ) -> list[dict[str, str]]:
-    """Fetch models from all connected providers in parallel."""
-    import asyncio
-    import logging
-    from stitch_backend.domains.api_keys.service import ApiKeysService
+    """Fetch models from all connected providers in parallel.
 
-    logger = logging.getLogger(__name__)
-    svc = ApiKeysService(session)
+    All DB data (accounts + API keys) must be preloaded by the caller — this
+    function performs ONLY network I/O and must run OUTSIDE any DB session.
+    """
+    import asyncio
+
     tasks: list[tuple[str, asyncio.Task]] = []
     task_names: list[str] = []
 
     # API-key providers
     for provider in ("openai", "anthropic", "gemini", "antigravity", "fireworks", "zai", "dashscope"):
-        try:
-            keys = await svc.get_keys(provider)
-            if keys:
-                if provider in ("openai", "antigravity", "fireworks", "dashscope"):
-                    coro = _fetch_openai_compatible_models(provider, keys)
-                elif provider == "anthropic":
-                    coro = _fetch_anthropic_models(keys)
-                elif provider == "gemini":
-                    coro = _fetch_gemini_models(keys)
-                elif provider == "zai":
-                    coro = _fetch_zai_models(keys)
-                else:
-                    continue
-                tasks.append((provider, asyncio.ensure_future(coro)))
-                task_names.append(provider)
-                logger.info("[Models] Fetching models for %s (%d keys)", provider, len(keys))
-            else:
-                logger.debug("[Models] No keys for %s", provider)
-        except Exception as e:
-            logger.warning("[Models] Error checking keys for %s: %s", provider, e)
+        keys = api_keys.get(provider, [])
+        if not keys:
+            logger.debug("[Models] No keys for %s", provider)
+            continue
+        if provider in ("openai", "antigravity", "fireworks", "dashscope"):
+            coro = _fetch_openai_compatible_models(provider, keys)
+        elif provider == "anthropic":
+            coro = _fetch_anthropic_models(keys)
+        elif provider == "gemini":
+            coro = _fetch_gemini_models(keys)
+        elif provider == "zai":
+            coro = _fetch_zai_models(keys)
+        else:
+            continue
+        tasks.append((provider, asyncio.ensure_future(coro)))
+        task_names.append(provider)
+        logger.info("[Models] Fetching models for %s (%d keys)", provider, len(keys))
 
     # Account-based: Kiro
     if enabled_providers & {"kiro", "kiro_v2"}:
-        accounts_func = await _get_accounts_func()
-        accounts = await accounts_func(session)
         tasks.append(("kiro", asyncio.ensure_future(_fetch_kiro_models(accounts))))
         task_names.append("kiro")
         logger.info("[Models] Fetching Kiro models (%d enabled accounts)",
@@ -377,7 +375,7 @@ async def _fetch_all_provider_models(
         logger.warning("[Models] No providers configured — returning empty list")
         return []
 
-    # Fetch all in parallel with timeout
+    # Fetch all in parallel (overall deadline enforced by caller via asyncio.wait_for)
     results = await asyncio.gather(*(t for _, t in tasks), return_exceptions=True)
 
     # Aggregate results
@@ -395,65 +393,82 @@ async def _fetch_all_provider_models(
     return all_models
 
 
-# Helper to get accounts function (avoids circular import)
-_accounts_func = None
-
-
-async def _get_accounts_func():
-    global _accounts_func
-    if _accounts_func is None:
-        from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
-        _accounts_func = AiProxyAccountStore.get_accounts
-    return _accounts_func
-
-
-@register_command("get_available_models")
+@register_command("get_available_models", readonly=True)
 async def cmd_get_available_models(params: dict) -> list:
-    """Return models from actually connected providers via real API calls."""
+    """Return models from actually connected providers via real API calls.
+
+    Session discipline (fixes 92s hang): the DB session is held ONLY for the
+    short preload phase (accounts + API keys).  The network fetch runs
+    OUTSIDE any DB session, bounded by a 15s ``asyncio.wait_for`` deadline so
+    a hung proxy handshake cannot block the single SQLite write connection.
+    """
+    import asyncio
     import time
     from stitch_backend.database import run_in_session
     from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.api_keys.service import ApiKeysService
 
     # Check cache
     now = time.time()
     if _models_cache["data"] is not None and _models_cache["expires"] > now:
         return _models_cache["data"]
 
-    async def _op(session):
+    # ── Phase 1: short DB session — preload accounts + API keys, then close.
+    async def _preload(session):
         accounts = await AiProxyAccountStore.get_accounts(session)
         enabled_providers = {
             (a.get("provider") or "").lower()
             for a in accounts if a.get("enabled")
         }
-        result = await _fetch_all_provider_models(session, enabled_providers)
+        svc = ApiKeysService(session)
+        api_keys: dict[str, list[dict]] = {}
+        for provider in ("openai", "anthropic", "gemini", "antigravity", "fireworks", "zai", "dashscope"):
+            try:
+                keys = await svc.get_keys(provider)
+                if keys:
+                    api_keys[provider] = keys
+            except Exception as e:
+                logger.warning("[Models] Error checking keys for %s: %s", provider, e)
+        return accounts, enabled_providers, api_keys
 
-        # Fallback: if all API calls returned [], use known models for connected providers
-        if not result:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning("[Models] All API calls returned empty — using fallback for %s", enabled_providers)
+    try:
+        accounts, enabled_providers, api_keys = await run_in_session(_preload)
+    except Exception as e:
+        logger.error("[Models] Failed to preload provider data: %s", e)
+        if _models_cache["data"] is not None:
+            logger.warning("[Models] Serving stale cache after preload failure")
+            return _models_cache["data"]
+        return []
 
-            # Check API keys
-            from stitch_backend.domains.api_keys.service import ApiKeysService
-            svc = ApiKeysService(session)
-            key_providers = set()
-            for provider in ("openai", "anthropic", "gemini", "antigravity", "fireworks", "zai", "dashscope"):
-                try:
-                    keys = await svc.get_keys(provider)
-                    if keys:
-                        key_providers.add(provider)
-                except Exception:
-                    pass
+    # ── Phase 2: network fetch OUTSIDE any DB session — bounded by 15s.
+    result: list = []
+    try:
+        result = await asyncio.wait_for(
+            _fetch_all_provider_models(accounts, api_keys, enabled_providers),
+            timeout=15.0,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("[Models] Fetch timed out after 15s — serving stale cache")
+    except ProxyUnavailableError as e:
+        logger.warning("[Models] Proxy unavailable: %s — serving stale cache", e)
+    except Exception as e:
+        logger.error("[Models] Fetch failed: %s — serving stale cache", e)
 
-            # Add fallback models for connected providers
-            for provider in enabled_providers | key_providers:
-                if provider in _FALLBACK_MODELS:
-                    for m in _FALLBACK_MODELS[provider]:
-                        result.append({"id": m["id"], "provider": provider, "name": m["name"]})
+    # On any failure (timeout, proxy error, all fetchers empty) serve stale
+    # cache even if expired — only return [] when there was never any data.
+    if not result and _models_cache["data"] is not None:
+        logger.warning("[Models] Serving stale cache (expired=%s)",
+                       _models_cache["expires"] <= now)
+        return _models_cache["data"]
 
-        return result
-
-    result = await run_in_session(_op)
+    # Fallback: if all API calls returned [], use known models for connected providers
+    if not result:
+        logger.warning("[Models] All API calls returned empty — using fallback for %s",
+                       enabled_providers | set(api_keys.keys()))
+        for provider in enabled_providers | set(api_keys.keys()):
+            if provider in _FALLBACK_MODELS:
+                for m in _FALLBACK_MODELS[provider]:
+                    result.append({"id": m["id"], "provider": provider, "name": m["name"]})
 
     # Update cache
     _models_cache["data"] = result
@@ -978,54 +993,54 @@ async def cmd_provider_auth_flow_cancel(params: dict) -> bool:
 
 # ── Analytics ───────────────────────────────────────────────────────────────
 
-@register_command("get_ai_proxy_account_daily_usage")
+@register_command("get_ai_proxy_account_daily_usage", readonly=True)
 async def cmd_get_ai_proxy_account_daily_usage(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
     async def _op(session):
         return await AiProxyAnalytics.get_daily_usage_by_account(session)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_daily_stats")
+@register_command("get_daily_stats", readonly=True)
 async def cmd_get_daily_stats(params: dict) -> dict:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
     async def _op(session):
         return await AiProxyAnalytics.get_daily_stats(session)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_model_usage")
+@register_command("get_model_usage", readonly=True)
 async def cmd_get_model_usage(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
     async def _op(session):
         return await AiProxyAnalytics.get_model_usage(session)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_cost_estimate")
+@register_command("get_cost_estimate", readonly=True)
 async def cmd_get_cost_estimate(params: dict) -> float:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
     async def _op(session):
         return await AiProxyAnalytics.get_cost_estimate(session)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_weekly_stats")
+@register_command("get_weekly_stats", readonly=True)
 async def cmd_get_weekly_stats(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
     async def _op(session):
         return await AiProxyAnalytics.get_weekly_stats(session)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 # ── Utility ─────────────────────────────────────────────────────────────────
