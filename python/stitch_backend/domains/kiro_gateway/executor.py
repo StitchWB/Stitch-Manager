@@ -11,7 +11,6 @@ import json
 import logging
 import time
 import types
-from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import httpx
@@ -19,18 +18,25 @@ from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.responses import Response
 
-from stitch_backend.domains.ai_proxy.litellm_gateway import GatewayRequest, JsonObject
 from stitch_backend.domains.kiro_gateway.pool import (
-    AccountPool, AccountSnapshot, ErrorType, classify_error,
+    AccountPool,
+    AccountSnapshot,
+    ErrorType,
+    classify_error,
 )
 from stitch_backend.domains.kiro_gateway.session import (
-    SessionAffinityStore, extract_session_hint,
+    SessionAffinityStore,
+    extract_session_hint,
 )
-from stitch_backend.domains.kiro_gateway.stats import ProxyStats
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Awaitable, Callable
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from stitch_backend.domains.ai_proxy.litellm_gateway import GatewayRequest, JsonObject
     from stitch_backend.domains.kiro_gateway.service import KiroGatewayService
+    from stitch_backend.domains.kiro_gateway.stats import ProxyStats
 
 logger = logging.getLogger(__name__)
 
@@ -74,15 +80,15 @@ class KiroExecutor:
 
     def _get_http_client(self) -> httpx.AsyncClient:
         """Return httpx client with current outbound proxy (per-call read).
-        
+
         Reads proxy from kiro_patch config on each call. If proxy changed,
         recreates the cached proxy client. Returns proxy client if proxy
         is configured, otherwise returns the shared no-proxy client.
         """
         from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
-        
+
         current_proxy = _get_outbound_proxy()
-        
+
         # If proxy changed, recreate the proxy client
         if current_proxy != self._cached_proxy:
             # Close old proxy client if exists
@@ -102,7 +108,7 @@ class KiroExecutor:
                         loop.run_until_complete(old_client.aclose())
                 except Exception as e:
                     logger.debug("Proxy client close error: %s", e)
-            
+
             # Create new proxy client if proxy is configured
             if current_proxy is not None:
                 self._cached_proxy_client = httpx.AsyncClient(
@@ -114,9 +120,9 @@ class KiroExecutor:
                 logger.info("Created new proxy client for %s", proxy_display)
             else:
                 self._cached_proxy_client = None
-            
+
             self._cached_proxy = current_proxy
-        
+
         # Return proxy client if available, otherwise shared no-proxy client
         return self._cached_proxy_client if self._cached_proxy_client is not None else self._http
 
@@ -161,7 +167,10 @@ class KiroExecutor:
         self, body: JsonObject, endpoint: str, stream: bool,
     ) -> JsonObject | Response:
         from stitch_backend.domains.kiro_gateway.upstream.client import (
-            KiroApiError, KiroStreamResult, SuspendedError, call_kiro_api,
+            KiroApiError,
+            KiroStreamResult,
+            SuspendedError,
+            call_kiro_api,
         )
 
         # 1. Session hint → affinity

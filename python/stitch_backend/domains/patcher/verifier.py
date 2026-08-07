@@ -6,7 +6,6 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class VerificationResult:
     file_path: str
     checks_passed: int = 0
     checks_failed: int = 0
-    details: List[str] | None = None
+    details: list[str] | None = None
 
     def __post_init__(self) -> None:
         if self.details is None:
@@ -57,7 +56,7 @@ def verify_json_key(file_path: Path, key: str, expected_value: object = None) ->
     return True
 
 
-def file_checksum(path: Path) -> Optional[str]:
+def file_checksum(path: Path) -> str | None:
     """Return SHA-256 hex digest of a file."""
     if not path.exists():
         return None
@@ -69,7 +68,7 @@ def file_checksum(path: Path) -> Optional[str]:
 
 
 def verify_patch_set(
-    checks: List[dict],
+    checks: list[dict],
 ) -> VerificationResult:
     """Run a list of verification checks and aggregate the result.
 
@@ -80,7 +79,7 @@ def verify_patch_set(
     """
     passed = 0
     failed = 0
-    details: List[str] = []
+    details: list[str] = []
 
     for check in checks:
         ctype = check.get("type", "")

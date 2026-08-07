@@ -29,13 +29,16 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from sqlalchemy import update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.domains.ai_gateway.models import ProviderEndpoint, _utcnow
 from stitch_backend.domains.ai_gateway.service import ProviderEndpointService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

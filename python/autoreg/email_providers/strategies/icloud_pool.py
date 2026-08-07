@@ -10,11 +10,11 @@ without any extra setup.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from ..base import EmailContext
-from ..verifiers.imap import ImapVerifier
 from ..generators.icloud import ICloudPoolEmailGenerator
+from ..verifiers.imap import ImapVerifier
 from .base import BaseStrategy
 
 logger = logging.getLogger(__name__)

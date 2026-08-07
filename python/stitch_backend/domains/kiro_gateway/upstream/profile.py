@@ -6,10 +6,12 @@ Reference: kiroApi.ts fetchEnterpriseProfileArn (~2256).
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 import httpx
 
-from stitch_backend.domains.kiro_gateway.upstream.models import ProxyAccount
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.upstream.models import ProxyAccount
 
 
 def _get_codewhisperer_endpoint(region: str | None) -> str:

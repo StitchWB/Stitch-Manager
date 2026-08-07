@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
-
+from typing import Any, Literal
 
 StepKind = Literal[
     "goto",
@@ -29,8 +28,8 @@ class ScenarioStep:
     tab_id: str
     kind: StepKind
     selector_candidates: list[SelectorCandidate]
-    value: Optional[str] = None
-    url: Optional[str] = None
+    value: str | None = None
+    url: str | None = None
     timeout_ms: int = 15000
     retry: int = 0
     sensitive: bool = False

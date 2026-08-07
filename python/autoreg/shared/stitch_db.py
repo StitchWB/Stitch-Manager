@@ -8,19 +8,19 @@ Note: The actual database access requires Python bindings which are not yet impl
 """
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def get_imap_settings_from_db() -> Optional[Dict[str, Any]]:
+def get_imap_settings_from_db() -> dict[str, Any] | None:
     """
     Retrieve IMAP settings from Stitch SQLite database.
-    
+
     Returns:
         IMAP configuration dict with keys: host, port, user, password
         Returns None if no configuration is stored or database is not accessible.
-    
+
     Note: This is currently a stub implementation. In a real implementation,
     this would connect to the app's SQLite database at ~/.stitch-manager/db.sqlite
     and retrieve IMAP settings from the settings table.
@@ -32,10 +32,10 @@ def get_imap_settings_from_db() -> Optional[Dict[str, Any]]:
     return None
 
 
-def get_proxy_settings_from_db() -> Optional[Dict[str, Any]]:
+def get_proxy_settings_from_db() -> dict[str, Any] | None:
     """
     Retrieve proxy settings from Stitch SQLite database.
-    
+
     Returns:
         Proxy configuration dict or None if not configured.
     """
@@ -43,10 +43,10 @@ def get_proxy_settings_from_db() -> Optional[Dict[str, Any]]:
     return None
 
 
-def get_registration_settings_from_db() -> Optional[Dict[str, Any]]:
+def get_registration_settings_from_db() -> dict[str, Any] | None:
     """
     Retrieve registration settings from Stitch SQLite database.
-    
+
     Returns:
         Registration configuration dict or None if not configured.
     """

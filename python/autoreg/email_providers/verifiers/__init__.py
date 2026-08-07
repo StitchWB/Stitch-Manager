@@ -2,8 +2,8 @@
 
 from .base import IEmailVerifier
 from .imap import ImapVerifier
-from .mock import MockVerifier
 from .mailtm_verifier import MailTmVerifier
+from .mock import MockVerifier
 
 __all__ = [
     'IEmailVerifier',

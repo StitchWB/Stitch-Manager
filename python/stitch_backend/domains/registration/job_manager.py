@@ -11,7 +11,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from stitch_backend.core.event_bus import event_bus
@@ -36,7 +36,7 @@ class RegistrationJob:
     step: str = ""
     error: str | None = None
     result: dict[str, Any] | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     started_at: datetime | None = None
     finished_at: datetime | None = None
     retry_count: int = 0
@@ -127,7 +127,7 @@ class JobManager:
             raise JobNotFoundError(job_id)
         self._tasks[job_id].cancel()
         self._jobs[job_id].status = JobStatus.CANCELLED
-        self._jobs[job_id].finished_at = datetime.now(timezone.utc)
+        self._jobs[job_id].finished_at = datetime.now(UTC)
         await event_bus.emit("job.cancelled", {"job_id": job_id})
         logger.info("Job %s cancelled", job_id)
 
@@ -137,7 +137,7 @@ class JobManager:
         """Run a job with concurrency limit and retry logic."""
         async with self._semaphore:
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.now(timezone.utc)
+            job.started_at = datetime.now(UTC)
             await event_bus.emit("job.started", {"job_id": job.id})
 
             try:
@@ -178,7 +178,7 @@ class JobManager:
                     job.error = str(exc)
                     logger.error("Job %s failed permanently: %s", job.id, exc)
             finally:
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.now(UTC)
                 await event_bus.emit("job.finished", {
                     "job_id": job.id,
                     "status": job.status.value,

@@ -12,7 +12,6 @@ import asyncio
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 
-
 # ── Session commands (8) ──────────────────────────────────────────────────────
 
 @register_command("email_inbox_connect")

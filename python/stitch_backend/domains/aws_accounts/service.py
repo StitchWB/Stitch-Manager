@@ -11,14 +11,14 @@ Table schema (from migration 007)::
 
 from __future__ import annotations
 
-import json
 import logging
-import time
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class AwsAccountsService:
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
         await self._ensure_table()
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         r = await self._db.execute(
             text(
                 "INSERT INTO aws_accounts (email, password, name, status, browser_profile_path, created_at) "
@@ -128,7 +128,7 @@ class AwsAccountsService:
 
     async def update_status(self, account_id: int, status: str) -> None:
         await self._ensure_table()
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         await self._db.execute(
             text("UPDATE aws_accounts SET status = :s, updated_at = :now WHERE id = :id"),
             {"s": status, "now": now, "id": account_id},
@@ -137,7 +137,7 @@ class AwsAccountsService:
 
     async def increment_use_count(self, account_id: int) -> None:
         await self._ensure_table()
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         await self._db.execute(
             text("UPDATE aws_accounts SET use_count = use_count + 1, "
                  "last_used_at = :now, updated_at = :now WHERE id = :id"),
@@ -147,7 +147,7 @@ class AwsAccountsService:
 
     async def update_browser_profile(self, account_id: int, profile_path: str) -> None:
         await self._ensure_table()
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         await self._db.execute(
             text("UPDATE aws_accounts SET browser_profile_path = :p, updated_at = :now WHERE id = :id"),
             {"p": profile_path, "now": now, "id": account_id},

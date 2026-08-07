@@ -30,8 +30,8 @@ async def cmd_start_oauth_pkce(params: dict) -> dict:
 @register_command("exchange_oauth_code")
 async def cmd_exchange_oauth_code(params: dict) -> dict:
     """Exchange an authorization code for tokens."""
-    from stitch_backend.domains.oauth.pkce import PKCEFlow
     from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
+    from stitch_backend.domains.oauth.pkce import PKCEFlow
 
     flow = PKCEFlow(
         authorize_url=params.get("authorizeUrl", ""),
@@ -138,9 +138,7 @@ async def cmd_refresh_oauth_token(params: dict) -> dict:
 
 # ── AWS OIDC / PKCE session management ─────────────────────────────────────────
 
-import asyncio
 import hashlib
-import os
 import secrets
 import time
 import uuid

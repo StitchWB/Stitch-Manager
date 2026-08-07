@@ -1,7 +1,8 @@
 """Mock verifier for testing"""
 
-import time
 import logging
+import time
+
 from ..base import IEmailVerifier
 
 logger = logging.getLogger(__name__)
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class MockVerifier(IEmailVerifier):
     """Mock verifier for testing"""
-    
+
     def __init__(
         self,
         code: str = "123456",
@@ -18,7 +19,7 @@ class MockVerifier(IEmailVerifier):
     ):
         """
         Initialize mock verifier
-        
+
         Args:
             code: Code to return
             delay: Simulated delay in seconds
@@ -27,7 +28,7 @@ class MockVerifier(IEmailVerifier):
         self.code = code
         self.delay = delay
         self.should_fail = should_fail
-    
+
     def get_verification_code(
         self,
         target_email: str,
@@ -38,13 +39,13 @@ class MockVerifier(IEmailVerifier):
         """Return mock verification code"""
         session_prefix = f"[{session_id}] " if session_id else ""
         logger.info(f"{session_prefix}MockVerifier: Getting code for {target_email}")
-        
+
         if self.delay > 0:
             time.sleep(self.delay)
-        
+
         if self.should_fail:
             logger.warning(f"{session_prefix}MockVerifier: Simulating failure")
             return None
-        
+
         logger.info(f"{session_prefix}MockVerifier: Returning code {self.code}")
         return self.code

@@ -55,7 +55,7 @@ class OAuthCallbackServer:
 
         try:
             await asyncio.wait_for(self._event.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise TimeoutError(f"OAuth callback not received within {timeout}s") from None
         finally:
             server.should_exit = True

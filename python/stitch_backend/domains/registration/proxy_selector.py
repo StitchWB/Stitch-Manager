@@ -29,8 +29,8 @@ class ProxySelector:
         (matching the ProxyLibraryEntry dataclass fields), or None if no
         proxies are configured.
         """
-        from stitch_backend.domains.proxy_library.service import load_proxy_library
         from stitch_backend.domains.ai_proxy.service import get_settings_kv, set_settings_kv
+        from stitch_backend.domains.proxy_library.service import load_proxy_library
 
         proxies = await load_proxy_library(session)
         enabled = [p for p in proxies if p.enabled]

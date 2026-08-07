@@ -19,7 +19,6 @@ import platform
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ def find_cloakbrowser(
     *,
     strict: bool = False,
     auto_download: bool = False,
-) -> Optional[str]:
+) -> str | None:
     """Locate the bundled CloakBrowser binary.
 
     Search order (first hit wins):
@@ -99,7 +98,7 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
-def _attempt_auto_download(project_root: Path) -> Optional[str]:
+def _attempt_auto_download(project_root: Path) -> str | None:
     """Try ``download_cloakbrowser.py``. Returns path on success."""
     if os.environ.get("AUTOREG_AUTO_DOWNLOAD_CLOAKBROWSER", "1") != "1":
         return None

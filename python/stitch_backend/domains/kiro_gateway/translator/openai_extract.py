@@ -5,6 +5,8 @@ Pure helpers used by `openai_in.openai_to_kiro`.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     KIRO_MAX_TOOL_DESC_LEN,
     JsonValue,
@@ -16,10 +18,12 @@ from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     parse_image_url,
     to_kiro_cache_point,
 )
-from stitch_backend.domains.kiro_gateway.translator.openai_types import (
-    OpenAIMessage,
-    OpenAITool,
-)
+
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.translator.openai_types import (
+        OpenAIMessage,
+        OpenAITool,
+    )
 
 
 def _parse_openai_file_data(file_data: str, name: str) -> dict[str, JsonValue]:

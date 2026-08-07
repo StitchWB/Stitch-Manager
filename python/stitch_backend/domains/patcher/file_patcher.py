@@ -5,8 +5,10 @@ from __future__ import annotations
 import logging
 import shutil
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +20,8 @@ class PatchResult:
     success: bool
     file_path: str
     patches_applied: int = 0
-    backup_path: Optional[str] = None
-    error: Optional[str] = None
+    backup_path: str | None = None
+    error: str | None = None
 
 
 # ── Backup helpers ───────────────────────────────────────────────────────────
@@ -46,7 +48,7 @@ def restore_backup(path: Path) -> bool:
 
 def patch_binary(
     file_path: Path,
-    replacements: List[Tuple[bytes, bytes]],
+    replacements: list[tuple[bytes, bytes]],
     *,
     backup: bool = True,
 ) -> PatchResult:
@@ -59,7 +61,7 @@ def patch_binary(
     if not file_path.exists():
         return PatchResult(success=False, file_path=str(file_path), error="File not found")
 
-    backup_path: Optional[str] = None
+    backup_path: str | None = None
     if backup:
         bk = create_backup(file_path)
         backup_path = str(bk)
@@ -88,7 +90,7 @@ def patch_binary(
 
 def patch_text(
     file_path: Path,
-    replacements: List[Tuple[str, str]],
+    replacements: list[tuple[str, str]],
     *,
     backup: bool = True,
     encoding: str = "utf-8",
@@ -97,7 +99,7 @@ def patch_text(
     if not file_path.exists():
         return PatchResult(success=False, file_path=str(file_path), error="File not found")
 
-    backup_path: Optional[str] = None
+    backup_path: str | None = None
     if backup:
         bk = create_backup(file_path)
         backup_path = str(bk)
@@ -129,7 +131,7 @@ def patch_json_config(
     if not file_path.exists():
         return PatchResult(success=False, file_path=str(file_path), error="File not found")
 
-    backup_path: Optional[str] = None
+    backup_path: str | None = None
     if backup:
         bk = create_backup(file_path)
         backup_path = str(bk)

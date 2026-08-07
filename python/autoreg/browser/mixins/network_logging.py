@@ -7,7 +7,7 @@ Provides methods to capture and analyze network traffic.
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from DrissionPage import ChromiumPage
@@ -75,7 +75,7 @@ class NetworkLoggingMixin:
 
     def save_network_logs(
         self, output_dir: Path, filename: str = "network_logs.json"
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """
         Save network logs to JSON file.
 

@@ -30,7 +30,7 @@ LAUNCH_SHARDBROWSER = "shardbrowser"  # Launch via ShardBrowser SDK (patchright 
 class BaseBrowser:
     """
     Base class for browser automation with DrissionPage.
-    
+
     Supports three browser engines controlled by *launch_method*:
 
     * ``LAUNCH_DIRECT`` (default) — standard DrissionPage / CloakBrowser.
@@ -48,33 +48,33 @@ class BaseBrowser:
     - Cookie and storage clearing
     - Window management
     - Clean shutdown
-    
+
     Attributes:
         page: ChromiumPage (DIRECT/CLOAK) or sync Playwright Page (SHARDBROWSER)
         headless: Whether browser runs in headless mode
     """
-    
+
     def __init__(
         self,
         headless: bool = False,
-        user_data_dir: Optional[str] = None,
+        user_data_dir: str | None = None,
         clear_cookies: bool = True,
         proxy_enabled: bool = False,
         proxy_type: str = 'http',
-        proxy_url: Optional[str] = None,
-        proxy_username: Optional[str] = None,
-        proxy_password: Optional[str] = None,
+        proxy_url: str | None = None,
+        proxy_username: str | None = None,
+        proxy_password: str | None = None,
         launch_method: str = LAUNCH_DIRECT,
         cloakbrowser_required: bool = False,
         cloakbrowser_auto_download: bool = True,
-        clear_origins: Optional[list] = None,
+        clear_origins: list | None = None,
         # ShardBrowser-specific
-        shardbrowser_profile_id: Optional[str] = None,
+        shardbrowser_profile_id: str | None = None,
         shardbrowser_platform: str = "Windows",
     ):
         """
         Initialize browser automation.
-        
+
         Args:
             headless: Run browser without GUI (default: False)
             user_data_dir: Custom user data directory for persistent profile.
@@ -96,10 +96,10 @@ class BaseBrowser:
                                    when creating a new profile (default: "Windows").
         """
         self.headless = headless
-        self.page: Optional[ChromiumPage] = None
+        self.page: ChromiumPage | None = None
         self._user_data_dir = user_data_dir
         self._clear_cookies = clear_cookies
-        self._temp_profile: Optional[str] = None
+        self._temp_profile: str | None = None
         self._proxy_enabled = proxy_enabled
         self._proxy_type = proxy_type
         self._proxy_url = proxy_url
@@ -112,28 +112,28 @@ class BaseBrowser:
         # ShardBrowser state
         self._shardbrowser_profile_id = shardbrowser_profile_id
         self._shardbrowser_platform = shardbrowser_platform
-        self._shard_sdk: Optional[object] = None    # shardx.ShardX instance
-        self._shard_browser: Optional[object] = None  # patchright Browser
-        self._shard_loop: Optional[object] = None   # asyncio event loop
-        
+        self._shard_sdk: object | None = None    # shardx.ShardX instance
+        self._shard_browser: object | None = None  # patchright Browser
+        self._shard_loop: object | None = None   # asyncio event loop
+
         # Initialize browser
         self._init_browser()
-    
-    def _find_chrome_path(self) -> Optional[str]:
+
+    def _find_chrome_path(self) -> str | None:
         """
         Find Chrome/Chromium executable path on different platforms.
-        
+
         Priority:
         1. CloakBrowser (bundled anti-detect browser)
         2. Windows Registry (installed Chrome)
         3. Common installation paths
-        
+
         Returns:
             Path to Chrome executable, or None if not found
         """
         system = platform.system()
         possible_paths = []
-        
+
         # --- Priority 1: CloakBrowser (bundled anti-detect browser) ---
         # 1a. Bundled path passed via env var (cross-platform)
         bundled_env = os.environ.get("CLOAKBROWSER_BUNDLED_PATH")
@@ -178,11 +178,11 @@ class BaseBrowser:
 
         if system == "Windows":
             logger.debug("OS detected: Windows")
-            
+
             # Try Windows Registry first
             try:
                 import winreg
-                
+
                 for root, key_path in [
                     (
                         winreg.HKEY_LOCAL_MACHINE,
@@ -203,7 +203,7 @@ class BaseBrowser:
                         continue
             except ImportError:
                 logger.warning("winreg module not available")
-            
+
             # Fallback to common paths
             possible_paths.extend([
                 os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
@@ -214,7 +214,7 @@ class BaseBrowser:
                 os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
                 os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
             ])
-            
+
         elif system == "Darwin":  # macOS
             logger.debug("OS detected: macOS")
             possible_paths.extend([
@@ -222,7 +222,7 @@ class BaseBrowser:
                 "/Applications/Chromium.app/Contents/MacOS/Chromium",
                 os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
             ])
-            
+
         else:  # Linux
             logger.debug(f"OS detected: {system}")
             possible_paths.extend([
@@ -232,20 +232,20 @@ class BaseBrowser:
                 "/usr/bin/chromium-browser",
                 "/snap/bin/chromium",
             ])
-        
+
         # Check all possible paths
         for path in possible_paths:
             if os.path.exists(path):
                 logger.info(f"Found Chrome at: {path}")
                 return path
-        
+
         logger.warning("Chrome executable not found in any checked locations")
         return None
-    
+
     def _setup_chrome_options(self) -> ChromiumOptions:
         """
         Configure ChromiumOptions with common settings.
-        
+
         Sets up:
         - User data directory (persistent or temporary)
         - Headless mode configuration
@@ -253,12 +253,12 @@ class BaseBrowser:
         - Language settings (English)
         - Automation detection hiding
         - Logging configuration
-        
+
         Returns:
             Configured ChromiumOptions instance
         """
         options = ChromiumOptions()
-        
+
         # Setup user data directory
         if self._user_data_dir:
             profile_path = self._user_data_dir
@@ -271,16 +271,16 @@ class BaseBrowser:
             )
             self._temp_profile = profile_path
             logger.info(f"Using temp profile: {profile_path}")
-        
+
         options.set_user_data_path(profile_path)
         options.auto_port()  # Automatically find free port
-        
+
         # Find and set Chrome executable path
         chrome_path = self._find_chrome_path()
         if chrome_path:
             options.set_browser_path(chrome_path)
             logger.info(f"Using browser executable: {chrome_path}")
-        
+
         # Headless mode configuration
         if self.headless:
             options.headless()
@@ -290,39 +290,39 @@ class BaseBrowser:
             options.set_argument('--disable-software-rasterizer')
             options.set_argument('--disable-extensions')
             options.set_argument('--remote-debugging-port=0')
-        
+
         # Hide automation indicators
         options.set_argument('--disable-infobars')
         options.set_argument('--no-first-run')
         options.set_argument('--no-default-browser-check')
-        
+
         # Reduce Chrome logs
         options.set_argument('--disable-logging')
         options.set_argument('--log-level=3')  # Only fatal errors
-        
+
         # Force English language
         options.set_argument('--lang=en-US')
         options.set_argument('--accept-lang=en-US,en')
-        
+
         # Window size - large for correct UI display
         options.set_argument('--window-size=1920,1080')
         options.set_argument('--start-maximized')
-        
+
         # Incognito mode for clean session (if not using persistent profile)
         if not self._user_data_dir:
             options.set_argument('--incognito')
-        
+
         # Configure proxy if enabled
         if self._proxy_enabled and self._proxy_url:
             logger.info(f"Configuring {self._proxy_type} proxy: {self._proxy_url}")
-            
+
             # Parse proxy URL (format: host:port)
             if ':' in self._proxy_url:
                 host, port = self._proxy_url.split(':', 1)
             else:
                 host = self._proxy_url
                 port = '8080'  # default
-            
+
             # Build proxy string based on type.
             # socks5h:// resolves DNS on the proxy side (remote), preventing DNS
             # leaks. socks5:// resolves DNS locally via the system resolver,
@@ -344,13 +344,13 @@ class BaseBrowser:
                     proxy_str = f"socks5h://{host}:{port}"
                 else:  # http
                     proxy_str = f"http://{host}:{port}"
-            
+
             # Set proxy in ChromiumOptions
             options.set_proxy(proxy_str)
             logger.info(f"Proxy configured: {proxy_str}")
-        
+
         return options
-    
+
     def _init_browser(self) -> None:
         """
         Initialize the browser engine selected by *launch_method*.
@@ -368,11 +368,11 @@ class BaseBrowser:
 
         # ── Original DrissionPage / CloakBrowser path ──────────────────────
         options = self._setup_chrome_options()
-        
+
         logger.info(f"Initializing ChromiumPage (headless={self.headless})...")
         self.page = ChromiumPage(options)
         logger.info("ChromiumPage initialized successfully")
-        
+
         # Wait for Chrome CDP connection
         logger.debug("Waiting for Chrome CDP connection...")
         cdp_ready = False
@@ -385,9 +385,9 @@ class BaseBrowser:
             except Exception as e:
                 if attempt == 29:
                     logger.error(f'Chrome CDP connection timeout after 3s: {e}')
-                    raise RuntimeError(f"Chrome CDP connection failed: {e}")
+                    raise RuntimeError(f"Chrome CDP connection failed: {e}") from None
                 time.sleep(0.1)
-        
+
         # Maximize window for correct UI display (non-headless only)
         if not self.headless:
             try:
@@ -400,7 +400,7 @@ class BaseBrowser:
                     logger.debug("Window resized to 1920x1080")
                 except RuntimeError:
                     pass
-        
+
         # Clear cookies and storage for clean session
         if self._clear_cookies and cdp_ready:
             try:
@@ -438,13 +438,13 @@ class BaseBrowser:
             raise RuntimeError(
                 "ShardBrowser engine requires the 'shardx' package. "
                 "Install it with:  pip install shardx"
-            )
+            ) from None
 
         # Build proxy URL: ShardBrowser expects a full URI like
         # "socks5h://user:pass@host:port" or "http://host:port".
         # socks5h:// resolves DNS on the proxy side (remote), preventing DNS
         # leaks. Playwright/patchright supports socks5h:// natively.
-        proxy_uri: Optional[str] = None
+        proxy_uri: str | None = None
         if self._proxy_enabled and self._proxy_url:
             if "://" in self._proxy_url:
                 proxy_uri = self._proxy_url  # already a full URI
@@ -513,21 +513,21 @@ class BaseBrowser:
             self._shardbrowser_profile_id,
             proxy_uri or "none",
         )
-    
+
     def navigate(self, url: str, timeout: float = 10.0) -> None:
         """
         Navigate to URL.
-        
+
         Args:
             url: URL to navigate to
             timeout: Page load timeout in seconds (default: 10.0)
-            
+
         Raises:
             RuntimeError: If navigation fails or page not initialized
         """
         if not self.page:
             raise RuntimeError("Browser not initialized")
-        
+
         logger.info(f"Navigating to: {url}")
         self.page.get(url, timeout=timeout)
 
@@ -535,40 +535,40 @@ class BaseBrowser:
     def current_url(self) -> str:
         """
         Get current page URL.
-        
+
         Returns:
             Current URL as string
-            
+
         Raises:
             RuntimeError: If page not initialized
         """
         if not self.page:
             raise RuntimeError("Browser not initialized")
         return self.page.url
-    
+
     def persist_profile(self, target_dir: str) -> str:
         """Copy temp profile to a persistent location.
-        
+
         Call this BEFORE close() to save the browser session for later reuse.
         The temp profile is copied to target_dir. The original temp directory
         is still cleaned up by close().
-        
+
         Args:
             target_dir: Target directory for persistent profile.
-            
+
         Returns:
             Path to the persistent profile (target_dir).
         """
         if not self._temp_profile or not os.path.exists(self._temp_profile):
             logger.warning("No temp profile to persist")
             return target_dir
-        
+
         import shutil
-        
+
         try:
             # Ensure target directory exists
             os.makedirs(target_dir, exist_ok=True)
-            
+
             # Copy all contents from temp to persistent
             for item in os.listdir(self._temp_profile):
                 src = os.path.join(self._temp_profile, item)
@@ -579,7 +579,7 @@ class BaseBrowser:
                     shutil.copytree(src, dst)
                 else:
                     shutil.copy2(src, dst)
-            
+
             logger.info(f"Browser profile persisted to: {target_dir}")
             return target_dir
         except Exception as e:
@@ -589,7 +589,7 @@ class BaseBrowser:
     def close(self) -> None:
         """
         Close browser and cleanup resources.
-        
+
         Handles both DrissionPage (DIRECT/CLOAK) and ShardBrowser engines.
         Safe to call multiple times.
         """
@@ -597,7 +597,6 @@ class BaseBrowser:
         if self._launch_method == LAUNCH_SHARDBROWSER:
             loop = self._shard_loop
             browser = self._shard_browser
-            sdk = self._shard_sdk
             self.page = None
             self._shard_browser = None
             self._shard_sdk = None
@@ -626,7 +625,7 @@ class BaseBrowser:
                 logger.warning(f"Error closing browser: {e}")
             finally:
                 self.page = None
-        
+
         # Cleanup temporary profile (only if not persistent)
         if (self._temp_profile and os.path.exists(self._temp_profile)
                 and getattr(self, '_cleanup_profile_on_close', True)):
@@ -777,7 +776,7 @@ class _ShardElementAdapter:
         except Exception:
             return ""
 
-    def attr(self, name: str) -> Optional[str]:
+    def attr(self, name: str) -> str | None:
         try:
             return self._run(self._handle.get_attribute(name))  # type: ignore[union-attr]
         except Exception:

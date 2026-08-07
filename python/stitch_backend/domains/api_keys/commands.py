@@ -9,7 +9,6 @@ from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.api_keys.schemas import GetApiKeysRequest, SetApiKeysRequest
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 

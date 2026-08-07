@@ -4,8 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +20,9 @@ class KeyMetrics:
     total_latency: float = 0.0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
-    last_used: Optional[float] = None
-    last_error: Optional[str] = None
-    last_error_time: Optional[float] = None
+    last_used: float | None = None
+    last_error: str | None = None
+    last_error_time: float | None = None
 
     @property
     def success_rate(self) -> float:
@@ -100,7 +99,7 @@ class KeyMetricsTracker:
             m.last_error_time = time.time()
             m.last_used = time.time()
 
-    def get_metrics(self, key_id: str) -> Optional[KeyMetrics]:
+    def get_metrics(self, key_id: str) -> KeyMetrics | None:
         """Получить метрики для ключа."""
         return self.metrics.get(key_id)
 
@@ -118,7 +117,7 @@ class KeyMetricsTracker:
 
 
 # Singleton instance
-_metrics_tracker: Optional[KeyMetricsTracker] = None
+_metrics_tracker: KeyMetricsTracker | None = None
 
 
 def get_metrics_tracker() -> KeyMetricsTracker:

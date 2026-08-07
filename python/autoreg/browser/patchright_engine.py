@@ -11,10 +11,9 @@ import logging
 import os
 import random
 import time
-from pathlib import Path
 from typing import Any
 
-from patchright.sync_api import sync_playwright, Browser, BrowserContext, Page
+from patchright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +243,7 @@ class PatchrightEngine:
         """Load cookies from JSON file."""
         if not os.path.exists(path):
             return
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             cookies = json.load(f)
         self.set_cookies(cookies)
 

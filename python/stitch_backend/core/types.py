@@ -7,10 +7,9 @@ and keeps Protocol contracts in one place.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
-
 
 # ── Account status ────────────────────────────────────────────────────────────
 
@@ -68,7 +67,7 @@ class RegContext:
     display_name: str = ""
     proxy: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 # ── Browser profile ──────────────────────────────────────────────────────────

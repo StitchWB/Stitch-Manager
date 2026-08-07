@@ -20,12 +20,13 @@ If ``google-auth`` is not installed, falls back to manual JWT signing.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -66,65 +67,104 @@ SCHEMA_SHEETS: dict[str, list[str]] = {
     ],
 }
 
+# Map of SVC_* sheet name → AccountsGraphDataset field (camelCase)
+SVC_FIELD_MAP: dict[str, str] = {
+    "SVC_ACCOUNT_LINKS": "accountLinks",
+    "SVC_PROFILE_LINKS": "profileLinks",
+    "SVC_AUTH_METHODS": "authMethods",
+    "SVC_ACCOUNT_AUTH_LINKS": "accountAuthLinks",
+}
+
 
 # ── Data classes ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class KeyValue:
-    """A key-value pair used in the Sheets API."""
+    """A key-value pair used in the Sheets API. Value is coerced to string."""
+
     key: str
     value: Any
 
     def to_dict(self) -> dict:
-        return {"key": self.key, "value": self.value}
+        return {"key": self.key, "value": "" if self.value is None else str(self.value)}
 
 
 @dataclass
 class GoogleSheetsConnectionStatus:
-    """Result of testing a Google Sheets connection."""
-    connected: bool
+    """Result of testing a Google Sheets connection.
+
+    TS contract: { ok: boolean; spreadsheetId: string; title: string | null;
+                   sheets: SheetDescriptor[]; warnings: string[] }
+    """
+    ok: bool
     spreadsheet_id: str
-    title: str = ""
-    sheet_names: list[str] = field(default_factory=list)
-    error: Optional[str] = None
+    title: str | None = None
+    sheets: list[dict] = field(default_factory=list)  # [{title, sheetId}]
+    warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
-            "connected": self.connected,
+            "ok": self.ok,
             "spreadsheetId": self.spreadsheet_id,
             "title": self.title,
-            "sheetNames": self.sheet_names,
-            "error": self.error,
+            "sheets": self.sheets,
+            "warnings": self.warnings,
         }
 
 
 @dataclass
 class AccountsGraphDataset:
-    """Normalised dataset fetched from Google Sheets."""
-    identities: list[list[dict]] = field(default_factory=list)
-    links: list[list[dict]] = field(default_factory=list)
-    svc_sheets: dict[str, list[list[dict]]] = field(default_factory=dict)
-    fetched_at: str = ""
+    """Normalised dataset fetched from Google Sheets.
+
+    TS contract: { spreadsheetId: string; title: string | null;
+                   identities: NormalizedRow[]; links: NormalizedRow[];
+                   accountLinks: NormalizedRow[]; profileLinks: NormalizedRow[];
+                   authMethods: NormalizedRow[]; accountAuthLinks: NormalizedRow[];
+                   services: ServiceSheetDataset[]; invalidRows: InvalidRow[];
+                   schemaIssues: SchemaIssue[] }
+    """
+    spreadsheet_id: str = ""
+    title: str | None = None
+    identities: list[dict] = field(default_factory=list)
+    links: list[dict] = field(default_factory=list)
+    account_links: list[dict] = field(default_factory=list)
+    profile_links: list[dict] = field(default_factory=list)
+    auth_methods: list[dict] = field(default_factory=list)
+    account_auth_links: list[dict] = field(default_factory=list)
+    services: list[dict] = field(default_factory=list)
+    invalid_rows: list[dict] = field(default_factory=list)
+    schema_issues: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
+            "spreadsheetId": self.spreadsheet_id,
+            "title": self.title,
             "identities": self.identities,
             "links": self.links,
-            "svcSheets": {k: v for k, v in self.svc_sheets.items()},
-            "fetchedAt": self.fetched_at,
+            "accountLinks": self.account_links,
+            "profileLinks": self.profile_links,
+            "authMethods": self.auth_methods,
+            "accountAuthLinks": self.account_auth_links,
+            "services": self.services,
+            "invalidRows": self.invalid_rows,
+            "schemaIssues": self.schema_issues,
         }
 
 
 # ── Auth helper ──────────────────────────────────────────────────────────────
 
-def _get_access_token(service_account_json: str) -> str:
-    """Obtain an OAuth2 access token from a service account JSON.
+# ponytail: module-level dict cache with TTL — simplest correct cache.
+# Upgrade path: per-account locks + LRU eviction if token churn or concurrency matters.
+_token_cache: dict[str, tuple[str, float]] = {}
+_TOKEN_TTL = 3300.0  # seconds (Google tokens expire in 3600; refresh early)
 
-    Tries ``google-auth`` first; falls back to manual JWT if unavailable.
-    """
+
+def _fetch_new_token(service_account_json: str) -> str:
+    """Fetch a fresh OAuth2 access token (no cache)."""
     try:
-        from google.oauth2 import service_account as sa
         from google.auth.transport.requests import Request
+        from google.oauth2 import service_account as sa
 
         creds = sa.Credentials.from_service_account_info(
             json.loads(service_account_json),
@@ -137,13 +177,13 @@ def _get_access_token(service_account_json: str) -> str:
 
     # Manual JWT flow (lightweight fallback)
     import base64
-    import hmac
-    import hashlib
 
     sa_info = json.loads(service_account_json)
     now = int(time.time())
 
-    header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256", "typ": "JWT"}).encode()).rstrip(b"=")
+    header = base64.urlsafe_b64encode(
+        json.dumps({"alg": "RS256", "typ": "JWT"}).encode()
+    ).rstrip(b"=")
     payload = base64.urlsafe_b64encode(json.dumps({
         "iss": sa_info["client_email"],
         "scope": "https://www.googleapis.com/auth/spreadsheets",
@@ -154,7 +194,6 @@ def _get_access_token(service_account_json: str) -> str:
 
     signing_input = header + b"." + payload
 
-    # Use cryptography library for RSA signing
     try:
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import padding
@@ -167,12 +206,11 @@ def _get_access_token(service_account_json: str) -> str:
         raise RuntimeError(
             "Neither google-auth nor cryptography is installed. "
             "Install one: pip install google-auth cryptography"
-        )
+        ) from None
 
     sig_b64 = base64.urlsafe_b64encode(signature).rstrip(b"=")
     jwt_token = (signing_input + b"." + sig_b64).decode()
 
-    # Exchange JWT for access token
     resp = httpx.post(
         "https://oauth2.googleapis.com/token",
         data={
@@ -185,13 +223,66 @@ def _get_access_token(service_account_json: str) -> str:
     return resp.json()["access_token"]
 
 
+def _get_access_token(service_account_json: str) -> str:
+    """Obtain an OAuth2 access token from a service account JSON (cached)."""
+    cache_key = hashlib.sha256(service_account_json.encode()).hexdigest()
+    cached = _token_cache.get(cache_key)
+    if cached and cached[1] > time.time():
+        return cached[0]
+
+    token = _fetch_new_token(service_account_json)
+    _token_cache[cache_key] = (token, time.time() + _TOKEN_TTL)
+    return token
+
+
+async def _resolve_access_token(service_account_json: str) -> str:
+    """Prefer stored OAuth user tokens; fall back to service-account JWT.
+
+    OAuth tokens (when a user has connected their Google account) take
+    priority over the service-account JSON flow.  If no OAuth tokens are
+    stored or the refresh fails, the caller's service-account JSON is used.
+    """
+    from stitch_backend.domains.google_sheets.oauth_service import get_oauth_service
+
+    # ponytail: swallow OAuth errors — if the DB or OAuth service is
+    # unavailable, fall back to the service-account flow silently.
+    try:
+        oauth_token = await get_oauth_service().get_access_token()
+        if oauth_token:
+            return oauth_token
+    except Exception:
+        pass
+    return _get_access_token(service_account_json)
+
+
+# ── Normalization helpers ────────────────────────────────────────────────────
+
+
+def _normalize_row(row_number: int, headers: list[str], raw_row: list[str]) -> dict:
+    """Convert a raw sheet row to NormalizedRow dict: {rowNumber, cells: [{key, value}]}."""
+    cells = []
+    for i, header in enumerate(headers):
+        value = raw_row[i] if i < len(raw_row) else ""
+        cells.append(KeyValue(key=header, value=value).to_dict())
+    return {"rowNumber": row_number, "cells": cells}
+
+
+def _get_cell_value(normalized_row: dict, key: str) -> str:
+    """Extract a cell value from a NormalizedRow by key."""
+    for cell in normalized_row.get("cells", []):
+        if cell["key"] == key:
+            return cell["value"]
+    return ""
+
+
 # ── Service ──────────────────────────────────────────────────────────────────
+
 
 class GoogleSheetsService:
     """Thin wrapper around the Google Sheets REST API v4."""
 
     def __init__(self) -> None:
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -205,12 +296,12 @@ class GoogleSheetsService:
     def _headers(self, token: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    # ── Connection test ────────────────────────────────────────────────────
+    # ── Connection test ──────────────────────────────────────────────────────
 
     async def test_connection(
         self, spreadsheet_id: str, service_account_json: str
     ) -> GoogleSheetsConnectionStatus:
-        token = _get_access_token(service_account_json)
+        token = await _resolve_access_token(service_account_json)
         client = self._get_client()
 
         try:
@@ -222,27 +313,32 @@ class GoogleSheetsService:
             resp.raise_for_status()
             data = resp.json()
 
-            sheet_names = [s["properties"]["title"] for s in data.get("sheets", [])]
+            sheets = [
+                {"title": s["properties"]["title"], "sheetId": s["properties"]["sheetId"]}
+                for s in data.get("sheets", [])
+            ]
             return GoogleSheetsConnectionStatus(
-                connected=True,
+                ok=True,
                 spreadsheet_id=spreadsheet_id,
-                title=data.get("properties", {}).get("title", ""),
-                sheet_names=sheet_names,
+                title=data.get("properties", {}).get("title"),
+                sheets=sheets,
             )
         except Exception as exc:
             return GoogleSheetsConnectionStatus(
-                connected=False,
+                ok=False,
                 spreadsheet_id=spreadsheet_id,
-                error=str(exc)[:300],
+                title=None,
+                sheets=[],
+                warnings=[str(exc)[:300]],
             )
 
-    # ── Schema init ────────────────────────────────────────────────────────
+    # ── Schema init ─────────────────────────────────────────────────────────
 
     async def init_schema(
         self, spreadsheet_id: str, service_account_json: str
     ) -> GoogleSheetsConnectionStatus:
         """Create required sheets + headers if missing."""
-        token = _get_access_token(service_account_json)
+        token = await _resolve_access_token(service_account_json)
         client = self._get_client()
 
         # Fetch current sheets
@@ -255,7 +351,7 @@ class GoogleSheetsService:
         existing = {s["properties"]["title"] for s in resp.json().get("sheets", [])}
 
         requests: list[dict] = []
-        for sheet_name, headers in SCHEMA_SHEETS.items():
+        for sheet_name in SCHEMA_SHEETS:
             if sheet_name not in existing:
                 requests.append({"addSheet": {"properties": {"title": sheet_name}}})
 
@@ -279,43 +375,87 @@ class GoogleSheetsService:
         # Return updated status
         return await self.test_connection(spreadsheet_id, service_account_json)
 
-    # ── Dataset fetch ──────────────────────────────────────────────────────
+    # ── Dataset fetch ───────────────────────────────────────────────────────
 
     async def fetch_dataset(
         self, spreadsheet_id: str, service_account_json: str
     ) -> AccountsGraphDataset:
-        token = _get_access_token(service_account_json)
+        token = await _resolve_access_token(service_account_json)
         client = self._get_client()
 
-        # Get sheet list
-        resp = await client.get(
-            f"{SHEETS_API_BASE}/{spreadsheet_id}",
-            params={"includeGridData": "false"},
-            headers=self._headers(token),
-        )
-        resp.raise_for_status()
-        sheet_names = [s["properties"]["title"] for s in resp.json().get("sheets", [])]
+        dataset = AccountsGraphDataset(spreadsheet_id=spreadsheet_id)
 
-        dataset = AccountsGraphDataset(fetched_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        # Get spreadsheet metadata (title + sheet list with sheetIds)
+        try:
+            resp = await client.get(
+                f"{SHEETS_API_BASE}/{spreadsheet_id}",
+                params={"includeGridData": "false"},
+                headers=self._headers(token),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            dataset.title = data.get("properties", {}).get("title")
+            sheet_list = data.get("sheets", [])
+            sheet_map = {
+                s["properties"]["title"]: s["properties"].get("sheetId", 0)
+                for s in sheet_list
+            }
+            sheet_names = list(sheet_map.keys())
+        except Exception:
+            return dataset
 
         # Fetch IDENTITIES
         if "IDENTITIES" in sheet_names:
-            dataset.identities = await self._fetch_sheet(client, token, spreadsheet_id, "IDENTITIES")
+            dataset.identities = await self._fetch_sheet(
+                client, token, spreadsheet_id, "IDENTITIES"
+            )
 
         # Fetch LINKS
         if "LINKS" in sheet_names:
-            dataset.links = await self._fetch_sheet(client, token, spreadsheet_id, "LINKS")
+            dataset.links = await self._fetch_sheet(
+                client, token, spreadsheet_id, "LINKS"
+            )
 
         # Fetch SVC_* sheets
         for name in sheet_names:
-            if name.startswith("SVC_"):
-                dataset.svc_sheets[name] = await self._fetch_sheet(client, token, spreadsheet_id, name)
+            if not name.startswith("SVC_"):
+                continue
+            rows = await self._fetch_sheet(client, token, spreadsheet_id, name)
+            sheet_id = sheet_map.get(name, 0)
+
+            # Build ServiceSheetDataset entry for every SVC_* sheet
+            dataset.services.append({
+                "sheetName": name,
+                "sheetId": sheet_id,
+                "rows": rows,
+            })
+
+            # Also populate the explicit camelCase field if it's a standard sheet
+            field = SVC_FIELD_MAP.get(name)
+            if field == "accountLinks":
+                dataset.account_links = rows
+            elif field == "profileLinks":
+                dataset.profile_links = rows
+            elif field == "authMethods":
+                dataset.auth_methods = rows
+            elif field == "accountAuthLinks":
+                dataset.account_auth_links = rows
+
+        # Schema issues: warn about missing required sheets
+        for required in ("IDENTITIES", "LINKS"):
+            if required not in sheet_names:
+                dataset.schema_issues.append({
+                    "level": "warning",
+                    "sheetName": required,
+                    "message": f"Required sheet '{required}' is missing",
+                })
 
         return dataset
 
     async def _fetch_sheet(
         self, client: httpx.AsyncClient, token: str, spreadsheet_id: str, sheet_name: str
-    ) -> list[list[dict]]:
+    ) -> list[dict]:
+        """Fetch a sheet and return rows as NormalizedRow dicts: {rowNumber, cells}."""
         resp = await client.get(
             f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{sheet_name}",
             headers=self._headers(token),
@@ -329,14 +469,12 @@ class GoogleSheetsService:
 
         headers = values[0]
         rows = []
-        for row in values[1:]:
-            row_dict = {}
-            for i, header in enumerate(headers):
-                row_dict[header] = row[i] if i < len(row) else ""
-            rows.append(row_dict)
+        for i, row in enumerate(values[1:]):
+            row_number = i + 2  # 1-indexed, header is row 1
+            rows.append(_normalize_row(row_number, headers, row))
         return rows
 
-    # ── Row CRUD helpers ──────────────────────────────────────────────────
+    # ── Row CRUD helpers ─────────────────────────────────────────────────────
 
     async def _upsert_row(
         self,
@@ -346,7 +484,7 @@ class GoogleSheetsService:
         row: list[dict],
         id_column: str,
     ) -> list[dict]:
-        """Upsert a row by its ID column. Returns the normalised row."""
+        """Upsert a row by its ID column. Returns the normalised row cells."""
         client = self._get_client()
         row_dict = {kv["key"]: kv["value"] for kv in row}
 
@@ -363,7 +501,7 @@ class GoogleSheetsService:
         # Find matching row
         row_index = -1
         for i, existing_row in enumerate(existing):
-            if existing_row.get(id_column) == row_id:
+            if _get_cell_value(existing_row, id_column) == row_id:
                 row_index = i
                 break
 
@@ -400,9 +538,9 @@ class GoogleSheetsService:
         headers = SCHEMA_SHEETS.get(sheet_name, [])
 
         for i, row in enumerate(existing):
-            if row.get(id_column) == row_id:
+            if _get_cell_value(row, id_column) == row_id:
                 # Build update with status=deleted
-                values_row = [str(row.get(h, "")) for h in headers]
+                values_row = [str(_get_cell_value(row, h)) for h in headers]
                 status_idx = headers.index("status") if "status" in headers else -1
                 is_primary_idx = headers.index("is_primary") if "is_primary" in headers else -1
 
@@ -422,52 +560,52 @@ class GoogleSheetsService:
 
         return False
 
-    # ── Public CRUD methods ────────────────────────────────────────────────
+    # ── Public CRUD methods ──────────────────────────────────────────────────
 
     async def upsert_link(self, spreadsheet_id: str, sa_json: str, link: list[dict]) -> list[dict]:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._upsert_row(token, spreadsheet_id, "LINKS", link, "link_id")
 
     async def soft_delete_link(self, spreadsheet_id: str, sa_json: str, link_id: str) -> bool:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._soft_delete_row(token, spreadsheet_id, "LINKS", link_id, "link_id")
 
     async def upsert_account_link(self, spreadsheet_id: str, sa_json: str, link: list[dict]) -> list[dict]:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._upsert_row(token, spreadsheet_id, "SVC_ACCOUNT_LINKS", link, "account_link_id")
 
     async def soft_delete_account_link(self, spreadsheet_id: str, sa_json: str, link_id: str) -> bool:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._soft_delete_row(token, spreadsheet_id, "SVC_ACCOUNT_LINKS", link_id, "account_link_id")
 
     async def upsert_profile_link(self, spreadsheet_id: str, sa_json: str, link: list[dict]) -> list[dict]:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._upsert_row(token, spreadsheet_id, "SVC_PROFILE_LINKS", link, "profile_link_id")
 
     async def soft_delete_profile_link(self, spreadsheet_id: str, sa_json: str, link_id: str) -> bool:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._soft_delete_row(token, spreadsheet_id, "SVC_PROFILE_LINKS", link_id, "profile_link_id")
 
     async def upsert_auth_method(self, spreadsheet_id: str, sa_json: str, method: list[dict]) -> list[dict]:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._upsert_row(token, spreadsheet_id, "SVC_AUTH_METHODS", method, "auth_method_id")
 
     async def soft_delete_auth_method(self, spreadsheet_id: str, sa_json: str, method_id: str) -> bool:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._soft_delete_row(token, spreadsheet_id, "SVC_AUTH_METHODS", method_id, "auth_method_id")
 
     async def upsert_account_auth_link(self, spreadsheet_id: str, sa_json: str, link: list[dict]) -> list[dict]:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._upsert_row(token, spreadsheet_id, "SVC_ACCOUNT_AUTH_LINKS", link, "account_auth_link_id")
 
     async def soft_delete_account_auth_link(self, spreadsheet_id: str, sa_json: str, link_id: str) -> bool:
-        token = _get_access_token(sa_json)
+        token = await _resolve_access_token(sa_json)
         return await self._soft_delete_row(token, spreadsheet_id, "SVC_ACCOUNT_AUTH_LINKS", link_id, "account_auth_link_id")
 
 
 # ── Singleton ────────────────────────────────────────────────────────────────
 
-_service: Optional[GoogleSheetsService] = None
+_service: GoogleSheetsService | None = None
 
 
 def get_sheets_service() -> GoogleSheetsService:

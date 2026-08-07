@@ -42,10 +42,11 @@ async def cmd_collect_zai_tokens(params: dict) -> dict:
     """
     from stitch_backend.domains.ai_proxy.service import get_zai_token_db_path, set_zai_token_db_path
     from stitch_backend.domains.ai_proxy.zai_token_collector import (
-        collect_tokens as _collect,
-        get_token_count,
         DEFAULT_TOKEN_COUNT,
         TokenCollectorError,
+    )
+    from stitch_backend.domains.ai_proxy.zai_token_collector import (
+        collect_tokens as _collect,
     )
 
     count = int(params.get("count", DEFAULT_TOKEN_COUNT))

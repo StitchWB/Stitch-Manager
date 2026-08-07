@@ -14,12 +14,11 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.core.base_repository import BaseRepository
 from stitch_backend.core.base_service import BaseService
@@ -34,6 +33,9 @@ from stitch_backend.domains.profiles.schemas import (
     ProfileSettingsRecord,
     ProfileSettingsV1,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +210,7 @@ class ProfileSettingsService(BaseService):
             ),
             "scenarios": scenarios,
             "composedFlows": flows,
-            "exportedAt": datetime.now(timezone.utc).isoformat(),
+            "exportedAt": datetime.now(UTC).isoformat(),
         }
         Path(destination_path).write_text(
             json.dumps(payload, indent=2), encoding="utf-8"

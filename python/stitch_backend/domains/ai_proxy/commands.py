@@ -404,6 +404,7 @@ async def cmd_get_available_models(params: dict) -> list:
     """
     import asyncio
     import time
+
     from stitch_backend.database import run_in_session
     from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
     from stitch_backend.domains.api_keys.service import ApiKeysService
@@ -447,7 +448,7 @@ async def cmd_get_available_models(params: dict) -> list:
             _fetch_all_provider_models(accounts, api_keys, enabled_providers),
             timeout=15.0,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("[Models] Fetch timed out after 15s — serving stale cache")
     except ProxyUnavailableError as e:
         logger.warning("[Models] Proxy unavailable: %s — serving stale cache", e)
@@ -682,7 +683,7 @@ async def _try_cli_quota(cli_name: str, provider: str) -> dict | None:
             "remainingQuota": remaining,
             "resetAt": reset_at,
         }
-    except (FileNotFoundError, asyncio.TimeoutError, Exception) as e:
+    except (TimeoutError, FileNotFoundError, Exception) as e:
         logger.debug("[Quota] %s CLI unavailable: %s", cli_name, e)
         return None
 
@@ -691,6 +692,7 @@ async def _try_cli_quota(cli_name: str, provider: str) -> dict | None:
 async def cmd_fetch_all_quotas(params: dict) -> list:
     """Fetch quota info for all providers via CLI tools, fall back to API key counts."""
     import asyncio
+
     from stitch_backend.domains.api_keys.service import ApiKeysService
 
     # Try fetching real quotas from CLI tools concurrently
@@ -736,6 +738,7 @@ async def cmd_fetch_openai_account_quotas(params: dict) -> list:
     """Fetch OpenAI/Codex account-level quotas from auth files and usage API."""
     import json as _json
     import time
+
     import httpx
 
     auth_dirs = _auth_dirs()
@@ -918,7 +921,7 @@ async def cmd_scan_auth_files(params: dict) -> list:
 @register_command("auto_import_ai_proxy_auth_files")
 async def cmd_auto_import_ai_proxy_auth_files(params: dict) -> dict:
     """Scan and auto-import discovered auth files into accounts."""
-    from stitch_backend.domains.ai_proxy.service import AuthFileScanner, AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore, AuthFileScanner
 
     files = AuthFileScanner.scan_all()
 
@@ -1056,6 +1059,7 @@ async def cmd_open_url_in_browser(params: dict) -> None:
 async def cmd_debug_run_ai_proxy_migration(params: dict) -> str:
     """Run a raw SQL migration for debugging (requires STITCH_DEBUG_ALLOW_SQL=1)."""
     import os
+
     from sqlalchemy import text as sql_text
 
     if not os.environ.get("STITCH_DEBUG_ALLOW_SQL"):

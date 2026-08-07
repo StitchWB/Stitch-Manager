@@ -46,7 +46,7 @@ class PatchrightHCaptchaMixin:
                 return True
 
             # Retry with delays
-            for attempt in range(4):
+            for _attempt in range(4):
                 time.sleep(3.0)
                 if find_and_click_in_frame(page.main_frame):
                     return True

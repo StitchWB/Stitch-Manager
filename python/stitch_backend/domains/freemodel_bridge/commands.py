@@ -49,6 +49,7 @@ async def cmd_get_freemodel_bridge_status(params: dict) -> dict:
 async def cmd_get_freemodel_bridge_capabilities(params: dict) -> dict:
     """Get bridge capabilities (models, features) via HTTP."""
     import httpx
+
     from stitch_backend.domains.freemodel_bridge.service import FreemodelBridgeService
 
     info = FreemodelBridgeService.status()

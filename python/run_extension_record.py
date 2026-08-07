@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ def _stderr(msg: str) -> None:
     try:
         sys.stderr.write(f"[run_extension_record.py] {msg}\n")
     except UnicodeEncodeError:
-        sys.stderr.buffer.write(f"[run_extension_record.py] {msg}\n".encode('utf-8'))
+        sys.stderr.buffer.write(f"[run_extension_record.py] {msg}\n".encode())
     sys.stderr.flush()
 
 

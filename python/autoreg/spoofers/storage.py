@@ -50,19 +50,31 @@ class StorageSpoofModule(BaseSpoofModule):
 
     // ============================================
     // Permissions API (query)
+    // Это ПОСЛЕДНИЙ модуль в цепочке, поэтому именно эта обёртка wins.
+    // Спуфим toString, чтобы anti-bot, проверяющий сигнатуру "[native code]",
+    // не увидел JS-override (обычная функция сразу палится).
     // ============================================
     if (navigator.permissions && navigator.permissions.query) {
         const originalQuery = navigator.permissions.query;
-        navigator.permissions.query = function(parameters) {
+        const spoofedQuery = function query(parameters) {
             // Всегда возвращаем 'granted' или 'prompt' для важных пермишенов
-            if (parameters.name === 'notifications') {
+            if (parameters && parameters.name === 'notifications') {
                 return Promise.resolve({ state: 'prompt', onchange: null });
             }
-            if (parameters.name === 'geolocation') {
+            if (parameters && parameters.name === 'geolocation') {
                 return Promise.resolve({ state: 'prompt', onchange: null });
             }
             return originalQuery.call(navigator.permissions, parameters);
         };
+        try {
+            Object.defineProperty(spoofedQuery, 'toString', {
+                value: () => 'function query() { [native code] }',
+                configurable: true, writable: true
+            });
+            Object.defineProperty(spoofedQuery, 'name', { value: 'query', configurable: true });
+            Object.defineProperty(spoofedQuery, 'length', { value: 1, configurable: true });
+        } catch(e) {}
+        navigator.permissions.query = spoofedQuery;
     }
 
 })();

@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import json
 import struct
-from collections.abc import AsyncGenerator
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
-from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonValue
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonValue
 
 # ── Event types ────────────────────────────────────────────────────────────────
 

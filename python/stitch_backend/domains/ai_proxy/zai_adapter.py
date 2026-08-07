@@ -7,11 +7,12 @@ import json
 import sqlite3
 import time
 import uuid
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Protocol, TypeAlias
+from typing import TYPE_CHECKING, Protocol, TypeAlias
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    from pathlib import Path
 
 ZAI_BASE_URL = "https://chat.z.ai"
 ZAI_CHAT_COMPLETIONS_URL = f"{ZAI_BASE_URL}/api/v2/chat/completions"

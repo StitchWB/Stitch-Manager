@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.key_health.service import KeyHealthService, hash_key
 
 logger = logging.getLogger(__name__)
@@ -87,14 +87,24 @@ class KeyHealthWorker:
 
         # Test keys concurrently with a semaphore limit
         semaphore = asyncio.Semaphore(10)
+        results: list[dict[str, Any]] = []
 
         async def test_one(key_info: dict[str, Any]) -> None:
             async with semaphore:
-                await cls._test_single_key(key_info)
+                result = await cls._test_single_key(key_info)
+                if result:
+                    results.append(result)
 
         await asyncio.gather(
             *(test_one(k) for k in keys_to_test), return_exceptions=True,
         )
+
+        # Batch write all results in one transaction
+        if results:
+            try:
+                await cls._batch_persist_results(results)
+            except Exception:
+                logger.exception("KeyHealthWorker: failed to batch persist results")
 
         elapsed = time.monotonic() - start
         logger.info(
@@ -140,16 +150,16 @@ class KeyHealthWorker:
     async def _load_provider_keys(
         cls, provider: str,
     ) -> list[dict[str, Any]]:
-        """Load keys for a built-in provider."""
+        """Load keys for a built-in provider (read-only)."""
         async def _op(session):
             from stitch_backend.domains.api_keys.service import ApiKeysService
             svc = ApiKeysService(session)
             return await svc.get_keys(provider)
-        return await run_in_session(_op)
+        return await run_in_read_session(_op)
 
     @classmethod
     async def _load_custom_provider_keys(cls) -> list[dict[str, Any]]:
-        """Load keys from all custom providers."""
+        """Load keys from all custom providers (read-only)."""
         async def _op(session):
             from stitch_backend.domains.api_keys.custom_providers import (
                 get_custom_providers,
@@ -182,11 +192,11 @@ class KeyHealthWorker:
                         provider_id,
                     )
             return results
-        return await run_in_session(_op)
+        return await run_in_read_session(_op)
 
     @classmethod
-    async def _test_single_key(cls, key_info: dict[str, Any]) -> None:
-        """Test one API key via the appropriate adapter and persist the result."""
+    async def _test_single_key(cls, key_info: dict[str, Any]) -> dict[str, Any] | None:
+        """Test one API key via the appropriate adapter and return the result."""
         provider_id: str = key_info["provider_id"]
         api_key: str = key_info["api_key"]
         base_url: str | None = key_info.get("base_url")
@@ -252,33 +262,7 @@ class KeyHealthWorker:
 
         latency_ms = (time.monotonic() - start) * 1000
 
-        # Persist result
-        async def _op(session):
-            svc = KeyHealthService(session)
-            # Ensure record exists
-            await svc.upsert_health(
-                provider_id=provider_id,
-                key_hash=kh,
-                status="healthy" if success else "unknown",
-                models_available=models,
-            )
-            await svc.record_test_result(
-                key_hash=kh,
-                success=success,
-                latency_ms=latency_ms,
-                models_available=models,
-                error=error_msg,
-                http_status=http_status,
-            )
-
-        try:
-            await run_in_session(_op)
-        except Exception:
-            logger.exception(
-                "KeyHealthWorker: failed to persist result for %s/%s",
-                provider_id, kh[:8],
-            )
-
+        # Log result
         if success:
             logger.debug(
                 "KeyHealthWorker: OK  %s/%s (%d models, %.0fms)",
@@ -289,6 +273,42 @@ class KeyHealthWorker:
                 "KeyHealthWorker: FAIL %s/%s (%s, %.0fms)",
                 provider_id, kh[:8], error_msg, latency_ms,
             )
+
+        # Return result for batch persist
+        return {
+            "provider_id": provider_id,
+            "key_hash": kh,
+            "success": success,
+            "latency_ms": latency_ms,
+            "models": models,
+            "error": error_msg,
+            "http_status": http_status,
+        }
+
+    @classmethod
+    async def _batch_persist_results(cls, results: list[dict[str, Any]]) -> None:
+        """Persist all test results in a single transaction."""
+        async def _op(session):
+            svc = KeyHealthService(session)
+            for r in results:
+                # Ensure record exists
+                await svc.upsert_health(
+                    provider_id=r["provider_id"],
+                    key_hash=r["key_hash"],
+                    status="healthy" if r["success"] else "unknown",
+                    models_available=r["models"],
+                )
+                await svc.record_test_result(
+                    key_hash=r["key_hash"],
+                    success=r["success"],
+                    latency_ms=r["latency_ms"],
+                    models_available=r["models"],
+                    error=r["error"],
+                    http_status=r["http_status"],
+                )
+
+        await run_in_session(_op)
+        logger.debug("KeyHealthWorker: batch persisted %d results", len(results))
 
     @staticmethod
     def _default_base_url(provider_id: str) -> str | None:

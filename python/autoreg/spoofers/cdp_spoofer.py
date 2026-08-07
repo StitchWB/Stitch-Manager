@@ -5,6 +5,7 @@ CDP-based спуфинг для DrissionPage
 Собирает JS из всех модулей и инжектит через CDP.
 """
 
+import re
 
 from .automation import AutomationSpoofModule
 from .base import BaseSpoofModule
@@ -20,6 +21,7 @@ from .math import MathSpoofModule
 from .media_spoofer import MediaSpoofModule  # Consolidated: audio + media
 from .navigator_spoofer import NavigatorSpoofModule  # Consolidated: navigator + capabilities
 from .profile import SpoofProfile, generate_random_profile
+from .speech import SpeechSpoofModule
 from .storage import StorageSpoofModule
 from .timezone import TimezoneSpoofModule
 from .webrtc import WebRTCSpoofModule
@@ -41,7 +43,67 @@ JS_MODULES: list[type[BaseSpoofModule]] = [
     MathSpoofModule,         # Math fingerprint (sin/cos/tan)
     HistorySpoofModule,      # History length
     StorageSpoofModule,      # Storage quota and DBs
+    SpeechSpoofModule,       # SpeechSynthesis.getVoices (platform/locale-coherent)
 ]
+
+
+def build_user_agent_metadata(user_agent: str) -> dict:
+    """Build CDP ``userAgentMetadata`` consistent with the spoofed UA string.
+
+    CRITICAL: ``Emulation.setUserAgentOverride`` without ``userAgentMetadata``
+    leaves the browser in a half-spoofed state that anti-bot systems (AWS
+    FWCIM included) detect instantly:
+
+    - the ``sec-ch-ua*`` request headers are dropped entirely, and
+    - ``navigator.userAgentData`` exposes empty brand versions and an empty
+      platform.
+
+    Passing metadata that matches the UA major version keeps the HTTP client
+    hints, the JS API and the UA string consistent.
+    """
+    m = re.search(r"Chrome/(\d+)", user_agent)
+    major = m.group(1) if m else "129"
+
+    if "Macintosh" in user_agent or "Mac OS X" in user_agent:
+        platform, platform_version = "macOS", "15.0.0"
+    elif "Android" in user_agent:
+        platform, platform_version = "Android", "14.0.0"
+    elif "Linux" in user_agent:
+        platform, platform_version = "Linux", ""
+    else:
+        platform, platform_version = "Windows", "10.0.0"
+
+    return {
+        "brands": [
+            {"brand": "Not A(Brand", "version": "99"},
+            {"brand": "Google Chrome", "version": major},
+            {"brand": "Chromium", "version": major},
+        ],
+        "fullVersionList": [
+            {"brand": "Not A(Brand", "version": "99.0.0.0"},
+            {"brand": "Google Chrome", "version": f"{major}.0.0.0"},
+            {"brand": "Chromium", "version": f"{major}.0.0.0"},
+        ],
+        "platform": platform,
+        "platformVersion": platform_version,
+        "architecture": "x86",
+        "bitness": "64",
+        "model": "",
+        "mobile": False,
+        "wow64": False,
+    }
+
+
+def build_accept_language(locale: str) -> str:
+    """Build a fully q-valued Accept-Language header.
+
+    Passing a bare ``"ru-RU,en;q=0.9"`` makes Chrome append its own q-value,
+    producing the malformed ``ru-RU,en;q=0.9;q=0.9`` — another anomaly signal.
+    """
+    lang = locale.split("-")[0].split("_")[0]
+    if lang.lower() == "en":
+        return "en-US,en;q=0.9"
+    return f"{locale},{lang};q=0.9,en-US;q=0.8,en;q=0.7"
 
 
 class CDPSpoofer:
@@ -118,7 +180,15 @@ class CDPSpoofer:
             js = module.get_js()
             if js:
                 js_parts.append(f"\n// === {module.name}: {module.description} ===")
-                js_parts.append(js)
+                # Isolate each module: a runtime error in one module must not
+                # kill the rest of the chain (this is exactly what happened
+                # with the old cdp_hide console redefinition — it silently
+                # disabled 13 downstream modules, including client hints).
+                js_parts.append(
+                    "try {\n" + js + "\n} catch (e) {\n"
+                    f"  console.debug('[SPOOF] module {module.name} failed:', e);\n"
+                    "}"
+                )
 
         js_parts.append("\nconsole.log('[SPOOF] All modules applied');")
         return '\n'.join(js_parts)
@@ -180,12 +250,13 @@ class CDPSpoofer:
             results['webdriver_hide'] = False
             # FAIL: WebDriver hide: {self._fmt_err(e)}")
 
-        # 1. User-Agent через CDP
+        # 1. User-Agent через CDP (+ userAgentMetadata для sec-ch-ua*)
         try:
             page.run_cdp('Emulation.setUserAgentOverride',
                 userAgent=p.user_agent,
                 platform=p.platform,
-                acceptLanguage=f"{p.locale},en;q=0.9"
+                acceptLanguage=build_accept_language(p.locale),
+                userAgentMetadata=build_user_agent_metadata(p.user_agent)
             )
             results['user_agent'] = True
             # OK: User-Agent: {p.user_agent[:50]}...")
@@ -319,7 +390,8 @@ class CDPSpoofer:
             page.run_cdp('Emulation.setUserAgentOverride',
                 userAgent=p.user_agent,
                 platform=p.platform,
-                acceptLanguage=f"{p.locale},en;q=0.9"
+                acceptLanguage=build_accept_language(p.locale),
+                userAgentMetadata=build_user_agent_metadata(p.user_agent)
             )
             # OK: User-Agent")
         except Exception as e:

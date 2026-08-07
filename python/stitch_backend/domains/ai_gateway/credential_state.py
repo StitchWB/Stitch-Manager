@@ -45,13 +45,16 @@ operation.  It is included in ``_VALID_STATES`` for validation only.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
 from stitch_backend.domains.ai_gateway.models import _utcnow
 from stitch_backend.domains.ai_gateway.service import CredentialService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
 
 logger = logging.getLogger(__name__)
 

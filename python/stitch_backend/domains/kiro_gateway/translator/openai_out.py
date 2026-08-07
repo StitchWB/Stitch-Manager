@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Callable
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 JsonScalar = str | int | float | bool | None
 JsonValue = JsonScalar | dict[str, JsonScalar] | list[JsonScalar | dict[str, JsonScalar]]

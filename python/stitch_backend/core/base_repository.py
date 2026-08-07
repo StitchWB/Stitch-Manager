@@ -16,13 +16,17 @@ Usage::
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Generic, Sequence, Type, TypeVar
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.database import Base
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +34,7 @@ T = TypeVar("T", bound=Base)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class BaseRepository(Generic[T]):
@@ -41,7 +45,7 @@ class BaseRepository(Generic[T]):
       - ``_pk``: primary key column name (default ``"id"``)
     """
 
-    _model: Type[T]
+    _model: type[T]
     _pk: str = "id"
 
     def __init__(self, db: AsyncSession) -> None:
@@ -103,7 +107,7 @@ class BaseRepository(Generic[T]):
             if hasattr(instance, key):
                 setattr(instance, key, value)
         if hasattr(instance, "updated_at"):
-            instance.updated_at = _utcnow()  # type: ignore[attr-defined]
+            instance.updated_at = _utcnow()
         await self._db.flush()
         await self._db.refresh(instance)
         return instance

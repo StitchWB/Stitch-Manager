@@ -9,17 +9,18 @@ for any registration provider. It works with all email strategies:
 - ADDYIO (alias forwarding)
 """
 
+import datetime
+import email as email_lib
+import imaplib
 import re
 import time
-import datetime
-import imaplib
-import email as email_lib
+from collections.abc import Callable
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
-from typing import Optional, Dict, Callable, Any
+from typing import Any
 
 
-def _extract_verification_code_from_text(text: str) -> Optional[str]:
+def _extract_verification_code_from_text(text: str) -> str | None:
     """Extract verification code using common patterns."""
     patterns = [
         r'\b(\d{6})\b',
@@ -36,14 +37,14 @@ def _extract_verification_code_from_text(text: str) -> Optional[str]:
 
 
 def get_verification_code_from_mailtm(
-    mailtm_config: Dict[str, Any],
+    mailtm_config: dict[str, Any],
     sender_keywords: list[str],
     max_wait: int = 120,
     time_window: int = 300,
-    log_callback: Optional[Callable] = None,
-    target_email: Optional[str] = None,
-    session_id: Optional[str] = None,
-) -> Optional[str]:
+    log_callback: Callable | None = None,
+    target_email: str | None = None,
+    session_id: str | None = None,
+) -> str | None:
     """
     Retrieve verification code from an existing Mail.tm mailbox.
 
@@ -79,7 +80,7 @@ def get_verification_code_from_mailtm(
             return None
 
         start_time = time.time()
-        cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=time_window)
+        cutoff_time = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=time_window)
 
         while time.time() - start_time < max_wait:
             try:
@@ -95,7 +96,7 @@ def get_verification_code_from_mailtm(
                     if created_at_raw:
                         created_dt = parsedate_to_datetime(created_at_raw) if ',' in created_at_raw else datetime.datetime.fromisoformat(created_at_raw.replace('Z', '+00:00'))
                         if created_dt.tzinfo is None:
-                            created_dt = created_dt.replace(tzinfo=datetime.timezone.utc)
+                            created_dt = created_dt.replace(tzinfo=datetime.UTC)
                         if created_dt < cutoff_time:
                             continue
                 except Exception:
@@ -224,19 +225,19 @@ def extract_body_text(msg: Any) -> str:
 
 
 def get_verification_code_from_imap(
-    imap_config: Dict[str, Any],
+    imap_config: dict[str, Any],
     sender_keywords: list[str],
-    subject_pattern: Optional[str] = None,
+    subject_pattern: str | None = None,
     max_wait: int = 120,
     time_window: int = 300,
-    log_callback: Optional[Callable] = None,
-    target_email: Optional[str] = None,
-    session_id: Optional[str] = None,
+    log_callback: Callable | None = None,
+    target_email: str | None = None,
+    session_id: str | None = None,
     max_retries: int = 3,
     logger=None,
-    url_pattern: Optional[str] = None,
-    code_pattern: Optional[str] = None,
-) -> Optional[str]:
+    url_pattern: str | None = None,
+    code_pattern: str | None = None,
+) -> str | None:
     r"""
     Universal function to retrieve verification code from IMAP with retry logic.
 
@@ -286,13 +287,13 @@ def get_verification_code_from_imap(
 
     # Retry logic with exponential backoff
     retry_delays = [1, 2, 4, 8]  # Exponential backoff: 1s, 2s, 4s, 8s
-    
+
     for retry_attempt in range(max_retries):
         if retry_attempt > 0:
             delay = retry_delays[min(retry_attempt - 1, len(retry_delays) - 1)]
             log(f"[Email] Retry attempt {retry_attempt + 1}/{max_retries} after {delay}s delay")
             time.sleep(delay)
-        
+
         attempt_start = time.time()
         result = _get_verification_code_internal(
             imap_config=imap_config,
@@ -321,36 +322,36 @@ def get_verification_code_from_imap(
 
 
 def _get_verification_code_internal(
-    imap_config: Dict[str, Any],
+    imap_config: dict[str, Any],
     sender_keywords: list[str],
-    subject_pattern: Optional[str],
+    subject_pattern: str | None,
     max_wait: int,
     time_window: int,
-    log_callback: Optional[Callable],
-    target_email: Optional[str],
-    session_id: Optional[str],
+    log_callback: Callable | None,
+    target_email: str | None,
+    session_id: str | None,
     logger=None,
-    url_pattern: Optional[str] = None,
-    code_pattern: Optional[str] = None,
+    url_pattern: str | None = None,
+    code_pattern: str | None = None,
 ) -> dict:
     """
     Internal function to retrieve verification code from IMAP (single attempt).
     Returns dict with 'code' (str or None) and 'error' (str or None).
     This is called by get_verification_code_from_imap with retry logic.
     """
-    
+
     def log(message: str):
         """Helper to log messages with session ID"""
         prefix = f"[{session_id}]" if session_id else ""
         full_message = f"{prefix} {message}" if prefix else message
         if log_callback:
             log_callback(full_message)
-    
+
     host = imap_config.get('host')
     port = imap_config.get('port', 993)
     user = imap_config.get('user')
     password = imap_config.get('password')
-    
+
     if not all([host, user, password]):
         log("[Email] Incomplete IMAP config")
         return {"code": None, "error": "Incomplete IMAP config"}
@@ -362,18 +363,18 @@ def _get_verification_code_internal(
         port = int(port)
     except Exception:
         port = 993
-    
+
     start_time = time.time()
-    cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=time_window)
+    cutoff_time = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=time_window)
     log(f"[Email] Starting IMAP poll (max_wait={max_wait}s, time_window={time_window}s, cutoff={cutoff_time.strftime('%Y-%m-%d %H:%M:%S')} UTC, target_email={target_email})")
     last_error = None
-    
+
     # Build search query for primary keyword
     primary_keyword = sender_keywords[0] if sender_keywords else None
     if not primary_keyword:
         log("[Email] No sender keywords provided")
         return {"code": None, "error": "No sender keywords provided"}
-    
+
     poll_interval_sec = 3
 
     while time.time() - start_time < max_wait:
@@ -386,7 +387,7 @@ def _get_verification_code_internal(
                 pass
             mail.login(str(user), str(password))
             mail.select('INBOX')
-            
+
             messages = None
             used_fallback = False
             search_queries = [('FROM', kw) for kw in sender_keywords]
@@ -426,7 +427,7 @@ def _get_verification_code_internal(
             if messages and messages[0]:
                 email_ids = messages[0].split()
                 log(f"[Email] Checking {min(len(email_ids), 10)} of {len(email_ids)} emails (newest first, cutoff={cutoff_time.strftime('%H:%M:%S')})")
-                
+
                 new_email_count = 0
                 # Check only last 10 emails (newest first)
                 for num in reversed(email_ids[-10:]):
@@ -478,7 +479,7 @@ def _get_verification_code_internal(
                     try:
                         email_date = parsedate_to_datetime(date_str)
                         if email_date.tzinfo is None:
-                            email_date = email_date.replace(tzinfo=datetime.timezone.utc)
+                            email_date = email_date.replace(tzinfo=datetime.UTC)
                         if email_date < cutoff_time:
                             log(f"[Email] Skipping old email from={from_addr!r} subject={subject!r} date={date_str} (older than cutoff)")
                             continue
@@ -593,7 +594,7 @@ def _get_verification_code_internal(
                     log(f"[Email] Email passed all checks but no 6-char code found. from={from_addr!r} subject={subject!r} body_snippet={body[:250]!r}")
 
                 if new_email_count == 0:
-                    log(f"[Email] No new emails yet — waiting for forwarded message to arrive...")
+                    log("[Email] No new emails yet — waiting for forwarded message to arrive...")
 
             mail.logout()
 

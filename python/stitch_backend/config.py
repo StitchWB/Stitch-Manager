@@ -5,11 +5,9 @@ from __future__ import annotations
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 # ── Project root detection ────────────────────────────────────────────────────
 # In dev mode: python/stitch_backend/config.py  →  parent.parent = repo root
@@ -80,7 +78,7 @@ class Settings(BaseSettings):
 
     # ── LiteLLM gateway ────────────────────────────────────────────────────────
     litellm_gateway_enabled: bool = True
-    litellm_gateway_local_api_key: Optional[str] = "proxypal-local"
+    litellm_gateway_local_api_key: str | None = "proxypal-local"
     litellm_gateway_model_prefix: str = "/v1"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
@@ -94,7 +92,7 @@ class Settings(BaseSettings):
     db_echo: bool = False            # SQLAlchemy statement logging
 
     @model_validator(mode="after")
-    def _compute_db_url(self) -> "Settings":
+    def _compute_db_url(self) -> Settings:
         """Fill in database_url with the canonical path when not set via env."""
         if not self.database_url:
             self.database_url = _default_db_url()
@@ -104,15 +102,15 @@ class Settings(BaseSettings):
     proxy_port: int = 20128
 
     # ── Email / IMAP ──────────────────────────────────────────────────────────
-    imap_host: Optional[str] = None
+    imap_host: str | None = None
     imap_port: int = 993
-    imap_user: Optional[str] = None
-    imap_password: Optional[str] = None
+    imap_user: str | None = None
+    imap_password: str | None = None
     imap_folder: str = "INBOX"
 
     # ── Captcha solving ───────────────────────────────────────────────────────
     captcha_provider: str = "turnstile"   # turnstile | hcaptcha
-    captcha_api_key: Optional[str] = None
+    captcha_api_key: str | None = None
 
     # ── Registration ──────────────────────────────────────────────────────────
     reg_max_concurrency: int = 3

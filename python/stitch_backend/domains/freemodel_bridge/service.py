@@ -8,15 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
-import os
-
 from stitch_backend.config import REPO_ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class FreemodelBridgeService:
             _process.terminate()
             try:
                 await asyncio.wait_for(_process.wait(), timeout=5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _process.kill()
             logger.info("[FreeBridge] Stopped (pid=%d)", _process.pid)
 

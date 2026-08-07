@@ -16,9 +16,8 @@ import asyncio
 import json
 import random
 import uuid
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Protocol, TypedDict
+from typing import TYPE_CHECKING, Protocol, TypedDict
 
 import httpx
 
@@ -28,6 +27,9 @@ from .sse import (
     ToolUseEvent,
     parse_event_stream,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 # ── Account protocol (minimal — sibling models.py owns the real model) ────────
 

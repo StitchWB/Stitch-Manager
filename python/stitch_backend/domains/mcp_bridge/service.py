@@ -9,8 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +69,7 @@ def append_critical_journal(action: str, args: Any, result: Any) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "action": action,
             "dryRun": dry_run_enabled(),
             "args": args,

@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import logging
 import random
-import string
 from pathlib import Path
 
 from stitch_backend.domains.profiles.schemas import BrowserFingerprintProfile

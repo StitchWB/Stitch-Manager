@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Composed flow runner.
 
 Executes a compiled flow plan (segments), where every segment maps to an

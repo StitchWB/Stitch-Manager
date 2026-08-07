@@ -34,7 +34,7 @@ Typical usage:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .stripe_iframe import StripeIframeMixin
 
@@ -98,8 +98,8 @@ class StripeBillingMixin(StripeIframeMixin):
         card_number: str,
         expiry: str,
         cvc: str,
-        cardholder_name: Optional[str] = None,
-        page: Optional["ChromiumPage"] = None,
+        cardholder_name: str | None = None,
+        page: ChromiumPage | None = None,
     ) -> bool:
         """Fill the four payment-card fields.
 
@@ -141,12 +141,12 @@ class StripeBillingMixin(StripeIframeMixin):
     def fill_stripe_address(
         self,
         *,
-        country: Optional[str] = None,
-        line1: Optional[str] = None,
-        city: Optional[str] = None,
-        zip_code: Optional[str] = None,
-        state: Optional[str] = None,
-        page: Optional["ChromiumPage"] = None,
+        country: str | None = None,
+        line1: str | None = None,
+        city: str | None = None,
+        zip_code: str | None = None,
+        state: str | None = None,
+        page: ChromiumPage | None = None,
     ) -> bool:
         """Fill billing address fields.
 
@@ -202,7 +202,7 @@ class StripeBillingMixin(StripeIframeMixin):
         return bool(any_filled)
 
     def submit_stripe_billing(
-        self, page: Optional["ChromiumPage"] = None
+        self, page: ChromiumPage | None = None
     ) -> bool:
         """Click the Stripe submit/pay button.
 

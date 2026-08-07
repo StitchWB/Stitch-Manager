@@ -21,7 +21,10 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any, Callable, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 KIRO_SSO_CACHE_DIR = Path.home() / ".aws" / "sso" / "cache"
 KIRO_AUTH_TOKEN_PATH = KIRO_SSO_CACHE_DIR / "kiro-auth-token.json"
@@ -245,7 +248,6 @@ class KiroAuthTokenWatcher:
         self._thread.start()
 
     def _run(self) -> None:
-        import time
 
         while not self._stop.is_set():
             if self._stop.wait(self._interval):

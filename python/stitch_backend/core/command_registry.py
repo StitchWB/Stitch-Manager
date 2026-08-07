@@ -40,8 +40,9 @@ from __future__ import annotations
 import importlib
 import logging
 import pkgutil
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Callable, Coroutine, NamedTuple, Type
+from typing import Any, NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +127,10 @@ def list_commands() -> list[str]:
 
 # ── Provider registry ─────────────────────────────────────────────────────────
 
-_PROVIDER_REGISTRY: dict[str, Type] = {}
+_PROVIDER_REGISTRY: dict[str, type] = {}
 
 
-def register_provider(provider_id: str) -> Callable[[Type], Type]:
+def register_provider(provider_id: str) -> Callable[[type], type]:
     """Decorator: register a class as the provider plugin for *provider_id*.
 
     The decorated class is expected to expose:
@@ -140,7 +141,7 @@ def register_provider(provider_id: str) -> Callable[[Type], Type]:
       - ``async execute_flow(session, ctx) -> TokenData``
     """
 
-    def decorator(cls: Type) -> Type:
+    def decorator(cls: type) -> type:
         cls.provider_id = provider_id  # type: ignore[attr-defined]
         if provider_id in _PROVIDER_REGISTRY:
             logger.warning("Provider '%s' already registered — overwriting", provider_id)
@@ -150,7 +151,7 @@ def register_provider(provider_id: str) -> Callable[[Type], Type]:
     return decorator
 
 
-def get_provider(provider_id: str) -> Type:
+def get_provider(provider_id: str) -> type:
     """Look up a provider class by ID; raise if not found."""
     try:
         return _PROVIDER_REGISTRY[provider_id]
@@ -158,12 +159,12 @@ def get_provider(provider_id: str) -> Type:
         raise ProviderNotFoundError(provider_id) from None
 
 
-def list_providers() -> dict[str, Type]:
+def list_providers() -> dict[str, type]:
     """Return a copy of the full provider registry."""
     return dict(_PROVIDER_REGISTRY)
 
 
-def scan_providers() -> dict[str, Type]:
+def scan_providers() -> dict[str, type]:
     """Import every non-private module inside ``domains/registration/providers/``
     so that ``@register_provider`` decorators fire.  Idempotent.
 

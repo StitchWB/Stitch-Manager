@@ -79,13 +79,19 @@ class CDPHideSpoofModule(BaseSpoofModule):
     // CONSOLE PROTECTION
     // ============================================
 
-    // Скрываем что консоль была открыта через CDP
-    const originalConsole = window.console;
-    Object.defineProperty(window, 'console', {
-        get: () => originalConsole,
-        set: () => {},
-        configurable: false
-    });
+    // NOTE: window.console is spec-defined as non-configurable, so
+    // Object.defineProperty(window, 'console', ...) ALWAYS throws and used
+    // to kill the entire spoof script chain (strict mode). Guard it and do
+    // not attempt a redefine — freezing the reference is enough.
+    try {
+        const originalConsole = window.console;
+        if (originalConsole) {
+            Object.defineProperty(window, '__consoleRef', {
+                value: originalConsole,
+                configurable: true
+            });
+        }
+    } catch(e) {}
 
 })();
 '''

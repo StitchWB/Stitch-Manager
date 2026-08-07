@@ -21,9 +21,7 @@ Kiro is the only provider that genuinely needs its own adapter class
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator
-from typing import Any
-from urllib.parse import urlparse, urlunparse
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -33,6 +31,9 @@ from stitch_backend.domains.ai_gateway.adapters.base import (
     register_adapter,
 )
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 _PROBE_TIMEOUT_SECONDS = 10.0
 

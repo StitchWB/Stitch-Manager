@@ -5,13 +5,15 @@ import math
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 
-from stitch_backend.domains.background_manager.schemas import (
-    BackgroundManagerConfig,
-    RateLimitPolicy,
-)
+if TYPE_CHECKING:
+    from stitch_backend.domains.background_manager.schemas import (
+        BackgroundManagerConfig,
+        RateLimitPolicy,
+    )
 
 _DEFAULT_MAX_WAIT_SECONDS = 30.0
 

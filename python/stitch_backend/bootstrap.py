@@ -59,45 +59,45 @@ async def bootstrap() -> None:
 
     # ── Command modules ──────────────────────────────────────────────────────
     # Import so @register_command decorators fire
-    import stitch_backend.domains.accounts.commands  # noqa: F401
-    import stitch_backend.domains.settings.commands  # noqa: F401
-    import stitch_backend.domains.utility.commands  # noqa: F401
-    import stitch_backend.domains.registration.commands  # noqa: F401
-    import stitch_backend.domains.email.commands  # noqa: F401
-    import stitch_backend.domains.oauth.commands  # noqa: F401
-    import stitch_backend.domains.activation.commands  # noqa: F401
-    import stitch_backend.domains.patcher.commands  # noqa: F401
-    import stitch_backend.domains.browser.commands  # noqa: F401
-    import stitch_backend.domains.proxy_library.commands  # noqa: F401
-    import stitch_backend.domains.scenarios.commands  # noqa: F401
-    import stitch_backend.domains.scheduler.commands  # noqa: F401
-    import stitch_backend.domains.patcher.commands  # noqa: F401
-    import stitch_backend.domains.google_sheets.commands  # noqa: F401
-    import stitch_backend.domains.replenishment.commands  # noqa: F401
-    import stitch_backend.domains.profiles.commands  # noqa: F401
-    import stitch_backend.domains.api_keys.commands  # noqa: F401
-    import stitch_backend.domains.email_counter.commands  # noqa: F401
-    import stitch_backend.domains.composed_flows.commands  # noqa: F401
-    import stitch_backend.domains.prompts.commands  # noqa: F401
-    import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
-    import stitch_backend.domains.email_inbox.commands  # noqa: F401
-    import stitch_backend.domains.router.commands  # noqa: F401
-    import stitch_backend.domains.background_manager.commands  # noqa: F401
-    import stitch_backend.domains.cards.commands  # noqa: F401
-    import stitch_backend.domains.kiro_patch.commands  # noqa: F401
     import stitch_backend.domains.account_status.commands  # noqa: F401
+    import stitch_backend.domains.accounts.commands  # noqa: F401
+    import stitch_backend.domains.activation.commands  # noqa: F401
     import stitch_backend.domains.ai_proxy.commands  # noqa: F401
     import stitch_backend.domains.ai_proxy.zai_token_commands  # noqa: F401
-    import stitch_backend.domains.opencode_config.commands  # noqa: F401
-    import stitch_backend.domains.python_jobs.commands  # noqa: F401
-    import stitch_backend.domains.mcp_bridge.commands  # noqa: F401
-    import stitch_backend.domains.logging.commands  # noqa: F401
+    import stitch_backend.domains.api_keys.commands  # noqa: F401
     import stitch_backend.domains.aws_accounts.commands  # noqa: F401
-    import stitch_backend.domains.totp.commands  # noqa: F401
-    import stitch_backend.domains.utility.file_dialogs  # noqa: F401
-    import stitch_backend.domains.utility.stubs  # noqa: F401
+    import stitch_backend.domains.background_manager.commands  # noqa: F401
+    import stitch_backend.domains.browser.commands  # noqa: F401
+    import stitch_backend.domains.cards.commands  # noqa: F401
+    import stitch_backend.domains.composed_flows.commands  # noqa: F401
+    import stitch_backend.domains.email.commands  # noqa: F401
+    import stitch_backend.domains.email_counter.commands  # noqa: F401
+    import stitch_backend.domains.email_inbox.commands  # noqa: F401
+    import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
+    import stitch_backend.domains.google_sheets.commands  # noqa: F401
+    import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
     import stitch_backend.domains.key_health.commands  # noqa: F401
+    import stitch_backend.domains.kiro_patch.commands  # noqa: F401
+    import stitch_backend.domains.logging.commands  # noqa: F401
+    import stitch_backend.domains.mcp_bridge.commands  # noqa: F401
+    import stitch_backend.domains.oauth.commands  # noqa: F401
+    import stitch_backend.domains.opencode_config.commands  # noqa: F401
+    import stitch_backend.domains.patcher.commands  # noqa: F401  # noqa: F401
+    import stitch_backend.domains.profiles.commands  # noqa: F401
+    import stitch_backend.domains.prompts.commands  # noqa: F401
+    import stitch_backend.domains.proxy_library.commands  # noqa: F401
+    import stitch_backend.domains.python_jobs.commands  # noqa: F401
+    import stitch_backend.domains.registration.commands  # noqa: F401
+    import stitch_backend.domains.replenishment.commands  # noqa: F401
+    import stitch_backend.domains.router.commands  # noqa: F401
+    import stitch_backend.domains.scenarios.commands  # noqa: F401
+    import stitch_backend.domains.scheduler.commands  # noqa: F401
+    import stitch_backend.domains.settings.commands  # noqa: F401
+    import stitch_backend.domains.totp.commands  # noqa: F401
+    import stitch_backend.domains.utility.commands  # noqa: F401
+    import stitch_backend.domains.utility.file_dialogs  # noqa: F401
+    import stitch_backend.domains.utility.stubs  # noqa: F401
 
     # ── Registry scan ────────────────────────────────────────────────────────
     from stitch_backend.core.command_registry import list_commands, scan_providers
@@ -120,8 +120,8 @@ async def bootstrap() -> None:
 
     # ── iCloud pool ──────────────────────────────────────────────────────────
     try:
-        from stitch_backend.domains.icloud_email_pool.service import get_icloud_pool_service
         from stitch_backend.database import get_session_factory as _gsf
+        from stitch_backend.domains.icloud_email_pool.service import get_icloud_pool_service
 
         icloud_svc = get_icloud_pool_service()
         icloud_svc.register_bridge()

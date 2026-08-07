@@ -3,7 +3,7 @@ CAPTCHA handling mixin for browser automation
 Provides high-level CAPTCHA detection and solving capabilities
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 from autoreg.captcha.turnstile import TurnstileSolver
 
@@ -11,7 +11,7 @@ from autoreg.captcha.turnstile import TurnstileSolver
 class CaptchaMixin:
     """
     Mixin for browser automation classes to handle CAPTCHA challenges
-    
+
     Requires:
         - self.browser: DrissionPage ChromiumPage instance
         - self.log(message): Logging method
@@ -20,7 +20,7 @@ class CaptchaMixin:
     def detect_captcha(self) -> dict:
         """
         Detect if any CAPTCHA is present on the page
-        
+
         Returns:
             dict with detection results:
                 - type: str | None - CAPTCHA type ("turnstile", etc.) or None
@@ -48,7 +48,7 @@ class CaptchaMixin:
     def _detect_turnstile(self) -> dict:
         """
         Detect Cloudflare Turnstile CAPTCHA
-        
+
         Returns:
             dict with Turnstile detection results
         """
@@ -62,7 +62,7 @@ class CaptchaMixin:
     def _check_turnstile_solved(self) -> bool:
         """
         Check if Turnstile is solved
-        
+
         Returns:
             bool: True if solved
         """
@@ -75,11 +75,11 @@ class CaptchaMixin:
     def solve_turnstile(self, method: str = "auto", timeout: int = 60) -> bool:
         """
         Solve Turnstile CAPTCHA
-        
+
         Args:
             method: Solving method - "auto", "opencv", "dom", or "manual"
             timeout: Maximum time to wait for solve (seconds)
-        
+
         Returns:
             bool: True if solved successfully
         """
@@ -93,10 +93,10 @@ class CaptchaMixin:
     def wait_for_captcha_solve(self, timeout: int = 60) -> bool:
         """
         Wait for any CAPTCHA to be solved (auto-detect type)
-        
+
         Args:
             timeout: Maximum time to wait (seconds)
-        
+
         Returns:
             bool: True if solved within timeout
         """
@@ -124,7 +124,7 @@ class CaptchaMixin:
     def _get_log_callback(self) -> Callable[[str], None] | None:
         """
         Get log callback function for CAPTCHA solver
-        
+
         Returns:
             Callable or None
         """

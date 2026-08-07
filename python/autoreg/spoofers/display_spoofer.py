@@ -19,42 +19,59 @@ class DisplaySpoofModule(BaseSpoofModule):
     def get_js(self) -> str:
         p = self.profile
 
-        # Screen properties
+        # Static screen properties that are safe constants (identical on the
+        # vast majority of desktop displays) and don't cross-correlate with
+        # anything the layout exposes.
         screen_props = {
-            'width': str(p.screen_width),
-            'height': str(p.screen_height),
-            'availWidth': str(p.avail_width),
-            'availHeight': str(p.avail_height),
             'colorDepth': str(p.color_depth),
             'pixelDepth': str(p.color_depth),
             'deviceXDPI': '96',
             'logicalXDPI': '96',
             'fontSmoothingEnabled': 'true',
         }
-
-        # Window dimensions
-        window_props = {
-            'innerWidth': str(p.screen_width),
-            'innerHeight': str(p.avail_height),
-            'outerWidth': str(p.screen_width),
-            'outerHeight': str(p.screen_height),
-            'devicePixelRatio': str(p.pixel_ratio),
-        }
-
         screen_props_js = define_properties('screen', screen_props)
-        window_props_js = define_properties('window', window_props)
 
         return wrap_iife(f'''
 // ============================================
-// SCREEN PROPERTIES
+// SCREEN / WINDOW DIMENSION RE-ALIGNMENT
+// --------------------------------------------
+// CloakBrowser spoofs screen.* and outerWidth/outerHeight at the ENGINE level
+// to its own profile (e.g. 1920x1080) but does NOT adjust window.innerWidth/
+// innerHeight, which stay at the real monitor size. On a maximized window that
+// produces physically impossible states anti-bot (AWS FWCIM) treats as a strong
+// automation signal:
+//     innerWidth(2560) > screen.width(1920)
+//     innerWidth(2560) > outerWidth(1920)
+// visualViewport, matchMedia and layout all expose the real size anyway, so the
+// fix is to pull screen.* / outer* UP to the real layout viewport (top frame
+// only — screen is a shared object, one correction covers every frame).
+// ============================================
+try {{
+    if (window.self === window.top) {{
+        const _rw = window.innerWidth;
+        const _rh = window.innerHeight;
+        if (_rw > 0 && _rh > 0) {{
+            const _title = 36;    // window title bar (maximized)
+            const _taskbar = 48;  // OS taskbar
+            try {{
+                Object.defineProperty(screen, 'width',      {{ get: () => _rw, configurable: true }});
+                Object.defineProperty(screen, 'height',     {{ get: () => _rh + _title + _taskbar, configurable: true }});
+                Object.defineProperty(screen, 'availWidth', {{ get: () => _rw, configurable: true }});
+                Object.defineProperty(screen, 'availHeight',{{ get: () => _rh + _title, configurable: true }});
+            }} catch(e) {{}}
+            try {{
+                Object.defineProperty(window, 'outerWidth',  {{ get: () => _rw, configurable: true }});
+                Object.defineProperty(window, 'outerHeight', {{ get: () => _rh + _title, configurable: true }});
+            }} catch(e) {{}}
+        }}
+    }}
+}} catch(e) {{}}
+
+// ============================================
+// STATIC SCREEN PROPERTIES (colorDepth / DPI)
 // app-min.js collects: width-height-availHeight-colorDepth-deviceXDPI-logicalXDPI-fontSmoothing
 // ============================================
 {screen_props_js}
-
-// ============================================
-// WINDOW DIMENSIONS
-// ============================================
-{window_props_js}
 
 // ============================================
 // PERFORMANCE TIMING

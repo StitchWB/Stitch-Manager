@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import platform
 from dataclasses import dataclass
-from typing import Final, TypedDict
+from typing import TYPE_CHECKING, Final, TypedDict
 
 import httpx
 
-from stitch_backend.domains.ai_proxy.zai_chat_gateway import ChatCompletionRequest, JsonObject
+if TYPE_CHECKING:
+    from stitch_backend.domains.ai_proxy.zai_chat_gateway import ChatCompletionRequest, JsonObject
 
 _DEFAULT_ENDPOINT: Final = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 _QODER_VERSION: Final = "0.15.9"

@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 def _run_tk_dialog(dialog_fn, **kwargs) -> Any:
     """Run a tkinter dialog in a thread (tkinter must run in its own event loop)."""
     import tkinter as tk  # noqa: PLC0415
-    from tkinter import filedialog  # noqa: PLC0415
 
     result: Any = None
 

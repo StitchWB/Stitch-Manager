@@ -225,7 +225,7 @@ def _write_cookies_to_profile(cookies_json: str, profile: Path) -> None:
 
             # Chrome time = microseconds since 1601-01-01
             # Python time = seconds since 1970-01-01; offset = 11644473600s
-            _CHROME_EPOCH_OFFSET = 11_644_473_600 * 1_000_000
+            _CHROME_EPOCH_OFFSET = 11_644_473_600 * 1_000_000  # noqa: N806 — constant
             now_chrome = int(_time.time() * 1_000_000) + _CHROME_EPOCH_OFFSET
 
             inserted = 0

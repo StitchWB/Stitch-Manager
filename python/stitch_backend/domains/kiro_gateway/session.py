@@ -9,11 +9,12 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from collections.abc import Mapping
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
-from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonObject
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
+    from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonObject
 
 # ── extract_session_hint ──────────────────────────────────────────────────────
 

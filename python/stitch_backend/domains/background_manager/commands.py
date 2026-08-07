@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-
 from typing import cast
 
 from sqlalchemy import text
@@ -42,7 +41,7 @@ async def _load_config() -> BackgroundManagerConfig:
             return BackgroundManagerConfig.model_validate({})
         return normalise_background_manager_config(value)
 
-    return cast(BackgroundManagerConfig, await run_in_read_session(_op))
+    return cast("BackgroundManagerConfig", await run_in_read_session(_op))
 
 
 @register_command("get_background_manager_status", readonly=True)

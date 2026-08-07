@@ -19,7 +19,6 @@ from pydantic import (
     model_validator,
 )
 
-
 # ── Response ──────────────────────────────────────────────────────────────────
 
 class AccountResponse(BaseModel):

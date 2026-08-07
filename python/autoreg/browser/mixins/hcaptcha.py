@@ -35,7 +35,7 @@ class HCaptchaMixin:
                     return iframe
             except Exception:
                 continue
-        
+
         # Final fallback: search all iframes for hcaptcha in src
         try:
             iframes = page.eles('css:iframe')
@@ -49,7 +49,7 @@ class HCaptchaMixin:
                     continue
         except Exception:
             pass
-        
+
         return None
 
     def _click_hcaptcha_in_iframe(self, page, iframe):
@@ -110,11 +110,11 @@ class HCaptchaMixin:
             result = page.run_js("""
                 const iframe = document.querySelector('iframe[src*="hcaptcha"], iframe[data-hcaptcha-widget-id], .HCaptcha-container iframe');
                 if (!iframe) return { success: false, error: 'iframe not found' };
-                
+
                 try {
                     const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                     if (!iframeDoc) return { success: false, error: 'cannot access iframe document' };
-                    
+
                     // Try multiple checkbox selectors
                     const selectors = [
                         '#checkbox',
@@ -125,7 +125,7 @@ class HCaptchaMixin:
                         'div[role="checkbox"]',
                         '.check'
                     ];
-                    
+
                     for (const sel of selectors) {
                         const el = iframeDoc.querySelector(sel);
                         if (el) {
@@ -133,7 +133,7 @@ class HCaptchaMixin:
                             return { success: true, selector: sel, method: 'contentWindow' };
                         }
                     }
-                    
+
                     // If no specific checkbox found, try clicking the body center
                     // (hCaptcha sometimes uses a single clickable div)
                     const body = iframeDoc.body;
@@ -148,13 +148,13 @@ class HCaptchaMixin:
                         body.dispatchEvent(clickEvent);
                         return { success: true, method: 'body_click' };
                     }
-                    
+
                     return { success: false, error: 'no clickable element found in iframe' };
                 } catch (e) {
                     return { success: false, error: e.message };
                 }
             """)
-            
+
             if isinstance(result, dict) and result.get('success'):
                 logger.info(f"Clicked hCaptcha via JS contentWindow: {result.get('method')}")
                 return True
@@ -195,13 +195,13 @@ class HCaptchaMixin:
             # 1. Get all execution contexts from CDP
             contexts_result = page.run_cdp('Runtime.getExecutionContexts')
             contexts = contexts_result.get('contexts', []) if isinstance(contexts_result, dict) else []
-            
+
             logger.debug(f"CDP contexts found: {len(contexts)}")
             for ctx in contexts:
                 name = ctx.get('name', '')
                 origin = ctx.get('origin', '')
                 logger.debug(f"  CDP ctx: name={name[:60]}, origin={origin[:60]}, id={ctx.get('id', '?')[:12]}")
-            
+
             # 2. Find the context for the hCaptcha iframe
             # The iframe name/source helps identify it
             hcaptcha_ctx = None
@@ -213,7 +213,7 @@ class HCaptchaMixin:
                     hcaptcha_ctx = ctx['id']
                     logger.info(f"Found hCaptcha CDP context: {name} (frame: {frame_id})")
                     break
-            
+
             if not hcaptcha_ctx:
                 # Fallback: try to match by iframe name pattern
                 try:
@@ -228,11 +228,11 @@ class HCaptchaMixin:
                                 break
                 except Exception:
                     pass
-            
+
             if not hcaptcha_ctx:
                 logger.debug("Could not find hCaptcha execution context via CDP")
                 return False
-            
+
             # 3. Evaluate JS inside the iframe to find and click the checkbox
             for attempt in range(6):
                 result = page.run_cdp('Runtime.evaluate', **{
@@ -261,17 +261,17 @@ class HCaptchaMixin:
                     'contextId': hcaptcha_ctx,
                     'returnByValue': True,
                 })
-                
+
                 if isinstance(result, dict):
                     value = result.get('result', {}).get('value') if isinstance(result.get('result'), dict) else result.get('value')
                     if isinstance(value, dict) and value.get('success'):
                         logger.info(f"Clicked hCaptcha via CDP eval: {value.get('selector')} (attempt {attempt + 1})")
                         return True
-                
+
                 if attempt < 5:
                     logger.debug(f"hCaptcha CDP eval not ready (attempt {attempt + 1}/6)")
                     time.sleep(1.0)
-            
+
             logger.warning("hCaptcha checkbox not found via CDP eval after 6 attempts")
             return False
         except Exception as e:
@@ -291,7 +291,7 @@ class HCaptchaMixin:
         """
         try:
             rect = iframe.rect if hasattr(iframe, 'rect') else None
-            
+
             # Extract coordinates — rect may be a FrameRect object (attributes)
             # or a dict from JS getBoundingClientRect
             if rect is not None:
@@ -331,7 +331,7 @@ class HCaptchaMixin:
                 (width * 0.50, height * 0.50),   # dead center
                 (width * 0.35, height * 0.45),   # alternative center
             ]
-            
+
             clicked = False
             for px, py in positions:
                 x = left + px
@@ -345,11 +345,11 @@ class HCaptchaMixin:
                     break
                 except Exception:
                     continue
-            
+
             if not clicked:
                 logger.warning("All CDP click positions failed")
                 return False
-            
+
             return True
         except Exception as e:
             logger.warning(f"Failed CDP hCaptcha click: {e}")

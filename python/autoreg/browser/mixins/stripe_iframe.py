@@ -1,6 +1,7 @@
 """Mixin for Stripe checkout iframe handling"""
 import logging
 from typing import Any
+
 from DrissionPage import ChromiumPage
 
 logger = logging.getLogger(__name__)
@@ -8,20 +9,20 @@ logger = logging.getLogger(__name__)
 
 class StripeIframeMixin:
     """Reusable Stripe payment iframe methods for provider browsers"""
-    
+
     def find_stripe_iframe(self, page: ChromiumPage, iframe_type: str = "payment", timeout: float = 10):
         """Find Stripe iframe by type (payment vs address).
-        
+
         Args:
             page: DrissionPage ChromiumPage
             iframe_type: "payment" or "address" to filter by src keyword
             timeout: Timeout per iframe check
-            
+
         Returns:
             iframe element or None
         """
         keyword = "payment" if iframe_type == "payment" else "address"
-        for attempt in range(int(timeout * 2)):
+        for _attempt in range(int(timeout * 2)):
             iframes = page.eles("tag:iframe", timeout=1)
             for iframe in iframes:
                 src = iframe.attr("src") or ""
@@ -30,7 +31,7 @@ class StripeIframeMixin:
                     return iframe
             self.human_delay(0.3, 0.5) if hasattr(self, 'human_delay') else __import__('time').sleep(0.5)
         return None
-    
+
     def _try_fill_field(self, page_or_frame, field_variants: list[str], value: str, label: str, timeout: float = 0.5, field_type: str = "auto") -> Any:
         """Try to find and return a field element using multiple selector variants.
 

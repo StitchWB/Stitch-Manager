@@ -19,6 +19,9 @@ import logging
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.domains.ai_gateway.adapters.base import get_adapter
+from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
+from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
 from stitch_backend.domains.ai_gateway.schemas import (
     CredentialCreateRequest,
     CredentialIdRequest,
@@ -49,9 +52,6 @@ from stitch_backend.domains.ai_gateway.schemas import (
     UpstreamModelResponse,
     UpstreamModelUpdateRequest,
 )
-from stitch_backend.domains.ai_gateway.adapters.base import get_adapter
-from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
-from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
 from stitch_backend.domains.ai_gateway.service import (
     CredentialModelAccessService,
     CredentialService,

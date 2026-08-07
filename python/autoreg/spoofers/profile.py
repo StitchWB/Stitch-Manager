@@ -17,12 +17,91 @@ if sys.platform != 'win32':
 from .ip_timezone import detect_ip_geo
 
 
+def _detect_chrome_major_version() -> int:
+    """Detect the real Chrome major version of the bundled CloakBrowser.
+
+    The UA string MUST match the engine that actually sends the requests:
+    CloakBrowser leaks its real version into ``sec-ch-ua`` /
+    ``navigator.userAgentData`` / the TLS fingerprint regardless of any CDP
+    override, so claiming a different major in the UA string produces an
+    instant inconsistency signal for anti-bot (AWS FWCIM). Reading the
+    version from the bundled manifest keeps the two in sync automatically.
+
+    Falls back to a known-good constant when the manifest is absent
+    (e.g. running outside the repo layout).
+    """
+    try:
+        # python/autoreg/spoofers/profile.py -> repo root = parents[3]
+        repo_root = Path(__file__).resolve().parents[3]
+        manifests = list((repo_root / "resources" / "cloakbrowser").glob("*.manifest"))
+        if manifests:
+            # e.g. "146.0.7680.177.manifest" -> 146
+            return int(manifests[0].name.split(".")[0])
+    except Exception:  # noqa: BLE001
+        pass
+    return 146  # keep in sync with resources/cloakbrowser/*.manifest
+
+
+def _build_user_agent(chrome_major: int) -> str:
+    return (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        f"(KHTML, like Gecko) Chrome/{chrome_major}.0.0.0 Safari/537.36"
+    )
+
+
+# ── Когерентные hardware-персоны ────────────────────────────────────────────
+# GPU + RAM + логические ядра + экран + color depth подбираются ВМЕСТЕ как
+# реальные популярные конфигурации (подход CloakBrowser 148+ "coherent
+# hardware personas"). Это закрывает cross-API корреляцию: детектор не увидит
+# невозможных связок вида "Intel UHD + 32GB RAM + 32 ядра" или
+# "RTX 3080 + 2GB RAM". Значения device_memory/hardware_concurrency — как их
+# реально отдаёт Chrome (capped: 2/4/8/16/32; логические потоки CPU).
+_HARDWARE_PERSONAS: list[dict] = [
+    # Бюджет / офис, интегрированная графика
+    {'gpu_vendor': "Google Inc. (Intel)",
+         'gpu_renderer': "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+         'device_memory': 8, 'hardware_concurrency': 4, 'screen': (1366, 768),
+         'color_depth': 32, 'pixel_ratio': 1.25},
+    {'gpu_vendor': "Google Inc. (Intel)",
+         'gpu_renderer': "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+         'device_memory': 8, 'hardware_concurrency': 8, 'screen': (1536, 864),
+         'color_depth': 32, 'pixel_ratio': 1.25},
+    # Средний десктоп
+    {'gpu_vendor': "Google Inc. (NVIDIA)",
+         'gpu_renderer': "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)",
+         'device_memory': 8, 'hardware_concurrency': 6, 'screen': (1920, 1080),
+         'color_depth': 32, 'pixel_ratio': 1.0},
+    {'gpu_vendor': "Google Inc. (AMD)",
+         'gpu_renderer': "ANGLE (AMD, AMD Radeon RX 580 Series Direct3D11 vs_5_0 ps_5_0, D3D11)",
+         'device_memory': 8, 'hardware_concurrency': 8, 'screen': (1920, 1080),
+         'color_depth': 32, 'pixel_ratio': 1.0},
+    # Игровой десктоп
+    {'gpu_vendor': "Google Inc. (NVIDIA)",
+         'gpu_renderer': "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+         'device_memory': 16, 'hardware_concurrency': 12, 'screen': (1920, 1080),
+         'color_depth': 32, 'pixel_ratio': 1.0},
+    {'gpu_vendor': "Google Inc. (NVIDIA)",
+         'gpu_renderer': "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+         'device_memory': 16, 'hardware_concurrency': 16, 'screen': (2560, 1440),
+         'color_depth': 32, 'pixel_ratio': 1.0},
+]
+
+
+def _random_hardware() -> dict:
+    """Возвращает одну когерентную hardware-персону (GPU+RAM+ядра+экран)."""
+    return random.choice(_HARDWARE_PERSONAS)
+
+
 @dataclass
 class SpoofProfile:
     """Профиль для спуфинга - все параметры в одном месте"""
 
-    # Browser - актуальная версия Chrome (декабрь 2024)
-    user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    # Browser - версия должна совпадать с реальным движком CloakBrowser,
+    # иначе sec-ch-ua / userAgentData / TLS разойдутся с UA-строкой.
+    # Вычисляется один раз при импорте (версия движка за процесс не меняется).
+    # Важно: оставляем обычным классовым атрибутом, а не field(default_factory),
+    # потому что from_dict() читает ``cls.user_agent`` как fallback.
+    user_agent: str = _build_user_agent(_detect_chrome_major_version())
     platform: str = "Win32"
     vendor: str = "Google Inc."
 
@@ -181,24 +260,16 @@ def generate_profile_from_ip() -> SpoofProfile | None:
 
     print(f"[PROFILE] Detected IP geo: {geo.city}, {geo.country} ({geo.timezone})")
 
-    # Случайное разрешение экрана
-    resolutions = [(1920, 1080), (1366, 768), (1536, 864), (1440, 900), (1280, 720)]
-    screen_width, screen_height = random.choice(resolutions)
+    # Когерентная hardware-персона: GPU+RAM+ядра+экран+color depth вместе,
+    # чтобы не было невозможных cross-API комбинаций.
+    hw = _random_hardware()
+    screen_width, screen_height = hw["screen"]
     taskbar_height = random.choice([40, 48, 30])
 
-    # Случайный WebGL
-    webgl_configs = [
-        ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-        ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-        ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 580 Series Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-        ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-    ]
-    webgl_vendor, webgl_renderer = random.choice(webgl_configs)
-
-    # Актуальные версии Chrome
-    chrome_versions = ['131.0.0.0', '130.0.0.0', '129.0.0.0']
-    chrome_version = random.choice(chrome_versions)
-    user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version} Safari/537.36"
+    # Версия Chrome = реальная версия движка CloakBrowser (иначе UA-строка
+    # разойдётся с sec-ch-ua / userAgentData / TLS, которые движок отдаёт
+    # сам и которые нельзя переопределить через CDP).
+    user_agent = _build_user_agent(_detect_chrome_major_version())
 
     return SpoofProfile(
         user_agent=user_agent,
@@ -208,13 +279,13 @@ def generate_profile_from_ip() -> SpoofProfile | None:
         screen_height=screen_height,
         avail_width=screen_width,
         avail_height=screen_height - taskbar_height,
-        color_depth=24,
-        pixel_ratio=random.choice([1.0, 1.25, 1.5]),
-        hardware_concurrency=random.choice([4, 6, 8, 12]),
-        device_memory=random.choice([4, 8, 16]),
+        color_depth=hw["color_depth"],
+        pixel_ratio=hw["pixel_ratio"],
+        hardware_concurrency=hw["hardware_concurrency"],
+        device_memory=hw["device_memory"],
         max_touch_points=0,
-        webgl_vendor=webgl_vendor,
-        webgl_renderer=webgl_renderer,
+        webgl_vendor=hw["gpu_vendor"],
+        webgl_renderer=hw["gpu_renderer"],
         timezone=geo.timezone,
         timezone_offset=geo.timezone_offset,
         locale=geo.locale,
@@ -243,24 +314,15 @@ def generate_random_profile() -> SpoofProfile:
     us_profiles = ['new_york', 'los_angeles', 'chicago']
     base = PROFILES[random.choice(us_profiles)]
 
-    # Случайное разрешение экрана
-    resolutions = [(1920, 1080), (1366, 768), (1536, 864), (1440, 900), (1280, 720)]
-    screen_width, screen_height = random.choice(resolutions)
+    # Когерентная hardware-персона (GPU+RAM+ядра+экран+color depth вместе).
+    hw = _random_hardware()
+    screen_width, screen_height = hw["screen"]
     taskbar_height = random.choice([40, 48, 30])
 
-    # Случайный WebGL
-    webgl_configs = [
-        ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-        ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-        ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 580 Series Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-        ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-    ]
-    webgl_vendor, webgl_renderer = random.choice(webgl_configs)
-
-    # Актуальные версии Chrome
-    chrome_versions = ['131.0.0.0', '130.0.0.0', '129.0.0.0']
-    chrome_version = random.choice(chrome_versions)
-    user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version} Safari/537.36"
+    # Версия Chrome = реальная версия движка CloakBrowser (иначе UA-строка
+    # разойдётся с sec-ch-ua / userAgentData / TLS, которые движок отдаёт
+    # сам и которые нельзя переопределить через CDP).
+    user_agent = _build_user_agent(_detect_chrome_major_version())
 
     return SpoofProfile(
         user_agent=user_agent,
@@ -270,13 +332,13 @@ def generate_random_profile() -> SpoofProfile:
         screen_height=screen_height,
         avail_width=screen_width,
         avail_height=screen_height - taskbar_height,
-        color_depth=24,
-        pixel_ratio=random.choice([1.0, 1.25, 1.5]),
-        hardware_concurrency=random.choice([4, 6, 8, 12]),
-        device_memory=random.choice([4, 8, 16]),
+        color_depth=hw["color_depth"],
+        pixel_ratio=hw["pixel_ratio"],
+        hardware_concurrency=hw["hardware_concurrency"],
+        device_memory=hw["device_memory"],
         max_touch_points=0,
-        webgl_vendor=webgl_vendor,
-        webgl_renderer=webgl_renderer,
+        webgl_vendor=hw["gpu_vendor"],
+        webgl_renderer=hw["gpu_renderer"],
         timezone=base.timezone,
         timezone_offset=base.timezone_offset,
         locale=base.locale,

@@ -11,14 +11,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from stitch_backend.domains.settings.models import Setting
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,7 @@ class SettingsService:
 
     async def update(self, settings: dict[str, Any]) -> dict[str, Any]:
         """Batch upsert settings.  Returns the full settings after update."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         for key, value in settings.items():
             # Skip masked passwords

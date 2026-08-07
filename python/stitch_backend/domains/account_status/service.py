@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from autoreg.providers.base import ProviderId
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +27,11 @@ _HTTP_TIMEOUT = 15.0
 
 
 def _now_rfc3339() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
 def _now_sqlite() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _is_token_expired(expires_at: str | None) -> bool:
@@ -37,7 +39,7 @@ def _is_token_expired(expires_at: str | None) -> bool:
         return True
     try:
         exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        return datetime.now(timezone.utc) >= exp
+        return datetime.now(UTC) >= exp
     except (ValueError, TypeError):
         return True
 
@@ -129,7 +131,11 @@ async def check_account_status(db: AsyncSession, account_id: int) -> dict[str, A
         status_str = "active" if status["isActive"] else "expired"
         if "Banned" in status.get("plan", ""):
             status_str = "banned"
-        await _update_account_status(db, account_id, status_str, status.get("quotaUsed", 0))
+        await _update_account_status(
+            db, account_id, status_str,
+            quota_used=status.get("quotaUsed", 0),
+            quota_limit=status.get("quotaLimit", 0),
+        )
         return status
 
     if provider in (ProviderId.KIRO.value, ProviderId.KIRO_V2.value):
@@ -144,7 +150,9 @@ async def check_account_status(db: AsyncSession, account_id: int) -> dict[str, A
             )
         used = quota.get("used", 0)
         limit = quota.get("limit", 0)
-        await _update_account_status(db, account_id, "active", used)
+        await _update_account_status(
+            db, account_id, "active", used, quota_limit=limit,
+        )
         return _status_info(
             _pid, email, True, "Pro",
             quota_used=used, quota_limit=limit,
@@ -218,6 +226,17 @@ async def confirm_account_profile_session(db: AsyncSession, account_id: int) -> 
     profile_path = account.get("browser_profile_path", "")
     cookies = account.get("cookies", "{}")
     await _save_browser_session(db, account_id, profile_path, cookies, session_data)
+
+    # Increment login_count and set last_login_at
+    now_sql = _now_sqlite()
+    await db.execute(
+        text(
+            "UPDATE accounts SET login_count = login_count + 1, "
+            "last_login_at = :now, updated_at = :now WHERE id = :id"
+        ),
+        {"now": now_sql, "id": account_id},
+    )
+    await db.flush()
     logger.info("Profile session confirmed for account %d", account_id)
 
 
@@ -254,11 +273,16 @@ async def _get_account(db: AsyncSession, account_id: int) -> dict[str, Any] | No
 
 async def _update_account_status(
     db: AsyncSession, account_id: int, status: str, quota_used: int = 0,
+    quota_limit: int = 0,
 ) -> None:
     now = _now_sqlite()
     await db.execute(
-        text("UPDATE accounts SET status=:s, quota_used=:q, updated_at=:now WHERE id=:id"),
-        {"s": status, "q": quota_used, "now": now, "id": account_id},
+        text(
+            "UPDATE accounts SET status=:s, quota_used=:q, quota_limit=:ql, "
+            "quota_checked_at=:now, last_checked_at=:now, updated_at=:now "
+            "WHERE id=:id"
+        ),
+        {"s": status, "q": quota_used, "ql": quota_limit, "now": now, "id": account_id},
     )
     await db.flush()
 

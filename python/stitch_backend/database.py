@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from sqlalchemy import event
 from sqlalchemy import inspect as _sa_inspect
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -19,10 +20,14 @@ from sqlalchemy.orm import DeclarativeBase
 from stitch_backend.config import get_settings
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Callable, Coroutine
+
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 # ── Declarative base ──────────────────────────────────────────────────────────
@@ -34,45 +39,78 @@ class Base(DeclarativeBase):
 
 # ── Engine / session factory ──────────────────────────────────────────────────
 
-_engine: AsyncEngine | None = None
-_session_factory: async_sessionmaker[AsyncSession] | None = None
+_write_engine: AsyncEngine | None = None
+_read_engine: AsyncEngine | None = None
+_write_session_factory: async_sessionmaker[AsyncSession] | None = None
+_read_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def _get_engine() -> AsyncEngine:
-    """Build (or return cached) async engine."""
-    global _engine  # noqa: PLW0603
-    if _engine is None:
+def _get_write_engine() -> AsyncEngine:
+    """Build (or return cached) write engine with single connection."""
+    global _write_engine  # noqa: PLW0603
+    if _write_engine is None:
         settings = get_settings()
-        _engine = create_async_engine(
+        _write_engine = create_async_engine(
             settings.database_url,
             echo=settings.db_echo,
-            # SQLite-specific: use WAL mode for concurrent reads
-            connect_args={"check_same_thread": False},
+            pool_size=1,  # Single write connection — no contention by design
+            max_overflow=0,
             pool_pre_ping=True,
+            connect_args={"check_same_thread": False},
         )
 
-        # Enable WAL journal mode for better concurrency
-        @event.listens_for(_engine.sync_engine, "connect")
-        def _set_sqlite_pragma(dbapi_conn, _connection_record):  # type: ignore[no-untyped-def]
+        # Enable WAL journal mode and optimize for writes
+        @event.listens_for(_write_engine.sync_engine, "connect")
+        def _set_write_pragma(dbapi_conn, _connection_record):
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA synchronous=NORMAL")  # Faster than FULL, safe with WAL
             cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 
-    return _engine
+    return _write_engine
+
+
+def _get_read_engine() -> AsyncEngine:
+    """Build (or return cached) read engine with connection pool."""
+    global _read_engine  # noqa: PLW0603
+    if _read_engine is None:
+        settings = get_settings()
+        _read_engine = create_async_engine(
+            settings.database_url,
+            echo=settings.db_echo,
+            pool_size=5,  # Multiple read connections
+            max_overflow=10,
+            pool_pre_ping=True,
+            connect_args={"check_same_thread": False},
+        )
+
+    return _read_engine
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
-    """Return (and lazily create) the global session factory."""
-    global _session_factory  # noqa: PLW0603
-    if _session_factory is None:
-        _session_factory = async_sessionmaker(
-            bind=_get_engine(),
+    """Return (and lazily create) the write session factory (backward compatibility)."""
+    global _write_session_factory  # noqa: PLW0603
+    if _write_session_factory is None:
+        _write_session_factory = async_sessionmaker(
+            bind=_get_write_engine(),
             class_=AsyncSession,
             expire_on_commit=False,
         )
-    return _session_factory
+    return _write_session_factory
+
+
+def get_read_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Return (and lazily create) the read session factory."""
+    global _read_session_factory  # noqa: PLW0603
+    if _read_session_factory is None:
+        _read_session_factory = async_sessionmaker(
+            bind=_get_read_engine(),
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+    return _read_session_factory
 
 
 # ── FastAPI dependency ────────────────────────────────────────────────────────
@@ -97,26 +135,76 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 # ── Standalone command helper ──────────────────────────────────────────────────
 
-from collections.abc import Callable, Coroutine
+import time as _time
+
 
 async def run_in_session(
-    fn: Callable[[AsyncSession], Coroutine[Any, Any, Any]],
-) -> Any:
-    """Execute *fn(session)* inside a managed session with auto-commit/rollback.
+    fn: Callable[[AsyncSession], Coroutine[Any, Any, T]],
+    *,
+    max_retries: int = 3,
+) -> T:
+    """Execute *fn(session)* inside a managed WRITE session with auto-commit/rollback.
+
+    Uses the single write connection (pool_size=1) to eliminate contention.
+    Retries on transient "database is locked" errors with exponential backoff.
 
     This is the preferred pattern for command handlers::
 
         result = await run_in_session(lambda s: MyService(s).do_thing())
     """
     factory = get_session_factory()
-    async with factory() as session:
+    last_error: Exception | None = None
+    start = _time.monotonic()
+
+    for attempt in range(max_retries):
         try:
-            result = await fn(session)
-            await session.commit()
-            return result
+            async with factory() as session:
+                result = await fn(session)
+                await session.commit()
+
+                # Monitoring: log slow operations
+                elapsed = _time.monotonic() - start
+                if elapsed > 1.0:
+                    logger.warning("Slow DB write: %.2fs", elapsed)
+                if attempt > 0:
+                    logger.info("DB write succeeded after %d retries (%.2fs)", attempt, elapsed)
+
+                return result
+        except OperationalError as exc:
+            if "database is locked" in str(exc).lower() and attempt < max_retries - 1:
+                last_error = exc
+                # Exponential backoff: 0.1s, 0.2s, 0.4s
+                delay = 0.1 * (2 ** attempt)
+                logger.warning(
+                    "Database locked (attempt %d/%d), retrying in %.1fs",
+                    attempt + 1, max_retries, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
         except Exception:
-            await session.rollback()
+            # Non-retryable error
             raise
+
+    # All retries exhausted
+    raise last_error or OperationalError("Max retries exceeded", None, None)  # type: ignore[arg-type]  # SQLAlchemy stubs require BaseException for orig
+
+
+async def run_in_read_session(
+    fn: Callable[[AsyncSession], Coroutine[Any, Any, T]],
+) -> T:
+    """Execute *fn(session)* inside a managed READ session (no commit).
+
+    Uses the read connection pool (pool_size=5) for concurrent reads.
+    No retry logic needed — reads don't contend.
+
+    Example::
+
+        result = await run_in_read_session(lambda s: MyService(s).get_thing())
+    """
+    factory = get_read_session_factory()
+    async with factory() as session:
+        return await fn(session)
 
 
 # ── Table creation (dev / first run) ──────────────────────────────────────────
@@ -131,20 +219,20 @@ async def create_all_tables() -> None:
     ADD COLUMN`` for any column the ORM expects but the DB lacks.  Use Alembic
     for anything more involved.
     """
-    engine = _get_engine()
+    engine = _get_write_engine()
     async with engine.begin() as conn:
         # Import all model modules so Base.metadata is populated
         import stitch_backend.domains.accounts.models  # noqa: F401
-        import stitch_backend.domains.settings.models  # noqa: F401
-        import stitch_backend.domains.profiles.models  # noqa: F401
-        import stitch_backend.domains.email_counter.models  # noqa: F401
+        import stitch_backend.domains.ai_gateway.models  # noqa: F401
         import stitch_backend.domains.composed_flows.models  # noqa: F401
-        import stitch_backend.domains.email_inbox.models      # noqa: F401
-        import stitch_backend.domains.logging.models           # noqa: F401
-        import stitch_backend.domains.totp.models              # noqa: F401
+        import stitch_backend.domains.email_counter.models  # noqa: F401
+        import stitch_backend.domains.email_inbox.models  # noqa: F401
         import stitch_backend.domains.icloud_email_pool.models  # noqa: F401
         import stitch_backend.domains.key_health.models  # noqa: F401
-        import stitch_backend.domains.ai_gateway.models  # noqa: F401
+        import stitch_backend.domains.logging.models  # noqa: F401
+        import stitch_backend.domains.profiles.models  # noqa: F401
+        import stitch_backend.domains.settings.models  # noqa: F401
+        import stitch_backend.domains.totp.models  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_missing_columns)
 
@@ -252,9 +340,14 @@ def _constant_default_sql(column: Any) -> str | None:
 # ── Teardown ──────────────────────────────────────────────────────────────────
 
 async def dispose_engine() -> None:
-    """Dispose the engine and close all pooled connections."""
-    global _engine, _session_factory  # noqa: PLW0603
-    if _engine is not None:
-        await _engine.dispose()
-        _engine = None
-        _session_factory = None
+    """Dispose the write/read engines and close all pooled connections."""
+    global _write_engine, _read_engine  # noqa: PLW0603
+    global _write_session_factory, _read_session_factory  # noqa: PLW0603
+    if _write_engine is not None:
+        await _write_engine.dispose()
+        _write_engine = None
+        _write_session_factory = None
+    if _read_engine is not None:
+        await _read_engine.dispose()
+        _read_engine = None
+        _read_session_factory = None

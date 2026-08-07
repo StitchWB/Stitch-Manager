@@ -21,18 +21,15 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from typing import Any
 
 import typer
 
 from stitch_backend.bootstrap import bootstrap
+from stitch_backend.cli.groups import register_all_commands
 from stitch_backend.core.command_registry import (
-    CommandNotFoundError,
-    get_command_handler,
     list_commands,
 )
 from stitch_backend.core.invoke import invoke_command_safe, serialise
-from stitch_backend.cli.groups import register_all_commands
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -84,7 +81,7 @@ def cmd_run(
     if not result["ok"]:
         print(json.dumps(result["error"], indent=2), file=sys.stderr)
         raise typer.Exit(result["error"]["code"])
-    
+
     print(json.dumps(serialise(result["data"]), indent=2, default=str))
 
 

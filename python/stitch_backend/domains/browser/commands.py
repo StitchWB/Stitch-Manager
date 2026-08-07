@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC
 from typing import Any
 
 from sqlalchemy import text
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 async def _save_session(db, account_id: int, profile_path: str, cookies: str, session_data: str) -> None:
     """Persist browser session data for an account."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     # Validate JSON fields (empty strings are allowed)
     if cookies:
@@ -30,7 +31,7 @@ async def _save_session(db, account_id: int, profile_path: str, cookies: str, se
     if session_data:
         json.loads(session_data)
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
         text(
             "UPDATE accounts "
@@ -64,9 +65,9 @@ async def _load_session(db, account_id: int) -> dict[str, str] | None:
 
 async def _clear_session(db, account_id: int) -> None:
     """Clear browser session data for an account."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
         text(
             "UPDATE accounts "

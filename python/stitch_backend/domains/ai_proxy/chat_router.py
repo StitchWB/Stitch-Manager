@@ -6,19 +6,21 @@ import ipaddress
 import json
 import time
 from collections import deque
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.database import get_db
-from stitch_backend.domains.ai_proxy.service import get_zai_token_db_path
 from stitch_backend.domains.ai_proxy.account_selection import select_available_account
-from stitch_backend.domains.ai_proxy.qoder_chat_gateway import QoderAdapter, QoderCredentials, QoderProviderError
+from stitch_backend.domains.ai_proxy.qoder_chat_gateway import (
+    QoderAdapter,
+    QoderCredentials,
+    QoderProviderError,
+)
+from stitch_backend.domains.ai_proxy.service import get_zai_token_db_path
 from stitch_backend.domains.ai_proxy.zai_chat_gateway import (
     ChatCompletionRequest,
     InvalidChatCompletionRequestError,
@@ -28,6 +30,10 @@ from stitch_backend.domains.ai_proxy.zai_chat_gateway import (
 )
 from stitch_backend.domains.api_keys.service import ApiKeysService
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 chat_router = APIRouter(tags=["Chat"])
 _LOCAL_CHAT_BEARER = "Bearer proxypal-local"

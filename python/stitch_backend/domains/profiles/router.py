@@ -22,20 +22,21 @@ Routes (mounted at ``/api/v1/profiles``):
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.database import get_db
 from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
-from stitch_backend.domains.profiles.schemas import (
-    BrowserFingerprintProfile,
-    ProfileSettingsRecord,
-    ProfileSettingsV1,
-)
 from stitch_backend.domains.profiles.settings_service import ProfileSettingsService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from stitch_backend.domains.profiles.schemas import (
+        ProfileSettingsV1,
+    )
 
 logger = logging.getLogger(__name__)
 

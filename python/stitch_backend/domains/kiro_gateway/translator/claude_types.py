@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
-from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonValue
+if TYPE_CHECKING:
+    from stitch_backend.domains.kiro_gateway.translator.kiro_types import JsonValue
 
 
 class ClaudeContentBlock(TypedDict, total=False):
