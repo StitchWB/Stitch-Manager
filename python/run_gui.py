@@ -290,8 +290,8 @@ def main() -> None:
                 user32 = ctypes.windll.user32
                 hwnd = user32.FindWindowW(None, "Stitch Account Manager")
                 if hwnd:
-                    LR_LOADFROMFILE = 0x00000010
-                    WM_SETICON = 0x0080
+                    LR_LOADFROMFILE = 0x00000010  # noqa: N806 — Win32 API constant
+                    WM_SETICON = 0x0080  # noqa: N806 — Win32 API constant
                     hicon = user32.LoadImageW(None, icon, 1, 32, 32, LR_LOADFROMFILE)
                     if hicon:
                         user32.SendMessageW(hwnd, WM_SETICON, 0, hicon)  # ICON_SMALL
@@ -316,28 +316,32 @@ def main() -> None:
     if sys.platform == "win32":
         # Try EdgeChromium first (uses system WebView2, much faster)
         try:
-            import clr  # pythonnet - required for EdgeChromium
+            import clr  # noqa: F401 — pythonnet availability test (import itself is the check)
             start_kwargs["gui"] = "edgechromium"
             print("[run_gui] Using EdgeChromium (WebView2) for fast startup", flush=True)
         except ImportError:
             print("[run_gui] WARNING: pythonnet not installed, falling back to CEF (slow)", flush=True)
             print("[run_gui] Install with: pip install pythonnet", flush=True)
-    
+
     if icon:
         start_kwargs["icon"] = icon  # taskbar/window icon on Windows
 
     print(f"[run_gui] Starting webview with: {start_kwargs}", flush=True)
-    
+
     # Add timing to understand where the delay is
-    import time
     start_time = time.time()
-    
+    has_loaded = False
+
     def on_loaded():
+        nonlocal has_loaded
+        if has_loaded:
+            return
+        has_loaded = True
         elapsed = time.time() - start_time
         print(f"[run_gui] Window loaded in {elapsed:.2f}s", flush=True)
-    
+
     window.events.loaded += on_loaded
-    
+
     try:
         webview.start(**start_kwargs)
     except Exception as e:

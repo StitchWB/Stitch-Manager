@@ -7,13 +7,12 @@ import logging
 import math
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import exc as sqlalchemy_exc
-from starlette.responses import Response
 
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway import circuit_breaker
@@ -33,6 +32,9 @@ from stitch_backend.domains.ai_proxy.litellm_gateway import (
 )
 from stitch_backend.domains.ai_proxy.rate_limiter import get_rate_limiter
 from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
+
+if TYPE_CHECKING:
+    from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +162,7 @@ class LiteLLMExecutor:
 
     async def chat(self, payload: GatewayRequest) -> JsonObject | Response:
         config = await self._load_config()
-        
+
         # Try AI Gateway routing first
         routing_results = await self._try_ai_gateway_route(payload)
         if routing_results is not None:
@@ -178,7 +180,7 @@ class LiteLLMExecutor:
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
-        
+
         # Fall back to LiteLLM Router
         routed_model = _routed_model(payload, config)
         router = await self._current_router(config)
@@ -279,7 +281,7 @@ class LiteLLMExecutor:
                 error=sanitized,
             )
             logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, sanitized)
-            raise HTTPException(status_code=500, detail=sanitized)
+            raise HTTPException(status_code=500, detail=sanitized) from None
 
     async def _invoke_via_gateway(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
@@ -384,13 +386,14 @@ class LiteLLMExecutor:
                 routing_result.upstream_model.upstream_model_id, latency, sanitized,
             )
             # Record failure to routing engine (non-fatal if DB is unavailable)
+            exc = e  # capture for closure — PEP 3110 deletes `e` after except block
             try:
                 async def _record_failure(session):
                     await self._routing_engine.record_result(
                         session,
                         credential_id=routing_result.credential.id,
                         endpoint_id=routing_result.endpoint.id,
-                        error=routing_result.adapter.classify_error(e),
+                        error=routing_result.adapter.classify_error(exc),
                         http_status=None,
                     )
                 await run_in_session(_record_failure)
@@ -400,7 +403,7 @@ class LiteLLMExecutor:
 
     async def messages(self, payload: GatewayRequest) -> JsonObject | Response:
         config = await self._load_config()
-        
+
         # Try AI Gateway routing first
         routing_results = await self._try_ai_gateway_route(payload)
         if routing_results is not None:
@@ -418,7 +421,7 @@ class LiteLLMExecutor:
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
-        
+
         # Fall back to LiteLLM Router
         routed_model = _routed_model(payload, config)
         router = await self._current_router(config)
@@ -514,7 +517,6 @@ class LiteLLMExecutor:
 
         except Exception as e:
             latency = time.time() - start_time
-            error_str = str(e).lower()
 
             # NOTE: using provider as key_id — interim simplification pending per-credential routing
             sanitized = _sanitize_error(e, secret="")
@@ -524,7 +526,7 @@ class LiteLLMExecutor:
                 error=sanitized,
             )
             logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, sanitized)
-            raise HTTPException(status_code=500, detail=sanitized)
+            raise HTTPException(status_code=500, detail=sanitized) from None
 
     async def _invoke_via_gateway_messages(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
@@ -631,13 +633,14 @@ class LiteLLMExecutor:
                 routing_result.upstream_model.upstream_model_id, latency, sanitized,
             )
             # Record failure to routing engine (non-fatal if DB is unavailable)
+            exc = e  # capture for closure — PEP 3110 deletes `e` after except block
             try:
                 async def _record_failure(session):
                     await self._routing_engine.record_result(
                         session,
                         credential_id=routing_result.credential.id,
                         endpoint_id=routing_result.endpoint.id,
-                        error=routing_result.adapter.classify_error(e),
+                        error=routing_result.adapter.classify_error(exc),
                         http_status=None,
                     )
                 await run_in_session(_record_failure)
@@ -647,7 +650,7 @@ class LiteLLMExecutor:
 
     async def responses(self, payload: GatewayRequest) -> JsonObject | Response:
         config = await self._load_config()
-        
+
         # Try AI Gateway routing first
         routing_results = await self._try_ai_gateway_route(payload)
         if routing_results is not None:
@@ -665,7 +668,7 @@ class LiteLLMExecutor:
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
-        
+
         # Fall back to LiteLLM Router
         routed_model = _routed_model(payload, config)
         router = await self._current_router(config)
@@ -763,7 +766,6 @@ class LiteLLMExecutor:
 
         except Exception as e:
             latency = time.time() - start_time
-            error_str = str(e).lower()
 
             # NOTE: using provider as key_id — interim simplification pending per-credential routing
             sanitized = _sanitize_error(e, secret="")
@@ -773,7 +775,7 @@ class LiteLLMExecutor:
                 error=sanitized,
             )
             logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, sanitized)
-            raise HTTPException(status_code=500, detail=sanitized)
+            raise HTTPException(status_code=500, detail=sanitized) from None
 
     async def _invoke_via_gateway_responses(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
@@ -883,13 +885,14 @@ class LiteLLMExecutor:
                 routing_result.upstream_model.upstream_model_id, latency, sanitized,
             )
             # Record failure to routing engine (non-fatal if DB is unavailable)
+            exc = e  # capture for closure — PEP 3110 deletes `e` after except block
             try:
                 async def _record_failure(session):
                     await self._routing_engine.record_result(
                         session,
                         credential_id=routing_result.credential.id,
                         endpoint_id=routing_result.endpoint.id,
-                        error=routing_result.adapter.classify_error(e),
+                        error=routing_result.adapter.classify_error(exc),
                         http_status=None,
                     )
                 await run_in_session(_record_failure)
@@ -903,7 +906,7 @@ class LiteLLMExecutor:
         try:
             async def _get_models(session):
                 return await self._routing_engine.get_available_public_models(session)
-            
+
             public_models = await run_in_session(_get_models)
             if public_models:
                 return {
@@ -921,7 +924,7 @@ class LiteLLMExecutor:
                 }
         except Exception as e:
             logger.debug("AI Gateway models unavailable: %s", e)
-        
+
         # Fall back to LiteLLM providers
         config = await self._load_config()
         await self._current_router(config)

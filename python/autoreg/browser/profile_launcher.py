@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import sys
@@ -26,13 +27,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ..core.paths import get_paths
-from .cloakbrowser_profile_manager import CloakBrowserProfileManager
 from .async_cloakbrowser_wrapper import AsyncCloakBrowserWrapper
+from .cloakbrowser_profile_manager import CloakBrowserProfileManager
+
+logger = logging.getLogger(__name__)
 
 DEBUG_TIMING = os.environ.get("STITCH_DEBUG_TIMING", "0") == "1"
 
 if TYPE_CHECKING:  # pragma: no cover
-    from playwright.async_api import Page
+    pass
 
 
 WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
@@ -607,7 +610,6 @@ class ProfileLauncher:
         # Second attempt: find and kill zombie open_browser.py workers
         # that use this exact profile path, then unlink again.
         import subprocess
-        import sys
 
         profile_str = str(self.profile_path)
         try:
@@ -867,7 +869,7 @@ class ProfileLauncher:
                 _safe_stderr(f"[ProfileLauncher] Navigation failed with '{err_msg}', retrying without wait_until parameter...")
                 try:
                     await page.goto(target_url)
-                    _safe_stderr(f"[ProfileLauncher] Navigation successful on retry (no wait_until)")
+                    _safe_stderr("[ProfileLauncher] Navigation successful on retry (no wait_until)")
                     return page
                 except Exception as retry_err:
                     _safe_stderr(f"[ProfileLauncher] Retry also failed: {retry_err}")

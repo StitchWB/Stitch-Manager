@@ -10,12 +10,13 @@ Designed to run on-demand (UI button / command), NOT inside chat requests.
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ ZUM_POLL_INTERVAL: float = 0.5
 class BrowserEngine(Protocol):
     def launch(self) -> Any: ...
     def close(self) -> None: ...
-    def goto(self, url: str, _wait_until: str = "domcontentloaded", timeout: float = 30.0) -> None: ...
+    def goto(self, url: str, wait_until: str = "domcontentloaded", timeout: float = 30.0) -> None: ...
     def fill(self, _selector: str, value: str, _humanize: bool | None = None) -> None: ...
     def click(self, _selector: str, timeout: float = 10.0) -> None: ...
     def wait_for_selector(self, _selector: str, timeout: float = 10.0, state: str = "visible") -> Any | None: ...

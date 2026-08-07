@@ -7,7 +7,6 @@ the /kiro prefix in main.py to avoid shadowing LiteLLM's /v1.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from stitch_backend.domains.ai_proxy.litellm_gateway import (
@@ -19,6 +18,8 @@ from stitch_backend.domains.kiro_gateway.session import SessionAffinityStore
 from stitch_backend.domains.kiro_gateway.stats import ProxyStats
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fastapi import APIRouter
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,7 +48,6 @@ def create_kiro_gateway_router(
 
     import httpx
 
-    from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
 
     pool = AccountPool()
     affinity = SessionAffinityStore()
@@ -64,5 +64,4 @@ def create_kiro_gateway_router(
     return create_native_gateway_router(
         executor_factory=executor_factory,
         local_api_key=api_key,
-        reject_adapters=frozenset(),
     )
