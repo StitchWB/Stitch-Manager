@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.ai_proxy.holone_inspector import Finding, Severity, default_engine
 from stitch_backend.domains.ai_proxy.holone_stream import (
     ProtectionResult,
@@ -359,6 +360,7 @@ class HoloneService:
         # Trim to max
         if len(self._findings) > self._max_findings:
             self._findings = self._findings[-self._max_findings :]
+        event_bus.emit_sync("holone.findings_changed", {"findings": self.findings})
 
     @property
     def findings(self) -> list[dict[str, Any]]:

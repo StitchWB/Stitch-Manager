@@ -10,7 +10,14 @@ import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 # ── Response ──────────────────────────────────────────────────────────────────
@@ -53,6 +60,21 @@ class AccountResponse(BaseModel):
     last_used_at: str | None = Field(None, alias="lastUsedAt")
     last_checked_at: str | None = Field(None, alias="lastCheckedAt")
     registration_source: str | None = Field(None, alias="registrationSource")
+
+    # Quota (nested object matching frontend SimpleQuotaInfo)
+    quota: dict[str, Any] | None = Field(None, alias="quota")
+
+    # Registration data (frontend Account type)
+    registration_password: str | None = Field(None, alias="registrationPassword")
+    registration_date: str | None = Field(None, alias="registrationDate")
+    registration_method: str | None = Field(None, alias="registrationMethod")
+    registration_metadata: str | None = Field(None, alias="registrationMetadata")
+
+    # Patch
+    patch_applied_at: str | None = Field(None, alias="patchAppliedAt")
+
+    # Login stats
+    last_login_at: str | None = Field(None, alias="lastLoginAt")
 
     # Referral (v0 quota system)
     ref_code: str | None = Field(None, alias="refCode")
@@ -118,6 +140,26 @@ class AccountResponse(BaseModel):
         # Legacy DBs store ``id`` as INTEGER — coerce to str for the API.
         if processed.get("id") is not None:
             processed["id"] = str(processed["id"])
+
+        # Map password → registrationPassword (frontend expects this field)
+        if "password" in processed:
+            processed["registration_password"] = processed["password"]
+
+        # Map registration_source → registrationMethod (semantically equivalent)
+        if "registration_source" in processed:
+            processed["registration_method"] = processed["registration_source"]
+
+        # Build nested quota object from persisted columns
+        quota_used = processed.get("quota_used", 0) or 0
+        quota_limit = processed.get("quota_limit", 0) or 0
+        quota_checked_at = processed.get("quota_checked_at")
+        processed["quota"] = {
+            "used": quota_used,
+            "limit": quota_limit,
+            "resetAt": _dt(quota_checked_at) if isinstance(quota_checked_at, datetime) else (
+                quota_checked_at if isinstance(quota_checked_at, str) else None
+            ),
+        }
 
         return processed
 
@@ -197,15 +239,40 @@ class SetAccountProxyRequest(BaseModel):
 
 
 class RefreshAccountRequest(BaseModel):
+    """Request body for ``refresh_account`` command.
+
+    Accepts ``accountId`` (primary, used by the frontend) and ``id``
+    (defense-in-depth for MCP tools and other clients that send ``id``).
+    """
+
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    account_id: int | str = Field(alias="accountId")
+    account_id: int | str = Field(
+        alias="accountId",
+        validation_alias=AliasChoices("accountId", "id"),
+    )
 
 
 class GetAccountQuotaRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     account_id: int | str = Field(alias="accountId")
+
+
+class RefreshAccountsRequest(BaseModel):
+    """Request body for the batch ``refresh_accounts`` command.
+
+    ``accountIds`` must be non-empty and capped at 200 to prevent
+    unbounded fan-out.  Exceeding the cap raises ``ValidationError``.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    account_ids: list[int | str] = Field(
+        alias="accountIds",
+        min_length=1,
+        max_length=200,
+    )
 
 
 class ArchiveAccountRequest(BaseModel):

@@ -10,11 +10,13 @@ which guarantees auto-commit on success and rollback on error.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.core.event_bus import event_bus
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.accounts.schemas import (
     AddAccountRequest,
     ArchiveAccountRequest,
@@ -25,6 +27,7 @@ from stitch_backend.domains.accounts.schemas import (
     GetAccountQuotaRequest,
     ListAccountsRequest,
     RefreshAccountRequest,
+    RefreshAccountsRequest,
     RefreshKiroTokenRequest,
     SetAccountProxyRequest,
     UpdateAccountMetadataRequest,
@@ -47,7 +50,7 @@ def _parse(model_cls, params: dict):
 # Commands
 # ═════════════════════════════════════════════════════════════════════════════
 
-@register_command("list_accounts")
+@register_command("list_accounts", readonly=True)
 async def cmd_list_accounts(params: dict) -> list:
     req = _parse(ListAccountsRequest, params)
 
@@ -60,10 +63,10 @@ async def cmd_list_accounts(params: dict) -> list:
             show_archived=req.show_archived,
         )
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_accounts")
+@register_command("get_accounts", readonly=True)
 async def cmd_get_accounts(params: dict) -> list:
     """Backward-compatible alias for ``list_accounts``."""
     return await cmd_list_accounts(params)
@@ -136,7 +139,7 @@ async def cmd_set_account_proxy(params: dict) -> Any:
     return await run_in_session(_op)
 
 
-@register_command("get_account_proxy")
+@register_command("get_account_proxy", readonly=True)
 async def cmd_get_account_proxy(params: dict) -> dict:
     account_id = str(params.get("accountId") or params.get("id", ""))
 
@@ -144,35 +147,143 @@ async def cmd_get_account_proxy(params: dict) -> dict:
         svc = AccountService(session)
         return await svc.get_account(account_id)
 
-    account = await run_in_session(_op)
+    account = await run_in_read_session(_op)
     return {"accountId": account_id, "proxyId": account.proxy_id, "proxyConfig": account.proxy_config}
 
 
 @register_command("refresh_account")
-async def cmd_refresh_account(params: dict) -> dict:
+async def cmd_refresh_account(params: dict) -> Any:
+    """Run a real provider status/quota check and return the updated account.
+
+    Delegates to ``AccountService.refresh_account`` which calls the
+    account_status service for provider-dispatched quota fetching.  On
+    network failure, falls back to a timestamp-only update.
+    Returns the updated account serialized as AccountResponse so the
+    frontend store can replace the row.
+    """
     req = _parse(RefreshAccountRequest, params)
 
     async def _op(session):
-        from datetime import datetime, timezone
+        svc = AccountService(session)
+        return await svc.refresh_account(str(req.account_id))
+
+    return await run_in_session(_op)
+
+
+@register_command("refresh_accounts", timeout=300)
+async def cmd_refresh_accounts(params: dict) -> dict:
+    """Batch-refresh quota/status for multiple accounts with bounded concurrency.
+
+    Processes up to 4 accounts concurrently via ``asyncio.Semaphore(4)``,
+    reusing the same per-account refresh logic as ``refresh_account``
+    (``AccountService.refresh_account``).  Each account gets its own DB
+    session via ``run_in_session``, so a single slow account cannot block
+    the single-writer pool for others.
+
+    Emits ``accounts.refresh_progress`` events after each account completes
+    so the frontend can update progress indicators live.
+
+    Request:  ``{ accountIds: number[] }`` (non-empty, max 200).
+    Response: ``{ total, updated, failed,
+                  results: [{accountId, ok, account?, error?}] }``
+    """
+    req = _parse(RefreshAccountsRequest, params)
+    account_ids = [str(aid) for aid in req.account_ids]
+    total = len(account_ids)
+
+    sem = asyncio.Semaphore(4)
+    updated = 0
+    failed = 0
+    done = 0
+
+    async def _refresh_one(account_id: str) -> dict:
+        nonlocal updated, failed, done
+        async with sem:
+            try:
+                async def _op(session):
+                    svc = AccountService(session)
+                    return await svc.refresh_account(account_id)
+
+                account = await run_in_session(_op)
+                serialized = account.model_dump(mode="json", by_alias=True)
+                updated += 1
+                done += 1
+                await event_bus.emit(
+                    "accounts.refresh_progress",
+                    {
+                        "accountId": account_id,
+                        "done": done,
+                        "total": total,
+                        "ok": True,
+                    },
+                )
+                return {
+                    "accountId": account_id,
+                    "ok": True,
+                    "account": serialized,
+                }
+            except Exception as exc:
+                failed += 1
+                done += 1
+                logger.warning(
+                    "refresh_accounts: failed for account %s: %s",
+                    account_id, exc,
+                )
+                await event_bus.emit(
+                    "accounts.refresh_progress",
+                    {
+                        "accountId": account_id,
+                        "done": done,
+                        "total": total,
+                        "ok": False,
+                        "error": str(exc),
+                    },
+                )
+                return {
+                    "accountId": account_id,
+                    "ok": False,
+                    "error": str(exc),
+                }
+
+    results = await asyncio.gather(
+        *[_refresh_one(aid) for aid in account_ids]
+    )
+    return {
+        "total": total,
+        "updated": updated,
+        "failed": failed,
+        "results": list(results),
+    }
+
+
+@register_command("get_account_quota", readonly=True)
+async def cmd_get_account_quota(params: dict) -> dict:
+    """Return persisted quota for an account (no live fetch).
+
+    Reads ``quota_used``, ``quota_limit``, ``quota_checked_at`` from the
+    accounts table.  Use ``refresh_account`` to trigger a live fetch.
+    """
+    req = _parse(GetAccountQuotaRequest, params)
+
+    async def _op(session):
         svc = AccountService(session)
         account = await svc.get_account(str(req.account_id))
-        account.last_checked_at = datetime.now(timezone.utc)
-        return account
+        used = account.quota_used or 0
+        limit = account.quota_limit or 0
+        checked_at = (
+            account.quota_checked_at.isoformat()
+            if account.quota_checked_at
+            else None
+        )
+        return {
+            "accountId": str(req.account_id),
+            "used": used,
+            "limit": limit,
+            "remaining": max(0, limit - used) if limit > 0 else 0,
+            "checkedAt": checked_at,
+        }
 
-    await run_in_session(_op)
-    return {"success": True, "accountId": str(req.account_id)}
-
-
-@register_command("get_account_quota")
-async def cmd_get_account_quota(params: dict) -> dict:
-    req = _parse(GetAccountQuotaRequest, params)
-    # Phase 2 stub: return placeholder quota
-    return {
-        "accountId": str(req.account_id),
-        "used": 0,
-        "limit": 0,
-        "remaining": 0,
-    }
+    return await run_in_read_session(_op)
 
 
 @register_command("archive_account")
@@ -186,7 +297,7 @@ async def cmd_archive_account(params: dict) -> Any:
     return await run_in_session(_op)
 
 
-@register_command("validate_account")
+@register_command("validate_account", readonly=True)
 async def cmd_validate_account(params: dict) -> bool:
     """Validate account exists and is active (matches Rust: bool)."""
     account_id = str(params.get("accountId") or params.get("id", ""))
@@ -195,7 +306,7 @@ async def cmd_validate_account(params: dict) -> bool:
         svc = AccountService(session)
         return await svc.get_account(account_id)
 
-    account = await run_in_session(_op)
+    account = await run_in_read_session(_op)
     return account.status == "active"
 
 
@@ -213,7 +324,7 @@ async def cmd_bulk_delete_accounts(params: dict) -> dict:
     return {"deleted": count}
 
 
-@register_command("bulk_export_accounts")
+@register_command("bulk_export_accounts", readonly=True)
 async def cmd_bulk_export_accounts(params: dict) -> list:
     req = _parse(BulkExportRequest, params)
 
@@ -221,13 +332,60 @@ async def cmd_bulk_export_accounts(params: dict) -> list:
         svc = AccountService(session)
         return await svc.bulk_export(req.provider, req.ids)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("bulk_refresh_quota")
 async def cmd_bulk_refresh_quota(params: dict) -> dict:
-    # Phase 2 stub
-    return {"refreshed": 0}
+    """Refresh quota for all accounts that have tokens, with bounded concurrency.
+
+    Iterates all non-archived accounts with a non-null ``token``, runs the
+    provider status/quota check via ``AccountService.refresh_account`` with
+    an asyncio.Semaphore(5) to bound concurrency, and returns the count of
+    successfully refreshed accounts.
+    """
+    from sqlalchemy import select
+    from stitch_backend.domains.accounts.models import Account
+    from stitch_backend.database import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = (
+            select(Account.id)
+            .where(Account.token.isnot(None))
+            .where(Account.token != "")
+            .where(Account.status != "archived")
+        )
+        result = await session.execute(stmt)
+        account_ids = [str(row[0]) for row in result.fetchall()]
+
+    if not account_ids:
+        return {"refreshed": 0}
+
+    sem = asyncio.Semaphore(5)
+    refreshed = 0
+
+    async def _refresh_one(account_id: str) -> bool:
+        nonlocal refreshed
+        async with sem:
+            async def _op(session):
+                svc = AccountService(session)
+                await svc.refresh_account(account_id)
+                return True
+
+            try:
+                await run_in_session(_op)
+                refreshed += 1
+                return True
+            except Exception as exc:
+                logger.warning(
+                    "bulk_refresh_quota: failed for account %s: %s",
+                    account_id, exc,
+                )
+                return False
+
+    await asyncio.gather(*[_refresh_one(aid) for aid in account_ids])
+    return {"refreshed": refreshed}
 
 
 # ── Additional accounts commands ────────────────────────────────────────────

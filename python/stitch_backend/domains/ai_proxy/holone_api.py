@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
 
 router = APIRouter(prefix="/holone", tags=["HoloNe Security"])
@@ -47,4 +48,13 @@ async def holone_config_update(body: HoloneConfigUpdate):
     service = get_holone_service()
     service.config.enabled = body.enabled
     service.config.mode = body.mode
+    await event_bus.emit(
+        "holone.status_changed",
+        {
+            "enabled": service.config.enabled,
+            "mode": service.config.mode,
+            "rule_count": service.rule_count,
+            "findings_count": len(service._findings),
+        },
+    )
     return {"enabled": service.config.enabled, "mode": service.config.mode}
