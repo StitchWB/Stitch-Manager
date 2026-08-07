@@ -64,6 +64,11 @@ def _configure_logging(level: str) -> None:
     # Reduce noise from command_registry warnings (expected in dev mode with --reload)
     logging.getLogger("stitch_backend.core.command_registry").setLevel(logging.ERROR)
 
+    # Third-party HTTP clients are noisy at INFO (KeyHealth worker probes ~35 keys
+    # every 5 minutes → one httpx INFO line per request). Warnings/errors only.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     # Suppress uvicorn's access log — the custom timing_middleware is the
     # replacement access log and produces richer, deduplicated output.
     # This MUST happen here (not in run()) because dev mode launches uvicorn
