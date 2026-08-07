@@ -20,20 +20,19 @@ import {
   startAiProxy,
   stopAiProxy,
 } from '../../lib/backend/modules/aiProxy';
-import { getSettings, updateSettings } from '../../lib/backend/modules/settings';
+import { updateSettings } from '../../lib/backend/modules/settings';
 import {
-  getBackgroundManagerConfig,
   updateBackgroundManagerConfig,
   type BackgroundManagerConfig,
 } from '../../lib/backend/modules/backgroundManager';
 import {
-  getScheduledTasks,
-  getSchedulerStatus,
-  startScheduler,
-  stopScheduler,
-} from '../../lib/backend/modules/scheduler';
-
-const POLL_INTERVAL_MS = 10_000;
+  useSchedulerStore,
+  startTaskPolling,
+  stopTaskPolling,
+  startSchedulerStatusPolling,
+  stopSchedulerStatusPolling,
+} from '../../stores/scheduler';
+import { useSettingsStore } from '../../stores/settings';
 
 function formatNextRun(unixSeconds: number | null): string {
   if (!unixSeconds) return t('dashboard.systemStrip.scheduler.noNextRun');
@@ -103,10 +102,17 @@ export function SystemStatusStrip() {
   const proxyStatus = useAiProxyStore(state => state.status);
   const setProxyStatus = useAiProxyStore(state => state.setStatus);
 
-  const [autoReplenishEnabled, setAutoReplenishEnabled] = useState(false);
-  const [bgConfig, setBgConfig] = useState<BackgroundManagerConfig | null>(null);
-  const [schedulerRunning, setSchedulerRunning] = useState(false);
+  // Read from settings store instead of fetching
+  const settings = useSettingsStore(state => state.settings);
+  const bgConfig = useSettingsStore(state => state.backgroundManagerConfig);
+  
+  const autoReplenishEnabled = Boolean(settings?.autoReplenishEnabled);
   const [nextRunUnix, setNextRunUnix] = useState<number | null>(null);
+
+  const tasks = useSchedulerStore(state => state.tasks);
+  const isRunning = useSchedulerStore(state => state.isRunning);
+  const startScheduler = useSchedulerStore(state => state.startScheduler);
+  const stopScheduler = useSchedulerStore(state => state.stopScheduler);
 
   const [proxyBusy, setProxyBusy] = useState(false);
   const [schedulerBusy, setSchedulerBusy] = useState(false);
@@ -115,52 +121,24 @@ export function SystemStatusStrip() {
   const proxyPort = proxyStatus?.port ?? null;
   const bridgeOnline = true; // Python backend always available
 
-  const refreshScheduler = useCallback(async () => {
-    try {
-      const [running, tasks] = await Promise.all([
-        getSchedulerStatus(),
-        getScheduledTasks().catch(() => []),
-      ]);
-      setSchedulerRunning(running);
-      const enabled = tasks.filter(task => task.enabled && task.nextRun > 0);
-      setNextRunUnix(
-        enabled.length > 0 ? Math.min(...enabled.map(task => task.nextRun)) : null
-      );
-    } catch (err) {
-      console.warn('[SystemStatusStrip] scheduler status:', err);
-    }
-  }, []);
-
-  const refreshSettings = useCallback(async () => {
-    try {
-      const settings = await getSettings();
-      setAutoReplenishEnabled(Boolean(settings.autoReplenishEnabled));
-    } catch (err) {
-      console.warn('[SystemStatusStrip] settings:', err);
-    }
-  }, []);
-
-  const refreshBackground = useCallback(async () => {
-    try {
-      setBgConfig(await getBackgroundManagerConfig());
-    } catch (err) {
-      console.warn('[SystemStatusStrip] background config:', err);
-    }
-  }, []);
+  // Derive nextRun from store tasks (polled centrally) instead of fetching.
+  useEffect(() => {
+    const enabled = tasks.filter(task => task.enabled && task.nextRun > 0);
+    setNextRunUnix(
+      enabled.length > 0 ? Math.min(...enabled.map(task => task.nextRun)) : null
+    );
+  }, [tasks]);
 
   useEffect(() => {
     startProxyStatusPolling();
-    void refreshScheduler();
-    void refreshSettings();
-    void refreshBackground();
-    const id = window.setInterval(() => {
-      void refreshScheduler();
-    }, POLL_INTERVAL_MS);
+    startSchedulerStatusPolling();
+    startTaskPolling();
     return () => {
-      window.clearInterval(id);
       stopProxyStatusPolling();
+      stopSchedulerStatusPolling();
+      stopTaskPolling();
     };
-  }, [refreshScheduler, refreshSettings, refreshBackground]);
+  }, []);
 
   const handleToggleProxy = useCallback(async () => {
     setProxyBusy(true);
@@ -177,12 +155,14 @@ export function SystemStatusStrip() {
 
   const handleToggleReplenish = useCallback(
     async (next: boolean) => {
-      setAutoReplenishEnabled(next);
+      // Optimistic update
+      const prev = useSettingsStore.getState().settings;
+      useSettingsStore.setState({ settings: { ...prev, autoReplenishEnabled: next } as any });
       try {
         await updateSettings({ autoReplenishEnabled: next });
       } catch (err) {
         console.error('[SystemStatusStrip] replenish toggle:', err);
-        setAutoReplenishEnabled(!next);
+        useSettingsStore.setState({ settings: prev });
         toast.error(t('dashboard.systemStrip.replenish.toggleFailed'));
       }
     },
@@ -194,12 +174,13 @@ export function SystemStatusStrip() {
       if (!bgConfig) return;
       const previous = bgConfig;
       const updated: BackgroundManagerConfig = { ...bgConfig, autoSwitchEnabled: next };
-      setBgConfig(updated);
+      // Optimistic update
+      useSettingsStore.getState().setBackgroundManagerConfig(updated);
       try {
         await updateBackgroundManagerConfig(updated);
       } catch (err) {
         console.error('[SystemStatusStrip] auto-switch toggle:', err);
-        setBgConfig(previous);
+        useSettingsStore.getState().setBackgroundManagerConfig(previous);
         toast.error(t('dashboard.systemStrip.autoSwitch.toggleFailed'));
       }
     },
@@ -209,21 +190,18 @@ export function SystemStatusStrip() {
   const handleToggleScheduler = useCallback(async () => {
     setSchedulerBusy(true);
     try {
-      if (schedulerRunning) {
+      if (isRunning) {
         await stopScheduler();
-        setSchedulerRunning(false);
       } else {
         await startScheduler();
-        setSchedulerRunning(true);
       }
-      void refreshScheduler();
     } catch (err) {
       console.error('[SystemStatusStrip] scheduler toggle:', err);
       toast.error(t('dashboard.systemStrip.scheduler.toggleFailed'));
     } finally {
       setSchedulerBusy(false);
     }
-  }, [schedulerRunning, refreshScheduler]);
+  }, [isRunning, startScheduler, stopScheduler]);
 
   const proxyValue = useMemo(() => {
     if (proxyBusy) return t('common.loading');
@@ -237,14 +215,14 @@ export function SystemStatusStrip() {
 
   const schedulerValue = useMemo(() => {
     if (schedulerBusy) return t('common.loading');
-    if (!schedulerRunning) return t('dashboard.systemStrip.scheduler.stopped');
+    if (!isRunning) return t('dashboard.systemStrip.scheduler.stopped');
     if (nextRunUnix === null) {
       return t('dashboard.systemStrip.scheduler.runningNoNext');
     }
     return t('dashboard.systemStrip.scheduler.runningWithNext', {
       next: formatNextRun(nextRunUnix),
     });
-  }, [schedulerBusy, schedulerRunning, nextRunUnix]);
+  }, [schedulerBusy, isRunning, nextRunUnix]);
 
   return (
     <section
@@ -334,26 +312,26 @@ export function SystemStatusStrip() {
           icon={<Calendar size={14} />}
           label={t('dashboard.systemStrip.scheduler.label')}
           value={schedulerValue}
-          active={schedulerRunning}
+          active={isRunning}
           loading={schedulerBusy}
           tooltip={
-            schedulerRunning
+            isRunning
               ? t('dashboard.systemStrip.scheduler.tooltipStop')
               : t('dashboard.systemStrip.scheduler.tooltipStart')
           }
           control={
             <IconButton
               size="sm"
-              variant={schedulerRunning ? 'danger' : 'success'}
+              variant={isRunning ? 'danger' : 'success'}
               onClick={handleToggleScheduler}
               disabled={schedulerBusy}
               aria-label={
-                schedulerRunning
+                isRunning
                   ? t('dashboard.systemStrip.scheduler.tooltipStop')
                   : t('dashboard.systemStrip.scheduler.tooltipStart')
               }
             >
-              {schedulerRunning ? <Pause size={12} /> : <Play size={12} />}
+              {isRunning ? <Pause size={12} /> : <Play size={12} />}
             </IconButton>
           }
         />
