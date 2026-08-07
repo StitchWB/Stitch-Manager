@@ -1,7 +1,6 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import {
   listProxyLibrary,
-  createProxyLibraryEntry,
   createOrGetProxyLibraryEntry,
   updateProxyLibraryEntry,
   deleteProxyLibraryEntry,
@@ -58,7 +57,7 @@ describe('lib/Backend/modules/proxyLibrary', () => {
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/import_proxy_library_bulk',
+      '/api/import_proxy_library_bulk',
       expect.objectContaining({
         body: JSON.stringify({
           request: {
@@ -79,7 +78,7 @@ describe('lib/Backend/modules/proxyLibrary', () => {
       defaultEnabled: true,
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/preview_proxy_library_bulk',
+      '/api/preview_proxy_library_bulk',
       expect.objectContaining({
         body: JSON.stringify({
           request: {
@@ -92,30 +91,8 @@ describe('lib/Backend/modules/proxyLibrary', () => {
     );
   });
 
-  it('creates and updates entries with draft structure', async () => {
+  it('updates entries with draft structure', async () => {
     mockFetchOk({ id: 'p1' });
-
-    await createProxyLibraryEntry({
-      label: 'A',
-      host: '1.2.3.4',
-      port: 8080,
-      proxyType: 'http',
-      enabled: true,
-    });
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/create_proxy_library_entry',
-      expect.objectContaining({
-        body: JSON.stringify({
-          draft: {
-            label: 'A',
-            host: '1.2.3.4',
-            port: 8080,
-            proxyType: 'http',
-            enabled: true,
-          },
-        }),
-      }),
-    );
 
     await updateProxyLibraryEntry({
       id: 'p1',
@@ -127,7 +104,7 @@ describe('lib/Backend/modules/proxyLibrary', () => {
       },
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/update_proxy_library_entry',
+      '/api/update_proxy_library_entry',
       expect.objectContaining({
         body: JSON.stringify({
           request: {
@@ -153,7 +130,7 @@ describe('lib/Backend/modules/proxyLibrary', () => {
       enabled: true,
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/create_or_get_proxy_library_entry',
+      '/api/create_or_get_proxy_library_entry',
       expect.objectContaining({
         body: JSON.stringify({
           draft: {
@@ -178,13 +155,13 @@ describe('lib/Backend/modules/proxyLibrary', () => {
 
     await listProxyLibrary();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/list_proxy_library',
+      '/api/list_proxy_library',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
 
     await deleteProxyLibraryEntry({ id: 'p1' });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/delete_proxy_library_entry',
+      '/api/delete_proxy_library_entry',
       expect.objectContaining({
         body: JSON.stringify({ request: { id: 'p1', options: undefined } }),
       }),
@@ -192,19 +169,19 @@ describe('lib/Backend/modules/proxyLibrary', () => {
 
     await getProxyLibraryRuntimeProxyUrl('p1');
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_proxy_library_runtime_proxy_url',
+      '/api/get_proxy_library_runtime_proxy_url',
       expect.objectContaining({ body: JSON.stringify({ id: 'p1' }) }),
     );
 
     await getProxyLibraryRuntimeProxyMap();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_proxy_library_runtime_proxy_map',
+      '/api/get_proxy_library_runtime_proxy_map',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
 
     await getProxyLibraryUsage('p1');
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/get_proxy_library_usage',
+      '/api/get_proxy_library_usage',
       expect.objectContaining({ body: JSON.stringify({ id: 'p1' }) }),
     );
   });
@@ -218,7 +195,7 @@ describe('lib/Backend/modules/proxyLibrary', () => {
     });
     await parseProxyLibraryInput({ raw: 'http://u:p@1.2.3.4:8080', defaultType: 'http' });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/parse_proxy_library_input',
+      '/api/parse_proxy_library_input',
       expect.objectContaining({
         body: JSON.stringify({
           request: {
@@ -245,7 +222,7 @@ describe('lib/Backend/modules/proxyLibrary', () => {
       }
     );
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/test_proxy_library_draft',
+      '/api/test_proxy_library_draft',
       expect.objectContaining({
         body: JSON.stringify({
           request: {
@@ -267,7 +244,7 @@ describe('lib/Backend/modules/proxyLibrary', () => {
     mockFetchOk(true);
     await ensureProxySaveUseAllowed({ proxyLibraryId: 'p1', maxAgeSeconds: 300 });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/ensure_proxy_save_use_allowed',
+      '/api/ensure_proxy_save_use_allowed',
       expect.objectContaining({
         body: JSON.stringify({
           request: {

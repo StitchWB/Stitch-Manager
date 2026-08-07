@@ -6,7 +6,6 @@ import {
   emailInboxDelete,
   emailInboxDisconnect,
   emailInboxGetProviderCatalog,
-  emailInboxGetProfile,
   emailInboxGetById,
   emailInboxGetCapabilities,
   emailInboxGetSyncState,
@@ -72,7 +71,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxConnect(input)).resolves.toEqual(session);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_connect',
+      '/api/email_inbox_connect',
       expect.objectContaining({ body: JSON.stringify({ input }) }),
     );
   });
@@ -84,7 +83,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
     const query = { subjectContains: 'Verify', unreadOnly: true };
     await expect(emailInboxList('s1', query)).resolves.toEqual(messages);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_list',
+      '/api/email_inbox_list',
       expect.objectContaining({ body: JSON.stringify({ sessionId: 's1', query }) }),
     );
   });
@@ -95,7 +94,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxGetById('s1', 'm1')).resolves.toEqual(message);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_get_by_id',
+      '/api/email_inbox_get_by_id',
       expect.objectContaining({ body: JSON.stringify({ sessionId: 's1', messageId: 'm1' }) }),
     );
   });
@@ -106,7 +105,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxListFolders('s1')).resolves.toEqual(folders);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_list_folders',
+      '/api/email_inbox_list_folders',
       expect.objectContaining({ body: JSON.stringify({ sessionId: 's1' }) }),
     );
   });
@@ -120,7 +119,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxWaitForEmail('s1', query, options)).resolves.toEqual(message);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_wait_for_email',
+      '/api/email_inbox_wait_for_email',
       expect.objectContaining({
         body: JSON.stringify({ sessionId: 's1', query, options }),
       }),
@@ -131,7 +130,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
     mockFetchOk(undefined);
     await expect(emailInboxMarkAsRead('s1', 'm1')).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_mark_as_read',
+      '/api/email_inbox_mark_as_read',
       expect.objectContaining({ body: JSON.stringify({ sessionId: 's1', messageId: 'm1' }) }),
     );
   });
@@ -140,7 +139,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
     mockFetchOk(undefined);
     await expect(emailInboxDelete('s1', 'm1')).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_delete',
+      '/api/email_inbox_delete',
       expect.objectContaining({ body: JSON.stringify({ sessionId: 's1', messageId: 'm1' }) }),
     );
   });
@@ -149,7 +148,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
     mockFetchOk(undefined);
     await expect(emailInboxDisconnect('s1')).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_disconnect',
+      '/api/email_inbox_disconnect',
       expect.objectContaining({ body: JSON.stringify({ sessionId: 's1' }) }),
     );
   });
@@ -166,7 +165,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxGetCapabilities('s1')).resolves.toEqual(capabilities);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_get_capabilities',
+      '/api/email_inbox_get_capabilities',
       expect.objectContaining({ body: JSON.stringify({ sessionId: 's1' }) }),
     );
   });
@@ -191,7 +190,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxGetProviderCatalog()).resolves.toEqual(catalog);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_get_provider_catalog',
+      '/api/email_inbox_get_provider_catalog',
       expect.objectContaining({ body: JSON.stringify({}) }),
     );
   });
@@ -202,19 +201,8 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxListProfiles()).resolves.toEqual(profiles);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_list_profiles',
+      '/api/email_inbox_list_profiles',
       expect.objectContaining({ body: JSON.stringify({}) }),
-    );
-  });
-
-  it('emailInboxGetProfile invokes email_inbox_get_profile', async () => {
-    const profile = { id: 'p1' };
-    mockFetchOk(profile);
-
-    await expect(emailInboxGetProfile('p1')).resolves.toEqual(profile);
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_get_profile',
-      expect.objectContaining({ body: JSON.stringify({ profileId: 'p1' }) }),
     );
   });
 
@@ -242,7 +230,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxUpsertProfile(input)).resolves.toEqual(saved);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_upsert_profile',
+      '/api/email_inbox_upsert_profile',
       expect.objectContaining({ body: JSON.stringify({ input }) }),
     );
   });
@@ -252,7 +240,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxDeleteProfile('p1')).resolves.toBe(true);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_delete_profile',
+      '/api/email_inbox_delete_profile',
       expect.objectContaining({ body: JSON.stringify({ profileId: 'p1' }) }),
     );
   });
@@ -263,7 +251,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxConnectProfile('p1')).resolves.toEqual(session);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_connect_profile',
+      '/api/email_inbox_connect_profile',
       expect.objectContaining({ body: JSON.stringify({ profileId: 'p1' }) }),
     );
   });
@@ -274,7 +262,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxGetSyncState('p1')).resolves.toEqual(syncState);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_get_sync_state',
+      '/api/email_inbox_get_sync_state',
       expect.objectContaining({ body: JSON.stringify({ profileId: 'p1' }) }),
     );
   });
@@ -286,7 +274,7 @@ describe('lib/Backend/modules/emailInbox contract', () => {
 
     await expect(emailInboxUpsertSyncState(input)).resolves.toEqual(saved);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:25584/api/email_inbox_upsert_sync_state',
+      '/api/email_inbox_upsert_sync_state',
       expect.objectContaining({ body: JSON.stringify({ input }) }),
     );
   });
