@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.scheduler.service import (
     Schedule,
@@ -87,16 +88,21 @@ async def cmd_create_task(params: dict) -> int:
 
     async def _op(db):
         return await create_task(db, name, task_type, schedule, config)
-    return await run_in_session(_op)
+    task_id = await run_in_session(_op)
+    try:
+        await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
+    except Exception:
+        logger.debug("[scheduler] failed to emit tasks_changed", exc_info=True)
+    return task_id
 
 
 @register_command("update_scheduled_task")
 async def cmd_update_task(params: dict) -> dict:
     """Update an existing scheduled task."""
     task_data = params.get("task", params)
+    task_id = int(task_data.get("id", 0))
 
     async def _op(db):
-        task_id = int(task_data.get("id", 0))
         existing = await get_task_by_id(db, task_id)
         if not existing:
             raise ValueError(f"Task {task_id} not found")
@@ -114,7 +120,12 @@ async def cmd_update_task(params: dict) -> dict:
         await update_task(db, existing)
         return task_to_dict(existing)
 
-    return await run_in_session(_op)
+    result = await run_in_session(_op)
+    try:
+        await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
+    except Exception:
+        logger.debug("[scheduler] failed to emit tasks_changed", exc_info=True)
+    return result
 
 
 @register_command("delete_scheduled_task")
@@ -125,7 +136,12 @@ async def cmd_delete_task(params: dict) -> dict:
     async def _op(db):
         await delete_task(db, task_id)
         return {"deleted": task_id}
-    return await run_in_session(_op)
+    result = await run_in_session(_op)
+    try:
+        await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
+    except Exception:
+        logger.debug("[scheduler] failed to emit tasks_changed", exc_info=True)
+    return result
 
 
 @register_command("toggle_scheduled_task")
@@ -141,7 +157,12 @@ async def cmd_toggle_task(params: dict) -> dict:
         task.enabled = enabled
         await update_task(db, task)
         return task_to_dict(task)
-    return await run_in_session(_op)
+    result = await run_in_session(_op)
+    try:
+        await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
+    except Exception:
+        logger.debug("[scheduler] failed to emit tasks_changed", exc_info=True)
+    return result
 
 
 # ── Execution ─────────────────────────────────────────────────────────────────
@@ -157,7 +178,12 @@ async def cmd_execute_now(params: dict) -> str:
         if not task:
             raise ValueError(f"Task {task_id} not found")
         return await execute_task_now(db, task)
-    return await run_in_session(_op)
+    result = await run_in_session(_op)
+    try:
+        await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
+    except Exception:
+        logger.debug("[scheduler] failed to emit tasks_changed", exc_info=True)
+    return result
 
 
 @register_command("get_task_executions", readonly=True)
@@ -276,4 +302,9 @@ async def cmd_create_from_template(params: dict) -> int:
         name = (name_override or "").strip() or tmpl.name
         return await create_task(db, name, tmpl.task_type, tmpl.schedule, tmpl.config)
 
-    return await run_in_session(_op)
+    task_id = await run_in_session(_op)
+    try:
+        await event_bus.emit("scheduler.tasks_changed", {"task_id": task_id})
+    except Exception:
+        logger.debug("[scheduler] failed to emit tasks_changed", exc_info=True)
+    return task_id

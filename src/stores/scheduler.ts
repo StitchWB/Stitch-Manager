@@ -229,33 +229,64 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
   },
 }));
 
-// ─── Task Polling ─────────────────────────────────────────────────────────────
-// Single ref-counted polling instance shared by all components, so multiple
-// Dashboard widgets don't each fire their own get_scheduled_tasks request.
-// Mirrors the startProxyStatusPolling/stopProxyStatusPolling pattern in aiProxy.
+// ─── Task List: WS-driven + heartbeat ───────────────────────────────────────
+// Single ref-counted instance shared by all components, so multiple Dashboard
+// widgets don't each fire their own get_scheduled_tasks request.
+// WS event 'scheduler.tasks_changed' is the primary update path; the 60s
+// heartbeat is a safety net (paused when the window is hidden).
 
-let taskPollingInterval: ReturnType<typeof setInterval> | null = null;
-let taskPollingSubscribers = 0;
-const TASK_POLL_INTERVAL_MS = 10_000;
+let taskSubscribers = 0;
+let taskHeartbeat: ReturnType<typeof setInterval> | null = null;
+let taskUnlistenPromise: Promise<UnlistenFn> | null = null;
+let tasksFetchInFlight = false;
+const TASK_HEARTBEAT_INTERVAL_MS = 60_000;
 
-/** Start polling scheduled tasks. Call on mount of components that need it. */
-export function startTaskPolling() {
-  taskPollingSubscribers++;
-  if (taskPollingSubscribers === 1) {
-    void useSchedulerStore.getState().fetchTasks();
-    taskPollingInterval = setInterval(
-      () => void useSchedulerStore.getState().fetchTasks(),
-      TASK_POLL_INTERVAL_MS
-    );
+async function fetchTasksSafe() {
+  if (tasksFetchInFlight) return;
+  tasksFetchInFlight = true;
+  try {
+    await useSchedulerStore.getState().fetchTasks();
+  } catch (err) {
+    console.warn('[scheduler store] tasks fetch failed:', err);
+  } finally {
+    tasksFetchInFlight = false;
   }
 }
 
-/** Stop polling scheduled tasks. Call on unmount. */
+function startTaskHeartbeat() {
+  if (taskHeartbeat) return;
+  taskHeartbeat = setInterval(fetchTasksSafe, TASK_HEARTBEAT_INTERVAL_MS);
+}
+
+function stopTaskHeartbeat() {
+  if (taskHeartbeat) {
+    clearInterval(taskHeartbeat);
+    taskHeartbeat = null;
+  }
+}
+
+/** Start task list updates. Call on mount of components that need it. */
+export function startTaskPolling() {
+  taskSubscribers++;
+  if (taskSubscribers === 1) {
+    ensureVisibilityListener();
+    void fetchTasksSafe();
+    taskUnlistenPromise = listen('scheduler.tasks_changed', () => {
+      void fetchTasksSafe();
+    });
+    startTaskHeartbeat();
+  }
+}
+
+/** Stop task list updates. Call on unmount. */
 export function stopTaskPolling() {
-  taskPollingSubscribers = Math.max(0, taskPollingSubscribers - 1);
-  if (taskPollingSubscribers === 0 && taskPollingInterval) {
-    clearInterval(taskPollingInterval);
-    taskPollingInterval = null;
+  taskSubscribers = Math.max(0, taskSubscribers - 1);
+  if (taskSubscribers === 0) {
+    stopTaskHeartbeat();
+    if (taskUnlistenPromise) {
+      taskUnlistenPromise.then((fn) => fn());
+      taskUnlistenPromise = null;
+    }
   }
 }
 
@@ -289,17 +320,24 @@ function stopStatusHeartbeat() {
   }
 }
 
-// Pause/resume heartbeat on visibility change (registered once, module-level)
-let statusVisibilityRegistered = false;
-function ensureStatusVisibilityListener() {
-  if (statusVisibilityRegistered) return;
-  statusVisibilityRegistered = true;
+// Pause/resume heartbeats on visibility change (registered once, module-level)
+let visibilityRegistered = false;
+function ensureVisibilityListener() {
+  if (visibilityRegistered) return;
+  visibilityRegistered = true;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       stopStatusHeartbeat();
-    } else if (statusSubscribers > 0) {
-      void fetchSchedulerStatus();
-      startStatusHeartbeat();
+      stopTaskHeartbeat();
+    } else {
+      if (statusSubscribers > 0) {
+        void fetchSchedulerStatus();
+        startStatusHeartbeat();
+      }
+      if (taskSubscribers > 0) {
+        void fetchTasksSafe();
+        startTaskHeartbeat();
+      }
     }
   });
 }
@@ -308,7 +346,7 @@ function ensureStatusVisibilityListener() {
 export function startSchedulerStatusPolling() {
   statusSubscribers++;
   if (statusSubscribers === 1) {
-    ensureStatusVisibilityListener();
+    ensureVisibilityListener();
     void fetchSchedulerStatus();
     statusUnlistenPromise = listen<{ running: boolean }>(
       'scheduler.status_changed',
