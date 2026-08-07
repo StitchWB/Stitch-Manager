@@ -8,14 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-from pathlib import Path
-from typing import Any
 
 from sqlalchemy import text as sql_text
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session
 from stitch_backend.domains.mcp_bridge.service import (
     append_critical_journal,
     autonomy_enabled,
@@ -177,7 +174,7 @@ async def cmd_mcp_cancel_python_job(params: dict) -> bool:
 
 # ── Aggregation / Info ─────────────────────────────────────────────────────
 
-@register_command("mcp_list_aliases")
+@register_command("mcp_list_aliases", readonly=True)
 async def cmd_mcp_list_aliases(params: dict) -> list:
     """List alias summaries (scenario count + flow count)."""
     limit = min(max(int(params.get("limit", 200)), 1), 1000)
@@ -197,7 +194,7 @@ async def cmd_mcp_list_aliases(params: dict) -> list:
         ]
 
     try:
-        return await run_in_session(_op)
+        return await run_in_read_session(_op)
     except Exception:
         return []
 

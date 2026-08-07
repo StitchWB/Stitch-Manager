@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.ai_gateway.schemas import (
     CredentialCreateRequest,
     CredentialIdRequest,
@@ -29,7 +29,6 @@ from stitch_backend.domains.ai_gateway.schemas import (
     CredentialUpdateRequest,
     ListCredentialModelAccessRequest,
     ListCredentialsRequest,
-    ListPublicModelsRequest,
     ListRouteTargetsForPublicModelRequest,
     ListUpstreamModelsRequest,
     ProviderEndpointCreateRequest,
@@ -90,17 +89,17 @@ async def cmd_create_provider_endpoint(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("list_provider_endpoints")
+@register_command("list_provider_endpoints", readonly=True)
 async def cmd_list_provider_endpoints(params: dict) -> list[dict]:
     async def _op(session):
         svc = ProviderEndpointService(session)
         endpoints = await svc.list_endpoints()
         return [ProviderEndpointResponse.from_orm_model(e) for e in endpoints]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_provider_endpoint")
+@register_command("get_provider_endpoint", readonly=True)
 async def cmd_get_provider_endpoint(params: dict) -> dict | None:
     req = ProviderEndpointIdRequest.model_validate(params)
 
@@ -109,7 +108,7 @@ async def cmd_get_provider_endpoint(params: dict) -> dict | None:
         endpoint = await svc.get_by_pk(req.id)
         return ProviderEndpointResponse.from_orm_model(endpoint) if endpoint else None
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("update_provider_endpoint")
@@ -159,7 +158,7 @@ async def cmd_create_credential(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("list_credentials")
+@register_command("list_credentials", readonly=True)
 async def cmd_list_credentials(params: dict) -> list[dict]:
     req = ListCredentialsRequest.model_validate(params)
 
@@ -168,10 +167,10 @@ async def cmd_list_credentials(params: dict) -> list[dict]:
         credentials = await svc.list_credentials(req.provider_endpoint_id)
         return [CredentialResponse.from_orm_model(c) for c in credentials]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_credential")
+@register_command("get_credential", readonly=True)
 async def cmd_get_credential(params: dict) -> dict | None:
     req = CredentialIdRequest.model_validate(params)
 
@@ -180,7 +179,7 @@ async def cmd_get_credential(params: dict) -> dict | None:
         credential = await svc.get_by_pk(req.id)
         return CredentialResponse.from_orm_model(credential) if credential else None
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("update_credential")
@@ -260,7 +259,7 @@ async def cmd_create_upstream_model(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("list_upstream_models")
+@register_command("list_upstream_models", readonly=True)
 async def cmd_list_upstream_models(params: dict) -> list[dict]:
     req = ListUpstreamModelsRequest.model_validate(params)
 
@@ -269,10 +268,10 @@ async def cmd_list_upstream_models(params: dict) -> list[dict]:
         models = await svc.list_models(req.provider_endpoint_id)
         return [UpstreamModelResponse.from_orm_model(m) for m in models]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_upstream_model")
+@register_command("get_upstream_model", readonly=True)
 async def cmd_get_upstream_model(params: dict) -> dict | None:
     req = UpstreamModelIdRequest.model_validate(params)
 
@@ -281,7 +280,7 @@ async def cmd_get_upstream_model(params: dict) -> dict | None:
         model = await svc.get_by_pk(req.id)
         return UpstreamModelResponse.from_orm_model(model) if model else None
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("update_upstream_model")
@@ -331,7 +330,7 @@ async def cmd_upsert_credential_model_access(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("list_credential_model_access")
+@register_command("list_credential_model_access", readonly=True)
 async def cmd_list_credential_model_access(params: dict) -> list[dict]:
     req = ListCredentialModelAccessRequest.model_validate(params)
 
@@ -340,7 +339,7 @@ async def cmd_list_credential_model_access(params: dict) -> list[dict]:
         rows = await svc.list_access(req.credential_id, req.upstream_model_id)
         return [CredentialModelAccessResponse.from_orm_model(r) for r in rows]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("delete_credential_model_access")
@@ -377,17 +376,17 @@ async def cmd_create_public_model(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("list_public_models")
+@register_command("list_public_models", readonly=True)
 async def cmd_list_public_models(params: dict) -> list[dict]:
     async def _op(session):
         svc = PublicModelService(session)
         models = await svc.list_public_models()
         return [PublicModelResponse.from_orm_model(m) for m in models]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_public_model")
+@register_command("get_public_model", readonly=True)
 async def cmd_get_public_model(params: dict) -> dict | None:
     req = PublicModelIdRequest.model_validate(params)
 
@@ -396,7 +395,7 @@ async def cmd_get_public_model(params: dict) -> dict | None:
         model = await svc.get_by_pk(req.id)
         return PublicModelResponse.from_orm_model(model) if model else None
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("update_public_model")
@@ -448,7 +447,7 @@ async def cmd_create_route_target(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("list_route_targets_for_public_model")
+@register_command("list_route_targets_for_public_model", readonly=True)
 async def cmd_list_route_targets_for_public_model(params: dict) -> list[dict]:
     req = ListRouteTargetsForPublicModelRequest.model_validate(params)
 
@@ -457,10 +456,10 @@ async def cmd_list_route_targets_for_public_model(params: dict) -> list[dict]:
         targets = await svc.list_targets_for_public_model(req.public_model_id)
         return [RouteTargetResponse.from_orm_model(t) for t in targets]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
-@register_command("get_route_target")
+@register_command("get_route_target", readonly=True)
 async def cmd_get_route_target(params: dict) -> dict | None:
     req = RouteTargetIdRequest.model_validate(params)
 
@@ -469,7 +468,7 @@ async def cmd_get_route_target(params: dict) -> dict | None:
         target = await svc.get_by_pk(req.id)
         return RouteTargetResponse.from_orm_model(target) if target else None
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("update_route_target")

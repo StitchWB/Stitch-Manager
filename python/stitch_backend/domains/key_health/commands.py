@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.key_health.schemas import (
     TestProviderKeysRequest,
     UpdateKeyHealthSettingsRequest,
@@ -62,7 +62,7 @@ async def _save_settings(settings: dict[str, Any]) -> None:
 # ── Commands ────────────────────────────────────────────────────────────────────
 
 
-@register_command("get_key_health")
+@register_command("get_key_health", readonly=True)
 async def cmd_get_key_health(params: dict) -> list[dict[str, Any]]:
     """Return all key health records, optionally filtered by provider.
 
@@ -81,7 +81,7 @@ async def cmd_get_key_health(params: dict) -> list[dict[str, Any]]:
             records = await svc.get_all_health()
         return [KeyHealthService.to_dict(r) for r in records]
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("test_provider_keys")
@@ -227,7 +227,7 @@ async def _test_single_provider(provider_id: str) -> None:
         )
 
 
-@register_command("get_key_models")
+@register_command("get_key_models", readonly=True)
 async def cmd_get_key_models(params: dict) -> dict[str, Any]:
     """Return discovered models for a specific key hash.
 
@@ -256,7 +256,7 @@ async def cmd_get_key_models(params: dict) -> dict[str, Any]:
             if record.last_tested_at else None,
         }
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("update_key_health_settings")

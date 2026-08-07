@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.settings.service import SettingsService
 
 
-@register_command("get_settings")
+@register_command("get_settings", readonly=True)
 async def cmd_get_settings(params: dict) -> dict:
     async def _op(session):
         svc = SettingsService(session)
         return await svc.get_all()
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("update_settings")

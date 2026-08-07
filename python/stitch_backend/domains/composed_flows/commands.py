@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 
 
 @register_command("upsert_composed_flow")
@@ -23,7 +23,7 @@ async def cmd_upsert_composed_flow(params: dict) -> dict:
     return await run_in_session(_op)
 
 
-@register_command("list_composed_flows")
+@register_command("list_composed_flows", readonly=True)
 async def cmd_list_composed_flows(params: dict) -> list:
     """List composed flows for an alias."""
     from stitch_backend.domains.composed_flows.service import ComposedFlowService
@@ -35,7 +35,7 @@ async def cmd_list_composed_flows(params: dict) -> list:
         svc = ComposedFlowService(session)
         return await svc.list_by_alias(alias, limit)
 
-    return await run_in_session(_op)
+    return await run_in_read_session(_op)
 
 
 @register_command("delete_composed_flow")

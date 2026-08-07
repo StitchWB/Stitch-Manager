@@ -148,7 +148,7 @@ async def cmd_test_imap_connection(params: dict) -> str:
     setting_key = "gmailAppPassword" if is_gmail else "imapPassword"
     if password in ("••••••••", "********", ""):
         from sqlalchemy import text as sql_text
-        from stitch_backend.database import run_in_session
+        from stitch_backend.database import run_in_read_session
 
         async def _fetch_pwd(session):
             r = await session.execute(
@@ -158,7 +158,7 @@ async def cmd_test_imap_connection(params: dict) -> str:
             row = r.first()
             return row[0] if row else ""
 
-        password = await run_in_session(_fetch_pwd)
+        password = await run_in_read_session(_fetch_pwd)
         if not password:
             pwd_type = "Gmail App Password" if is_gmail else "IMAP password"
             raise ValueError(f"{pwd_type} not configured")
@@ -247,11 +247,11 @@ def _generate_email_by_strategy(strategy: str, imap_user: str = "", domain: str 
         return {"email": f"user_{tag}@example.com", "strategy": strategy}
 
 
-@register_command("email_generate_from_settings")
+@register_command("email_generate_from_settings", readonly=True)
 async def cmd_email_generate_from_settings(params: dict) -> dict:
     """Generate email from stored settings. Mirrors Rust ``email_generate_from_settings``."""
     from sqlalchemy import text as sql_text
-    from stitch_backend.database import run_in_session
+    from stitch_backend.database import run_in_read_session
 
     async def _fetch(session):
         r = await session.execute(sql_text(
@@ -259,7 +259,7 @@ async def cmd_email_generate_from_settings(params: dict) -> dict:
         ))
         return {row[0]: row[1] for row in r.fetchall()}
 
-    settings = await run_in_session(_fetch)
+    settings = await run_in_read_session(_fetch)
     strategy = settings.get("email_strategy", "single")
     imap_user = settings.get("imap_email", "")
     domain = settings.get("imap_server") or None
