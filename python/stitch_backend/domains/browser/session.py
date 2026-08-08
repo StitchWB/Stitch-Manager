@@ -240,7 +240,7 @@ async def _launch_shard_worker(
     try:
         # Covers the worker ready-handshake window (default 45s) plus margin.
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=70)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return LaunchResult(success=False, error="ShardBrowser launcher timed out")
 
     payload: dict = {}

@@ -162,7 +162,7 @@ class AsyncShardBrowserWrapper:
         """The engine subprocess (Popen) — poll()/pid for the worker watchdog."""
         return getattr(self._sess, "process", None)
 
-    async def start(self) -> "AsyncShardBrowserWrapper":
+    async def start(self) -> AsyncShardBrowserWrapper:
         from urllib.parse import urlparse
 
         from DrissionPage import ChromiumOptions, ChromiumPage
@@ -287,7 +287,7 @@ class AsyncShardBrowserWrapper:
             logger.warning("ShardBrowser close error: %s", exc)
         logger.info("ShardBrowser session stopped")
 
-    async def __aenter__(self) -> "AsyncShardBrowserWrapper":
+    async def __aenter__(self) -> AsyncShardBrowserWrapper:
         return await self.start()
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
