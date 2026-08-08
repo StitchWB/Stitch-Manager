@@ -22,7 +22,7 @@ export function SectionHeader({
           {icon}
           {title}
         </h3>
-        {description && <p className="text-slate-500 text-xs">{description}</p>}
+        {description && <p className="text-slate-400 text-xs">{description}</p>}
       </div>
       {children}
     </div>
