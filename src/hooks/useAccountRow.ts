@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
+import { formatDistanceToNow } from 'date-fns';
+import { ru as dateFnsRu } from 'date-fns/locale';
 import type { Account } from '@/types/generated';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
+import { getLocale, t } from '@/lib/i18n';
 import {
   providerLabelToKey,
   type AccountRelationEdge,
@@ -94,6 +97,43 @@ function formatLastLogin(account: Account): string {
   });
 }
 
+function formatLastLoginRelative(account: Account): string {
+  const rawDate = account.lastLoginAt ?? account.lastUsedAt;
+  if (!rawDate) return '';
+  const parsedDate = new Date(rawDate);
+  if (Number.isNaN(parsedDate.getTime())) return '';
+  const locale = getLocale() === 'ru' ? dateFnsRu : undefined;
+  const result = formatDistanceToNow(parsedDate, { addSuffix: false, locale });
+  // Strip "около "/"about " prefix for compactness in dense table
+  return result.replace(/^(около|about)\s+/i, '');
+}
+
+function formatCreatedDateShort(account: Account): string {
+  const rawDate = account.createdAt ?? account.registrationDate;
+  if (!rawDate) return '';
+  const parsedDate = new Date(rawDate);
+  if (Number.isNaN(parsedDate.getTime())) return '';
+  return parsedDate.toLocaleDateString(getLocale() === 'ru' ? 'ru-RU' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  });
+}
+
+function getRegistrationMethodLabel(method: string | null): string {
+  if (!method) return '';
+  switch (method) {
+    case 'auto':
+      return t('accounts.registrationMethodAuto');
+    case 'manual':
+      return t('accounts.registrationMethodManual');
+    case 'import':
+      return t('accounts.registrationMethodImport');
+    default:
+      return method;
+  }
+}
+
 export interface UseAccountRowData {
   alias: string;
   displayAlias: string;
@@ -111,6 +151,11 @@ export interface UseAccountRowData {
   relationHintList: string[];
   relationProviderEntries: [string, AccountRelationEdge][];
   lastLoginFormatted: string;
+  lastLoginRelative: string;
+  hasLastLogin: boolean;
+  createdDateShort: string;
+  registrationMethodLabel: string;
+  hasNotes: boolean;
   statusVariant: string;
   statusDotColor: string;
 }
@@ -125,8 +170,12 @@ export function useAccountRowData(
   const profileId = getProfileId(account);
   const status = account.status;
   const tags = useMemo(() => parseTags(account.tags), [account.tags]);
-  const visibleTags = useMemo(() => tags.slice(0, 2), [tags]);
-  const remainingTagsCount = Math.max(0, tags.length - visibleTags.length);
+  const displayTags = useMemo(
+    () => tags.filter(tag => !tag.startsWith('profile:')),
+    [tags],
+  );
+  const visibleTags = useMemo(() => displayTags.slice(0, 2), [displayTags]);
+  const remainingTagsCount = Math.max(0, displayTags.length - visibleTags.length);
   const proxyValue = useMemo(() => getProxyValue(account), [account]);
   const providerLabel = providerLabelMap[account.provider] ?? account.provider;
   const accountIdentifier = account.email;
@@ -157,6 +206,14 @@ export function useAccountRowData(
   );
 
   const lastLoginFormatted = useMemo(() => formatLastLogin(account), [account]);
+  const lastLoginRelative = useMemo(() => formatLastLoginRelative(account), [account]);
+  const hasLastLogin = Boolean(account.lastLoginAt ?? account.lastUsedAt);
+  const createdDateShort = useMemo(() => formatCreatedDateShort(account), [account]);
+  const registrationMethodLabel = useMemo(
+    () => getRegistrationMethodLabel(account.registrationMethod),
+    [account.registrationMethod],
+  );
+  const hasNotes = Boolean(account.notes && account.notes.trim());
 
   return {
     alias,
@@ -175,6 +232,11 @@ export function useAccountRowData(
     relationHintList,
     relationProviderEntries,
     lastLoginFormatted,
+    lastLoginRelative,
+    hasLastLogin,
+    createdDateShort,
+    registrationMethodLabel,
+    hasNotes,
     statusVariant: statusVariantMap[status] ?? 'default',
     statusDotColor: statusDotColorMap[status] ?? 'bg-slate-500',
   };

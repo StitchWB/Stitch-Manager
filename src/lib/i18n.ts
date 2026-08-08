@@ -71,6 +71,14 @@ export interface Translations {
       notesTags: string;
       notes: string;
       tags: string;
+      noData: string;
+      quota: string;
+      noQuota: string;
+      quotaResetsAt: string;
+      copyMachineId: string;
+      machineIdCopied: string;
+      statsTitle: string;
+      lastLogin: string;
     };
     quickActions: {
       copyEmail: string;
@@ -223,11 +231,13 @@ export interface Translations {
     notAssigned: string;
     notAvailable: string;
     notes: string;
+    notesHasTooltip: string;
     openProfileAt: string;
     openingBrowser: string;
     password: string;
     pasteTokenHere: string;
     plan: string;
+    profileAccount: string;
     profileAlias: string;
     profileCreateFailed: string;
     profileCreateSuccess: string;
@@ -236,6 +246,9 @@ export interface Translations {
     profileDestinationCustom: string;
     profileDestinationLabel: string;
     profileGeoTab: string;
+    profileHealthNeedsLink: string;
+    profileHealthNoSession: string;
+    profileHealthReady: string;
     profileIdLabel: string;
     profileKind: string;
     profileKindLinked: string;
@@ -290,6 +303,9 @@ export interface Translations {
     profileSettingsResetAllMessage: string;
     profileSettingsResetAllTitle: string;
     profileSettingsTimezoneLabel: string;
+    profileStatus: string;
+    profileUsage: string;
+    profileUsageKiro: string;
     profilesCreateButton: string;
     profilesFilterAll: string;
     profilesFilterLabel: string;
@@ -303,6 +319,7 @@ export interface Translations {
       scenarios: string;
     }
     provider: string;
+    quotaNoDataTooltip: string;
     quotaUsage: string;
     refreshAll: string;
     refreshAllExpired: string;
@@ -311,6 +328,9 @@ export interface Translations {
     registrationDate: string;
     registrationInfo: string;
     registrationMethod: string;
+    registrationMethodAuto: string;
+    registrationMethodImport: string;
+    registrationMethodManual: string;
     relationCanLoginTo: string;
     relationFilterAll: string;
     relationFilterHasAny: string;
@@ -356,6 +376,7 @@ export interface Translations {
     syncPartial: string;
     syncing: string;
     tags: string;
+    tagsMore: string;
     tier: string;
     title: string;
     token: string;
@@ -1251,6 +1272,13 @@ export interface Translations {
     emailGeneration: string;
     emailGenerationDomain: string;
     emailPattern: string;
+    cockpit: {
+      identity: string;
+      browser: string;
+      network: string;
+      launch: string;
+      notify: string;
+    };
     engineTab: {
       auto: string;
       cardsLoaded: string;
@@ -1503,6 +1531,7 @@ export interface Translations {
     cleared: string;
     close: string;
     confirm: string;
+    sure: string;
     copy: string;
     copyToClipboard: string;
     creatingTask: string;
@@ -2986,6 +3015,18 @@ export interface Translations {
       description: string;
       initSchema: string;
       initializing: string;
+      oauth: {
+        connect: string;
+        connected: string;
+        connecting: string;
+        disconnect: string;
+        disconnectConfirm: string;
+        error: string;
+        orServiceAccount: string;
+        popupBlocked: string;
+        timeout: string;
+        usingOAuth: string;
+      };
       refreshDataset: string;
       refreshing: string;
       required: string;

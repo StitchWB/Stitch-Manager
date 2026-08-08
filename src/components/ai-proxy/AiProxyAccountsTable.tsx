@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { PlugZap, Trash2, PenSquare, ChevronRight } from 'lucide-react';
-import { ButtonBase, ProviderLogo, StatusBadge, UsageBar, Checkbox } from '@/components/ui';
+import { ButtonBase, ConfirmActionButton, ProviderLogo, StatusBadge, UsageBar, Checkbox } from '@/components/ui';
 
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
@@ -331,15 +331,20 @@ export function AiProxyAccountsTable({
                 >
                   <PenSquare size={16} />
                 </ButtonBase>
-                <ButtonBase
+                <ConfirmActionButton
                   type="button"
-                  className="p-1 rounded hover:bg-white/5 text-red-400 hover:text-red-300"
+                  size="icon"
+                  variant="ghost"
+                  className="p-1 w-auto h-auto text-red-400 hover:text-red-300"
                   title={t('aiHub.table.delete')}
-                  onClick={() => account.id && onDelete(account.id)}
+                  onConfirm={() => {
+                    if (account.id) onDelete(account.id);
+                  }}
                   disabled={!account.id}
+                  armedLabel={<Trash2 size={16} />}
                 >
                   <Trash2 size={16} />
-                </ButtonBase>
+                </ConfirmActionButton>
                 <ChevronRight size={16} className="text-slate-600" />
               </div>
             </div>

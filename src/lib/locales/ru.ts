@@ -1265,6 +1265,13 @@ tabs: {
     emailGeneration: "Генерация email и аутентификация",
     emailGenerationDomain: "ДОМЕН ГЕНЕРАЦИИ EMAIL",
     emailPattern: "Шаблон Email",
+    cockpit: {
+      identity: "Идентификация",
+      browser: "Браузер",
+      network: "Сеть",
+      launch: "Запуск",
+      notify: "Уведомления",
+    },
     engineTab: {
       auto: "Авто",
       cardsLoaded: "Карты загружены",
@@ -1517,6 +1524,7 @@ tabs: {
     cleared: "Очищено",
     close: "Закрыть",
     confirm: "Подтвердить",
+    sure: "Точно?",
     copy: "Копировать",
     copyToClipboard: "Копировать в буфер",
     creatingTask: "Создание задачи",

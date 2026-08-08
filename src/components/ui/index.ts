@@ -61,6 +61,12 @@ export { Modal } from './Modal';
 
 export { ConfirmDialog } from './ConfirmDialog';
 
+export { ConfirmDialogHost, askConfirm } from './ConfirmDialogHost';
+export type { ConfirmOptions } from './ConfirmDialogHost';
+
+export { ConfirmActionButton } from './ConfirmActionButton';
+export type { ConfirmActionButtonProps } from './ConfirmActionButton';
+
 
 export { ActionDialog } from './ActionDialog';
 
@@ -125,7 +131,7 @@ export { ModuleCard } from './ModuleCard';
 export type { ModuleStatus } from './ModuleCard';
 export { MissionControlHUD } from './MissionControlHUD';
 export { StatusBar } from './StatusBar';
-export { IdentitySystemCard } from './IdentitySystemCard';
+export { IdentitySystemCard, isIdentityConfigReady } from './IdentitySystemCard';
 export type { IdentityConfig } from './IdentitySystemCard';
 export { NetworkCard } from './NetworkCard';
 export type { NetworkConfig } from './NetworkCard';

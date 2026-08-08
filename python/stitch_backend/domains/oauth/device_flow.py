@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -44,7 +44,7 @@ class DeviceFlow:
                 "Device code obtained. User code: %s, verification URI: %s",
                 data.get("user_code"), data.get("verification_uri"),
             )
-            return data
+            return cast("dict[str, Any]", data)
 
     async def poll_for_token(
         self,
@@ -80,6 +80,6 @@ class DeviceFlow:
                     raise Exception(f"Device flow error: {error} — {data.get('error_description')}")
 
                 logger.info("Device flow: token obtained successfully")
-                return data
+                return cast("dict[str, Any]", data)
 
         raise TimeoutError(f"Device flow expired after {expires_in}s")

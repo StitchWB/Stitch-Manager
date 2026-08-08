@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import cast
 
 import uvicorn
 
@@ -41,7 +42,7 @@ def _get_proxy_port() -> int:
     try:
         from stitch_backend.domains.kiro_patch.service import get_config
         config = get_config()
-        return config.get("proxyPort", 5580)
+        return cast("int", config.get("proxyPort", 5580))
     except Exception:
         return 5580
 

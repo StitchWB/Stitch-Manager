@@ -1,7 +1,14 @@
-import { User, Settings2, Wifi, Volume2 } from 'lucide-react';
+import {
+  User,
+  Settings2,
+  Wifi,
+  Volume2,
+  LayoutGrid,
+  MonitorSmartphone,
+} from 'lucide-react';
 import { TabButton } from '@/components/ui';
 
-export type ConfigTab = 'identity' | 'engine' | 'network' | 'inbox' | 'sounds';
+export type ConfigTab = 'all' | 'identity' | 'browser' | 'network' | 'launch' | 'notify';
 
 interface ConfigTabsProps {
   activeTab: ConfigTab;
@@ -10,10 +17,12 @@ interface ConfigTabsProps {
 }
 
 const tabs: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'identity', label: 'Основное', icon: <User className="w-3.5 h-3.5" /> },
-  { id: 'engine', label: 'Запуск', icon: <Settings2 className="w-3.5 h-3.5" /> },
+  { id: 'all', label: 'Все', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+  { id: 'identity', label: 'Почта', icon: <User className="w-3.5 h-3.5" /> },
+  { id: 'browser', label: 'Браузер', icon: <MonitorSmartphone className="w-3.5 h-3.5" /> },
   { id: 'network', label: 'Сеть', icon: <Wifi className="w-3.5 h-3.5" /> },
-  { id: 'sounds', label: 'Ещё', icon: <Volume2 className="w-3.5 h-3.5" /> },
+  { id: 'launch', label: 'Запуск', icon: <Settings2 className="w-3.5 h-3.5" /> },
+  { id: 'notify', label: 'Звук', icon: <Volume2 className="w-3.5 h-3.5" /> },
 ];
 
 export function ConfigTabs({ activeTab, onTabChange, disabled }: ConfigTabsProps) {
@@ -28,7 +37,7 @@ export function ConfigTabs({ activeTab, onTabChange, disabled }: ConfigTabsProps
             icon={tab.icon}
             label={tab.label}
             disabled={disabled}
-            className="flex-1 !px-1 !py-2 !gap-1 text-[10px] font-bold tracking-tight"
+            className="flex-1 !px-0.5 !py-1.5 !gap-1 text-[9px] font-bold tracking-tight"
           />
         ))}
       </div>

@@ -21,7 +21,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -192,7 +192,7 @@ def read_kiro_auth_token_file() -> dict[str, Any] | None:
         return None
     if not data.get("accessToken") or not data.get("refreshToken"):
         return None
-    return data
+    return cast("dict[str, Any] | None", data)
 
 
 def parse_access_token_claims(access_token: str) -> dict[str, str] | None:
@@ -217,12 +217,10 @@ def parse_access_token_claims(access_token: str) -> dict[str, str] | None:
         else:
             aud = None
         return {
-            "sub": claims.get("sub") if isinstance(claims.get("sub"), str) else None,
-            "email": claims.get("email") if isinstance(claims.get("email"), str) else None,
-            "aud": aud,
-            "preferred_username": claims.get("preferred_username")
-            if isinstance(claims.get("preferred_username"), str)
-            else None,
+            "sub": cast("str", claims.get("sub")) if isinstance(claims.get("sub"), str) else "",
+            "email": cast("str", claims.get("email")) if isinstance(claims.get("email"), str) else "",
+            "aud": cast("str", aud),
+            "preferred_username": cast("str", claims.get("preferred_username")) if isinstance(claims.get("preferred_username"), str) else "",
         }
     except Exception:
         return None

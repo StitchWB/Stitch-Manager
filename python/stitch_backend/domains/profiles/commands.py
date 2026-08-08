@@ -20,7 +20,7 @@ Commands registered here:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
@@ -162,7 +162,7 @@ async def cmd_import_profile_bundle(params: dict) -> str:
         alias = await svc.import_bundle(
             req.source_path, req.target_alias, req.overwrite,
         )
-        return alias
+        return cast("str", alias)
 
     alias = await run_in_session(_op)
-    return alias
+    return cast("str", alias)

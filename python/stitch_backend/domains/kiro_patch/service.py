@@ -13,7 +13,7 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from cryptography.fernet import Fernet
 
@@ -54,8 +54,8 @@ def _config_dir() -> Path:
         home = Path.home()
         d = home / ".stitch-manager"
         d.mkdir(parents=True, exist_ok=True)
-        _config_dir._cache = d
-    return _config_dir._cache
+        cast("Any", _config_dir)._cache = d
+    return cast("Path", cast("Any", _config_dir)._cache)
 
 
 def _config_path() -> Path:
@@ -116,7 +116,7 @@ def get_config() -> dict[str, Any]:
         data["outboundProxy"] = _decrypt_proxy(
             data.get("outboundProxy", ""), data["machineId"]
         )
-        return data
+        return cast("dict[str, Any]", data)
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to read kiro config: %s", exc)
         cfg = dict(_DEFAULT_CONFIG)
@@ -164,7 +164,7 @@ def unbind_account(account_id: str) -> None:
 
 def get_account_bindings() -> dict[str, str]:
     config = get_config()
-    return config.get("accountBindings", {})
+    return cast("dict[str, str]", config.get("accountBindings", {}))
 
 
 # ── Patch operations ──────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { type ConfigTab } from '../components/registration';
@@ -156,16 +156,50 @@ export default function AutoRegNext() {
   const { accounts: allAccounts, fetchAccounts: fetchAccountsForPicker } = useAccountsStore();
 
   // Use persisted preferences instead of local state
-  const activeTab = autoRegPage.activeTab;
   const useRegistrationV2 = autoRegPage.useRegistrationV2;
+  const activeTab = autoRegPage.activeTab;
 
   // Wrapper functions to update preferences
+  const handleSetUseRegistrationV2 = (enabled: boolean) => {
+    setAutoRegV2(enabled);
+  };
   const handleSetActiveTab = (tab: ConfigTab) => {
     setAutoRegTab(tab);
   };
 
-  const handleSetUseRegistrationV2 = (enabled: boolean) => {
-    setAutoRegV2(enabled);
+  // ── Left panel width (drag-resizable divider before the console) ────────
+  const [leftWidth, setLeftWidth] = useState<number>(() => {
+    try {
+      const v = parseInt(localStorage.getItem('autoreg-left-width') || '', 10);
+      return Number.isFinite(v) && v >= 320 && v <= 700 ? v : 400;
+    } catch {
+      return 400;
+    }
+  });
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: leftWidth };
+    const move = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      setLeftWidth(Math.min(700, Math.max(320, d.startW + (ev.clientX - d.startX))));
+    };
+    const up = () => {
+      dragRef.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      setLeftWidth(w => {
+        try {
+          localStorage.setItem('autoreg-left-width', String(w));
+        } catch {
+          // ignore
+        }
+        return w;
+      });
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   };
 
   // Get email domain for pattern generation
@@ -535,6 +569,7 @@ export default function AutoRegNext() {
         allowedProviders={autoRegSupportedProviders}
         activeTab={activeTab}
         onTabChange={handleSetActiveTab}
+        width={leftWidth}
         identityConfig={identityConfig}
         onIdentityConfigChange={stableSetIMAPConfig}
         onTestImap={handleTestImap}
@@ -594,6 +629,10 @@ export default function AutoRegNext() {
         onCardBinChange={(cardBin: string) => useRegistrationStore.getState().setAdvancedSettings({ cardBin })}
         kiroPlan={config.advanced.kiroPlan || 'free'}
         onKiroPlanChange={(kiroPlan: string) => useRegistrationStore.getState().setAdvancedSettings({ kiroPlan })}
+        browserEngine={config.advanced.browserEngine || 'cloakbrowser'}
+        onBrowserEngineChange={(browserEngine: string) =>
+          useRegistrationStore.getState().setAdvancedSettings({ browserEngine })
+        }
         captchaSoundEnabled={config.advanced.captchaSoundEnabled}
         onCaptchaSoundEnabledChange={captchaSoundEnabled =>
           stableSetAdvancedSettings({ captchaSoundEnabled })
@@ -622,6 +661,15 @@ export default function AutoRegNext() {
         disabled={activeThreads > 0}
       />
 
+      {/* Draggable divider: left panel ↔ console */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        title="Потяните, чтобы изменить ширину панели"
+        onMouseDown={startResize}
+        className="w-1 shrink-0 cursor-col-resize bg-white/[0.06] hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors"
+      />
+
       {/* Right Panel - Console */}
       <ConsolePanel
         logs={logs}
@@ -637,6 +685,7 @@ export default function AutoRegNext() {
         showDebug={showDebugLogs}
         onShowDebugChange={setShowDebugLogs}
         pipelineJobId={pipelineJobId}
+        onConfigureMail={() => handleSetActiveTab('identity')}
       />
     </div>
   );

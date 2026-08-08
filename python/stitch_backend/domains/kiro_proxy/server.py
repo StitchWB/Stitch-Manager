@@ -21,7 +21,7 @@ import logging
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -161,13 +161,13 @@ def _get_outbound_proxy() -> str | None:
 
     # Module-level cache
     if not hasattr(_get_outbound_proxy, '_cache'):
-        _get_outbound_proxy._cache = None
-        _get_outbound_proxy._cache_time = 0
+        cast("Any", _get_outbound_proxy)._cache = None
+        cast("Any", _get_outbound_proxy)._cache_time = 0
 
     # Return cached value if fresh (< 5 seconds old)
     now = time.time()
-    if now - _get_outbound_proxy._cache_time < 5.0:
-        return _get_outbound_proxy._cache
+    if now - cast("Any", _get_outbound_proxy)._cache_time < 5.0:
+        return cast("str | None", cast("Any", _get_outbound_proxy)._cache)
 
     # Read from config and update cache
     try:
@@ -175,12 +175,12 @@ def _get_outbound_proxy() -> str | None:
         config = get_config()
         proxy_string = config.get("outboundProxy", "")
         result = _parse_proxy_url(proxy_string)
-        _get_outbound_proxy._cache = result
-        _get_outbound_proxy._cache_time = now
+        cast("Any", _get_outbound_proxy)._cache = result
+        cast("Any", _get_outbound_proxy)._cache_time = now
         return result
     except Exception as exc:
         logger.warning("Failed to read outbound proxy config: %s", exc)
-        return _get_outbound_proxy._cache  # Return stale cache on error
+        return cast("str | None", cast("Any", _get_outbound_proxy)._cache)  # Return stale cache on error
 
 
 def _is_allowed_domain(host: str) -> bool:

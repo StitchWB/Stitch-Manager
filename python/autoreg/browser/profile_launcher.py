@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ..core.paths import get_paths
 from .async_cloakbrowser_wrapper import AsyncCloakBrowserWrapper
+from .async_shardbrowser_wrapper import AsyncShardBrowserWrapper
 from .cloakbrowser_profile_manager import CloakBrowserProfileManager
 
 logger = logging.getLogger(__name__)
@@ -741,11 +742,39 @@ class ProfileLauncher:
             _safe_stderr(f"[ProfileLauncher] TIMING: _acquire_profile_lock: {t1-t0:.2f}s")
 
         try:
+            if self.engine in ("shardbrowser", "shardx"):
+                return await self._start_shardbrowser()
             return await self._start_cloakbrowser()
         except Exception:
             self._release_profile_lock()
             self._manager = None
             raise
+
+    async def _start_shardbrowser(self) -> AsyncShardBrowserWrapper:
+        """Start ShardBrowser (ShardX) persistent profile session.
+
+        The ShardX SDK owns the profile directory (fingerprint + cookies in
+        its cache), binds the proxy and resolves geo/timezone before launch.
+        ``shard_profile_id`` from config reuses the account's saved profile so
+        the interactive session matches the registration fingerprint.
+        """
+        proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
+        wrapper = AsyncShardBrowserWrapper(
+            shard_profile_id=self._config.get("shard_profile_id")
+            or self._config.get("shardProfileId"),
+            proxy=proxy_url,
+            headless=self.headless,
+            platform=str(self._config.get("shard_platform") or "Windows"),
+        )
+        await wrapper.start()
+        self._manager = wrapper
+
+        # Cookie injection (Playwright cookie dicts — native patchright API)
+        cookies = _load_cookies_from_config(self._config)
+        if cookies:
+            await wrapper.add_cookies(cookies)
+
+        return wrapper
 
     async def _start_cloakbrowser(self) -> AsyncCloakBrowserWrapper:
         """Start CloakBrowser via sync manager wrapped in async façade."""

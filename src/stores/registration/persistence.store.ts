@@ -11,6 +11,8 @@ import type { ProviderName } from '../../types/ui';
 type ExtendedSettingsData = SettingsData & {
   captchaSoundFile?: string;
   cardBin?: string;
+  browserEngine?: string;
+  kiroPlan?: string;
 };
 import type { LogVerbosity } from '../../constants/logging';
 import type {
@@ -169,6 +171,8 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
           captchaSoundFile: captchaSoundFile || settings.captchaSoundFile || 'taksi.mp3',
           cardsText: settings.cardsText || '',
           cardBin: settings.cardBin || '',
+          browserEngine: settings.browserEngine || 'cloakbrowser',
+          kiroPlan: settings.kiroPlan || 'free',
         },
         count: settings.count || 1,
         timeout: 60000,
@@ -264,6 +268,8 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         captchaSoundEnabled: config.advanced.captchaSoundEnabled,
         cardsText: config.advanced.cardsText || '',
         cardBin: config.advanced.cardBin || '',
+        browserEngine: config.advanced.browserEngine || 'cloakbrowser',
+        kiroPlan: config.advanced.kiroPlan || 'free',
 
         // Save addy.io settings (global)
         addyioEnabled: config.imap.addyioEnabled || false,

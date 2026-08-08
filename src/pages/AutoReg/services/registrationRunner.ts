@@ -788,6 +788,7 @@ async function runProviderRegistration(params: {
       billingState: null,
       billingZip: null,
       kiroPlan: config.advanced.kiroPlan?.trim() || 'free',
+      browserEngine: config.advanced.browserEngine?.trim() || 'cloakbrowser',
       correlationId,
       ...inboxBridgeFields,
     });

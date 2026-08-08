@@ -4,10 +4,8 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  Info,
 } from 'lucide-react';
 
-import { cn } from '../../lib/utils';
 import { parseProxyString, validateProxyString } from '../../lib/proxyUtils';
 import { t } from '@/lib/i18n';
 import { Button, Input, SegmentedControl } from './index';
@@ -80,28 +78,20 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
   }, [config.url]);
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* ── Connection mode ── */}
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          Подключение
-        </span>
-        <SegmentedControl
-          options={CONNECTION_MODE_OPTIONS}
-          value={connectionMode}
-          onChange={handleModeChange}
-          disabled={disabled}
-        />
-      </div>
-
-      {/* ── Proxy settings (only when proxy mode) ── */}
-      {config.enabled && (
-        <>
-          {/* Proxy type */}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              {t('network.proxyTypeLabel')}
-            </span>
+    <div className="flex flex-col gap-1.5">
+      {/* ── Connection mode + proxy type in one row ── */}
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <SegmentedControl
+            options={CONNECTION_MODE_OPTIONS}
+            value={connectionMode}
+            onChange={handleModeChange}
+            disabled={disabled}
+            size="sm"
+          />
+        </div>
+        {config.enabled && (
+          <div className="flex-1">
             <SegmentedControl
               options={PROXY_TYPE_OPTIONS}
               value={config.type}
@@ -110,9 +100,14 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
               disabled={disabled}
             />
           </div>
+        )}
+      </div>
 
+      {/* ── Proxy settings (only when proxy mode) ── */}
+      {config.enabled && (
+        <>
           {/* Proxy input — always single proxy here; library is in Settings */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             <Input
               type="text"
               label={listSummary ? `Прокси (из библиотеки: ${listSummary})` : t('network.proxyUrlLabel')}
@@ -150,40 +145,18 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
             )}
           </div>
 
-          {/* Format hint */}
-          <div className={cn(
-            'flex items-start gap-2 text-xs text-slate-500 bg-slate-800/20 rounded-lg px-3 py-2',
-            validationError && 'hidden'
-          )}>
-            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-600" />
-            <span>
-              {t('network.supportedFormats')}:{' '}
-              <code className="text-slate-400">ip:port:user:pass</code>
-              {' или '}
-              <code className="text-slate-400">ip:port</code>
-            </span>
-          </div>
-
           {/* Library link */}
           <Button
             variant="ghost"
-            size="sm"
+            size="xs"
             onClick={openProxyLibrary}
             disabled={disabled}
-            rightIcon={<ExternalLink className="w-3.5 h-3.5" />}
-            className="w-full justify-between text-slate-400 hover:text-slate-200 border border-white/[0.06] hover:border-white/[0.12] rounded-lg px-3 py-2 text-xs"
+            rightIcon={<ExternalLink className="w-3 h-3" />}
+            className="w-full justify-between text-slate-500 hover:text-slate-300 border border-white/[0.06] hover:border-white/[0.12] rounded-md px-2 py-1 text-[10px]"
           >
             Библиотека прокси (ротация, тестирование)
           </Button>
         </>
-      )}
-
-      {/* Direct connection hint */}
-      {!config.enabled && (
-        <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-800/20 rounded-lg px-3 py-2">
-          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-600" />
-          <span>Трафик идёт напрямую без промежуточного сервера</span>
-        </div>
       )}
     </div>
   );

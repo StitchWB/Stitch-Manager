@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     _EXECUTION_DIRECTIVE,
@@ -79,7 +79,7 @@ def openai_to_kiro(
         from stitch_backend.domains.kiro_gateway.translator.tool_norm import (
             default_tool_name_registry,  # noqa: E402
         )
-        tool_name_registry = default_tool_name_registry()
+        tool_name_registry = cast("ToolNameRegistry", default_tool_name_registry())
 
     model_id = map_model_id(request["model"])
     origin = "AI_EDITOR"

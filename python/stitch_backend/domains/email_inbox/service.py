@@ -14,7 +14,7 @@ import logging
 import threading
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -197,7 +197,7 @@ async def list_messages(
                     logger.warning("Skipping message UID %s: fetch failed", uid, exc_info=True)
             return messages
 
-        return _imap_call(sess, _run)
+        return cast("list[dict[str, Any]]", _imap_call(sess, _run))
 
     return await asyncio.to_thread(_do)
 
@@ -341,7 +341,7 @@ async def delete_profile(db: AsyncSession, profile_id: str) -> bool:
         {"id": profile_id},
     )
     await db.flush()
-    return result.rowcount > 0
+    return int(cast("Any", result).rowcount or 0) > 0
 
 
 async def connect_profile(db: AsyncSession, profile_id: str) -> dict[str, Any]:

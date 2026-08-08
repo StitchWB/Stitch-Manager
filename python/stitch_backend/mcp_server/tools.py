@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastmcp.tools import Tool
 from mcp.types import ToolAnnotations
@@ -60,7 +60,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
             result = await invoke_command_safe(meta.name, {})
             if not result["ok"]:
                 raise Exception(result["error"]["message"])
-            return result["data"]
+            return cast("dict[str, Any]", result["data"])
 
         tool_fn.__name__ = meta.name
         tool_fn.__doc__ = meta.description
@@ -94,19 +94,19 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     sig = inspect.Signature(params, return_annotation=dict[str, Any])
 
     # Build the actual function
-    async def tool_fn(**kwargs) -> dict[str, Any]:
+    async def _tool_fn(**kwargs) -> dict[str, Any]:
         result = await invoke_command_safe(meta.name, kwargs)
         if not result["ok"]:
             raise Exception(result["error"]["message"])
-        return result["data"]
+        return cast("dict[str, Any]", result["data"])
 
-    tool_fn.__name__ = meta.name
-    tool_fn.__doc__ = meta.description
-    tool_fn.__signature__ = sig
-    tool_fn.__annotations__ = {p.name: p.annotation for p in params}
-    tool_fn.__annotations__["return"] = dict[str, Any]
+    _tool_fn.__name__ = meta.name
+    _tool_fn.__doc__ = meta.description
+    cast("Any", _tool_fn).__signature__ = sig
+    _tool_fn.__annotations__ = {p.name: p.annotation for p in params}
+    _tool_fn.__annotations__["return"] = dict[str, Any]
 
-    return tool_fn
+    return _tool_fn
 
 
 def _build_annotations(meta: CommandMeta) -> ToolAnnotations:

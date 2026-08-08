@@ -16,6 +16,7 @@ schema (``model_validate(params)``) then performs the DB operation via
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
@@ -515,7 +516,7 @@ async def cmd_discover_models_for_endpoint(params: dict) -> dict:
         endpoint = await ep_svc.get_by_pk(req.id)
         if endpoint is None:
             return {"models_count": 0}
-        await DiscoveryWorker._discover_endpoint(session, endpoint)
+        await cast("Any", DiscoveryWorker)._discover_endpoint(session, endpoint)
         model_svc = UpstreamModelService(session)
         models = await model_svc.list_models(req.id)
         return {"models_count": len(models)}
@@ -554,7 +555,7 @@ async def cmd_test_credential_connection(params: dict) -> dict:
             "success": probe.success,
             "latency_ms": probe.latency_ms,
             "http_status": probe.http_status,
-            "error": _sanitize_error(probe.error, secret="") if probe.error else None,
+            "error": _sanitize_error(cast("BaseException", probe.error), secret="") if probe.error else None,
         }
 
     return await run_in_session(_op)

@@ -5,6 +5,8 @@ Mirrors Rust ``commands/aws_accounts.rs``.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 
@@ -141,7 +143,7 @@ async def cmd_get_account_bindings(params: dict) -> dict:
         return {}
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        return data.get("account_bindings", {})
+        return cast("dict[Any, Any]", data.get("account_bindings", {}))
     except Exception:
         return {}
 

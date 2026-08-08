@@ -16,7 +16,7 @@ import platform
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def _generate_id() -> str:
 def _load_telemetry() -> dict[str, str]:
     if _TELEMETRY_FILE.exists():
         try:
-            return json.loads(_TELEMETRY_FILE.read_text(encoding="utf-8"))
+            return cast("dict[str, str]", json.loads(_TELEMETRY_FILE.read_text(encoding="utf-8")))
         except Exception:
             pass
     # Generate fresh telemetry
@@ -45,7 +45,7 @@ def _load_telemetry() -> dict[str, str]:
     }
     _TELEMETRY_DIR.mkdir(parents=True, exist_ok=True)
     _TELEMETRY_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    return data
+    return cast("dict[str, str]", data)
 
 
 def _save_telemetry(data: dict[str, str]) -> None:
@@ -70,7 +70,7 @@ class TelemetryService:
             "serviceMachineId": _generate_id(),
             "kiroInstalled": False,
         }
-        _save_telemetry(new_data)
+        _save_telemetry(cast("dict[str, str]", new_data))
         return {
             "success": True,
             "message": "Telemetry reset successfully",

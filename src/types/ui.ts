@@ -320,6 +320,8 @@ export interface KiroV2AutoregConfig {
   cardBin: string | null;
   correlationId: string | null;
   kiroPlan: string | null;
+  /** Browser engine: "cloakbrowser" | "shardbrowser" */
+  browserEngine: string | null;
 }
 
 export interface KiroV2AutoregResult {

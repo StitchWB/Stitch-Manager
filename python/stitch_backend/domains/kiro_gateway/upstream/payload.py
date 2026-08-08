@@ -10,7 +10,7 @@ import json
 import uuid
 from datetime import UTC
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
     JsonObject,
@@ -211,20 +211,20 @@ def build_kiro_payload(
 
     documents = extra_options.get("documents")
     if isinstance(documents, list) and documents:
-        current_uim["documents"] = documents  # type: ignore[typeddict-item]
+        current_uim["documents"] = documents
 
     cache_point = extra_options.get("cachePoint")
     if isinstance(cache_point, dict) and cache_point:
-        current_uim["cachePoint"] = cache_point  # type: ignore[typeddict-item]
+        current_uim["cachePoint"] = cache_point
 
     # tools + toolResults in userInputMessageContext
     if kiro_tools or current_tool_results:
         uimc: dict[str, JsonValue] = {}
         if kiro_tools:
-            uimc["tools"] = kiro_tools  # type: ignore[typeddict-item]
+            uimc["tools"] = kiro_tools
         if current_tool_results:
-            uimc["toolResults"] = current_tool_results  # type: ignore[typeddict-item]
-        current_uim["userInputMessageContext"] = uimc  # type: ignore[typeddict-item]
+            uimc["toolResults"] = current_tool_results
+        current_uim["userInputMessageContext"] = uimc
 
     # context (editorState, shellState, gitState, etc.)
     ctx = extra_options.get("context")
@@ -232,9 +232,9 @@ def build_kiro_payload(
         existing = current_uim.get("userInputMessageContext") or {}
         for key in ("editorState", "shellState", "gitState", "envState", "additionalContext"):
             if key in ctx:
-                existing[key] = ctx[key]  # type: ignore[index]
+                existing[key] = ctx[key]
         if existing:
-            current_uim["userInputMessageContext"] = existing  # type: ignore[typeddict-item]
+            current_uim["userInputMessageContext"] = existing
 
     current_message: KiroHistoryMessage = KiroHistoryMessage(
         userInputMessage=current_uim,
@@ -266,11 +266,11 @@ def build_kiro_payload(
         fcuim = KiroUserInputMessage(content=final_content or "Continue", modelId=model_id, origin=origin)
         final_current["userInputMessage"] = fcuim
 
-    uimc_final = fcuim.get("userInputMessageContext") or {}
+    uimc_final: dict[str, Any] = fcuim.get("userInputMessageContext") or {}
     if kiro_tools:
-        uimc_final["tools"] = kiro_tools  # type: ignore[typeddict-item]
+        uimc_final["tools"] = kiro_tools
     if uimc_final:
-        fcuim["userInputMessageContext"] = uimc_final  # type: ignore[typeddict-item]
+        fcuim["userInputMessageContext"] = uimc_final
 
     # ── conversationId ─────────────────────────────────────────────────────
     conversation_id = extra_options.get("conversationId")

@@ -36,7 +36,7 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 
 import { copyToClipboard as copyTextToClipboard } from '@/lib/backend/modules/utils';
-import { Badge, Button, ButtonBase, EmptyState, FilterDropdown, Input, LoadingSpinner, LogGroup, MultiFilterDropdown, TabButton, Toggle } from '@/components/ui';
+import { Badge, Button, ButtonBase, ConfirmActionButton, EmptyState, FilterDropdown, Input, LoadingSpinner, LogGroup, MultiFilterDropdown, TabButton, Toggle } from '@/components/ui';
 
 const LOG_SOURCES = [
   'accounts',
@@ -191,7 +191,6 @@ export default function Logs() {
     resetLogsFilters,
   } = useUIPreferencesStore();
 
-  const [showClearConfirm, setShowClearConfirm] = useUIState('logs-clear-confirm', false, 'session');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isResizingPane, setIsResizingPane] = useUIState('logs-resizing-pane', false, 'session');
   const { copy } = useCopyToClipboard();
@@ -406,12 +405,11 @@ export default function Logs() {
   const handleClear = useCallback(async () => {
     try {
       await clearLogs();
-      setShowClearConfirm(false);
       setLogsSelectedLogId(null);
     } catch (err) {
       console.error('Failed to clear logs:', err);
     }
-  }, [clearLogs, setLogsSelectedLogId, setShowClearConfirm]);
+  }, [clearLogs, setLogsSelectedLogId]);
 
   const handleExport = useCallback(async () => {
     try {
@@ -709,15 +707,15 @@ export default function Logs() {
             >
               {t('logs.export')}
             </Button>
-            <Button
+            <ConfirmActionButton
               size="xs"
               variant="danger"
-              onClick={() => setShowClearConfirm(true)}
+              onConfirm={handleClear}
               disabled={logs.length === 0}
               leftIcon={<Trash2 size={12} />}
             >
               {t('logs.clear')}
-            </Button>
+            </ConfirmActionButton>
           </div>
         }
       />
@@ -1191,22 +1189,6 @@ export default function Logs() {
         </aside>
       </div>
 
-      {showClearConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 border border-white/10 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-2">{t('logs.clearConfirmTitle')}</h3>
-            <p className="text-sm text-slate-400 mb-6">{t('logs.clearConfirmMessage')}</p>
-            <div className="flex justify-end gap-3">
-              <Button onClick={() => setShowClearConfirm(false)} variant="secondary">
-                {t('common.cancel')}
-              </Button>
-              <Button onClick={handleClear} variant="danger">
-                {t('common.clear')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

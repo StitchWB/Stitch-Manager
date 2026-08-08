@@ -14,7 +14,7 @@ table (the same table the UI reads from):
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 
@@ -125,5 +125,5 @@ class ReferralPoolService:
     def get_signup_url(donor: dict[str, Any] | None) -> str:
         """Return the signup URL to use: donor ref_url or the seed URL."""
         if donor and donor.get("refUrl"):
-            return donor["refUrl"]
+            return cast("str", donor["refUrl"])
         return V0_APP_SIGNUP_URL

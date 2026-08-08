@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 JsonScalar = str | int | float | bool | None
-JsonValue = JsonScalar | dict[str, JsonScalar] | list[JsonScalar | dict[str, JsonScalar]]
-JsonObject = dict[str, JsonValue]
+JsonValue = Any
+JsonObject = dict[str, Any]
 
 
 class GatewayRequest(BaseModel):

@@ -19,6 +19,8 @@ interface ConsolePanelProps {
   showDebug: boolean;
   onShowDebugChange: (show: boolean) => void;
   pipelineJobId: string | null;
+  /** Shortcut shown in the empty state when mandatory settings are missing. */
+  onConfigureMail?: () => void;
 }
 
 export const ConsolePanel = ({
@@ -35,6 +37,7 @@ export const ConsolePanel = ({
   showDebug,
   onShowDebugChange,
   pipelineJobId,
+  onConfigureMail,
 }: ConsolePanelProps) => {
   // Only surface errors that are actual failures — skip [db] info messages
   // that happen to carry level="error" but contain success=True.
@@ -96,6 +99,17 @@ export const ConsolePanel = ({
               icon={Activity}
               title="Журнал пока пуст"
               description={canStart ? 'Настройте параметры слева и запустите процесс.' : 'Завершите обязательные настройки перед запуском.'}
+              action={
+                !canStart && onConfigureMail ? (
+                  <ButtonBase
+                    type="button"
+                    onClick={onConfigureMail}
+                    className="btn-ghost text-xs py-1.5 px-3 border border-amber-500/20 text-amber-300 hover:bg-amber-500/10 rounded-md"
+                  >
+                    {t('autoReg.configureMailFirst')}
+                  </ButtonBase>
+                ) : undefined
+              }
               className="h-full"
             />
           ) : (

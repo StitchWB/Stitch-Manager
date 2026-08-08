@@ -28,6 +28,7 @@ import type { AiProxyAccount, AuthFile, ProxySettings, ProxyStatus } from '../..
 import type { ConnectionStateMap, HistorySummary } from '../../components/ai-proxy/sections/types';
 import { useAiProxyStore, refreshProxyStatus } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 
 export function maskKey(key: string, visibleTail: number = 4): string {
   if (!key) return '';
@@ -351,7 +352,6 @@ export function useAiProvidersController() {
 
   const handleDelete = useCallback(
     async (id: number) => {
-      if (!window.confirm(t('aiHub.controller.confirm.deleteAccount'))) return;
       try {
         await deleteAiProxyAccount(id);
         appToast.success(t('aiHub.controller.toasts.accountDeleted'));
@@ -504,7 +504,13 @@ export function useAiProvidersController() {
       appToast.error(importValidation.error ?? t('aiHub.controller.errors.invalidImportPayload'));
       return;
     }
-    const ok = window.confirm(t('aiHub.controller.confirm.importPayload'));
+    const ok = await askConfirm({
+      title: t('common.confirm'),
+      message: t('aiHub.controller.confirm.importPayload'),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      variant: 'warning',
+    });
     if (!ok) return;
     setImportLoading(true);
     try {
@@ -524,14 +530,18 @@ export function useAiProvidersController() {
     }
   }, [fetchAccounts, importPayload, importValidation.error, importValidation.isValid]);
 
-  const handlePrepareImportFromScan = useCallback(() => {
+  const handlePrepareImportFromScan = useCallback(async () => {
     if (!authScan || authScan.length === 0) {
       appToast.error(t('aiHub.controller.errors.noScanResultsToImport'));
       return;
     }
-    const ok = window.confirm(
-      t('aiHub.controller.confirm.prepareFromScan', { count: authScan.length })
-    );
+    const ok = await askConfirm({
+      title: t('common.confirm'),
+      message: t('aiHub.controller.confirm.prepareFromScan', { count: authScan.length }),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      variant: 'warning',
+    });
     if (!ok) return;
     const payload = JSON.stringify(
       {
@@ -564,9 +574,13 @@ export function useAiProvidersController() {
       return;
     }
 
-    const ok = window.confirm(
-      t('aiHub.controller.confirm.importAllFromScan', { count: authScan.length })
-    );
+    const ok = await askConfirm({
+      title: t('common.confirm'),
+      message: t('aiHub.controller.confirm.importAllFromScan', { count: authScan.length }),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      variant: 'warning',
+    });
     if (!ok) return;
 
     const payload = JSON.stringify(

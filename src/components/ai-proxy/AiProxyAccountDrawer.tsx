@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";import { useEffect, useMemo, useState } from 'react';
 import { X, PlugZap, PenSquare, Trash2, RefreshCw, Clock, AlertTriangle } from 'lucide-react';
-import { ButtonBase, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui';
+import { ButtonBase, ConfirmActionButton, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui';
 
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
@@ -375,15 +375,20 @@ export function AiProxyAccountDrawer({
             <PenSquare size={16} />{t("aiHub.ai_proxy_account_drawer.edit")}
 
           </ButtonBase>
-          <ButtonBase
+          <ConfirmActionButton
             type="button"
-            className="h-9 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 flex items-center justify-center"
-            onClick={() => account.id && onDelete(account.id)}
+            size="icon"
+            variant="danger"
+            className="h-9 px-3 w-auto"
+            onConfirm={() => {
+              if (account.id) onDelete(account.id);
+            }}
             disabled={!account.id}
-            aria-label="Delete">
-            
+            aria-label="Delete"
+            armedLabel={<Trash2 size={16} />}>
+
             <Trash2 size={16} />
-          </ButtonBase>
+          </ConfirmActionButton>
         </div>
       </div>
     </>);

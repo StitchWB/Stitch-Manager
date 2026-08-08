@@ -1,6 +1,7 @@
 import { Link, AlertCircle } from 'lucide-react';
 import { Tooltip, TableCell } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 import type { Account } from '@/types/generated';
 
 const V0_APP_REF_QUOTA = 40;
@@ -45,16 +46,21 @@ export function getRefMeta(account: Account): RefMeta | null {
 
 interface AccountRefCellProps {
   account: Account;
+  hidden?: boolean;
 }
 
-export function AccountRefCell({ account }: AccountRefCellProps) {
+export function AccountRefCell({ account, hidden = false }: AccountRefCellProps) {
   const ref = getRefMeta(account);
+
+  // When the Ref column is hidden for the current list, render nothing so the
+  // table column count stays consistent with the (also hidden) header cell.
+  if (hidden) return null;
 
   // Only v0_app has referral quota — hide cell for other providers
   if (!ref) {
     return (
-      <TableCell className="w-[80px] min-w-[80px] px-2 py-2 align-middle">
-        <span className="text-slate-600 text-[10px]">—</span>
+      <TableCell className="w-[80px] min-w-[80px] px-2 py-1 align-middle">
+        <span className="text-slate-600 text-[10px]" title={t('accounts.notAvailable')}>—</span>
       </TableCell>
     );
   }
@@ -87,7 +93,7 @@ export function AccountRefCell({ account }: AccountRefCellProps) {
     : 'Реферальная ссылка не получена';
 
   return (
-    <TableCell className="w-[80px] min-w-[80px] px-2 py-2 align-middle">
+    <TableCell className="w-[80px] min-w-[80px] px-2 py-1 align-middle">
       <Tooltip content={tooltipText}>
         <div className="flex flex-col gap-1 cursor-default select-none">
           {/* Top row: dot + counter */}

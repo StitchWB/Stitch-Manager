@@ -6,16 +6,78 @@ quotas, auth flows, analytics, and utility operations.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 import webbrowser
 from pathlib import Path
+from typing import Any, Awaitable, Callable, cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.http_gateway import ProxyUnavailableError, gateway
 from stitch_backend.database import run_in_read_session, run_in_session
 
 logger = logging.getLogger(__name__)
+
+
+# ── Quota cache: on-demand TTL + single-flight ─────────────────────────────
+#
+# Quota commands fan out to CLI subprocesses and remote usage APIs (~1–2 s),
+# and the frontend calls them on every page mount — without a cache each
+# visit repeats the identical fan-out.  This cache returns the last result
+# within the TTL, coalesces concurrent callers into ONE in-flight fetch and
+# serves stale data when a refresh fails.  There is NO background polling:
+# an idle app makes zero calls, so the cache strictly reduces work versus
+# the previous per-mount fan-out.  ``{"force": true}`` bypasses the TTL.
+
+_QUOTA_CACHE_TTL_SECONDS = 90.0
+
+
+class _TtlSingleFlight:
+    """On-demand TTL cache with single-flight coalescing and stale fallback."""
+
+    def __init__(self, name: str, ttl: float = _QUOTA_CACHE_TTL_SECONDS) -> None:
+        self._name = name
+        self._ttl = ttl
+        self._data: Any = None
+        self._expires = 0.0
+        self._lock: asyncio.Lock | None = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def get_or_fetch(
+        self, fetch: Callable[[], Awaitable[Any]], *, force: bool = False
+    ) -> Any:
+        now = time.monotonic()
+        if not force and self._data is not None and self._expires > now:
+            return self._data
+
+        async with self._get_lock():
+            now = time.monotonic()
+            if not force and self._data is not None and self._expires > now:
+                return self._data  # another waiter refreshed while we queued
+
+            try:
+                data = await fetch()
+            except Exception as exc:  # noqa: BLE001
+                if self._data is not None:
+                    logger.warning(
+                        "[%s] refresh failed (%s) — serving stale cache", self._name, exc
+                    )
+                    return self._data
+                raise
+            self._data = data
+            self._expires = time.monotonic() + self._ttl
+            return data
+
+
+_ALL_QUOTAS_CACHE = _TtlSingleFlight("Quota")
+_OPENAI_QUOTAS_CACHE = _TtlSingleFlight("OpenAI Quota")
+_KIRO_QUOTAS_CACHE = _TtlSingleFlight("Kiro Quota")
 
 
 # ── Account CRUD ────────────────────────────────────────────────────────────
@@ -93,7 +155,7 @@ async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
         return await import_accounts_payload(session, payload_str)
 
     imported = await run_in_session(_op)
-    return imported  # int — matches Rust u64
+    return cast("int", imported)  # int — matches Rust u64
 
 
 # ── Models ──────────────────────────────────────────────────────────────────
@@ -283,7 +345,7 @@ async def _fetch_kiro_models(accounts: list[dict]) -> list[dict[str, str]]:
         return []
     try:
         async with client:
-            models = await fetch_kiro_models(proxy_account, client)
+            models = await fetch_kiro_models(cast("Any", proxy_account), client)
             return [
                 {
                     "id": m.get("modelId", ""),
@@ -412,7 +474,7 @@ async def cmd_get_available_models(params: dict) -> list:
     # Check cache
     now = time.time()
     if _models_cache["data"] is not None and _models_cache["expires"] > now:
-        return _models_cache["data"]
+        return cast("list[Any]", _models_cache["data"])
 
     # ── Phase 1: short DB session — preload accounts + API keys, then close.
     async def _preload(session):
@@ -438,7 +500,7 @@ async def cmd_get_available_models(params: dict) -> list:
         logger.error("[Models] Failed to preload provider data: %s", e)
         if _models_cache["data"] is not None:
             logger.warning("[Models] Serving stale cache after preload failure")
-            return _models_cache["data"]
+            return cast("list[Any]", _models_cache["data"])
         return []
 
     # ── Phase 2: network fetch OUTSIDE any DB session — bounded by 15s.
@@ -460,7 +522,7 @@ async def cmd_get_available_models(params: dict) -> list:
     if not result and _models_cache["data"] is not None:
         logger.warning("[Models] Serving stale cache (expired=%s)",
                        _models_cache["expires"] <= now)
-        return _models_cache["data"]
+        return cast("list[Any]", _models_cache["data"])
 
     # Fallback: if all API calls returned [], use known models for connected providers
     if not result:
@@ -688,8 +750,7 @@ async def _try_cli_quota(cli_name: str, provider: str) -> dict | None:
         return None
 
 
-@register_command("fetch_all_quotas_cmd")
-async def cmd_fetch_all_quotas(params: dict) -> list:
+async def _fetch_all_quotas_impl() -> list:
     """Fetch quota info for all providers via CLI tools, fall back to API key counts."""
     import asyncio
 
@@ -733,8 +794,15 @@ async def cmd_fetch_all_quotas(params: dict) -> list:
     return quotas
 
 
-@register_command("fetch_openai_account_quotas_cmd")
-async def cmd_fetch_openai_account_quotas(params: dict) -> list:
+@register_command("fetch_all_quotas_cmd")
+async def cmd_fetch_all_quotas(params: dict) -> list:
+    """Cached fan-out (TTL + single-flight). ``{"force": true}`` bypasses TTL."""
+    return await _ALL_QUOTAS_CACHE.get_or_fetch(
+        _fetch_all_quotas_impl, force=bool((params or {}).get("force"))
+    )
+
+
+async def _fetch_openai_account_quotas_impl() -> list:
     """Fetch OpenAI/Codex account-level quotas from auth files and usage API."""
     import json as _json
     import time
@@ -815,8 +883,15 @@ async def cmd_fetch_openai_account_quotas(params: dict) -> list:
     return results
 
 
-@register_command("fetch_kiro_account_quotas_cmd")
-async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
+@register_command("fetch_openai_account_quotas_cmd")
+async def cmd_fetch_openai_account_quotas(params: dict) -> list:
+    """Cached fan-out (TTL + single-flight). ``{"force": true}`` bypasses TTL."""
+    return await _OPENAI_QUOTAS_CACHE.get_or_fetch(
+        _fetch_openai_account_quotas_impl, force=bool((params or {}).get("force"))
+    )
+
+
+async def _fetch_kiro_account_quotas_impl() -> list:
     """Fetch Kiro account quotas via CodeWhisperer API using stored tokens."""
     import os
     import sys
@@ -904,6 +979,14 @@ async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
             })
 
     return results
+
+
+@register_command("fetch_kiro_account_quotas_cmd")
+async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
+    """Cached fan-out (TTL + single-flight). ``{"force": true}`` bypasses TTL."""
+    return await _KIRO_QUOTAS_CACHE.get_or_fetch(
+        _fetch_kiro_account_quotas_impl, force=bool((params or {}).get("force"))
+    )
 
 
 # ── Auth Files ──────────────────────────────────────────────────────────────

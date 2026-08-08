@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict, cast
 
 # ── Type aliases ─────────────────────────────────────────────────────────────
 
 JsonScalar = str | int | float | bool | None
-JsonValue = JsonScalar | dict[str, JsonScalar] | list[JsonScalar | dict[str, JsonScalar]]
-JsonObject = dict[str, JsonValue]
+JsonValue = Any
+JsonObject = dict[str, Any]
 
 # ── Kiro domain types ────────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ def kiro_to_claude_response(
             default_tool_name_registry,
         )
 
-        tool_name_registry = default_tool_name_registry()
+        tool_name_registry = cast("ToolNameRegistry", default_tool_name_registry())
 
     content_blocks: list[ClaudeContentBlock] = []
     restored_tool_uses = tool_name_registry.restore_tool_uses(tool_uses)
@@ -182,5 +182,5 @@ def create_claude_stream_event(
             usage, error).
     """
     event: ClaudeStreamEvent = ClaudeStreamEvent(type=event_type)
-    event.update(data)  # type: ignore[arg-type]
+    event.update(cast("Any", data))
     return event

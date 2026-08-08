@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelection } from '../hooks/useSelection';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
@@ -176,7 +177,13 @@ export default function AiProviders() {
         return;
       }
       if (requireConfirm) {
-        const ok = window.confirm(t('aiHub.warnings.copySensitiveConfirm', { label }));
+        const ok = await askConfirm({
+          title: t('common.copy'),
+          message: t('aiHub.warnings.copySensitiveConfirm', { label }),
+          confirmText: t('common.copy'),
+          cancelText: t('common.cancel'),
+          variant: 'warning',
+        });
         if (!ok) return;
       }
       try {
@@ -465,7 +472,6 @@ export default function AiProviders() {
                   <FloatingActionBar
                     selectedCount={selection.selectedCount}
                     onDelete={async () => {
-                      if (!window.confirm(t('aiHub.controller.confirm.bulkDelete', { count: selection.selectedCount }))) return;
                       try {
                         const ids = Array.from(selection.selectedIds);
                         await Promise.all(ids.map(id => controller.handleDelete(id)));

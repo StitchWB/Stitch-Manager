@@ -11,7 +11,7 @@ import base64
 import hashlib
 import logging
 import secrets
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -78,4 +78,4 @@ class PKCEFlow:
             resp.raise_for_status()
             tokens = resp.json()
             logger.info("PKCE token exchange successful")
-            return tokens
+            return cast("dict[str, Any]", tokens)

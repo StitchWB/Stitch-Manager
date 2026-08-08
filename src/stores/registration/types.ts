@@ -149,6 +149,10 @@ export interface AdvancedSettings {
   // Kiro-specific
   kiroPlan?: string; // free | pro | pro_plus | pro_max | power
 
+  // Browser engine for registration: cloakbrowser | shardbrowser.
+  // Fixed per account at registration time; interactive relaunch follows it.
+  browserEngine?: string;
+
   // Google Sheets Identity Graph (NO encryption in this phase)
   googleSheetsSpreadsheetId?: string;
   googleSheetsServiceAccountJson?: string;
@@ -282,6 +286,7 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     captchaSoundFile: 'taksi.mp3',
     cardsText: '',
     cardBin: '',
+    browserEngine: 'cloakbrowser',
 
     // Google Sheets Identity Graph (plaintext; encryption deferred)
     googleSheetsSpreadsheetId: '',

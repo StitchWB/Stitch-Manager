@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.core.types import RegContext, TokenData
@@ -153,4 +153,4 @@ class RegistrationOrchestrator:
             return result
 
         result = await run_in_session(_op)
-        return result.get("id") if isinstance(result, dict) else result.id
+        return cast("str", result.get("id")) if isinstance(result, dict) else cast("str", result.id)

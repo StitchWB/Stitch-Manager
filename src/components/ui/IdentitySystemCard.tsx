@@ -12,6 +12,8 @@ import {
   AtSign,
   Server,
   Cloud,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { AddyIoAccountDetails } from '../../types/generated';
@@ -85,18 +87,8 @@ const ImapForm = memo(
     showPassword?: boolean;
     setShowPassword: (v: boolean) => void;
   }) => (
-    <div className="space-y-4 pt-4 border-t border-white/5">
-      <div className="flex items-center gap-2 px-1">
-        <Server className="w-3.5 h-3.5 text-slate-500" />
-        <span className="text-[10px] uppercase text-slate-500 tracking-wider font-bold">
-          {t('autoReg.imapCredentials')}
-        </span>
-        <Tooltip content="The mailbox where registration emails will arrive">
-          <Info className="w-3 h-3 text-slate-600 cursor-help" />
-        </Tooltip>
-      </div>
-
-      <div className="flex gap-3">
+    <div className="space-y-2 pt-2">
+      <div className="flex gap-2">
         <Input
           label={t('autoReg.host')}
           placeholder="imap.example.com"
@@ -151,7 +143,171 @@ const ImapForm = memo(
 
 ImapForm.displayName = 'ImapForm';
 
+/**
+ * Compact disclosure around the IMAP credentials form.
+ * Collapsed (default once configured) shows a one-line summary
+ * "host · email" instead of the full form — saves ~200px of panel height.
+ */
+const CollapsibleImapForm = memo(
+  ({
+    config,
+    onChange,
+    disabled,
+    passwordSet,
+  }: {
+    config: IdentityConfig;
+    onChange: (c: Partial<IdentityConfig>) => void;
+    disabled?: boolean;
+    passwordSet?: boolean;
+  }) => {
+    const configured = !!(config.server && config.email && (config.password || passwordSet));
+    const [expanded, setExpanded] = useState(!configured);
+    const [showPassword, setShowPassword] = useState(false);
+    const summary =
+      config.server || config.email
+        ? `${config.server || 'imap…'} · ${config.email || '…'}`
+        : '—';
+
+    return (
+      <div className="pt-3 border-t border-white/5">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="w-full flex items-center justify-between gap-2 py-1 group"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <Server className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="text-[10px] uppercase text-slate-500 tracking-wider font-bold shrink-0">
+              {t('autoReg.imapCredentials')}
+            </span>
+            <Tooltip content="The mailbox where registration emails will arrive">
+              <Info className="w-3 h-3 text-slate-600 cursor-help shrink-0" />
+            </Tooltip>
+            <span
+              className={cn(
+                'text-[10px] font-mono truncate',
+                configured ? 'text-slate-400' : 'text-amber-400/80'
+              )}
+            >
+              {summary}
+            </span>
+          </span>
+          {expanded ? (
+            <ChevronUp className="w-3 h-3 text-slate-600 group-hover:text-slate-400 shrink-0" />
+          ) : (
+            <ChevronDown className="w-3 h-3 text-slate-600 group-hover:text-slate-400 shrink-0" />
+          )}
+        </button>
+        {expanded && (
+          <ImapForm
+            config={config}
+            onChange={onChange}
+            disabled={disabled}
+            passwordSet={passwordSet}
+            showPassword={showPassword}
+            setShowPassword={setShowPassword}
+          />
+        )}
+      </div>
+    );
+  }
+);
+
+CollapsibleImapForm.displayName = 'CollapsibleImapForm';
+
+/** Inline IMAP test controls — rendered inside the alias-preview row to save height. */
+const ImapTestInline = memo(
+  ({
+    onTest,
+    testing,
+    testStatus,
+    testError,
+    saveStatus,
+  }: {
+    onTest: () => void;
+    testing: boolean;
+    testStatus: TestConnectionStatus;
+    testError: string;
+    saveStatus?: string;
+  }) => (
+    <span className="flex items-center gap-1.5">
+      {saveStatus === 'saved' && (
+        <span className="text-[9px] font-bold uppercase text-emerald-500 tracking-widest">
+          {t('autoReg.saved')}
+        </span>
+      )}
+      {testStatus === 'success' && (
+        <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider">
+          <CheckCircle size={11} /> {t('identity.imapOk')}
+        </span>
+      )}
+      {testStatus === 'error' && (
+        <Tooltip content={testError || 'Connection failed'}>
+          <span className="flex items-center gap-1 text-[9px] font-bold text-red-400 uppercase tracking-wider cursor-help">
+            <XCircle size={11} /> {t('common.error')}
+          </span>
+        </Tooltip>
+      )}
+      <Button
+        variant="ghost"
+        size="xs"
+        type="button"
+        onClick={onTest}
+        isLoading={testing}
+        leftIcon={<RefreshCw size={12} />}
+        className="text-slate-400 hover:text-slate-200"
+      >
+        Тест
+      </Button>
+    </span>
+  )
+);
+
+ImapTestInline.displayName = 'ImapTestInline';
+
 type GenerationMode = 'custom' | 'cf-to-imap' | 'gmail' | 'addyio' | '33mail' | 'mailtm' | 'icloud_pool';
+
+/** Shared readiness check — used by the card itself and the cockpit header chip. */
+export function isIdentityConfigReady(
+  config: IdentityConfig,
+  passwordSet = false,
+  gmailAppPasswordSet = false
+): boolean {
+  const mode: GenerationMode = config.addyioEnabled
+    ? 'addyio'
+    : config.thirtyThreeMailEnabled
+      ? '33mail'
+      : config.mailtmEnabled
+        ? 'mailtm'
+        : config.icloudEnabled
+          ? 'icloud_pool'
+          : config.strategy === 'gmail'
+            ? 'gmail'
+            : config.strategy === 'cf-to-imap'
+              ? 'cf-to-imap'
+              : 'custom';
+  switch (mode) {
+    case 'gmail':
+      return !!(config.gmailBase && (config.gmailAppPassword || gmailAppPasswordSet));
+    case 'addyio':
+      return !!(config.addyioApiToken && config.server && config.email);
+    case '33mail':
+      return !!(config.thirtyThreeMailUsername && config.server && config.email);
+    case 'mailtm':
+      return true;
+    case 'icloud_pool':
+      return !!config.icloudEnabled;
+    case 'cf-to-imap':
+      return !!(
+        config.emailGenerationDomain &&
+        config.server &&
+        config.email &&
+        (config.password || passwordSet)
+      );
+    default:
+      return !!(config.server && config.email && (config.password || passwordSet));
+  }
+}
 
 export function IdentitySystemCard({
   config,
@@ -170,7 +326,6 @@ export function IdentitySystemCard({
   addyioAccountInfo,
   addyioDomains = [],
 }: IdentitySystemCardProps) {
-  const [showPassword, setShowPassword] = useState(false);
   const [showAppPassword, setShowAppPassword] = useState(false);
   const [preview, setPreview] = useState('');
   const [internalTestStatus, setInternalTestStatus] = useState<TestConnectionStatus>('idle');
@@ -237,21 +392,6 @@ export function IdentitySystemCard({
     }
   };
 
-  const isReady =
-    activeMode === 'gmail'
-      ? !!(config.gmailBase && (config.gmailAppPassword || gmailAppPasswordSet))
-      : activeMode === 'addyio'
-        ? !!(config.addyioApiToken && config.server && config.email)
-        : activeMode === '33mail'
-          ? !!(config.thirtyThreeMailUsername && config.server && config.email)
-          : activeMode === 'mailtm'
-            ? true
-            : activeMode === 'icloud_pool'
-              ? !!(config.icloudEnabled)
-              : activeMode === 'cf-to-imap'
-                ? !!(config.emailGenerationDomain && config.server && config.email && (config.password || passwordSet))
-                : !!(config.server && config.email && (config.password || passwordSet));
-
   const generatePreview = useCallback(() => {
     if (activeMode === 'gmail') {
       const base = config.gmailBase?.replace('@gmail.com', '') || 'your.email';
@@ -306,32 +446,12 @@ export function IdentitySystemCard({
   };
 
   return (
-    <div className="bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden shadow-xl">
-      <div className="px-5 py-4 border-b border-white/5 bg-white/[0.02]">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-            <Mail className={cn('w-5 h-5', isReady ? 'text-emerald-400' : 'text-slate-500')} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-bold text-white tracking-tight">
-              {t('autoReg.identitySystem')}
-            </h3>
-            <p className="text-[10px] text-slate-500 font-medium">{t('autoReg.emailGeneration')}</p>
-          </div>
-          {isReady && (
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px] shadow-emerald-500/50" />
-              {t('autoReg.ready')}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-1.5 p-3">
+    <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-4 gap-1">
         {[
-          { id: 'custom', label: t('autoReg.customDomain'), icon: Globe, color: 'text-blue-400' },
-          { id: 'cf-to-imap', label: t('autoReg.cfToImap'), icon: AtSign, color: 'text-amber-400' },
-          { id: 'gmail', label: t('autoReg.gmailAlias'), icon: Mail, color: 'text-red-400' },
+          { id: 'custom', label: 'Домен', icon: Globe, color: 'text-blue-400' },
+          { id: 'cf-to-imap', label: 'CF→IMAP', icon: AtSign, color: 'text-amber-400' },
+          { id: 'gmail', label: 'Gmail', icon: Mail, color: 'text-red-400' },
           { id: '33mail', label: '33mail', icon: AtSign, color: 'text-purple-400' },
           { id: 'addyio', label: 'Addy.io', icon: Shield, color: 'text-indigo-400' },
           { id: 'mailtm', label: 'Mail.tm', icon: Mail, color: 'text-cyan-400' },
@@ -343,7 +463,7 @@ export function IdentitySystemCard({
             onClick={() => handleModeChange(mode.id as GenerationMode)}
             disabled={disabled}
             className={cn(
-              'flex items-center justify-center px-2 py-1.5 rounded-md border transition-all duration-300 gap-1.5 select-none',
+              'flex items-center justify-center px-1 py-1 rounded-md border transition-all duration-300 gap-1 select-none',
               activeMode === mode.id
                 ? 'bg-white/10 border-white/20 shadow-lg ring-1 ring-white/10'
                 : 'bg-white/[0.02] border-white/5 hover:bg-white/5 hover:border-white/10'
@@ -367,9 +487,9 @@ export function IdentitySystemCard({
         ))}
       </div>
 
-      <div className="px-5 pb-5 space-y-5">
+      <div className="space-y-1.5">
         {activeMode === 'custom' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
@@ -397,34 +517,41 @@ export function IdentitySystemCard({
                 className="font-mono"
                 suffixText={`@${config.email?.split('@')[1] || 'domain.com'}`}
               />
-              <div className="flex items-center justify-between px-1">
+              <div className="flex items-center justify-between gap-1 px-1">
                 <span className="text-xs text-emerald-400 font-mono font-medium truncate">
                   {preview}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  type="button"
-                  onClick={generatePreview}
-                  className="h-6 w-6"
-                >
-                  <RefreshCw size={12} />
-                </Button>
+                <span className="flex items-center gap-1 shrink-0">
+                  <ImapTestInline
+                    onTest={handleTest}
+                    testing={testStatus === 'testing'}
+                    testStatus={testStatus}
+                    testError={testError}
+                    saveStatus={saveStatus}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    onClick={generatePreview}
+                    className="h-6 w-6"
+                  >
+                    <RefreshCw size={12} />
+                  </Button>
+                </span>
               </div>
             </div>
-            <ImapForm
+            <CollapsibleImapForm
               config={config}
               onChange={onChange}
               disabled={disabled}
               passwordSet={passwordSet}
-              showPassword={showPassword}
-              setShowPassword={setShowPassword}
             />
           </div>
         )}
 
         {activeMode === 'cf-to-imap' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <Input
               label={t('autoReg.emailGenerationDomain')}
               placeholder="customdomain.com"
@@ -460,34 +587,41 @@ export function IdentitySystemCard({
                 className="font-mono"
                 suffixText={`@${config.emailGenerationDomain || 'domain.com'}`}
               />
-              <div className="flex items-center justify-between px-1">
+              <div className="flex items-center justify-between gap-1 px-1">
                 <span className="text-xs text-emerald-400 font-mono font-medium truncate">
                   {preview}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  type="button"
-                  onClick={generatePreview}
-                  className="h-6 w-6"
-                >
-                  <RefreshCw size={12} />
-                </Button>
+                <span className="flex items-center gap-1 shrink-0">
+                  <ImapTestInline
+                    onTest={handleTest}
+                    testing={testStatus === 'testing'}
+                    testStatus={testStatus}
+                    testError={testError}
+                    saveStatus={saveStatus}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    onClick={generatePreview}
+                    className="h-6 w-6"
+                  >
+                    <RefreshCw size={12} />
+                  </Button>
+                </span>
               </div>
             </div>
-            <ImapForm
+            <CollapsibleImapForm
               config={config}
               onChange={onChange}
               disabled={disabled}
               passwordSet={passwordSet}
-              showPassword={showPassword}
-              setShowPassword={setShowPassword}
             />
           </div>
         )}
 
         {activeMode === 'gmail' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <Input
               label={t('autoReg.masterGmail')}
               type="email"
@@ -528,26 +662,35 @@ export function IdentitySystemCard({
                 suffixText="@gmail.com"
                 className="font-mono"
               />
-              <div className="flex items-center justify-between px-1">
+              <div className="flex items-center justify-between gap-1 px-1">
                 <span className="text-xs text-emerald-400 font-mono font-medium truncate">
                   {preview}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  type="button"
-                  onClick={generatePreview}
-                  className="h-6 w-6"
-                >
-                  <RefreshCw size={12} />
-                </Button>
+                <span className="flex items-center gap-1 shrink-0">
+                  <ImapTestInline
+                    onTest={handleTest}
+                    testing={testStatus === 'testing'}
+                    testStatus={testStatus}
+                    testError={testError}
+                    saveStatus={saveStatus}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    onClick={generatePreview}
+                    className="h-6 w-6"
+                  >
+                    <RefreshCw size={12} />
+                  </Button>
+                </span>
               </div>
             </div>
           </div>
         )}
 
         {activeMode === '33mail' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <Input
               label="33mail Username"
               value={config.thirtyThreeMailUsername || ''}
@@ -556,25 +699,32 @@ export function IdentitySystemCard({
               suffixText={`.${config.thirtyThreeMailDomain || '33mail.com'}`}
               className="font-mono"
             />
-            <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 shadow-lg">
-              <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-60">
-                {t('common.preview')}
-              </p>
-              <p className="text-white text-xs font-mono truncate">{preview}</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0 bg-purple-500/10 border border-purple-500/20 rounded-xl p-2.5 shadow-lg">
+                <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-60">
+                  {t('common.preview')}
+                </p>
+                <p className="text-white text-xs font-mono truncate">{preview}</p>
+              </div>
+              <ImapTestInline
+                onTest={handleTest}
+                testing={testStatus === 'testing'}
+                testStatus={testStatus}
+                testError={testError}
+                saveStatus={saveStatus}
+              />
             </div>
-            <ImapForm
+            <CollapsibleImapForm
               config={config}
               onChange={onChange}
               disabled={disabled}
               passwordSet={passwordSet}
-              showPassword={showPassword}
-              setShowPassword={setShowPassword}
             />
           </div>
         )}
 
         {activeMode === 'addyio' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <Input
               label={t('autoReg.addyio.apiToken')}
               type="password"
@@ -669,20 +819,27 @@ export function IdentitySystemCard({
                 />
               </div>
             </div>
-            <ImapForm
+            <div className="flex justify-end">
+              <ImapTestInline
+                onTest={handleTest}
+                testing={testStatus === 'testing'}
+                testStatus={testStatus}
+                testError={testError}
+                saveStatus={saveStatus}
+              />
+            </div>
+            <CollapsibleImapForm
               config={config}
               onChange={onChange}
               disabled={disabled}
               passwordSet={passwordSet}
-              showPassword={showPassword}
-              setShowPassword={setShowPassword}
             />
           </div>
         )}
 
         {activeMode === 'mailtm' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 shadow-lg">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-2.5 shadow-lg">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
                   <Mail className="w-4 h-4 text-cyan-400" />
@@ -713,8 +870,8 @@ export function IdentitySystemCard({
         )}
 
         {activeMode === 'icloud_pool' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 shadow-lg">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-2.5 shadow-lg">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-500/20 flex items-center justify-center">
                   <Cloud className="w-4 h-4 text-sky-400" />
@@ -748,38 +905,6 @@ export function IdentitySystemCard({
         )}
       </div>
 
-      {(activeMode === 'custom' || activeMode === 'cf-to-imap' || activeMode === 'gmail') && (
-        <div className="px-5 py-4 border-t border-white/5 bg-white/[0.01] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {saveStatus === 'saved' && (
-              <span className="text-[10px] font-bold uppercase text-emerald-500 tracking-widest animate-in fade-in duration-500">
-                {t('autoReg.saved')}
-              </span>
-            )}
-            {testStatus === 'success' && (
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md">
-                <CheckCircle size={12} /> {t('identity.imapOk')}
-              </div>
-            )}
-            {testStatus === 'error' && (
-              <Tooltip content={testError || 'Connection failed'}>
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-red-400 uppercase tracking-wider bg-red-500/10 px-2 py-1 rounded-md cursor-help">
-                  <XCircle size={12} /> {t('common.error')}
-                </div>
-              </Tooltip>
-            )}
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleTest}
-            isLoading={testStatus === 'testing'}
-            leftIcon={<RefreshCw size={14} />}
-          >
-            {t('autoReg.testConnection')}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

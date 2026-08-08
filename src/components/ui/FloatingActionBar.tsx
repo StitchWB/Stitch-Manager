@@ -3,6 +3,7 @@ import { Download, Trash2, X, RefreshCw, UserPlus, FolderOpen, CheckCircle, Eras
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { LoadingSpinner } from './LoadingSpinner';
+import { ConfirmActionButton } from './ConfirmActionButton';
 
 interface FloatingActionBarProps {
   selectedCount: number;
@@ -182,15 +183,17 @@ export function FloatingActionBar({
               </button>
             )}
 
-            <button
-              onClick={onDelete}
+            <ConfirmActionButton
+              variant="ghost"
+              size="sm"
+              onConfirm={onDelete}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 h-auto text-red-400 hover:text-red-300"
+              leftIcon={<Trash2 className="w-3.5 h-3.5" aria-hidden="true" />}
               aria-label={`Delete ${selectedCount} selected accounts`}
             >
-              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
               {t('common.delete') || 'Delete'}
-            </button>
+            </ConfirmActionButton>
 
             {/* Close button */}
             <button

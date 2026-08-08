@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 JsonScalar = str | int | float | bool | None
-JsonValue = JsonScalar | dict[str, JsonScalar] | list[JsonScalar | dict[str, JsonScalar]]
-JsonObject = dict[str, JsonValue]
+JsonValue = Any
+JsonObject = dict[str, Any]
 
 
 class OpenAIUsage(TypedDict, total=False):

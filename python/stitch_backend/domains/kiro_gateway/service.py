@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from stitch_backend.domains.accounts.models import Account
 from stitch_backend.domains.accounts.service import AccountService
@@ -81,11 +81,11 @@ class KiroGatewayService:
             profile_arn=meta.get("profile_arn") if isinstance(meta, dict) else None,
             machine_id=acc.machine_id,
             expires_at=_to_unix_ms(acc.expires_at),
-            _error_count=acc.consecutive_errors or 0,
+            _error_count=cast("Any", acc).consecutive_errors or 0,
             _last_used=_to_unix_ms(acc.last_used_at),
-            _cooldown_until=_to_unix_ms(acc.cooldown_until),
-            _suspended_at=_to_unix_ms(acc.suspended_at),
-            _suspend_reason=acc.suspend_reason,
+            _cooldown_until=_to_unix_ms(cast("Any", acc).cooldown_until),
+            _suspended_at=_to_unix_ms(cast("Any", acc).suspended_at),
+            _suspend_reason=cast("Any", acc).suspend_reason,
         )
 
     # ── Token refresh (delegate) ──────────────────────────────────────────
@@ -132,8 +132,8 @@ class KiroGatewayService:
         if snapshot is None:
             return
         acc = await self._accounts_service.get_account(account_id)
-        acc.consecutive_errors = snapshot._error_count
-        acc.cooldown_until = (
+        cast("Any", acc).consecutive_errors = snapshot._error_count
+        cast("Any", acc).cooldown_until = (
             datetime.fromtimestamp(snapshot._cooldown_until / 1000, tz=UTC)
             if snapshot._cooldown_until > 0
             else None
@@ -147,13 +147,13 @@ class KiroGatewayService:
         if snapshot is None:
             return
         acc = await self._accounts_service.get_account(account_id)
-        acc.suspended_at = (
+        cast("Any", acc).suspended_at = (
             datetime.fromtimestamp(snapshot._suspended_at / 1000, tz=UTC)
             if snapshot._suspended_at > 0
             else None
         )
-        acc.suspend_reason = snapshot._suspend_reason
-        acc.consecutive_errors = snapshot._error_count
+        cast("Any", acc).suspend_reason = snapshot._suspend_reason
+        cast("Any", acc).consecutive_errors = snapshot._error_count
         if snapshot._suspended_at > 0:
             acc.status = "banned"
         acc.updated_at = _utcnow()
@@ -163,9 +163,9 @@ class KiroGatewayService:
         """Clear suspension in the pool AND in the DB."""
         self._pool.clear_suspended(account_id)
         acc = await self._accounts_service.get_account(account_id)
-        acc.suspended_at = None
-        acc.suspend_reason = None
-        acc.consecutive_errors = 0
+        cast("Any", acc).suspended_at = None
+        cast("Any", acc).suspend_reason = None
+        cast("Any", acc).consecutive_errors = 0
         acc.status = "active"
         acc.updated_at = _utcnow()
         await self._db.flush()

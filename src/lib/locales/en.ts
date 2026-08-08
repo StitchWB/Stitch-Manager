@@ -1265,6 +1265,13 @@ export const en: Translations = {
     emailGeneration: "Email generation",
     emailGenerationDomain: "EMAIL GENERATION DOMAIN",
     emailPattern: "Email Pattern",
+    cockpit: {
+      identity: "Identity",
+      browser: "Browser",
+      network: "Network",
+      launch: "Launch",
+      notify: "Notifications",
+    },
     engineTab: {
       auto: "Auto",
       cardsLoaded: "Cards Loaded",
@@ -1517,6 +1524,7 @@ export const en: Translations = {
     cleared: "Cleared",
     close: "Close",
     confirm: "Confirm",
+    sure: "Sure?",
     copy: "Copy",
     copyToClipboard: "Copy To Clipboard",
     creatingTask: "Creating Task",

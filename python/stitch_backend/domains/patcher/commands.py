@@ -15,7 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.ttl_cache import TTLCache, TTLCacheDict
@@ -72,17 +72,17 @@ def _get_backup_dir(ide: str) -> Path:
     Caches the result to avoid repeated mkdir() calls.
     """
     if not hasattr(_get_backup_dir, '_cache'):
-        _get_backup_dir._cache = {}
+        cast("Any", _get_backup_dir)._cache = {}
 
-    if ide not in _get_backup_dir._cache:
+    if ide not in cast("Any", _get_backup_dir)._cache:
         config_dir = get_config_dir(ide)
         if config_dir is None:
             config_dir = Path.home() / f".{ide}"
         backup_dir = config_dir / PATCH_BACKUP_DIR_NAME
         backup_dir.mkdir(parents=True, exist_ok=True)
-        _get_backup_dir._cache[ide] = backup_dir
+        cast("Any", _get_backup_dir)._cache[ide] = backup_dir
 
-    return _get_backup_dir._cache[ide]
+    return cast("Path", cast("Any", _get_backup_dir)._cache[ide])
 
 
 def _find_extension_path(ide: str) -> Path | None:
@@ -93,7 +93,7 @@ def _find_extension_path(ide: str) -> Path | None:
 
     candidates = _IDE_EXTENSION_FILES.get(ide, ["dist/extension.js"])
     for rel in candidates:
-        candidate = installation.install_path / rel
+        candidate = cast("Path", installation.install_path) / rel
         if candidate.exists():
             return candidate
     return None
@@ -123,23 +123,23 @@ def _read_patch_version(file_path: Path) -> str | None:
 def _get_running_processes() -> set[str]:
     """Get set of running process names (cached for 30 seconds)."""
     if not hasattr(_get_running_processes, '_cache'):
-        _get_running_processes._cache = None
-        _get_running_processes._cache_time = 0
+        cast("Any", _get_running_processes)._cache = None
+        cast("Any", _get_running_processes)._cache_time = 0
 
     current_time = time.time()
-    if _get_running_processes._cache is None or current_time - _get_running_processes._cache_time > 30:
+    if cast("Any", _get_running_processes)._cache is None or current_time - cast("Any", _get_running_processes)._cache_time > 30:
         try:
             import psutil
-            _get_running_processes._cache = {
+            cast("Any", _get_running_processes)._cache = {
                 proc.info["name"].lower()
                 for proc in psutil.process_iter(["name"])
                 if proc.info["name"]
             }
-            _get_running_processes._cache_time = current_time
+            cast("Any", _get_running_processes)._cache_time = current_time
         except Exception:
-            _get_running_processes._cache = set()
+            cast("Any", _get_running_processes)._cache = set()
 
-    return _get_running_processes._cache
+    return cast("set[str]", cast("Any", _get_running_processes)._cache)
 
 
 def _is_ide_running(ide: str) -> bool:
@@ -450,7 +450,7 @@ async def cmd_detect_ides(params: dict) -> list[dict[str, Any]]:
     if not force:
         cached = _detect_cache.get()
         if cached is not None:
-            return cached
+            return cast("list[dict[str, Any]]", cached)
 
     result = await asyncio.to_thread(_sync_detect_all)
     _detect_cache.set(result)
@@ -466,7 +466,7 @@ async def cmd_get_patch_status(params: dict) -> dict[str, Any]:
 
     cached = _patch_status_cache.get(ide_type)
     if cached is not None:
-        return cached
+        return cast("dict[str, Any]", cached)
 
     result = await asyncio.to_thread(_sync_get_patch_status, ide_type)
     _patch_status_cache.set(ide_type, result)
@@ -482,7 +482,7 @@ async def cmd_list_backups(params: dict) -> list[dict[str, Any]]:
 
     cached = _backups_cache.get(ide_type)
     if cached is not None:
-        return cached
+        return cast("list[dict[str, Any]]", cached)
 
     result = await asyncio.to_thread(_sync_list_backups, ide_type)
     _backups_cache.set(ide_type, result)
@@ -494,7 +494,7 @@ async def cmd_get_kiro_patch_config(params: dict) -> dict[str, Any]:
     """Get Kiro patch configuration."""
     cached = _config_cache.get()
     if cached is not None:
-        return cached
+        return cast("dict[str, Any]", cached)
 
     result = await asyncio.to_thread(_sync_read_config)
     _config_cache.set(result)

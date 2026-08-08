@@ -11,6 +11,7 @@ import logging
 import subprocess
 import webbrowser
 from datetime import UTC
+from typing import Any, cast
 
 from stitch_backend import __version__
 from stitch_backend.core.command_registry import register_command
@@ -306,12 +307,12 @@ async def cmd_obs_recent(params: dict) -> list:
     from stitch_backend.domains.logging.service import LoggingService
 
     limit = int(params.get("limit", 50))
-    return await run_in_read_session(
+    return cast("list[Any]", await cast("Any", run_in_read_session)(
         lambda s: LoggingService(s).query_logs({
             "channels": ["observability"],
             "limit": limit,
         })
-    )
+    ))
 
 
 @register_command("obs_timeline", readonly=True)
@@ -322,9 +323,9 @@ async def cmd_obs_timeline(params: dict) -> list:
 
     filter_ = params.get("filter", {})
     filter_.setdefault("channels", ["observability", "backend", "app"])
-    return await run_in_read_session(
+    return cast("list[Any]", await cast("Any", run_in_read_session)(
         lambda s: LoggingService(s).query_logs(filter_)
-    )
+    ))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -487,7 +488,7 @@ async def cmd_initialize_app(params: dict) -> dict:
     result["registrationStatus"] = registration_status
     result["registrationJobs"] = registration_jobs
 
-    return result
+    return cast("dict[Any, Any]", result)
 
 
 # =============================================================================
@@ -611,7 +612,7 @@ async def cmd_get_proxy_debug_logs(params: dict) -> list:
             "limit": limit,
         })
     )
-    return result.get("logs", [])
+    return cast("list[Any]", cast("dict[Any, Any]", result).get("logs", []))
 
 
 @register_command("clear_proxy_debug_logs")

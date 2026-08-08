@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import type { ConfigTab } from '../components/registration/ConfigTabs';
+
 // ============================================
 // Types
 // ============================================
@@ -35,7 +37,7 @@ interface LogsPagePreferences {
 }
 
 interface AutoRegPagePreferences {
-  activeTab: 'identity' | 'engine' | 'network' | 'inbox' | 'sounds';
+  activeTab: ConfigTab;
   useRegistrationV2: boolean;
 
   isRunning: boolean; // Track if registration is in progress
@@ -90,7 +92,7 @@ interface UIPreferencesState {
   resetLogsFilters: () => void;
 
   // Actions for AutoReg page
-  setAutoRegTab: (tab: 'identity' | 'engine' | 'network' | 'inbox' | 'sounds') => void;
+  setAutoRegTab: (tab: ConfigTab) => void;
   setAutoRegV2: (enabled: boolean) => void;
 
   setAutoRegRunning: (running: boolean) => void;
@@ -145,7 +147,7 @@ const defaultLogsPreferences: LogsPagePreferences = {
 };
 
 const defaultAutoRegPreferences: AutoRegPagePreferences = {
-  activeTab: 'identity',
+  activeTab: 'all',
   useRegistrationV2: false,
   isRunning: false,
   providerEmailSettings: {},
@@ -393,7 +395,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
     }),
     {
       name: 'ui-preferences-storage',
-      version: 6,
+      version: 7,
       migrate: (persistedState: unknown) => {
         const state = persistedState as Record<string, unknown>;
         if (state.accountsPage) {
@@ -411,10 +413,23 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
         }
         // v6: AutoReg "automation" tab removed (moved to Settings → Automation
         // and AI Hub → Rotation). Fall back to "identity" for legacy values.
+        // v7: cockpit tabs renamed (engine→launch, sounds→notify, inbox removed).
         if (state.autoRegPage) {
           const autoRegPage = state.autoRegPage as Record<string, unknown>;
-          if (autoRegPage.activeTab === 'automation') {
-            autoRegPage.activeTab = 'identity';
+          const legacyTabs: Record<string, string> = {
+            automation: 'all',
+            engine: 'launch',
+            sounds: 'notify',
+            inbox: 'all',
+          };
+          const tab = autoRegPage.activeTab as string | undefined;
+          if (tab && legacyTabs[tab]) {
+            autoRegPage.activeTab = legacyTabs[tab];
+          } else if (
+            tab &&
+            !['all', 'identity', 'browser', 'network', 'launch', 'notify'].includes(tab)
+          ) {
+            autoRegPage.activeTab = 'all';
           }
         }
         return state as unknown as UIPreferencesState;

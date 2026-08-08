@@ -26,7 +26,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -171,7 +171,7 @@ def _fetch_new_token(service_account_json: str) -> str:
             scopes=["https://www.googleapis.com/auth/spreadsheets"],
         )
         creds.refresh(Request())
-        return creds.token
+        return cast("str", creds.token)
     except ImportError:
         pass
 
@@ -198,9 +198,9 @@ def _fetch_new_token(service_account_json: str) -> str:
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import padding
 
-        private_key = serialization.load_pem_private_key(
+        private_key = cast("Any", serialization.load_pem_private_key(
             sa_info["private_key"].encode(), password=None,
-        )
+        ))
         signature = private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
     except ImportError:
         raise RuntimeError(
@@ -220,7 +220,7 @@ def _fetch_new_token(service_account_json: str) -> str:
         timeout=10.0,
     )
     resp.raise_for_status()
-    return resp.json()["access_token"]
+    return cast("str", resp.json()["access_token"])
 
 
 def _get_access_token(service_account_json: str) -> str:
@@ -271,7 +271,7 @@ def _get_cell_value(normalized_row: dict, key: str) -> str:
     """Extract a cell value from a NormalizedRow by key."""
     for cell in normalized_row.get("cells", []):
         if cell["key"] == key:
-            return cell["value"]
+            return cast("str", cell["value"])
     return ""
 
 

@@ -20,9 +20,12 @@ import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from stitch_backend.config import REPO_ROOT
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.core.event_schemas import LogEntryPayload, ObsEventPayload
 
@@ -241,6 +244,9 @@ def _build_provider(provider_name: str, config: dict):
             billing_state=config.get("billing_state") or config.get("billingState"),
             billing_zip=config.get("billing_zip") or config.get("billingZip"),
             kiro_plan=config.get("kiro_plan") or config.get("kiroPlan") or "free",
+            browser_engine=config.get("browser_engine")
+            or config.get("browserEngine")
+            or "cloakbrowser",
         )
 
     if provider_name == "windsurf":
@@ -302,7 +308,7 @@ class _LogBridgeHandler(logging.Handler):
     # hot-reloads (where isinstance() fails because the class object differs).
     _is_stitch_log_bridge = True
 
-    def __init__(self, callback: callable[[str], None]) -> None:
+    def __init__(self, callback: Callable[[str], None]) -> None:
         super().__init__(level=logging.DEBUG)
         self._callback = callback
 
@@ -318,7 +324,7 @@ class _LogBridgeHandler(logging.Handler):
 _BRIDGE_LOGGER_NAMES = ("autoreg",)
 
 
-def _install_log_bridge(callback: callable[[str], None]) -> list[_LogBridgeHandler]:
+def _install_log_bridge(callback: Callable[[str], None]) -> list[_LogBridgeHandler]:
     """Attach ``_LogBridgeHandler`` to all autoreg/pipeline loggers.
 
     Idempotent: any previously-attached bridge handlers are removed first so
@@ -891,6 +897,30 @@ class RegistrationService:
                             )
                         except Exception as _bp_exc:
                             log_callback(f"[db] Browser profile save failed (non-fatal): {_bp_exc}")
+
+                    # Persist browser engine + shard profile id via ORM so the
+                    # interactive "Open browser" relaunches the account with the
+                    # same engine/fingerprint. ORM update works on both legacy
+                    # Rust-created and ORM-created schemas.
+                    _engine = _kiro_account.get("browser_engine") or "cloakbrowser"
+                    _shard_id = _kiro_account.get("shard_profile_id")
+                    if account_id:
+                        try:
+                            from stitch_backend.database import run_in_session
+                            from stitch_backend.domains.accounts.models import Account
+
+                            async def _set_engine(session):
+                                acc = await session.get(Account, str(account_id))
+                                if acc is not None:
+                                    acc.browser_engine = _engine
+                                    acc.shard_profile_id = _shard_id
+
+                            await run_in_session(_set_engine)
+                            log_callback(f"[db] Browser engine saved: {_engine}")
+                        except Exception as _eng_exc:
+                            log_callback(
+                                f"[db] Browser engine save failed (non-fatal): {_eng_exc}"
+                            )
                 except Exception as db_exc:
                     import traceback as _tb
                     logger.warning(
@@ -932,7 +962,7 @@ class RegistrationService:
                     "message": f"Registration failed: {error_msg}",
                 })
 
-            return result
+            return cast("dict[Any, Any]", result)
 
         except asyncio.CancelledError:
             logger.info("Registration %s cancelled by user", job_id)

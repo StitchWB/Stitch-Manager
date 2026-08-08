@@ -216,3 +216,55 @@ export async function deleteGoogleSheetsAccountAuthLink(params: {
   const normalized = withNormalizedSpreadsheetId(params);
   return safeInvoke<boolean>('delete_google_sheets_account_auth_link', normalized);
 }
+
+// ============================================
+// Google OAuth (user-account flow)
+// ============================================
+
+export interface GoogleOAuthStartResponse {
+  authUrl: string;
+  state: string;
+  port?: number;
+}
+
+export interface GoogleOAuthStatus {
+  connected: boolean;
+  email: string | null;
+}
+
+export interface GoogleOAuthCallbackResult {
+  received: boolean;
+  success: boolean;
+  email: string | null;
+}
+
+/**
+ * Start Google OAuth flow. Returns auth_url to open in a popup and state
+ * for CSRF validation (handled by the backend callback).
+ */
+export async function startGoogleOAuth(): Promise<GoogleOAuthStartResponse> {
+  return safeInvoke<GoogleOAuthStartResponse>('start_google_oauth', {});
+}
+
+/**
+ * Remove stored Google OAuth tokens. Returns success flag.
+ */
+export async function disconnectGoogleOAuth(): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>('disconnect_google_oauth', {});
+}
+
+/**
+ * Check current Google OAuth status. Used for initial mount load and
+ * for polling during the OAuth popup flow.
+ */
+export async function getGoogleOAuthStatus(): Promise<GoogleOAuthStatus> {
+  return safeInvoke<GoogleOAuthStatus>('get_google_oauth_status', {});
+}
+
+/**
+ * Check if loopback server received OAuth callback.
+ * Used for polling during the OAuth popup flow.
+ */
+export async function checkGoogleOAuthCallback(state: string): Promise<GoogleOAuthCallbackResult> {
+  return safeInvoke<GoogleOAuthCallbackResult>('check_google_oauth_callback', { state });
+}

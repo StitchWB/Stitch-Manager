@@ -21,6 +21,9 @@ from typing import TYPE_CHECKING, Protocol, TypedDict
 
 import httpx
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 from .sse import (
     ContextUsageEvent,
     ParsedEvent,
@@ -188,7 +191,7 @@ async def call_kiro_api_stream(
     *,
     client: httpx.AsyncClient,
     preferred_endpoint: str | None = None,
-    refresh_token_hook: callable[[AccountLike], object] | None = None,
+    refresh_token_hook: Callable[[AccountLike], object] | None = None,
 ) -> AsyncGenerator[ParsedEvent, None]:
     """Stream Kiro API response, yielding parsed events from the AWS Event Stream.
 
@@ -270,7 +273,7 @@ async def call_kiro_api(
     *,
     client: httpx.AsyncClient,
     preferred_endpoint: str | None = None,
-    refresh_token_hook: callable[[AccountLike], object] | None = None,
+    refresh_token_hook: Callable[[AccountLike], object] | None = None,
 ) -> KiroStreamResult:
     """Non-streaming Kiro API call — accumulates all events into a result.
 
@@ -304,7 +307,7 @@ async def _accumulate_stream(
     payload: dict[str, object],
     client: httpx.AsyncClient,
     preferred_endpoint: str | None,
-    refresh_token_hook: callable[[AccountLike], object] | None,
+    refresh_token_hook: Callable[[AccountLike], object] | None,
 ) -> KiroStreamResult:
     """Accumulate streaming events into a KiroStreamResult."""
     result = KiroStreamResult()

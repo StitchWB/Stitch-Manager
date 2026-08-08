@@ -16,6 +16,7 @@ Commands:
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
@@ -49,7 +50,7 @@ async def _resolve_sa_json(provided: str) -> str:
             "Google Sheets service account JSON is not configured. "
             "Paste it in Settings → Google Sheets and click Save."
         )
-    return value
+    return cast("str", value)
 
 
 # ── Connection ───────────────────────────────────────────────────────────────

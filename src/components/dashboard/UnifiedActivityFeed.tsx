@@ -8,14 +8,12 @@ import { cn } from '@/lib/utils';
 
 import { useLogsStore } from '../../stores/logs';
 import { useAccountsStore } from '../../stores/accounts';
+import { useSchedulerStore, startTaskPolling, stopTaskPolling } from '../../stores/scheduler';
 import {
   getRegistrationJobs,
   clearRegistrationJobs,
 } from '../../lib/backend/modules/registration';
-import {
-  getScheduledTasks,
-  getTaskExecutions,
-} from '../../lib/backend/modules/scheduler';
+import { getTaskExecutions } from '../../lib/backend/modules/scheduler';
 import type { RegistrationJob } from '../../types/ui';
 
 import { ActivityItem } from './ActivityItem';
@@ -88,6 +86,8 @@ export function UnifiedActivityFeed() {
   const [schedulerItems, setSchedulerItems] = useState<FeedItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  const tasks = useSchedulerStore(state => state.tasks);
+
   const refreshRegJobs = useCallback(async () => {
     try {
       const jobs = await getRegistrationJobs();
@@ -102,7 +102,7 @@ export function UnifiedActivityFeed() {
 
   const refreshSchedulerExecutions = useCallback(async () => {
     try {
-      const tasks = await getScheduledTasks();
+      const tasks = useSchedulerStore.getState().tasks;
       const enabled = tasks.filter(t => t.enabled).slice(0, 5);
       const buckets = await Promise.all(
         enabled.map(task =>
@@ -198,14 +198,21 @@ export function UnifiedActivityFeed() {
   }, [accounts, navigate]);
 
   useEffect(() => {
+    startTaskPolling();
     void refreshRegJobs();
-    void refreshSchedulerExecutions();
     const id = window.setInterval(() => {
       void refreshRegJobs();
-      void refreshSchedulerExecutions();
     }, POLL_MS);
-    return () => window.clearInterval(id);
-  }, [refreshRegJobs, refreshSchedulerExecutions]);
+    return () => {
+      window.clearInterval(id);
+      stopTaskPolling();
+    };
+  }, [refreshRegJobs]);
+
+  // Refresh scheduler executions reactively when the centrally-polled tasks change.
+  useEffect(() => {
+    void refreshSchedulerExecutions();
+  }, [tasks, refreshSchedulerExecutions]);
 
   const merged = useMemo(() => {
     const items =

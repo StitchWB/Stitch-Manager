@@ -20,9 +20,12 @@ import asyncio
 import json
 import logging
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import typer
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from stitch_backend.core.command_meta import (
     CommandMeta,
@@ -53,12 +56,12 @@ def _pydantic_type_to_cli_type(annotation: Any) -> type:
         return str
 
     if annotation in (int, float, bool, str):
-        return annotation
+        return cast("type", annotation)
 
     return str  # fallback: complex types as string
 
 
-def _build_cli_command(meta: CommandMeta, ensure_bootstrapped: callable):
+def _build_cli_command(meta: CommandMeta, ensure_bootstrapped: Callable[..., Any]):
     """Generate a Typer command with named flags from Pydantic model.
 
     For commands with a request_model:
@@ -147,11 +150,11 @@ def _build_cli_command(meta: CommandMeta, ensure_bootstrapped: callable):
     exec(func_src, ns)
     fn = ns[meta.name]
     fn.__doc__ = meta.description
-    fn.__generated__ = func_src  # For debugging
+    cast("Any", fn).__generated__ = func_src  # For debugging
     return fn
 
 
-def register_all_commands(app: typer.Typer, ensure_bootstrapped: callable) -> int:
+def register_all_commands(app: typer.Typer, ensure_bootstrapped: Callable[..., Any]) -> int:
     """Register grouped CLI commands from metadata.
 
     Args:
