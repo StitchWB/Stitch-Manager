@@ -296,6 +296,9 @@ class AiProxyAnalytics:
                 "estimatedCost": float(row.estimated_cost) if row else 0.0,
             }
         except Exception:
+            logger.warning(
+                "AiProxyAnalytics.get_daily_stats failed", exc_info=True,
+            )
             return {"totalRequests": 0, "totalTokens": 0, "estimatedCost": 0.0}
 
     @classmethod
@@ -312,6 +315,9 @@ class AiProxyAnalytics:
                 for r in result.fetchall()
             ]
         except Exception:
+            logger.warning(
+                "AiProxyAnalytics.get_model_usage failed", exc_info=True,
+            )
             return []
 
     @classmethod
@@ -325,6 +331,9 @@ class AiProxyAnalytics:
             row = result.fetchone()
             return float(row.total) if row else 0.0
         except Exception:
+            logger.warning(
+                "AiProxyAnalytics.get_cost_estimate failed", exc_info=True,
+            )
             return 0.0
 
     @classmethod
@@ -342,6 +351,9 @@ class AiProxyAnalytics:
                 for r in result.fetchall()
             ]
         except Exception:
+            logger.warning(
+                "AiProxyAnalytics.get_weekly_stats failed", exc_info=True,
+            )
             return []
 
     @classmethod
@@ -362,6 +374,10 @@ class AiProxyAnalytics:
                 for r in result.fetchall()
             ]
         except Exception:
+            logger.warning(
+                "AiProxyAnalytics.get_daily_usage_by_account failed",
+                exc_info=True,
+            )
             return []
 
 

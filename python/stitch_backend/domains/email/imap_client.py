@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -54,15 +55,15 @@ class ImapClient:
                 host=self._host, port=self._port,
             )
         if self._user and self._password:
-            await self._client.login(self._user, self._password)
+            await cast("Any", self._client).login(self._user, self._password)
         logger.info("IMAP connected to %s:%d", self._host, self._port)
 
     async def disconnect(self) -> None:
         if self._client is not None:
             try:
-                await self._client.logout()
+                await cast("Any", self._client).logout()
             except Exception:
-                pass
+                logger.debug("IMAP logout failed", exc_info=True)
             self._client = None
 
     async def search(self, folder: str = "INBOX", criteria: str = "ALL") -> list[str]:
@@ -70,8 +71,8 @@ class ImapClient:
         if self._client is None:
             return []
         try:
-            await self._client.select(folder)
-            _, data = await self._client.uid("search", None, criteria)
+            await cast("Any", self._client).select(folder)
+            _, data = await cast("Any", self._client).uid("search", None, criteria)
             uids = data[0].split() if data and data[0] else []
             return [uid.decode() if isinstance(uid, bytes) else uid for uid in uids]
         except Exception:
@@ -83,8 +84,8 @@ class ImapClient:
         if self._client is None:
             return ""
         try:
-            await self._client.select(folder)
-            _, data = await self._client.uid("fetch", uid, "(RFC822)")
+            await cast("Any", self._client).select(folder)
+            _, data = await cast("Any", self._client).uid("fetch", uid, "(RFC822)")
             if data and len(data) >= 2:
                 raw = data[1]
                 return raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)

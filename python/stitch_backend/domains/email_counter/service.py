@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -150,6 +150,10 @@ class EmailCounterService:
                     "createdAt": row[2],
                 })
         except Exception:
+            logger.warning(
+                "EmailCounter diagnostics: failed to fetch last generated emails",
+                exc_info=True,
+            )
             last_emails = []
 
         # Current email strategy
@@ -157,9 +161,13 @@ class EmailCounterService:
             result = await self._db.execute(
                 text("SELECT value FROM settings WHERE key = 'email_strategy'")
             )
-            row = result.first()
+            row = cast("Any", result.first())
             strategy = row[0] if row else "plus_alias"
         except Exception:
+            logger.warning(
+                "EmailCounter diagnostics: failed to read email_strategy setting",
+                exc_info=True,
+            )
             strategy = "plus_alias"
 
         return {

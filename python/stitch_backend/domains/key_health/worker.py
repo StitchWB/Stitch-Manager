@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -39,7 +39,7 @@ class KeyHealthWorker:
         """Start the periodic health check loop."""
         if cls._task is not None:
             logger.warning("KeyHealthWorker already running")
-            return
+            return None
         cls._interval_seconds = interval_seconds
         cls._task = asyncio.create_task(cls._loop())
         logger.info(
@@ -50,7 +50,7 @@ class KeyHealthWorker:
     async def stop(cls) -> None:
         """Stop the periodic health check loop."""
         if cls._task is None:
-            return
+            return None
         cls._task.cancel()
         try:
             await cls._task
@@ -81,7 +81,7 @@ class KeyHealthWorker:
 
         if not keys_to_test:
             logger.debug("KeyHealthWorker: no keys to test")
-            return
+            return None
 
         logger.info("KeyHealthWorker: testing %d keys", len(keys_to_test))
 
@@ -133,8 +133,9 @@ class KeyHealthWorker:
                         "base_url": base_url,
                     })
             except Exception:
-                logger.debug(
+                logger.warning(
                     "KeyHealthWorker: could not load keys for %s", provider,
+                    exc_info=True,
                 )
 
         # ── Custom providers ────────────────────────────────────────────────
@@ -142,7 +143,10 @@ class KeyHealthWorker:
             custom_keys = await cls._load_custom_provider_keys()
             keys.extend(custom_keys)
         except Exception:
-            logger.debug("KeyHealthWorker: could not load custom provider keys")
+            logger.warning(
+                "KeyHealthWorker: could not load custom provider keys",
+                exc_info=True,
+            )
 
         return keys
 
@@ -187,9 +191,10 @@ class KeyHealthWorker:
                             "base_url": base_url,
                         })
                 except Exception:
-                    logger.debug(
-                        "KeyHealthWorker: could not load custom keys for %s",
-                        provider_id,
+                    logger.warning(
+                        "KeyHealthWorker: could not load custom keys for %s (name=%s)",
+                        provider_id, provider_name,
+                        exc_info=True,
                     )
             return results
         return await run_in_read_session(_op)
@@ -207,10 +212,10 @@ class KeyHealthWorker:
         if base_url:
             test_url = base_url.rstrip("/")
         else:
-            test_url = cls._default_base_url(provider_id)
+            test_url = cast("str", cls._default_base_url(provider_id))
 
         if not test_url:
-            return
+            return None
 
         # Map provider_id to adapter_type
         adapter_type = cls._adapter_type_for_provider(provider_id)
