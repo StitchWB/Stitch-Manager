@@ -81,8 +81,9 @@ async def check_account_status(db: AsyncSession, account_id: int) -> dict[str, A
 
     # Token expired?
     if _is_token_expired(expires_at):
-        # For now, return expired status (token refresh requires OAuth logic)
-        logger.warning("Token for account %d (%s) is expired", account_id, email)
+        # Expected business state (surfaced in the UI payload), not an
+        # anomaly — keep it out of the WARNING/stderr stream.
+        logger.debug("Token for account %d (%s) is expired", account_id, email)
         return _status_info(
             provider, email, False, "Expired",
             expires_at=expires_at,
