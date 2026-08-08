@@ -30,7 +30,7 @@ export default {
         'vsc-border': 'rgba(255, 255, 255, 0.06)',
         'vsc-border-light': 'rgba(255, 255, 255, 0.10)',
         'vsc-text': '#e2e8f0',
-        'vsc-text-muted': '#64748b',
+        'vsc-text-muted': '#94a3b8',
         'vsc-blue': '#818cf8',
         'vsc-green': '#34d399',
         'vsc-red': '#f87171',

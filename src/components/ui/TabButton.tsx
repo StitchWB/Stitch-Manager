@@ -52,7 +52,7 @@ export function TabButton({
               ? appearance === 'workspace'
                 ? 'text-vsc-blue'
                 : 'text-indigo-300'
-              : 'text-slate-500'
+              : 'text-slate-400'
           )}
         >
           {icon}

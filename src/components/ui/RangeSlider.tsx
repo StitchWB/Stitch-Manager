@@ -119,8 +119,8 @@ export function RangeSlider({
       />
       {showMinMax && (minLabel || maxLabel) && (
         <div className="flex justify-between mt-1">
-          <span className="text-[9px] text-slate-600">{minLabel || min}</span>
-          <span className="text-[9px] text-slate-600">{maxLabel || max}</span>
+          <span className="text-[10px] text-slate-400/80">{minLabel || min}</span>
+          <span className="text-[10px] text-slate-400/80">{maxLabel || max}</span>
         </div>
       )}
     </div>

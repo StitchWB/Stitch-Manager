@@ -35,7 +35,7 @@ export function UIScaleSection({ uiScale, onUIScaleChange }: UIScaleSectionProps
         <div className="flex justify-center mt-2">
           <ButtonBase
             onClick={() => onUIScaleChange(1.0)}
-            className="text-xs text-primary/60 hover:text-primary transition-colors font-medium uppercase tracking-tighter"
+            className="text-xs text-primary/80 hover:text-primary transition-colors font-medium uppercase tracking-tighter"
           >
             {t('settings.general.scaleReset')}
           </ButtonBase>
