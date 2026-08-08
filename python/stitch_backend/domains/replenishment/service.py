@@ -190,7 +190,11 @@ class ReplenishmentService:
                 try:
                     await self._trigger_registration(provider, strategy, settings)
                 except Exception as exc:
-                    logger.error("Replenishment failed for %s: %s", provider, exc)
+                    logger.warning(
+                        "Replenishment failed for %s (strategy=%s): %s",
+                        provider, strategy, exc,
+                        exc_info=True,
+                    )
                     self._update_status(is_running=False, provider=provider, step="Error", error=str(exc)[:200])
 
                 # Only one provider per tick to avoid conflicts

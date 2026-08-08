@@ -104,7 +104,7 @@ class FreemodelBridgeService:
                 logger.warning("[FreeBridge] Process started but not ready within 15s")
         except Exception as exc:
             _error = str(exc)
-            logger.error("[FreeBridge] Failed to start: %s", exc)
+            logger.error("[FreeBridge] Failed to start: %s", exc, exc_info=True)
 
         return FreemodelBridgeService.status()
 
