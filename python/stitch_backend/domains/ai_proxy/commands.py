@@ -12,7 +12,10 @@ import logging
 import time
 import webbrowser
 from pathlib import Path
-from typing import Any, Awaitable, Callable, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.http_gateway import ProxyUnavailableError, gateway
@@ -797,9 +800,9 @@ async def _fetch_all_quotas_impl() -> list:
 @register_command("fetch_all_quotas_cmd")
 async def cmd_fetch_all_quotas(params: dict) -> list:
     """Cached fan-out (TTL + single-flight). ``{"force": true}`` bypasses TTL."""
-    return await _ALL_QUOTAS_CACHE.get_or_fetch(
+    return list(await _ALL_QUOTAS_CACHE.get_or_fetch(
         _fetch_all_quotas_impl, force=bool((params or {}).get("force"))
-    )
+    ))
 
 
 async def _fetch_openai_account_quotas_impl() -> list:
@@ -886,9 +889,9 @@ async def _fetch_openai_account_quotas_impl() -> list:
 @register_command("fetch_openai_account_quotas_cmd")
 async def cmd_fetch_openai_account_quotas(params: dict) -> list:
     """Cached fan-out (TTL + single-flight). ``{"force": true}`` bypasses TTL."""
-    return await _OPENAI_QUOTAS_CACHE.get_or_fetch(
+    return list(await _OPENAI_QUOTAS_CACHE.get_or_fetch(
         _fetch_openai_account_quotas_impl, force=bool((params or {}).get("force"))
-    )
+    ))
 
 
 async def _fetch_kiro_account_quotas_impl() -> list:
@@ -984,9 +987,9 @@ async def _fetch_kiro_account_quotas_impl() -> list:
 @register_command("fetch_kiro_account_quotas_cmd")
 async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
     """Cached fan-out (TTL + single-flight). ``{"force": true}`` bypasses TTL."""
-    return await _KIRO_QUOTAS_CACHE.get_or_fetch(
+    return list(await _KIRO_QUOTAS_CACHE.get_or_fetch(
         _fetch_kiro_account_quotas_impl, force=bool((params or {}).get("force"))
-    )
+    ))
 
 
 # ── Auth Files ──────────────────────────────────────────────────────────────

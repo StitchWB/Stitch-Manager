@@ -15,7 +15,6 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from DrissionPage import ChromiumOptions, ChromiumPage
 
@@ -431,15 +430,14 @@ class BaseBrowser:
 
         Requires:  ``pip install shardx``
         """
+        from importlib.util import find_spec
         from urllib.parse import urlparse
 
-        try:
-            import shardx as _shardx  # type: ignore[import-untyped]
-        except ImportError:
+        if find_spec("shardx") is None:
             raise RuntimeError(
                 "ShardBrowser engine requires the 'shardx' package. "
                 "Install it with:  pip install shardx"
-            ) from None
+            )
 
         from .async_shardbrowser_wrapper import build_shard_sdk, create_shard_profile
 

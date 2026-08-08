@@ -120,6 +120,7 @@ module = [
     "aioimaplib.*",
     "google.auth.*",
     "google.oauth2.*",
+    "shardx",
     "autoreg.browser.*",
     "autoreg.spoofers.*",
     "autoreg.services.*",

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
@@ -223,7 +224,7 @@ async def cmd_get_browser_engines(params: dict) -> dict:
             runtime = shardx.ShardX().runtime
             shard["engineVersion"] = getattr(runtime, "chromium_version", None)
             binary = getattr(runtime, "binary_path", None)
-            installed = bool(binary) and Path(binary).exists()
+            installed = binary is not None and Path(binary).exists()
             fp_dir = getattr(runtime, "fingerprints_dir", None)
             if not installed:
                 # Fallback: the process env may differ from the canonical one
