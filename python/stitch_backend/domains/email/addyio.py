@@ -9,7 +9,7 @@ Uses httpx for async HTTP calls to https://app.addy.io/api/v1/.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -38,7 +38,7 @@ async def test_connection(api_token: str, proxy: str | None = None) -> dict[str,
             headers=_headers(api_token),
         )
         resp.raise_for_status()
-        return resp.json()
+        return cast("dict[str, Any]", resp.json())
 
 
 async def get_account(api_token: str, proxy: str | None = None) -> dict[str, Any]:
@@ -53,7 +53,7 @@ async def get_account(api_token: str, proxy: str | None = None) -> dict[str, Any
         )
         resp.raise_for_status()
         data = resp.json()
-        return data.get("data", data)
+        return cast("dict[str, Any]", data.get("data", data))
 
 
 async def get_domains(api_token: str, proxy: str | None = None) -> dict[str, Any]:
@@ -67,7 +67,7 @@ async def get_domains(api_token: str, proxy: str | None = None) -> dict[str, Any
             headers=_headers(api_token),
         )
         resp.raise_for_status()
-        return resp.json()
+        return cast("dict[str, Any]", resp.json())
 
 
 async def get_recipients(api_token: str, proxy: str | None = None) -> list[dict[str, Any]]:
@@ -82,4 +82,4 @@ async def get_recipients(api_token: str, proxy: str | None = None) -> list[dict[
         )
         resp.raise_for_status()
         data = resp.json()
-        return data.get("data", data if isinstance(data, list) else [])
+        return cast("list[dict[str, Any]]", data.get("data", data if isinstance(data, list) else []))

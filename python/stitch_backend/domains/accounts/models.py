@@ -107,6 +107,14 @@ class Account(Base):
     user_agent: Mapped[str | None] = mapped_column(
         String, comment="Custom User-Agent string"
     )
+    browser_engine: Mapped[str | None] = mapped_column(
+        String,
+        comment="Engine the account was registered/opened with: cloakbrowser|shardbrowser",
+    )
+    shard_profile_id: Mapped[str | None] = mapped_column(
+        String,
+        comment="ShardX saved profile id (persistent fingerprint + cookies)",
+    )
 
     # ═══════ Proxy ══════════════════════════════════════════════════════════
     proxy_id: Mapped[str | None] = mapped_column(

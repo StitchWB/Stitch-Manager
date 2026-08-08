@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.event_bus import event_bus
@@ -69,7 +69,7 @@ async def cmd_list_accounts(params: dict) -> list:
 @register_command("get_accounts", readonly=True)
 async def cmd_get_accounts(params: dict) -> list:
     """Backward-compatible alias for ``list_accounts``."""
-    return await cmd_list_accounts(params)
+    return cast("list[Any]", await cmd_list_accounts(params))
 
 
 @register_command("add_account")
@@ -307,7 +307,7 @@ async def cmd_validate_account(params: dict) -> bool:
         return await svc.get_account(account_id)
 
     account = await run_in_read_session(_op)
-    return account.status == "active"
+    return cast("bool", account.status == "active")
 
 
 # ── Bulk operations ──────────────────────────────────────────────────────────

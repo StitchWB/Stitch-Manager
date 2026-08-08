@@ -1,15 +1,13 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
 import { useAccountsStore } from '../stores/accounts';
 import { useLogsStore } from '../stores/logs';
+import { useSettingsStore } from '../stores/settings';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
-import { getDashboardStats } from '../lib/backend';
-import { getSettings } from '../lib/backend/modules/settings';
 import { t } from '../lib/i18n';
-import type { DashboardStats } from '../types/generated';
 import {
   StatsGrid,
   QuickActionsPanel,
@@ -23,13 +21,11 @@ import { UnifiedActivityFeed } from '../components/dashboard/UnifiedActivityFeed
 // ============================================
 export default function Dashboard() {
   const { providers, selectedProvider, language, addNotification } = useAppStore();
-  const { accounts, fetchAccounts } = useAccountsStore();
+  const accounts = useAccountsStore(state => state.accounts);
   const { addLog } = useLogsStore();
+  const settings = useSettingsStore(state => state.settings);
   const navigate = useNavigate();
 
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [fleetTarget, setFleetTarget] = useState(0);
   const [refreshingProvider, setRefreshingProvider] = useState<string | null>(null);
 
   // Bulk refresh hook for refreshing all tokens
@@ -41,61 +37,18 @@ export default function Dashboard() {
   // Force re-render when language changes
   void language; // Force re-render on language change
 
-  const loadDashboardStats = useCallback(async () => {
-    try {
-      setIsLoadingStats(true);
-      const stats = await getDashboardStats();
-      setDashboardStats(stats);
-    } catch (error) {
-      console.error('Failed to load dashboard stats:', error);
-      // Silent fail for background stats loading - no notification needed
-    } finally {
-      setIsLoadingStats(false);
-    }
-  }, []);
+  // Derive fleet target from settings store (no API call needed)
+  const fleetTarget = useMemo(() => {
+    if (!settings) return 0;
+    return (
+      (settings.minActiveKiro || 0) +
+      (settings.minActiveWindsurf || 0) +
+      (settings.minActiveTrae || 0)
+    );
+  }, [settings]);
 
-  const loadFleetTarget = useCallback(async () => {
-    try {
-      const settings = await getSettings();
-      setFleetTarget(
-        (settings.minActiveKiro || 0) +
-          (settings.minActiveWindsurf || 0) +
-          (settings.minActiveTrae || 0)
-      );
-    } catch (error) {
-      console.error('Failed to load fleet target:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    Promise.resolve(fetchAccounts()).catch(() => {});
-    Promise.resolve(loadDashboardStats()).catch(() => {});
-    loadFleetTarget();
-  }, [fetchAccounts, loadDashboardStats, loadFleetTarget]);
-
+  // Derive all stats from accounts already in store (no API call needed)
   const summaryData = useMemo(() => {
-    if (dashboardStats) {
-      const accountsByProvider = providers.map(p => ({
-        provider: p.id,
-        count: dashboardStats.accountsByProvider?.[p.id] || 0,
-        color: p.color,
-      }));
-
-      // Calculate accounts near quota limit (>80%)
-      const accountsNearLimit = accounts.filter(a => {
-        if (!a.quota || a.quota.limit <= 0) return false;
-        const percentUsed = (a.quota.used / a.quota.limit) * 100;
-        return percentUsed > 80;
-      }).length;
-
-      return {
-        totalAccounts: dashboardStats.totalAccounts,
-        accountsByProvider,
-        activeTokens: dashboardStats.activeTokens,
-        accountsNearLimit,
-      };
-    }
-
     const totalAccounts = accounts.length;
     const accountsByProvider = providers.map(p => ({
       provider: p.id,
@@ -117,7 +70,7 @@ export default function Dashboard() {
       activeTokens,
       accountsNearLimit,
     };
-  }, [accounts, providers, dashboardStats]);
+  }, [accounts, providers]);
 
   const fleetActive = useMemo(() => {
     const isActive = (provider: string) =>
@@ -150,7 +103,6 @@ export default function Dashboard() {
 
     try {
       await startBulkRefresh(allAccountIds);
-      await loadDashboardStats();
       addLog({
         level: 'success',
         message: 'Bulk refresh completed',
@@ -176,7 +128,6 @@ export default function Dashboard() {
       });
       try {
         await startBulkRefresh(ids);
-        await loadDashboardStats();
         addLog({
           level: 'success',
           message: `Refreshed ${ids.length} ${providerName} accounts`,
@@ -192,7 +143,7 @@ export default function Dashboard() {
         setRefreshingProvider(null);
       }
     },
-    [addLog, loadDashboardStats, startBulkRefresh]
+    [addLog, startBulkRefresh]
   );
 
   const handleAccountsNearLimitClick = () => {
@@ -228,7 +179,7 @@ export default function Dashboard() {
 
           {/* Stats Grid */}
           <StatsGrid
-            isLoading={isLoadingStats}
+            isLoading={false}
             totalAccounts={summaryData.totalAccounts}
             activeTokens={summaryData.activeTokens}
             fleetActive={fleetActive}

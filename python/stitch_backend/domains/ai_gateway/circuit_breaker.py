@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import update
 
@@ -185,7 +185,7 @@ async def is_endpoint_available(
                 .values(circuit_state="half_open", updated_at=now)
             )
             await session.flush()
-            return result.rowcount > 0  # type: ignore[return-value]
+            return int(cast("Any", result).rowcount or 0) > 0
         return False
 
     if state == "half_open":

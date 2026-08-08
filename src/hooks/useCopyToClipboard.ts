@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { copyToClipboard as nativeCopy } from '@/lib/native';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 
 // Module-level timer for the stateless helper below.
 // Prevents a previous sensitive auto-clear from wiping out later clipboard content.
@@ -29,7 +30,7 @@ export interface CopyToClipboardOptions {
   sensitive?: boolean;
   /** Ask user confirmation before copying. */
   requireConfirmation?: boolean;
-  /** Message used for native confirmation dialog (window.confirm). */
+  /** Message used for the in-app confirmation dialog. */
   confirmationMessage?: string;
   /** Auto-clear clipboard after copying. Defaults to true for sensitive copy. */
   autoClear?: boolean;
@@ -137,7 +138,12 @@ export const useCopyToClipboard = (
               ? 'This value is sensitive. Copy to clipboard? (Clipboard may be readable by other apps.)'
               : 'Copy to clipboard?');
 
-          if (!window.confirm(message)) {
+          const confirmed = await askConfirm({
+            title: isSensitive ? 'Sensitive data' : 'Copy to clipboard',
+            message,
+            variant: 'warning',
+          });
+          if (!confirmed) {
             return;
           }
         }
@@ -200,7 +206,12 @@ export const copyToClipboard = async (
         (options.sensitive
           ? 'This value is sensitive. Copy to clipboard? (Clipboard may be readable by other apps.)'
           : 'Copy to clipboard?');
-      if (!window.confirm(message)) return;
+      const confirmed = await askConfirm({
+        title: options.sensitive ? 'Sensitive data' : 'Copy to clipboard',
+        message,
+        variant: 'warning',
+      });
+      if (!confirmed) return;
     }
 
     await writeToClipboard(text);

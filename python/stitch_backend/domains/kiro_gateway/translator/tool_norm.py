@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import copy
 import re
+from typing import Any
 
 JsonScalar = str | int | float | bool | None
-JsonValue = JsonScalar | dict[str, JsonScalar] | list[JsonScalar | dict[str, JsonScalar]]
-JsonObject = dict[str, JsonValue]
+JsonValue = Any
+JsonObject = dict[str, Any]
 
 # ponytail: 10240 matches the task spec; reference uses 10237 but the difference
 # is negligible and this is the contract the sibling translators compile against.

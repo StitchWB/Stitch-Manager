@@ -169,7 +169,7 @@ export function AccountsToolbar({
           </ToolbarRow>
 
           {/* Right: View Switcher + Utility Actions + Primary Button */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {showAccountsModes && (
               <ViewModeSwitch
                 value={resolvedViewMode}
@@ -186,6 +186,9 @@ export function AccountsToolbar({
                 className="shrink-0"
               />
             )}
+
+            {/* Divider between view switcher and utility actions */}
+            {showAccountsModes && <div className="h-6 w-px bg-white/10 shrink-0" />}
 
             <ToolbarActionsCluster className="gap-2" align="end">
             {/* Utility Group: Refresh/Import/Export */}
@@ -256,39 +259,48 @@ export function AccountsToolbar({
 
             {/* Columns Menu */}
             {isAccountsList ? (
-              <AccountsColumnsMenu
-                visibleColumns={visibleColumns}
-                onToggleColumn={onToggleVisibleColumn}
-                onReset={onResetVisibleColumns}
-              />
+              <>
+                <div className="h-6 w-px bg-white/10 shrink-0" />
+                <AccountsColumnsMenu
+                  visibleColumns={visibleColumns}
+                  onToggleColumn={onToggleVisibleColumn}
+                  onReset={onResetVisibleColumns}
+                />
+              </>
             ) : null}
 
             {/* Compact IconButtons: Auto-Reg, Create Profile */}
             {isAccountsList ? (
-              <div className="flex items-center gap-1">
-                <Tooltip content={t('sidebar.autoReg')}>
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    onClick={onOpenAutoReg}
-                    className="h-8 w-8 rounded-lg"
-                  >
-                    <Bot size={16} />
-                  </IconButton>
-                </Tooltip>
+              <>
+                <div className="h-6 w-px bg-white/10 shrink-0" />
+                <div className="flex items-center gap-1">
+                  <Tooltip content={t('sidebar.autoReg')}>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={onOpenAutoReg}
+                      className="h-8 w-8 rounded-lg"
+                    >
+                      <Bot size={16} />
+                    </IconButton>
+                  </Tooltip>
 
-                <Tooltip content={t('accounts.profilesCreateButton')}>
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    onClick={onCreateStandaloneProfile}
-                    className="h-8 w-8 rounded-lg"
-                  >
-                    <UserPlus size={16} />
-                  </IconButton>
-                </Tooltip>
-              </div>
+                  <Tooltip content={t('accounts.profilesCreateButton')}>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={onCreateStandaloneProfile}
+                      className="h-8 w-8 rounded-lg"
+                    >
+                      <UserPlus size={16} />
+                    </IconButton>
+                  </Tooltip>
+                </div>
+              </>
             ) : null}
+
+            {/* Divider before primary button */}
+            <div className="h-6 w-px bg-white/10 shrink-0" />
 
             {/* Primary Add Account Button */}
             <Button
@@ -456,6 +468,7 @@ export function AccountsToolbar({
                 />
 
                 {/* Show archived toggle */}
+                <div className="h-5 w-px bg-white/10 shrink-0" />
                 <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none whitespace-nowrap">
                   <input
                     type="checkbox"

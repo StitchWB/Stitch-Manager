@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import random
 import string
-from typing import Any
+from typing import Any, cast
 
 from autoreg.services.mailtm import MailTmConfig, MailTmService
 
@@ -112,11 +112,11 @@ def get_message(svc: MailTmService, message_id: str) -> dict[str, Any] | None:
 
 
 def mark_as_read(svc: MailTmService, message_id: str) -> None:
-    svc.mark_message_seen(message_id, True)
+    cast("Any", svc).mark_message_seen(message_id, True)
 
 
 def delete_message(svc: MailTmService, message_id: str) -> None:
-    svc.delete_message(message_id)
+    cast("Any", svc).delete_message(message_id)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────

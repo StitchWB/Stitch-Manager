@@ -10,7 +10,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def decode_jwt_payload(token: str) -> dict[str, Any]:
     if len(parts) < 2:
         raise ZaiSessionError("invalid_jwt", "Token is not a valid JWT")
     payload_bytes = base64.urlsafe_b64decode(parts[1] + "==")
-    return json.loads(payload_bytes)
+    return cast("dict[str, Any]", json.loads(payload_bytes))
 
 
 async def scrape_fe_version(client: ZaiSessionHttpClient) -> str:

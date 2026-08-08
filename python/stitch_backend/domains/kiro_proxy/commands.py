@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+from typing import cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.event_bus import event_bus
@@ -43,7 +44,7 @@ def _get_proxy_port() -> int:
     try:
         from stitch_backend.domains.kiro_patch.service import get_config
         config = get_config()
-        return config.get("proxyPort", 5580)
+        return cast("int", config.get("proxyPort", 5580))
     except Exception:
         return 5580
 

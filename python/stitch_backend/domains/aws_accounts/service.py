@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import text
 
@@ -122,7 +122,7 @@ class AwsAccountsService:
             },
         )
         await self._db.flush()
-        new_id = r.lastrowid
+        new_id = cast("Any", r).lastrowid
         result = await self.get_by_id(new_id)
         return result or {"id": new_id, "email": data["email"]}
 

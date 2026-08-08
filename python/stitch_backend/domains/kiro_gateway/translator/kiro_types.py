@@ -8,13 +8,15 @@ document helpers, and the execution-directive system-prompt suffix.
 from __future__ import annotations
 
 import base64
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 # ── JSON aliases ─────────────────────────────────────────────────────────────
-
+# JsonValue is Any because JSON is recursive and Python's type system cannot
+# express a recursive union that supports .get()/[] without isinstance narrowing
+# at every call site.  Any is the standard escape hatch for arbitrary JSON.
 JsonScalar = str | int | float | bool | None
-JsonValue = JsonScalar | dict[str, JsonScalar] | list[JsonScalar | dict[str, JsonScalar]]
-JsonObject = dict[str, JsonValue]
+JsonValue = Any
+JsonObject = dict[str, Any]
 
 # ── Kiro domain types ────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ChevronRight, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -9,8 +9,8 @@ import { NumberInput } from '@/components/ui/NumberInput';
 import { cn } from '@/lib/utils';
 
 import type { Account } from '../../types/ui';
-import { getSettings } from '../../lib/backend/modules/settings';
-import { getRegistrationStatus } from '../../lib/backend/modules/registration';
+import { useSettingsStore } from '../../stores/settings';
+import { useRuntimeStore } from '../../stores/registration/runtime.store';
 
 interface ProviderFleetGridProps {
   accounts: Account[];
@@ -90,48 +90,33 @@ export function ProviderFleetGrid({
   refreshingProvider,
 }: ProviderFleetGridProps) {
   const navigate = useNavigate();
-  const [targets, setTargets] = useState<Record<string, number>>({
-    kiro: 0,
-    windsurf: 0,
-    trae: 0,
-  });
+  
+  // Read from settings store instead of fetching
+  const settings = useSettingsStore(state => state.settings);
+  const isRunning = useRuntimeStore(state => state.isRunning);
+  const activeProvider = useRuntimeStore(state => state.activeProvider);
+  
+  const targets = useMemo<Record<string, number>>(() => ({
+    kiro: settings?.minActiveKiro ?? 0,
+    windsurf: settings?.minActiveWindsurf ?? 0,
+    trae: settings?.minActiveTrae ?? 0,
+  }), [settings]);
+  
+  const autoReplenishEnabled = Boolean(settings?.autoReplenishEnabled);
+  
+  // Derive activeRunner from registration store's activeProvider
+  const activeRunner = useMemo(() => {
+    if (isRunning && activeProvider && activeProvider !== 'all') {
+      return activeProvider.toLowerCase();
+    }
+    return null;
+  }, [isRunning, activeProvider]);
+  
   const [counts, setCounts] = useState<Record<string, number>>({
     kiro: 1,
     windsurf: 1,
     trae: 1,
   });
-  const [autoReplenishEnabled, setAutoReplenishEnabled] = useState(false);
-  const [activeRunner, setActiveRunner] = useState<string | null>(null);
-
-  const refreshSettings = useCallback(async () => {
-    try {
-      const settings = await getSettings();
-      setTargets({
-        kiro: settings.minActiveKiro ?? 0,
-        windsurf: settings.minActiveWindsurf ?? 0,
-        trae: settings.minActiveTrae ?? 0,
-      });
-      setAutoReplenishEnabled(Boolean(settings.autoReplenishEnabled));
-    } catch (err) {
-      console.warn('[ProviderFleetGrid] settings:', err);
-    }
-  }, []);
-
-  const refreshRunner = useCallback(async () => {
-    try {
-      const status = await getRegistrationStatus();
-      setActiveRunner(status.isRunning ? status.provider?.toLowerCase() ?? null : null);
-    } catch {
-      setActiveRunner(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshSettings();
-    void refreshRunner();
-    const id = window.setInterval(refreshRunner, 5_000);
-    return () => window.clearInterval(id);
-  }, [refreshSettings, refreshRunner]);
 
   const handleAdjust = useCallback((id: string, value: number) => {
     setCounts(prev => ({ ...prev, [id]: Math.min(Math.max(value, 1), 99) }));

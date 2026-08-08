@@ -1,5 +1,5 @@
 import { t } from "@/lib/i18n";
-import { Globe, Trash2, Settings, FolderKanban } from 'lucide-react';
+import { Globe, Trash2, Settings, FolderKanban, MoreHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -8,7 +8,7 @@ import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
 import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
 import { getProfileSettings } from '@/lib/backend/modules/profiles';
 import { ProfileScenariosPanel } from './scenarioRecorder/ProfileScenariosPanel';
-import { Button, EmptyState } from '@/components/ui';
+import { Badge, Button, ConfirmActionButton, EmptyState, IconButton, ProviderLogo, Tooltip } from '@/components/ui';
 
 export interface ProfileItem {
   alias: string;
@@ -19,6 +19,20 @@ export interface ProfileItem {
   usedForKiro?: boolean;
   usedTargets?: string[];
   healthStatus?: 'ready' | 'needs_link' | 'no_session_path';
+}
+
+function getHealthBadgeConfig(healthStatus: NonNullable<ProfileItem['healthStatus']>): {
+  variant: 'success' | 'warning' | 'danger';
+  label: string;
+} {
+  switch (healthStatus) {
+    case 'ready':
+      return { variant: 'success', label: t('accounts.profileHealthReady') };
+    case 'needs_link':
+      return { variant: 'warning', label: t('accounts.profileHealthNeedsLink') };
+    case 'no_session_path':
+      return { variant: 'danger', label: t('accounts.profileHealthNoSession') };
+  }
 }
 
 interface ProfilesTableProps {
@@ -230,12 +244,21 @@ export default function ProfilesTable({
 
   return (
     <div className="flex flex-col h-full overflow-hidden px-2 sm:px-4">
-      <div className="hidden xl:grid grid-cols-[minmax(260px,1fr)_160px_minmax(300px,auto)] gap-4 py-3 px-4 border-b border-white/10 sticky top-0 bg-void-base/95 backdrop-blur-md z-40">
+      <div className="hidden xl:grid grid-cols-[minmax(240px,1fr)_120px_minmax(150px,200px)_104px_minmax(130px,180px)_minmax(280px,auto)] gap-4 py-3 px-4 border-b border-white/10 sticky top-0 bg-void-base/95 backdrop-blur-md z-40">
         <span className="text-xs font-semibold text-slate-400 tracking-wide">
           {t('accounts.profileAlias')}
         </span>
         <span className="text-xs font-semibold text-slate-400 tracking-wide text-center">
           {t('accounts.profileKind')}
+        </span>
+        <span className="text-xs font-semibold text-slate-400 tracking-wide">
+          {t('accounts.profileAccount')}
+        </span>
+        <span className="text-xs font-semibold text-slate-400 tracking-wide text-center">
+          {t('accounts.profileStatus')}
+        </span>
+        <span className="text-xs font-semibold text-slate-400 tracking-wide">
+          {t('accounts.profileUsage')}
         </span>
         <span className="text-xs font-semibold text-slate-400 tracking-wide text-right pr-4">
           {t('common.actions')}
@@ -245,13 +268,14 @@ export default function ProfilesTable({
       <div className="flex-1 overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10 pb-8 pt-2 space-y-1.5">
         {profiles.map((profile) => {
           const isLinked = Boolean(profile.linkedAccountEmail);
+          const health = profile.healthStatus ? getHealthBadgeConfig(profile.healthStatus) : null;
 
           return (
             <div
               key={profile.alias}
-              className="relative rounded-xl border bg-vsc-panel/60 border-white/[0.03] hover:border-white/[0.08] hover:bg-vsc-panel transition-all duration-200 overflow-visible">
+              className="relative rounded-lg border bg-vsc-panel/60 border-white/[0.04] hover:border-white/[0.12] hover:bg-vsc-panel transition-all duration-200 overflow-visible">
 
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,1fr)_160px_minmax(300px,auto)] gap-4 items-start xl:items-center px-4 py-3">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(240px,1fr)_120px_minmax(150px,200px)_104px_minmax(130px,180px)_minmax(280px,auto)] gap-4 items-start xl:items-center px-3 py-2">
                 <div className="flex flex-col min-w-0 xl:pr-2">
                   <span className="text-sm leading-5 font-bold text-slate-100 truncate">
                     {profile.displayName ?? profile.alias}
@@ -284,68 +308,116 @@ export default function ProfilesTable({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-start xl:justify-end gap-2 border-t xl:border-t-0 border-white/5 pt-2 xl:pt-0 min-w-0 max-w-full">
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    leftIcon={<Globe size={12} />}
-                    onClick={() => {
-                      // Default open path now goes through recorder quick-start so
-                      // browser opens with in-page recorder overlay immediately.
-                      openRecordModal(profile.alias, { quickStart: true });
-                    }}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {profile.linkedAccountEmail ? (
+                    <>
+                      {profile.linkedProvider ? (
+                        <ProviderLogo provider={profile.linkedProvider} size={14} className="shrink-0" />
+                      ) : null}
+                      <span className="text-[11px] text-slate-300 truncate">
+                        {profile.linkedAccountEmail}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-600">—</span>
+                  )}
+                </div>
 
-                    <span className="hidden sm:inline">
-                      {t('accounts.openProfileAt')}{t("accounts.profiles_table.overlay")}
+                <div className="flex xl:justify-center">
+                  {health ? (
+                    <Badge variant={health.variant} size="sm" withDot className="normal-case tracking-normal border-0">
+                      {health.label}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-slate-600">—</span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1 min-w-0">
+                  {profile.usedForKiro ? (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                      {t('accounts.profileUsageKiro')}
                     </span>
-                    <span className="sm:hidden">{t("accounts.profiles_table.open")}</span>
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    leftIcon={<FolderKanban size={12} />}
-                    onClick={() => {
-                      if (onOpenScenarios) {
-                        onOpenScenarios(profile.alias);
-                        return;
-                      }
+                  ) : null}
+                  {profile.usedTargets?.map(target => (
+                    <span key={target} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-slate-400 border border-white/10">
+                      {target}
+                    </span>
+                  ))}
+                  {!profile.usedForKiro && (!profile.usedTargets || profile.usedTargets.length === 0) ? (
+                    <span className="text-xs text-slate-600">—</span>
+                  ) : null}
+                </div>
 
-                      setActiveRecordAlias(null);
-                      setActiveRecordMeta(null);
-                      setActiveRecordQuickStart(false);
-                      setReplayAlias(null);
-                      setReplayInitialScenarioPath(null);
-                      setScenariosAlias(profile.alias);
-                    }}>{t("accounts.profiles_table.scenarios")}
-
-
-                  </Button>
-                  {canEdit ?
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    leftIcon={<Settings size={12} />}
-                    onClick={() => onEdit(profile.alias)}>
-
-                      {t('common.settings')}
-                    </Button> :
-                  null}
-                  <div className="relative">
-                    <Button
-                      size="xs"
-                      variant="secondary"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        const triggerEl = event.currentTarget as unknown as HTMLElement;
-                        if (openMenuAlias === profile.alias) {
-                          closeMenu();
-                        } else {
-                          openMenu(profile.alias, triggerEl);
+                <div className="flex flex-wrap items-center justify-start xl:justify-end gap-1 border-t xl:border-t-0 border-white/5 pt-2 xl:pt-0 min-w-0 max-w-full">
+                  <Tooltip content={`${t('accounts.openProfileAt')}${t('accounts.profiles_table.overlay')}`}>
+                    <IconButton
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 text-slate-400 hover:text-sky-300 hover:bg-white/10"
+                      onClick={() => {
+                        openRecordModal(profile.alias, { quickStart: true });
+                      }}
+                    >
+                      <Globe size={14} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip content={t('accounts.profiles_table.scenarios')}>
+                    <IconButton
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 text-slate-400 hover:text-indigo-300 hover:bg-white/10"
+                      onClick={() => {
+                        if (onOpenScenarios) {
+                          onOpenScenarios(profile.alias);
+                          return;
                         }
-                      }}>
-
-                      {t('common.more') || 'More'}
-                    </Button>
+                        setActiveRecordAlias(null);
+                        setActiveRecordMeta(null);
+                        setActiveRecordQuickStart(false);
+                        setReplayAlias(null);
+                        setReplayInitialScenarioPath(null);
+                        setScenariosAlias(profile.alias);
+                      }}
+                    >
+                      <FolderKanban size={14} />
+                    </IconButton>
+                  </Tooltip>
+                  {canEdit ? (
+                    <Tooltip content={t('common.settings')}>
+                      <IconButton
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 text-slate-400 hover:text-slate-100 hover:bg-white/10"
+                        onClick={() => onEdit(profile.alias)}
+                      >
+                        <Settings size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
+                  <div className="relative">
+                    <Tooltip content={t('common.more') || 'More'}>
+                      <IconButton
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 text-slate-400 hover:text-slate-100 hover:bg-white/10"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const triggerEl = event.currentTarget as unknown as HTMLElement;
+                          if (openMenuAlias === profile.alias) {
+                            closeMenu();
+                          } else {
+                            openMenu(profile.alias, triggerEl);
+                          }
+                        }}
+                      >
+                        <MoreHorizontal size={14} />
+                      </IconButton>
+                    </Tooltip>
                   </div>
                 </div>
               </div>
@@ -395,19 +467,19 @@ export default function ProfilesTable({
                 {t('common.replay') || 'Replay'}
               </Button>
               <div className="my-1 border-t border-white/10" />
-              <Button
+              <ConfirmActionButton
             size="xs"
             variant="danger"
             className="w-full justify-start"
             leftIcon={<Trash2 size={12} />}
-            onClick={() => {
+            onConfirm={() => {
               const aliasToDelete = openMenuAlias;
               closeMenu();
               void onDelete(aliasToDelete);
             }}>
 
                 {t('accounts.deleteProfile')}
-              </Button>
+              </ConfirmActionButton>
             </div>,
         portalRoot
       ) :

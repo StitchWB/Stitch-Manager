@@ -5,6 +5,8 @@ Each command maps to the corresponding Rust backend command.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.api_keys.schemas import GetApiKeysRequest, SetApiKeysRequest
@@ -31,7 +33,7 @@ def _make_get_cmd(provider: str):
 
         return await run_in_session(_op)
 
-    handler._request_model = GetApiKeysRequest  # ponytail: for AST-immune dynamic generators
+    cast("Any", handler)._request_model = GetApiKeysRequest  # ponytail: for AST-immune dynamic generators
     return handler
 
 
@@ -50,7 +52,7 @@ def _make_set_cmd(provider: str):
 
         return await run_in_session(_op)
 
-    handler._request_model = SetApiKeysRequest  # ponytail: for AST-immune dynamic generators
+    cast("Any", handler)._request_model = SetApiKeysRequest  # ponytail: for AST-immune dynamic generators
     return handler
 
 

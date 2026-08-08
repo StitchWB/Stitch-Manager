@@ -21,7 +21,7 @@ Kiro is the only provider that genuinely needs its own adapter class
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
@@ -167,7 +167,7 @@ class ConfigurableAdapter:
             async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS, follow_redirects=False) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
-                return resp.json()
+                return cast("dict[str, Any]", resp.json())
 
         return self._stream_invoke(url, headers, payload)
 
@@ -208,7 +208,7 @@ class ConfigurableAdapter:
             async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS, follow_redirects=False) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
-                return resp.json()
+                return cast("dict[str, Any]", resp.json())
 
         return self._stream_invoke(url, headers, payload)
 

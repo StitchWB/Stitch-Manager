@@ -7,6 +7,8 @@ defined in legacy frontend logging module.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 
@@ -69,7 +71,7 @@ async def cmd_add_log(params: dict) -> dict:
 @register_command("add_app_log")
 async def cmd_add_app_log(params: dict) -> dict:
     """Compatibility alias for ``add_log``."""
-    return await cmd_add_log(params)
+    return cast("dict[Any, Any]", await cmd_add_log(params))
 
 
 # ── Clear operations ─────────────────────────────────────────────────────────
@@ -92,7 +94,7 @@ async def cmd_clear_logs(params: dict) -> int:
 @register_command("clear_app_logs")
 async def cmd_clear_app_logs(params: dict) -> int:
     """Compatibility alias for ``clear_logs``."""
-    return await cmd_clear_logs(params)
+    return cast("int", await cmd_clear_logs(params))
 
 
 # ── Export operations ────────────────────────────────────────────────────────
@@ -116,4 +118,4 @@ async def cmd_export_logs(params: dict) -> str:
 @register_command("export_app_logs", readonly=True)
 async def cmd_export_app_logs(params: dict) -> str:
     """Compatibility alias for ``export_logs``."""
-    return await cmd_export_logs(params)
+    return cast("str", await cmd_export_logs(params))

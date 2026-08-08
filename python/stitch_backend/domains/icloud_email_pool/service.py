@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import func, select, update
 
@@ -124,6 +124,8 @@ class ICloudPoolService:
             deleted=counts.get("deleted", 0),
             rateRemaining=rate_remaining,
             rateSecondsUntilSlot=rate_until,
+            rate_remaining=rate_remaining,
+            rate_seconds_until_slot=rate_until,
         )
 
     async def list_entries(
@@ -166,7 +168,7 @@ class ICloudPoolService:
         for i in range(count):
             label = f"{label_prefix} #{i + 1}"
             try:
-                alias = self._icloud.generate_alias(label)
+                alias = cast("Any", self._icloud).generate_alias(label)
             except RateLimitError as exc:
                 logger.warning(
                     "Rate limit hit after %d/%d aliases: %s", i, count, exc
@@ -222,7 +224,7 @@ class ICloudPoolService:
 
         if self.is_authenticated() and entry.apple_alias_id:
             try:
-                self._icloud.delete_alias(entry.apple_alias_id)
+                cast("Any", self._icloud).delete_alias(entry.apple_alias_id)
             except Exception as exc:
                 logger.warning("Could not delete Apple alias %s: %s", entry.apple_alias_id, exc)
 
@@ -257,7 +259,7 @@ class ICloudPoolService:
         for i in range(count):
             label = f"{label_prefix} #{i + 1}"
             try:
-                alias = self._icloud.generate_alias(label)
+                alias = cast("Any", self._icloud).generate_alias(label)
             except RateLimitError as exc:
                 logger.warning(
                     "Rate limit hit after %d/%d aliases: %s", i, count, exc
@@ -306,7 +308,7 @@ class ICloudPoolService:
         """
         if self.is_authenticated() and apple_alias_id:
             try:
-                self._icloud.delete_alias(apple_alias_id)
+                cast("Any", self._icloud).delete_alias(apple_alias_id)
             except Exception as exc:
                 logger.warning(
                     "Could not delete Apple alias %s: %s", apple_alias_id, exc
@@ -369,7 +371,7 @@ class ICloudPoolService:
                     )
 
                 loop.call_soon_threadsafe(_run)
-                return future.result(timeout=10)
+                return cast("dict[str, Any] | None", future.result(timeout=10))
             else:
                 return loop.run_until_complete(self._claim_next_async())
         except Exception as exc:

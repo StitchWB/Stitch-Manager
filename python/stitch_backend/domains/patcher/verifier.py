@@ -6,6 +6,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ def verify_json_key(file_path: Path, key: str, expected_value: object = None) ->
     if key not in data:
         return False
     if expected_value is not None:
-        return data[key] == expected_value
+        return cast("bool", data[key] == expected_value)
     return True
 
 
@@ -87,9 +88,9 @@ def verify_patch_set(
         value = check.get("value")
 
         if ctype == "binary_contains":
-            ok = verify_binary_contains(fpath, value)
+            ok = verify_binary_contains(fpath, cast("bytes", value))
         elif ctype == "text_contains":
-            ok = verify_text_contains(fpath, value)
+            ok = verify_text_contains(fpath, cast("str", value))
         elif ctype == "json_key":
             ok = verify_json_key(fpath, check.get("key", ""), value)
         else:

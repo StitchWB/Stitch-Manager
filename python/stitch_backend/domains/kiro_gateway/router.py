@@ -7,7 +7,7 @@ the /kiro prefix in main.py to avoid shadowing LiteLLM's /v1.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from stitch_backend.domains.ai_proxy.litellm_gateway import (
     create_native_gateway_router,
@@ -59,7 +59,7 @@ def create_kiro_gateway_router(
     )
 
     def executor_factory() -> KiroExecutor:
-        return KiroExecutor(pool, session_factory, affinity, stats, http_client)
+        return KiroExecutor(pool, cast("Any", session_factory), affinity, stats, http_client)
 
     return create_native_gateway_router(
         executor_factory=executor_factory,

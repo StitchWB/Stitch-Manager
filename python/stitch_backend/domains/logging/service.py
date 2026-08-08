@@ -12,7 +12,7 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import delete, func, select
 
@@ -190,9 +190,9 @@ class LoggingService:
             stmt = delete(AppLog)
         result = await self._db.execute(stmt)
         await self._db.flush()
-        deleted = result.rowcount
+        deleted = cast("Any", result).rowcount
         event_bus.emit_sync("logs.cleared", {"count": deleted})
-        return deleted
+        return cast("int", deleted)
 
     # ── Export ────────────────────────────────────────────────────────────
 

@@ -16,7 +16,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import text
 
@@ -55,13 +55,13 @@ class ProfileSettingsRepo(BaseRepository[ProfileSettings]):
             existing.config_json = config_json
             existing.cookies = cookies
             existing.notes = notes
-            existing.updated_at = self._utcnow()
+            existing.updated_at = cast("Any", self)._utcnow()
             await self._db.flush()
             await self._db.refresh(existing)
             return existing
         return await self.create(
             alias=alias, config_json=config_json,
-            cookies=cookies, notes=notes, updated_at=self._utcnow(),
+            cookies=cookies, notes=notes, updated_at=cast("Any", self)._utcnow(),
         )
 
     async def rename_alias(self, old_alias: str, new_alias: str) -> None:
@@ -98,7 +98,7 @@ class ProfileSettingsService(BaseService):
         migrated = await self._migrate_legacy_proxy_if_needed(row)
         if migrated:
             row = await self._repo.get_by_pk(alias)
-        return self._row_to_record(row)
+        return self._row_to_record(cast("ProfileSettings", row))
 
     async def save_settings(
         self, alias: str, settings: ProfileSettingsV1,
@@ -339,18 +339,19 @@ class ProfileSettingsService(BaseService):
 
         # Try to parse the proxy URL and register it in proxy_library
         try:
+            import stitch_backend.domains.proxy_library.service as _pls
             from stitch_backend.domains.proxy_library.service import (
                 parse_proxy_line,
-                upsert_proxy_entry,
             )
-            draft = parse_proxy_line(raw_url)
+            upsert_proxy_entry = cast("Any", _pls).upsert_proxy_entry
+            draft = cast("dict[str, Any]", parse_proxy_line(raw_url))
             legacy_user = (proxy_obj.get("username") or "").strip()
             legacy_pass = (proxy_obj.get("password") or "").strip()
             if legacy_user:
-                draft["username"] = legacy_user
-                draft["password"] = legacy_pass
-            draft["enabled"] = True
-            draft["label"] = f"{row.alias} proxy"
+                cast("dict[str, Any]", draft)["username"] = legacy_user
+                cast("dict[str, Any]", draft)["password"] = legacy_pass
+            cast("dict[str, Any]", draft)["enabled"] = True
+            cast("dict[str, Any]", draft)["label"] = f"{row.alias} proxy"
             proxy_id = await upsert_proxy_entry(self._db, draft)
 
             proxy_obj["proxyLibraryId"] = proxy_id

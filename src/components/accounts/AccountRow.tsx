@@ -1,4 +1,4 @@
-import { Play, MoreHorizontal, Key, Copy } from 'lucide-react';
+import { Play, MoreHorizontal, Key, Copy, Clock, StickyNote } from 'lucide-react';
 import {
   Badge,
   type BadgeProps,
@@ -34,6 +34,7 @@ interface AccountRowProps {
   isRefreshing: boolean;
   isMenuOpen: boolean;
   visibleColumns?: AccountsTableVisibleColumns;
+  showRefColumn?: boolean;
   relationHints?: string[];
   relationEdges?: AccountRelationEdge[];
   onToggleSelection: (accountId: number) => void;
@@ -63,6 +64,7 @@ export function AccountRow({
   isRefreshing,
   isMenuOpen,
   visibleColumns = { lastLogin: true, apiKey: true, quota: true },
+  showRefColumn = true,
   relationHints,
   relationEdges,
   onToggleSelection,
@@ -95,13 +97,13 @@ export function AccountRow({
   return (
     <TableRow
       className={cn(
-        'group/row min-h-16 border-white/[0.04] hover:bg-white/[0.02]',
-        isSelected && 'bg-indigo-500/10'
+        'group/row h-[42px] border-white/[0.04] hover:bg-white/[0.03] transition-colors',
+        isSelected && 'bg-indigo-500/10 hover:bg-indigo-500/[0.12]'
       )}
     >
       {/* Checkbox */}
       <TableCell
-        className="sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]"
+        className="sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]"
         onClick={event => event.stopPropagation()}
       >
         <Checkbox
@@ -113,26 +115,20 @@ export function AccountRow({
       </TableCell>
 
       {/* Provider */}
-      <TableCell className="sticky left-[40px] z-10 w-[70px] min-w-[70px] px-2 py-2 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
-        <div className="flex items-center gap-1 overflow-hidden">
+      <TableCell className="sticky left-[40px] z-10 w-[80px] min-w-[80px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
+        <div className="flex items-center gap-1.5 overflow-hidden">
           <ProviderLogo provider={account.provider} size={14} className="shrink-0" />
           <span className="truncate whitespace-nowrap text-[11px] text-slate-300">{data.providerLabel}</span>
         </div>
       </TableCell>
 
       {/* Account */}
-      <TableCell className="sticky left-[110px] z-10 w-[130px] min-w-[130px] max-w-[150px] px-2 py-2 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
+      <TableCell className="sticky left-[120px] z-10 w-[160px] min-w-[160px] max-w-[180px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
         <ButtonBase
           type="button"
           onClick={() => onShowDetails(account)}
-          className="group/account inline-flex max-w-full flex-col items-start overflow-hidden text-left"
+          className="group/account inline-flex max-w-full flex-col items-start gap-px overflow-hidden text-left"
         >
-          <span className="w-full truncate text-sm font-semibold text-white group-hover/account:text-indigo-200">
-            {data.displayAlias}
-          </span>
-          {data.alias && data.alias !== data.displayAlias && data.alias !== data.accountIdentifier ? (
-            <span className="w-full truncate text-[10px] text-slate-500">{data.alias}</span>
-          ) : null}
           <Tooltip
             content={
               <div className="space-y-1 text-[11px]">
@@ -142,14 +138,63 @@ export function AccountRow({
             }
             side="top"
           >
-            <span className="w-full truncate text-[11px] text-slate-500">
-              {data.accountIdentifier !== data.displayAlias && data.accountIdentifier !== data.alias ? data.accountIdentifier : '\u00A0'}
+            <span className="w-full truncate text-[13px] font-semibold text-white group-hover/account:text-indigo-200">
+              {data.displayAlias}
             </span>
           </Tooltip>
+          {/* Subline: method • engine • date • tags • notes */}
+          <div className="flex w-full items-center gap-1 text-[10px] text-slate-500">
+            {data.registrationMethodLabel && (
+              <span className="shrink-0">{data.registrationMethodLabel}</span>
+            )}
+            {account.browserEngine === 'shardbrowser' && (
+              <>
+                {data.registrationMethodLabel && <span className="text-slate-600">•</span>}
+                <Tooltip content="Зарегистрирован через ShardBrowser (engine-level spoofing)" side="top">
+                  <span className="shrink-0 rounded border border-indigo-500/30 bg-indigo-500/10 px-1 py-px text-[9px] font-semibold text-indigo-300">
+                    Shard
+                  </span>
+                </Tooltip>
+              </>
+            )}
+            {data.createdDateShort && (
+              <>
+                {data.registrationMethodLabel && <span className="text-slate-600">•</span>}
+                <span className="shrink-0 tabular-nums">{data.createdDateShort}</span>
+              </>
+            )}
+            {data.visibleTags.length > 0 && (
+              <>
+                {(data.registrationMethodLabel || data.createdDateShort) && (
+                  <span className="text-slate-600">•</span>
+                )}
+                <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+                  {data.visibleTags.map(tag => (
+                    <span
+                      key={tag}
+                      className="shrink-0 rounded bg-white/[0.06] px-1 py-px text-[9px] text-slate-400"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  {data.remainingTagsCount > 0 && (
+                    <span className="shrink-0 text-[9px] text-slate-500">
+                      {t('accounts.tagsMore', { count: data.remainingTagsCount })}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+            {data.hasNotes && (
+              <Tooltip content={t('accounts.notesHasTooltip')} side="top">
+                <StickyNote size={10} className="ml-auto shrink-0 text-amber-400/60" />
+              </Tooltip>
+            )}
+          </div>
         </ButtonBase>
 
         {(data.relationProviderEntries.length > 0 || data.relationHintList.length > 0) && (
-          <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
             <div className="flex items-center gap-1">
               {data.relationProviderEntries.slice(0, 4).map(([providerKey, edge]) => (
                 <Tooltip key={`${providerKey}-${edge.type}`} content={edge.label}>
@@ -180,7 +225,7 @@ export function AccountRow({
 
       {/* Quick Actions (visible on hover) */}
       <TableCell
-        className="w-[90px] min-w-[90px] px-1 py-2 align-middle"
+        className="w-[90px] min-w-[90px] px-1 py-1 align-middle"
         onClick={event => event.stopPropagation()}
       >
         <AccountRowQuickActions
@@ -191,7 +236,7 @@ export function AccountRow({
       </TableCell>
 
       {/* Status */}
-      <TableCell className="w-[70px] min-w-[70px] px-2 py-2 align-middle">
+      <TableCell className="w-[70px] min-w-[70px] px-2 py-1 align-middle">
         <Badge
           variant={data.statusVariant as BadgeProps['variant']}
           size="sm"
@@ -206,17 +251,26 @@ export function AccountRow({
       <TableCell
         className={cn(
           visibleColumns.lastLogin
-            ? 'w-[70px] min-w-[70px] px-2 py-2 align-middle text-[11px] text-slate-300 tabular-nums'
+            ? 'w-[120px] min-w-[120px] px-2 py-1 align-middle text-[11px] text-slate-400'
             : 'hidden'
         )}
       >
-        {data.lastLoginFormatted}
+        {data.hasLastLogin && data.lastLoginRelative ? (
+          <div className="flex items-center gap-1">
+            <Clock size={10} className="shrink-0 text-slate-600" />
+            <span className="truncate tabular-nums">{data.lastLoginRelative}</span>
+          </div>
+        ) : (
+          <Tooltip content={t('accounts.never')} side="top">
+            <span className="text-slate-600">—</span>
+          </Tooltip>
+        )}
       </TableCell>
 
       {/* Password / Token */}
       <TableCell
         className={cn(
-          visibleColumns.apiKey ? 'w-[70px] min-w-[70px] px-2 py-2 align-middle' : 'hidden'
+          visibleColumns.apiKey ? 'w-[70px] min-w-[70px] px-2 py-1 align-middle' : 'hidden'
         )}
         onClick={event => event.stopPropagation()}
       >
@@ -236,7 +290,7 @@ export function AccountRow({
                 variant="ghost"
                 className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
               >
-                <Key size={14} className="text-amber-400 hover:text-amber-300" />
+                <Key size={13} className="text-amber-400 hover:text-amber-300" />
               </IconButton>
             </Tooltip>
           ) : null}
@@ -255,12 +309,14 @@ export function AccountRow({
                 variant="ghost"
                 className="inline-flex items-center justify-center rounded p-1 hover:bg-white/10 transition-colors"
               >
-                <Copy size={14} className="text-emerald-400 hover:text-emerald-300" />
+                <Copy size={13} className="text-emerald-400 hover:text-emerald-300" />
               </IconButton>
             </Tooltip>
           ) : null}
           {!account.registrationPassword && !account.token ? (
-            <span className="text-xs text-slate-600">—</span>
+            <Tooltip content={t('accounts.notAvailable')} side="top">
+              <span className="text-slate-600">—</span>
+            </Tooltip>
           ) : null}
         </div>
       </TableCell>
@@ -268,7 +324,7 @@ export function AccountRow({
       {/* Quota */}
       <TableCell
         className={cn(
-          visibleColumns.quota ? 'w-[65px] min-w-[65px] px-2 py-2 align-middle' : 'hidden'
+          visibleColumns.quota ? 'w-[80px] min-w-[80px] px-2 py-1 align-middle' : 'hidden'
         )}
       >
         <AccountQuotaCell account={account} onCheckStatus={onCheckStatus} />
@@ -276,7 +332,7 @@ export function AccountRow({
 
       {/* 2FA TOTP code — shown only when this account has linked TOTP keys */}
       {totpKeys.length > 0 && (
-        <TableCell className="w-[100px] min-w-[100px] px-2 py-2 align-middle" onClick={(e) => e.stopPropagation()}>
+        <TableCell className="w-[100px] min-w-[100px] px-2 py-1 align-middle" onClick={(e) => e.stopPropagation()}>
           <TotpBadge
             secret={totpKeys[0].secret}
             period={totpKeys[0].period}
@@ -285,15 +341,15 @@ export function AccountRow({
         </TableCell>
       )}
       {totpKeys.length === 0 && (
-        <TableCell className="w-[100px] min-w-[100px] px-2 py-2 align-middle" />
+        <TableCell className="w-[100px] min-w-[100px] px-2 py-1 align-middle" />
       )}
 
       {/* Referral quota */}
-      <AccountRefCell account={account} />
+      <AccountRefCell account={account} hidden={!showRefColumn} />
 
       {/* Actions */}
       <TableCell
-        className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-2 align-middle"
+        className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-1 align-middle"
         onClick={event => event.stopPropagation()}
       >
         <div className="relative flex justify-end" data-row-actions-menu="true">

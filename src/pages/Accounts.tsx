@@ -349,7 +349,6 @@ export default function Accounts() {
 
   const handleDeleteProfile = useCallback(
     async (alias: string) => {
-      if (!window.confirm(t('accounts.deleteProfileConfirm', { alias }))) return;
       try {
         await deleteFingerprintProfile({ email: alias });
         toast.success(t('accounts.profileDeleteSuccess'));

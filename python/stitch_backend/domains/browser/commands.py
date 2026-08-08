@@ -80,12 +80,23 @@ async def _clear_session(db, account_id: int) -> None:
 
 async def _get_account_info(db, account_id: int) -> dict[str, Any] | None:
     """Load minimal account info needed for browser launch."""
-    row = (
-        await db.execute(
-            text("SELECT id, email, provider, status FROM accounts WHERE id = :id"),
-            {"id": account_id},
-        )
-    ).mappings().first()
+    try:
+        row = (
+            await db.execute(
+                text(
+                    "SELECT id, email, provider, status, browser_engine, shard_profile_id "
+                    "FROM accounts WHERE id = :id"
+                ),
+                {"id": account_id},
+            )
+        ).mappings().first()
+    except Exception:  # noqa: BLE001 — pre-migration schema without engine columns
+        row = (
+            await db.execute(
+                text("SELECT id, email, provider, status FROM accounts WHERE id = :id"),
+                {"id": account_id},
+            )
+        ).mappings().first()
     if not row:
         return None
     return {
@@ -93,6 +104,8 @@ async def _get_account_info(db, account_id: int) -> dict[str, Any] | None:
         "email": row.get("email") or "",
         "provider": row.get("provider") or "",
         "status": row.get("status") or "",
+        "browser_engine": row.get("browser_engine") or "cloakbrowser",
+        "shard_profile_id": row.get("shard_profile_id"),
     }
 
 
@@ -150,6 +163,135 @@ async def cmd_clear_browser_session(params: dict) -> dict:
     return {"success": True}
 
 
+#: Background ShardX engine download state (single-flight).
+_SHARD_ENGINE_UPDATE: dict[str, Any] = {"running": False, "error": None}
+
+
+@register_command("get_browser_engines", readonly=True)
+async def cmd_get_browser_engines(params: dict) -> dict:
+    """Report available browser engines and their install status.
+
+    Drives the engine selector in the registration UI: engines that are not
+    installed are shown disabled with a hint, and providers without engine
+    support are handled by the frontend via ``supportedProviders``.
+
+    For ShardBrowser the probe is read-only (never triggers a download):
+    SDK presence, engine binary + version on disk, fingerprint library size,
+    and the background update state.
+    """
+    import asyncio
+
+    def _probe() -> dict:
+        engines: list[dict[str, Any]] = []
+
+        # CloakBrowser — bundled binary in resources/
+        try:
+            from autoreg.browser.cloakbrowser_finder import find_cloakbrowser
+
+            cloak_path = find_cloakbrowser(auto_download=False)
+        except Exception:  # noqa: BLE001
+            cloak_path = None
+        engines.append({
+            "id": "cloakbrowser",
+            "displayName": "CloakBrowser",
+            "available": bool(cloak_path),
+            "supportedProviders": ["kiro_v2"],
+        })
+
+        # ShardBrowser — shardx SDK installed; engine auto-downloads from the
+        # ProxyShard CDN on first launch (~170 MB, cached afterwards).
+        shard: dict[str, Any] = {
+            "id": "shardbrowser",
+            "displayName": "ShardBrowser",
+            "available": False,
+            "engineAutoDownload": True,
+            "supportedProviders": ["kiro_v2"],
+            "engineInstalled": False,
+            "engineVersion": None,
+            "fingerprints": 0,
+            "updating": _SHARD_ENGINE_UPDATE["running"],
+            "updateError": _SHARD_ENGINE_UPDATE["error"],
+        }
+        try:
+            import shardx
+
+            shard["available"] = True
+            # Runtime metadata is computed from the package manifest; no
+            # network / download happens until install() is called.
+            import os as _os
+
+            runtime = shardx.ShardX().runtime
+            shard["engineVersion"] = getattr(runtime, "chromium_version", None)
+            binary = getattr(runtime, "binary_path", None)
+            installed = bool(binary) and Path(binary).exists()
+            fp_dir = getattr(runtime, "fingerprints_dir", None)
+            if not installed:
+                # Fallback: the process env may differ from the canonical one
+                # (launchers that strip LOCALAPPDATA) — check well-known cache
+                # locations so the status reflects what is actually on disk.
+                home = Path.home()
+                candidates = {
+                    Path(_os.environ.get("LOCALAPPDATA", home)) / "shardx-sdk",
+                    home / "shardx-sdk",
+                    home / "AppData" / "Local" / "shardx-sdk",
+                }
+                installed = any(
+                    (c / "ShardX-Windows" / "chrome.exe").exists() for c in candidates
+                )
+                if installed and fp_dir is not None and not fp_dir.exists():
+                    for c in candidates:
+                        alt = c / "fingerprints"
+                        if alt.exists():
+                            fp_dir = alt
+                            break
+            shard["engineInstalled"] = installed
+            if fp_dir is not None and fp_dir.exists():
+                shard["fingerprints"] = len(list(fp_dir.glob("*.json")))
+        except Exception:  # noqa: BLE001
+            pass
+        engines.append(shard)
+
+        return {"engines": engines}
+
+    return await asyncio.to_thread(_probe)
+
+
+@register_command("update_shard_engine")
+async def cmd_update_shard_engine(params: dict) -> dict:
+    """Download / force-update the ShardX engine in a background thread.
+
+    Returns immediately (``started``); the UI polls ``get_browser_engines``
+    (``updating`` flag flips off when done, ``engineInstalled`` flips on).
+    A 170 MB download can take minutes — never block the command timeout.
+    """
+    import threading
+
+    force = bool((params or {}).get("force", True))
+
+    if _SHARD_ENGINE_UPDATE["running"]:
+        return {"started": False, "reason": "already running"}
+
+    _SHARD_ENGINE_UPDATE["running"] = True
+    _SHARD_ENGINE_UPDATE["error"] = None
+
+    def _work() -> None:
+        try:
+            from autoreg.browser.async_shardbrowser_wrapper import build_shard_sdk
+
+            sdk = build_shard_sdk()
+            sdk.runtime.install(force=force)
+            _SHARD_ENGINE_UPDATE["error"] = None
+        except Exception as exc:  # noqa: BLE001
+            _SHARD_ENGINE_UPDATE["error"] = str(exc)
+        finally:
+            _SHARD_ENGINE_UPDATE["running"] = False
+
+    threading.Thread(
+        target=_work, daemon=True, name="shardx-engine-update"
+    ).start()
+    return {"started": True}
+
+
 @register_command("open_account_browser", readonly=True)
 async def cmd_open_account_browser(params: dict) -> dict:
     """Launch CloakBrowser/Chrome with the account's persistent profile.
@@ -187,6 +329,8 @@ async def cmd_open_account_browser(params: dict) -> dict:
         proxy_url=proxy_url,
         headless=headless,
         extra_url=extra_url,
+        engine=info.get("browser_engine"),
+        shard_profile_id=info.get("shard_profile_id"),
     )
 
     return {

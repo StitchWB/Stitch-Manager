@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, cast
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,12 +17,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 if getattr(sys, 'frozen', False):
     # Running as PyInstaller bundle
-    REPO_ROOT = Path(sys._MEIPASS)
+    REPO_ROOT = Path(cast('Any', sys)._MEIPASS)
 else:
     # Running from source
     _BACKEND_DIR = Path(__file__).resolve().parent          # python/stitch_backend
     PYTHON_DIR = _BACKEND_DIR.parent                        # python/
     REPO_ROOT = PYTHON_DIR.parent                           # repo root
+
+# Some launchers (elevated desktop app, services) start the backend without
+# LOCALAPPDATA in the environment.  Third-party caches that derive their
+# directory from it (shardx SDK → %LOCALAPPDATA%\shardx-sdk) would otherwise
+# silently use a different location per process: the status probe says
+# "not installed" while another process already downloaded the engine, and
+# launches re-download 170 MB into a second directory.  Normalize once, here,
+# so the backend AND every worker it spawns agree on the canonical cache.
+if sys.platform == "win32":
+    os.environ.setdefault("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
 
 
 def _app_data_dir() -> Path:

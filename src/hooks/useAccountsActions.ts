@@ -370,10 +370,6 @@ export function useAccountsActions({
         return;
       }
 
-      if (!window.confirm(t('accounts.deleteConfirm', { count: targets.length }))) {
-        return;
-      }
-
       try {
         await deleteAccounts(targets);
         toast.success(`Deleted ${targets.length} account${targets.length > 1 ? 's' : ''}`);

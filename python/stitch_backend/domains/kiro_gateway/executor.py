@@ -11,7 +11,7 @@ import json
 import logging
 import time
 import types
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from fastapi import HTTPException
@@ -318,7 +318,7 @@ class KiroExecutor:
             completed = False
             try:
                 async for event in call_kiro_api_stream(
-                    adapter, payload, client=self._get_http_client(),
+                    cast("Any", adapter), payload, client=self._get_http_client(),
                 ):
                     chunk = json.dumps(event, separators=(",", ":"))
                     yield f"data: {chunk}\n\n"

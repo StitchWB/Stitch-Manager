@@ -13,6 +13,8 @@ interface LaunchPadProps {
   onStart: () => void;
   onStop: () => void;
   jobId?: string | null;
+  /** When set, the "configure mail first" pill becomes a clickable shortcut. */
+  onConfigureMail?: () => void;
 }
 
 export function LaunchPad({
@@ -24,6 +26,7 @@ export function LaunchPad({
   onStart,
   onStop,
   jobId,
+  onConfigureMail,
 }: LaunchPadProps) {
   const [isPaused, setIsPaused] = useState(false);
   const isPythonBlocked = pythonAvailable === false;
@@ -97,6 +100,15 @@ export function LaunchPad({
           <Badge variant="danger" size="sm">{t('autoReg.launch_pad.python')}</Badge>
         ) : canStart ? (
           <Badge variant="success" size="sm" withDot withPulse>{t('autoReg.readyToStart')}</Badge>
+        ) : onConfigureMail ? (
+          <button
+            type="button"
+            onClick={onConfigureMail}
+            title={t('autoReg.configureMailFirst')}
+            className="cursor-pointer rounded transition-opacity hover:opacity-75"
+          >
+            <Badge variant="warning" size="sm">{t('autoReg.configureMailFirst')}</Badge>
+          </button>
         ) : (
           <Badge variant="warning" size="sm">{t('autoReg.configureMailFirst')}</Badge>
         )}

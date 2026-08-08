@@ -7,7 +7,7 @@ import logging
 import math
 import time
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
@@ -99,11 +99,11 @@ class LiteLLMExecutor:
         """Attempt routing via AI Gateway engine. Returns list of routing candidates or None."""
         try:
             gw_request = AIGatewayRequest(
-                model=payload.model,
+                model=cast("str", payload.model),
                 messages=payload.messages or [],
                 stream=payload.stream,
                 tools=payload.tools,
-                response_format=payload.response_format,
+                response_format=cast("Any", payload).response_format,
             )
 
             async def _route(session):
@@ -118,7 +118,7 @@ class LiteLLMExecutor:
                 routing_results[0].upstream_model.upstream_model_id,
                 routing_results[0].credential.id[:8],
             )
-            return routing_results
+            return cast("list[Any] | None", routing_results)
         except RoutingError as e:
             logger.debug("AI Gateway route unavailable for %s: %s", payload.model, e)
             return None
@@ -261,7 +261,7 @@ class LiteLLMExecutor:
             if payload.stream:
                 result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
             else:
-                result = _json_object(response)
+                result = cast("Any", _json_object(response))
                 if holone_service.config.enabled:
                     result, findings, blocked = holone_service.inspect_response_openai(
                         result, client_has_tools=client_has_tools
@@ -364,7 +364,7 @@ class LiteLLMExecutor:
             if payload.stream:
                 result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
             else:
-                result = _json_object(response)
+                result = cast("Any", _json_object(response))
                 if holone_service.config.enabled:
                     result, findings, blocked = holone_service.inspect_response_openai(
                         result, client_has_tools=client_has_tools
@@ -503,7 +503,7 @@ class LiteLLMExecutor:
             if payload.stream:
                 result, _ = await self._stream_anthropic_response(response, client_has_tools=client_has_tools)
             else:
-                result = _json_object(response)
+                result = cast("Any", _json_object(response))
                 # Compression: compress output response
                 if compression_service.config.enabled:
                     result = compression_service.compress_output(result)
@@ -609,7 +609,7 @@ class LiteLLMExecutor:
             if payload.stream:
                 result, _ = await self._stream_anthropic_response(response, client_has_tools=client_has_tools)
             else:
-                result = _json_object(response)
+                result = cast("Any", _json_object(response))
                 if compression_service.config.enabled:
                     result = compression_service.compress_output(result)
                 if holone_service.config.enabled:
@@ -752,7 +752,7 @@ class LiteLLMExecutor:
             if payload.stream:
                 result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
             else:
-                result = _json_object(response)
+                result = cast("Any", _json_object(response))
                 # Compression: compress output response
                 if compression_service.config.enabled:
                     result = compression_service.compress_output(result)
@@ -861,7 +861,7 @@ class LiteLLMExecutor:
             if payload.stream:
                 result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
             else:
-                result = _json_object(response)
+                result = cast("Any", _json_object(response))
                 if compression_service.config.enabled:
                     result = compression_service.compress_output(result)
                 if holone_service.config.enabled:

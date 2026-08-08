@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select
 
@@ -57,7 +57,7 @@ class KeyHealthService:
             existing.status = status
             existing.updated_at = _utcnow()
             if models_available is not None:
-                existing.models_available = models_available
+                cast("Any", existing).models_available = models_available
             await self._db.flush()
             return existing
 
@@ -172,7 +172,7 @@ class KeyHealthService:
             prev_lat = record.avg_latency or 0.0
             record.avg_latency = prev_lat * 0.7 + latency_ms * 0.3
             if models_available is not None:
-                record.models_available = models_available
+                cast("Any", record).models_available = models_available
             record.status = "healthy"
             record.cooldown_until = None
         else:

@@ -7,7 +7,7 @@ Kiro types/helpers in `kiro_types.py`, inbound models in `claude_types.py`.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from stitch_backend.domains.kiro_gateway.translator.claude_extract import (
     convert_claude_tools,
@@ -70,7 +70,7 @@ def claude_to_kiro(
         from stitch_backend.domains.kiro_gateway.translator.tool_norm import (
             default_tool_name_registry,  # noqa: E402
         )
-        tool_name_registry = default_tool_name_registry()
+        tool_name_registry = cast("ToolNameRegistry", default_tool_name_registry())
 
     model_id = map_model_id(request["model"])
     origin = "AI_EDITOR"

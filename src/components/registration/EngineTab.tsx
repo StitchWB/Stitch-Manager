@@ -19,45 +19,32 @@ import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
 import { Button, GlassCard, Input, Select, Toggle, Textarea, Badge } from '@/components/ui';
 import { NumberInput } from '../ui/NumberInput';
 
-interface EngineTabProps {
+export type BrowserEngineId = 'cloakbrowser' | 'shardbrowser';
+
+interface EngineInfo {
+  id: string;
+  displayName: string;
+  available: boolean;
+  supportedProviders?: string[];
+  engineInstalled?: boolean;
+  engineVersion?: string | null;
+  fingerprints?: number;
+  updating?: boolean;
+  updateError?: string | null;
+}
+
+interface BrowserSectionProps {
   provider: ProviderName;
-  useRegistrationV2: boolean;
-  onUseRegistrationV2Change: (enabled: boolean) => void;
+  browserEngine: string;
+  onBrowserEngineChange: (engine: string) => void;
   headless: boolean;
   onHeadlessChange: (enabled: boolean) => void;
-  speedMultiplier: number;
-  onSpeedMultiplierChange: (value: number) => void;
-  delayBetweenAccounts: number;
-  onDelayBetweenAccountsChange: (value: number) => void;
-  logVerbosity: LogVerbosity;
-  onLogVerbosityChange: (level: LogVerbosity) => void;
-  verificationCodeTimeout: number;
-  onVerificationCodeTimeoutChange: (value: number) => void;
-  oauthCallbackTimeout: number;
-  onOauthCallbackTimeoutChange: (value: number) => void;
-  allowAccessWait: number;
-  onAllowAccessWaitChange: (value: number) => void;
-  pageLoadTimeout: number;
-  onPageLoadTimeoutChange: (value: number) => void;
-  elementWaitTimeout: number;
-  onElementWaitTimeoutChange: (value: number) => void;
-  imapPollInterval: number;
-  onImapPollIntervalChange: (value: number) => void;
-  passwordLength: number;
-  onPasswordLengthChange: (value: number) => void;
   realisticTyping: boolean;
   onRealisticTypingChange: (enabled: boolean) => void;
   humanDelays: boolean;
   onHumanDelaysChange: (enabled: boolean) => void;
   screenshotsOnError: boolean;
   onScreenshotsOnErrorChange: (enabled: boolean) => void;
-  cardsText?: string;
-  onCardsTextChange?: (text: string) => void;
-  cardBin?: string;
-  onCardBinChange?: (text: string) => void;
-  // Kiro-specific
-  kiroPlan?: string;
-  onKiroPlanChange?: (plan: string) => void;
   disabled?: boolean;
 }
 
@@ -105,7 +92,6 @@ function CompactGroup({
         </span>
         {expanded ?
           <ChevronUp className="w-3 h-3 text-slate-700 group-hover:text-slate-500" /> :
-
           <ChevronDown className="w-3 h-3 text-slate-700 group-hover:text-slate-500" />
         }
       </div>
@@ -150,12 +136,224 @@ function InlineToggle({
   return tooltip ? <Tooltip content={tooltip}>{content}</Tooltip> : content;
 }
 
-export function EngineTab({
+/**
+ * Browser engine + behaviour section of the registration cockpit.
+ *
+ * The engine is a per-run choice here; once a registration succeeds the
+ * engine is stored on the account and the interactive "Open browser"
+ * relaunches with the same engine/fingerprint.
+ */
+export function BrowserSection({
+  provider,
+  browserEngine,
+  onBrowserEngineChange,
+  headless,
+  onHeadlessChange,
+  realisticTyping,
+  onRealisticTypingChange,
+  humanDelays,
+  onHumanDelaysChange,
+  screenshotsOnError,
+  onScreenshotsOnErrorChange,
+  disabled
+}: BrowserSectionProps) {
+  const [engines, setEngines] = useState<EngineInfo[] | null>(null);
+  const [engineBusy, setEngineBusy] = useState(false);
+
+  const refreshEngines = () =>
+    safeInvoke<{ engines: EngineInfo[] }>('get_browser_engines', {})
+      .then(res => setEngines(res?.engines ?? null))
+      .catch(() => undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    safeInvoke<{ engines: EngineInfo[] }>('get_browser_engines', {})
+      .then(res => { if (!cancelled) setEngines(res?.engines ?? null); })
+      .catch(() => { if (!cancelled) setEngines(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const shardInfo = engines?.find(e => e.id === 'shardbrowser');
+  const shardAvailable = shardInfo ? shardInfo.available : true;
+  const engineSupported = provider === 'kiro_v2';
+
+  // Poll while a background engine download is running.
+  useEffect(() => {
+    if (!shardInfo?.updating) return undefined;
+    const id = setInterval(refreshEngines, 5000);
+    return () => clearInterval(id);
+  }, [shardInfo?.updating]);
+
+  const handleUpdateEngine = async () => {
+    setEngineBusy(true);
+    try {
+      await safeInvoke('update_shard_engine', { force: true });
+      await refreshEngines();
+    } finally {
+      setEngineBusy(false);
+    }
+  };
+
+  const engineButton = (id: BrowserEngineId, label: string, hint: string) => {
+    const active = (browserEngine || 'cloakbrowser') === id;
+    const blocked = !engineSupported || (id === 'shardbrowser' && !shardAvailable);
+    const tooltip = !engineSupported
+      ? 'Доступно для Kiro v2'
+      : id === 'shardbrowser' && !shardAvailable
+        ? 'ShardX SDK не установлен (pip install shardx)'
+        : hint;
+    const btn = (
+      <button
+        type="button"
+        disabled={disabled || blocked}
+        onClick={() => onBrowserEngineChange(id)}
+        className={cn(
+          'flex-1 px-2 py-1.5 rounded-md text-[11px] font-semibold transition-colors border',
+          active
+            ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300'
+            : 'bg-white/[0.02] border-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/5',
+          (disabled || blocked) && 'opacity-50 cursor-not-allowed pointer-events-none'
+        )}
+      >
+        {label}
+      </button>
+    );
+    return blocked ? <Tooltip content={tooltip}>{btn}</Tooltip> : btn;
+  };
+
+  return (
+    <div className="grid gap-1 rounded-md bg-white/[0.02] p-2">
+      <div className="flex items-center gap-2 px-0.5 pb-1">
+        <span className="text-[9px] uppercase font-medium text-slate-600 tracking-wider">
+          Движок
+        </span>
+      </div>
+      <div className="flex gap-1">
+        {engineButton(
+          'cloakbrowser',
+          'CloakBrowser',
+          'Патченный Chromium + JS-спуфинг отпечатков'
+        )}
+        {engineButton(
+          'shardbrowser',
+          'ShardBrowser',
+          'Спуфинг на уровне движка (WebGPU/шрифты/TLS/QUIC)'
+        )}
+      </div>
+      {browserEngine === 'cloakbrowser' && (
+        <div className="px-0.5 pt-0.5 space-y-0.5">
+          <p className="text-[9px] text-slate-500">
+            Патченный Chromium + JS-спуфинг отпечатков.
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[9px] text-slate-500 truncate">
+              {engines?.find(e => e.id === 'cloakbrowser')?.available
+                ? 'Бинарь установлен (resources/cloakbrowser)'
+                : 'Бинарь не найден — скачается автоматически при первом запуске'}
+            </span>
+          </div>
+        </div>
+      )}
+      {browserEngine === 'shardbrowser' && (
+        <div className="px-0.5 pt-0.5 space-y-0.5">
+          <p className="text-[9px] text-slate-500">
+            Спуфинг на уровне движка Chromium (WebGPU/шрифты/TLS/QUIC).
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[9px] text-slate-500 truncate">
+              {shardInfo?.updating
+                ? 'Движок скачивается…'
+                : shardInfo?.engineInstalled
+                  ? `Движок ${shardInfo.engineVersion ?? ''} установлен${shardInfo.fingerprints ? ` · отпечатков: ${shardInfo.fingerprints}` : ''}`
+                  : 'Движок не установлен (~170 МБ)'}
+              {shardInfo?.updateError ? (
+                <span className="text-red-400"> · ошибка: {shardInfo.updateError}</span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              disabled={disabled || shardInfo?.updating || engineBusy}
+              onClick={handleUpdateEngine}
+              className="shrink-0 text-[9px] font-semibold text-indigo-300 hover:text-indigo-200 disabled:opacity-50 cursor-pointer"
+            >
+              {shardInfo?.updating ? 'Качается…' : shardInfo?.engineInstalled ? 'Обновить' : 'Скачать сейчас'}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1">
+        <InlineToggle
+          label="Окно браузера"
+          checked={!headless}
+          onChange={enabled => onHeadlessChange(!enabled)}
+          disabled={disabled}
+          tooltip="Показывать браузерное окно во время выполнения." />
+        <InlineToggle
+          label="Плавный набор"
+          checked={realisticTyping}
+          onChange={onRealisticTypingChange}
+          disabled={disabled}
+          tooltip="Добавляет задержки между вводимыми символами." />
+        <InlineToggle
+          label="Паузы"
+          checked={humanDelays}
+          onChange={onHumanDelaysChange}
+          disabled={disabled}
+          tooltip="Добавляет небольшие паузы между действиями." />
+        <InlineToggle
+          label="Скриншоты ошибок"
+          checked={screenshotsOnError}
+          onChange={onScreenshotsOnErrorChange}
+          disabled={disabled}
+          tooltip="Сохраняет скриншоты для отладки ошибок." />
+      </div>
+    </div>
+  );
+}
+
+interface LaunchSectionProps {
+  provider: ProviderName;
+  useRegistrationV2: boolean;
+  onUseRegistrationV2Change: (enabled: boolean) => void;
+  headless: boolean;
+  speedMultiplier: number;
+  onSpeedMultiplierChange: (value: number) => void;
+  delayBetweenAccounts: number;
+  onDelayBetweenAccountsChange: (value: number) => void;
+  logVerbosity: LogVerbosity;
+  onLogVerbosityChange: (level: LogVerbosity) => void;
+  verificationCodeTimeout: number;
+  onVerificationCodeTimeoutChange: (value: number) => void;
+  oauthCallbackTimeout: number;
+  onOauthCallbackTimeoutChange: (value: number) => void;
+  allowAccessWait: number;
+  onAllowAccessWaitChange: (value: number) => void;
+  pageLoadTimeout: number;
+  onPageLoadTimeoutChange: (value: number) => void;
+  elementWaitTimeout: number;
+  onElementWaitTimeoutChange: (value: number) => void;
+  imapPollInterval: number;
+  onImapPollIntervalChange: (value: number) => void;
+  passwordLength: number;
+  onPasswordLengthChange: (value: number) => void;
+  cardsText?: string;
+  onCardsTextChange?: (text: string) => void;
+  cardBin?: string;
+  onCardBinChange?: (text: string) => void;
+  kiroPlan?: string;
+  onKiroPlanChange?: (plan: string) => void;
+  disabled?: boolean;
+}
+
+/**
+ * Execution parameters section of the registration cockpit:
+ * speed/delays/password/logs + Kiro plan chips + timeouts + cards.
+ */
+export function LaunchSection({
   provider,
   useRegistrationV2,
   onUseRegistrationV2Change,
   headless,
-  onHeadlessChange,
   speedMultiplier,
   onSpeedMultiplierChange,
   delayBetweenAccounts,
@@ -176,12 +374,6 @@ export function EngineTab({
   onImapPollIntervalChange,
   passwordLength,
   onPasswordLengthChange,
-  realisticTyping,
-  onRealisticTypingChange,
-  humanDelays,
-  onHumanDelaysChange,
-  screenshotsOnError,
-  onScreenshotsOnErrorChange,
   cardsText,
   onCardsTextChange,
   cardBin,
@@ -189,7 +381,7 @@ export function EngineTab({
   kiroPlan,
   onKiroPlanChange,
   disabled
-}: EngineTabProps) {
+}: LaunchSectionProps) {
   const [cardMode, setCardMode] = useState<'manual' | 'auto'>('auto');
   const [findingLive, setFindingLive] = useState(false);
   const [lastFoundCard, setLastFoundCard] = useState<string | null>(null);
@@ -232,23 +424,8 @@ export function EngineTab({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* ===== PRIMARY EXECUTION SETTINGS ===== */}
-      <GlassCard className="p-3">
-        <div className="mb-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-300">Основные параметры</div>
-          <div className="text-[10px] text-slate-500">Применяются к следующему запуску</div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2 rounded-md bg-white/[0.02] px-2.5 py-2">
-            <InlineToggle
-              label="Открывать браузерное окно"
-              checked={!headless}
-              onChange={enabled => onHeadlessChange(!enabled)}
-              disabled={disabled}
-              tooltip="Показывать браузерное окно во время выполнения." />
-          </div>
-
+      <GlassCard className="p-2">
+        <div className="grid grid-cols-2 gap-2">
           <Tooltip content="Скорость выполнения операций">
             <NumberInput
               label="Скорость"
@@ -378,29 +555,6 @@ export function EngineTab({
           </div>
         </CompactGroup>
 
-        <CompactGroup title="Браузер">
-          <div className="grid gap-1 rounded-md bg-white/[0.02] p-2">
-            <InlineToggle
-              label="Плавный набор текста"
-              checked={realisticTyping}
-              onChange={onRealisticTypingChange}
-              disabled={disabled}
-              tooltip="Добавляет задержки между вводимыми символами." />
-            <InlineToggle
-              label="Дополнительные паузы"
-              checked={humanDelays}
-              onChange={onHumanDelaysChange}
-              disabled={disabled}
-              tooltip="Добавляет небольшие паузы между действиями." />
-            <InlineToggle
-              label="Скриншоты при ошибках"
-              checked={screenshotsOnError}
-              onChange={onScreenshotsOnErrorChange}
-              disabled={disabled}
-              tooltip="Сохраняет скриншоты для отладки ошибок." />
-          </div>
-        </CompactGroup>
-
         {provider === 'fireworks' && (onCardsTextChange || onCardBinChange) &&
           <CompactGroup title="Карты">
             {/* Mode toggle */}
@@ -452,7 +606,7 @@ export function EngineTab({
                     value={cardBin || ''}
                     onChange={(e) => onCardBinChange?.(e.target.value)}
                     placeholder="515462002112xxxx"
-                    disabled={disabled || findingLive}
+                    disabled={disabled || findingLive || !cardBin}
                     className="flex-1 text-xs font-mono"
                     shellClassName="h-7"
                   />
@@ -497,16 +651,19 @@ export function EngineTab({
           </CompactGroup>
         }
 
-        {/* Kiro plan selection — only for kiro_v2 */}
+        {/* Kiro plan selection — only for kiro_v2, horizontal chips */}
         {provider === 'kiro_v2' && onKiroPlanChange &&
-          <CompactGroup title="Тариф Kiro" defaultExpanded>
-            <div className="flex flex-col gap-1 pb-1">
+          <div className="border-t border-white/[0.06] py-1.5">
+            <div className="text-[10px] font-semibold text-slate-600 tracking-wide pb-1.5">
+              Тариф Kiro
+            </div>
+            <div className="flex flex-wrap gap-1">
               {[
-                { value: 'free', label: 'Free', sub: '$0 · 50 кр' },
-                { value: 'pro', label: 'Pro', sub: '$20 · 1K' },
-                { value: 'pro_plus', label: 'Pro+', sub: '$40 · 2K' },
-                { value: 'pro_max', label: 'Pro Max', sub: '$100 · 5K' },
-                { value: 'power', label: 'Power', sub: '$200 · 10K' },
+                { value: 'free', label: 'Free', sub: '$0·50кр' },
+                { value: 'pro', label: 'Pro', sub: '$20·1K' },
+                { value: 'pro_plus', label: 'Pro+', sub: '$40·2K' },
+                { value: 'pro_max', label: 'ProMax', sub: '$100·5K' },
+                { value: 'power', label: 'Power', sub: '$200·10K' },
               ].map(opt => {
                 const active = (kiroPlan || 'free') === opt.value;
                 return (
@@ -516,23 +673,22 @@ export function EngineTab({
                     disabled={disabled}
                     onClick={() => onKiroPlanChange(opt.value)}
                     className={cn(
-                      'flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors text-left',
-                      'border',
+                      'flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold transition-colors border',
                       active
                         ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300'
-                        : 'bg-white/[0.02] border-white/[0.05] text-slate-400 hover:text-slate-200 hover:bg-white/[0.05]',
+                        : 'bg-white/[0.02] border-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/5',
                       disabled && 'opacity-50 pointer-events-none',
                     )}
                   >
-                    <span className="font-medium">{opt.label}</span>
-                    <span className={cn('text-[10px]', active ? 'text-indigo-400' : 'text-slate-600')}>
+                    {opt.label}
+                    <span className={cn('text-[9px] font-normal', active ? 'text-indigo-400/80' : 'text-slate-600')}>
                       {opt.sub}
                     </span>
                   </button>
                 );
               })}
             </div>
-          </CompactGroup>
+          </div>
         }
       </div>
 
@@ -558,3 +714,5 @@ export function EngineTab({
     </div>);
 
 }
+
+

@@ -1,3 +1,5 @@
+// Must run before any module that fires toasts: installs the anti-spam patch.
+import './lib/observability/toast-dedup';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

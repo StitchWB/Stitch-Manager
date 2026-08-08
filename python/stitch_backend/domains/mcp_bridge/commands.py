@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, cast
 
 from sqlalchemy import text as sql_text
 
@@ -37,7 +38,7 @@ async def cmd_mcp_list_recorded_scenarios(params: dict) -> list:
     handler = get_command_handler("list_recorded_scenarios")
     result = await handler(params)
     items = result.get("items", []) if isinstance(result, dict) else result
-    return items
+    return cast("list[Any]", items)
 
 
 @register_command("mcp_read_scenario_file_json")
@@ -50,7 +51,7 @@ async def cmd_mcp_read_scenario_file_json(params: dict) -> dict:
         raise ValueError(f"Scenario not found: {path}")
 
     raw = path.read_text(encoding="utf-8")
-    return json.loads(raw)
+    return cast("dict[Any, Any]", json.loads(raw))
 
 
 @register_command("mcp_write_scenario_file_json")
@@ -79,7 +80,7 @@ async def cmd_mcp_list_composed_flows(params: dict) -> list:
     """List composed flows (delegates to composed_flows command)."""
     from stitch_backend.core.command_registry import get_command_handler
     handler = get_command_handler("list_composed_flows")
-    return await handler(params)
+    return cast("list[Any]", await handler(params))
 
 
 @register_command("mcp_upsert_composed_flow")
@@ -98,12 +99,12 @@ async def cmd_mcp_upsert_composed_flow(params: dict) -> dict:
             "dryRun": True,
         }
         append_critical_journal("mcp_upsert_composed_flow", params, result)
-        return result
+        return cast("dict[Any, Any]", result)
 
     handler = get_command_handler("upsert_composed_flow")
     result = await handler(params)
     append_critical_journal("mcp_upsert_composed_flow", params, result)
-    return result
+    return cast("dict[Any, Any]", result)
 
 
 @register_command("mcp_start_composed_flow_run")
@@ -121,7 +122,7 @@ async def cmd_mcp_start_composed_flow_run(params: dict) -> dict:
         import uuid
         result = {"jobId": f"dryrun_job_{uuid.uuid4().hex[:8]}"}
         append_critical_journal("mcp_start_composed_flow_run", params, result)
-        return result
+        return cast("dict[Any, Any]", result)
 
     script_path = str(REPO_ROOT / "python" / "run_composed_flow.py")
     job = await get_job_manager().start(
@@ -130,7 +131,7 @@ async def cmd_mcp_start_composed_flow_run(params: dict) -> dict:
     )
     result = {"jobId": job.id}
     append_critical_journal("mcp_start_composed_flow_run", params, result)
-    return result
+    return cast("dict[Any, Any]", result)
 
 
 # ── Python Job delegation ───────────────────────────────────────────────────
@@ -169,7 +170,7 @@ async def cmd_mcp_cancel_python_job(params: dict) -> bool:
 
     result = await get_job_manager().cancel(job_id)
     append_critical_journal("mcp_cancel_python_job", params, {"cancelled": result, "dryRun": False})
-    return result
+    return cast("bool", result)
 
 
 # ── Aggregation / Info ─────────────────────────────────────────────────────

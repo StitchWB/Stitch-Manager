@@ -154,6 +154,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Registered %d command(s), %d readonly", len(commands), readonly_count)
     logger.debug("Registered commands: %s", commands)
 
+    # Prewarm the heavy optional shardx import (pulls patchright/playwright,
+    # ~1 s) in a daemon thread so the first get_browser_engines probe and the
+    # first ShardBrowser launch don't stall the UI.
+    import threading as _threading
+
+    def _prewarm_shardx() -> None:
+        try:
+            import shardx  # noqa: F401
+        except Exception:  # noqa: BLE001 — optional dependency
+            pass
+
+    _threading.Thread(target=_prewarm_shardx, daemon=True, name="shardx-prewarm").start()
+
     # Auto-discover provider plugins
     providers = scan_providers()
     if providers:

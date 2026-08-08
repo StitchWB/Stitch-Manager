@@ -833,24 +833,58 @@ tr:hover .action-btn,
 }
 
 /* ============================================
-   Sonner Toast Customization
+   Sonner Toast Customization (compact glass)
    ============================================ */
 [data-sonner-toaster] {
-  --normal-bg: rgba(15, 23, 42, 0.95);
+  --normal-bg: rgba(15, 23, 42, 0.92);
   --normal-border: rgba(255, 255, 255, 0.1);
   --normal-text: #e2e8f0;
 }
 
 [data-sonner-toast] {
-  @apply rounded-lg shadow-xl;
+  @apply shadow-lg;
+  border-radius: 10px;
   font-family: 'Inter', 'Geist', 'Segoe UI', system-ui, sans-serif;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Compact content */
+[data-sonner-toast] [data-content] {
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+[data-sonner-toast] [data-title] {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+[data-sonner-toast] [data-description] {
+  font-size: 11.5px;
+  opacity: 0.75;
+}
+
+[data-sonner-toast] [data-icon] {
+  width: 16px;
+  height: 16px;
+  margin-inline-start: 0;
+}
+
+[data-sonner-toast] [data-icon] svg {
+  width: 100%;
+  height: 100%;
 }
 
 /* Close button styling */
 [data-sonner-toast] [data-close-button] {
   @apply bg-white/10 border-white/10 text-slate-400 hover:bg-white/20 hover:text-white transition-colors;
+  width: 18px;
+  height: 18px;
   left: auto !important;
-  right: 4px !important;
+  right: 5px !important;
 }
 
 /* Toast stacking animation */
@@ -869,24 +903,33 @@ tr:hover .action-btn,
   }
 }
 
+/* Per-type tinted glass backgrounds */
 [data-sonner-toast][data-type='success'] {
-  --normal-bg: rgba(16, 185, 129, 0.1);
-  --normal-border: rgba(16, 185, 129, 0.2);
+  background:
+    linear-gradient(rgba(16, 185, 129, 0.14), rgba(16, 185, 129, 0.14)),
+    rgba(15, 23, 42, 0.92);
+  border-color: rgba(16, 185, 129, 0.3);
 }
 
 [data-sonner-toast][data-type='error'] {
-  --normal-bg: rgba(239, 68, 68, 0.1);
-  --normal-border: rgba(239, 68, 68, 0.2);
+  background:
+    linear-gradient(rgba(239, 68, 68, 0.14), rgba(239, 68, 68, 0.14)),
+    rgba(15, 23, 42, 0.92);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 [data-sonner-toast][data-type='warning'] {
-  --normal-bg: rgba(245, 158, 11, 0.1);
-  --normal-border: rgba(245, 158, 11, 0.2);
+  background:
+    linear-gradient(rgba(245, 158, 11, 0.14), rgba(245, 158, 11, 0.14)),
+    rgba(15, 23, 42, 0.92);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 [data-sonner-toast][data-type='info'] {
-  --normal-bg: rgba(99, 102, 241, 0.1);
-  --normal-border: rgba(99, 102, 241, 0.2);
+  background:
+    linear-gradient(rgba(99, 102, 241, 0.14), rgba(99, 102, 241, 0.14)),
+    rgba(15, 23, 42, 0.92);
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
 /* ============================================

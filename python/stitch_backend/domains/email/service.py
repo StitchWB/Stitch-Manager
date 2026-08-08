@@ -8,7 +8,7 @@ command layer.  It delegates to the concrete strategies defined in
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from stitch_backend.config import get_settings
 from stitch_backend.domains.email.imap_client import ImapClient, InboxService
@@ -77,7 +77,7 @@ class EmailService:
         strategy = self.make_strategy(strategy_id)
         email = await strategy.acquire_email(ctx)
         ctx.email = email
-        return email
+        return cast("str", email)
 
     async def wait_for_verification_code(
         self,

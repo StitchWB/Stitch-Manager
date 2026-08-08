@@ -112,7 +112,7 @@ CORE_TOOLS = [
 
 
 @mcp.tool
-async def list_mcp_commands(filter: str = "") -> list[str]:  # type: ignore[reportUnusedParameter]
+async def list_mcp_commands(filter: str = "") -> list[str]:
     """List all registered backend commands. Filter by substring."""
     cmds = list_commands()
     if filter:
@@ -121,7 +121,7 @@ async def list_mcp_commands(filter: str = "") -> list[str]:  # type: ignore[repo
 
 
 @mcp.tool
-async def execute_any(command_name: str, args: dict = None) -> Any:  # type: ignore[reportUnusedParameter]
+async def execute_any(command_name: str, args: dict[str, Any] | None = None) -> Any:
     """Invoke any registered backend command by name (escape hatch)."""
     if command_name in WRITE_COMMANDS:
         ensure_write_allowed(command_name)

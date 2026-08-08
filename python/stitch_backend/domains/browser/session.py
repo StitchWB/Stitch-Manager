@@ -14,6 +14,7 @@ import logging
 import os
 import platform
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -112,12 +113,31 @@ async def launch_account_browser(
     proxy_url: str | None = None,
     headless: bool = False,
     extra_url: str | None = None,
+    engine: str | None = None,
+    shard_profile_id: str | None = None,
 ) -> LaunchResult:
-    """Launch CloakBrowser (or Chrome) with a persistent profile for an account.
+    """Launch the account's browser with a persistent profile.
+
+    Engine is a per-account property fixed at registration time:
+    * ``cloakbrowser`` (default) — CloakBrowser/Chrome subprocess launch.
+    * ``shardbrowser`` — ShardX session via the open_browser worker (the
+      worker keeps the SDK session alive while the window is open).
 
     The browser opens the provider's URL.  If *cookies_json* is provided it
     is injected via DrissionPage after launch (best-effort).
     """
+    engine = (engine or "cloakbrowser").strip().lower()
+    if engine in ("shardbrowser", "shardx"):
+        return await _launch_shard_worker(
+            account_id=account_id,
+            provider=provider,
+            email=email,
+            shard_profile_id=shard_profile_id,
+            proxy_url=proxy_url,
+            headless=headless,
+            extra_url=extra_url,
+        )
+
     browser_exe = _find_cloakbrowser()
     if browser_exe is None:
         return LaunchResult(success=False, error="No CloakBrowser or Chrome found")
@@ -164,6 +184,80 @@ async def launch_account_browser(
         success=True,
         profile_path=str(profile),
         pid=proc.pid,
+        url=url,
+    )
+
+
+async def _launch_shard_worker(
+    account_id: int,
+    provider: str,
+    email: str,
+    shard_profile_id: str | None,
+    proxy_url: str | None,
+    headless: bool,
+    extra_url: str | None,
+) -> LaunchResult:
+    """Launch a ShardBrowser account session via the open_browser worker.
+
+    The worker process keeps the ShardX SDK session (and therefore the
+    patched engine + fingerprint) alive for as long as the browser window is
+    open — same pattern as the CloakBrowser profile worker.  The parent
+    open_browser process spawns the detached worker, health-checks it for
+    ~2.5 s and prints a JSON verdict which we parse here.
+    """
+    open_browser = Path(__file__).resolve().parents[3] / "open_browser.py"
+    if not open_browser.exists():
+        return LaunchResult(success=False, error=f"open_browser.py not found: {open_browser}")
+
+    url = extra_url or _PROVIDER_URLS.get(provider.lower(), "https://google.com")
+    config_json = json.dumps({
+        "engine": "shardbrowser",
+        "shard_profile_id": shard_profile_id,
+    })
+    cmd = [
+        sys.executable,
+        str(open_browser),
+        "--email", email or f"account_{account_id}",
+        "--provider", (provider or "kiro").lower(),
+        "--url", url,
+        "--config-json", config_json,
+    ]
+    if proxy_url:
+        cmd.extend(["--proxy", proxy_url])
+    if headless:
+        cmd.append("--headless")
+
+    logger.info("Launching ShardBrowser worker for account %s", account_id)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return LaunchResult(success=False, error=f"Failed to launch shard worker: {exc}")
+
+    try:
+        # Covers the worker ready-handshake window (default 45s) plus margin.
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=70)
+    except asyncio.TimeoutError:
+        return LaunchResult(success=False, error="ShardBrowser launcher timed out")
+
+    payload: dict = {}
+    try:
+        payload = json.loads(out.decode("utf-8", errors="replace") or "{}")
+    except Exception:  # noqa: BLE001
+        payload = {}
+
+    if not payload.get("success"):
+        return LaunchResult(
+            success=False,
+            error=payload.get("error") or "ShardBrowser worker failed to start",
+        )
+    return LaunchResult(
+        success=True,
+        profile_path=str(payload.get("profile_path") or ""),
+        pid=payload.get("pid"),
         url=url,
     )
 

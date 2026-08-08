@@ -8,6 +8,7 @@ import {
   normalizeSpreadsheetId,
   testGoogleSheetsConnection,
 } from '@/lib/backend/modules/googleSheets';
+import { OAuthConnectButton } from './OAuthConnectButton';
 
 const SETTINGS_SECRET_MASK = '********';
 
@@ -33,9 +34,12 @@ export function GoogleSheetsSettingsSection({
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [message, setMessage] = useState<string>('');
   const [busyAction, setBusyAction] = useState<'test' | 'init' | 'refresh' | null>(null);
+  const [oauthConnected, setOauthConnected] = useState(false);
+  const [oauthEmail, setOauthEmail] = useState<string | null>(null);
 
+  // OAuth connected satisfies the auth requirement; service account JSON is optional then.
   const canRunActions = Boolean(
-    spreadsheetId.trim() && (serviceAccountJson.trim() || hasStoredServiceAccountJson)
+    spreadsheetId.trim() && (oauthConnected || serviceAccountJson.trim() || hasStoredServiceAccountJson)
   );
 
   const handleSpreadsheetIdBlur = () => {
@@ -57,7 +61,7 @@ export function GoogleSheetsSettingsSection({
     try {
       const result = await testGoogleSheetsConnection({
         spreadsheetId: spreadsheetId.trim(),
-        serviceAccountJson: serviceAccountJson.trim() || SETTINGS_SECRET_MASK,
+        serviceAccountJson: oauthConnected ? '' : (serviceAccountJson.trim() || SETTINGS_SECRET_MASK),
       });
       setStatus('success');
       setMessage(
@@ -85,7 +89,7 @@ export function GoogleSheetsSettingsSection({
     try {
       const result = await initGoogleSheetsSchema({
         spreadsheetId: spreadsheetId.trim(),
-        serviceAccountJson: serviceAccountJson.trim() || SETTINGS_SECRET_MASK,
+        serviceAccountJson: oauthConnected ? '' : (serviceAccountJson.trim() || SETTINGS_SECRET_MASK),
       });
       setStatus('success');
       setMessage(
@@ -113,7 +117,7 @@ export function GoogleSheetsSettingsSection({
     try {
       const dataset = await fetchGoogleSheetsDataset({
         spreadsheetId: spreadsheetId.trim(),
-        serviceAccountJson: serviceAccountJson.trim() || SETTINGS_SECRET_MASK,
+        serviceAccountJson: oauthConnected ? '' : (serviceAccountJson.trim() || SETTINGS_SECRET_MASK),
       });
       setStatus('success');
       setMessage(
@@ -136,6 +140,19 @@ export function GoogleSheetsSettingsSection({
       className="pt-2"
     >
       <div className="space-y-4">
+        <OAuthConnectButton
+          onStatusChange={(connected, email) => {
+            setOauthConnected(connected);
+            setOauthEmail(email);
+          }}
+        />
+
+        {oauthConnected && oauthEmail && (
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+            {t('settings.googleSheets.oauth.usingOAuth', { email: oauthEmail })}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-3">
           <Input
             label={t('settings.googleSheets.spreadsheetId')}
@@ -146,18 +163,20 @@ export function GoogleSheetsSettingsSection({
             placeholder="1AbCDEF..."
           />
 
-          <Textarea
-            label={t('settings.googleSheets.serviceAccountJson')}
-            value={serviceAccountJson}
-            onChange={e => onServiceAccountJsonChange(e.target.value)}
-            rows={8}
-            placeholder='{"type":"service_account", ...}'
-            hint={
-              hasStoredServiceAccountJson
-                ? 'JSON сохранён (скрыт). Можно оставить поле пустым — кнопки будут использовать сохранённый ключ.'
-                : undefined
-            }
-          />
+          {!oauthConnected && (
+            <Textarea
+              label={t('settings.googleSheets.serviceAccountJson')}
+              value={serviceAccountJson}
+              onChange={e => onServiceAccountJsonChange(e.target.value)}
+              rows={8}
+              placeholder='{"type":"service_account", ...}'
+              hint={
+                hasStoredServiceAccountJson
+                  ? 'JSON сохранён (скрыт). Можно оставить поле пустым — кнопки будут использовать сохранённый ключ.'
+                  : undefined
+              }
+            />
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

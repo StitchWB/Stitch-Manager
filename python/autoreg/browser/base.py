@@ -113,8 +113,7 @@ class BaseBrowser:
         self._shardbrowser_profile_id = shardbrowser_profile_id
         self._shardbrowser_platform = shardbrowser_platform
         self._shard_sdk: object | None = None    # shardx.ShardX instance
-        self._shard_browser: object | None = None  # patchright Browser
-        self._shard_loop: object | None = None   # asyncio event loop
+        self._shard_browser: object | None = None  # shardx BrowserSession
 
         # Initialize browser
         self._init_browser()
@@ -419,20 +418,22 @@ class BaseBrowser:
     # ── ShardBrowser engine ───────────────────────────────────────────────────
 
     def _init_shardbrowser(self) -> None:
-        """Launch a ShardX (patchright) browser session.
+        """Launch a ShardX engine and drive it via DrissionPage over CDP.
 
-        ShardX SDK is fully async (asyncio + patchright).  We run it inside a
-        dedicated event loop on the current thread so the rest of the
-        (synchronous) provider code works unchanged.
+        The shardx SDK spawns the patched Chromium (engine-level spoofing)
+        with a remote-debugging port and returns the CDP endpoint; we attach
+        a regular ``ChromiumPage`` to it.  No asyncio bridging is needed, so
+        the synchronous provider code works unchanged and gets the full
+        native DrissionPage API (get/ele/run_cdp/...).
 
-        The SDK auto-downloads the patched Chromium 149 engine + fingerprint
+        The SDK auto-downloads the patched Chromium engine + fingerprint
         library on the first call (~170 MB, cached afterwards).
 
         Requires:  ``pip install shardx``
         """
-        try:
-            import asyncio as _asyncio
+        from urllib.parse import urlparse
 
+        try:
             import shardx as _shardx  # type: ignore[import-untyped]
         except ImportError:
             raise RuntimeError(
@@ -440,10 +441,12 @@ class BaseBrowser:
                 "Install it with:  pip install shardx"
             ) from None
 
+        from .async_shardbrowser_wrapper import build_shard_sdk, create_shard_profile
+
         # Build proxy URL: ShardBrowser expects a full URI like
         # "socks5h://user:pass@host:port" or "http://host:port".
         # socks5h:// resolves DNS on the proxy side (remote), preventing DNS
-        # leaks. Playwright/patchright supports socks5h:// natively.
+        # leaks.
         proxy_uri: str | None = None
         if self._proxy_enabled and self._proxy_url:
             if "://" in self._proxy_url:
@@ -458,61 +461,78 @@ class BaseBrowser:
                 else:
                     proxy_uri = f"{scheme}://{self._proxy_url}"
 
-        # One dedicated event loop for the lifetime of this browser instance
-        loop = _asyncio.new_event_loop()
-        self._shard_loop = loop
+        sdk = build_shard_sdk()
+        self._shard_sdk = sdk
 
-        async def _start() -> None:
-            sdk = _shardx.ShardX()
-            self._shard_sdk = sdk
-
-            # Re-use a saved profile (persistent fingerprint + cookies) when an
-            # ID was provided; otherwise create a fresh random Windows profile.
-            if self._shardbrowser_profile_id:
-                try:
-                    profile = sdk.open_profile(self._shardbrowser_profile_id)
-                    logger.info(
-                        "ShardBrowser: reusing saved profile %s",
-                        self._shardbrowser_profile_id,
-                    )
-                except Exception:
-                    logger.warning(
-                        "ShardBrowser: saved profile %s not found, creating new one",
-                        self._shardbrowser_profile_id,
-                    )
-                    profile = sdk.create_profile(platform=self._shardbrowser_platform)
-            else:
-                profile = sdk.create_profile(platform=self._shardbrowser_platform)
+        # Re-use a saved profile (persistent fingerprint + cookies) when an
+        # ID was provided; otherwise create a fresh random Windows profile.
+        profile = None
+        if self._shardbrowser_profile_id:
+            try:
+                profile = sdk.open_profile(self._shardbrowser_profile_id)
                 logger.info(
-                    "ShardBrowser: created new %s profile id=%s",
-                    self._shardbrowser_platform,
-                    getattr(profile, "id", "?"),
+                    "ShardBrowser: reusing saved profile %s",
+                    self._shardbrowser_profile_id,
                 )
+            except Exception:
+                logger.warning(
+                    "ShardBrowser: saved profile %s not found, creating new one",
+                    self._shardbrowser_profile_id,
+                )
+        if profile is None:
+            profile = create_shard_profile(sdk, self._shardbrowser_platform)
+            logger.info(
+                "ShardBrowser: created new %s profile id=%s",
+                self._shardbrowser_platform,
+                getattr(profile, "id", "?"),
+            )
 
-            # Store profile id so the caller can persist it
-            self._shardbrowser_profile_id = getattr(profile, "id", self._shardbrowser_profile_id)
+        # Store profile id so the caller can persist it
+        self._shardbrowser_profile_id = getattr(profile, "id", self._shardbrowser_profile_id)
 
-            browser = await sdk.session(
-                profile,
-                proxy=proxy_uri,
-                headless=self.headless,
-            ).__aenter__()
-            self._shard_browser = browser
+        # Spawn the engine with a CDP endpoint (synchronous, no event loop).
+        sess = sdk.launch(
+            profile,
+            proxy=proxy_uri,
+            headless=self.headless,
+            cdp=True,
+        )
+        if not sess.cdp_url:
+            sess.stop()
+            raise RuntimeError("ShardBrowser engine failed to expose a CDP endpoint")
 
-            # Grab the first (and only) context + page
-            ctx = browser.contexts[0]
-            raw_page = await ctx.new_page()
+        # Attach DrissionPage to the running engine (host:port from ws url).
+        from DrissionPage import ChromiumOptions, ChromiumPage
 
-            # Wrap the async patchright Page in a thin synchronous adapter so
-            # provider code can call page.get(url), page.url, page.run_js() etc.
-            self.page = _ShardPageAdapter(raw_page, loop)  # type: ignore[assignment]
+        address = urlparse(sess.cdp_url).netloc
+        try:
+            options = ChromiumOptions()
+            options.set_address(address)
+            options.set_argument('--disable-infobars')
+            options.set_argument('--no-first-run')
+            options.set_argument('--no-default-browser-check')
+            options.set_argument('--disable-logging')
+            options.set_argument('--log-level=3')
+            page = ChromiumPage(addr_or_opts=options)
+        except Exception:
+            # Never leave the engine process orphaned on attach failure.
+            sess.stop()
+            raise
+        # BrowserSession owns the engine process; stop() terminates it.
+        self._shard_browser = sess
+        self.page = page
 
-        loop.run_until_complete(_start())
         logger.info(
-            "ShardBrowser initialised (profile_id=%s, proxy=%s)",
+            "ShardBrowser initialised (profile_id=%s, proxy=%s, cdp=%s)",
             self._shardbrowser_profile_id,
             proxy_uri or "none",
+            address,
         )
+
+    @property
+    def shard_profile_id(self) -> str | None:
+        """ShardX saved profile id in use (None unless ShardBrowser engine)."""
+        return self._shardbrowser_profile_id
 
     def navigate(self, url: str, timeout: float = 10.0) -> None:
         """
@@ -595,24 +615,19 @@ class BaseBrowser:
         """
         # ── ShardBrowser cleanup ─────────────────────────────────────────────
         if self._launch_method == LAUNCH_SHARDBROWSER:
-            loop = self._shard_loop
-            browser = self._shard_browser
-            self.page = None
-            self._shard_browser = None
+            page, self.page = self.page, None
+            sess, self._shard_browser = self._shard_browser, None
             self._shard_sdk = None
-            if loop and not loop.is_closed():
-                async def _close_shard():
-                    if browser:
-                        try:
-                            await browser.close()
-                        except Exception:  # noqa: BLE001
-                            pass
-                try:
-                    loop.run_until_complete(_close_shard())
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("ShardBrowser close error: %s", exc)
-                finally:
-                    loop.close()
+            try:
+                if sess is not None:
+                    sess.stop()  # terminates the engine process
+                if page is not None:
+                    try:
+                        page.quit()
+                    except Exception:  # noqa: BLE001
+                        pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ShardBrowser close error: %s", exc)
             logger.info("ShardBrowser closed")
             return
 
@@ -636,204 +651,3 @@ class BaseBrowser:
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp profile: {e}")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ShardBrowser synchronous page adapter
-# ─────────────────────────────────────────────────────────────────────────────
-
-class _ShardPageAdapter:
-    """Thin synchronous wrapper around a patchright async ``Page``.
-
-    Exposes the subset of the DrissionPage API used by the Kiro provider:
-    ``get(url)``, ``ele(sel, timeout)``, ``eles(sel)``, ``url``, ``run_js()``,
-    ``run_cdp()``, ``refresh()``, ``wait.doc_loaded()``.
-
-    All async patchright calls are dispatched onto the *loop* that was
-    created by ``BaseBrowser._init_shardbrowser``.
-    """
-
-    def __init__(self, raw_page: object, loop: object) -> None:
-        self._page = raw_page    # patchright Page
-        self._loop = loop        # asyncio.AbstractEventLoop
-
-    # ── Internal runner ───────────────────────────────────────────────────────
-
-    def _run(self, coro):
-        """Run a coroutine synchronously on the browser event loop."""
-        import asyncio as _asyncio
-        future = _asyncio.run_coroutine_threadsafe(coro, self._loop)  # type: ignore[arg-type]
-        return future.result(timeout=60)
-
-    # ── Navigation ────────────────────────────────────────────────────────────
-
-    def get(self, url: str, timeout: float = 10.0) -> None:
-        self._run(self._page.goto(url, timeout=int(timeout * 1000)))  # type: ignore[union-attr]
-
-    def refresh(self) -> None:
-        self._run(self._page.reload())  # type: ignore[union-attr]
-
-    @property
-    def url(self) -> str:
-        return self._page.url  # type: ignore[union-attr]
-
-    # ── Element lookup (returns _ShardElementAdapter or None) ─────────────────
-
-    def ele(self, selector: str, timeout: float = 1.0) -> Optional["_ShardElementAdapter"]:
-        """Find the first element matching *selector*.
-
-        Translates DrissionPage selector syntax to Playwright locator:
-        - ``text=Foo`` → ``page.get_by_text("Foo")``
-        - ``@attr=val`` → ``[attr="val"]`` CSS attribute selector
-        - ``css:…`` / ``xpath:…`` → passed through
-        - Everything else → treated as CSS selector
-        """
-        locator = _shard_selector_to_locator(self._page, selector)
-        try:
-            handle = self._run(
-                locator.first.element_handle(timeout=int(timeout * 1000))
-            )
-            if handle is None:
-                return None
-            return _ShardElementAdapter(handle, locator.first, self._loop)
-        except Exception:  # noqa: BLE001
-            return None
-
-    def eles(self, selector: str) -> list:
-        """Return all elements matching *selector*."""
-        locator = _shard_selector_to_locator(self._page, selector)
-        try:
-            handles = self._run(locator.element_handles())
-            return [
-                _ShardElementAdapter(h, locator.nth(i), self._loop)
-                for i, h in enumerate(handles)
-            ]
-        except Exception:  # noqa: BLE001
-            return []
-
-    # ── JavaScript ────────────────────────────────────────────────────────────
-
-    def run_js(self, script: str, *args) -> object:
-        """Evaluate *script* in the page context (returns JSON-serialisable value)."""
-        try:
-            return self._run(self._page.evaluate(script, *args))  # type: ignore[union-attr]
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("run_js error: %s", exc)
-            return None
-
-    def run_cdp(self, method: str, **params) -> dict:
-        """Send a raw CDP command (patchright CDPSession)."""
-        try:
-            async def _cdp():
-                client = await self._page.context.new_cdp_session(self._page)  # type: ignore[union-attr]
-                return await client.send(method, params)
-            return self._run(_cdp()) or {}
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("run_cdp %s error: %s", method, exc)
-            return {}
-
-    # ── Wait helpers ──────────────────────────────────────────────────────────
-
-    class _WaitProxy:
-        def __init__(self, adapter: "_ShardPageAdapter") -> None:
-            self._a = adapter
-
-        def doc_loaded(self, timeout: float = 10.0) -> None:
-            self._a._run(
-                self._a._page.wait_for_load_state(  # type: ignore[union-attr]
-                    "domcontentloaded", timeout=int(timeout * 1000)
-                )
-            )
-
-    @property
-    def wait(self) -> "_WaitProxy":
-        return self._WaitProxy(self)
-
-
-class _ShardElementAdapter:
-    """Wraps a patchright ElementHandle + Locator to look like a DrissionPage element."""
-
-    def __init__(self, handle: object, locator: object, loop: object) -> None:
-        self._handle = handle
-        self._locator = locator
-        self._loop = loop
-
-    def _run(self, coro):
-        import asyncio as _asyncio
-        future = _asyncio.run_coroutine_threadsafe(coro, self._loop)  # type: ignore[arg-type]
-        return future.result(timeout=30)
-
-    @property
-    def tag(self) -> str:
-        try:
-            return self._run(self._handle.get_property("tagName")).json_value().lower()  # type: ignore[union-attr]
-        except Exception:
-            return ""
-
-    @property
-    def text(self) -> str:
-        try:
-            return self._run(self._handle.inner_text())  # type: ignore[union-attr]
-        except Exception:
-            return ""
-
-    def attr(self, name: str) -> str | None:
-        try:
-            return self._run(self._handle.get_attribute(name))  # type: ignore[union-attr]
-        except Exception:
-            return None
-
-    def click(self) -> None:
-        self._run(self._locator.click())  # type: ignore[union-attr]
-
-    def input(self, value: str) -> None:
-        self._run(self._locator.fill(value))  # type: ignore[union-attr]
-
-    def clear(self) -> None:
-        self._run(self._locator.clear())  # type: ignore[union-attr]
-
-    def press(self, key: str) -> None:
-        self._run(self._locator.press(key))  # type: ignore[union-attr]
-
-    def type(self, value: str) -> None:
-        self._run(self._locator.type(value))  # type: ignore[union-attr]
-
-
-# ── Selector translation helper ───────────────────────────────────────────────
-
-def _shard_selector_to_locator(page: object, selector: str):
-    """Translate a DrissionPage selector string to a patchright Locator."""
-    s = selector.strip()
-
-    # text=Foo  /  text:Foo
-    if s.startswith("text=") or s.startswith("text:"):
-        text = s.split("=", 1)[-1] if "=" in s else s.split(":", 1)[-1]
-        return page.get_by_text(text, exact=False)  # type: ignore[union-attr]
-
-    # aria:Label
-    if s.startswith("aria:"):
-        label = s[5:]
-        return page.get_by_role("any", name=label)  # type: ignore[union-attr]
-
-    # @attr=value  →  [attr="value"]
-    if s.startswith("@"):
-        part = s[1:]
-        if "=" in part:
-            attr, val = part.split("=", 1)
-            return page.locator(f'[{attr}="{val}"]')  # type: ignore[union-attr]
-        return page.locator(f"[{part}]")  # type: ignore[union-attr]
-
-    # css:selector
-    if s.startswith("css:"):
-        return page.locator(s[4:])  # type: ignore[union-attr]
-
-    # xpath://…
-    if s.startswith("xpath:") or s.startswith("xpath://"):
-        xpath = s.split(":", 1)[-1]
-        return page.locator(f"xpath={xpath}")  # type: ignore[union-attr]
-
-    # tag:input  →  input
-    if s.startswith("tag:"):
-        return page.locator(s[4:])  # type: ignore[union-attr]
-
-    # Fallback — treat as CSS
-    return page.locator(s)  # type: ignore[union-attr]

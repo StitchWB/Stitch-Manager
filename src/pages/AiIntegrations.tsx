@@ -8,6 +8,7 @@ import { ConnectionsNav } from '@/components/ai-proxy/ConnectionsNav';
 import { AiTransferModal } from '@/components/ai-proxy/modals/AiTransferModal';
 import Header from '@/components/layout/Header';
 import { Button, GlassCard, Input, PageHeader, StatusBadge } from '@/components/ui';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '@/stores/app';
 import { useAiProvidersController } from './hooks/useAiProvidersController';
@@ -108,7 +109,16 @@ export function AiIntegrations({
       kind?: 'url' | 'key'
     ) => {
       if (!value) return;
-      if (requireConfirm && !window.confirm(copy.sensitiveConfirm)) return;
+      if (requireConfirm) {
+        const ok = await askConfirm({
+          title: t('common.copy'),
+          message: copy.sensitiveConfirm,
+          confirmText: t('common.copy'),
+          cancelText: t('common.cancel'),
+          variant: 'warning',
+        });
+        if (!ok) return;
+      }
 
       try {
         await navigator.clipboard.writeText(value);

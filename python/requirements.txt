@@ -61,6 +61,10 @@ numpy>=1.24.0
 # Patchright (stealth Playwright fork - bypasses Cloudflare Turnstile)
 patchright>=1.0.0
 
+# ShardX (ShardBrowser) anti-detect engine SDK — engine-level fingerprint
+# spoofing; patched Chromium auto-downloads from ProxyShard CDN on first use.
+shardx>=0.1.0
+
 # Optional: Regular Playwright (fallback if Patchright not available)
 # playwright>=1.40.0
 

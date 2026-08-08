@@ -47,6 +47,8 @@ class AccountResponse(BaseModel):
     browser_profile_path: str | None = Field(None, alias="browserProfilePath")
     cookies: str | None = None
     session_data: str | None = Field(None, alias="sessionData")
+    browser_engine: str | None = Field(None, alias="browserEngine")
+    shard_profile_id: str | None = Field(None, alias="shardProfileId")
 
     # Proxy
     proxy_id: str | None = Field(None, alias="proxyId")

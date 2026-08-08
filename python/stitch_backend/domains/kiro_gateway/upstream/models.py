@@ -7,7 +7,7 @@ fetch_kiro_models: async httpx for ListAvailableModels, with capability detectio
 from __future__ import annotations
 
 import re
-from typing import TypedDict
+from typing import Any, TypedDict, cast
 
 import httpx
 
@@ -147,7 +147,7 @@ async def fetch_kiro_models(
             while True:
                 params: dict[str, str] = {"origin": "AI_EDITOR", "maxResults": "50"}
                 if account.get("profileArn"):
-                    params["profileArn"] = account["profileArn"]
+                    params["profileArn"] = cast("str", account["profileArn"])
                 if next_token:
                     params["nextToken"] = next_token
 
@@ -176,7 +176,7 @@ def detect_model_capabilities(
     caps: dict[str, bool] = {"thinking": False, "caching": False}
 
     if isinstance(schema, dict):
-        props = schema.get("properties") or schema.get("additionalModelRequestFields", {}).get("properties")
+        props = cast("Any", schema).get("properties") or cast("Any", schema).get("additionalModelRequestFields", {}).get("properties")
         if isinstance(props, dict):
             caps["thinking"] = "thinking" in props or "output_config" in props or "reasoning" in props
 

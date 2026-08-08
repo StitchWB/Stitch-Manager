@@ -7,7 +7,7 @@ Pure functions; lazy imports avoid pulling translator modules at app import.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import HTTPException
 
@@ -66,7 +66,7 @@ def build_client_response(result: object, endpoint: str, body: JsonObject) -> Js
             kiro_to_openai_response,
         )
         return kiro_to_openai_response(
-            result.content, tool_uses, usage, model,
+            result.content, cast("Any", tool_uses), cast("Any", usage), model,
             reasoning_content=(
                 {"text": result.reasoning_text, "signature": result.reasoning_signature or ""}
                 if result.reasoning_text else None
@@ -78,7 +78,7 @@ def build_client_response(result: object, endpoint: str, body: JsonObject) -> Js
             kiro_to_claude_response,
         )
         return dict(kiro_to_claude_response(
-            result.content, tool_uses, usage, model,
+            result.content, cast("Any", tool_uses), cast("Any", usage), model,
             reasoning_content=(
                 {"text": result.reasoning_text, "redactedContent": result.redacted_content}
                 if result.reasoning_text else None

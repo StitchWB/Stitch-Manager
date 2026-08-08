@@ -85,7 +85,7 @@ def _create_failed_tool_use_message(tool_use_ids: list[str]) -> KiroHistoryMessa
         userInputMessage=KiroUserInputMessage(
             content="",
             origin="AI_EDITOR",
-            userInputMessageContext={  # type: ignore[typeddict-item]
+            userInputMessageContext={
                 "toolResults": [_create_failed_tool_result(tid) for tid in tool_use_ids],
             },
         ),
@@ -212,7 +212,7 @@ def _remove_invalid_tool_results(messages: list[KiroHistoryMessage]) -> list[Kir
             new_uim: KiroUserInputMessage = KiroUserInputMessage(
                 content=uim.get("content", ""),
                 origin=uim.get("origin", "AI_EDITOR"),
-                userInputMessageContext={  # type: ignore[typeddict-item]
+                userInputMessageContext={
                     "toolResults": filtered,
                 },
             )
@@ -263,7 +263,7 @@ def _ensure_valid_tool_uses_and_results(messages: list[KiroHistoryMessage]) -> l
                         new_uim: KiroUserInputMessage = KiroUserInputMessage(
                             content=uim.get("content", ""),
                             origin=uim.get("origin", "AI_EDITOR"),
-                            userInputMessageContext={  # type: ignore[typeddict-item]
+                            userInputMessageContext={
                                 "toolResults": completed,
                             },
                         )

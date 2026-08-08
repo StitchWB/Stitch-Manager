@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import struct
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, TypedDict, cast
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -199,7 +199,7 @@ def _decode_event(event_type: str, payload: bytes) -> ParsedEvent:
     ) or data.get("metadataEvent"):
         md = data.get("messageMetadataEvent") or data.get("metadataEvent") or data
         result["metadata"] = MessageMetadataEvent(
-            tokenUsage=md.get("tokenUsage") if isinstance(md.get("tokenUsage"), dict) else {},
+            tokenUsage=cast("dict[str, int]", md.get("tokenUsage") if isinstance(md.get("tokenUsage"), dict) else {}),
             inputTokens=int(md.get("inputTokens", 0)),
             outputTokens=int(md.get("outputTokens", 0)),
         )

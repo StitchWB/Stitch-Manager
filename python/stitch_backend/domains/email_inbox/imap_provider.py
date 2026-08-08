@@ -12,7 +12,7 @@ import logging
 from email import message_from_bytes
 from email.header import decode_header
 from email.utils import parseaddr
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def connect(host: str, port: int, username: str, password: str, use_tls: bool) -
     if use_tls:
         conn = imaplib.IMAP4_SSL(host, port)
     else:
-        conn = imaplib.IMAP4(host, port)
+        conn = cast("Any", imaplib.IMAP4(host, port))
     conn.login(username, password)
     return conn
 
@@ -120,7 +120,7 @@ def search(conn: imaplib.IMAP4, query: dict[str, Any] | None) -> list[str]:
     # Use UID SEARCH because every downstream operation (FETCH/STORE) treats
     # the returned identifier as a stable UID. Mixing sequence numbers from
     # SEARCH with UID FETCH caused valid messages to fail intermittently.
-    status, data = conn.uid("search", None, search_str)
+    status, data = conn.uid("search", "", search_str)
     if status != "OK":
         return []
     ids = data[0].split() if data and data[0] else []
@@ -156,11 +156,11 @@ def fetch_message(conn: imaplib.IMAP4, uid: str) -> dict[str, Any]:
             if ct == "text/plain" and "attachment" not in disp:
                 payload = part.get_payload(decode=True)
                 if payload:
-                    text_body = payload.decode("utf-8", errors="replace")
+                    text_body = cast("Any", payload).decode("utf-8", errors="replace")
             elif ct == "text/html" and "attachment" not in disp:
                 payload = part.get_payload(decode=True)
                 if payload:
-                    html_body = payload.decode("utf-8", errors="replace")
+                    html_body = cast("Any", payload).decode("utf-8", errors="replace")
             elif "attachment" in disp:
                 fname = part.get_filename() or "unnamed"
                 payload = part.get_payload(decode=True)
@@ -173,7 +173,7 @@ def fetch_message(conn: imaplib.IMAP4, uid: str) -> dict[str, Any]:
     else:
         payload = msg.get_payload(decode=True)
         if payload:
-            text_body = payload.decode("utf-8", errors="replace")
+            text_body = cast("Any", payload).decode("utf-8", errors="replace")
 
     return {
         "id": uid,

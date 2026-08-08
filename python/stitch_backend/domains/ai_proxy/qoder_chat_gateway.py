@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import platform
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, TypedDict
+from typing import TYPE_CHECKING, Final, TypedDict, cast
 
 import httpx
 
@@ -84,7 +84,7 @@ class QoderAdapter:
         try:
             response = await self._client.post(
                 _DEFAULT_ENDPOINT,
-                headers=build_qoder_headers(token),
+                headers=cast("dict[str, str]", build_qoder_headers(token)),
                 json=payload,
             )
         except httpx.HTTPError as exc:

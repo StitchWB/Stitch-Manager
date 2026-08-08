@@ -7,13 +7,37 @@ import { t } from '@/lib/i18n';
 import { useAppStore } from './stores/app';
 import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
+import { useRuntimeStore } from './stores/registration/runtime.store';
+import { useSettingsStore } from './stores/settings';
 import { useUIPreferencesStore } from './stores/uiPreferences';
 import { useTotpStore } from './stores/totp';
+import { useAccountsStore } from './stores/accounts';
+import { useSchedulerStore } from './stores/scheduler';
+import { useAiProxyStore } from './stores/aiProxy';
 import { CommandPalette } from '@/components/ui/CommandPalette';
+import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
 import { safeInvoke } from './lib/backend';
+import type { Account, ProxyStatus, ScheduledTask } from './types/generated';
+import type { TotpKey } from './lib/backend/modules/totp';
+import type { RegistrationJob } from './types/ui';
+import type { BackgroundManagerConfig } from './lib/backend/modules/backgroundManager';
 
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Accounts = lazy(() => import('./pages/Accounts'));
+/** Shape returned by backend get_registration_status — richer than the frontend RegistrationStatus union. */
+interface RegistrationStatusResponse {
+  isRunning: boolean;
+  success: boolean | null;
+  status: string | null;
+  provider: string | null;
+  email: string | null;
+  step: string | null;
+  progress: number | null;
+  error: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+import Dashboard from './pages/Dashboard';
+import Accounts from './pages/Accounts';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProviders = lazy(() => import('./pages/AiProviders'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
@@ -182,11 +206,68 @@ function App() {
       try {
         const data = await safeInvoke<{
           settings: Record<string, unknown>;
-          accounts: unknown[];
+          accounts: Account[];
           activeAccounts: Record<string, string>;
           dashboardStats: Record<string, unknown>;
-          totpKeys: unknown[];
+          totpKeys: TotpKey[];
+          scheduledTasks: ScheduledTask[];
+          proxyStatus: ProxyStatus;
+          schedulerStatus: boolean;
+          registrationStatus: RegistrationStatusResponse;
+          registrationJobs: RegistrationJob[];
+          backgroundManagerConfig: BackgroundManagerConfig;
         }>('initialize_app');
+        
+        // Populate accounts store
+        if (data.accounts) {
+          useAccountsStore.setState({ accounts: data.accounts });
+        }
+        
+        // Populate active accounts (backend returns string IDs, store expects number | null)
+        if (data.activeAccounts) {
+          const converted: Record<string, number | null> = {};
+          for (const [k, v] of Object.entries(data.activeAccounts)) {
+            const num = Number(v);
+            converted[k] = Number.isFinite(num) ? num : null;
+          }
+          useAccountsStore.setState({ activeAccountIds: converted });
+        }
+        
+        // Populate scheduler store
+        if (data.scheduledTasks) {
+          useSchedulerStore.setState({ tasks: data.scheduledTasks });
+        }
+        if (data.schedulerStatus !== undefined) {
+          useSchedulerStore.setState({ isRunning: data.schedulerStatus });
+        }
+        
+        // Populate proxy store
+        if (data.proxyStatus) {
+          useAiProxyStore.getState().setStatus(data.proxyStatus);
+        }
+        
+        // Populate TOTP store
+        if (data.totpKeys && data.totpKeys.length > 0) {
+          useTotpStore.setState({ keys: data.totpKeys });
+        }
+        
+        // Populate registration store (use runtime store directly, not facade)
+        if (data.registrationStatus) {
+          const rs = data.registrationStatus;
+          useRuntimeStore.setState({
+            isRunning: rs.isRunning,
+            status: (rs.status ?? 'pending') as any,
+            activeProvider: rs.provider ?? 'all',
+          });
+        }
+        
+        // Populate settings store
+        if (data.settings) {
+          useSettingsStore.getState().setSettings(data.settings as any);
+        }
+        if (data.backgroundManagerConfig) {
+          useSettingsStore.getState().setBackgroundManagerConfig(data.backgroundManagerConfig);
+        }
         
         // Subscribe to real-time log events from backend
         subscribeToLogs();
@@ -194,12 +275,8 @@ function App() {
         // Fetch initial logs from database (not included in init response)
         fetchLogs();
         
-        // Pre-fetch TOTP keys if not included in init response
-        if (data.totpKeys && data.totpKeys.length > 0) {
-          // TOTP keys already loaded from init
-        } else {
-          void fetchTotpKeys().catch(() => { });
-        }
+        // Load settings (this still needs to be called to populate the full config)
+        loadSettings();
       } catch (error) {
         console.error('Failed to initialize app:', error);
         // Fallback to individual API calls if initialization fails
@@ -322,24 +399,20 @@ function App() {
       <Toaster
         position="bottom-right"
         expand={false}
-        richColors
         closeButton
-        gap={8}
-        visibleToasts={4}
+        gap={10}
+        visibleToasts={3}
         toastOptions={{
           style: {
-            background: 'rgba(15, 23, 42, 0.95)',
             backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.1)',
             color: '#e2e8f0',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
           },
           className: 'sonner-toast',
-          duration: 4000,
         }}
         theme="dark"
       />
+      <ConfirmDialogHost />
       <CommandPalette />
     </>
   );

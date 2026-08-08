@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from stitch_backend.core.command_registry import register_command
 
 
@@ -168,7 +170,7 @@ async def cmd_test_imap_connection(params: dict) -> str:
     with imaplib.IMAP4_SSL(host, port, ssl_context=ctx) as mail:
         mail.login(user, password)
         status, data = mail.select("INBOX")
-        message_count = data[0].decode() if status == "OK" else "0"
+        message_count = cast("bytes", data[0]).decode() if status == "OK" else "0"
         mail.close()
         mail.logout()
         return f"Connected successfully! INBOX has {message_count} messages"
