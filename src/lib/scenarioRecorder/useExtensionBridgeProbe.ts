@@ -32,12 +32,12 @@ export function useExtensionBridgeProbe({ isOpen, runnerMode }: UseExtensionBrid
     try {
       const started = await startPythonJob({
         scriptPath: 'python/probe_extension_bridge.py',
-        args: ['--timeout-ms', '2200', '--port', '18733'],
-        timeoutMs: 8000,
+        args: ['--timeout-ms', '6000', '--port', '18733'],
+        timeoutMs: 20000,
         correlationId: `ext_bridge_probe_${Date.now()}`,
       });
 
-      const deadline = Date.now() + 7000;
+      const deadline = Date.now() + 15000;
       let finalStatus: Awaited<ReturnType<typeof getPythonJobStatus>> = null;
       while (Date.now() < deadline) {
         const status = await getPythonJobStatus(started.jobId);
