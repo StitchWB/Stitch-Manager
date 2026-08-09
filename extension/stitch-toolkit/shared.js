@@ -1,23 +1,13 @@
-// Shared constants for Stitch Toolkit extension
-export const TOOLKIT_VERSION = '0.6.1';
+// Shared constants for Stitch Toolkit extension (unified runner + toolkit).
+export const TOOLKIT_VERSION = '0.7.0';
 
-// Bridge ports (kept for backward compat with existing Python runners)
+// Bridge ports must match python/run_extension_record.py / run_extension_replay.py
+// and python/probe_extension_bridge.py (health).
 export const BRIDGE_PORTS = Object.freeze({
-  record: 9123,
-  replay: 9124,
-  health: 9125,
+  record: 18731,
+  replay: 18732,
+  health: 18733,
 });
-
-export function bridgeUrl(kind) {
-  const port = BRIDGE_PORTS[kind];
-  if (!port) return null;
-  return `ws://127.0.0.1:${port}`;
-}
-
-export function syncApiUrl(path) {
-  const base = 'http://127.0.0.1:9876';
-  return `${base}${path}`;
-}
 
 // Storage keys
 export const STORAGE_KEYS = Object.freeze({
