@@ -613,16 +613,29 @@ class ProfileLauncher:
         import subprocess
 
         profile_str = str(self.profile_path)
+        # Shard workers carry --email / (optionally) --profile-id instead of the
+        # full profile path — match those too, otherwise elevated zombies from
+        # crashed shard workers are never recognised (and a non-elevated shell
+        # can't kill them).
+        worker_email = str(self._config.get('worker_email') or '')
         try:
             result = subprocess.run(
                 ['wmic', 'process', 'where', 'name="python.exe"', 'get', 'ProcessId,CommandLine', '/format:csv'],
                 capture_output=True, text=True, timeout=10,
             )
             for line in result.stdout.splitlines():
-                if 'open_browser.py' in line and profile_str in line:
-                    parts = line.strip().split(',')
-                    if len(parts) >= 2 and parts[1].strip().strip('"').isdigit():
-                        pid = int(parts[1].strip().strip('"'))
+                if 'open_browser.py' in line and '--worker' in line and (
+                    profile_str in line
+                    or self.profile_id in line
+                    or (worker_email and worker_email in line)
+                ):
+                    # CSV = Node,CommandLine,PID — CommandLine may contain
+                    # commas (config-json), so the PID is the LAST field.
+                    parts = line.strip().rsplit(',', 1)
+                    if len(parts) == 2 and parts[1].strip().isdigit():
+                        pid = int(parts[1].strip())
+                        if pid == os.getpid():
+                            continue  # never kill ourselves
                         try:
                             subprocess.run(
                                 ['taskkill', '/F', '/PID', str(pid)],
