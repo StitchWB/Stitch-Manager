@@ -31,6 +31,7 @@ interface AccountRowProps {
   account: Account;
   isSelected: boolean;
   isActive: boolean;
+  isInspected?: boolean;
   isRefreshing: boolean;
   isMenuOpen: boolean;
   visibleColumns?: AccountsTableVisibleColumns;
@@ -61,6 +62,7 @@ export function AccountRow({
   account,
   isSelected,
   isActive,
+  isInspected,
   isRefreshing,
   isMenuOpen,
   visibleColumns = { lastLogin: true, apiKey: true, quota: true },
@@ -98,12 +100,16 @@ export function AccountRow({
     <TableRow
       className={cn(
         'group/row h-[42px] border-white/[0.04] hover:bg-white/[0.03] transition-colors',
-        isSelected && 'bg-indigo-500/10 hover:bg-indigo-500/[0.12]'
+        isSelected && 'bg-indigo-500/10 hover:bg-indigo-500/[0.12]',
+        isInspected && 'bg-indigo-950/30 hover:bg-indigo-950/40',
       )}
     >
       {/* Checkbox */}
       <TableCell
-        className="sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]"
+        className={cn(
+          'sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
+          isInspected && 'bg-indigo-950/40 border-l-2 border-indigo-500',
+        )}
         onClick={event => event.stopPropagation()}
       >
         <Checkbox
@@ -115,7 +121,10 @@ export function AccountRow({
       </TableCell>
 
       {/* Provider */}
-      <TableCell className="sticky left-[40px] z-10 w-[80px] min-w-[80px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
+      <TableCell className={cn(
+        'sticky left-[40px] z-10 w-[80px] min-w-[80px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
+        isInspected && 'bg-indigo-950/40',
+      )}>
         <div className="flex items-center gap-1.5 overflow-hidden">
           <ProviderLogo provider={account.provider} size={14} className="shrink-0" />
           <span className="truncate whitespace-nowrap text-[11px] text-slate-300">{data.providerLabel}</span>
@@ -123,7 +132,10 @@ export function AccountRow({
       </TableCell>
 
       {/* Account */}
-      <TableCell className="sticky left-[120px] z-10 w-[160px] min-w-[160px] max-w-[180px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]">
+      <TableCell className={cn(
+        'sticky left-[120px] z-10 w-[160px] min-w-[160px] max-w-[180px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
+        isInspected && 'bg-indigo-950/40',
+      )}>
         <ButtonBase
           type="button"
           onClick={() => onShowDetails(account)}
@@ -349,7 +361,10 @@ export function AccountRow({
 
       {/* Actions */}
       <TableCell
-        className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-1 align-middle"
+        className={cn(
+          'sticky right-0 z-10 w-[48px] min-w-[48px] max-w-[48px] px-1 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
+          isInspected && 'bg-indigo-950/40',
+        )}
         onClick={event => event.stopPropagation()}
       >
         <div className="relative flex justify-end" data-row-actions-menu="true">
