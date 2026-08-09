@@ -46,6 +46,13 @@
             '<option value="light"' + (s.theme === 'light' ? ' selected' : '') + '>' + i18n('settings.themeLight') + '</option>' +
           '</select></div>' +
       '</div>' +
+      '<div class="tk-section-title">' + i18n('settings.bridgeTitle') + '</div>' +
+      '<div class="tk-bridge-grid" id="tk-bridge-grid">' +
+        '<div class="tk-bridge-row" data-bridge="record"><span class="tk-bridge-dot"></span><span class="tk-bridge-name">' + i18n('settings.bridgeRecord') + '</span><span class="tk-bridge-state">…</span></div>' +
+        '<div class="tk-bridge-row" data-bridge="replay"><span class="tk-bridge-dot"></span><span class="tk-bridge-name">' + i18n('settings.bridgeReplay') + '</span><span class="tk-bridge-state">…</span></div>' +
+        '<div class="tk-bridge-row" data-bridge="health"><span class="tk-bridge-dot"></span><span class="tk-bridge-name">' + i18n('settings.bridgeHealth') + '</span><span class="tk-bridge-state">…</span></div>' +
+      '</div>' +
+      '<div class="tk-hint" style="text-align:left;margin-top:6px">' + i18n('settings.bridgeHint') + '</div>' +
       '<div class="tk-section-title">' + i18n('settings.billingProfiles') + '</div>' +
       '<div class="tk-billing-profiles" id="tk-billing-profiles">' + profileItems + '<button class="tk-btn" id="tk-add-profile" style="margin-top:4px">' + i18n('settings.addProfile') + '</button></div>' +
       '<div class="tk-section-title">' + i18n('settings.data') + '</div>' +
@@ -53,11 +60,32 @@
         '<button class="tk-btn" id="tk-export-all" style="flex:1">' + i18n('settings.exportAll') + '</button>' +
         '<button class="tk-btn tk-danger" id="tk-clear-all" style="flex:1">' + i18n('settings.clearAll') + '</button>' +
       '</div>' +
-      '<div class="tk-hint">' + i18n('app.version', { version: '0.6.1' }) + '</div>';
+      '<div class="tk-hint">' + i18n('app.version', { version: '0.7.0' }) + '</div>';
+  }
+
+  function refreshBridgeStatus(container) {
+    var grid = container.querySelector('#tk-bridge-grid');
+    if (!grid) return;
+    try {
+      chrome.runtime.sendMessage({ type: 'tk:status' }).then(function (resp) {
+        if (!resp || !resp.ok || !resp.bridges) return;
+        var i18n = window.StitchI18n.t;
+        ['record', 'replay', 'health'].forEach(function (kind) {
+          var row = grid.querySelector('[data-bridge="' + kind + '"]');
+          if (!row) return;
+          var online = Boolean(resp.bridges[kind]);
+          row.classList.toggle('tk-on', online);
+          var stateEl = row.querySelector('.tk-bridge-state');
+          if (stateEl) stateEl.textContent = online ? i18n('settings.bridgeOnline') : i18n('settings.bridgeOffline');
+        });
+      }).catch(function () {});
+    } catch (e) {}
   }
 
   function mount(container) {
     container.innerHTML = render();
+
+    refreshBridgeStatus(container);
 
     container.querySelector('#tk-set-autodetect') && container.querySelector('#tk-set-autodetect').addEventListener('click', function () { toggleSetting('autoDetect', this); });
     container.querySelector('#tk-set-autoexpand') && container.querySelector('#tk-set-autoexpand').addEventListener('click', function () { toggleSetting('autoExpand', this); });
@@ -116,7 +144,7 @@
 
   function exportAll(container) {
     var data = {
-      version: '0.6.1',
+      version: '0.7.0',
       exported: new Date().toISOString(),
       cardHistory: window.StateManager.get('cardHistory'),
       billingProfiles: window.StateManager.get('billingProfiles'),
