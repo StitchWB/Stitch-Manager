@@ -293,7 +293,9 @@ async def cmd_update_shard_engine(params: dict) -> dict:
     return {"started": True}
 
 
-@register_command("open_account_browser", readonly=True)
+# The shard worker ready-handshake can take up to 45s (plus engine spawn),
+# far beyond the dispatcher default of 25s — give this command its own budget.
+@register_command("open_account_browser", readonly=True, timeout=90)
 async def cmd_open_account_browser(params: dict) -> dict:
     """Launch CloakBrowser/Chrome with the account's persistent profile.
 
