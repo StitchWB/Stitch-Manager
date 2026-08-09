@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from stitch_backend.domains.kiro_gateway.translator.kiro_types import (
@@ -72,7 +72,7 @@ REMEMBER: When in doubt, write LESS per operation. Multiple small operations > o
 THINKING_MODE_PROMPT = "<thinking_mode>enabled</thinking_mode>\n<max_thinking_length>200000</max_thinking_length>"
 
 
-class AgentMode(str, Enum):
+class AgentMode(StrEnum):
     VIBE = "vibe"
     SPEC = "spec"
 

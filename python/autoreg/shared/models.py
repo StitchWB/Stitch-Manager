@@ -5,13 +5,13 @@ All configuration models use Pydantic for runtime type validation,
 providing type safety, automatic validation, and clear error messages.
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class EmailStrategy(str, Enum):
+class EmailStrategy(StrEnum):
     """Email generation strategies"""
 
     STATIC = "static"  # Use single email

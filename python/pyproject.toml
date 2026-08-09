@@ -58,6 +58,7 @@ dev = [
     "httpx>=0.27.0",       # TestClient async
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "types-aiofiles>=24.0.0",
     # browser automation — needed by tests/browser/**
     "DrissionPage>=4.0.0",
     "aioimaplib>=1.1.0",
@@ -120,6 +121,7 @@ module = [
     "aioimaplib.*",
     "google.auth.*",
     "google.oauth2.*",
+    "webview",
     "shardx",
     "autoreg.browser.*",
     "autoreg.spoofers.*",
