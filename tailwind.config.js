@@ -3,7 +3,6 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
-    "./extension/stitch-scenario-runner/src/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
   theme: {
