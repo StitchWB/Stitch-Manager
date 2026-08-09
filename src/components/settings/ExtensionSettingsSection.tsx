@@ -12,7 +12,7 @@ export function ExtensionSettingsSection() {
     runnerMode: 'extension',
   });
 
-  const extensionRelativePath = 'extension/stitch-scenario-runner/dist';
+  const extensionRelativePath = 'extension/stitch-toolkit';
   const extensionPathForUi = useMemo(() => extensionRelativePath, []);
 
   const bridgeStatusText = bridge.state.checking

@@ -87,7 +87,7 @@ class ReplayAbort(Exception):  # noqa: N818 — established control-flow name
 
 
 _SHARED_OVERLAY_RUNTIME_PATH = (
-    PYTHON_ROOT.parent / "extension" / "stitch-scenario-runner" / "overlay_runtime.js"
+    PYTHON_ROOT.parent / "extension" / "stitch-toolkit" / "overlay_runtime.js"
 )
 
 
