@@ -80,6 +80,42 @@ export interface Translations {
       statsTitle: string;
       lastLogin: string;
     };
+    inspector: {
+      tabs: {
+        overview: string;
+        session: string;
+        activity: string;
+        data: string;
+        notes: string;
+      };
+      openMail: string;
+      archive: string;
+      openLogsForAccount: string;
+      autoRefreshQuota: string;
+      notesSaved: string;
+      notesSaveFailed: string;
+      tokenHoursRemaining: string;
+      tokenDaysRemaining: string;
+      patchInfo: string;
+      patchAppliedAt: string;
+      patchConfig: string;
+      accountRegion: string;
+      providerType: string;
+      providerSubtype: string;
+      providerMetadata: string;
+      referralBlock: string;
+      refCode: string;
+      refUsed: string;
+      refMax: string;
+      referredBy: string;
+      timestamps: string;
+      lastUsedAt: string;
+      createdAt: string;
+      updatedAt: string;
+      registrationMetadata: string;
+      useCount: string;
+      loginCount: string;
+    };
     quickActions: {
       copyEmail: string;
       copyPassword: string;

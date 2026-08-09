@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Users } from 'lucide-react';
 import type { Account } from '../types/generated';
 import { t } from '../lib/i18n';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
 import type { AccountsTableVisibleColumns } from '../stores/uiPreferences';
+import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { AccountRow } from './accounts/AccountRow';
-import { AccountDrawer, ConfirmDialog } from '@/components/ui';
+import { AccountInspectorPanel, ConfirmDialog } from '@/components/ui';
 import {
   Checkbox,
   EmptyState,
@@ -76,14 +78,43 @@ export default function AccountsTable({
   onAuthorizeKiroAccount,
   onCopyRefUrl,
   onRefreshRefUrl,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onUpdate: _onUpdate,
+  onUpdate,
   onRelationEdgeClick,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
-  const [detailsModalAccount, setDetailsModalAccount] = useState<Account | null>(null);
+  const [inspectedAccountId, setInspectedAccountId] = useState<number | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ isOpen: false });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [panelWidth, setPanelWidth] = useState<number>(
+    () => useUIPreferencesStore.getState().getComponentPreference<number>('accountsInspector.width', 500),
+  );
+
+  // Track available row width so the panel can adapt: docked on wide screens,
+  // non-modal overlay on narrow ones (table keeps full width there).
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const hasMainLayout = !isLoading && accounts.length > 0;
+  useEffect(() => {
+    if (!hasMainLayout) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    setContainerWidth(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, [hasMainLayout]);
+
+  // Docked master-detail at any size; on narrow containers the panel is capped
+  // so the table keeps a usable width (remaining columns via horizontal scroll).
+  const displayWidth =
+    containerWidth > 0
+      ? Math.min(panelWidth, Math.max(340, containerWidth - 620))
+      : panelWidth;
+
+  const inspectedAccount = accounts.find(a => a.id === inspectedAccountId) ?? null;
 
   const { copy } = useCopyToClipboard({
     successMessage: t('accounts.tokenCopiedAutoClear'),
@@ -114,6 +145,69 @@ export default function AccountsTable({
     };
   }, [openMenuId]);
 
+  // Keyboard navigation: ArrowUp/ArrowDown move inspection, Escape closes panel
+  useEffect(() => {
+    if (inspectedAccountId == null) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+      if (openMenuId != null) return;
+      if (deleteDialog.isOpen) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setInspectedAccountId(null);
+        return;
+      }
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const currentIdx = accounts.findIndex(a => a.id === inspectedAccountId);
+        if (currentIdx === -1) return;
+        const delta = event.key === 'ArrowDown' ? 1 : -1;
+        const newIdx = Math.max(0, Math.min(accounts.length - 1, currentIdx + delta));
+        if (newIdx !== currentIdx && accounts[newIdx]) {
+          setInspectedAccountId(accounts[newIdx].id);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [inspectedAccountId, accounts, openMenuId, deleteDialog.isOpen]);
+
+  // Panel resizer: drag to adjust width (clamp 400–720), persist on mouseup
+  const handleResizerMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const newWidth = Math.max(340, Math.min(720, startWidth - delta));
+      setPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // Persist final width (computed from the event, not inside a state updater —
+      // a zustand set() inside an updater is a render-phase side effect)
+      const finalWidth = Math.max(340, Math.min(720, startWidth - (ev.clientX - startX)));
+      setPanelWidth(finalWidth);
+      useUIPreferencesStore.getState().setComponentPreference('accountsInspector.width', finalWidth);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   const isAccountActive = (account: Account) => activeAccountIds[account.provider] === account.id;
 
   const handleLaunch = async (account: Account) => {
@@ -138,8 +232,14 @@ export default function AccountsTable({
     try {
       if (deleteDialog.mode === 'single') {
         await onDelete(deleteDialog.accountId);
+        if (deleteDialog.accountId === inspectedAccountId) {
+          setInspectedAccountId(null);
+        }
       } else {
         await onDeleteSelected(deleteDialog.accountIds);
+        if (deleteDialog.accountIds.includes(inspectedAccountId ?? -1)) {
+          setInspectedAccountId(null);
+        }
       }
       setDeleteDialog({ isOpen: false });
     } finally {
@@ -172,7 +272,7 @@ export default function AccountsTable({
   }
 
   const handleShowDetails = (account: Account) => {
-    setDetailsModalAccount(account);
+    setInspectedAccountId(account.id);
     setOpenMenuId(null);
   };
 
@@ -181,11 +281,11 @@ export default function AccountsTable({
   );
 
   return (
-    <div className="flex h-full flex-col overflow-hidden px-4 pb-4">
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-vsc-border bg-vsc-terminal/80">
+    <div ref={rootRef} className="flex h-full overflow-hidden px-4 pb-4">
+      <div className="relative min-h-0 flex-1 min-w-0 overflow-hidden rounded-xl border border-vsc-border bg-vsc-terminal/80">
         <div className="w-full h-full">
           <Table
-            containerClassName="h-full overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
+            containerClassName="h-full overflow-y-auto overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
             className="w-full table-fixed text-xs"
             aria-label={t('accounts.accountsTable')}
           >
@@ -245,7 +345,7 @@ export default function AccountsTable({
                   {t('accounts.account_ref_cell.column_header')}
                 </TableHead>
               )}
-              <TableHead className="w-[48px] min-w-[48px] max-w-[48px] px-1 py-1.5 text-right text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal">
+              <TableHead className="sticky right-0 z-30 w-[48px] min-w-[48px] max-w-[48px] px-1 py-1.5 text-right text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal bg-vsc-terminal/95">
                 {t('common.actions')}
               </TableHead>
             </TableRow>
@@ -258,6 +358,7 @@ export default function AccountsTable({
                 account={account}
                 isSelected={selectedIds.has(account.id)}
                 isActive={isAccountActive(account)}
+                isInspected={inspectedAccountId === account.id}
                 isRefreshing={isAccountRefreshing(account.id)}
                 isMenuOpen={openMenuId === account.id}
                 visibleColumns={visibleColumns}
@@ -297,19 +398,55 @@ export default function AccountsTable({
         </div>
       </div>
 
-      <AccountDrawer
-        account={detailsModalAccount}
-        isOpen={Boolean(detailsModalAccount)}
-        onClose={() => setDetailsModalAccount(null)}
-        onCopyToken={(token) => { navigator.clipboard.writeText(token); }}
-        onRefresh={() => { /* refresh handled by parent */ }}
-        onDelete={(accountId) => {
-          if (onDelete) onDelete(accountId);
-          setDetailsModalAccount(null);
-        }}
-        onOpenBrowser={onOpenBrowser ? (id) => { void onOpenBrowser(id); } : undefined}
-        onAuthorizeKiroAccount={onAuthorizeKiroAccount ? (id) => { void onAuthorizeKiroAccount(id); } : undefined}
-      />
+      {/* Resizer + Inspector Panel */}
+      <AnimatePresence>
+        {inspectedAccount && (
+          <motion.div
+            key="inspector-wrapper"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: displayWidth, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="shrink-0 h-full flex"
+            style={{ overflow: 'hidden' }}
+          >
+            {/* Resizer divider */}
+            <div
+              className="shrink-0 w-1 cursor-col-resize bg-white/5 hover:bg-indigo-500/40 transition-colors"
+              onMouseDown={handleResizerMouseDown}
+            />
+            {/* Panel */}
+            <div className="shrink-0 h-full min-w-0 flex-1" style={{ width: displayWidth }}>
+              <AccountInspectorPanel
+                key={inspectedAccount.id}
+                account={inspectedAccount}
+                isActive={isAccountActive(inspectedAccount)}
+                onToggleActive={() => handleToggleActive(inspectedAccount)}
+                onOpenBrowser={onOpenBrowser ? (id) => { void onOpenBrowser(id); } : undefined}
+                onAuthorizeKiroAccount={onAuthorizeKiroAccount ? (id) => { void onAuthorizeKiroAccount(id); } : undefined}
+                onOpenProfileSession={onOpenProfileSession}
+                onConfirmProfileSession={onConfirmProfileSession}
+                onClearProfileSession={onClearProfileSession}
+                onToggleAutoRefreshQuota={onToggleAutoRefreshQuota}
+                onCopyRefUrl={onCopyRefUrl}
+                onRefreshRefUrl={onRefreshRefUrl}
+                onCopyToken={token =>
+                  copy(token, {
+                    sensitive: true,
+                    autoClear: true,
+                    autoClearAfterMs: 15000,
+                    requireConfirmation: true,
+                    confirmationMessage: t('accounts.copyTokenSensitiveConfirm'),
+                  })
+                }
+                onUpdate={onUpdate}
+                onRequestDelete={openSingleDelete}
+                onClose={() => setInspectedAccountId(null)}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}

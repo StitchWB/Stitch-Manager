@@ -137,7 +137,6 @@ export { NetworkCard } from './NetworkCard';
 export type { NetworkConfig } from './NetworkCard';
 export { AccountProxySection } from './AccountProxySection';
 export { FloatingActionBar } from './FloatingActionBar';
-export { default as AccountDetailsModal } from './AccountDetailsModal';
 
 export { ButtonBase } from './ButtonBase';
 
@@ -165,7 +164,7 @@ export { Terminal } from './Terminal';
 
 export { StatusFilterChip, QuotaFilterChipDropdown } from './FilterChip';
 
-export { AccountDrawer } from './AccountDrawer';
+export { AccountInspectorPanel } from './AccountInspectorPanel';
 
 export { ModelPicker } from './ModelPicker';
 export type { ModelOption } from './ModelPicker';
