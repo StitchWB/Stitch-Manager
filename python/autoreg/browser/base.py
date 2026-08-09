@@ -489,12 +489,15 @@ class BaseBrowser:
         self._shardbrowser_profile_id = getattr(profile, "id", self._shardbrowser_profile_id)
 
         # Spawn the engine with a CDP endpoint (synchronous, no event loop).
-        sess = sdk.launch(
-            profile,
-            proxy=proxy_uri,
-            headless=self.headless,
-            cdp=True,
-        )
+        from .async_shardbrowser_wrapper import patch_engine_spawn
+
+        with patch_engine_spawn():
+            sess = sdk.launch(
+                profile,
+                proxy=proxy_uri,
+                headless=self.headless,
+                cdp=True,
+            )
         if not sess.cdp_url:
             sess.stop()
             raise RuntimeError("ShardBrowser engine failed to expose a CDP endpoint")
