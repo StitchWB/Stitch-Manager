@@ -21,9 +21,174 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import contextmanager
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _is_elevated() -> bool:
+    """True when the current process runs with an elevated (admin) token."""
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+class _HandleProc:
+    """Popen-like wrapper around a raw Windows process handle."""
+
+    def __init__(self, handle: Any, pid: int) -> None:
+        self._handle = handle
+        self.pid = pid
+        self.returncode: int | None = None
+
+    def poll(self) -> int | None:
+        if self.returncode is not None:
+            return self.returncode
+        import ctypes
+
+        code = ctypes.c_ulong(259)  # STILL_ACTIVE
+        ctypes.windll.kernel32.GetExitCodeProcess(self._handle, ctypes.byref(code))
+        if code.value != 259:
+            self.returncode = code.value
+        return self.returncode
+
+    def terminate(self, timeout: float = 5.0) -> None:
+        import ctypes
+
+        ctypes.windll.kernel32.TerminateProcess(self._handle, 1)
+
+    def kill(self) -> None:
+        self.terminate()
+
+    def wait(self, timeout: float = 5.0) -> int:
+        import time as _time
+
+        deadline = _time.monotonic() + timeout
+        while _time.monotonic() < deadline:
+            if self.poll() is not None:
+                return self.returncode or 0
+            _time.sleep(0.2)
+        return self.poll() or 0
+
+
+def _deelevated_spawn(argv: list) -> Any:
+    """Spawn argv with the user's NON-elevated token (dup of explorer.exe's).
+
+    The ShardX engine de-elevates itself when started elevated (RunDeElevated
+    relaunch) and that handoff dies in this environment — the browser window
+    closes seconds after opening.  Starting it non-elevated directly avoids
+    the relaunch entirely.  Returns a ``_HandleProc`` or None on any failure.
+    """
+    import ctypes
+    from ctypes import wintypes as wt
+
+    try:
+        kernel32 = ctypes.windll.kernel32
+        advapi32 = ctypes.windll.advapi32
+
+        explorer_pid = None
+        try:
+            import psutil
+
+            for p in psutil.process_iter(["pid", "name"]):
+                if (p.info.get("name") or "").lower() == "explorer.exe":
+                    explorer_pid = p.info["pid"]
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+        if not explorer_pid:
+            return None
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        hproc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, explorer_pid)
+        if not hproc:
+            return None
+        htok = wt.HANDLE()
+        if not advapi32.OpenProcessToken(hproc, 0x0002, ctypes.byref(htok)):  # TOKEN_DUPLICATE
+            return None
+        hdup = wt.HANDLE()
+        if not advapi32.DuplicateTokenEx(
+            htok, 0xF01FF, None, 2, 1, ctypes.byref(hdup)  # SecurityImpersonation, PrimaryToken
+        ):
+            return None
+
+        class STARTINFOW(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_ulong), ("lpReserved", wt.LPWSTR),
+                ("lpDesktop", wt.LPWSTR), ("lpTitle", wt.LPWSTR),
+                ("dwX", wt.DWORD), ("dwY", wt.DWORD),
+                ("dwXSize", wt.DWORD), ("dwYSize", wt.DWORD),
+                ("dwXCountChars", wt.DWORD), ("dwYCountChars", wt.DWORD),
+                ("dwFillAttribute", wt.DWORD), ("dwFlags", wt.DWORD),
+                ("wShowWindow", wt.WORD), ("cbReserved2", wt.WORD),
+                ("lpReserved2", ctypes.c_void_p),
+                ("hStdInput", wt.HANDLE), ("hStdOutput", wt.HANDLE),
+                ("hStdError", wt.HANDLE),
+            ]
+
+        class PROCINFO(ctypes.Structure):
+            _fields_ = [
+                ("hProcess", wt.HANDLE), ("hThread", wt.HANDLE),
+                ("dwProcessId", wt.DWORD), ("dwThreadId", wt.DWORD),
+            ]
+
+        si = STARTINFOW()
+        si.cb = ctypes.sizeof(STARTINFOW)
+        si.lpDesktop = "winsta0\\default"
+        pi = PROCINFO()
+        cmdline = ctypes.create_unicode_buffer(
+            " ".join(f'"{a}"' if " " in str(a) else str(a) for a in argv)
+        )
+        CREATE_NO_WINDOW = 0x08000000
+        ok = advapi32.CreateProcessWithTokenW(
+            hdup, 0, None, cmdline, CREATE_NO_WINDOW, None, None,
+            ctypes.byref(si), ctypes.byref(pi),
+        )
+        if not ok:
+            return None
+        kernel32.CloseHandle(pi.hThread)
+        logger.info("ShardBrowser: engine spawned de-elevated (pid=%s)", pi.dwProcessId)
+        return _HandleProc(pi.hProcess, pi.dwProcessId)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ShardBrowser: de-elevated spawn failed: %s", exc)
+        return None
+
+
+@contextmanager
+def patch_engine_spawn():
+    """Scope-patched ``subprocess.Popen`` for the ShardX engine spawn.
+
+    The engine gets its own process group (``CREATE_NEW_PROCESS_GROUP``) so
+    console/group signals travelling the backend spawn chain can never reach
+    it; observed symptom without it was the engine exiting 0 a few seconds
+    after start when launched through that chain.
+    """
+    import subprocess as _sp
+
+    orig = _sp.Popen
+
+    def patched(argv, *a, **kw):
+        try:
+            if isinstance(argv, (list, tuple)) and argv and "shardx" in str(argv[0]).lower():
+                if _is_elevated():
+                    spawned = _deelevated_spawn(list(argv))
+                    if spawned is not None:
+                        return spawned
+                flags = kw.get("creationflags", 0) or 0
+                kw["creationflags"] = flags | 0x00000200  # CREATE_NEW_PROCESS_GROUP
+        except Exception:  # noqa: BLE001
+            pass
+        return orig(argv, *a, **kw)
+
+    _sp.Popen = patched
+    try:
+        yield
+    finally:
+        _sp.Popen = orig
 
 
 def build_shard_sdk() -> Any:
@@ -199,12 +364,13 @@ class AsyncShardBrowserWrapper:
         self._shard_profile_id = getattr(profile, "id", self._shard_profile_id)
 
         # Spawn the engine with a CDP endpoint (synchronous, no event loop).
-        sess = sdk.launch(
-            profile,
-            proxy=self._proxy,
-            headless=self._headless,
-            cdp=True,
-        )
+        with patch_engine_spawn():
+            sess = sdk.launch(
+                profile,
+                proxy=self._proxy,
+                headless=self._headless,
+                cdp=True,
+            )
         if not sess.cdp_url:
             sess.stop()
             raise RuntimeError("ShardBrowser engine failed to expose a CDP endpoint")
