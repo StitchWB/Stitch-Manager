@@ -39,6 +39,12 @@ if (!integrationOk) {
   process.exit(1);
 }
 
+const backgroundOk = run('Background Smoke Test (WS Bridge Protocol)', 'test-background.cjs');
+if (!backgroundOk) {
+  console.log('❌ Background smoke test FAILED');
+  process.exit(1);
+}
+
 console.log('═══════════════════════════════════════════════════════════════');
 console.log('  ✅ ALL TESTS PASSED');
 console.log('  Extension is ready for browser testing!');

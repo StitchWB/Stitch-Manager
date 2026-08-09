@@ -126,13 +126,34 @@ try {
   console.log(e.stack);
 }
 
+// Load panel tools in manifest order (they register on window namespace;
+// bootstrap picks them up because it is deferred via setTimeout).
+['panel/tools/stripe-filler.js', 'panel/tools/recorder-tool.js', 'panel/tools/settings-tool.js'].forEach(function (file) {
+  try {
+    loadScript(file);
+  } catch (e) {
+    fail(file + ' load error: ' + e.message);
+  }
+});
+if (window.StripeFillerTool && window.RecorderTool && window.SettingsTool) {
+  pass('All panel tools registered');
+} else {
+  fail('Panel tools missing: ' + [
+    window.StripeFillerTool ? null : 'StripeFillerTool',
+    window.RecorderTool ? null : 'RecorderTool',
+    window.SettingsTool ? null : 'SettingsTool',
+  ].filter(Boolean).join(', '));
+}
+
 // Trigger DOMContentLoaded for bootstrap
 const event = new Event('DOMContentLoaded');
 document.dispatchEvent(event);
 
-// Give it a tick for async operations
-setTimeout(function () {}, 0);
+// Bootstrap is deferred via setTimeout(0) when document is already parsed,
+// so UI checks must wait at least one macrotask before asserting.
+setTimeout(runUiChecks, 60);
 
+function runUiChecks() {
 console.log('');
 console.log('3. Checking UI elements');
 
@@ -278,3 +299,4 @@ setTimeout(function () {
     }
   }, 300);
 }, 300);
+} // end runUiChecks
