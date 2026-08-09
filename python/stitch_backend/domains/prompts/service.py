@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 import os
-import platform
 import shutil
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -143,10 +143,11 @@ class PromptsService:
         prompts_dir = _prompts_dir()
         prompts_dir.mkdir(parents=True, exist_ok=True)
         path_str = str(prompts_dir)
-        system = platform.system()
-        if system == "Windows":
+        # sys.platform (not platform.system()) so mypy narrows the
+        # Windows-only os.startfile branch per target platform.
+        if sys.platform == "win32":
             os.startfile(path_str)
-        elif system == "Darwin":
+        elif sys.platform == "darwin":
             os.system(f'open "{path_str}"')
         else:
             os.system(f'xdg-open "{path_str}"')
