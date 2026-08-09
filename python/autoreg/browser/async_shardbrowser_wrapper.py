@@ -26,6 +26,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Win32 access/creation flags for the de-elevated spawn path (module-level
+# so pep8-naming N806 stays happy).
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+CREATE_NO_WINDOW = 0x08000000
+
 
 def _is_elevated() -> bool:
     """True when the current process runs with an elevated (admin) token."""
@@ -103,7 +108,6 @@ def _deelevated_spawn(argv: list) -> Any:
         if not explorer_pid:
             return None
 
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         hproc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, explorer_pid)
         if not hproc:
             return None
@@ -143,7 +147,6 @@ def _deelevated_spawn(argv: list) -> Any:
         cmdline = ctypes.create_unicode_buffer(
             " ".join(f'"{a}"' if " " in str(a) else str(a) for a in argv)
         )
-        CREATE_NO_WINDOW = 0x08000000
         ok = advapi32.CreateProcessWithTokenW(
             hdup, 0, None, cmdline, CREATE_NO_WINDOW, None, None,
             ctypes.byref(si), ctypes.byref(pi),

@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 # ── Account status ────────────────────────────────────────────────────────────
 
-class AccountStatus(str, Enum):
+class AccountStatus(StrEnum):
     ACTIVE = "active"
     DISABLED = "disabled"
     EXPIRED = "expired"
@@ -26,7 +26,7 @@ class AccountStatus(str, Enum):
 
 # ── Job status ────────────────────────────────────────────────────────────────
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
