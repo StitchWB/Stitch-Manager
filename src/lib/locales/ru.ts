@@ -3268,6 +3268,7 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     editTooltip: "Изменить название",
     removeTooltip: "Удалить ключ",
     copyCode: "2FA: {code} — нажмите, чтобы скопировать",
+    columnHeader: "2FA",
     codeCopied: "2FA-код скопирован",
     linkedAccount: "Привязан к аккаунту",
     uriDetected: "Ссылка otpauth:// распознана — поля заполнены"
