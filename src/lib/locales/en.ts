@@ -3272,6 +3272,7 @@ addMailboxFromSheets: "Import from Google Sheets",
     editTooltip: "Edit label",
     removeTooltip: "Remove key",
     copyCode: "2FA: {code} — click to copy",
+    columnHeader: "2FA",
     codeCopied: "2FA code copied",
     linkedAccount: "Linked to an account",
     uriDetected: "otpauth:// URI detected — fields filled"

@@ -114,6 +114,14 @@ export default function AccountsTable({
       ? Math.min(panelWidth, Math.max(340, containerWidth - 620))
       : panelWidth;
 
+  // On tight tables the hover quick-actions column is dead space — hide it
+  // (the same actions live in the row ⋯ menu and the inspector action bar).
+  const tableAreaWidth = containerWidth > 0 ? containerWidth - displayWidth - 4 : 0;
+  const hideQuickActions = tableAreaWidth > 0 && tableAreaWidth < 760;
+  // The 2FA column needs ~100px of real estate; below this the chip would be
+  // clipped under the pinned actions column — hide it (codes stay in the inspector).
+  const hideTotpColumn = tableAreaWidth > 0 && tableAreaWidth < 900;
+
   const inspectedAccount = accounts.find(a => a.id === inspectedAccountId) ?? null;
 
   const { copy } = useCopyToClipboard({
@@ -308,8 +316,10 @@ export default function AccountsTable({
               <TableHead className="sticky left-[120px] z-30 w-[160px] min-w-[160px] max-w-[180px] px-2 py-1.5 text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal bg-vsc-terminal/95">
                 {t('accounts.account')}
               </TableHead>
-              <TableHead className="w-[90px] min-w-[90px] px-1 py-1.5 text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal">
-              </TableHead>
+              {!hideQuickActions && (
+                <TableHead className="w-[90px] min-w-[90px] px-1 py-1.5 text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal">
+                </TableHead>
+              )}
               <TableHead className="w-[70px] min-w-[70px] px-2 py-1.5 text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal">
                 {t('accounts.statusHeader')}
               </TableHead>
@@ -340,12 +350,19 @@ export default function AccountsTable({
               >
                 {t('accounts.columnQuota')}
               </TableHead>
+              {/* TOTP column — the row always renders a TOTP cell, so the header
+                  must reserve the slot to keep table-fixed columns aligned */}
+              {!hideTotpColumn && (
+                <TableHead className="w-[100px] min-w-[100px] px-2 py-1.5 text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal">
+                  {t('totp.columnHeader')}
+                </TableHead>
+              )}
               {hasRefData && (
                 <TableHead className="w-[80px] min-w-[80px] px-2 py-1.5 text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal">
                   {t('accounts.account_ref_cell.column_header')}
                 </TableHead>
               )}
-              <TableHead className="sticky right-0 z-30 w-[48px] min-w-[48px] max-w-[48px] px-1 py-1.5 text-right text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal bg-vsc-terminal/95">
+              <TableHead className="sticky right-0 z-30 w-[68px] min-w-[68px] max-w-[68px] px-1 py-1.5 text-right text-[10px] text-slate-400 whitespace-nowrap normal-case tracking-normal bg-vsc-terminal/95">
                 {t('common.actions')}
               </TableHead>
             </TableRow>
@@ -363,6 +380,8 @@ export default function AccountsTable({
                 isMenuOpen={openMenuId === account.id}
                 visibleColumns={visibleColumns}
                 showRefColumn={hasRefData}
+                hideQuickActions={hideQuickActions}
+                hideTotpColumn={hideTotpColumn}
                 relationHints={relationHintsById?.[account.id]}
                 relationEdges={relationEdgesById?.[account.id]}
                 onToggleSelection={onToggleSelection}

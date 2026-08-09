@@ -121,6 +121,15 @@
   scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
 }
 
+/* Hidden scrollbar (e.g. horizontally scrollable tab strips) */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* ============================================
    Selection & Focus Styles
    ============================================ */

@@ -36,6 +36,8 @@ interface AccountRowProps {
   isMenuOpen: boolean;
   visibleColumns?: AccountsTableVisibleColumns;
   showRefColumn?: boolean;
+  hideQuickActions?: boolean;
+  hideTotpColumn?: boolean;
   relationHints?: string[];
   relationEdges?: AccountRelationEdge[];
   onToggleSelection: (accountId: number) => void;
@@ -67,6 +69,8 @@ export function AccountRow({
   isMenuOpen,
   visibleColumns = { lastLogin: true, apiKey: true, quota: true },
   showRefColumn = true,
+  hideQuickActions = false,
+  hideTotpColumn = false,
   relationHints,
   relationEdges,
   onToggleSelection,
@@ -107,8 +111,8 @@ export function AccountRow({
       {/* Checkbox */}
       <TableCell
         className={cn(
-          'sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
-          isInspected && 'bg-indigo-950/40 border-l-2 border-indigo-500',
+          'sticky left-0 z-10 w-[40px] min-w-[40px] max-w-[40px] px-2 py-1 align-middle bg-vsc-bg group-hover/row:bg-[#0b0b0f]',
+          isInspected && 'bg-[#0e0d26] border-l-2 border-indigo-500 group-hover/row:bg-[#0e0d26]',
         )}
         onClick={event => event.stopPropagation()}
       >
@@ -122,8 +126,8 @@ export function AccountRow({
 
       {/* Provider */}
       <TableCell className={cn(
-        'sticky left-[40px] z-10 w-[80px] min-w-[80px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
-        isInspected && 'bg-indigo-950/40',
+        'sticky left-[40px] z-10 w-[80px] min-w-[80px] px-2 py-1 align-middle bg-vsc-bg group-hover/row:bg-[#0b0b0f]',
+        isInspected && 'bg-[#0e0d26] group-hover/row:bg-[#0e0d26]',
       )}>
         <div className="flex items-center gap-1.5 overflow-hidden">
           <ProviderLogo provider={account.provider} size={14} className="shrink-0" />
@@ -133,8 +137,8 @@ export function AccountRow({
 
       {/* Account */}
       <TableCell className={cn(
-        'sticky left-[120px] z-10 w-[160px] min-w-[160px] max-w-[180px] px-2 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
-        isInspected && 'bg-indigo-950/40',
+        'sticky left-[120px] z-10 w-[160px] min-w-[160px] max-w-[180px] px-2 py-1 align-middle bg-vsc-bg group-hover/row:bg-[#0b0b0f]',
+        isInspected && 'bg-[#0e0d26] group-hover/row:bg-[#0e0d26]',
       )}>
         <ButtonBase
           type="button"
@@ -235,17 +239,19 @@ export function AccountRow({
         )}
       </TableCell>
 
-      {/* Quick Actions (visible on hover) */}
-      <TableCell
-        className="w-[90px] min-w-[90px] px-1 py-1 align-middle"
-        onClick={event => event.stopPropagation()}
-      >
-        <AccountRowQuickActions
-          account={account}
-          onOpenBrowser={onOpenBrowser}
-          onAuthorizeKiroAccount={onAuthorizeKiroAccount}
-        />
-      </TableCell>
+      {/* Quick Actions (visible on hover); hidden on tight tables */}
+      {!hideQuickActions && (
+        <TableCell
+          className="w-[90px] min-w-[90px] px-1 py-1 align-middle"
+          onClick={event => event.stopPropagation()}
+        >
+          <AccountRowQuickActions
+            account={account}
+            onOpenBrowser={onOpenBrowser}
+            onAuthorizeKiroAccount={onAuthorizeKiroAccount}
+          />
+        </TableCell>
+      )}
 
       {/* Status */}
       <TableCell className="w-[70px] min-w-[70px] px-2 py-1 align-middle">
@@ -343,7 +349,7 @@ export function AccountRow({
       </TableCell>
 
       {/* 2FA TOTP code — shown only when this account has linked TOTP keys */}
-      {totpKeys.length > 0 && (
+      {!hideTotpColumn && totpKeys.length > 0 && (
         <TableCell className="w-[100px] min-w-[100px] px-2 py-1 align-middle" onClick={(e) => e.stopPropagation()}>
           <TotpBadge
             secret={totpKeys[0].secret}
@@ -352,7 +358,7 @@ export function AccountRow({
           />
         </TableCell>
       )}
-      {totpKeys.length === 0 && (
+      {!hideTotpColumn && totpKeys.length === 0 && (
         <TableCell className="w-[100px] min-w-[100px] px-2 py-1 align-middle" />
       )}
 
@@ -362,8 +368,11 @@ export function AccountRow({
       {/* Actions */}
       <TableCell
         className={cn(
-          'sticky right-0 z-10 w-[48px] min-w-[48px] max-w-[48px] px-1 py-1 align-middle bg-vsc-terminal group-hover/row:bg-white/[0.03]',
-          isInspected && 'bg-indigo-950/40',
+          // Opaque bg + inner shadow so the pinned column reads as intentional
+          // when the table overflows and content scrolls underneath it.
+          'sticky right-0 z-10 w-[68px] min-w-[68px] max-w-[68px] px-1 py-1 align-middle bg-vsc-bg shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.8)]',
+          !isInspected && 'group-hover/row:bg-[#0b0b0f]',
+          isInspected && 'bg-[#0e0d26] group-hover/row:bg-[#0e0d26]',
         )}
         onClick={event => event.stopPropagation()}
       >

@@ -566,7 +566,7 @@ export function AccountInspectorPanel({
       </div>
 
       {/* ── tabs strip ─────────────────────────────────────────────────────── */}
-      <div className="shrink-0 px-2 py-1.5 border-b border-white/5 flex items-center gap-1">
+      <div className="shrink-0 px-2 py-1.5 border-b border-white/5 flex items-center gap-1 overflow-x-auto scrollbar-none">
         {TAB_IDS.map(tabId => (
           <TabButton
             key={tabId}

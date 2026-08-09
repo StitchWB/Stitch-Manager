@@ -3279,6 +3279,7 @@ export interface Translations {
     editTooltip: string;
     removeTooltip: string;
     copyCode: string;
+columnHeader: string;
     codeCopied: string;
     linkedAccount: string;
     uriDetected: string;
