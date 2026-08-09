@@ -10,6 +10,9 @@
   --tk-surface: rgba(14, 16, 28, 0.97);
   --tk-surface-elevated: rgba(22, 24, 40, 0.98);
   --tk-glass: linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%);
+  --tk-field-bg: rgba(0, 0, 0, 0.35);
+  --tk-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23cbd5e1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  color-scheme: dark;
 
   /* Accents */
   --tk-accent: #6366f1;
@@ -77,6 +80,9 @@
     --tk-surface: rgba(255, 255, 255, 0.96);
     --tk-surface-elevated: rgba(248, 250, 252, 0.98);
     --tk-glass: linear-gradient(145deg, rgba(255,255,255,0.9) 0%, rgba(241,245,249,0.95) 100%);
+    --tk-field-bg: rgba(15, 23, 42, 0.05);
+    --tk-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    color-scheme: light;
     --tk-border: rgba(0, 0, 0, 0.06);
     --tk-border-hover: rgba(0, 0, 0, 0.12);
     --tk-border-focus: rgba(99, 102, 241, 0.4);
@@ -112,6 +118,9 @@
   --tk-surface: rgba(255, 255, 255, 0.96);
   --tk-surface-elevated: rgba(248, 250, 252, 0.98);
   --tk-glass: linear-gradient(145deg, rgba(255,255,255,0.9) 0%, rgba(241,245,249,0.95) 100%);
+  --tk-field-bg: rgba(15, 23, 42, 0.05);
+  --tk-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  color-scheme: light;
   --tk-border: rgba(0, 0, 0, 0.06);
   --tk-border-hover: rgba(0, 0, 0, 0.12);
   --tk-text: #0f172a;
@@ -225,6 +234,38 @@
 @keyframes tk-rec-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* Replay state — cyan pulse so replay is visually distinct from recording */
+.tk-float-btn.tk-replaying {
+  animation: tk-replay-pulse 1.8s ease-in-out infinite;
+}
+.tk-float-btn.tk-replaying::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22d3ee;
+  border: 2px solid var(--tk-bg-deep);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+  animation: tk-rec-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes tk-replay-pulse {
+  0%, 100% {
+    box-shadow:
+      0 4px 20px rgba(99, 102, 241, 0.5),
+      0 0 60px rgba(99, 102, 241, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 6px 28px rgba(99, 102, 241, 0.6),
+      0 0 80px rgba(34, 211, 238, 0.3),
+      0 0 100px rgba(99, 102, 241, 0.3);
+  }
 }
 
 /* Steps badge */
@@ -557,7 +598,7 @@
 .tk-input {
   width: 100%;
   border: 1px solid var(--tk-border);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--tk-field-bg);
   color: var(--tk-text);
   border-radius: var(--tk-radius-sm);
   padding: 5px 8px;
@@ -615,8 +656,8 @@
 /* Select */
 .tk-select {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--tk-border-hover);
+  background: var(--tk-field-bg);
   color: var(--tk-text);
   border-radius: var(--tk-radius-md);
   padding: 8px 28px 8px 10px;
@@ -628,11 +669,10 @@
   margin-bottom: var(--tk-space-sm);
   -webkit-appearance: none;
   appearance: none;
-  color-scheme: dark;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23cbd5e1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--tk-select-chevron);
   background-repeat: no-repeat;
   background-position: right 12px center;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .tk-select:hover { 
@@ -655,7 +695,7 @@
 }
 
 .tk-card-row select {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--tk-field-bg);
   border: 1px solid var(--tk-border);
   border-radius: var(--tk-radius-md);
   color: var(--tk-text);
@@ -665,12 +705,12 @@
   transition: border-color 0.2s ease;
   -webkit-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--tk-select-chevron);
   background-repeat: no-repeat;
   background-position: right 8px center;
   flex: 0 0 90px;
   min-width: 0;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .tk-card-row select:hover { 
@@ -1332,6 +1372,50 @@ button.tk-mini:hover {
   margin-top: 2px;
 }
 
+/* Scenario library rows — compact action buttons */
+.tk-scenario-item {
+  cursor: default;
+  padding: 8px 10px;
+}
+
+.tk-scenario-item:hover {
+  transform: none;
+}
+
+.tk-sc-act {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--tk-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--tk-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.tk-sc-act:hover {
+  border-color: var(--tk-border-hover);
+  color: var(--tk-text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.tk-sc-play:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  color: var(--tk-accent-bright);
+  background: var(--tk-accent-soft);
+}
+
+.tk-sc-del:hover {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: var(--tk-danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    SETTINGS TOGGLES
    ═══════════════════════════════════════════════════════════════════════ */
@@ -1515,5 +1599,143 @@ button.tk-mini:hover {
       0 4px 28px rgba(99,102,241,0.7),
       0 0 0 5px rgba(99,102,241,0.15),
       0 0 80px rgba(99,102,241,0.35); 
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REPLAY PROGRESS BAR
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.tk-progress {
+  height: 6px;
+  border-radius: var(--tk-radius-pill);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--tk-border);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.tk-progress-fill {
+  height: 100%;
+  border-radius: var(--tk-radius-pill);
+  background: linear-gradient(90deg, var(--tk-accent), #22d3ee);
+  box-shadow: 0 0 8px var(--tk-accent-glow);
+  transition: width 0.25s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BRIDGE STATUS (Settings)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.tk-bridge-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tk-bridge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--tk-radius-sm);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--tk-border);
+  font-size: var(--tk-text-sm);
+  color: var(--tk-text-secondary);
+}
+
+.tk-bridge-row .tk-bridge-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.tk-bridge-row .tk-bridge-state {
+  font-size: var(--tk-text-xs);
+  font-weight: 600;
+  color: var(--tk-text-dim);
+}
+
+.tk-bridge-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--tk-text-dim);
+}
+
+.tk-bridge-row.tk-on .tk-bridge-dot {
+  background: var(--tk-success);
+  box-shadow: 0 0 8px var(--tk-success-glow);
+}
+
+.tk-bridge-row.tk-on .tk-bridge-state {
+  color: var(--tk-success);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIGHT THEME POLISH — soften glows designed for dark surfaces
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-color-scheme: light) {
+  :host(:not(.tk-dark)) .tk-btn.tk-accent {
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.22);
+  }
+
+  :host(:not(.tk-dark)) .tk-float-btn {
+    box-shadow:
+      0 4px 16px rgba(99, 102, 241, 0.35),
+      0 0 0 1px rgba(255, 255, 255, 0.4);
+    animation: none;
+  }
+
+  :host(:not(.tk-dark)) .tk-panel {
+    box-shadow:
+      0 8px 32px rgba(15, 23, 42, 0.14),
+      0 0 0 1px rgba(15, 23, 42, 0.06);
+  }
+}
+
+:host(.tk-light) .tk-btn.tk-accent {
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.22);
+}
+
+:host(.tk-light) .tk-float-btn {
+  box-shadow:
+    0 4px 16px rgba(99, 102, 241, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.4);
+  animation: none;
+}
+
+:host(.tk-light) .tk-panel {
+  box-shadow:
+    0 8px 32px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(15, 23, 42, 0.06);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDUCED MOTION — respect user preference
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-float-btn,
+  .tk-float-btn.tk-recording,
+  .tk-float-btn.tk-recording::before,
+  .tk-float-btn.tk-replaying,
+  .tk-float-btn.tk-replaying::before,
+  .tk-toast,
+  .tk-status {
+    animation: none !important;
+  }
+
+  .tk-btn,
+  .tk-tab,
+  .tk-input,
+  .tk-select,
+  .tk-step,
+  .tk-progress-fill,
+  .tk-action-btn,
+  .tk-close-btn {
+    transition: none !important;
   }
 }

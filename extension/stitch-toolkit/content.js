@@ -413,17 +413,28 @@
       if (sub) sub.textContent = text;
     }
 
-    function setRecordingUI(recording, paused) {
+    var _liveStepCount = 0;
+
+    // mode: 'record' | 'replay' | falsy (idle)
+    function setRecordingUI(mode, paused) {
+      var recording = mode === 'record';
+      var replaying = mode === 'replay';
       floatBtn.classList.toggle('tk-recording', recording && !paused);
+      floatBtn.classList.toggle('tk-replaying', replaying);
+      if (!recording && !replaying) setLiveStepCount(0);
+    }
+
+    function setLiveStepCount(count) {
+      _liveStepCount = Math.max(0, Number(count) || 0);
+      updateStepsBadge();
     }
 
     function updateStepsBadge() {
-      var steps = StateManager.get('recordingSteps') || [];
       floatBtn.querySelectorAll('.tk-steps-dot').forEach(function (b) { b.remove(); });
-      if (steps.length > 0) {
+      if (_liveStepCount > 0) {
         var badge = document.createElement('div');
         badge.className = 'tk-steps-dot';
-        badge.textContent = steps.length > 99 ? '99+' : steps.length;
+        badge.textContent = _liveStepCount > 99 ? '99+' : _liveStepCount;
         floatBtn.appendChild(badge);
       }
     }
@@ -513,6 +524,7 @@
       updateToolContent: updateToolContent,
       setSubtitle: setSubtitle,
       setRecordingUI: setRecordingUI,
+      setLiveStepCount: setLiveStepCount,
       updateStepsBadge: updateStepsBadge,
       applyTheme: applyTheme,
       pulseFloatBtn: pulseFloatBtn,
@@ -788,7 +800,7 @@
   });
 
   EventBus.on('recorder:state', function (data) {
-    PanelManager.setRecordingUI(data.recording, data.paused);
+    PanelManager.setRecordingUI(data.mode || (data.recording ? 'record' : null), data.paused);
   });
 
   EventBus.on('steps:updated', function () {
@@ -842,11 +854,15 @@
     }
   });
 
-  // RecorderTool subscriptions
+  // RecorderTool subscriptions — steps live in the background session now
   EventBus.on('export:show', function () {
-    var steps = StateManager.get('recordingSteps');
-    if (!steps || steps.length === 0) { NotificationService.warn(window.StitchI18n.t('recorder.noStepsToExport')); return; }
-    if (window.RecorderTool) window.RecorderTool.showExportModal(steps);
+    try {
+      chrome.runtime.sendMessage({ type: 'tk:recorder-steps' }).then(function (resp) {
+        var steps = resp && resp.ok ? resp.steps : [];
+        if (!steps || steps.length === 0) { NotificationService.warn(window.StitchI18n.t('recorder.noStepsToExport')); return; }
+        if (window.RecorderTool) window.RecorderTool.showExportModal(steps);
+      }).catch(function () { NotificationService.warn(window.StitchI18n.t('recorder.noStepsToExport')); });
+    } catch (e) { NotificationService.warn(window.StitchI18n.t('recorder.noStepsToExport')); }
   });
 
   EventBus.on('shortcut:recorder-toggle', function () { if (window.RecorderTool) window.RecorderTool.toggle(); });
@@ -860,6 +876,49 @@
       duration: 6000,
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // RecorderBridge — sync panel UI with background recording sessions
+  // (bridge-driven sessions from the Stitch app included). NO side effects
+  // until init() is called.
+  // ─────────────────────────────────────────────────────────────────────
+  var RecorderBridge = (function () {
+    var _initialized = false;
+
+    function applyStatus(resp) {
+      if (!resp || !resp.ok) return;
+      PanelManager.setRecordingUI(resp.mode || null, Boolean(resp.paused));
+      if (resp.mode === 'record') PanelManager.setLiveStepCount(resp.stepCount || 0);
+    }
+
+    function init() {
+      if (_initialized) return;
+      _initialized = true;
+
+      try {
+        chrome.runtime.onMessage.addListener(function (message) {
+          var type = message && message.type;
+          if (type === 'tk:recorder-progress') {
+            var payload = message.payload || {};
+            PanelManager.setRecordingUI('record', Boolean(payload.paused));
+            PanelManager.setLiveStepCount(payload.stepCount || 0);
+            EventBus.emit('recorder:progress', payload);
+          }
+        });
+      } catch (e) {
+        console.warn('[TK RecorderBridge] onMessage unavailable:', e && e.message);
+      }
+
+      // Initial sync — covers sessions started before this page loaded.
+      try {
+        chrome.runtime.sendMessage({ type: 'tk:recorder-status' })
+          .then(applyStatus)
+          .catch(function () {});
+      } catch (e) {}
+    }
+
+    return { init: init };
+  })();
 
   // ─────────────────────────────────────────────────────────────────────
   // Bootstrap — инициализация приложения
@@ -884,6 +943,7 @@
     AutoDetector.init();
     ClipboardWatcher.init();
     PasteInterceptor.init();
+    RecorderBridge.init();
 
     // Mount initial tool
     var activeTab = StateManager.get('activeTab');
@@ -894,7 +954,7 @@
       activeTool.mount(tc2);
     }
 
-    console.log('[Stitch Toolkit] v0.6.0 initialized (' + window.StitchI18n.getLocale() + ')');
+    console.log('[Stitch Toolkit] v0.7.0 initialized (' + window.StitchI18n.getLocale() + ')');
   }
 
   // Cleanup on page unload / extension reload
