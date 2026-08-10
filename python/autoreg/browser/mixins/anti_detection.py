@@ -37,6 +37,19 @@ class AntiDetectionMixin:
         Returns:
             CDPSpoofer instance if successful, None otherwise
         """
+        # Engine-level anti-detect browsers (CloakBrowser / ShardBrowser) spoof
+        # identity inside the engine and persist it in their profile. Layering
+        # CDP fingerprint overrides on top creates cross-API inconsistencies that
+        # are easier to detect than either layer alone, so skip the CDP layer
+        # entirely there. Plain-Chrome browsers (no engine spoofing) still get
+        # the CDP layer as their only identity source.
+        if getattr(self, "_engine_spoofs_identity", False):
+            logger.info(
+                "Engine-level anti-detect browser active — skipping CDP "
+                "fingerprint layer (engine owns identity)"
+            )
+            return None
+
         # Check if spoofing is enabled
         spoofing_enabled = os.environ.get("SPOOFING_ENABLED", "1") == "1"
 

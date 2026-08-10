@@ -114,6 +114,11 @@ class BaseBrowser:
         self._shard_sdk: object | None = None    # shardx.ShardX instance
         self._shard_browser: object | None = None  # shardx BrowserSession
 
+        # True when the launched engine spoofs identity at the engine level
+        # (CloakBrowser / ShardBrowser). Consumers must then skip CDP
+        # fingerprint spoofing to avoid inconsistent double-spoofing.
+        self._engine_spoofs_identity = False
+
         # Initialize browser
         self._init_browser()
 
@@ -132,11 +137,16 @@ class BaseBrowser:
         system = platform.system()
         possible_paths = []
 
+        # Engine-level identity spoofing is active only when we actually launch
+        # CloakBrowser below (not a plain system Chrome fallback).
+        self._engine_spoofs_identity = False
+
         # --- Priority 1: CloakBrowser (bundled anti-detect browser) ---
         # 1a. Bundled path passed via env var (cross-platform)
         bundled_env = os.environ.get("CLOAKBROWSER_BUNDLED_PATH")
         if bundled_env and Path(bundled_env).exists():
             logger.info(f"Found CloakBrowser (bundled): {bundled_env}")
+            self._engine_spoofs_identity = True
             return bundled_env
 
         # 1b. Resource directory (production layout: <app>/resources/cloakbrowser/)
@@ -153,6 +163,7 @@ class BaseBrowser:
         for path in possible_bundled:
             if path.exists():
                 logger.info(f"Found CloakBrowser (bundled): {path}")
+                self._engine_spoofs_identity = True
                 return str(path)
 
         # Attempt auto-download on first run if enabled
@@ -168,6 +179,7 @@ class BaseBrowser:
                     downloaded = project_root / "resources" / "cloakbrowser" / ("chrome.exe" if system == "Windows" else "chrome")
                     if result.returncode == 0 and downloaded.exists():
                         logger.info(f"CloakBrowser auto-downloaded: {downloaded}")
+                        self._engine_spoofs_identity = True
                         return str(downloaded)
                     else:
                         logger.warning(f"Auto-download failed: {result.stderr}")
@@ -273,7 +285,8 @@ class BaseBrowser:
         options.set_user_data_path(profile_path)
         options.auto_port()  # Automatically find free port
 
-        # Find and set Chrome executable path
+        # Find and set Chrome executable path. _find_chrome_path also records
+        # whether the resolved binary is CloakBrowser (engine-level spoofing).
         chrome_path = self._find_chrome_path()
         if chrome_path:
             options.set_browser_path(chrome_path)
@@ -522,6 +535,7 @@ class BaseBrowser:
         # BrowserSession owns the engine process; stop() terminates it.
         self._shard_browser = sess
         self.page = page
+        self._engine_spoofs_identity = True  # ShardX spoofs at engine level
 
         logger.info(
             "ShardBrowser initialised (profile_id=%s, proxy=%s, cdp=%s)",

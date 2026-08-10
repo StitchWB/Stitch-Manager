@@ -489,22 +489,14 @@ class CloakBrowserProfileManager:
         self._page = ChromiumPage(f"127.0.0.1:{debug_port}")
         self._page.set.load_mode("normal")
 
-        # Apply anti-detection spoofing if email/profile-based
-        try:
-            from autoreg.spoofers.cdp_spoofer import apply_pre_navigation_spoofing
-            from autoreg.spoofers.profile_storage import ProfileStorage
-
-            storage_dir = str(get_paths().browser_profiles_dir.parent / "spoof_profiles")
-            storage = ProfileStorage(storage_dir)
-            profile = storage.get_or_create(self.profile_id)
-            # Always skip CDP device-metrics override: it clamps the viewport
-            # to the profile's screen size, which mismatches the real window
-            # and produces a gray letterbox. JS-level DisplaySpoofModule
-            # already spoofs screen.* and window.outer/innerWidth.
-            apply_pre_navigation_spoofing(self._page, profile)
-            logger.info("Anti-detection spoofing applied (CDP device-metrics: skipped)")
-        except Exception as e:
-            logger.warning(f"Anti-detection spoofing failed: {e}")
+        # NOTE: No CDP fingerprint spoofing on this path. CloakBrowser already
+        # spoofs identity at the engine (blink) level and persists it in the
+        # profile's user-data-dir. Stacking our CDP SpoofProfile on top produced
+        # inconsistent double-spoofing (a stronger detection signal than either
+        # layer alone) and silently stomped the configured tz/locale with the
+        # SpoofProfile's own IP-geo detection. Only environment overrides
+        # (timezone / headers / geolocation) are applied below — those must
+        # match the proxy egress, which the engine cannot know about.
 
         # Timezone via CDP
         if self.timezone_id:
