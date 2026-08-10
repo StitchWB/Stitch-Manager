@@ -23,6 +23,7 @@ import sys
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -71,6 +72,19 @@ class ProxySpec:
 
 def _is_auto(value: Any) -> bool:
     return isinstance(value, str) and value.strip().lower() == "auto"
+
+
+def _normalize_engine(engine: Any) -> str:
+    """Normalize engine name to a canonical value.
+
+    - ``shardbrowser`` | ``shardx`` | ``shard`` -> ``shardbrowser``
+    - ``cloackbrowser`` (legacy typo) | ``cloakbrowser`` | ``""`` | anything else
+      -> ``cloakbrowser``
+    """
+    value = str(engine or "").lower().strip()
+    if value in ("shardbrowser", "shardx", "shard"):
+        return "shardbrowser"
+    return "cloakbrowser"
 
 
 def _safe_stderr(msg: str) -> None:
@@ -559,7 +573,7 @@ class ProfileLauncher:
         headless: bool = False,
         proxy: Any = None,
         config: dict[str, Any] | None = None,
-        engine: str = "cloackbrowser",
+        engine: str = "cloakbrowser",
     ) -> None:
         self.profile_id = _sanitize_profile_id(profile_id)
         self._config: dict[str, Any] = config or {}
@@ -575,7 +589,7 @@ class ProfileLauncher:
             )
             self.profile_path = self.profiles_root / self.profile_id
         self.headless = headless
-        self.engine = engine.lower().strip()
+        self.engine = _normalize_engine(engine)
 
         self._proxy = _parse_proxy_any(proxy if proxy is not None else self._config.get("proxy"))
         self._manager: Any | None = None
@@ -755,7 +769,7 @@ class ProfileLauncher:
             _safe_stderr(f"[ProfileLauncher] TIMING: _acquire_profile_lock: {t1-t0:.2f}s")
 
         try:
-            if self.engine in ("shardbrowser", "shardx"):
+            if self.engine == "shardbrowser":
                 return await self._start_shardbrowser()
             return await self._start_cloakbrowser()
         except Exception:
@@ -763,24 +777,78 @@ class ProfileLauncher:
             self._manager = None
             raise
 
+    def _engine_state_path(self) -> Path:
+        return self.profile_path / "engine_state.json"
+
+    def _load_engine_state(self) -> dict:
+        """Load persisted engine state (e.g. ``shard_profile_id``).
+
+        Missing or corrupt file is treated as absent — never raises.
+        """
+        try:
+            path = self._engine_state_path()
+            if not path.exists():
+                return {}
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+            logger.warning("engine_state.json is not a JSON object; ignoring")
+            return {}
+        except Exception as e:
+            logger.debug("Could not load engine_state.json: %s", e)
+            return {}
+
+    def _save_engine_state(self, shard_profile_id: str) -> None:
+        """Persist ``shard_profile_id`` so the next standalone launch reuses it.
+
+        Never raises — persistence failure is logged but does not break launch.
+        """
+        try:
+            self.profile_path.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "shard_profile_id": shard_profile_id,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            self._engine_state_path().write_text(
+                json.dumps(payload, indent=2), encoding="utf-8"
+            )
+        except Exception as e:
+            logger.warning("Could not save engine_state.json: %s", e)
+
     async def _start_shardbrowser(self) -> AsyncShardBrowserWrapper:
         """Start ShardBrowser (ShardX) persistent profile session.
 
         The ShardX SDK owns the profile directory (fingerprint + cookies in
         its cache), binds the proxy and resolves geo/timezone before launch.
         ``shard_profile_id`` from config reuses the account's saved profile so
-        the interactive session matches the registration fingerprint.
+        the interactive session matches the registration fingerprint. When the
+        config omits it (standalone launch), the persisted ``engine_state.json``
+        is used so the same ShardX profile is reused across launches instead of
+        creating a fresh identity every time.
         """
         proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
+        # Config priority: explicit config value (account flow passes it via DB)
+        # first, then persisted engine_state.json (standalone profile reuse).
+        shard_profile_id = (
+            self._config.get("shard_profile_id")
+            or self._config.get("shardProfileId")
+        )
+        if not shard_profile_id:
+            shard_profile_id = self._load_engine_state().get("shard_profile_id")
         wrapper = AsyncShardBrowserWrapper(
-            shard_profile_id=self._config.get("shard_profile_id")
-            or self._config.get("shardProfileId"),
+            shard_profile_id=shard_profile_id,
             proxy=proxy_url,
             headless=self.headless,
             platform=str(self._config.get("shard_platform") or "Windows"),
         )
         await wrapper.start()
         self._manager = wrapper
+
+        # Persist the effective shard_profile_id so the next standalone launch
+        # reuses the same ShardX profile instead of creating a fresh one.
+        effective_id = wrapper.shard_profile_id
+        if effective_id:
+            self._save_engine_state(effective_id)
 
         # Cookie injection (Playwright cookie dicts — native patchright API)
         cookies = _load_cookies_from_config(self._config)
