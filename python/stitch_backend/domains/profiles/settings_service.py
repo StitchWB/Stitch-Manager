@@ -139,9 +139,11 @@ class ProfileSettingsService(BaseService):
         if old_alias.lower() == new_alias.lower():
             return
 
-        # Check new alias doesn't exist in fingerprints
-        existing = FingerprintService.list_aliases()
-        if any(a.lower() == new_alias.lower() for a in existing):
+        # Check new alias doesn't collide with an existing profile
+        # (fingerprint files or settings rows)
+        existing = {a.lower() for a in FingerprintService.list_aliases()}
+        existing |= {a.lower() for a in await self.list_setting_aliases()}
+        if new_alias.lower() in existing:
             raise ProfileAliasExistsError(new_alias)
 
         # Rename fingerprint file
@@ -193,17 +195,18 @@ class ProfileSettingsService(BaseService):
             raise ProfileError("destination_path is required")
 
         profile = FingerprintService.load(alias)
-        if profile is None:
-            raise ProfileNotFoundError(alias)
-
         settings_record = await self.get_settings(alias)
+        if profile is None and settings_record is None:
+            raise ProfileNotFoundError(alias)
         scenarios = await self._fetch_related("scenarios", alias)
         flows = await self._fetch_related("composed_flows", alias)
 
         payload = {
             "version": 1,
             "alias": alias,
-            "profile": profile.model_dump(mode="json", by_alias=True),
+            "profile": (
+                profile.model_dump(mode="json", by_alias=True) if profile else None
+            ),
             "settings": (
                 settings_record.model_dump(mode="json", by_alias=True)
                 if settings_record else None
@@ -235,8 +238,9 @@ class ProfileSettingsService(BaseService):
         alias = (target_alias or source_alias).strip()
 
         # Check conflict
-        existing = FingerprintService.list_aliases()
-        if any(a.lower() == alias.lower() for a in existing) and not overwrite:
+        existing = {a.lower() for a in FingerprintService.list_aliases()}
+        existing |= {a.lower() for a in await self.list_setting_aliases()}
+        if alias.lower() in existing and not overwrite:
             raise ProfileAliasExistsError(alias)
 
         # Import fingerprint

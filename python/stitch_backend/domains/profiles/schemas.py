@@ -79,14 +79,16 @@ class ProfileSettingsBrowserWindow(BaseModel):
 
 
 class ProfileSettingsHardware(BaseModel):
+    """Hardware-adjacent launcher settings.
+
+    Identity fields (userAgent/platform/hardwareConcurrency/deviceMemory/
+    screenWidth/screenHeight) were removed: the browser engine owns identity
+    and nothing consumed them. Pydantic ignores the legacy keys still present
+    in previously stored configs.
+    """
+
     model_config = ConfigDict(populate_by_name=True)
 
-    user_agent: str | None = Field(None, alias="userAgent")
-    platform: str | None = None
-    hardware_concurrency: int | None = Field(None, alias="hardwareConcurrency")
-    device_memory: int | None = Field(None, alias="deviceMemory")
-    screen_width: int | None = Field(None, alias="screenWidth")
-    screen_height: int | None = Field(None, alias="screenHeight")
     browser_window: ProfileSettingsBrowserWindow | None = Field(
         None, alias="browserWindow"
     )

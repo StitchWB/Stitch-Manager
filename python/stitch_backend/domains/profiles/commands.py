@@ -92,7 +92,22 @@ async def cmd_delete_profile(params: dict) -> dict:
 
 @register_command("list_profiles_rust", readonly=True)
 async def cmd_list_profiles(params: dict) -> list[str]:
-    return FingerprintService.list_aliases()
+    """List known profile aliases.
+
+    The registry of record is the ``profile_settings`` table; fingerprint
+    JSON files remain a legacy source so existing installs keep their
+    profiles visible.
+    """
+
+    async def _op(session):
+        svc = ProfileSettingsService(session)
+        return await svc.list_setting_aliases()
+
+    db_aliases = await run_in_session(_op)
+    seen = {a.lower() for a in db_aliases}
+    return list(db_aliases) + [
+        a for a in FingerprintService.list_aliases() if a.lower() not in seen
+    ]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
