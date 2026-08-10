@@ -1,7 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ProfileItem } from '../components/ProfilesTable';
 import type { Account } from '../types/generated';
 import { formatProfileAlias } from '../lib/profiles/displayName';
+import { getProfileSettings } from '../lib/backend/modules/profiles';
+import { normalizeBrowserEngine, type BrowserEngineId } from '../lib/browser/engines';
+import { safeInvoke } from '../lib/backend/core';
 
 export type ProfileListFilter = 'all' | 'standalone' | 'linked' | 'used_kiro';
 
@@ -15,6 +18,7 @@ interface UseProfilesViewModelParams {
 interface UseProfilesViewModelResult {
   profileItems: ProfileItem[];
   visibleProfileItems: ProfileItem[];
+  shardAvailable: boolean;
 }
 
 export function useProfilesViewModel({
@@ -23,6 +27,55 @@ export function useProfilesViewModel({
   searchQuery,
   profileListFilter,
 }: UseProfilesViewModelParams): UseProfilesViewModelResult {
+  const [engineMap, setEngineMap] = useState<Record<string, BrowserEngineId>>({});
+  const [shardAvailable, setShardAvailable] = useState(false);
+
+  // Fetch per-profile engine settings once per alias set.
+  useEffect(() => {
+    if (profileAliases.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        profileAliases.map(async alias => {
+          try {
+            const record = await getProfileSettings({ alias });
+            const engine = normalizeBrowserEngine(record?.settings?.engine);
+            return [alias, engine] as const;
+          } catch {
+            return [alias, 'cloakbrowser' as BrowserEngineId] as const;
+          }
+        })
+      );
+      if (cancelled) return;
+      const next: Record<string, BrowserEngineId> = {};
+      for (const [alias, engine] of entries) {
+        next[alias] = engine;
+      }
+      setEngineMap(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileAliases]);
+
+  // Fetch engine availability once.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await safeInvoke<{ engines: Array<{ id: string; available: boolean }> }>('get_browser_engines', {});
+        if (cancelled) return;
+        const shard = res?.engines?.find(e => e.id === 'shardbrowser');
+        setShardAvailable(shard ? shard.available : false);
+      } catch {
+        if (!cancelled) setShardAvailable(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const profileItems = useMemo<ProfileItem[]>(() => {
     const linkedByAlias = new Map(
       accounts
@@ -86,9 +139,10 @@ export function useProfilesViewModel({
         ),
         usedTargets,
         healthStatus,
+        engine: engineMap[alias] ?? 'cloakbrowser',
       };
     });
-  }, [accounts, profileAliases]);
+  }, [accounts, profileAliases, engineMap]);
 
   const visibleProfileItems = useMemo(() => {
     let items = [...profileItems];
@@ -112,5 +166,5 @@ export function useProfilesViewModel({
     return items;
   }, [profileItems, searchQuery, profileListFilter]);
 
-  return { profileItems, visibleProfileItems };
+  return { profileItems, visibleProfileItems, shardAvailable };
 }

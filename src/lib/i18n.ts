@@ -281,6 +281,12 @@ export interface Translations {
     profileDeleteSuccess: string;
     profileDestinationCustom: string;
     profileDestinationLabel: string;
+    profileEngineConfirmAction: string;
+    profileEngineConfirmMessage: string;
+    profileEngineConfirmTitle: string;
+    profileEngineLabel: string;
+    profileEngineSaveFailed: string;
+    profileEngineSaved: string;
     profileGeoTab: string;
     profileHealthNeedsLink: string;
     profileHealthNoSession: string;

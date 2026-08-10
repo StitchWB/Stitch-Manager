@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
 import type { ScenarioRunnerMode } from '@/lib/scenarioRecorder/types';
 import { useExtensionBridgeProbe } from '@/lib/scenarioRecorder/useExtensionBridgeProbe';
+import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 
 type ScenarioRecordModalProps = {
   alias: string | null;
@@ -49,7 +50,7 @@ export function ScenarioRecordModal({
   const [noOverlay, setNoOverlay] = useState(false);
   const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
   const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
-  const [engine, setEngine] = useState<'cloackbrowser'>('cloackbrowser');
+  const [engine, setEngine] = useState<BrowserEngineId>('cloakbrowser');
   const [engineHydrated, setEngineHydrated] = useState(false);
 
   const noOverlayPrefKey = useMemo(() => `stitch.recorder.noOverlay.${alias || 'global'}`, [alias]);
@@ -86,8 +87,8 @@ export function ScenarioRecordModal({
         setUrl(built.startUrl);
 
         const profileEngine = record?.settings?.engine;
-        if (profileEngine === 'cloackbrowser') {
-          setEngine(profileEngine);
+        if (profileEngine) {
+          setEngine(normalizeBrowserEngine(profileEngine));
         }
 
         const proxy = record?.settings?.network?.proxy;
@@ -211,14 +212,14 @@ export function ScenarioRecordModal({
       // best effort only
     }}, [isOpen, runnerMode, runnerModePrefKey]);
 
-  // Engine preference (cloackbrowser only)
+  // Engine preference (defaults to cloakbrowser; hydrated from profile settings)
   useEffect(() => {
     if (!isOpen) return;
     try {
-      setEngine('cloackbrowser');
+      setEngine('cloakbrowser');
       setEngineHydrated(true);
     } catch {
-      setEngine('cloackbrowser');
+      setEngine('cloakbrowser');
       setEngineHydrated(true);
     }
   }, [isOpen, enginePrefKey]);

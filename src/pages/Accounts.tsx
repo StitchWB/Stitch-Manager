@@ -12,10 +12,11 @@ import type { ProviderName } from '../types/ui';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { useUIState } from '../hooks/useUIState';
 import {
-  getOrCreateFingerprintProfile,
-  saveFingerprintProfile,
   listFingerprintProfiles,
   deleteFingerprintProfile,
+  getProfileSettings,
+  saveProfileSettings,
+  createDefaultProfileSettings,
   openStandaloneFingerprintProfileAndRememberUrl,
 } from '@/lib/backend';
 import { t } from '../lib/i18n';
@@ -326,9 +327,8 @@ export default function Accounts() {
 
   const handleCreateStandaloneProfile = useCallback(async () => {
     try {
-      const profile = await getOrCreateFingerprintProfile({ email: null });
       const alias = `standalone_profile_${Date.now()}@local.profile`;
-      await saveFingerprintProfile({ email: alias, profile });
+      await saveProfileSettings({ alias, settings: createDefaultProfileSettings() });
       toast.success(`${t('accounts.profileCreateSuccess')}: ${alias}`);
       await loadProfiles();
       handleEntityFilterChange('profiles');
@@ -340,7 +340,7 @@ export default function Accounts() {
     }
   }, [loadProfiles, handleEntityFilterChange]);
 
-  const { visibleProfileItems } = useProfilesViewModel({
+  const { visibleProfileItems, shardAvailable } = useProfilesViewModel({
     profileAliases,
     accounts: storeAccounts,
     searchQuery,
@@ -390,8 +390,10 @@ export default function Accounts() {
     if (!selectedAccounts.length) return;
     const settled = await Promise.allSettled(
       selectedAccounts.map(async acc => {
-        const profile = await getOrCreateFingerprintProfile({ email: acc.email });
-        await saveFingerprintProfile({ email: acc.email, profile });
+        const existing = await getProfileSettings({ alias: acc.email });
+        if (!existing) {
+          await saveProfileSettings({ alias: acc.email, settings: createDefaultProfileSettings() });
+        }
       })
     );
     const success = settled.filter(s => s.status === 'fulfilled').length;
@@ -563,6 +565,7 @@ export default function Accounts() {
               profileAliases={profileAliases}
               profilesLoading={profilesLoading}
               visibleProfileItems={visibleProfileItems}
+              shardAvailable={shardAvailable}
               onEditProfile={handleEditProfile}
               onOpenStandaloneProfile={handleOpenStandaloneProfile}
               onDeleteProfile={handleDeleteProfile}

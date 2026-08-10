@@ -13,6 +13,7 @@ interface ProfilesSectionProps {
   customUrl: string;
   className?: string;
   skeletonCount?: number;
+  shardAvailable?: boolean;
 }
 
 export function ProfilesSection({
@@ -26,6 +27,7 @@ export function ProfilesSection({
   customUrl,
   className,
   skeletonCount = 6,
+  shardAvailable = false,
 }: ProfilesSectionProps) {
   return (
     <div className={className ?? 'flex flex-col h-full'}>
@@ -42,6 +44,7 @@ export function ProfilesSection({
           onOpenScenarios={onOpenScenarios}
           openTarget={openTarget}
           customUrl={customUrl}
+          shardAvailable={shardAvailable}
         />
       )}
     </div>
