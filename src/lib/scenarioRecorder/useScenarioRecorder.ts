@@ -9,6 +9,7 @@ import {
 } from '@/lib/backend/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
 import type { ScenarioRecordStatus, ScenarioRunnerMode } from './types';
+import type { BrowserEngineId } from '@/lib/browser/engines';
 
 type ScenarioRecorderOptions = {
   alias: string;
@@ -18,7 +19,7 @@ type ScenarioRecorderOptions = {
   configJson?: string | null;
   noOverlay?: boolean;
   runnerMode?: ScenarioRunnerMode;
-  engine?: 'cloackbrowser';
+  engine?: BrowserEngineId;
 };
 
 type ScenarioRecorderState = {

@@ -53,6 +53,7 @@ import {
 import { useReplayPresets, type ReplayRunPreset } from '@/lib/scenarioRecorder/replayPresets';
 import { useReplayVersioning } from '@/lib/scenarioRecorder/useReplayVersioning';
 import type { ScenarioRunnerMode } from '@/lib/scenarioRecorder/types';
+import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 
 type ScenarioReplayModalProps = {
   alias: string | null;
@@ -110,7 +111,7 @@ export function ScenarioReplayModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
   const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
-  const [engine, setEngine] = useState<'cloackbrowser'>('cloackbrowser');
+  const [engine, setEngine] = useState<BrowserEngineId>('cloakbrowser');
   const [engineHydrated, setEngineHydrated] = useState(false);
   const [recentScenarioPaths, setRecentScenarioPaths] = useState<string[]>([]);
   const [indexedScenarios, setIndexedScenarios] = useState<ScenarioRecordItem[]>([]);
@@ -302,14 +303,14 @@ export function ScenarioReplayModal({
       // best effort only
     }}, [isOpen, runnerMode, runnerModePrefKey]);
 
-  // Engine preference (cloackbrowser only)
+  // Engine preference (defaults to cloakbrowser; hydrated from profile settings)
   useEffect(() => {
     if (!isOpen) return;
     try {
-      setEngine('cloackbrowser');
+      setEngine('cloakbrowser');
       setEngineHydrated(true);
     } catch {
-      setEngine('cloackbrowser');
+      setEngine('cloakbrowser');
       setEngineHydrated(true);
     }
   }, [isOpen, enginePrefKey]);
@@ -383,8 +384,8 @@ export function ScenarioReplayModal({
         setStartUrl(built.startUrl);
 
         const profileEngine = record?.settings?.engine;
-        if (profileEngine === 'cloackbrowser') {
-          setEngine(profileEngine);
+        if (profileEngine) {
+          setEngine(normalizeBrowserEngine(profileEngine));
         }
 
         if (!scenarioPathTouchedRef.current) {

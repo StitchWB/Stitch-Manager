@@ -18,8 +18,9 @@ import type { LogVerbosity } from '../../constants/logging';
 import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
 import { Button, GlassCard, Input, Select, Toggle, Textarea, Badge } from '@/components/ui';
 import { NumberInput } from '../ui/NumberInput';
+import type { BrowserEngineId } from '@/lib/browser/engines';
 
-export type BrowserEngineId = 'cloakbrowser' | 'shardbrowser';
+export type { BrowserEngineId };
 
 interface EngineInfo {
   id: string;

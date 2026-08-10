@@ -48,12 +48,6 @@ export const defaultSettings: ProfileSettingsV1 = {
     longitude: null,
   },
   hardware: {
-    userAgent: null,
-    platform: null,
-    hardwareConcurrency: null,
-    deviceMemory: null,
-    screenWidth: null,
-    screenHeight: null,
     browserWindow: {
       mode: 'fit-screen',
       width: null,
@@ -1056,17 +1050,19 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
     setError(null);
 
     try {
-      const source = await loadFingerprintProfile({ email: currentAlias });
-      if (!source) {
-        throw new Error('Source profile not found');
-      }
-
       const aliases = await listFingerprintProfiles();
       const duplicateAlias = buildUniqueDuplicateAlias(currentAlias, aliases);
-      await saveFingerprintProfile({
-        email: duplicateAlias,
-        profile: source as BrowserFingerprintProfile,
-      });
+
+      // Copy the fingerprint JSON only when the source actually has one
+      // (legacy profiles). Settings-only profiles have no fingerprint file —
+      // identity is owned by the engine, so there is nothing to copy.
+      const source = await loadFingerprintProfile({ email: currentAlias });
+      if (source) {
+        await saveFingerprintProfile({
+          email: duplicateAlias,
+          profile: source as BrowserFingerprintProfile,
+        });
+      }
 
       const normalized = mergeSettings({
         ...draft,

@@ -95,6 +95,7 @@ export {
   openStandaloneFingerprintProfileAndRememberUrl,
   getProfileSettings,
   saveProfileSettings,
+  createDefaultProfileSettings,
   type BrowserFingerprintProfile,
   type ProfileSettingsRecord,
   type ProfileSettingsV1,

@@ -7,6 +7,7 @@
 import { safeInvoke } from '../core';
 import { buildRunnerConfigFromProfileSettings } from '@/lib/scenarioRecorder/configBuilder';
 import { getProxyLibraryRuntimeProxyUrl } from './proxyLibrary';
+import type { BrowserEngineId } from '@/lib/browser/engines';
 
 const DEFAULT_SETTINGS_WINDOW = {
   mode: 'fit-screen' as const,
@@ -61,12 +62,9 @@ export interface ProfileSettingsGeo {
 }
 
 export interface ProfileSettingsHardware {
-  userAgent?: string | null;
-  platform?: string | null;
-  hardwareConcurrency?: number | null;
-  deviceMemory?: number | null;
-  screenWidth?: number | null;
-  screenHeight?: number | null;
+  // Identity fields (userAgent/platform/hardwareConcurrency/deviceMemory/
+  // screenWidth/screenHeight) intentionally absent: the browser engine owns
+  // identity at launch; nothing consumed them.
   browserWindow?: ProfileSettingsBrowserWindow | null;
 }
 
@@ -92,7 +90,7 @@ export interface ProfileSettingsV1 {
   geo: ProfileSettingsGeo;
   hardware: ProfileSettingsHardware;
   storage: ProfileSettingsStorage;
-  engine?: 'cloackbrowser' | null;
+  engine?: BrowserEngineId | null;
 }
 
 export interface ProfileSettingsRecord {
@@ -101,6 +99,23 @@ export interface ProfileSettingsRecord {
   cookies?: string | null;
   notes?: string | null;
   updatedAt?: string | null;
+}
+
+/**
+ * Default launcher settings for a freshly created profile.
+ *
+ * Profile creation writes this record (the alias registry lives in the
+ * profile_settings table); no fake fingerprint JSON is generated — identity
+ * is owned by the browser engine at launch.
+ */
+export function createDefaultProfileSettings(): ProfileSettingsV1 {
+  return {
+    version: 1,
+    network: {},
+    geo: {},
+    hardware: { browserWindow: { ...DEFAULT_SETTINGS_WINDOW } },
+    storage: {},
+  };
 }
 
 export async function getOrCreateFingerprintProfile(params: {
@@ -195,7 +210,25 @@ export async function openStandaloneFingerprintProfile(params: {
       if (proxyUrl) args.push('--proxy', proxyUrl);
     }
   } catch { /* best-effort */ }
-  return safeInvoke<string>('run_python_script', { scriptPath: 'python/open_browser.py', args });
+  const result = await safeInvoke<string>('run_python_script', { scriptPath: 'python/open_browser.py', args });
+  const trimmed = (result ?? '').trim();
+  // Detect backend-reported launch failures so callers show error toasts
+  // instead of treating a failed launch as success.
+  if (trimmed.startsWith('error:')) {
+    throw new Error(trimmed);
+  }
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    // Not JSON — the string is the raw result, return as before.
+    return result;
+  }
+  if (parsed && typeof parsed === 'object' && (parsed as Record<string, unknown>).success === false) {
+    const err = (parsed as Record<string, unknown>).error;
+    throw new Error(typeof err === 'string' && err ? err : 'Browser launch failed');
+  }
+  return result;
 }
 
 export async function openStandaloneFingerprintProfileAndRememberUrl(params: {

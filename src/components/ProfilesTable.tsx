@@ -2,13 +2,16 @@ import { t } from "@/lib/i18n";
 import { Globe, Trash2, Settings, FolderKanban, MoreHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
 
 import { LayoutGrid } from 'lucide-react';
 import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
 import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
-import { getProfileSettings } from '@/lib/backend/modules/profiles';
+import { getProfileSettings, saveProfileSettings } from '@/lib/backend/modules/profiles';
 import { ProfileScenariosPanel } from './scenarioRecorder/ProfileScenariosPanel';
-import { Badge, Button, ConfirmActionButton, EmptyState, IconButton, ProviderLogo, Tooltip } from '@/components/ui';
+import { Badge, Button, ConfirmActionButton, ConfirmDialog, EmptyState, IconButton, ProviderLogo, Tooltip } from '@/components/ui';
+import { EngineToggle } from './profiles/EngineToggle';
+import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 
 export interface ProfileItem {
   alias: string;
@@ -19,6 +22,7 @@ export interface ProfileItem {
   usedForKiro?: boolean;
   usedTargets?: string[];
   healthStatus?: 'ready' | 'needs_link' | 'no_session_path';
+  engine?: BrowserEngineId;
 }
 
 function getHealthBadgeConfig(healthStatus: NonNullable<ProfileItem['healthStatus']>): {
@@ -43,6 +47,7 @@ interface ProfilesTableProps {
   onDelete: (alias: string) => Promise<void>;
   openTarget: string;
   customUrl: string;
+  shardAvailable?: boolean;
 }
 
 export default function ProfilesTable({
@@ -52,7 +57,8 @@ export default function ProfilesTable({
   onEdit,
   onDelete,
   openTarget,
-  customUrl
+  customUrl,
+  shardAvailable = false,
 }: ProfilesTableProps) {
   const [activeRecordAlias, setActiveRecordAlias] = useState<string | null>(null);
   const [activeRecordMeta, setActiveRecordMeta] = useState<{
@@ -65,6 +71,14 @@ export default function ProfilesTable({
   const [replayInitialScenarioPath, setReplayInitialScenarioPath] = useState<string | null>(null);
   const [scenariosAlias, setScenariosAlias] = useState<string | null>(null);
   const [openMenuAlias, setOpenMenuAlias] = useState<string | null>(null);
+  const [engineOverrides, setEngineOverrides] = useState<Record<string, BrowserEngineId>>({});
+  const [engineConfirm, setEngineConfirm] = useState<{
+    alias: string;
+    newEngine: BrowserEngineId;
+    currentEngine: BrowserEngineId;
+    hasPriorUsage: boolean;
+  } | null>(null);
+  const [engineSaving, setEngineSaving] = useState<string | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLElement | null>(null);
   const [menuPosition, setMenuPosition] = useState<{top: number;left: number;} | null>(null);
@@ -232,6 +246,65 @@ export default function ProfilesTable({
     openReplayModal(alias, initialPath);
   };
 
+  const resolveProfileEngine = (profile: ProfileItem): BrowserEngineId => {
+    return engineOverrides[profile.alias] ?? profile.engine ?? 'cloakbrowser';
+  };
+
+  const handleEngineChange = async (alias: string, newEngine: BrowserEngineId) => {
+    const current = engineOverrides[alias] ?? profiles.find(p => p.alias === alias)?.engine ?? 'cloakbrowser';
+    if (current === newEngine) return;
+
+    // Check for prior usage: the profile was launched (storage.lastUrl set)
+    // OR an engine was explicitly saved before and differs from the new one
+    // (browser state may exist for that engine). Fresh profiles switch silently.
+    let hasPriorUsage = false;
+    try {
+      const record = await getProfileSettings({ alias });
+      const lastUrl = record?.settings?.storage?.lastUrl?.trim();
+      const explicitEngine = record?.settings?.engine ?? null;
+      hasPriorUsage =
+        Boolean(lastUrl) ||
+        (explicitEngine !== null && normalizeBrowserEngine(explicitEngine) !== newEngine);
+    } catch {
+      // If we can't load settings, don't block the switch.
+    }
+
+    if (hasPriorUsage) {
+      setEngineConfirm({ alias, newEngine, currentEngine: current, hasPriorUsage });
+      return;
+    }
+
+    await applyEngineChange(alias, newEngine);
+  };
+
+  const applyEngineChange = async (alias: string, newEngine: BrowserEngineId) => {
+    setEngineSaving(alias);
+    try {
+      const record = await getProfileSettings({ alias });
+      const settings = record?.settings ?? {
+        version: 1,
+        network: {},
+        geo: {},
+        hardware: {},
+        storage: {},
+      };
+      await saveProfileSettings({ alias, settings: { ...settings, engine: newEngine } });
+      setEngineOverrides(prev => ({ ...prev, [alias]: newEngine }));
+      toast.success(t('accounts.profileEngineSaved'));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('accounts.profileEngineSaveFailed'));
+    } finally {
+      setEngineSaving(null);
+    }
+  };
+
+  const confirmEngineChange = async () => {
+    if (!engineConfirm) return;
+    const { alias, newEngine } = engineConfirm;
+    setEngineConfirm(null);
+    await applyEngineChange(alias, newEngine);
+  };
+
   if (profiles.length === 0) {
     return (
       <EmptyState
@@ -305,6 +378,17 @@ export default function ProfilesTable({
                       t('accounts.profileKindLinked') :
                       t('accounts.profileKindStandalone')}
                     </span>
+                    {!isLinked && (
+                      <div className="w-28">
+                        <EngineToggle
+                          value={resolveProfileEngine(profile)}
+                          onChange={(engine) => void handleEngineChange(profile.alias, engine)}
+                          shardAvailable={shardAvailable}
+                          size="sm"
+                          disabled={engineSaving === profile.alias}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -521,6 +605,17 @@ export default function ProfilesTable({
         }}
         defaultUrl={resolveTargetUrl(openTarget, customUrl)}
         defaultScenarioPath={replayInitialScenarioPath ?? undefined} />
+
+      <ConfirmDialog
+        isOpen={Boolean(engineConfirm)}
+        onClose={() => setEngineConfirm(null)}
+        onConfirm={() => void confirmEngineChange()}
+        title={t('accounts.profileEngineConfirmTitle')}
+        message={t('accounts.profileEngineConfirmMessage')}
+        confirmText={t('accounts.profileEngineConfirmAction')}
+        cancelText={t('common.cancel')}
+        variant="warning"
+      />
 
     </div>);
 

@@ -10,6 +10,7 @@ import {
 } from '@/lib/backend/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
 import type { ScenarioRunnerMode } from './types';
+import type { BrowserEngineId } from '@/lib/browser/engines';
 
 type ScenarioReplayOptions = {
   alias: string;
@@ -21,7 +22,7 @@ type ScenarioReplayOptions = {
   continueOnError?: boolean;
   headless?: boolean;
   runnerMode?: ScenarioRunnerMode;
-  engine?: 'cloackbrowser';
+  engine?: BrowserEngineId;
 };
 
 export type ScenarioReplayStatus =

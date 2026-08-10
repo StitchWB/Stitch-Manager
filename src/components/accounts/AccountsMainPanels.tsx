@@ -44,6 +44,7 @@ interface AccountsMainPanelsProps {
   profileAliases: string[];
   profilesLoading: boolean;
   visibleProfileItems: ProfileItem[];
+  shardAvailable?: boolean;
   onEditProfile: (alias: string) => void;
   onOpenStandaloneProfile: (alias: string, target: string, customUrl?: string) => Promise<void>;
   onDeleteProfile: (alias: string) => Promise<void>;
@@ -78,6 +79,7 @@ export function AccountsMainPanels({
   profileAliases,
   profilesLoading,
   visibleProfileItems,
+  shardAvailable = false,
   onEditProfile,
   onOpenStandaloneProfile,
   onDeleteProfile,
@@ -164,6 +166,7 @@ export function AccountsMainPanels({
             <ProfilesSection
               profilesLoading={profilesLoading}
               profiles={visibleProfileItems}
+              shardAvailable={shardAvailable}
               onEdit={onEditProfile}
               onOpen={onOpenStandaloneProfile}
               onDelete={onDeleteProfile}
@@ -206,6 +209,7 @@ export function AccountsMainPanels({
             skeletonCount={4}
             profilesLoading={profilesLoading}
             profiles={visibleProfileItems}
+            shardAvailable={shardAvailable}
             onEdit={onEditProfile}
             onOpen={onOpenStandaloneProfile}
             onDelete={onDeleteProfile}

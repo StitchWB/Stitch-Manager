@@ -4,6 +4,7 @@ import {
   getProxyLibraryRuntimeProxyMap,
   getProxyLibraryRuntimeProxyUrl,
 } from '@/lib/backend/modules/proxyLibrary';
+import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 
 export type RunnerConfigBuildResult = {
   config: Record<string, unknown>;
@@ -15,7 +16,7 @@ export type RunnerConfigBuildResult = {
 type BuildOptions = {
   defaultUrl: string;
   fallbackUrl?: string;
-  engine?: 'cloackbrowser';
+  engine?: BrowserEngineId;
 };
 
 function parseRuntimeProxyUrl(raw: string): {
@@ -138,7 +139,7 @@ export async function buildRunnerConfigFromProfileSettings(
   const maximizeOnStart = Boolean(rawWindow?.maximizeOnStart);
 
   const config: Record<string, unknown> = {
-    engine: options.engine ?? 'cloackbrowser',
+    engine: normalizeBrowserEngine(options.engine ?? settings?.engine),
     locale: settings?.geo?.locale ?? undefined,
     timezone_id: settings?.geo?.timezone ?? 'Auto',
     geolocation: hasManualGeo
