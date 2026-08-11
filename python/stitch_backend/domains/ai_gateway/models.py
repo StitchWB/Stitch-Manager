@@ -66,6 +66,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
+from stitch_backend.security.fernet_at_rest import EncryptedText
 
 
 def _utcnow() -> datetime:
@@ -214,11 +215,11 @@ class CredentialSecret(Base):
         ForeignKey("ai_gateway_credentials.id", ondelete="CASCADE"),
         nullable=False, unique=True, index=True,
     )
-    # ponytail: plain-text for now (matches existing ai_proxy_settings/accounts
-    # storage in this codebase — no encryption-at-rest anywhere yet). Swap the
-    # column for a ciphertext blob + `keyring`-backed key-wrap without changing
-    # callers if/when secret-at-rest encryption is added project-wide.
-    secret_value: Mapped[str] = mapped_column(Text, nullable=False)
+    # ponytail: encrypted at rest via EncryptedText TypeDecorator (Fernet).
+    # Previously plaintext — see plan §3.5 decision 13.  Swap the key
+    # (TOKEN_ENCRYPTION_KEY env or .db_key file) and all values become
+    # unreadable; back up the key before rotating.
+    secret_value: Mapped[str] = mapped_column(EncryptedText, nullable=False)
     secret_type: Mapped[str] = mapped_column(
         String, default="api_key", comment="api_key | oauth_access_token | session_token",
     )

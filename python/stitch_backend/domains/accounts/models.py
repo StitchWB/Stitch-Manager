@@ -20,6 +20,7 @@ from sqlalchemy import JSON, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
+from stitch_backend.security.fernet_at_rest import EncryptedText
 
 
 def _utcnow() -> datetime:
@@ -39,7 +40,7 @@ class Account(Base):
         String, nullable=False, index=True
     )
     password: Mapped[str | None] = mapped_column(
-        String, comment="Encrypted at rest"
+        EncryptedText, comment="Encrypted at rest"
     )
     provider: Mapped[str] = mapped_column(
         String, nullable=False, index=True, comment="kiro, windsurf, openai, ..."
@@ -59,10 +60,10 @@ class Account(Base):
 
     # ═══════ Tokens ═════════════════════════════════════════════════════════
     token: Mapped[str | None] = mapped_column(
-        Text, comment="Primary access token"
+        EncryptedText, comment="Primary access token"
     )
     refresh_token: Mapped[str | None] = mapped_column(
-        Text, comment="OAuth refresh token"
+        EncryptedText, comment="OAuth refresh token"
     )
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), comment="Token expiration"
@@ -77,7 +78,7 @@ class Account(Base):
         String, comment="Kiro device binding"
     )
     api_key: Mapped[str | None] = mapped_column(
-        String, comment="For API-key providers (OpenAI, Fireworks)"
+        EncryptedText, comment="For API-key providers (OpenAI, Fireworks)"
     )
 
     # ═══════ Machine ════════════════════════════════════════════════════════
@@ -96,10 +97,10 @@ class Account(Base):
         String, comment="Browser profile directory on disk"
     )
     cookies: Mapped[str | None] = mapped_column(
-        Text, comment="JSON-serialised cookies"
+        EncryptedText, comment="JSON-serialised cookies"
     )
     session_data: Mapped[str | None] = mapped_column(
-        Text, comment="localStorage / sessionStorage dump"
+        EncryptedText, comment="localStorage / sessionStorage dump"
     )
     fingerprint: Mapped[dict | None] = mapped_column(
         JSON, comment="Browser fingerprint config (UA, WebGL, canvas, ...)"

@@ -98,6 +98,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Ensure tables exist (dev convenience; use Alembic in production)
     await create_all_tables()
 
+    # Encrypt-at-rest migration: re-encrypt any plaintext secrets left over
+    # from before EncryptedText was applied (idempotent — skips encrypted rows).
+    try:
+        from stitch_backend.security.fernet_at_rest import migrate_plaintext_to_encrypted
+        await migrate_plaintext_to_encrypted()
+    except Exception as _exc:
+        logger.error("Encrypted-at-rest migration failed: %s", _exc)
+
+    # Plugin distribution: activate → heartbeat → sync (never blocks startup)
+    try:
+        from stitch_backend.domains.plugin_distribution import run_startup_sequence
+        await run_startup_sequence()
+    except Exception as _exc:
+        logger.warning("Plugin distribution startup skipped: %s", _exc)
+
     # Create scheduler tables (raw SQL, not ORM models)
     from stitch_backend.database import get_session_factory
     from stitch_backend.domains.scheduler.service import ensure_tables as _sched_tables
