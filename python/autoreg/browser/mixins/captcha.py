@@ -5,8 +5,6 @@ Provides high-level CAPTCHA detection and solving capabilities
 
 from collections.abc import Callable
 
-from autoreg.captcha.turnstile import TurnstileSolver
-
 
 class CaptchaMixin:
     """
@@ -45,6 +43,22 @@ class CaptchaMixin:
 
         return {"type": None, "present": False, "solved": False, "details": {}}
 
+    def _get_turnstile_solver_class(self):
+        """Resolve TurnstileSolver: engine-pack first, autoreg.captcha fallback.
+
+        Returns ``None`` only when both sources are unavailable (which
+        shouldn't happen in practice — autoreg.captcha is always present
+        in the open-core binary).
+        """
+        from autoreg.plugin.engine_pack import get_solver_class
+
+        cls = get_solver_class("turnstile", "TurnstileSolver")
+        if cls is not None:
+            return cls
+        from autoreg.captcha.turnstile import TurnstileSolver
+
+        return TurnstileSolver
+
     def _detect_turnstile(self) -> dict:
         """
         Detect Cloudflare Turnstile CAPTCHA
@@ -53,7 +67,8 @@ class CaptchaMixin:
             dict with Turnstile detection results
         """
         try:
-            solver = TurnstileSolver(self.browser, log_callback=self._get_log_callback())
+            solver_cls = self._get_turnstile_solver_class()
+            solver = solver_cls(self.browser, log_callback=self._get_log_callback())
             return solver.detect()
         except Exception as e:
             self.log(f"[CAPTCHA] Turnstile detection error: {e}")
@@ -67,7 +82,8 @@ class CaptchaMixin:
             bool: True if solved
         """
         try:
-            solver = TurnstileSolver(self.browser, log_callback=self._get_log_callback())
+            solver_cls = self._get_turnstile_solver_class()
+            solver = solver_cls(self.browser, log_callback=self._get_log_callback())
             return solver.is_solved()
         except Exception:
             return False
@@ -84,7 +100,8 @@ class CaptchaMixin:
             bool: True if solved successfully
         """
         try:
-            solver = TurnstileSolver(self.browser, log_callback=self._get_log_callback())
+            solver_cls = self._get_turnstile_solver_class()
+            solver = solver_cls(self.browser, log_callback=self._get_log_callback())
             return solver.solve(method=method, timeout=timeout)
         except Exception as e:
             self.log(f"[CAPTCHA] Turnstile solve error: {e}")
