@@ -47,13 +47,27 @@ class StepResult:
 
 
 def build_selector(candidate: SelectorCandidate) -> str:
-    """Build a DrissionPage selector string from kind + value."""
+    """Build a DrissionPage selector string from kind + value.
+
+    Conversion table (prepared_area/plugin_packages/README.md):
+      css    → verbatim (DrissionPage auto-detects bare CSS)
+      text   → text:{value}
+      aria   → aria:{value}        (DrissionPage aria: prefix)
+      testid → css:[data-testid="{value}"]
+      attr   → @{value}            (e.g. @placeholder=..., @data-id=...)
+      xpath  → verbatim (DrissionPage auto-detects bare XPath)
+      role   → @:{value}          (legacy, not in README table)
+    """
     k = candidate.kind.lower()
     v = candidate.value
     if k == "text":
         return f"text:{v}"
     if k == "testid":
         return f'css:[data-testid="{v}"]'
+    if k == "attr":
+        return f"@{v}"
+    if k == "aria":
+        return f"aria:{v}"
     if k == "role":
         return f"@:{v}"
     return v

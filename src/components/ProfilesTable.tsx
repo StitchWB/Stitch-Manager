@@ -9,7 +9,7 @@ import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
 import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
 import { getProfileSettings, saveProfileSettings } from '@/lib/backend/modules/profiles';
 import { ProfileScenariosPanel } from './scenarioRecorder/ProfileScenariosPanel';
-import { Badge, Button, ConfirmActionButton, ConfirmDialog, EmptyState, IconButton, ProviderLogo, Tooltip } from '@/components/ui';
+import { Badge, Button, ConfirmActionButton, ConfirmDialog, EmptyState, IconButton, Tooltip } from '@/components/ui';
 import { EngineToggle } from './profiles/EngineToggle';
 import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 
@@ -79,6 +79,7 @@ export default function ProfilesTable({
     hasPriorUsage: boolean;
   } | null>(null);
   const [engineSaving, setEngineSaving] = useState<string | null>(null);
+  const [deleteAlias, setDeleteAlias] = useState<string | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLElement | null>(null);
   const [menuPosition, setMenuPosition] = useState<{top: number;left: number;} | null>(null);
@@ -317,28 +318,7 @@ export default function ProfilesTable({
 
   return (
     <div className="flex flex-col h-full overflow-hidden px-2 sm:px-4">
-      <div className="hidden xl:grid grid-cols-[minmax(240px,1fr)_120px_minmax(150px,200px)_104px_minmax(130px,180px)_minmax(280px,auto)] gap-4 py-3 px-4 border-b border-white/10 sticky top-0 bg-void-base/95 backdrop-blur-md z-40">
-        <span className="text-xs font-semibold text-slate-400 tracking-wide">
-          {t('accounts.profileAlias')}
-        </span>
-        <span className="text-xs font-semibold text-slate-400 tracking-wide text-center">
-          {t('accounts.profileKind')}
-        </span>
-        <span className="text-xs font-semibold text-slate-400 tracking-wide">
-          {t('accounts.profileAccount')}
-        </span>
-        <span className="text-xs font-semibold text-slate-400 tracking-wide text-center">
-          {t('accounts.profileStatus')}
-        </span>
-        <span className="text-xs font-semibold text-slate-400 tracking-wide">
-          {t('accounts.profileUsage')}
-        </span>
-        <span className="text-xs font-semibold text-slate-400 tracking-wide text-right pr-4">
-          {t('common.actions')}
-        </span>
-      </div>
-
-      <div className="flex-1 overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10 pb-8 pt-2 space-y-1.5">
+      <div className="flex-1 overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10 pb-8 pt-2 space-y-1">
         {profiles.map((profile) => {
           const isLinked = Boolean(profile.linkedAccountEmail);
           const health = profile.healthStatus ? getHealthBadgeConfig(profile.healthStatus) : null;
@@ -346,94 +326,66 @@ export default function ProfilesTable({
           return (
             <div
               key={profile.alias}
-              className="relative rounded-lg border bg-vsc-panel/60 border-white/[0.04] hover:border-white/[0.12] hover:bg-vsc-panel transition-all duration-200 overflow-visible">
-
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(240px,1fr)_120px_minmax(150px,200px)_104px_minmax(130px,180px)_minmax(280px,auto)] gap-4 items-start xl:items-center px-3 py-2">
-                <div className="flex flex-col min-w-0 xl:pr-2">
-                  <span className="text-sm leading-5 font-bold text-slate-100 truncate">
-                    {profile.displayName ?? profile.alias}
-                  </span>
-                  {profile.displayName && profile.displayName !== profile.alias ?
-                  <span className="text-[11px] text-slate-500 truncate font-mono">
-                      {profile.alias}
-                    </span> :
-                  null}
-                  {profile.linkedAccountEmail ?
-                  <span className="text-[11px] text-slate-500 truncate">
-                      {profile.linkedAccountEmail}
-                    </span> :
-                  null}
-                </div>
-
-                <div className="flex xl:justify-center">
-                  <div className="flex flex-col items-center gap-1">
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide border ${
-                      isLinked ?
-                      'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' :
-                      'bg-white/5 text-slate-300 border-white/10'}`
-                      }>
-
-                      {isLinked ?
-                      t('accounts.profileKindLinked') :
-                      t('accounts.profileKindStandalone')}
+              className="group rounded-md border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.14] transition-colors">
+              <div className="flex items-center gap-3 px-3 py-1.5 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center min-w-0">
+                    <span className="text-sm font-semibold text-slate-100 truncate">
+                      {profile.displayName ?? profile.alias}
                     </span>
-                    {!isLinked && (
-                      <div className="w-28">
-                        <EngineToggle
-                          value={resolveProfileEngine(profile)}
-                          onChange={(engine) => void handleEngineChange(profile.alias, engine)}
-                          shardAvailable={shardAvailable}
-                          size="sm"
-                          disabled={engineSaving === profile.alias}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 min-w-0">
-                  {profile.linkedAccountEmail ? (
-                    <>
-                      {profile.linkedProvider ? (
-                        <ProviderLogo provider={profile.linkedProvider} size={14} className="shrink-0" />
-                      ) : null}
-                      <span className="text-[11px] text-slate-300 truncate">
-                        {profile.linkedAccountEmail}
+                    <span className="ml-2 inline-flex gap-1 shrink-0">
+                      <span
+                        className={`text-[10px] px-1.5 py-px rounded border ${
+                        isLinked ?
+                        'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' :
+                        'bg-white/5 text-slate-300 border-white/10'}`
+                        }>
+                        {isLinked ?
+                        t('accounts.profileKindLinked') :
+                        t('accounts.profileKindStandalone')}
                       </span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-slate-600">—</span>
-                  )}
-                </div>
-
-                <div className="flex xl:justify-center">
-                  {health ? (
-                    <Badge variant={health.variant} size="sm" withDot className="normal-case tracking-normal border-0">
-                      {health.label}
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-slate-600">—</span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1 min-w-0">
-                  {profile.usedForKiro ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-300 border border-sky-500/20">
-                      {t('accounts.profileUsageKiro')}
+                      {profile.usedForKiro ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                          {t('accounts.profileUsageKiro')}
+                        </span>
+                      ) : null}
+                      {profile.usedTargets?.map(target => (
+                        <span key={target} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-slate-400 border border-white/10">
+                          {target}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                  {profile.linkedAccountEmail ? (
+                    <span className="text-[11px] font-mono text-slate-500 truncate block">
+                      {profile.linkedAccountEmail}
+                    </span>
+                  ) : profile.displayName && profile.displayName !== profile.alias ? (
+                    <span className="text-[11px] font-mono text-slate-500 truncate block">
+                      {profile.alias}
                     </span>
                   ) : null}
-                  {profile.usedTargets?.map(target => (
-                    <span key={target} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-slate-400 border border-white/10">
-                      {target}
-                    </span>
-                  ))}
-                  {!profile.usedForKiro && (!profile.usedTargets || profile.usedTargets.length === 0) ? (
-                    <span className="text-xs text-slate-600">—</span>
-                  ) : null}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-start xl:justify-end gap-1 border-t xl:border-t-0 border-white/5 pt-2 xl:pt-0 min-w-0 max-w-full">
+                {!isLinked ? (
+                  <div className="w-28 shrink-0">
+                    <EngineToggle
+                      value={resolveProfileEngine(profile)}
+                      onChange={(engine) => void handleEngineChange(profile.alias, engine)}
+                      shardAvailable={shardAvailable}
+                      size="sm"
+                      disabled={engineSaving === profile.alias}
+                    />
+                  </div>
+                ) : null}
+
+                {health ? (
+                  <Badge variant={health.variant} size="sm" withDot className="shrink-0 normal-case tracking-normal border-0">
+                    {health.label}
+                  </Badge>
+                ) : null}
+
+                <div className="flex items-center gap-0.5 shrink-0">
                   <Tooltip content={`${t('accounts.openProfileAt')}${t('accounts.profiles_table.overlay')}`}>
                     <IconButton
                       type="button"
@@ -482,6 +434,17 @@ export default function ProfilesTable({
                       </IconButton>
                     </Tooltip>
                   ) : null}
+                  <Tooltip content={t('accounts.deleteProfile')}>
+                    <IconButton
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                      onClick={() => setDeleteAlias(profile.alias)}
+                    >
+                      <Trash2 size={14} />
+                    </IconButton>
+                  </Tooltip>
                   <div className="relative">
                     <Tooltip content={t('common.more') || 'More'}>
                       <IconButton
@@ -615,6 +578,21 @@ export default function ProfilesTable({
         confirmText={t('accounts.profileEngineConfirmAction')}
         cancelText={t('common.cancel')}
         variant="warning"
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteAlias)}
+        onClose={() => setDeleteAlias(null)}
+        onConfirm={() => {
+          const alias = deleteAlias;
+          setDeleteAlias(null);
+          if (alias) void onDelete(alias);
+        }}
+        title={t('accounts.deleteProfile')}
+        message={t('accounts.deleteProfileConfirm', { alias: deleteAlias ?? '' })}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
+        variant="danger"
       />
 
     </div>);

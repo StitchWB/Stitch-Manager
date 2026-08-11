@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -91,6 +93,11 @@ class PluginScenarioProvider:
         self._browser_factory = browser_factory
         self._log_callback: Callable[[str], None] | None = None
         self._browser: Any | None = None
+        # Per-run fresh user-data dir (set by _create_browser).  None when
+        # browser_factory is used (tests) or before browser launch.  Kept
+        # on success for session reuse; cleaned up on failure (see
+        # _cleanup_profile_dir).
+        self._profile_dir: str | None = None
         self._last_executor_result: ExecutorResult | None = None
 
         # Read + validate manifest.
@@ -255,6 +262,7 @@ class PluginScenarioProvider:
             browser = self._create_browser(proxy)
         except Exception as exc:
             self.log(f"browser launch failed: {exc}")
+            self._cleanup_profile_dir()
             return self._fail(email, f"browser launch failed: {exc}")
         self._browser = browser
 
@@ -266,6 +274,11 @@ class PluginScenarioProvider:
             "account.password": password,
             "account.name": name,
         }
+
+        # Track whether the run reached account.save (terminal success) so
+        # the finally block can decide whether to keep or clean up the
+        # per-run profile dir.  False on every path except a completed run.
+        run_succeeded = False
 
         try:
             # Build the execution plan: dependencies in declared order,
@@ -310,6 +323,9 @@ class PluginScenarioProvider:
                 self._last_executor_result = result
                 self._failure_manifest = self._manifest
                 self._failure_scenario = self._scenario
+                # account.save is terminal — success + completed means the
+                # profile dir holds a real session worth keeping.
+                run_succeeded = result.success and result.completed
                 return self._build_result(result, email, password, name)
 
             # No steps to execute (empty plan — should not happen since the
@@ -321,6 +337,8 @@ class PluginScenarioProvider:
         finally:
             self._close_browser(browser)
             self._browser = None
+            if not run_succeeded:
+                self._cleanup_profile_dir()
 
     def close(self) -> None:
         """Cleanup browser resources (matches BaseProvider.close)."""
@@ -335,6 +353,16 @@ class PluginScenarioProvider:
         The executor duck-types the browser (``.get``, ``.ele``, ``.url``,
         ``.cookies``, ``.run_js``).  ``browser_factory`` kwarg allows tests
         to inject a mock without launching a real browser.
+
+        A fresh user-data dir is created per run via ``tempfile.mkdtemp`` so
+        cookies/sessions never leak between runs (run #9 regression: the
+        default persistent profile inherited the previous run's AWS cookies
+        and showed the password page for the wrong email).  The path is
+        stored on ``self._profile_dir`` so ``_build_result`` can record it
+        truthfully as ``browser_profile_path`` for the account's session
+        reuse.  Cleanup: on failure (account.save not reached) the dir is
+        removed to avoid temp-dir litter; on success it is kept for session
+        reuse (OS temp cleanup handles it eventually).
         """
         if self._browser_factory is not None:
             return self._browser_factory()
@@ -347,7 +375,14 @@ class PluginScenarioProvider:
                 "DrissionPage not available for plugin scenario execution"
             ) from exc
 
+        # Fresh per-run user-data dir — no cookie/session leakage between
+        # runs.  Mirrors the established pattern in autoreg/browser/base.py
+        # (_setup_chrome_options) and providers/openai/browser.py.
+        profile_dir = tempfile.mkdtemp(prefix="stitch-plugin-profile-")
+        self._profile_dir = profile_dir
+
         options = ChromiumOptions()
+        options.set_user_data_path(profile_dir)
         if self._headless:
             options.headless()
         if proxy:
@@ -367,6 +402,20 @@ class PluginScenarioProvider:
                     pass
                 break
 
+    def _cleanup_profile_dir(self) -> None:
+        """Remove the per-run profile dir on failure (no session worth keeping).
+
+        On success the dir is kept for session reuse (the account's
+        ``browser_profile_path`` points at it).  On failure — browser
+        launch error, scenario exception, or a failed step before
+        ``account.save`` was reached — the dir is removed to avoid
+        temp-dir litter.  OS temp cleanup is the final backstop.
+        """
+        if self._profile_dir is None:
+            return
+        shutil.rmtree(self._profile_dir, ignore_errors=True)
+        self._profile_dir = None
+
     def _build_result(
         self,
         result: ExecutorResult,
@@ -380,8 +429,15 @@ class PluginScenarioProvider:
         store (e.g. ``account.email``, ``account.session``).  These are
         mapped to the keys the downstream ``RegistrationService._run()``
         reads via ``result.get(...)``.
+
+        ``kiro_account.browser_profile_path`` records the per-run temp
+        profile dir truthfully (the temp path IS the profile for this
+        account) so the downstream service can persist it for session
+        reuse — same shape as the built-in kiro_v2 provider's result.
         """
         outputs = result.outputs or {}
+        session_data = outputs.get("account.session") or {}
+        profile_path = self._profile_dir or ""
         return {
             "success": result.success,
             "provider": self._service,
@@ -391,7 +447,13 @@ class PluginScenarioProvider:
             "token": outputs.get("account.token"),
             "refresh_token": outputs.get("account.refresh_token"),
             "api_key": outputs.get("account.api_key"),
-            "session_data": outputs.get("account.session") or {},
+            "session_data": session_data,
+            "kiro_account": {
+                "email": outputs.get("account.email") or email or "",
+                "browser_profile_path": profile_path,
+                "cookies": session_data.get("cookies", "[]"),
+                "session_data": session_data.get("session_data", "{}"),
+            },
             "error": result.error,
             "steps_completed": result.steps_completed,
             "human_pause": result.human_pause,
@@ -431,7 +493,7 @@ class PluginScenarioProvider:
             manifest.version,
             scenario,
             self._last_executor_result,
-            artifacts={},
+            artifacts=self._last_executor_result.artifacts or None,
             consent=consent,
         )
 
