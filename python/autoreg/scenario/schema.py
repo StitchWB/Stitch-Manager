@@ -12,7 +12,21 @@ StepKind = Literal[
     "assert",
     "manual.pause",
     "proxy.switch",
+    # v2 extensions (plan §4.3) — declarative, executed by the engine.
+    "extract",
+    "branch",
+    "imap.otp",
+    "captcha.solve",
+    "stripe.fill_checkout",
+    "totp.register",
+    "account.save",
+    # Tolerated unknown kinds are mapped to "noop" by parse_scenario_v2.
+    "noop",
 ]
+
+# Engine API version (plan §3.1 item 1).  Bumped when the engine gains
+# capabilities; old binaries tolerate newer manifests via the noop fallback.
+ENGINE_API: int = 2
 
 
 @dataclass(frozen=True)

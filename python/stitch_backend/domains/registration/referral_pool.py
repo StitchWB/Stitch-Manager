@@ -18,8 +18,6 @@ from typing import Any, cast
 
 from sqlalchemy import select
 
-from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
-
 logger = logging.getLogger(__name__)
 
 _PROVIDER = "v0_app"
@@ -49,6 +47,7 @@ class ReferralPoolService:
         ``ref_max_count``.  Returns a serialised dict or ``None`` when the pool
         is empty.
         """
+        from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
         from stitch_backend.domains.accounts.models import Account
 
         stmt = (
@@ -124,6 +123,7 @@ class ReferralPoolService:
     @staticmethod
     def get_signup_url(donor: dict[str, Any] | None) -> str:
         """Return the signup URL to use: donor ref_url or the seed URL."""
+        from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
         if donor and donor.get("refUrl"):
             return cast("str", donor["refUrl"])
         return V0_APP_SIGNUP_URL

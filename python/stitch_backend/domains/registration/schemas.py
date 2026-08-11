@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from autoreg.providers.base import ProviderId
+from autoreg.provider_ids import ProviderId
 
 
 class StartRegistrationRequest(BaseModel):

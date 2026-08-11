@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from sqlalchemy import text
 
-from autoreg.providers.base import ProviderId
+from autoreg.provider_ids import ProviderId
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
