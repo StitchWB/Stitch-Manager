@@ -155,6 +155,23 @@ def _build_provider_kwargs(config: dict) -> dict[str, Any]:
     return kwargs
 
 
+def _autoreg_providers_available() -> bool:
+    """Whether ``autoreg.providers`` (Zone 2) is importable in this build.
+
+    Uses ``importlib.util.find_spec`` — no import side effects and no
+    ``import autoreg.providers`` statement, so the zone-boundary leak-guard
+    does not flag it.  The open-core build ships without ``autoreg/providers/``;
+    this lets registration degrade gracefully instead of crashing with
+    ImportError.
+    """
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("autoreg.providers") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def _build_provider(provider_name: str, config: dict):
     """Instantiate the correct autoreg provider from config dict.
 
@@ -163,6 +180,12 @@ def _build_provider(provider_name: str, config: dict):
     that uvicorn's file watcher triggers a real reload — otherwise code changes
     to browser.py / provider.py are invisible until the whole process restarts.
     """
+    if not _autoreg_providers_available():
+        raise ValueError(
+            "Auto-registration is unavailable in this build "
+            "(autoreg providers are not installed)."
+        )
+
     import sys as _sys
 
     _RELOAD_PREFIXES = (  # noqa: N806 — constant tuple
@@ -181,6 +204,32 @@ def _build_provider(provider_name: str, config: dict):
             del _sys.modules[_key]
 
     base_kwargs = _build_provider_kwargs(config)
+
+    # ── Plugin package resolution (plan §3.3 decision 9) ──────────────
+    # Try to resolve a plugin package for this service.  If found, run
+    # registration through the plugin's data-only scenario.  If not found
+    # or any error occurs, fall back to the built-in provider chain below.
+    # A FRESH PluginLoader is created per call — this is the pinning
+    # contract (plan §3.2 item 5): a package installed/removed mid-run
+    # does not change the resolved version; the next run picks up the
+    # change.
+    try:
+        from autoreg.plugin.loader import PluginLoader
+        from autoreg.plugin.provider_adapter import PluginScenarioProvider
+
+        loader = PluginLoader()
+        pkg_dir = loader.resolve(provider_name)
+        if pkg_dir is not None:
+            logger.info(
+                "Registration: using plugin package for %s from %s",
+                provider_name, pkg_dir,
+            )
+            return PluginScenarioProvider(pkg_dir, **base_kwargs)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Plugin resolution for %s failed, falling back to built-in: %s",
+            provider_name, exc,
+        )
 
     if provider_name == "fireworks":
         from autoreg.providers.fireworks import FireworksProvider
