@@ -3189,6 +3189,39 @@ export interface Translations {
       withAuth: string;
       withoutAuth: string;
     }
+    telemetry: {
+      title: string;
+      description: string;
+      consentLabel: string;
+      consentDescription: string;
+      pendingTitle: string;
+      pendingDescription: string;
+      refresh: string;
+      emptyTitle: string;
+      emptyDescription: string;
+      colPlugin: string;
+      colStep: string;
+      colDate: string;
+      colSize: string;
+      scrubbedBadge: string;
+      notScrubbedBadge: string;
+      preview: string;
+      send: string;
+      discard: string;
+      sending: string;
+      discarding: string;
+      sendSuccess: string;
+      sendFailed: string;
+      discardSuccess: string;
+      discardFailed: string;
+      loadFailed: string;
+      previewLoadFailed: string;
+      previewTitle: string;
+      sensitiveDroppedNotice: string;
+      scrubbedNotice: string;
+      close: string;
+      consentOffNotice: string;
+    }
     settingsSaved: string;
     title: string;
   }

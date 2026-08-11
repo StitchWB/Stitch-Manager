@@ -1,6 +1,6 @@
-"""App logs ORM model — matches the Rust ``app_logs`` table.
+"""App logs ORM model — maps to the ``app_logs`` table.
 
-Schema (Rust migrations.rs)::
+Schema::
 
     CREATE TABLE app_logs (
         id TEXT PRIMARY KEY,

@@ -514,3 +514,21 @@ export {
   type FillICloudPoolResult,
   type AuthenticateICloudResult,
 } from './modules/icloudPool';
+
+// ============================================
+// Telemetry / Failure Reports
+// ============================================
+
+export {
+  getPendingReports,
+  getReportPreview,
+  sendReport,
+  discardReport,
+  type PendingReport,
+  type GetPendingReportsResponse,
+  type ReportPreview,
+  type SendReportResult,
+  type DiscardReportResult,
+} from './modules/telemetry';
+
+export * as telemetry from './modules/telemetry';

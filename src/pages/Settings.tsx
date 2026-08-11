@@ -45,6 +45,7 @@ import {
   GoogleSheetsSettingsSection,
   ExtensionSettingsSection,
   BackgroundManagerSettingsSection,
+  TelemetrySection,
 } from '../components/settings';
 
 const SETTINGS_SECRET_MASK = '********';
@@ -857,6 +858,7 @@ export default function Settings() {
               }}
             />
             <DatabaseSection dbPath={dbPath} onCopy={copy} />
+            <TelemetrySection />
           </div>
         );
       case 'automation':

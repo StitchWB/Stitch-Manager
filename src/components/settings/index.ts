@@ -12,3 +12,4 @@ export { ICloudEmailSection } from './ICloudEmailSection';
 export { GoogleSheetsSettingsSection } from './GoogleSheetsSettingsSection';
 export { ExtensionSettingsSection } from './ExtensionSettingsSection';
 export { BackgroundManagerSettingsSection } from './BackgroundManagerSettingsSection';
+export { TelemetrySection } from './TelemetrySection';

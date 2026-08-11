@@ -84,6 +84,7 @@ async def bootstrap() -> None:
     import stitch_backend.domains.oauth.commands  # noqa: F401
     import stitch_backend.domains.opencode_config.commands  # noqa: F401
     import stitch_backend.domains.patcher.commands  # noqa: F401  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.commands  # noqa: F401
     import stitch_backend.domains.profiles.commands  # noqa: F401
     import stitch_backend.domains.prompts.commands  # noqa: F401
     import stitch_backend.domains.proxy_library.commands  # noqa: F401

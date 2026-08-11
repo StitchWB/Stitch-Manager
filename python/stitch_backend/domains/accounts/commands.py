@@ -299,7 +299,7 @@ async def cmd_archive_account(params: dict) -> Any:
 
 @register_command("validate_account", readonly=True)
 async def cmd_validate_account(params: dict) -> bool:
-    """Validate account exists and is active (matches Rust: bool)."""
+    """Validate account exists and is active (returns bool)."""
     account_id = str(params.get("accountId") or params.get("id", ""))
 
     async def _op(session):
