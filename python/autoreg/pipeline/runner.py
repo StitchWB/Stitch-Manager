@@ -137,10 +137,14 @@ class RegistrationPipeline:
         if not self._browser:
             return {"success": False, "error": "No browser available"}
         try:
-            return step.execute(self._browser)
+            result = step.execute(self._browser)
         except Exception as e:
             logger.error(f"Step {step.id} crashed: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+        # matched_candidate sensor (plan §3.4 item 11): 0-based index of the
+        # weighted SelectorCandidate that matched, or None when none were used.
+        result.setdefault("matched_candidate", None)
+        return result
 
     def _drain_config_commands(self) -> None:
         while True:
