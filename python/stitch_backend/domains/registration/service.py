@@ -224,7 +224,7 @@ def _build_provider(provider_name: str, config: dict):
                 "Registration: using plugin package for %s from %s",
                 provider_name, pkg_dir,
             )
-            return PluginScenarioProvider(pkg_dir, **base_kwargs)
+            return PluginScenarioProvider(pkg_dir, loader=loader, **base_kwargs)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Plugin resolution for %s failed, falling back to built-in: %s",
@@ -1010,6 +1010,18 @@ class RegistrationService:
                     "error": error_msg,
                     "message": f"Registration failed: {error_msg}",
                 })
+
+                # ── Pending failure report (plan §7 Phase 4) ──────────────
+                # On plugin scenario failure with telemetry consent, build a
+                # scrubbed bundle and store it as a pending report.  Never
+                # raises — telemetry must not break a run.
+                try:
+                    from stitch_backend.domains.plugin_distribution.failure_hook import (
+                        maybe_save_failure_report,
+                    )
+                    await maybe_save_failure_report(provider, result)
+                except Exception as _report_exc:  # noqa: BLE001
+                    logger.debug("Failure report hook skipped: %s", _report_exc)
 
             return cast("dict[Any, Any]", result)
 

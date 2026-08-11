@@ -20,10 +20,16 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..scenario.parse_v2 import parse_scenario_v2
+from .dependency_resolver import (
+    DependencyResolutionError,
+    ResolvedDependency,
+    resolve_dependencies,
+)
 from .executor import ScenarioExecutor
 from .manifest import validate_manifest
 
@@ -33,6 +39,7 @@ if TYPE_CHECKING:
     from ..scenario.schema import ScenarioStep, ScenarioV2
     from .capabilities import StepResult
     from .executor import ExecutorResult
+    from .loader import PluginLoader
     from .manifest import PluginManifest
 
 logger = logging.getLogger(__name__)
@@ -75,6 +82,7 @@ class PluginScenarioProvider:
         thirty_three_mail_config: dict[str, Any] | None = None,
         mailtm_inbox_config: dict[str, Any] | None = None,
         browser_factory: Callable[[], Any] | None = None,
+        loader: PluginLoader | None = None,
         **_unused: Any,
     ) -> None:
         self._package_dir = Path(package_dir)
@@ -83,6 +91,7 @@ class PluginScenarioProvider:
         self._browser_factory = browser_factory
         self._log_callback: Callable[[str], None] | None = None
         self._browser: Any | None = None
+        self._last_executor_result: ExecutorResult | None = None
 
         # Read + validate manifest.
         manifest_path = self._package_dir / "plugin.json"
@@ -97,6 +106,23 @@ class PluginScenarioProvider:
         self._profile: dict[str, Any] = {}
         self._selectors: dict[str, Any] = {}
         self._load_entry_files()
+
+        # Resolve dependencies (plan §3.3 — depends chaining).  Pre-parse
+        # dep scenarios in __init__ so errors surface before register()
+        # opens any browser.  Unresolvable deps store an error string in
+        # _dep_error; register() returns it as a failure before browser
+        # launch (does NOT raise — the dispatch layer must not fall back to
+        # built-in when the main package IS installed but a dep is missing).
+        self._dependencies: list[ResolvedDependency] = []
+        self._dep_error: str | None = None
+        # Attribution: which package's step was executing when the run
+        # ended (dep manifest on dep failure, main manifest otherwise).
+        # Used by build_failure_report so the bundle's plugin_id/version
+        # come from the package that actually failed.
+        self._failure_manifest: PluginManifest = self._manifest
+        self._failure_scenario: ScenarioV2 | None = self._scenario
+        if self._manifest.depends:
+            self._resolve_dependencies(loader)
 
     # ── Entry-file loading ───────────────────────────────────────────────
 
@@ -146,6 +172,28 @@ class PluginScenarioProvider:
 
     # ── Duck-typed provider interface ───────────────────────────────────
 
+    def _resolve_dependencies(self, loader: PluginLoader | None) -> None:
+        """Resolve + pre-parse dependency scenarios.
+
+        Stores the error string in ``self._dep_error`` if any dependency
+        cannot be resolved or its scenario cannot be parsed.  The error is
+        returned from ``register()`` before opening any browser — does NOT
+        raise, so the dispatch layer does not fall back to built-in when
+        the main package IS installed but a dep is missing.
+        """
+        if loader is None:
+            self._dep_error = (
+                "plugin declares dependencies but no loader was provided "
+                "(cannot resolve dependencies)"
+            )
+            return
+        try:
+            self._dependencies = resolve_dependencies(self._manifest, loader)
+        except DependencyResolutionError as exc:
+            self._dep_error = str(exc)
+        except Exception as exc:  # noqa: BLE001 — surface any resolution error
+            self._dep_error = f"dependency resolution failed: {exc}"
+
     def set_log_callback(self, callback: Callable[[str], None]) -> None:
         """Store a log callback (matches CommonProvider.set_log_callback)."""
         self._log_callback = callback
@@ -166,6 +214,11 @@ class PluginScenarioProvider:
     ) -> dict[str, Any]:
         """Execute the plugin scenario and return a result dict.
 
+        If the package declares dependencies, each dependency's scenario is
+        executed IN ORDER before the main scenario.  All scenarios share
+        ONE browser instance and ONE store so outputs from dep steps (e.g.
+        ``account.email``) flow into main steps.
+
         Returns a dict compatible with built-in providers::
             {success, provider, email, password, name, session_data,
              error, token, refresh_token, api_key, ...}
@@ -175,6 +228,27 @@ class PluginScenarioProvider:
 
         if self._scenario is None:
             return self._fail(email, "plugin scenario not loaded")
+
+        # Dependency resolution errors surface BEFORE opening any browser.
+        if self._dep_error is not None:
+            self.log(self._dep_error)
+            return self._fail(email, self._dep_error)
+
+        # Generate defaults for missing credentials.  Built-in providers
+        # do this internally; the plugin path has nobody to do it, so we
+        # generate here before seeding the store.  Reuses the existing
+        # generators in autoreg.shared (no new dependencies).
+        if not password:
+            from ..shared.password_utils import generate_secure_password
+
+            password = generate_secure_password()
+        if not name:
+            if email:
+                from ..shared.name_utils import generate_name_from_email
+
+                name = generate_name_from_email(email)
+            else:
+                name = "User"
 
         # Create browser.
         try:
@@ -186,6 +260,7 @@ class PluginScenarioProvider:
 
         # Seed store with credentials so scenario steps can reference them
         # via ${account.email} / ${account.password} / ${account.name}.
+        # The same store dict is shared across all dep + main scenarios.
         store: dict[str, Any] = {
             "account.email": email,
             "account.password": password,
@@ -193,19 +268,53 @@ class PluginScenarioProvider:
         }
 
         try:
-            executor = _EventEmittingExecutor(
-                self._scenario,
-                browser,
-                store=store,
-                imap_config=self._imap_config,
-                transport=transport,
-            )
-            self.log(
-                f"executing {len(self._scenario.steps)} steps "
-                f"from plugin package {self._manifest.id}@{self._manifest.version}"
-            )
-            result: ExecutorResult = executor.run()
-            return self._build_result(result, email, password, name)
+            # Build the execution plan: dependencies in declared order,
+            # then the main package's scenario.  Each entry is a
+            # (manifest, scenario) pair so failure attribution can point
+            # at the package whose step actually failed.
+            plan: list[tuple[PluginManifest, ScenarioV2]] = [
+                (dep.manifest, dep.scenario) for dep in self._dependencies
+            ]
+            plan.append((self._manifest, self._scenario))
+
+            # Billing skip: honor KIRO_SKIP_BILLING=1 (parity with the
+            # built-in KIRO_V2_SKIP_BILLING).  Remove stripe.fill_checkout
+            # steps from all scenarios (deps + main) before execution.
+            if _should_skip_billing(kwargs):
+                plan = [(m, _strip_billing_steps(s)) for m, s in plan]
+                self.log("billing disabled — stripe.fill_checkout skipped")
+
+            result: ExecutorResult | None = None
+            for manifest, scenario in plan:
+                executor = _EventEmittingExecutor(
+                    scenario,
+                    browser,
+                    store=store,
+                    imap_config=self._imap_config,
+                    transport=transport,
+                )
+                self.log(
+                    f"executing {len(scenario.steps)} steps "
+                    f"from plugin package {manifest.id}@{manifest.version}"
+                )
+                result = executor.run()
+                if not result.success:
+                    # Stop on first failure; attribute to this package.
+                    self._last_executor_result = result
+                    self._failure_manifest = manifest
+                    self._failure_scenario = scenario
+                    return self._build_result(result, email, password, name)
+
+            # All scenarios succeeded — the last result is the main scenario's.
+            if result is not None:
+                self._last_executor_result = result
+                self._failure_manifest = self._manifest
+                self._failure_scenario = self._scenario
+                return self._build_result(result, email, password, name)
+
+            # No steps to execute (empty plan — should not happen since the
+            # main scenario is always in the plan, but guard anyway).
+            return self._fail(email, "no scenario steps to execute")
         except Exception as exc:
             self.log(f"scenario execution failed: {exc}")
             return self._fail(email, str(exc))
@@ -297,6 +406,53 @@ class PluginScenarioProvider:
             "email": email or "",
             "error": error,
         }
+
+    def build_failure_report(self, *, consent: bool = False) -> dict[str, Any] | None:
+        """Build a scrubbed failure-report bundle from the last executor run.
+
+        Called by the backend's failure hook after ``register()`` returns a
+        failed result.  Returns ``None`` when there is no executor result or
+        when consent is off (mirrors :func:`build_report_bundle`).
+
+        Attribution: the bundle's ``plugin_id`` / ``version`` / ``step``
+        come from the package whose step actually failed — a dependency's
+        manifest on dep failure, the main manifest on main failure.
+        """
+        if self._last_executor_result is None:
+            return None
+        scenario = self._failure_scenario or self._scenario
+        if scenario is None:
+            return None
+        from .reporter import build_report_bundle
+
+        manifest = self._failure_manifest or self._manifest
+        return build_report_bundle(
+            manifest.id,
+            manifest.version,
+            scenario,
+            self._last_executor_result,
+            artifacts={},
+            consent=consent,
+        )
+
+
+def _should_skip_billing(kwargs: dict[str, Any]) -> bool:
+    """Check if billing should be skipped (env var or kwargs flag)."""
+    return (
+        os.environ.get("KIRO_SKIP_BILLING", "0") == "1"
+        or os.environ.get("KIRO_V2_SKIP_BILLING", "0") == "1"
+        or bool(kwargs.get("skipBilling") or kwargs.get("skip_billing"))
+    )
+
+
+def _strip_billing_steps(scenario: ScenarioV2) -> ScenarioV2:
+    """Remove stripe.fill_checkout steps from a scenario (billing skip)."""
+    from dataclasses import replace
+
+    filtered = [s for s in scenario.steps if s.kind != "stripe.fill_checkout"]
+    if len(filtered) == len(scenario.steps):
+        return scenario
+    return replace(scenario, steps=filtered)
 
 
 class _EventEmittingExecutor(ScenarioExecutor):

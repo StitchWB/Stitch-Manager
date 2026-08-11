@@ -1,6 +1,6 @@
 """Composed flows ORM model.
 
-Matches Rust migration 018_composed_flows.sql::
+Schema (migration 018_composed_flows.sql)::
 
     CREATE TABLE composed_flows (
       id TEXT PRIMARY KEY,

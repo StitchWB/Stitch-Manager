@@ -84,7 +84,7 @@ async def cmd_send_python_job_control(params: dict) -> bool:
 
 @register_command("run_python_script")
 async def cmd_run_python_script(params: dict) -> str:
-    """Run a Python script and return stdout (matches Rust: String)."""
+    """Run a Python script and return stdout as str."""
     import os as _os
 
     script = params.get("scriptPath", params.get("script", ""))

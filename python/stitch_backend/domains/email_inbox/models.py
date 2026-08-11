@@ -1,6 +1,6 @@
 """Email Inbox ORM models — profiles and sync state tables.
 
-Matches Rust migration ``019_email_inbox_profiles.sql``::
+Schema (migration ``019_email_inbox_profiles.sql``)::
 
     email_inbox_profiles:
         id, label, provider, account_id, connect_input_json, created_at, updated_at

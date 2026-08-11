@@ -1,7 +1,8 @@
 """Activation service — exchange codes for HWID-bound tokens (plan §3.1 item 3).
 
 The activation file (``.activation``) stores the client's credential:
-``{token, pubkey, entitlements, server_url, last_server_time, degraded}``.
+``{token, pubkey, entitlements, server_url, last_server_time, degraded,
+last_successful_heartbeat}``.
 It is written with chmod 0600 (best-effort on POSIX).  The token is NEVER
 logged.
 """
@@ -39,6 +40,7 @@ class ActivationState:
     server_url: str = ""
     last_server_time: str = ""
     degraded: bool = False
+    last_successful_heartbeat: str = ""
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ActivationState:
@@ -53,6 +55,7 @@ class ActivationState:
             server_url=str(raw.get("server_url", "")),
             last_server_time=str(raw.get("last_server_time", "")),
             degraded=bool(raw.get("degraded", False)),
+            last_successful_heartbeat=str(raw.get("last_successful_heartbeat", "")),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -140,6 +143,14 @@ class ActivationService:
         if state is None:
             return
         state.last_server_time = server_time
+        self._save(state)
+
+    def record_heartbeat_success(self, timestamp: str) -> None:
+        """Record the last successful heartbeat timestamp (plan §3.2 item 8)."""
+        state = self.load()
+        if state is None:
+            return
+        state.last_successful_heartbeat = timestamp
         self._save(state)
 
     def _save(self, state: ActivationState) -> None:

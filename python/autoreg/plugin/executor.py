@@ -8,6 +8,7 @@ duck-typed DrissionPage-style browser (``.get``, ``.ele``, ``.url``,
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -28,6 +29,8 @@ from .capabilities import (
 )
 
 logger = logging.getLogger(__name__)
+
+_TEMPLATE_RE = re.compile(r"\$\{([^}]+)\}")
 
 
 @dataclass
@@ -126,18 +129,57 @@ class ScenarioExecutor:
         try:
             result = handler(step)
             if result.error and step.sensitive and step.value:
-                result.error = result.error.replace(step.value, "***")
+                result.error = self._scrub_sensitive(step, result.error)
             return result
         except ExecutorError:
             raise
         except Exception as e:  # noqa: BLE001
             error = str(e)
             if step.sensitive and step.value:
-                error = error.replace(step.value, "***")
+                error = self._scrub_sensitive(step, error)
             return StepResult(step.id, step.kind, False, error=error)
+
+    def _scrub_sensitive(self, step: ScenarioStep, error: str) -> str:
+        """Scrub ``step.value`` and its resolved form from ``error``.
+
+        Templated sensitive values (``${account.password}``) must scrub both
+        the template literal and the resolved secret, since the resolved
+        value is what reaches the browser and may appear in exceptions.
+        """
+        error = error.replace(step.value or "", "***")
+        if step.value and "${" in step.value:
+            resolved = self._resolve_value(step.value, warn=False)
+            if resolved and resolved != step.value:
+                error = error.replace(resolved, "***")
+        return error
 
     def _timeout_s(self, step: ScenarioStep) -> float:
         return max(step.timeout_ms / 1000.0, 0.1)
+
+    # ── value templating ───────────────────────────────────────────────
+
+    def _resolve_value(self, value: str | None, *, warn: bool = True) -> str:
+        """Resolve ``${key}`` placeholders against ``self._store``.
+
+        Plain keys (``account.email``, ``verification_code``, ...).  Missing
+        keys interpolate to empty string and emit a single warning per key
+        when ``warn`` is True.  Values without placeholders pass through
+        unchanged.  ``None`` -> ``""``.
+        """
+        if not value:
+            return ""
+        if "${" not in value:
+            return value
+
+        def _replace(match: re.Match[str]) -> str:
+            key = match.group(1)
+            if key in self._store:
+                return str(self._store[key])
+            if warn:
+                logger.warning("executor: missing store key %r in template", key)
+            return ""
+
+        return _TEMPLATE_RE.sub(_replace, value)
 
     # ── basic step handlers ────────────────────────────────────────────
 
@@ -168,7 +210,7 @@ class ScenarioExecutor:
             elem.clear()
         except Exception:  # noqa: BLE001
             pass
-        elem.input(step.value or "")
+        elem.input(self._resolve_value(step.value))
         return StepResult(step.id, step.kind, True, matched_candidate=idx)
 
     def _press(self, step: ScenarioStep) -> StepResult:

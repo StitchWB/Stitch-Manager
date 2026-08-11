@@ -3,7 +3,7 @@
 Stores per-alias browser profile settings (network, geo, hardware, storage)
 as JSON in SQLite.  Complements file-based fingerprint profiles.
 
-Table schema (matches Rust migration 016):
+Table schema (migration 016):
   - alias:       TEXT PK
   - config_json: TEXT NOT NULL  (versioned JSON blob)
   - cookies:     TEXT NULL

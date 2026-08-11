@@ -158,7 +158,7 @@ async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
         return await import_accounts_payload(session, payload_str)
 
     imported = await run_in_session(_op)
-    return cast("int", imported)  # int — matches Rust u64
+    return cast("int", imported)  # int
 
 
 # ── Models ──────────────────────────────────────────────────────────────────
@@ -589,7 +589,7 @@ async def cmd_get_provider_model_mappings(params: dict) -> list:
                 return []
         return []
 
-    return await run_in_session(_op)  # list — matches Rust Vec<ProviderModelMapping>
+    return await run_in_session(_op)  # list of ProviderModelMapping dicts
 
 
 @register_command("set_provider_model_mappings")
@@ -666,7 +666,7 @@ async def cmd_configure_ai_proxy_ide(params: dict) -> dict:
 
 @register_command("get_ai_proxy_ide_config_preview")
 async def cmd_get_ai_proxy_ide_config_preview(params: dict) -> str:
-    """Preview the IDE configuration that would be written (matches Rust: String)."""
+    """Preview the IDE configuration that would be written (returns str)."""
     ide = params.get("ide", params.get("ideType", ""))
     preview = {
         "ide": ide,
@@ -1159,7 +1159,7 @@ async def cmd_debug_run_ai_proxy_migration(params: dict) -> str:
         result = await session.execute(sql_text(sql))
         return f"Rows affected: {result.rowcount}"
 
-    return await run_in_session(_op)  # str — matches Rust String
+    return await run_in_session(_op)  # str
 
 
 @register_command("test_provider_connection")
