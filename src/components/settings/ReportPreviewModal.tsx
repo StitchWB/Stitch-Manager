@@ -17,6 +17,18 @@ interface ReportPreviewModalProps {
   consentOn: boolean;
 }
 
+/** Max inline string length in the JSON preview — longer values are replaced
+ * with a size placeholder so 500 KB base64 blobs don't flood the modal. */
+const MAX_INLINE_STRING = 300;
+
+function _truncateLongStringsReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === 'string' && value.length > MAX_INLINE_STRING) {
+    const sizeKb = (value.length / 1024).toFixed(1);
+    return `<${_key || 'value'}: ${sizeKb} KB>`;
+  }
+  return value;
+}
+
 export function ReportPreviewModal({
   reportId,
   onClose,
@@ -91,7 +103,9 @@ export function ReportPreviewModal({
     }
   };
 
-  const bundleJson = preview ? JSON.stringify(preview.bundle, null, 2) : '';
+  const bundleJson = preview
+    ? JSON.stringify(preview.bundle, _truncateLongStringsReplacer, 2)
+    : '';
 
   const renderBundle = () => {
     if (!bundleJson) return null;

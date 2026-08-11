@@ -39,10 +39,10 @@ export function ProfileSettingsModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50">
+      <div className="fixed inset-0 z-[70]">
         <div aria-label="Close profile settings backdrop" className="absolute inset-0 bg-black/60" onClick={vm.requestClose} role="presentation" />
 
-        <aside className="absolute right-0 top-0 h-full w-full max-w-[560px] border-l border-white/10 bg-vsc-panel shadow-2xl flex flex-col">
+        <aside className="absolute right-0 top-0 h-full w-full max-w-[560px] border-l border-white/10 bg-[#0f121e] shadow-2xl flex flex-col">
           <header className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-xs text-slate-400">{t('accounts.profileAlias') || 'Profile'}</div>
@@ -110,7 +110,7 @@ export function ProfileSettingsModal({
             }
           </div>
 
-          <footer className="sticky bottom-0 border-t border-white/10 px-5 py-4 flex items-center justify-between gap-3 bg-vsc-panel">
+          <footer className="sticky bottom-0 border-t border-white/10 px-5 py-4 flex items-center justify-between gap-3 bg-[#0f121e]">
             <div className="text-xs text-slate-400">{vm.dirty ? 'Unsaved changes' : 'No changes'}</div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={vm.requestClose} disabled={vm.saving || vm.duplicating || vm.deleting || vm.exportingBundle || vm.importingBundle}>{t('common.close') || 'Close'}</Button>

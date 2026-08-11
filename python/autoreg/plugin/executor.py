@@ -7,11 +7,15 @@ duck-typed DrissionPage-style browser (``.get``, ``.ele``, ``.url``,
 
 from __future__ import annotations
 
+import base64
 import logging
+import os
 import re
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from ..scenario.schema import ScenarioStep, ScenarioV2
@@ -33,6 +37,27 @@ logger = logging.getLogger(__name__)
 _TEMPLATE_RE = re.compile(r"\$\{([^}]+)\}")
 
 
+def _read_back_value(elem: Any) -> str | None:
+    """Read back an element's current value for fill verification.
+
+    DrissionPage ChromiumElement exposes value via ``attr("value")`` (the
+    pattern used throughout the repo — see kiro_v2/browser.py:1049,
+    kiro/browser.py:1132).  Falls back to a ``.value`` property if the
+    element lacks ``attr``.  Returns ``None`` when no read-back mechanism
+    is available (caller treats ``None`` as "trust the input").
+    """
+    attr_fn = getattr(elem, "attr", None)
+    if callable(attr_fn):
+        try:
+            return str(attr_fn("value") or "")
+        except Exception:  # noqa: BLE001 — best-effort read-back
+            return None
+    val = getattr(elem, "value", None)
+    if val is not None and not callable(val):
+        return str(val)
+    return None
+
+
 @dataclass
 class ExecutorResult:
     """Top-level result of running a scenario."""
@@ -46,6 +71,7 @@ class ExecutorResult:
     completed: bool = False
     step_results: list[StepResult] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
+    artifacts: dict[str, Any] = field(default_factory=dict)
 
 
 class ScenarioExecutor:
@@ -87,9 +113,10 @@ class ScenarioExecutor:
             try:
                 sr = self._dispatch(step)
             except ExecutorError as e:
-                result.success = False
-                result.error = str(e)
-                break
+                # Convert to a failed StepResult so on_failure applies uniformly
+                # (plan §4.3(b) — exception-caused failures are subject to
+                # on_failure=continue just like ordinary failed results).
+                sr = StepResult(step.id, step.kind, False, error=str(e))
 
             result.step_results.append(sr)
             result.steps_completed += 1
@@ -104,9 +131,28 @@ class ScenarioExecutor:
                 result.human_pause_reason = sr.human_pause_reason
                 break
             if not sr.success and not sr.skipped:
-                result.success = False
-                result.error = sr.error
-                break
+                on_failure = (step.meta or {}).get("on_failure", "abort")
+                if on_failure in ("continue", "skip"):
+                    # Non-fatal: mark skipped so downstream sees it, keep
+                    # success=False on the StepResult itself.  No artifacts
+                    # captured (keep bundles small); error stays in sr.error
+                    # and skip_reason for the step event/log.
+                    sr.skipped = True
+                    sr.skip_reason = f"on_failure=continue: {sr.error or 'failed'}"
+                    logger.info(
+                        "step %s failed but on_failure=continue — proceeding",
+                        step.id,
+                    )
+                else:
+                    if on_failure != "abort":
+                        logger.warning(
+                            "step %s has unknown on_failure=%r — treating as abort",
+                            step.id, on_failure,
+                        )
+                    result.success = False
+                    result.error = sr.error
+                    result.artifacts[step.id] = self._capture_failure_artifacts(step)
+                    break
             if sr.next_step_id:
                 target = self._steps_by_id.get(sr.next_step_id)
                 if target is not None:
@@ -155,6 +201,55 @@ class ScenarioExecutor:
 
     def _timeout_s(self, step: ScenarioStep) -> float:
         return max(step.timeout_ms / 1000.0, 0.1)
+
+    # ── failure artifact capture (plan §3.4) ───────────────────────────
+
+    _MAX_HTML_CHARS: int = 200_000
+
+    def _capture_failure_artifacts(self, step: ScenarioStep) -> dict[str, Any]:
+        """Capture screenshot + HTML of the current page for a failed step.
+
+        Sensitive steps return ``{}`` — their DOM may contain typed passwords
+        (privacy by construction).  Best-effort: browsers without
+        ``get_screenshot`` / ``html`` are skipped silently with a debug log.
+        """
+        if step.sensitive:
+            return {}
+        artifacts: dict[str, Any] = {}
+        tmp_path: str | None = None
+        try:
+            get_screenshot = getattr(self._browser, "get_screenshot", None)
+            if get_screenshot is not None:
+                with tempfile.NamedTemporaryFile(
+                    suffix=".png", delete=False
+                ) as f:
+                    tmp_path = f.name
+                get_screenshot(path=tmp_path)
+                data = Path(tmp_path).read_bytes()
+                if data:
+                    artifacts["screenshot_b64"] = base64.b64encode(data).decode(
+                        "ascii"
+                    )
+                    artifacts["screenshot_bytes"] = len(data)
+        except Exception as exc:  # noqa: BLE001 — best-effort capture
+            logger.debug(
+                "executor: screenshot capture failed for %s: %s", step.id, exc
+            )
+        finally:
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+        try:
+            html = getattr(self._browser, "html", None)
+            if html is not None:
+                artifacts["html"] = str(html)[: self._MAX_HTML_CHARS]
+        except Exception as exc:  # noqa: BLE001 — best-effort capture
+            logger.debug(
+                "executor: html capture failed for %s: %s", step.id, exc
+            )
+        return artifacts
 
     # ── value templating ───────────────────────────────────────────────
 
@@ -210,8 +305,57 @@ class ScenarioExecutor:
             elem.clear()
         except Exception:  # noqa: BLE001
             pass
-        elem.input(self._resolve_value(step.value))
-        return StepResult(step.id, step.kind, True, matched_candidate=idx)
+        resolved_value = self._resolve_value(step.value)
+        elem.input(resolved_value)
+
+        # Read-back verification: AWS signin remounts the form while the
+        # Shortbread cookie banner script loads, silently losing the typed
+        # value.  Re-input up to 2 more times if the value isn't reflected.
+        if resolved_value == "":
+            return StepResult(step.id, step.kind, True, matched_candidate=idx)
+
+        max_attempts = 3  # initial input + 2 retries
+        for attempt in range(max_attempts):
+            current = _read_back_value(elem)
+            if current is None:
+                logger.debug(
+                    "fill: step %s element has no value read-back; "
+                    "skipping verification",
+                    step.id,
+                )
+                return StepResult(step.id, step.kind, True, matched_candidate=idx)
+            if current == resolved_value:
+                return StepResult(step.id, step.kind, True, matched_candidate=idx)
+            if attempt < max_attempts - 1:
+                logger.debug(
+                    "fill: step %s value not reflected (attempt %d/%d); "
+                    "re-inputting after page remount",
+                    step.id, attempt + 1, max_attempts - 1,
+                )
+                time.sleep(0.7)
+                elem, idx = resolve_selector(
+                    self._browser, step, self._timeout_s(step)
+                )
+                if elem is None:
+                    return StepResult(
+                        step.id, step.kind, False,
+                        error="fill: element disappeared during read-back retry",
+                        matched_candidate=idx,
+                    )
+                try:
+                    elem.clear()
+                except Exception:  # noqa: BLE001
+                    pass
+                elem.input(resolved_value)
+
+        return StepResult(
+            step.id, step.kind, False,
+            error=(
+                f"fill: typed value not reflected after {max_attempts} attempts "
+                f"(page remount?)"
+            ),
+            matched_candidate=idx,
+        )
 
     def _press(self, step: ScenarioStep) -> StepResult:
         key = step.value or "Enter"
@@ -251,21 +395,55 @@ class ScenarioExecutor:
 
     def _assert(self, step: ScenarioStep) -> StepResult:
         meta = step.meta or {}
-        url_contains = meta.get("url_contains")
-        if url_contains:
-            if url_contains in (self._browser.url or ""):
-                return StepResult(step.id, step.kind, True)
-            return StepResult(
-                step.id, step.kind, False,
-                error=f"assert: url does not contain '{url_contains}'",
+        # Mode resolution — tolerant of both encodings:
+        #   new:    meta={"assert": "url_contains", "poll": true}  (kiro scenario)
+        #   legacy: meta={"url_contains": "<substring>"}           (old tests)
+        mode = meta.get("assert") or (
+            "url_contains" if "url_contains" in meta else "selector_exists"
+        )
+        if mode not in ("url_contains", "selector_exists"):
+            logger.warning(
+                "assert: step %s has unknown mode %r — falling back to selector_exists",
+                step.id, mode,
             )
-        elem, idx = resolve_selector(self._browser, step, self._timeout_s(step))
-        if elem is None:
-            return StepResult(
-                step.id, step.kind, False,
-                error="assert: element not found", matched_candidate=idx,
-            )
-        return StepResult(step.id, step.kind, True, matched_candidate=idx)
+            mode = "selector_exists"
+
+        poll = bool(meta.get("poll"))
+        deadline = time.time() + self._timeout_s(step)
+
+        if mode == "url_contains":
+            # Target substring: step.url first (kiro scenario encodes the
+            # expected OAuth callback URL there), then legacy meta keys.
+            target = step.url or meta.get("url") or meta.get("url_contains") or ""
+            if not target:
+                return StepResult(
+                    step.id, step.kind, False,
+                    error="assert: url_contains mode requires step.url or meta.url/url_contains",
+                )
+            while True:
+                if target in (self._browser.url or ""):
+                    return StepResult(step.id, step.kind, True)
+                if not poll or time.time() >= deadline:
+                    return StepResult(
+                        step.id, step.kind, False,
+                        error=f"assert: url does not contain '{target}'"
+                        + (" (poll timeout)" if poll else ""),
+                    )
+                time.sleep(1.0)
+
+        # selector_exists (default + unknown-mode fallback)
+        while True:
+            elem, idx = resolve_selector(self._browser, step, self._timeout_s(step))
+            if elem is not None:
+                return StepResult(step.id, step.kind, True, matched_candidate=idx)
+            if not poll or time.time() >= deadline:
+                return StepResult(
+                    step.id, step.kind, False,
+                    error="assert: element not found"
+                    + (" (poll timeout)" if poll else ""),
+                    matched_candidate=idx,
+                )
+            time.sleep(1.0)
 
     def _manual_pause(self, step: ScenarioStep) -> StepResult:
         reason = (step.meta or {}).get("reason", "manual.pause")
