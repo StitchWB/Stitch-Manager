@@ -2761,9 +2761,6 @@ export interface Translations {
       who_launches_extension: string;
       who_launches_native: string;
     }
-    scenario_replay_modal: {
-      engine_cloakbrowser: string;
-    }
   }
   scenarios: {
     copyPath: string;
