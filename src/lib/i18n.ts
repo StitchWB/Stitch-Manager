@@ -3898,6 +3898,50 @@ columnHeader: string;
     unknown: string;
   };
   }
+uiTexts: {
+    auto: string;
+    autoSelected: string;
+    cloakDesc: string;
+    configure: string;
+    current: string;
+    customReferral: string;
+    debugDesc: string;
+    debugTitle: string;
+    directConnection: string;
+    engineLabel: string;
+    engineShard: string;
+    errorLabel: string;
+    icloudDesc: string;
+    icloudForwarding: string;
+    icloudPrefill: string;
+    icloudQuota: string;
+    icloudTitle: string;
+    kiroPlan: string;
+    lastError: string;
+    launchIde: string;
+    manualSelected: string;
+    networkManage: string;
+    networkProxy: string;
+    noDonors: string;
+    noModelsFound: string;
+    noProxiesAvailable: string;
+    noProxy: string;
+    pauseHint: string;
+    providerLabel: string;
+    proxyLibraryTitle: string;
+    referralDonor: string;
+    refillingNow: string;
+    scenarioLabel: string;
+    scenarioSteps: string;
+    shardDesc: string;
+    stepsSummary: string;
+    test: string;
+    times: string;
+    tps: string;
+    unitCtx: string;
+    unitTok: string;
+    unlink: string;
+};
 }
 
 // ============================================

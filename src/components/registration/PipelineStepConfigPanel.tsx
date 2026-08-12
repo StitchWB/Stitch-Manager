@@ -1,4 +1,5 @@
 import { Pause, ToggleLeft, ToggleRight, ChevronLeft, Settings2 } from 'lucide-react';
+import { t } from '@/lib/i18n';
 import { Badge, GlassCard, IconButton, Button } from '@/components/ui';
 import { cn } from '../../lib/utils';
 
@@ -73,7 +74,7 @@ export function PipelineStepSummaryBar({
   return (
     <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-t border-white/[0.06] bg-white/[0.01]">
       <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500 shrink-0">
-        Сценарий
+        {t('uiTexts.scenarioLabel')}
       </span>
       <div className="flex items-center gap-1 flex-1 min-w-0">
         <Badge variant="info" size="sm">{enabledCount}/{steps.length}</Badge>
@@ -89,7 +90,7 @@ export function PipelineStepSummaryBar({
         rightIcon={<Settings2 className="w-3 h-3" />}
         className="text-[10px] text-slate-400 hover:text-slate-200 shrink-0 px-1.5 py-0.5"
       >
-        Настроить
+        {t('uiTexts.configure')}
       </Button>
     </div>
   );
@@ -156,9 +157,9 @@ export function PipelineStepConfigPanel({
           <ChevronLeft className="w-3.5 h-3.5" />
         </IconButton>
         <div className="flex-1">
-          <div className="text-xs font-semibold text-slate-200">Шаги сценария</div>
+          <div className="text-xs font-semibold text-slate-200">{t('uiTexts.scenarioSteps')}</div>
           <div className="text-[10px] text-slate-500">
-            {enabledCount}/{steps.length} активных · {activePauses} {activePauses === 1 ? 'пауза' : 'пауз'}
+            {t('uiTexts.stepsSummary', { enabled: enabledCount, total: steps.length, pauses: activePauses })}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -229,7 +230,7 @@ export function PipelineStepConfigPanel({
       </GlassCard>
 
       <p className="text-[10px] text-slate-600 px-1">
-        Паузы останавливают выполнение после завершения шага — вы можете проверить состояние и продолжить вручную.
+        {t('uiTexts.pauseHint')}
       </p>
     </div>
   );

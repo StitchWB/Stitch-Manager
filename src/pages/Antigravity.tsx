@@ -100,7 +100,9 @@ export default function Antigravity() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     refreshAuthFiles();
+    });
   }, [refreshAuthFiles]);
 
   const handleStartLogin = useCallback(async () => {

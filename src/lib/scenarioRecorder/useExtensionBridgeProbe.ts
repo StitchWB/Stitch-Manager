@@ -85,11 +85,14 @@ export function useExtensionBridgeProbe({ isOpen, runnerMode }: UseExtensionBrid
 
   useEffect(() => {
     if (!isOpen || runnerMode !== 'extension') return;
+      queueMicrotask(() => {
     void runProbe();
+      });
     return () => {};
   }, [isOpen, runProbe, runnerMode]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (!isOpen || runnerMode !== 'extension') {
       setState({
         checking: false,
@@ -99,6 +102,7 @@ export function useExtensionBridgeProbe({ isOpen, runnerMode }: UseExtensionBrid
         latencyMs: null,
       });
     }
+    });
   }, [isOpen, runnerMode]);
 
   const statusText = useMemo(() => {

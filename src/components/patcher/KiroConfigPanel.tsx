@@ -48,7 +48,9 @@ export default function KiroConfigPanel() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     loadData();
+    });
   }, [loadData]);
 
   const handleSave = async () => {
@@ -87,7 +89,7 @@ export default function KiroConfigPanel() {
   if (isLoading || !config) {
     return (
       <div className="bg-white/[0.02] border border-white/5 rounded-xl p-6">
-        <div className="text-center text-slate-500 text-sm">Loading...</div>
+        <div className="text-center text-slate-500 text-sm">{t('common.loading')}</div>
       </div>
     );
   }
@@ -135,9 +137,10 @@ export default function KiroConfigPanel() {
               <HelpCircle className="w-3 h-3 text-slate-600 hover:text-slate-400 cursor-help" />
             </Tooltip>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
+            <label className="relative inline-flex items-center cursor-pointer">
+              {/* eslint-disable-next-line no-restricted-syntax -- custom-styled switch; kit Toggle has a different visual contract */}
+              <input
+                type="checkbox"
               checked={config.proxyEnabled ?? false}
               onChange={async (e) => {
                 const enabled = e.target.checked;

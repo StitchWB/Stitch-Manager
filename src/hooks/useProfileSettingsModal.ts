@@ -464,7 +464,9 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
     };
 
     void loadProxyLibrary();
+      queueMicrotask(() => {
     void refreshAliases();
+      });
     return () => {
       cancelled = true;
     };
@@ -472,7 +474,9 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
 
   useEffect(() => {
     if (isOpen) return;
+      queueMicrotask(() => {
     resetImportWorkflow();
+      });
   }, [isOpen, resetImportWorkflow]);
 
   useEffect(() => {
@@ -491,13 +495,15 @@ export function useProfileSettingsModal({ alias, isOpen, onClose, onSaved }: Use
   useEffect(() => {
     if (!isOpen || !alias) return;
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setAliasDraft(alias);
-    setDirty(false);
-    setShowAdvanced(false);
-    setShowCookieEditor(false);
+      let cancelled = false;
+      queueMicrotask(() => {
+        setLoading(true);
+        setError(null);
+        setAliasDraft(alias);
+        setDirty(false);
+        setShowAdvanced(false);
+        setShowCookieEditor(false);
+      });
 
     const load = async () => {
       try {

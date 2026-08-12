@@ -46,7 +46,9 @@ export function useProxyConfig() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     loadConfig();
+    });
   }, [loadConfig]);
 
   return {

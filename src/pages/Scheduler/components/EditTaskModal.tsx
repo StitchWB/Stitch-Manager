@@ -148,10 +148,12 @@ export function EditTaskModal({ taskId, onClose }: EditTaskModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!task) return;
-    setFormState(fromTask(task));
-    setError(null);
-  }, [task]);
+      if (!task) return;
+      queueMicrotask(() => {
+        setFormState(fromTask(task));
+        setError(null);
+      });
+    }, [task]);
 
   const formValidationError = useMemo(() => {
     if (!task || !formState) return null;

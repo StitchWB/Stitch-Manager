@@ -76,7 +76,9 @@ export function CompressionSection() {
   }, [isLoaded]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     fetchAll();
+    });
   }, [fetchAll]);
 
   // ── Save ─────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { Badge, Button, Checkbox, EmptyState } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { EmailMessage, ProviderCapabilities } from '@/lib/backend/modules/emailInbox';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 const VIRTUAL_ROW_HEIGHT = 64;
 const VIRTUAL_OVERSCAN = 8;
@@ -97,7 +98,9 @@ export function MailMessageList({
 
   // Reset bulk selection when message set changes
   useEffect(() => {
+    queueMicrotask(() => {
     setSelectedIds(prev => prev.filter(id => messages.some(message => message.id === id)));
+    });
   }, [messages]);
 
   const virtualSlice = useMemo(() => {
@@ -364,7 +367,7 @@ export function MailMessageList({
                   {/* Hover-only quick actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     {!message.isRead && capabilities?.canMarkAsRead ? (
-                      <button
+                      <ButtonBase
                         type="button"
                         title={t('mail.markReadAction')}
                         disabled={busy}
@@ -375,10 +378,10 @@ export function MailMessageList({
                         className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50"
                       >
                         <MailOpen size={12} />
-                      </button>
+                      </ButtonBase>
                     ) : null}
                     {capabilities?.canDelete ? (
-                      <button
+                      <ButtonBase
                         type="button"
                         title={t('mail.deleteAction')}
                         disabled={busy}
@@ -389,7 +392,7 @@ export function MailMessageList({
                         className="p-1 rounded text-slate-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50"
                       >
                         <Trash2 size={12} />
-                      </button>
+                      </ButtonBase>
                     ) : null}
                   </div>
                 </div>

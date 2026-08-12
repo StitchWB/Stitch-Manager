@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Link2, RefreshCw, AlertCircle } from 'lucide-react';
 
 import { GlassCard, Select, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { getReferralDonors, type ReferralDonor } from '@/lib/backend';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface V0ReferralDonorPanelProps {
   /** Selected donor id, or null for automatic selection. */
@@ -56,7 +58,9 @@ export function V0ReferralDonorPanel({
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void load();
+    });
   }, [load, refreshKey]);
 
   // The donor that will actually be used: manual selection or the auto-pick.
@@ -72,9 +76,9 @@ export function V0ReferralDonorPanel({
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-emerald-300/80">
           <Link2 size={13} />
-          <span>Реферальный донор</span>
+          <span>{t('uiTexts.referralDonor')}</span>
         </div>
-        <button
+        <ButtonBase
           type="button"
           onClick={() => void load()}
           disabled={loading}
@@ -82,7 +86,7 @@ export function V0ReferralDonorPanel({
           aria-label="Обновить список доноров"
         >
           <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
-        </button>
+        </ButtonBase>
       </div>
 
       {/* Active donor banner */}
@@ -99,7 +103,7 @@ export function V0ReferralDonorPanel({
             </span>
           </div>
           <div className="text-[11px] text-emerald-300/70 mt-1">
-            {value ? 'Выбран вручную' : 'Выбран автоматически'} · сейчас пополняется рефералами
+            {value ? t('uiTexts.manualSelected') : t('uiTexts.autoSelected')} · {t('uiTexts.refillingNow')}
           </div>
           <div className="w-full h-1 rounded-full bg-white/10 overflow-hidden mt-1.5">
             <div
@@ -130,7 +134,7 @@ export function V0ReferralDonorPanel({
         className={cn('h-9 py-1 text-xs w-full', hasCustomUrl && 'opacity-40')}
       >
         <option value={AUTO}>
-          Авто{activeDonorId ? '' : ' (нет доноров — стартовая ссылка)'}
+          {t('uiTexts.auto')}{activeDonorId ? '' : ` (${t('uiTexts.noDonors')})`}
         </option>
         {donors.map(d => {
           const exhausted = (d.refUsedCount || 0) >= (d.refMaxCount || 40);
@@ -147,7 +151,7 @@ export function V0ReferralDonorPanel({
       {onCustomUrlChange && (
         <div className="mt-3 pt-3 border-t border-white/10">
           <label className="block text-[11px] uppercase tracking-widest text-slate-400 mb-1.5">
-            Своя реферальная ссылка
+            {t('uiTexts.customReferral')}
           </label>
           <Input
             type="text"

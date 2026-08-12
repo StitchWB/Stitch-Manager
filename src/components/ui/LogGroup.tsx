@@ -295,7 +295,7 @@ export function LogGroup({
                         toggleDedup(log.id);
                       }}
                     >
-                      \u00d7{count}
+                      {t('uiTexts.times', { count })}
                     </button>
                   )}
 

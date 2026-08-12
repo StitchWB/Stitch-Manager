@@ -52,7 +52,9 @@ export const ConsolePanel = ({
 
   // Reset dismiss state whenever a genuinely new error appears.
   useEffect(() => {
+    queueMicrotask(() => {
     setErrorDismissed(false);
+    });
   }, [lastError?.message]);
 
   const showError = !!lastError && !errorDismissed;
@@ -80,16 +82,16 @@ export const ConsolePanel = ({
           <div className="shrink-0 flex items-start gap-2 border-b border-red-500/15 bg-red-500/[0.04] px-4 py-2">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
             <div className="min-w-0 flex-1">
-              <StatusBadge status="error" size="sm">Последняя ошибка</StatusBadge>
+              <StatusBadge status="error" size="sm">{t('uiTexts.lastError')}</StatusBadge>
               <p className="mt-1 break-words text-xs text-red-200/80">{lastError.message}</p>
             </div>
-            <button
+            <ButtonBase
               onClick={() => setErrorDismissed(true)}
               className="ml-1 shrink-0 rounded p-0.5 text-red-400/60 hover:text-red-300 hover:bg-red-500/10 transition-colors"
               aria-label="Закрыть"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </ButtonBase>
           </div>
         )}
 

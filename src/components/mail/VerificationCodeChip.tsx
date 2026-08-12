@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { extractVerificationMatches } from '@/lib/mail/verificationCodes';
 import type { VerificationCodeMatch } from '@/lib/mail/verificationCodes';
 import { t } from '@/lib/i18n';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface VerificationCodeChipProps {
   subject?: string | null;
@@ -57,7 +58,9 @@ export function VerificationCodeChip({
 
   // Reset local copy-state whenever a different message is opened
   useEffect(() => {
+    queueMicrotask(() => {
     setCopiedKey(null);
+    });
   }, [messageId]);
 
   // Auto-clear the copied indicator after a few seconds
@@ -124,17 +127,17 @@ export function VerificationCodeChip({
 
             <div className="ml-auto flex items-center gap-1 shrink-0">
               {match.kind === 'link' ? (
-                <button
+                <ButtonBase
                   type="button"
                   onClick={() => handleOpenLink(match.value)}
                   title={t('mail.verificationLinkOpen')}
                   className="p-1 rounded text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
                 >
                   <ExternalLink size={12} />
-                </button>
+                </ButtonBase>
               ) : null}
 
-              <button
+              <ButtonBase
                 type="button"
                 onClick={() => {
                   void handleCopy(match);
@@ -148,7 +151,7 @@ export function VerificationCodeChip({
               >
                 {isCopied ? <Check size={12} /> : <Copy size={12} />}
                 {isCopied ? t('mail.verificationCopied') : t('mail.verificationCopyAction')}
-              </button>
+              </ButtonBase>
             </div>
           </div>
         );

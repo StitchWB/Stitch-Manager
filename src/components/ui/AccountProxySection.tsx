@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Globe, Link2, Unlink, ChevronDown, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { setAccountProxy } from '@/lib/backend';
@@ -75,7 +76,7 @@ export function AccountProxySection({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-xs text-slate-400 uppercase tracking-wider">
           <Globe className="w-3.5 h-3.5" />
-          Сеть / Прокси
+          {t('uiTexts.networkProxy')}
         </div>
         {boundProxy && (
           <button
@@ -84,7 +85,7 @@ export function AccountProxySection({
             className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
           >
             <Unlink className="w-3 h-3" />
-            Отвязать
+            {t('uiTexts.unlink')}
           </button>
         )}
       </div>
@@ -111,8 +112,8 @@ export function AccountProxySection({
             <WifiOff className="w-4 h-4 text-slate-500" />
           </div>
           <div className="flex-1">
-            <div className="text-sm text-slate-400">Прокси не привязан</div>
-            <div className="text-xs text-slate-500">Прямое подключение</div>
+            <div className="text-sm text-slate-400">{t('uiTexts.noProxy')}</div>
+            <div className="text-xs text-slate-500">{t('uiTexts.directConnection')}</div>
           </div>
         </div>
       )}
@@ -132,7 +133,7 @@ export function AccountProxySection({
         <div className="mt-3 max-h-48 overflow-y-auto space-y-1 border-t border-white/5 pt-3">
           {enabledProxies.length === 0 ? (
             <div className="text-xs text-slate-500 text-center py-4">
-              Нет доступных прокси. Добавьте в Настройки → Подключение.
+              {t('uiTexts.noProxiesAvailable')}
             </div>
           ) : (
             enabledProxies.map((proxy) => (
@@ -165,7 +166,7 @@ export function AccountProxySection({
                   </div>
                 </div>
                 {proxy.id === proxyId && (
-                  <span className="text-[10px] text-indigo-400 font-medium">Текущий</span>
+                  <span className="text-[10px] text-indigo-400 font-medium">{t('uiTexts.current')}</span>
                 )}
               </button>
             ))

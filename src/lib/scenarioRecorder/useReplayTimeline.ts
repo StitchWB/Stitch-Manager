@@ -50,10 +50,12 @@ export function useReplayTimeline({ isOpen, correlationId, jobId }: UseReplayTim
   }, [correlationId, isOpen, jobId]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (!isOpen) {
       setTimelineEntries([]);
       setTimelineLoading(false);
     }
+    });
   }, [isOpen]);
 
   return {

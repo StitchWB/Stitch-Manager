@@ -144,7 +144,9 @@ export default function Chat() {
 
   // Reset error dismissed state when a new error appears
   useEffect(() => {
+    queueMicrotask(() => {
     if (error) setErrorDismissed(false);
+    });
   }, [error]);
 
   const fetchSetup = useCallback(async () => {
@@ -253,7 +255,9 @@ export default function Chat() {
 
   // Fetch AI Proxy setup on mount
   useEffect(() => {
+    queueMicrotask(() => {
     fetchSetup();
+    });
   }, [fetchSetup]);
 
   useEffect(() => {
@@ -302,7 +306,7 @@ export default function Chat() {
     <div className="flex flex-col h-full overflow-hidden">
       <Header
         title={t('chat.title') || 'Chat'}
-        subtitle={t('chat.subtitle') || 'AI Proxy Debug Client'}
+        subtitle={t('chat.subtitle') || t('uiTexts.debugTitle')}
         icon={<MessageSquare size={18} />}
         actions={
           <div className="flex items-center gap-2">
@@ -394,7 +398,7 @@ export default function Chat() {
               <div className="max-w-4xl mx-auto">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-vsc-text">
-                    AI Proxy Debug Client
+                    {t('uiTexts.debugTitle')}
                   </h3>
                   {!proxyRunning && (
                     <span className="text-xs text-vsc-yellow flex items-center gap-1">
@@ -404,7 +408,7 @@ export default function Chat() {
                   )}
                 </div>
                 <p className="text-2xs text-vsc-text-muted mb-3">
-                  Debug-only. Use this page to validate AI Proxy routing; configure providers and keys in AI Proxy settings for IDE/CLI usage.
+                  {t('uiTexts.debugDesc')}
                 </p>
 
                 <div className="mb-3 p-3 bg-vsc-panel/50 rounded-lg border border-vsc-border">
@@ -652,14 +656,14 @@ export default function Chat() {
           {/* Inspector — collapsible */}
           {messages.some(m => m.role === 'assistant' && m.debug) && (
             <div className="border-t border-vsc-border bg-vsc-sidebar/40">
-              <button
+              <ButtonBase
                 type="button"
                 onClick={() => setInspectorOpen(!inspectorOpen)}
                 className="w-full flex items-center justify-between px-4 py-2 text-xs font-medium text-vsc-text hover:bg-vsc-hover transition-colors"
               >
                 <span>{t('chat.inspectorToggle')}</span>
                 <span className="text-vsc-text-muted">{inspectorOpen ? '▲' : '▼'}</span>
-              </button>
+              </ButtonBase>
               {inspectorOpen && (
                 <div className="px-4 py-3 border-t border-vsc-border/50 max-w-4xl mx-auto">
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -824,7 +828,7 @@ export default function Chat() {
                       {setupLoading ? (
                         <span className="flex items-center gap-2">
                           <LoadingSpinner size="xs" />
-                          Loading...
+                          {t('common.loading')}
                         </span>
                       ) : selectedModel ? (
                         `${selectedModel.name}${selectedModel.source === 'aiProxy' ? ' • AI Proxy' : ''}`

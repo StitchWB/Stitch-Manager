@@ -29,6 +29,8 @@ import type { TotpKey } from '@/lib/backend/modules/totp';
 import { TotpBadge } from '../components/totp/TotpBadge';
 import { isOtpauthUri, parseOtpauthUri } from '@/lib/otpauth';
 import { cn } from '../lib/utils';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Select } from '@/components/ui/Select';
 
 /* ── Add / Edit form state ── */
 interface FormState {
@@ -311,14 +313,14 @@ export default function Totp() {
               if (e.key === 'Escape') setQuery('');
             }}
           />
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as 'newest' | 'alpha')}
-            className="bg-white/5 border border-white/10 rounded-md text-xs px-2 py-1.5 text-slate-300 outline-none focus:border-indigo-500/40 cursor-pointer shrink-0"
-          >
-            <option value="newest">{t('totp.sortNewest')}</option>
-            <option value="alpha">{t('totp.sortAlpha')}</option>
-          </select>
+            <Select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as 'newest' | 'alpha')}
+              className="bg-white/5 border border-white/10 rounded-md text-xs px-2 py-1.5 text-slate-300 outline-none focus:border-indigo-500/40 cursor-pointer shrink-0"
+            >
+              <option value="newest">{t('totp.sortNewest')}</option>
+              <option value="alpha">{t('totp.sortAlpha')}</option>
+            </Select>
           <IconButton
             variant="ghost"
             size="sm"
@@ -414,7 +416,7 @@ export default function Totp() {
             const isCollapsed = !!collapsed[groupKey];
             return (
               <div key={groupKey || '__no_issuer__'}>
-                <button
+                <ButtonBase
                   type="button"
                   onClick={() => toggleGroup(g.issuer)}
                   className="flex w-full items-center gap-1.5 px-1 pt-3 pb-1 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
@@ -422,7 +424,7 @@ export default function Totp() {
                   {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                   <span className="truncate">{g.issuer ?? t('totp.noIssuer')}</span>
                   <span className="font-normal text-slate-600">{g.keys.length}</span>
-                </button>
+                </ButtonBase>
                 {!isCollapsed && (
                   <div className="divide-y divide-white/[0.04]">
                     {g.keys.map((key) => renderRow(key, false))}
@@ -618,9 +620,9 @@ function IssuerSuggestInput({
         className={className}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute inset-x-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg bg-slate-900 border border-white/10 shadow-xl shadow-black/40">
+          <div className="absolute inset-x-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg bg-vsc-panel-solid border border-white/10 shadow-xl shadow-black/40">
           {filtered.map((s) => (
-            <button
+            <ButtonBase
               key={s}
               type="button"
               onMouseDown={(e) => {
@@ -631,7 +633,7 @@ function IssuerSuggestInput({
               className="w-full px-3 py-1.5 text-left text-sm text-slate-300 hover:bg-white/5 transition-colors"
             >
               {s}
-            </button>
+            </ButtonBase>
           ))}
         </div>
       )}

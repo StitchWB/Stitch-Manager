@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { Credential, ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
 import { Button, Input, Select, Checkbox, Modal } from '@/components/ui';
+import { t } from '@/lib/i18n';
 
 interface CredentialFormProps {
   endpoint: ProviderEndpoint;
@@ -44,46 +45,46 @@ export function CredentialForm({ endpoint, credential, open, onClose }: Credenti
 
   const footer = (
     <div className="flex justify-end gap-3">
-      <Button variant="outline" onClick={onClose}>Cancel</Button>
+      <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
       <Button disabled={loading} onClick={handleSubmit}>
-        {loading ? 'Saving...' : credential ? 'Update' : 'Create'}
+        {loading ? t('aiGateway.cred.saving') : credential ? t('aiGateway.cred.update') : t('aiGateway.cred.create')}
       </Button>
     </div>
   );
 
   return (
-    <Modal isOpen={open} onClose={onClose} title={credential ? 'Edit Credential' : 'Add Credential'} size="sm" footer={footer}>
+    <Modal isOpen={open} onClose={onClose} title={credential ? t('aiGateway.cred.editTitle') : t('aiGateway.cred.addTitle')} size="sm" footer={footer}>
       <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium">Label (optional)</label>
-          <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g., Production Key" />
+          <label className="text-sm font-medium">{t('aiGateway.cred.labelOptional')}</label>
+          <Input value={label} onChange={e => setLabel(e.target.value)} placeholder={t('aiGateway.cred.phLabel')} />
         </div>
 
         <div>
-          <label className="text-sm font-medium">Auth Type</label>
+          <label className="text-sm font-medium">{t('aiGateway.cred.authType')}</label>
           <Select value={authType} onChange={e => setAuthType(e.target.value)} disabled={!!credential} required>
-            <option value="api_key">API Key</option>
-            <option value="oauth">OAuth</option>
-            <option value="session">Session Token</option>
+            <option value="api_key">{t('aiGateway.cred.optApiKey')}</option>
+            <option value="oauth">{t('aiGateway.cred.optOAuth')}</option>
+            <option value="session">{t('aiGateway.cred.optSession')}</option>
           </Select>
         </div>
 
         <div>
           <label className="text-sm font-medium">
-            {credential ? 'New Secret (leave empty to keep current)' : 'Secret'}
+            {credential ? t('aiGateway.cred.secretNew') : t('aiGateway.cred.secret')}
           </label>
           <Input
             type="password"
             value={secret}
             onChange={e => setSecret(e.target.value)}
-            placeholder={credential ? 'Leave empty to keep current secret' : 'Enter API key or token'}
+            placeholder={credential ? t('aiGateway.cred.phKeep') : t('aiGateway.cred.phEnter')}
             required={!credential}
           />
         </div>
 
         <div className="flex items-center space-x-2">
           <Checkbox id="cred-enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-          <label htmlFor="cred-enabled" className="text-sm font-medium">Enabled</label>
+          <label htmlFor="cred-enabled" className="text-sm font-medium">{t('aiGateway.enabled')}</label>
         </div>
 
         {error && <div className="text-sm text-red-400">{error}</div>}

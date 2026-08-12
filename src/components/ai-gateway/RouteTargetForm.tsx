@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { t } from '@/lib/i18n';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { RouteTarget, PublicModel } from '@/lib/backend/modules/aiGateway';
 import { Button, Input, Checkbox, Modal, Select } from '@/components/ui';
@@ -81,7 +82,7 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
 
   const footer = (
     <div className="flex justify-end gap-3">
-      <Button variant="outline" onClick={onClose}>Cancel</Button>
+      <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
       <Button disabled={loading} onClick={handleSubmit}>
         {loading ? 'Saving...' : target ? 'Update' : 'Create'}
       </Button>
@@ -92,14 +93,14 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
     <Modal isOpen={open} onClose={onClose} title={target ? 'Edit Route Target' : 'Add Route Target'} size="sm" footer={footer}>
       <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium">Upstream Model</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.upstreamModel')}</label>
           <Select
             value={upstreamModelId}
             onChange={e => setUpstreamModelId(e.target.value)}
             disabled={!!target}
             required
           >
-            <option value="">Select upstream model...</option>
+            <option value="">{t('aiGateway.form.selectUpstream')}</option>
             {groupedModels.flatMap(group =>
               group.models.map(model => (
                 <option key={model.id} value={model.id}>
@@ -111,7 +112,7 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
         </div>
 
         <div>
-          <label className="text-sm font-medium">Priority</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.priority')}</label>
           <Input
             type="number"
             value={priority}
@@ -119,11 +120,11 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
             min={0}
             required
           />
-          <p className="text-xs text-slate-400 mt-1">Lower numbers are tried first</p>
+          <p className="text-xs text-slate-400 mt-1">{t('aiGateway.form.priorityHint')}</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium">Weight</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.weight')}</label>
           <Input
             type="number"
             value={weight}
@@ -132,11 +133,11 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
             step={0.1}
             required
           />
-          <p className="text-xs text-slate-400 mt-1">Reserved for future weighted selection — currently unused (routing uses priority only)</p>
+          <p className="text-xs text-slate-400 mt-1">{t('aiGateway.form.weightHint')}</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium">Cost Modifier</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.costModifier')}</label>
           <Input
             type="number"
             value={costModifier}
@@ -145,12 +146,12 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
             step={0.1}
             required
           />
-          <p className="text-xs text-slate-400 mt-1">Multiplier for cost calculation (1.0 = normal cost)</p>
+          <p className="text-xs text-slate-400 mt-1">{t('aiGateway.form.costHint')}</p>
         </div>
 
         <div className="flex items-center space-x-2">
           <Checkbox id="target-enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-          <label htmlFor="target-enabled" className="text-sm font-medium">Enabled</label>
+          <label htmlFor="target-enabled" className="text-sm font-medium">{t('aiGateway.enabled')}</label>
         </div>
 
         {error && <div className="text-sm text-red-400">{error}</div>}

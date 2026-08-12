@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Package, Search, Star, Zap } from 'lucide-react';
 import {
   GlassCard, Input, Badge, EmptyState,
@@ -102,12 +103,12 @@ export function ModelsSection({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Model</TableHead>
-              <TableHead>Provider</TableHead>
-              <TableHead className="text-right">Context</TableHead>
-              <TableHead className="text-right">Output</TableHead>
-              <TableHead>Caps</TableHead>
-              <TableHead className="text-right">Assign</TableHead>
+              <TableHead>{t('opencode.table.model')}</TableHead>
+              <TableHead>{t('opencode.table.provider')}</TableHead>
+              <TableHead className="text-right">{t('opencode.table.context')}</TableHead>
+              <TableHead className="text-right">{t('opencode.table.output')}</TableHead>
+              <TableHead>{t('opencode.table.caps')}</TableHead>
+              <TableHead className="text-right">{t('opencode.table.assign')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

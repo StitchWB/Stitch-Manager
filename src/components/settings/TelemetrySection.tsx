@@ -58,8 +58,10 @@ export function TelemetrySection() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void loadConsent();
     void loadReports();
+    });
   }, [loadConsent, loadReports]);
 
   const handleConsentChange = async (checked: boolean) => {

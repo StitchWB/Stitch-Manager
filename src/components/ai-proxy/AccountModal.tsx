@@ -56,6 +56,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
   const [showOAuthModal, setShowOAuthModal] = useState(false);
 
   useEffect(() => {
+    queueMicrotask(() => {
     const accountWithQuotas = account as
     (AiProxyAccount & {
       softQuotaTokensDaily?: number | null;
@@ -94,6 +95,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         softQuotaRequestsDaily: ''
       });
     }
+    });
   }, [account, isOpen]);
 
   const parseOptionalPositiveInt = (value: string, label: string) => {

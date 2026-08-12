@@ -169,9 +169,11 @@ export function UnifiedActivityFeed() {
       }));
   }, [logs, navigate]);
 
-  const newAccountItems = useMemo<FeedItem[]>(() => {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return [...accounts]
+    const newAccountItems = useMemo<FeedItem[]>(() => {
+      // eslint-disable-next-line react-hooks/purity -- time-window filter is intentionally time-dependent
+      const accountCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const cutoff = accountCutoff;
+      return [...accounts]
       .filter(a => {
         const ts = new Date(a.createdAt).getTime();
         return Number.isFinite(ts) && ts >= cutoff;
@@ -195,11 +197,13 @@ export function UnifiedActivityFeed() {
         timestampMs: new Date(a.createdAt).getTime(),
         onOpen: () => navigate(`/accounts?provider=${a.provider}`),
       }));
-  }, [accounts, navigate]);
+    }, [accounts, navigate]);
 
   useEffect(() => {
     startTaskPolling();
+      queueMicrotask(() => {
     void refreshRegJobs();
+      });
     const id = window.setInterval(() => {
       void refreshRegJobs();
     }, POLL_MS);
@@ -211,7 +215,9 @@ export function UnifiedActivityFeed() {
 
   // Refresh scheduler executions reactively when the centrally-polled tasks change.
   useEffect(() => {
+    queueMicrotask(() => {
     void refreshSchedulerExecutions();
+    });
   }, [tasks, refreshSchedulerExecutions]);
 
   const merged = useMemo(() => {

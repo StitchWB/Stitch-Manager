@@ -21,12 +21,14 @@ export function useReplayRecentRuns({
   const [runs, setRuns] = useState<ScenarioRunItem[]>([]);
 
   useEffect(() => {
-    if (!isOpen || !alias) {
-      setRuns([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+      if (!isOpen || !alias) {
+        queueMicrotask(() => {
+          setRuns([]);
+          setLoading(false);
+          setError(null);
+        });
+        return;
+      }
 
     let cancelled = false;
     const load = async () => {

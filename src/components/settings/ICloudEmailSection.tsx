@@ -19,6 +19,8 @@ import {
   getICloudPoolStats,
 } from '@/lib/backend';
 import type { ICloudPoolStats } from '@/types/generated';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Select } from '@/components/ui/Select';
 
 interface ICloudEmailSectionProps {
   enabled: boolean;
@@ -156,13 +158,13 @@ export function ICloudEmailSection({
                 onChange={e => onAppPasswordChange(e.target.value)}
                 placeholder="xxxx-xxxx-xxxx-xxxx"
                 rightElement={
-                  <button
+                  <ButtonBase
                     type="button"
                     onClick={() => setShowPassword(p => !p)}
                     className="p-1.5 text-slate-400 hover:text-white"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                  </ButtonBase>
                 }
               />
             </div>
@@ -275,15 +277,15 @@ export function ICloudEmailSection({
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400">{t('settings.icloud.generate')}</span>
-                  <select
-                    value={fillCount}
-                    onChange={e => setFillCount(Number(e.target.value))}
-                    className="bg-vsc-input border border-vsc-border rounded px-2 py-1 text-xs text-vsc-text focus:outline-none focus:border-vsc-blue"
-                  >
-                    {[1, 2, 3, 4, 5].map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
+                    <Select
+                      value={String(fillCount)}
+                      onChange={e => setFillCount(Number(e.target.value))}
+                      className="bg-vsc-input border border-vsc-border rounded px-2 py-1 text-xs text-vsc-text focus:outline-none focus:border-vsc-blue"
+                    >
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </Select>
                   <span className="text-xs text-slate-400">{t('settings.icloud.aliases')}</span>
                 </div>
                 <Button

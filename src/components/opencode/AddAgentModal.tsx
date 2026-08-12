@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Bot } from 'lucide-react';
 import { Modal, Button, Input } from '@/components/ui';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface AddAgentModalProps {
   isOpen: boolean;
@@ -16,10 +18,12 @@ export function AddAgentModal({ isOpen, existingIds, onAdd, onClose }: AddAgentM
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    // Deferred reset: synchronous setState inside the effect body is forbidden.
+    queueMicrotask(() => {
       setId('');
       setError('');
-    }
+    });
   }, [isOpen]);
 
   const validate = (value: string): string => {
@@ -53,8 +57,8 @@ export function AddAgentModal({ isOpen, existingIds, onAdd, onClose }: AddAgentM
       icon={<Bot className="w-5 h-5" />}
       footer={
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleAdd} disabled={!id.trim()}>Add Agent</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button onClick={handleAdd} disabled={!id.trim()}>{t('opencode.buttons.addAgent')}</Button>
         </div>
       }
     >
@@ -74,24 +78,24 @@ export function AddAgentModal({ isOpen, existingIds, onAdd, onClose }: AddAgentM
 
         {suggestions.length > 0 && (
           <div>
-            <div className="text-xs text-vsc-text-muted mb-2">Suggestions:</div>
+            <div className="text-xs text-vsc-text-muted mb-2">{t('opencode.ui.suggestions')}</div>
             <div className="flex flex-wrap gap-1.5">
               {suggestions.map(s => (
-                <button
+                <ButtonBase
                   key={s}
                   type="button"
                   onClick={() => { setId(s); setError(''); }}
                   className="px-2.5 py-1 text-xs rounded-md bg-white/5 border border-white/10 hover:border-sky-500/50 hover:text-sky-300 transition-colors"
                 >
                   {s}
-                </button>
+                </ButtonBase>
               ))}
             </div>
           </div>
         )}
 
         <div className="text-xs text-vsc-text-muted">
-          The agent will use the default model. You can change it right after adding.
+          {t('opencode.ui.agentHint')}
         </div>
       </div>
     </Modal>

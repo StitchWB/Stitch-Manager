@@ -71,7 +71,9 @@ export default function Scenarios({ embedded = false }: ScenariosProps = {}) {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void loadProfiles();
+    });
   }, [loadProfiles]);
 
   useEffect(() => {

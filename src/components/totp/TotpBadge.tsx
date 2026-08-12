@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { generateTotp, totpCounter } from '@/lib/totp';
 import { t } from '@/lib/i18n';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface TotpBadgeProps {
   secret: string;
@@ -73,7 +74,9 @@ export function TotpBadge({
     // Reset on secret/period change
     lastCounter.current = -1;
     hasValidCode.current = false;
+      queueMicrotask(() => {
     setCode(PENDING);
+      });
 
     // Fire immediately — code appears within one microtask queue flush
     void update();
@@ -108,7 +111,7 @@ export function TotpBadge({
 
     return (
       <Tooltip content={t('totp.copyCode', { code: formatCode(code) })} side="top">
-        <button
+        <ButtonBase
           type="button"
           onClick={(e) => {
             e.stopPropagation();
@@ -126,7 +129,7 @@ export function TotpBadge({
             {formatCode(code)}
           </span>
           <TotpTimer period={period} size={18} strokeWidth={2} showText={false} />
-        </button>
+        </ButtonBase>
       </Tooltip>
     );
   }
@@ -150,7 +153,7 @@ export function TotpBadge({
 
     return (
       <Tooltip content={t('totp.copyCode', { code: formatCode(code) })} side="top">
-        <button
+        <ButtonBase
           type="button"
           onClick={(e) => {
             e.stopPropagation();
@@ -169,7 +172,7 @@ export function TotpBadge({
           </span>
           <TotpTimer period={period} size={20} strokeWidth={2} showText={false} />
           <Copy size={13} className="opacity-60" />
-        </button>
+        </ButtonBase>
       </Tooltip>
     );
   }
@@ -196,7 +199,7 @@ export function TotpBadge({
       <div className="flex items-center gap-3">
         <TotpTimer period={period} size={36} strokeWidth={3} showText={true} />
         <Tooltip content="Copy code" side="top">
-          <button
+          <ButtonBase
             type="button"
             disabled={!isReady}
             onClick={() =>
@@ -211,7 +214,7 @@ export function TotpBadge({
             aria-label="Copy 2FA code"
           >
             <Copy size={16} />
-          </button>
+          </ButtonBase>
         </Tooltip>
       </div>
     </div>

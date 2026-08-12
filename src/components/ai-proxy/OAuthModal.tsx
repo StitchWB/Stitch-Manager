@@ -64,7 +64,9 @@ export default function OAuthModal({
 
   useEffect(() => {
     if (isOpen && provider) {
+        queueMicrotask(() => {
       void initOAuth();
+        });
     }
     return () => {
       setPolling(false);

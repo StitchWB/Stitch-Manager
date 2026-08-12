@@ -168,7 +168,7 @@ export function AccountRow({
                 {data.registrationMethodLabel && <span className="text-slate-600">•</span>}
                 <Tooltip content="Зарегистрирован через ShardBrowser (engine-level spoofing)" side="top">
                   <span className="shrink-0 rounded border border-indigo-500/30 bg-indigo-500/10 px-1 py-px text-[9px] font-semibold text-indigo-300">
-                    Shard
+                    {t('uiTexts.engineShard')}
                   </span>
                 </Tooltip>
               </>

@@ -3,6 +3,7 @@ import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
 import { Button } from '@/components/ui';
 import { Input, Select, Checkbox, Modal } from '@/components/ui';
+import { t } from '@/lib/i18n';
 
 interface ProviderEndpointFormProps {
   endpoint?: ProviderEndpoint | null;
@@ -65,38 +66,38 @@ export function ProviderEndpointForm({ endpoint, open, onClose }: ProviderEndpoi
   };
 
   return (
-    <Modal isOpen={open} onClose={onClose} title={endpoint ? 'Edit Provider Endpoint' : 'Add Provider Endpoint'} size="sm">
+    <Modal isOpen={open} onClose={onClose} title={endpoint ? t('aiGateway.form.editEndpointTitle') : t('aiGateway.form.addEndpointTitle')} size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-sm font-medium">Name</label>
-          <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., OpenAI Production" required />
+          <label className="text-sm font-medium">{t('aiGateway.form.name')}</label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder={t('aiGateway.form.phName')} required />
         </div>
 
         <div>
-          <label className="text-sm font-medium">Adapter Type</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.adapterType')}</label>
           <Select value={adapterType} onChange={e => handleAdapterTypeChange(e.target.value)} required>
-            <option value="openai_compatible">OpenAI Compatible</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="gemini">Gemini</option>
+            <option value="openai_compatible">{t('aiGateway.form.optOpenai')}</option>
+            <option value="anthropic">{t('aiGateway.form.optAnthropic')}</option>
+            <option value="gemini">{t('aiGateway.form.optGemini')}</option>
           </Select>
         </div>
 
         <div>
-          <label className="text-sm font-medium">Base URL</label>
-          <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="e.g., https://api.openai.com/v1" required />
+          <label className="text-sm font-medium">{t('aiGateway.baseUrl')}</label>
+          <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder={t('aiGateway.form.phBaseUrl')} required />
         </div>
 
         <div className="flex items-center space-x-2">
           <Checkbox id="enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-          <label htmlFor="enabled" className="text-sm font-medium">Enabled</label>
+          <label htmlFor="enabled" className="text-sm font-medium">{t('aiGateway.enabled')}</label>
         </div>
 
         {error && <div className="text-sm text-red-400">{error}</div>}
 
         <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" disabled={loading}>
-            {loading ? 'Saving...' : endpoint ? 'Update' : 'Create'}
+            {loading ? t('aiGateway.cred.saving') : endpoint ? t('aiGateway.cred.update') : t('aiGateway.cred.create')}
           </Button>
         </div>
       </form>

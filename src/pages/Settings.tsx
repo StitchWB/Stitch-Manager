@@ -333,7 +333,9 @@ export default function Settings() {
   }, [setTheme]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     loadSettings();
+    });
   }, [loadSettings]);
 
   const handleCategoryChange = (category: SettingsCategory) => {

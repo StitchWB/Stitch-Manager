@@ -149,7 +149,9 @@ export default function AiAnalytics() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void loadAnalytics();
+    });
   }, [loadAnalytics]);
 
   const weeklyAggregate = useMemo(() => aggregateWeekly(weeklyStats), [weeklyStats]);

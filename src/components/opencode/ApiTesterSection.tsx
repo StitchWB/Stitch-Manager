@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '@/lib/i18n';
 import { TestTube, Plus, Loader2, Eye, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { GlassCard, Button, Input, Checkbox, Badge, Textarea, StatusBadge } from '@/components/ui';
@@ -42,7 +43,7 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
       const result = await testOpenCodeApi(baseUrl, apiKey);
       if (result.success && result.models) {
         setModels(result.models);
-        toast.success(`Discovered ${result.models.length} models`);
+        toast.success(t('opencode.ui.discoveredToast', { count: result.models.length }));
       } else {
         toast.error(result.error || 'API test failed');
       }
@@ -115,10 +116,10 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold mb-2">API Tester</h3>
-        <p className="text-sm text-vsc-text-muted">
-          Test an API endpoint to discover available models
-        </p>
+        <h3 className="text-lg font-semibold mb-2">{t('opencode.ui.testerTitle')}</h3>
+          <p className="text-sm text-vsc-text-muted">
+            {t('opencode.ui.testerDesc')}
+          </p>
       </div>
 
       <GlassCard className="p-6 space-y-4">
@@ -137,9 +138,9 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
         />
         <Button onClick={handleTest} disabled={testing || !baseUrl || !apiKey} className="w-full">
           {testing ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Testing...</>
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('opencode.ui.testing')}</>
           ) : (
-            <><TestTube className="w-4 h-4" /> Test Connection</>
+            <><TestTube className="w-4 h-4" /> {t('opencode.buttons.testConnection')}</>
           )}
         </Button>
       </GlassCard>
@@ -147,13 +148,13 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
       {models.length > 0 && (
         <GlassCard className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold">Discovered Models ({models.length})</h4>
+            <h4 className="font-semibold">{t('opencode.ui.discoveredModels', { count: models.length })}</h4>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set(models.map(m => m.id)))}>
-                Select All
+                {t('opencode.buttons.selectAll')}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-                Clear
+                {t('opencode.ui.clear')}
               </Button>
             </div>
           </div>
@@ -170,7 +171,7 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
                   <span className="text-sm truncate">{model.id}</span>
                   {model.vision && <Eye className="w-3 h-3 text-blue-400 flex-shrink-0" />}
                   {model.status === 'experimental' && (
-                    <Badge variant="warning" size="sm">exp</Badge>
+                    <Badge variant="warning" size="sm">{t('opencode.ui.exp')}</Badge>
                   )}
                 </div>
               </div>
@@ -179,14 +180,14 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
 
           <div className="pt-4 border-t border-vsc-border space-y-4">
             <Input
-              label="Provider Name *"
+              label={t('opencode.ui.providerName')}
               value={providerName}
               onChange={e => setProviderName(e.target.value)}
-              placeholder="e.g., My Provider"
+              placeholder={t('opencode.ui.phProviderName')}
             />
             <Button onClick={handleAdd} disabled={selected.size === 0 || !providerName} className="w-full">
               <Plus className="w-4 h-4" />
-              Add {selected.size} Model{selected.size !== 1 ? 's' : ''}
+              {t('opencode.buttons.addSelectedModels', { count: selected.size })}
             </Button>
           </div>
         </GlassCard>
@@ -195,14 +196,14 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
       {/* Bulk test section */}
       <GlassCard className="p-6 space-y-4">
         <div>
-          <h4 className="font-semibold">Bulk Test</h4>
+          <h4 className="font-semibold">{t('opencode.ui.bulkTest')}</h4>
           <p className="text-sm text-vsc-text-muted">
-            Paste multiple API keys (one per line) to test them all at once.
+            {t('opencode.ui.bulkTestDesc')}
           </p>
         </div>
 
         <Textarea
-          label="API Keys"
+          label={t('opencode.ui.apiKeys')}
           value={bulkKeysText}
           onChange={e => setBulkKeysText(e.target.value)}
           placeholder={"sk-...\nsk-...\nsk-..."}
@@ -215,9 +216,9 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
           className="w-full"
         >
           {bulkTesting ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Testing...</>
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('opencode.ui.testing')}</>
           ) : (
-            <><TestTube className="w-4 h-4" /> Bulk Test</>
+            <><TestTube className="w-4 h-4" /> {t('opencode.ui.bulkTest')}</>
           )}
         </Button>
 
@@ -226,7 +227,7 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
           <div className="space-y-3 pt-4 border-t border-vsc-border">
             <div className="flex items-center justify-between">
               <h5 className="text-sm font-medium">
-                Results ({bulkResults.length})
+                {t('opencode.ui.results', { count: bulkResults.length })}
               </h5>
               <Button
                 variant="ghost"
@@ -235,9 +236,9 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
                 disabled={bulkImporting || bulkResults.filter(r => r.status === 'ok').length === 0}
               >
                 {bulkImporting ? (
-                  <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Importing...</>
+                  <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> {t('opencode.ui.importing')}</>
                 ) : (
-                  <><Upload className="w-3 h-3 mr-1" /> Import Working</>
+                  <><Upload className="w-3 h-3 mr-1" /> {t('opencode.ui.importWorking')}</>
                 )}
               </Button>
             </div>

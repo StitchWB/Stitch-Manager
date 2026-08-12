@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { TestTube, Loader2, CheckCircle2, XCircle, Server, Key, Link2, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Modal, Button, Input, Badge, Toggle } from '@/components/ui';
 import { testOpenCodeApi, type ProviderConfig, type ModelConfig } from '@/lib/backend/modules/opencodeConfig';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface ProviderEditorModalProps {
   isOpen: boolean;
@@ -48,7 +50,9 @@ export function ProviderEditorModal({
   const [modelEdits, setModelEdits] = useState<Record<string, ModelConfig>>({});
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    // Deferred hydration: synchronous setState inside the effect body is forbidden.
+    queueMicrotask(() => {
       setName(provider?.name || '');
       setBaseURL(provider?.options?.baseURL || '');
       setApiKey(provider?.options?.apiKey || '');
@@ -59,7 +63,7 @@ export function ProviderEditorModal({
       setRemovedModels(new Set());
       setEditingModel(null);
       setModelEdits({});
-    }
+    });
   }, [provider, isOpen]);
 
   const existingModels = Object.keys(provider?.models || {}).filter(m => !removedModels.has(m));
@@ -203,7 +207,7 @@ export function ProviderEditorModal({
             {providerId ? `ID: ${providerId}` : 'New provider will get ID from name'}
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
             <Button
               variant="ghost"
               onClick={handleTest}
@@ -214,10 +218,10 @@ export function ProviderEditorModal({
               ) : (
                 <TestTube className="w-4 h-4" />
               )}
-              Test
+              {t('opencode.ui.test')}
             </Button>
             <Button onClick={handleSave} disabled={!name || !baseURL}>
-              Save Provider
+              {t('opencode.ui.saveProvider')}
             </Button>
           </div>
         </div>
@@ -229,7 +233,7 @@ export function ProviderEditorModal({
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Link2 className="w-4 h-4 text-vsc-text-muted" />
-            <h4 className="text-sm font-semibold">Connection</h4>
+            <h4 className="text-sm font-semibold">{t('opencode.ui.connection')}</h4>
           </div>
           <div className="space-y-3">
             <Input
@@ -262,7 +266,7 @@ export function ProviderEditorModal({
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Key className="w-4 h-4 text-vsc-text-muted" />
-            <h4 className="text-sm font-semibold">Credentials</h4>
+            <h4 className="text-sm font-semibold">{t('opencode.ui.credentials')}</h4>
           </div>
           <Input
             label="API Key"
@@ -278,19 +282,19 @@ export function ProviderEditorModal({
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
             <div className="flex items-center gap-2 text-emerald-300 text-sm font-medium mb-2">
               <CheckCircle2 className="w-4 h-4" />
-              Connection OK — {test.models.length} models available
+              {t('opencode.ui.connectionOk', { count: test.models.length })}
             </div>
             <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
               {test.models.slice(0, 20).map(m => (
                 <Badge key={m.id} size="sm" variant="success">{m.id}</Badge>
               ))}
               {test.models.length > 20 && (
-                <Badge size="sm" variant="outline">+{test.models.length - 20} more</Badge>
+                <Badge size="sm" variant="outline">{t('opencode.ui.moreModels', { count: test.models.length - 20 })}</Badge>
               )}
             </div>
             {Object.keys(provider?.models || {}).length === 0 && (
               <div className="text-xs text-emerald-200/70 mt-2">
-                These models will be added when you save.
+                {t('opencode.ui.modelsWillBeAdded')}
               </div>
             )}
           </div>
@@ -308,20 +312,20 @@ export function ProviderEditorModal({
         {/* Existing models — collapsed by default, expandable with removal */}
         {existingModels.length > 0 && (
           <div className="rounded-lg border border-vsc-border">
-            <button
+            <ButtonBase
               type="button"
               onClick={() => setModelsExpanded(prev => !prev)}
               className="flex items-center justify-between w-full px-3 py-2 text-sm hover:bg-white/5 transition-colors"
             >
               <div className="flex items-center gap-2">
                 <Package className="w-4 h-4 text-vsc-text-muted" />
-                <span className="font-semibold">Configured Models</span>
+                <span className="font-semibold">{t('opencode.ui.configuredModels')}</span>
                 <Badge size="sm">{existingModels.length}</Badge>
               </div>
               <span className="text-xs text-vsc-text-muted">
                 {modelsExpanded ? 'Collapse' : 'Show & manage'}
               </span>
-            </button>
+            </ButtonBase>
 
             {!modelsExpanded && (
               <div className="px-3 pb-2 text-xs text-vsc-text-muted truncate">
@@ -346,7 +350,7 @@ export function ProviderEditorModal({
                     const merged = { ...modelConfig, ...edit };
                     return (
                       <div key={m}>
-                        <button
+                        <ButtonBase
                           type="button"
                           onClick={() => handleEditModel(m)}
                           className="flex items-center justify-between w-full gap-2 px-2 py-1 rounded text-xs hover:bg-white/5 group"
@@ -359,15 +363,15 @@ export function ProviderEditorModal({
                             )}
                             <span className="truncate">{m}</span>
                           </div>
-                          <button
+                          <ButtonBase
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleRemoveModel(m); }}
                             className="opacity-0 group-hover:opacity-100 text-vsc-text-muted hover:text-red-400 transition-opacity shrink-0"
                             title="Remove model"
                           >
                             ×
-                          </button>
-                        </button>
+                          </ButtonBase>
+                        </ButtonBase>
 
                         {isEditing && (
                           <div className="ml-5 mt-1 mb-2 p-3 rounded-lg border border-vsc-border bg-white/[0.02] space-y-3">
@@ -434,7 +438,7 @@ export function ProviderEditorModal({
                   })}
                   {filteredModels.length === 0 && (
                     <div className="text-xs text-vsc-text-muted py-2">
-                      No models match "{modelFilter}"
+                      {t('opencode.ui.noModelsMatch', { filter: modelFilter })}
                     </div>
                   )}
                 </div>

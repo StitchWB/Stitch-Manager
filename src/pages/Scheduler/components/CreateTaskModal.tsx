@@ -87,7 +87,9 @@ export function CreateTaskModal({
     if (createMode !== 'template') return;
     if (templateId) return;
     if (initialTemplateId) {
+        queueMicrotask(() => {
       setTemplateId(initialTemplateId);
+        });
     }
   }, [createMode, initialTemplateId, templateId]);
 

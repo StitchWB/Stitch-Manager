@@ -257,7 +257,7 @@ const ImapTestInline = memo(
         leftIcon={<RefreshCw size={12} />}
         className="text-slate-400 hover:text-slate-200"
       >
-        Тест
+        {t('uiTexts.test')}
       </Button>
     </span>
   )
@@ -878,22 +878,22 @@ export function IdentitySystemCard({
                 </div>
                 <div className="flex-1 space-y-2">
                   <p className="text-sky-300 text-xs font-bold uppercase tracking-widest">
-                    iCloud Hide My Email
+                    {t('uiTexts.icloudTitle')}
                   </p>
                   <p className="text-slate-300 text-xs leading-relaxed">
-                    Aliases from your iCloud pool ({t('identity.noImapConfigNeeded').toLowerCase()} — verification via iCloud IMAP).
+                    {t('uiTexts.icloudDesc', { note: t('identity.noImapConfigNeeded').toLowerCase() })}
                   </p>
                   <div className="flex items-center gap-2 text-[10px] text-sky-400 font-medium">
                     <CheckCircle size={12} />
-                    <span>@privaterelay.appleid.com forwarding</span>
+                    <span>{t('uiTexts.icloudForwarding')}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-sky-400 font-medium">
                     <CheckCircle size={12} />
-                    <span>~700 aliases / month for $0.99</span>
+                    <span>{t('uiTexts.icloudQuota')}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-sky-400 font-medium">
                     <CheckCircle size={12} />
-                    <span>Pre-fill pool in Settings → Connectivity</span>
+                    <span>{t('uiTexts.icloudPrefill')}</span>
                   </div>
                 </div>
               </div>

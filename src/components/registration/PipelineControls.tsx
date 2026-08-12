@@ -274,9 +274,11 @@ export function PipelineControls({ jobId, isRunning }: PipelineControlsProps) {
 
   // Mark run finished when isRunning goes from true to false and we have steps
   useEffect(() => {
+    queueMicrotask(() => {
     if (!isRunning && steps.length > 0 && !runFinished) {
       setRunFinished(true);
     }
+    });
   }, [isRunning, steps.length, runFinished]);
 
   const sendCommand = useCallback(

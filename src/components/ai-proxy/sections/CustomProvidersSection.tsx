@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { t } from '@/lib/i18n';
 import { Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,6 +25,51 @@ type SharedApiKey = {
   customHeaders?: string | null;
 };
 
+// ── Health Summary Bar ─────────────────────────────────────────────────
+const HealthSummaryBar = ({ records }: { records: KeyHealthRecord[] }) => {
+  const summary = getHealthSummary(records);
+  return (
+    <GlassCard className="p-3">
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span className="text-slate-400 font-medium">{t('aiHub.keyHealth')}</span>
+        {summary.healthy > 0 && (
+          <span className="inline-flex items-center gap-1 text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            {t('aiHub.healthHealthy', { count: summary.healthy })}
+          </span>
+        )}
+        {summary.flaky > 0 && (
+          <span className="inline-flex items-center gap-1 text-amber-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            {t('aiHub.healthFlaky', { count: summary.flaky })}
+          </span>
+        )}
+        {summary.broken > 0 && (
+          <span className="inline-flex items-center gap-1 text-red-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+            {t('aiHub.healthBroken', { count: summary.broken })}
+          </span>
+        )}
+        {summary.expired > 0 && (
+          <span className="inline-flex items-center gap-1 text-slate-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            {t('aiHub.healthExpired', { count: summary.expired })}
+          </span>
+        )}
+        {summary.unknown > 0 && (
+          <span className="inline-flex items-center gap-1 text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+            {t('aiHub.healthUnknown', { count: summary.unknown })}
+          </span>
+        )}
+        {summary.total === 0 && (
+          <span className="text-slate-500">{t('aiHub.noData')}</span>
+        )}
+      </div>
+    </GlassCard>
+  );
+};
+
 export function CustomProvidersSection() {
   const [customProvidersList, setCustomProvidersList] = useState<CustomProvider[]>([]);
   const [selectedCustomProvider, setSelectedCustomProvider] = useState<string | null>(null);
@@ -37,11 +83,7 @@ export function CustomProvidersSection() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    loadCustomProviders();
-  }, []);
-
-  const loadCustomProviders = async () => {
+  async function loadCustomProviders() {
     try {
       const providers = await customProviders.getCustomProviders();
       setCustomProvidersList(providers);
@@ -71,7 +113,11 @@ export function CustomProvidersSection() {
     } catch {
       // Custom providers may not be available yet
     }
-  };
+  }
+
+  useEffect(() => {
+    queueMicrotask(() => void loadCustomProviders());
+  }, []);
 
   const loadHealthData = useCallback(async () => {
     try {
@@ -84,7 +130,9 @@ export function CustomProvidersSection() {
 
   // Load health data on mount
   useEffect(() => {
+    queueMicrotask(() => {
     loadHealthData();
+    });
   }, [loadHealthData]);
 
   // Auto-refresh health data
@@ -147,9 +195,9 @@ export function CustomProvidersSection() {
       const nextKeys = keys.map(k => k.apiKey === entry.key ? { ...k, apiKey: updated.key } : k);
       await customProviders.setCustomProviderKeys(selectedCustomProvider, nextKeys);
       setCustomProviderKeys(prev => ({ ...prev, [selectedCustomProvider]: nextKeys }));
-      toast.success(result.success ? 'Key is valid' : 'Key is invalid');
-    } catch (error) {
-      toast.error('Test failed');
+      toast.success(result.success ? t('aiHub.keyValid') : t('aiHub.keyInvalid'));
+    } catch {
+      toast.error(t('aiHub.testFailed'));
     }
   }, [selectedCustomProvider, customProvidersList, customProviderKeys]);
 
@@ -236,12 +284,12 @@ export function CustomProvidersSection() {
             return {
               ...entry,
               status: result.success ? 'ok' as const : 'invalid' as const,
-            };
-          } catch (error) {
-            return {
-              ...entry,
-              status: 'error' as const,
-            };
+              };
+            } catch {
+              return {
+                ...entry,
+                status: 'error' as const,
+              };
           }
         })
       );
@@ -280,10 +328,10 @@ export function CustomProvidersSection() {
       setCustomProvidersList(prev => [...prev, result.provider!]);
       setSelectedCustomProvider(providerId);
       setCustomProviderKeys(prev => ({ ...prev, [providerId]: normalized }));
-      toast.success(`Provider "${name}" created with ${validKeys.length} keys`);
+      toast.success(t('aiHub.providerCreatedWithKeys', { name, count: validKeys.length }));
       setIsCreateProviderDrawerOpen(false);
     } catch (error) {
-      toast.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(t('aiHub.failedGeneric', { msg: error instanceof Error ? error.message : String(error) }));
     }
   }, []);
 
@@ -293,7 +341,7 @@ export function CustomProvidersSection() {
       const parsed = parseProviderText(text);
 
       if (!parsed.baseUrl || parsed.keys.length === 0) {
-        toast.error('Не удалось найти URL или ключи в буфере обмена');
+        toast.error(t('aiHub.clipboardNoUrlKeys'));
         return;
       }
 
@@ -303,71 +351,26 @@ export function CustomProvidersSection() {
       if (existingProvider) {
         providerId = existingProvider.id;
         setSelectedCustomProvider(providerId);
-        toast.success(`Найден существующий провайдер: ${existingProvider.name}`);
+        toast.success(t('aiHub.existingProviderFound', { name: existingProvider.name }));
       } else {
         const name = parsed.name || new URL(parsed.baseUrl).hostname;
         const result = await customProviders.addCustomProvider(name, parsed.baseUrl, 'openai/*');
         if (!result.success || !result.provider) {
-          toast.error(result.error || 'Failed to create provider');
+          toast.error(result.error || t('aiHub.providerCreateFailed'));
           return;
         }
         providerId = result.provider.id;
         setCustomProvidersList(prev => [...prev, result.provider!]);
         setSelectedCustomProvider(providerId);
-        toast.success(`Создан провайдер: ${name}`);
+        toast.success(t('aiHub.providerCreated', { name }));
       }
 
       setPrefillKeys(parsed.keys);
       setIsBulkDrawerOpen(true);
     } catch {
-      toast.error('Failed to read clipboard');
+      toast.error(t('aiKeys.clipboardReadFailed'));
     }
   }, [customProvidersList]);
-
-  // ── Health Summary Bar ─────────────────────────────────────────────────
-const HealthSummaryBar = ({ records }: { records: KeyHealthRecord[] }) => {
-  const summary = getHealthSummary(records);
-  return (
-    <GlassCard className="p-3">
-      <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className="text-slate-400 font-medium">Key Health:</span>
-        {summary.healthy > 0 && (
-          <span className="inline-flex items-center gap-1 text-emerald-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            {summary.healthy} healthy
-          </span>
-        )}
-        {summary.flaky > 0 && (
-          <span className="inline-flex items-center gap-1 text-amber-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-            {summary.flaky} flaky
-          </span>
-        )}
-        {summary.broken > 0 && (
-          <span className="inline-flex items-center gap-1 text-red-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-            {summary.broken} broken
-          </span>
-        )}
-        {summary.expired > 0 && (
-          <span className="inline-flex items-center gap-1 text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-            {summary.expired} expired
-          </span>
-        )}
-        {summary.unknown > 0 && (
-          <span className="inline-flex items-center gap-1 text-slate-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-            {summary.unknown} unknown
-          </span>
-        )}
-        {summary.total === 0 && (
-          <span className="text-slate-500">No data yet</span>
-        )}
-      </div>
-    </GlassCard>
-  );
-};
 
 return (
     <div className="space-y-4">
@@ -382,18 +385,18 @@ return (
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">Custom Providers</h3>
+            <h3 className="text-sm font-semibold text-slate-200">{t('aiHub.customProviders')}</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Add any OpenAI-compatible provider with custom base URL
+              {t('aiHub.customProvidersDesc')}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <Toggle
-              label="Health"
+              label={t('aiHub.healthToggle')}
               checked={autoRefreshEnabled}
               onChange={toggleAutoRefresh}
               size="sm"
-              tooltip="Auto-refresh key health every 30s"
+              tooltip={t('aiHub.healthToggleTip')}
             />
             <Button
               variant="primary"
@@ -401,7 +404,7 @@ return (
               leftIcon={<Sparkles size={12} />}
               onClick={handleSmartPasteFromPost}
             >
-              Smart Paste from Post
+              {t('aiHub.smartPasteFromPost')}
             </Button>
             <Button
               variant="secondary"
@@ -409,7 +412,7 @@ return (
               leftIcon={<Plus size={12} />}
               onClick={() => setIsCreateProviderDrawerOpen(true)}
             >
-              Add Provider
+              {t('aiHub.addProvider')}
             </Button>
           </div>
         </div>
@@ -422,10 +425,9 @@ return (
         {customProvidersList.length === 0 ? (
           <GlassCard className="p-8">
             <div className="text-center">
-              <p className="text-sm text-slate-400 mb-1">No custom providers yet</p>
+              <p className="text-sm text-slate-400 mb-1">{t('aiHub.noCustom')}</p>
               <p className="text-xs text-slate-500">
-                Use <span className="text-sky-400">Smart Paste</span> to add from a post, or{' '}
-                <span className="text-sky-400">Add Provider</span> manually
+                {t('aiHub.customEmpty', { smart: t('aiHub.smartPasteFromPost'), add: t('aiHub.addProvider') })}
               </p>
             </div>
           </GlassCard>

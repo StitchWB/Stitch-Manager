@@ -111,8 +111,10 @@ export function AiProxySettings() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void loadData();
     void loadModels();
+    });
   }, [loadData, loadModels]);
 
   const handleStart = async () => {

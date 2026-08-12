@@ -401,7 +401,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-[#0a0c14] border border-vsc-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+        <div className="bg-vsc-panel-solid border border-vsc-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-vsc-border">
           <h2 className="text-lg font-semibold text-vsc-text">{t('aiHub.wizard.title')}</h2>

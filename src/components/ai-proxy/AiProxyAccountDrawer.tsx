@@ -110,7 +110,9 @@ export function AiProxyAccountDrawer({
     if (!isOpen || !account?.id) return;
 
     let cancelled = false;
+      queueMicrotask(() => {
     setRequestsLoading(true);
+      });
     void (async () => {
       try {
         // We only have global history API today; filter client-side.

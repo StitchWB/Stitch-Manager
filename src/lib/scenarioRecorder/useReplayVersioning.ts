@@ -27,12 +27,14 @@ export function useReplayVersioning({ scenario, isOpen }: UseReplayVersioningPar
   const [rollbackLoading, setRollbackLoading] = useState(false);
 
   useEffect(() => {
-    if (!isOpen || !scenario?.id) {
-      setRevisions([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+      if (!isOpen || !scenario?.id) {
+        queueMicrotask(() => {
+          setRevisions([]);
+          setLoading(false);
+          setError(null);
+        });
+        return;
+      }
 
     let cancelled = false;
     const load = async () => {

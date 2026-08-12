@@ -16,6 +16,7 @@ import { GlassCard, IconButton, Toggle, Tooltip } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
 import { useAiProxyStore, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
+import type { SettingsData } from '@/types/generated';
 import {
   startAiProxy,
   stopAiProxy,
@@ -123,10 +124,12 @@ export function SystemStatusStrip() {
 
   // Derive nextRun from store tasks (polled centrally) instead of fetching.
   useEffect(() => {
+    queueMicrotask(() => {
     const enabled = tasks.filter(task => task.enabled && task.nextRun > 0);
     setNextRunUnix(
       enabled.length > 0 ? Math.min(...enabled.map(task => task.nextRun)) : null
     );
+    });
   }, [tasks]);
 
   useEffect(() => {
@@ -157,7 +160,7 @@ export function SystemStatusStrip() {
     async (next: boolean) => {
       // Optimistic update
       const prev = useSettingsStore.getState().settings;
-      useSettingsStore.setState({ settings: { ...prev, autoReplenishEnabled: next } as any });
+        useSettingsStore.setState({ settings: { ...(prev ?? {}), autoReplenishEnabled: next } as SettingsData });
       try {
         await updateSettings({ autoReplenishEnabled: next });
       } catch (err) {

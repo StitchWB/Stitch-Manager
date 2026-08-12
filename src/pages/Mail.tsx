@@ -145,7 +145,9 @@ export default function Mail() {
     if (!accountIdParam) {
       // Param cleared (e.g. user clicked another sidebar entry) → drop scope.
       if (accountScope) {
+          queueMicrotask(() => {
         setAccountScope(null);
+          });
       }
       accountParamConsumedFor.current = null;
       return;

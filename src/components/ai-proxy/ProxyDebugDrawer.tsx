@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Trash2, RefreshCw, Bug } from 'lucide-react';
 import { aiProxy } from '@/lib/backend';
 import type { ProxyDebugLog } from '@/lib/backend/modules/aiProxy';
-import { Button, LoadingSpinner } from '@/components/ui';
+import { Button, Checkbox, LoadingSpinner, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { t } from '@/lib/i18n';
 
 interface ProxyDebugDrawerProps {
   isOpen: boolean;
@@ -30,7 +32,7 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
 
   useEffect(() => {
     if (isOpen) {
-      fetchLogs();
+      queueMicrotask(() => void fetchLogs());
     }
   }, [isOpen, fetchLogs]);
 
@@ -58,24 +60,21 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="relative w-full max-w-3xl bg-[#18181b] border-l border-white/10 flex flex-col h-full shadow-2xl">
+      <div className="relative w-full max-w-3xl bg-vsc-panel-solid border-l border-white/10 flex flex-col h-full shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
           <div className="flex items-center gap-2">
             <Bug className="w-4 h-4 text-amber-400" />
-            <h2 className="text-sm font-semibold text-white">Proxy Debug Logs</h2>
+            <h2 className="text-sm font-semibold text-white">{t('aiHub.debugTitle')}</h2>
             <span className="text-xs text-slate-500">({logs.length})</span>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="accent-amber-500 w-3 h-3"
-                checked={autoRefresh}
-                onChange={e => setAutoRefresh(e.target.checked)}
-              />
-              Auto
-            </label>
+            <Checkbox
+              checked={autoRefresh}
+              onChange={e => setAutoRefresh(e.target.checked)}
+              label={t('aiHub.auto')}
+              className="text-xs text-slate-400"
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -93,12 +92,12 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
             >
               <Trash2 className="w-3 h-3" />
             </Button>
-            <button
+            <ButtonBase
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />
-            </button>
+            </ButtonBase>
           </div>
         </div>
 
@@ -106,35 +105,35 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
         <div className="flex flex-1 overflow-hidden">
           {/* Logs list */}
           <div className="w-1/2 border-r border-white/10 overflow-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-[#18181b] z-10">
-                <tr className="border-b border-white/10 text-slate-400">
-                  <th className="px-3 py-2 text-left font-medium">Method</th>
-                  <th className="px-3 py-2 text-left font-medium">Path</th>
-                  <th className="px-3 py-2 text-left font-medium">Status</th>
-                  <th className="px-3 py-2 text-left font-medium">Time</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-xs">
+              <TableHeader className="sticky top-0 bg-vsc-panel-solid z-10">
+                <TableRow className="border-b border-white/10 text-slate-400 hover:bg-transparent">
+                  <TableHead className="px-3 py-2 text-left font-medium">{t('aiHub.debugMethod')}</TableHead>
+                  <TableHead className="px-3 py-2 text-left font-medium">{t('aiHub.debugPath')}</TableHead>
+                  <TableHead className="px-3 py-2 text-left font-medium">{t('aiHub.debugStatus')}</TableHead>
+                  <TableHead className="px-3 py-2 text-left font-medium">{t('aiHub.debugTime')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {logs.map(log => (
-                  <tr
+                  <TableRow
                     key={log.id ?? log.createdAt}
-                    className={`border-b border-white/5 cursor-pointer transition-colors ${
+                    className={`cursor-pointer transition-colors ${
                       selectedLog?.id === log.id ? 'bg-amber-500/10' : 'hover:bg-white/5'
                     }`}
                     onClick={() => setSelectedLog(log)}
                   >
-                    <td className="px-3 py-2">
+                    <TableCell className="px-3 py-2">
                       <span className={
                         log.method === 'GET' ? 'text-emerald-400' :
                         log.method === 'POST' ? 'text-blue-400' :
                         'text-slate-300'
                       }>{log.method}</span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-300 truncate max-w-[150px]" title={log.path}>
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-slate-300 truncate max-w-[150px]" title={log.path}>
                       {log.path}
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       {log.errorMessage ? (
                         <span className="text-red-400">ERR</span>
                       ) : log.responseStatus ? (
@@ -146,21 +145,21 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
                       ) : (
                         <span className="text-slate-500">—</span>
                       )}
-                    </td>
-                    <td className="px-3 py-2 text-slate-500">
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-slate-500">
                       {log.durationMs !== null && log.durationMs !== undefined ? `${log.durationMs}ms` : '—'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {logs.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={4} className="px-3 py-8 text-center text-slate-500">
                       {loading ? 'Loading...' : 'No proxy debug logs yet. Make a request through the proxy.'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           {/* Detail panel */}
@@ -168,7 +167,7 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
             {selectedLog ? (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-xs font-medium text-slate-400 mb-1">Request</h3>
+                    <h3 className="text-xs font-medium text-slate-400 mb-1">{t('aiHub.request')}</h3>
                   <div className="bg-black/30 rounded-lg p-3 space-y-2 text-xs">
                     <div className="flex gap-2">
                       <span className="text-emerald-400 font-mono">{selectedLog.method}</span>
@@ -188,7 +187,7 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
                 </div>
 
                 <div>
-                  <h3 className="text-xs font-medium text-slate-400 mb-1">Response</h3>
+                    <h3 className="text-xs font-medium text-slate-400 mb-1">{t('aiHub.response')}</h3>
                   <div className="bg-black/30 rounded-lg p-3 space-y-2 text-xs">
                     {selectedLog.responseStatus ? (
                       <span className={`font-mono ${
@@ -196,10 +195,10 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
                         selectedLog.responseStatus >= 400 ? 'text-red-400' :
                         'text-amber-400'
                       }`}>
-                        Status: {selectedLog.responseStatus}
+                        {t('aiHub.statusValue', { status: selectedLog.responseStatus })}
                       </span>
                     ) : selectedLog.errorMessage ? (
-                      <span className="text-red-400">Error: {selectedLog.errorMessage}</span>
+                      <span className="text-red-400">{t('aiHub.errorValue', { msg: selectedLog.errorMessage })}</span>
                     ) : null}
                     {selectedLog.responseHeaders && (
                       <pre className="text-slate-500 text-[10px] overflow-auto max-h-32 whitespace-pre-wrap">
@@ -216,7 +215,7 @@ export function ProxyDebugDrawer({ isOpen, onClose }: ProxyDebugDrawerProps) {
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-                Select a log entry to view details
+                {t('aiHub.selectLog')}
               </div>
             )}
           </div>

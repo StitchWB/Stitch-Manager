@@ -293,7 +293,7 @@ export const ChatMessage = memo(function ChatMessage({
           )}
           {!isUser && message.debug?.completionTokens != null && message.debug.completionTokens > 0 && message.debug?.durationMs != null && message.debug.durationMs > 0 && (
             <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-blue/10 text-vsc-blue border border-vsc-blue/30 font-mono">
-              {((message.debug.completionTokens / message.debug.durationMs) * 1000).toFixed(1)} t/s
+              {t('uiTexts.tps', { value: ((message.debug.completionTokens / message.debug.durationMs) * 1000).toFixed(1) })}
             </span>
           )}
           {!isUser && message.debug?.durationMs != null && (
@@ -303,12 +303,12 @@ export const ChatMessage = memo(function ChatMessage({
           )}
           {!isUser && message.debug?.completionTokens != null && message.debug.completionTokens > 0 && (
             <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-input text-vsc-text-muted border border-vsc-border font-mono">
-              {message.debug.promptTokens ?? 0}→{message.debug.completionTokens} tok
+              {message.debug.promptTokens ?? 0}→{message.debug.completionTokens} {t('uiTexts.unitTok')}
             </span>
           )}
           {!isUser && message.debug?.contextUsagePct != null && message.debug.contextUsagePct > 0 && (
             <span className="text-2xs px-1.5 py-0.5 rounded bg-vsc-green/10 text-vsc-green border border-vsc-green/30 font-mono">
-              ctx {message.debug.contextUsagePct.toFixed(1)}%
+              {t('uiTexts.unitCtx')} {message.debug.contextUsagePct.toFixed(1)}%
             </span>
           )}
           {!isUser && message.debug?.forceProvider && (

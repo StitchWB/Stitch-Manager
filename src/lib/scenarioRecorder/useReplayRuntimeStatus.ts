@@ -27,7 +27,9 @@ export function useReplayRuntimeStatus({ isOpen }: UseReplayRuntimeStatusParams)
 
   useEffect(() => {
     if (!isOpen) return;
+      queueMicrotask(() => {
     void refreshRuntime();
+      });
   }, [isOpen, refreshRuntime]);
 
   return {

@@ -63,7 +63,9 @@ export default function Automation() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void refreshKpis();
+    });
   }, [refreshKpis]);
 
   const enabledTasks = useMemo(() => kpi.tasks.filter(task => task.enabled), [kpi.tasks]);

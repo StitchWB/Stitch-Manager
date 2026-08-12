@@ -51,7 +51,9 @@ export default function PromptEditor({ promptName, title, description }: PromptE
   }, [promptName]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     loadPrompt();
+    });
   }, [loadPrompt]);
 
   const handleSave = async () => {
