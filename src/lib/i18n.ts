@@ -3630,6 +3630,7 @@ columnHeader: string;
       saveProvider: string;
       suggestions: string;
       test: string;
+      testerDesc: string;
       testerTitle: string;
       testing: string;
       agentHint: string;
@@ -3860,6 +3861,7 @@ columnHeader: string;
     upstreamModelId: string;
     vision: string;
     weight: string;
+    weightHint: string;
   };
   list: {
     addEndpoint: string;

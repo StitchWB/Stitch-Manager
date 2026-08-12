@@ -368,7 +368,7 @@ export function CustomProvidersSection() {
       setPrefillKeys(parsed.keys);
       setIsBulkDrawerOpen(true);
     } catch {
-      toast.error(t('aiKeys.clipboardReadFailed'));
+      toast.error(t('apiKeys.clipboardReadFailed'));
     }
   }, [customProvidersList]);
 

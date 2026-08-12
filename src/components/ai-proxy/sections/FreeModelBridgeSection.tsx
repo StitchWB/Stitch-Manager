@@ -108,7 +108,7 @@ export function FreeModelBridgeSection() {
               onClick={handleTestFreemodel}
               isLoading={isTestingFreemodel}
             >
-              {t('aiKeys.testConnection')}
+              {t('apiKeys.testConnection')}
             </Button>
             {freemodelTestResult && (
               <span className={`text-xs ${freemodelTestResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
