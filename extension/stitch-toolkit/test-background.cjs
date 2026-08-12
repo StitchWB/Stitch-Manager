@@ -360,6 +360,39 @@ async function run() {
     await new Promise(r => setTimeout(r, 80));
   }
 
+  console.log('');
+  console.log('9. Replay goto/navigate steps drive tab navigation (runDomStep)');
+  if (bridges.replay) {
+    tabsUpdateCalls.length = 0;
+    chrome.tabs.query = async () => [{ id: 9, url: 'about:blank', status: 'complete', active: true }];
+    chrome.tabs.get = async (tabId) => ({ id: tabId, url: 'https://example.com/', status: 'complete' });
+    bridges.replay._message({
+      type: 'start_replay',
+      payload: {
+        runId: 'goto_exec_test',
+        alias: 'test@local',
+        scenarioPath: '/tmp/s.json',
+        startUrl: 'https://example.com/',
+        fromStep: 1,
+        // goto (sanitized nav) + legacy navigate alias must both navigate.
+        steps: [
+          { kind: 'goto', url: 'https://example.com/' },
+          { kind: 'navigate', url: 'https://www.iana.org/' },
+        ],
+        nativeHosted: true,
+      },
+    });
+    await new Promise(r => setTimeout(r, 300));
+    const navUrls = tabsUpdateCalls.map(c => c.opts && c.opts.url);
+    if (navUrls.includes('https://example.com/') && navUrls.includes('https://www.iana.org/')) pass('goto + navigate steps drive tab navigation');
+    else fail('goto/navigate did not navigate: ' + JSON.stringify(navUrls));
+    const doneMsgs = bridges.replay.sent.filter(p => p.type === 'replay_step_done');
+    if (doneMsgs.length >= 2) pass('replay_step_done emitted for nav steps');
+    else fail('replay_step_done count: ' + doneMsgs.length);
+    bridges.replay._message({ type: 'control', payload: { command: 'stop' } });
+    await new Promise(r => setTimeout(r, 80));
+  }
+
   finish();
 }
 
