@@ -3578,10 +3578,35 @@ columnHeader: string;
       allModels: string;
       testApi: string;
       discoveredModels: string;
+      providers: string;
+    };
+    table: {
+      enabled: string;
+      name: string;
+      models: string;
+      actions: string;
+    };
+    stats: {
+      providers: string;
     };
     descriptions: {
       testApi: string;
     };
+  }
+  aiGateway: {
+    title: string;
+    subtitle: string;
+    migrate: string;
+    backEndpoints: string;
+    backModels: string;
+    discovering: string;
+    discoverModels: string;
+    adapter: string;
+    baseUrl: string;
+    status: string;
+    enabled: string;
+    disabled: string;
+    contract: string;
   }
 }
 

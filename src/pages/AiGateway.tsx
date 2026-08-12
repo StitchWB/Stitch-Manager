@@ -11,6 +11,7 @@ import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
 import { RouteTargetsList } from '@/components/ai-gateway/RouteTargetsList';
 import { RouteTargetForm } from '@/components/ai-gateway/RouteTargetForm';
 import { Button, ConfirmActionButton } from '@/components/ui';
+import { t } from '@/lib/i18n';
 import { appToast } from '@/lib/observability/toast';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import { useFormDialog } from '@/hooks/useFormDialog';
@@ -155,9 +156,9 @@ export default function AiGateway() {
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">AI Gateway</h1>
+          <h1 className="text-3xl font-bold mb-2">{t('aiGateway.title')}</h1>
           <p className="text-muted-foreground">
-            Manage provider endpoints, credentials, models, and routing
+            {t('aiGateway.subtitle')}
           </p>
         </div>
         <ConfirmActionButton
@@ -167,7 +168,7 @@ export default function AiGateway() {
           onConfirm={handleMigrate}
         >
           <Database className="h-4 w-4 mr-2" />
-          Migrate Legacy Data
+          {t('aiGateway.migrate')}
         </ConfirmActionButton>
       </div>
 
@@ -195,7 +196,7 @@ export default function AiGateway() {
         <div className="space-y-6">
           <Button variant="ghost" onClick={handleBack} className="mb-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Endpoints
+            {t('aiGateway.backEndpoints')}
           </Button>
 
           <div className="bg-white/5 border border-white/10 rounded-lg p-6">
@@ -211,13 +212,13 @@ export default function AiGateway() {
                 onClick={handleDiscoverModels}
               >
                 {!discovering && <Search className="h-4 w-4 mr-2" />}
-                {discovering ? 'Discovering...' : 'Discover Models'}
+                {discovering ? t('aiGateway.discovering') : t('aiGateway.discoverModels')}
               </Button>
             </div>
             <div className="text-sm text-slate-400 space-y-1">
-              <div>Adapter: {view.endpoint.adapterType}</div>
-              <div>Base URL: {view.endpoint.baseUrl}</div>
-              <div>Status: {view.endpoint.enabled ? 'Enabled' : 'Disabled'}</div>
+              <div>{t('aiGateway.adapter')}: {view.endpoint.adapterType}</div>
+              <div>{t('aiGateway.baseUrl')}: {view.endpoint.baseUrl}</div>
+              <div>{t('aiGateway.status')}: {view.endpoint.enabled ? t('aiGateway.enabled') : t('aiGateway.disabled')}</div>
             </div>
           </div>
 
@@ -239,7 +240,7 @@ export default function AiGateway() {
         <div className="space-y-6">
           <Button variant="ghost" onClick={handleBack} className="mb-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Models
+            {t('aiGateway.backModels')}
           </Button>
 
           <div className="bg-white/5 border border-white/10 rounded-lg p-6">
@@ -251,11 +252,11 @@ export default function AiGateway() {
               <div className="text-sm text-slate-400 mb-2">{view.publicModel.displayName}</div>
             )}
             <div className="text-sm text-slate-400">
-              Status: {view.publicModel.enabled ? 'Enabled' : 'Disabled'}
+              {t('aiGateway.status')}: {view.publicModel.enabled ? t('aiGateway.enabled') : t('aiGateway.disabled')}
             </div>
             {view.publicModel.contract && (
               <div className="mt-4">
-                <h3 className="text-sm font-medium mb-2">Contract:</h3>
+                <h3 className="text-sm font-medium mb-2">{t('aiGateway.contract')}</h3>
                 <pre className="text-xs bg-white/5 p-3 rounded overflow-auto">
                   {JSON.stringify(view.publicModel.contract, null, 2)}
                 </pre>

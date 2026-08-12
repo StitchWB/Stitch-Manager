@@ -14,6 +14,8 @@ import type {
   ProviderEmailStrategy,
 } from './types';
 import { DEFAULT_CONFIG } from './types';
+import { createLogger } from '../../lib/observability/logger';
+const log = createLogger('ConfigStore');
 
 interface ConfigState {
   config: RegistrationConfig;
@@ -36,7 +38,7 @@ export const useConfigStore = create<ConfigState>(set => ({
   logVerbosity: 'normal',
 
   setProvider: (provider: ProviderName) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setProvider called:', provider);
+    log.debug('setProvider called:', provider);
     set(state => {
       // Save current email strategy to current provider's slot
       const currentStrategy: ProviderEmailStrategy = {
@@ -83,10 +85,10 @@ export const useConfigStore = create<ConfigState>(set => ({
   },
 
   setIMAPConfig: (imap: Partial<IMAPConfig>) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setIMAPConfig called with:', imap);
+    log.debug('setIMAPConfig called with:', imap);
     set(state => {
       const newImap = { ...state.config.imap, ...imap };
-      if (import.meta.env.DEV) console.debug('[CONFIG_STORE] New IMAP config state:', newImap);
+      log.debug('New IMAP config state:', newImap);
 
       // If strategy changed, update provider-specific strategy
       let updatedStrategies = state.config.providerEmailStrategies;
@@ -117,13 +119,13 @@ export const useConfigStore = create<ConfigState>(set => ({
         };
       }
 
-      if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setIMAPConfig: new config updates:', updates);
+      log.debug('setIMAPConfig: new config updates:', updates);
       return { config: { ...state.config, ...updates } };
     });
   },
 
   setProxyConfig: (proxy: Partial<ProxyConfig>) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setProxyConfig called:', proxy);
+    log.debug('setProxyConfig called:', proxy);
     set(state => ({
       config: {
         ...state.config,
@@ -133,7 +135,7 @@ export const useConfigStore = create<ConfigState>(set => ({
   },
 
   setAdvancedSettings: (settings: Partial<AdvancedSettings>) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setAdvancedSettings called:', settings);
+    log.debug('setAdvancedSettings called:', settings);
     set(state => ({
       config: {
         ...state.config,
@@ -144,31 +146,31 @@ export const useConfigStore = create<ConfigState>(set => ({
 
   setCount: (count: number) => {
     const clampedCount = Math.max(1, Math.min(100, count));
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setCount called:', count, '→ clamped:', clampedCount);
+    log.debug('setCount called:', count, '→ clamped:', clampedCount);
     set(state => ({
       config: { ...state.config, count: clampedCount },
     }));
   },
 
   setUIScale: (uiScale: number) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setUIScale called:', uiScale);
+    log.debug('setUIScale called:', uiScale);
     set(state => ({
       config: { ...state.config, uiScale: Math.max(0.5, Math.min(1.5, uiScale)) },
     }));
   },
 
   setLogVerbosity: (level: LogVerbosity) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setLogVerbosity called:', level);
+    log.debug('setLogVerbosity called:', level);
     set({ logVerbosity: level });
   },
 
   setConfig: (config: RegistrationConfig) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] setConfig called');
+    log.debug('setConfig called');
     set({ config });
   },
 
   updateConfig: (updates: Partial<RegistrationConfig>) => {
-    if (import.meta.env.DEV) console.debug('[CONFIG_STORE] updateConfig called with:', updates);
+    log.debug('updateConfig called with:', updates);
     set(state => ({
       config: { ...state.config, ...updates },
     }));

@@ -1,3 +1,5 @@
+import { createLogger } from '../../../lib/observability/logger';
+const log = createLogger('Debounce');
 /**
  * Debounce utility for auto-save functionality
  */
@@ -9,20 +11,20 @@ export const createDebouncedSave = (
   delay: number = 500
 ) => {
   return (settingsLoaded: boolean) => {
-    if (import.meta.env.DEV) console.debug('[DEBOUNCE] triggerSave called, settingsLoaded:', settingsLoaded);
+    log.debug('triggerSave called, settingsLoaded:', settingsLoaded);
     if (!settingsLoaded) {
-      if (import.meta.env.DEV) console.debug('[DEBOUNCE] settings not loaded yet, skipping');
+      log.debug('settings not loaded yet, skipping');
       return;
     }
 
     if (saveTimeout) {
-      if (import.meta.env.DEV) console.debug('[DEBOUNCE] clearing existing timeout');
+      log.debug('clearing existing timeout');
       clearTimeout(saveTimeout);
     }
 
-    if (import.meta.env.DEV) console.debug('[DEBOUNCE] setting timeout for', delay, 'ms');
+    log.debug('setting timeout for', delay, 'ms');
     saveTimeout = setTimeout(async () => {
-      if (import.meta.env.DEV) console.debug('[DEBOUNCE] timeout fired, calling saveCallback');
+      log.debug('timeout fired, calling saveCallback');
       await saveCallback();
     }, delay);
   };

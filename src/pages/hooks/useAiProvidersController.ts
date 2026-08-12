@@ -29,6 +29,8 @@ import type { ConnectionStateMap, HistorySummary } from '../../components/ai-pro
 import { useAiProxyStore, refreshProxyStatus } from '../../stores/aiProxy';
 import { t } from '../../lib/i18n';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
+import { createLogger } from '../../lib/observability/logger';
+const log = createLogger('AiHub');
 
 export function maskKey(key: string, visibleTail: number = 4): string {
   if (!key) return '';
@@ -125,7 +127,7 @@ export function useAiProvidersController() {
 
   const fetchProviderQuotas = useCallback(async () => {
     try {
-      if (import.meta.env.DEV) console.debug('[AI Hub] Fetching provider quotas...');
+      log.debug('Fetching provider quotas...');
       const [providerQuotasResult, openAiQuotasResult, kiroQuotasResult] = await Promise.allSettled([
         fetchAllQuotasSafe(),
         fetchOpenAiAccountQuotasSafe(),
@@ -139,7 +141,7 @@ export function useAiProvidersController() {
         setOpenAiAccountQuotas(openAiQuotasResult.value);
       }
       if (kiroQuotasResult.status === 'fulfilled') {
-        if (import.meta.env.DEV) console.debug('[AI Hub] Kiro quotas fetched:', kiroQuotasResult.value.length, kiroQuotasResult.value);
+        log.debug('Kiro quotas fetched:', kiroQuotasResult.value.length, kiroQuotasResult.value);
         setKiroAccountQuotas(kiroQuotasResult.value);
       } else {
         console.error('[AI Hub] Kiro quotas failed:', kiroQuotasResult.reason);

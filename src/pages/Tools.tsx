@@ -24,6 +24,8 @@ import { useCardToolsStore, type PersistedCard } from '../stores/cardTools';
 import { toast } from 'sonner';
 import { safeInvoke } from '../lib/backend/core';
 import { t } from '../lib/i18n';
+import { createLogger } from '../lib/observability/logger';
+const log = createLogger('CardCheck');
 
 /* ═══════════════════════════════════════════════
    TYPES
@@ -477,7 +479,7 @@ export default function Tools() {
 
   const addDebugLog = (msg: string) => {
     const time = new Date().toLocaleTimeString('ru-RU', { hour12: false });
-    if (import.meta.env.DEV) console.debug(`[CardCheck ${time}] ${msg}`);
+    log.debug(`[CardCheck ${time}] ${msg}`);
     setDebugLogs(prev => {
       const next = [{ time, msg }, ...prev].slice(0, 20);
       return next;

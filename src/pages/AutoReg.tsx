@@ -31,6 +31,8 @@ import {
   type IdentityConfig,
   type NetworkConfig,
 } from '@/components/ui';
+import { createLogger } from '../lib/observability/logger';
+const log = createLogger('AutoReg');
 
 export function computeEmailDomain(imap: {
   strategy: string;
@@ -314,7 +316,7 @@ export default function AutoRegNext() {
 
   // Initialize on mount
   useEffect(() => {
-    if (import.meta.env.DEV) console.debug('[AUTOREG] useEffect: initializing, calling loadSettings');
+    log.debug('useEffect: initializing, calling loadSettings');
     // NOTE: useRegistrationStore returns new function references on each render.
     // This effect must run only once; otherwise, it can repeatedly reload DB settings
     // and overwrite user edits (e.g. count snapping back to previous value).
@@ -325,7 +327,7 @@ export default function AutoRegNext() {
 
     // Save settings when user leaves the page or switches tabs
     const handleBeforeUnload = () => {
-      if (import.meta.env.DEV) console.debug('[AUTOREG] beforeunload event fired');
+      log.debug('beforeunload event fired');
       const settingsLoaded = useRegistrationStore.getState().settingsLoaded;
       if (settingsLoaded) {
         useRegistrationStore.getState().saveImmediately();

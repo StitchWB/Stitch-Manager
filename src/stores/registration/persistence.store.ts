@@ -31,6 +31,8 @@ import {
   saveEmailGenerationDomain,
 } from './utils/migration';
 import { validateIMAPConfig } from './utils/validation';
+import { createLogger } from '../../lib/observability/logger';
+const log = createLogger('PersistenceStore');
 
 interface PersistenceState {
   settingsLoaded: boolean;
@@ -52,10 +54,10 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
   gmailAppPasswordSet: false,
 
   loadSettings: async () => {
-    if (import.meta.env.DEV) console.debug('[PERSISTENCE_STORE] loadSettings: starting');
+    log.debug('loadSettings: starting');
     try {
       const settings: ExtendedSettingsData = await getSettings();
-      if (import.meta.env.DEV) console.debug('[PERSISTENCE_STORE] loadSettings: got settings from DB:', settings);
+      log.debug('loadSettings: got settings from DB:', settings);
 
       // Load provider-specific email strategies from localStorage with migration
       const providerEmailStrategies = loadProviderStrategies();
@@ -187,12 +189,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
           ? ''
           : settings.googleSheetsServiceAccountJson || '';
 
-      if (import.meta.env.DEV) console.debug(
-        '[PERSISTENCE_STORE] loadSettings: loaded count from DB:',
-        settings.count,
-        '→ config.count:',
-        config.count
-      );
+      log.debug('loadSettings: loaded count from DB:', settings.count, '→ config.count:', config.count);
 
       set({
         settingsLoaded: true,
@@ -200,7 +197,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         gmailAppPasswordSet: gmailAppPasswordMasked || !!settings.gmailAppPassword,
       });
 
-      if (import.meta.env.DEV) console.debug('[PERSISTENCE_STORE] loadSettings: completed successfully');
+      log.debug('loadSettings: completed successfully');
       return config;
     } catch (error) {
       console.error('[PERSISTENCE_STORE] loadSettings: failed:', error);
@@ -210,7 +207,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
   },
 
   saveSettings: async (config: RegistrationConfig, logVerbosity: LogVerbosity) => {
-    if (import.meta.env.DEV) console.debug('[PERSISTENCE_STORE] saveSettings: starting with config:', config);
+    log.debug('saveSettings: starting with config:', config);
 
     // Save provider-specific email strategies to localStorage
     saveProviderStrategies(config.providerEmailStrategies);
@@ -219,7 +216,7 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
     // Validate configuration
     const validation = validateIMAPConfig(config.imap, config.imap.strategy);
     if (!validation.valid) {
-      if (import.meta.env.DEV) console.debug('[PERSISTENCE_STORE] saveSettings: validation failed:', validation.error);
+      log.debug('saveSettings: validation failed:', validation.error);
       set({ saveStatus: 'error' });
       setTimeout(() => set({ saveStatus: 'idle' }), 3000);
       return;
@@ -317,16 +314,13 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         // ignore localStorage errors
       }
 
-      if (import.meta.env.DEV) console.debug(
-        '[PERSISTENCE_STORE] saveSettings: calling updateSettings with data:',
-        updateData
-      );
+      log.debug('saveSettings: calling updateSettings with data:', updateData);
       await updateSettings(updateData);
-      if (import.meta.env.DEV) console.debug('[PERSISTENCE_STORE] saveSettings: updateSettings completed successfully');
+      log.debug('saveSettings: updateSettings completed successfully');
 
       set({ saveStatus: 'saved' });
       setTimeout(() => set({ saveStatus: 'idle' }), 2000);
-      if (import.meta.env.DEV) console.debug('[PERSISTENCE_STORE] saveSettings: status set to saved');
+      log.debug('saveSettings: status set to saved');
     } catch (error) {
       console.error('[PERSISTENCE_STORE] saveSettings: failed:', error);
       set({ saveStatus: 'error' });
