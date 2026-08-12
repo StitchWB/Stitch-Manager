@@ -9,9 +9,9 @@ import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
 import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
 import { getProfileSettings, saveProfileSettings } from '@/lib/backend/modules/profiles';
 import { ProfileScenariosPanel } from './scenarioRecorder/ProfileScenariosPanel';
-import { Badge, Button, ConfirmActionButton, ConfirmDialog, EmptyState, IconButton, Tooltip } from '@/components/ui';
+import { Badge, Button, ConfirmActionButton, EmptyState, IconButton, Tooltip } from '@/components/ui';
 import { EngineToggle } from './profiles/EngineToggle';
-import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
+import { type BrowserEngineId } from '@/lib/browser/engines';
 
 export interface ProfileItem {
   alias: string;
@@ -72,14 +72,7 @@ export default function ProfilesTable({
   const [scenariosAlias, setScenariosAlias] = useState<string | null>(null);
   const [openMenuAlias, setOpenMenuAlias] = useState<string | null>(null);
   const [engineOverrides, setEngineOverrides] = useState<Record<string, BrowserEngineId>>({});
-  const [engineConfirm, setEngineConfirm] = useState<{
-    alias: string;
-    newEngine: BrowserEngineId;
-    currentEngine: BrowserEngineId;
-    hasPriorUsage: boolean;
-  } | null>(null);
   const [engineSaving, setEngineSaving] = useState<string | null>(null);
-  const [deleteAlias, setDeleteAlias] = useState<string | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLElement | null>(null);
   const [menuPosition, setMenuPosition] = useState<{top: number;left: number;} | null>(null);
@@ -251,31 +244,12 @@ export default function ProfilesTable({
     return engineOverrides[profile.alias] ?? profile.engine ?? 'cloakbrowser';
   };
 
-  const handleEngineChange = async (alias: string, newEngine: BrowserEngineId) => {
+  // Engine switching is a plain toggle: a click applies immediately and
+  // clicking the other option switches back. No confirmation by design.
+  const handleEngineChange = (alias: string, newEngine: BrowserEngineId) => {
     const current = engineOverrides[alias] ?? profiles.find(p => p.alias === alias)?.engine ?? 'cloakbrowser';
     if (current === newEngine) return;
-
-    // Check for prior usage: the profile was launched (storage.lastUrl set)
-    // OR an engine was explicitly saved before and differs from the new one
-    // (browser state may exist for that engine). Fresh profiles switch silently.
-    let hasPriorUsage = false;
-    try {
-      const record = await getProfileSettings({ alias });
-      const lastUrl = record?.settings?.storage?.lastUrl?.trim();
-      const explicitEngine = record?.settings?.engine ?? null;
-      hasPriorUsage =
-        Boolean(lastUrl) ||
-        (explicitEngine !== null && normalizeBrowserEngine(explicitEngine) !== newEngine);
-    } catch {
-      // If we can't load settings, don't block the switch.
-    }
-
-    if (hasPriorUsage) {
-      setEngineConfirm({ alias, newEngine, currentEngine: current, hasPriorUsage });
-      return;
-    }
-
-    await applyEngineChange(alias, newEngine);
+    void applyEngineChange(alias, newEngine);
   };
 
   const applyEngineChange = async (alias: string, newEngine: BrowserEngineId) => {
@@ -299,13 +273,6 @@ export default function ProfilesTable({
     }
   };
 
-  const confirmEngineChange = async () => {
-    if (!engineConfirm) return;
-    const { alias, newEngine } = engineConfirm;
-    setEngineConfirm(null);
-    await applyEngineChange(alias, newEngine);
-  };
-
   if (profiles.length === 0) {
     return (
       <EmptyState
@@ -322,6 +289,7 @@ export default function ProfilesTable({
         {profiles.map((profile) => {
           const isLinked = Boolean(profile.linkedAccountEmail);
           const health = profile.healthStatus ? getHealthBadgeConfig(profile.healthStatus) : null;
+          const showAliasTooltip = !isLinked && Boolean(profile.displayName) && profile.displayName !== profile.alias;
 
           return (
             <div
@@ -330,29 +298,44 @@ export default function ProfilesTable({
               <div className="flex items-center gap-3 px-3 py-1.5 min-w-0">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center min-w-0">
-                    <span className="text-sm font-semibold text-slate-100 truncate">
-                      {profile.displayName ?? profile.alias}
-                    </span>
-                    <span className="ml-2 inline-flex gap-1 shrink-0">
-                      <span
-                        className={`text-[10px] px-1.5 py-px rounded border ${
-                        isLinked ?
-                        'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' :
-                        'bg-white/5 text-slate-300 border-white/10'}`
-                        }>
-                        {isLinked ?
-                        t('accounts.profileKindLinked') :
-                        t('accounts.profileKindStandalone')}
-                      </span>
-                      {profile.usedForKiro ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-300 border border-sky-500/20">
-                          {t('accounts.profileUsageKiro')}
+                    {showAliasTooltip ? (
+                      <Tooltip content={profile.alias} wrapperClassName="min-w-0">
+                        <span className="text-sm font-semibold text-slate-100 truncate">
+                          {profile.displayName ?? profile.alias}
                         </span>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-100 truncate">
+                        {profile.displayName ?? profile.alias}
+                      </span>
+                    )}
+                    <span className="ml-2 inline-flex gap-1 shrink-0">
+                      <Badge
+                        variant={isLinked ? 'outline' : 'default'}
+                        size="sm"
+                        className="normal-case tracking-normal"
+                      >
+                        {isLinked ? t('accounts.profileKindLinked') : t('accounts.profileKindStandalone')}
+                      </Badge>
+                      {health ? (
+                        <Badge
+                          variant={health.variant}
+                          size="sm"
+                          withDot
+                          className="normal-case tracking-normal border-0"
+                        >
+                          {health.label}
+                        </Badge>
+                      ) : null}
+                      {profile.usedForKiro ? (
+                        <Badge variant="info" size="sm" className="normal-case tracking-normal">
+                          {t('accounts.profileUsageKiro')}
+                        </Badge>
                       ) : null}
                       {profile.usedTargets?.map(target => (
-                        <span key={target} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-slate-400 border border-white/10">
+                        <Badge key={target} variant="default" size="sm" className="normal-case tracking-normal">
                           {target}
-                        </span>
+                        </Badge>
                       ))}
                     </span>
                   </div>
@@ -360,32 +343,24 @@ export default function ProfilesTable({
                     <span className="text-[11px] font-mono text-slate-500 truncate block">
                       {profile.linkedAccountEmail}
                     </span>
-                  ) : profile.displayName && profile.displayName !== profile.alias ? (
-                    <span className="text-[11px] font-mono text-slate-500 truncate block">
-                      {profile.alias}
-                    </span>
                   ) : null}
                 </div>
 
-                {!isLinked ? (
-                  <div className="w-28 shrink-0">
-                    <EngineToggle
-                      value={resolveProfileEngine(profile)}
-                      onChange={(engine) => void handleEngineChange(profile.alias, engine)}
-                      shardAvailable={shardAvailable}
-                      size="sm"
-                      disabled={engineSaving === profile.alias}
-                    />
-                  </div>
-                ) : null}
+                <div className="flex items-center gap-2 shrink-0">
+                  {!isLinked ? (
+                    <div className="w-28 shrink-0">
+                      <EngineToggle
+                        value={resolveProfileEngine(profile)}
+                        onChange={(engine) => void handleEngineChange(profile.alias, engine)}
+                        shardAvailable={shardAvailable}
+                        shortLabels
+                        size="sm"
+                        disabled={engineSaving === profile.alias}
+                      />
+                    </div>
+                  ) : null}
 
-                {health ? (
-                  <Badge variant={health.variant} size="sm" withDot className="shrink-0 normal-case tracking-normal border-0">
-                    {health.label}
-                  </Badge>
-                ) : null}
-
-                <div className="flex items-center gap-0.5 shrink-0">
+                  <div className="flex items-center gap-0.5 shrink-0">
                   <Tooltip content={`${t('accounts.openProfileAt')}${t('accounts.profiles_table.overlay')}`}>
                     <IconButton
                       type="button"
@@ -435,15 +410,16 @@ export default function ProfilesTable({
                     </Tooltip>
                   ) : null}
                   <Tooltip content={t('accounts.deleteProfile')}>
-                    <IconButton
-                      type="button"
+                    <ConfirmActionButton
+                      iconOnly
                       size="sm"
                       variant="ghost"
                       className="h-7 w-7 text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-                      onClick={() => setDeleteAlias(profile.alias)}
+                      armedLabel={<Trash2 size={14} />}
+                      onConfirm={() => void onDelete(profile.alias)}
                     >
                       <Trash2 size={14} />
-                    </IconButton>
+                    </ConfirmActionButton>
                   </Tooltip>
                   <div className="relative">
                     <Tooltip content={t('common.more') || 'More'}>
@@ -465,6 +441,7 @@ export default function ProfilesTable({
                         <MoreHorizontal size={14} />
                       </IconButton>
                     </Tooltip>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -568,32 +545,6 @@ export default function ProfilesTable({
         }}
         defaultUrl={resolveTargetUrl(openTarget, customUrl)}
         defaultScenarioPath={replayInitialScenarioPath ?? undefined} />
-
-      <ConfirmDialog
-        isOpen={Boolean(engineConfirm)}
-        onClose={() => setEngineConfirm(null)}
-        onConfirm={() => void confirmEngineChange()}
-        title={t('accounts.profileEngineConfirmTitle')}
-        message={t('accounts.profileEngineConfirmMessage')}
-        confirmText={t('accounts.profileEngineConfirmAction')}
-        cancelText={t('common.cancel')}
-        variant="warning"
-      />
-
-      <ConfirmDialog
-        isOpen={Boolean(deleteAlias)}
-        onClose={() => setDeleteAlias(null)}
-        onConfirm={() => {
-          const alias = deleteAlias;
-          setDeleteAlias(null);
-          if (alias) void onDelete(alias);
-        }}
-        title={t('accounts.deleteProfile')}
-        message={t('accounts.deleteProfileConfirm', { alias: deleteAlias ?? '' })}
-        confirmText={t('common.delete')}
-        cancelText={t('common.cancel')}
-        variant="danger"
-      />
 
     </div>);
 

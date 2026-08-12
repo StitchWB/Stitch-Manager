@@ -1,9 +1,9 @@
 import { Copy, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { AuthFile } from '../../../types/generated';
 import { t } from '@/lib/i18n';
-import { Button, Checkbox, ConfirmDialog, Modal, Select, Textarea } from '@/components/ui';
+import { Button, Checkbox, Modal, Select, Textarea } from '@/components/ui';
 
 interface ImportValidationState {
   isValid: boolean;
@@ -68,7 +68,24 @@ export function AiTransferModal({
   effectiveExportIncludeSecrets,
   onCopy,
 }: AiTransferModalProps) {
-  const [confirmIncludeSecretsOpen, setConfirmIncludeSecretsOpen] = useState(false);
+  // Two-step "include secrets" (no confirm modal): first check arms for 3s,
+  // second check within the window confirms.
+  const [secretsArmed, setSecretsArmed] = useState(false);
+  const secretsArmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const disarmSecrets = () => {
+    if (secretsArmTimerRef.current) {
+      clearTimeout(secretsArmTimerRef.current);
+      secretsArmTimerRef.current = null;
+    }
+    setSecretsArmed(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (secretsArmTimerRef.current) clearTimeout(secretsArmTimerRef.current);
+    };
+  }, []);
 
   return (
     <>
@@ -246,12 +263,24 @@ export function AiTransferModal({
                   onChange={e => {
                     const next = e.target.checked;
                     if (next) {
-                      setConfirmIncludeSecretsOpen(true);
+                      if (secretsArmed) {
+                        disarmSecrets();
+                        onExportIncludeSecretsChange(true);
+                      } else {
+                        if (secretsArmTimerRef.current) clearTimeout(secretsArmTimerRef.current);
+                        secretsArmTimerRef.current = setTimeout(disarmSecrets, 3000);
+                        setSecretsArmed(true);
+                      }
                       return;
                     }
+                    disarmSecrets();
                     onExportIncludeSecretsChange(next);
                   }}
-                  label={t('aiHub.modals.includeSecrets')}
+                  label={
+                    secretsArmed ?
+                    <span className="text-red-300">{t('common.sure') || 'Sure?'}</span> :
+                    t('aiHub.modals.includeSecrets')
+                  }
                   className="py-0 px-0 hover:bg-transparent"
                 />
                 {exportFormat === 'csv' && (
@@ -310,19 +339,6 @@ export function AiTransferModal({
         )}
       </Modal>
 
-      <ConfirmDialog
-        isOpen={confirmIncludeSecretsOpen}
-        onClose={() => setConfirmIncludeSecretsOpen(false)}
-        onConfirm={() => {
-          onExportIncludeSecretsChange(true);
-          setConfirmIncludeSecretsOpen(false);
-        }}
-        title={t('aiHub.modals.includeSecrets')}
-        message={t('aiHub.warnings.includeSecretsConfirm')}
-        confirmText={t('common.confirm')}
-        cancelText={t('common.cancel')}
-        variant="warning"
-      />
     </>
   );
 }

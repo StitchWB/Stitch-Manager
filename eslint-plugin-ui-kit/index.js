@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- ESLint plugins must be CommonJS */
 const path = require('path');
 
 /**
@@ -12,17 +13,6 @@ function getAttributeValue(node, attrName) {
   if (attr.value?.type === 'JSXExpressionContainer' && attr.value.expression?.type === 'Literal')
     return attr.value.expression.value;
   return null;
-}
-
-function hasClassNameContaining(node, substring) {
-  const className = getAttributeValue(node, 'className');
-  return className && className.includes(substring);
-}
-
-function hasAnyClassPattern(node, patterns) {
-  const className = getAttributeValue(node, 'className');
-  if (!className) return false;
-  return patterns.some((p) => className.includes(p));
 }
 
 module.exports = {
@@ -150,15 +140,46 @@ module.exports = {
             }
 
             // Rule 6: Hardcoded theme colors
-            const hexColors = className.match(/bg-\[#([0-9a-fA-F]{3,8})\]/g);
-            if (hexColors) {
-              hexColors.forEach((color) => {
-                context.report({
-                  node,
-                  messageId: 'hardcodedColorToken',
-                  data: { color },
+              const hexColors = className.match(/bg-\[#([0-9a-fA-F]{3,8})\]/g);
+              if (hexColors) {
+                hexColors.forEach((color) => {
+                  context.report({
+                    node,
+                    messageId: 'hardcodedColorToken',
+                    data: { color },
+                  });
                 });
-              });
+              }
+          },
+        };
+      },
+    },
+    'no-confirm-dialog': {
+      meta: {
+        type: 'suggestion',
+        docs: {
+          description:
+            'Bans confirmation modals outside the UI kit. The standard confirm pattern is the two-step ConfirmActionButton (first click arms red, second executes).',
+          category: 'Best Practices',
+          recommended: true,
+        },
+        schema: [],
+        messages: {
+          noConfirmDialog:
+            'Confirm modals are banned here. Use the UI-kit two-step pattern: ConfirmActionButton (or an armed two-step state) instead of ConfirmDialog.',
+        },
+      },
+      create(context) {
+        // Skip files inside src/components/ui/ (the kit itself hosts ConfirmDialog)
+        const filename = context.getFilename();
+        if (filename.includes(path.join('src', 'components', 'ui'))) {
+          return {};
+        }
+
+        return {
+          JSXOpeningElement(node) {
+            if (node.name.type === 'JSXIdentifier' && node.name.name === 'ConfirmDialog') {
+              context.report({ node, messageId: 'noConfirmDialog' });
             }
           },
         };

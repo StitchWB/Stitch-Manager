@@ -22,7 +22,7 @@ import {
   Textarea,
   Badge,
   MultiFilterDropdown,
-  ConfirmDialog,
+  ConfirmActionButton,
   IconButton,
   Tooltip,
   ViewModeSwitch,
@@ -88,9 +88,9 @@ export function ProfileScenariosPanel({
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editTagsText, setEditTagsText] = useState('');
-  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
+
   const [duplicateLoading, setDuplicateLoading] = useState(false);
-  const [duplicateTarget, setDuplicateTarget] = useState<ScenarioRecordItem | null>(null);
+
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -150,8 +150,6 @@ export function ProfileScenariosPanel({
       setSelectedTags([]);
       setEditOpen(false);
       setEditItem(null);
-      setDuplicateConfirmOpen(false);
-      setDuplicateTarget(null);
       setHistoryOpen(false);
       setHistoryItem(null);
       setRevisions([]);
@@ -303,10 +301,7 @@ export function ProfileScenariosPanel({
     }
   }, []);
 
-  const openDuplicateConfirm = useCallback((item: ScenarioRecordItem) => {
-    setDuplicateTarget(item);
-    setDuplicateConfirmOpen(true);
-  }, []);
+
 
   const openHistory = useCallback(async (item: ScenarioRecordItem) => {
     setHistoryItem(item);
@@ -345,21 +340,19 @@ export function ProfileScenariosPanel({
     [historyItem]
   );
 
-  const confirmDuplicate = useCallback(async () => {
-    if (!duplicateTarget) return;
+  // Two-step duplicate (no confirm modal): first click arms, second duplicates.
+  const confirmDuplicate = useCallback(async (item: ScenarioRecordItem) => {
     setDuplicateLoading(true);
     try {
-      const created = await duplicateRecordedScenario({ scenarioId: duplicateTarget.id });
+      const created = await duplicateRecordedScenario({ scenarioId: item.id });
       setItems((prev) => [created, ...prev]);
       toast.success(t('common.saved'));
-      setDuplicateConfirmOpen(false);
-      setDuplicateTarget(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('common.error'));
     } finally {
       setDuplicateLoading(false);
     }
-  }, [duplicateTarget]);
+  }, []);
 
   const handleDeleteClick = useCallback(
     async (item: ScenarioRecordItem) => {
@@ -593,15 +586,18 @@ export function ProfileScenariosPanel({
                       
                             {t('common.edit')}
                           </Button>
-                          <IconButton
+                          <ConfirmActionButton
+                      iconOnly
                       size="md"
                       variant="ghost"
-                      onClick={() => openDuplicateConfirm(item)}
+                      isLoading={duplicateLoading}
+                      onConfirm={() => void confirmDuplicate(item)}
+                      armedLabel={<Repeat2 size={16} />}
                       aria-label={t('scenarios.duplicateScenario')}
                       title={t('scenarios.duplicateScenario')}>
-                      
+
                             <Repeat2 size={16} />
-                          </IconButton>
+                          </ConfirmActionButton>
                           <IconButton
                       size="md"
                       variant="ghost"
@@ -821,15 +817,18 @@ export function ProfileScenariosPanel({
                       t('common.delete')}
                           </Button>
                         </Tooltip>
-                        <IconButton
+                        <ConfirmActionButton
+                    iconOnly
                     size="md"
                     variant="ghost"
-                    onClick={() => openDuplicateConfirm(item)}
+                    isLoading={duplicateLoading}
+                    onConfirm={() => void confirmDuplicate(item)}
+                    armedLabel={<Repeat2 size={16} />}
                     aria-label={t('scenarios.duplicateScenario')}
                     title={t('scenarios.duplicateScenario')}>
-                    
+
                           <Repeat2 size={16} />
-                        </IconButton>
+                        </ConfirmActionButton>
                         <IconButton
                     size="md"
                     variant="ghost"
@@ -917,25 +916,7 @@ export function ProfileScenariosPanel({
         </div>
       </Modal>
 
-      <ConfirmDialog
-      isOpen={duplicateConfirmOpen}
-      onClose={() => {
-        setDuplicateConfirmOpen(false);
-        setDuplicateTarget(null);
-      }}
-      onConfirm={() => void confirmDuplicate()}
-      title={t('scenarios.duplicateScenario')}
-      message={
-      <div className="space-y-1">
-            <div className="text-slate-200">{duplicateTarget?.name ?? ''}</div>
-            <div className="text-xs text-slate-400">{duplicateTarget?.scenarioPath ?? ''}</div>
-          </div>
-      }
-      confirmText={t('common.confirm')}
-      cancelText={t('common.cancel')}
-      variant="warning"
-      isLoading={duplicateLoading} />
-    
+
 
       <Modal
       isOpen={historyOpen}

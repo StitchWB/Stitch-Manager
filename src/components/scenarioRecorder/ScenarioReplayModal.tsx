@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, LayoutGrid, ScrollText, Stethoscope } from 'lucide-react';
 import { useUIState } from '@/hooks/useUIState';
-import { Button, Checkbox, ConfirmDialog, Modal, SegmentedControl } from '@/components/ui';
+import { Button, Checkbox, Modal, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { getProfileSettings } from '@/lib/backend/modules/profiles';
 import { useScenarioReplay } from '@/lib/scenarioRecorder/useScenarioReplay';
@@ -135,7 +135,7 @@ export function ScenarioReplayModal({
   const [explicitRetryStep, setExplicitRetryStep] = useState<number | null>(null);
   const [selectedVersionNo, setSelectedVersionNo] = useState<number | null>(null);
   const [runStatusFilter, setRunStatusFilter] = useState<ReplayRunStatusFilter>('all');
-  const [presetToDelete, setPresetToDelete] = useState<ReplayRunPreset | null>(null);
+
   const [reindexing, setReindexing] = useState(false);
   const [activeTab, setActiveTab] = useUIState<'overview' | 'details' | 'diagnostics'>(
     'scenario-replay-active-tab',
@@ -265,7 +265,6 @@ export function ScenarioReplayModal({
       setSelectedVersionNo(null);
       setSelectedTags([]);
       setRunStatusFilter('all');
-      setPresetToDelete(null);
       setEngineHydrated(false);
       scenarioPathTouchedRef.current = false;
       return;
@@ -1032,7 +1031,8 @@ export function ScenarioReplayModal({
                     }
                   }}
                   onRequestDeletePreset={(preset) => {
-                    setPresetToDelete(preset);
+                    deletePreset(preset.id);
+                    toast.success(t('common.saved'));
                   }} />
 
                   <ReplayRunHistoryPanel
@@ -1185,25 +1185,6 @@ export function ScenarioReplayModal({
           null}
         </div>
       </Modal>
-
-      <ConfirmDialog
-        isOpen={Boolean(presetToDelete)}
-        onClose={() => setPresetToDelete(null)}
-        onConfirm={() => {
-          if (!presetToDelete) return;
-          deletePreset(presetToDelete.id);
-          toast.success(t('common.saved'));
-          setPresetToDelete(null);
-        }}
-        title={t('recorder.replay.presetDeleteTitle')}
-        message={
-        presetToDelete ?
-        t('recorder.replay.presetDeleteMessage', { name: presetToDelete.name }) :
-        ''
-        }
-        confirmText={t('common.delete')}
-        cancelText={t('common.cancel')}
-        variant="danger" />
 
     </>);
 

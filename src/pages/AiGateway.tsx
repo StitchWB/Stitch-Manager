@@ -10,7 +10,7 @@ import { PublicModelsList } from '@/components/ai-gateway/PublicModelsList';
 import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
 import { RouteTargetsList } from '@/components/ai-gateway/RouteTargetsList';
 import { RouteTargetForm } from '@/components/ai-gateway/RouteTargetForm';
-import { Button, ConfirmDialog } from '@/components/ui';
+import { Button, ConfirmActionButton } from '@/components/ui';
 import { appToast } from '@/lib/observability/toast';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import { useFormDialog } from '@/hooks/useFormDialog';
@@ -48,7 +48,7 @@ export default function AiGateway() {
   // Migration state
   const { migrateLegacyData, fetchUpstreamModels } = useAiGatewayStore();
   const [migrating, setMigrating] = useState(false);
-  const [migrateDialogOpen, setMigrateDialogOpen] = useState(false);
+
 
   const handleSelectEndpoint = (endpoint: ProviderEndpoint) => {
     setView({ type: 'endpoint-detail', endpoint });
@@ -137,7 +137,6 @@ export default function AiGateway() {
   };
 
   const handleMigrate = async () => {
-    setMigrateDialogOpen(false);
     setMigrating(true);
     try {
       const result = await migrateLegacyData();
@@ -161,15 +160,15 @@ export default function AiGateway() {
             Manage provider endpoints, credentials, models, and routing
           </p>
         </div>
-        <Button
+        <ConfirmActionButton
           variant="outline"
           size="sm"
           isLoading={migrating}
-          onClick={() => setMigrateDialogOpen(true)}
+          onConfirm={handleMigrate}
         >
           <Database className="h-4 w-4 mr-2" />
           Migrate Legacy Data
-        </Button>
+        </ConfirmActionButton>
       </div>
 
       {view.type === 'endpoints' && (
@@ -317,16 +316,6 @@ export default function AiGateway() {
         />
       )}
 
-      <ConfirmDialog
-        isOpen={migrateDialogOpen}
-        onClose={() => setMigrateDialogOpen(false)}
-        onConfirm={handleMigrate}
-        title="Migrate Legacy Data"
-        message="This will import provider endpoints and credentials from the legacy AI proxy configuration into the AI Gateway. Continue?"
-        confirmText="Migrate"
-        variant="warning"
-        isLoading={migrating}
-      />
     </div>
   );
 }

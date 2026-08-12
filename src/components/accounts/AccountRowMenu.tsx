@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff, KeyRound, Link, RotateCcw } from 'lucide-react';
 import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -68,6 +69,8 @@ export function AccountRowMenu({
 }: AccountRowMenuProps) {
   const autoRefreshEnabled = isAutoRefreshEnabled(account);
   const refMeta = getRefMeta(account);
+  // Two-step delete via menu (no confirm modal): first click arms for 3s.
+  const [deleteArmed, setDeleteArmed] = useState(false);
   if (!isMenuOpen) return null;
 
   return (
@@ -246,12 +249,17 @@ export function AccountRowMenu({
         type="button"
         className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-rose-300 hover:bg-rose-500/10"
         onClick={() => {
-          onDelete(account.id);
-          onCloseMenu();
+          if (deleteArmed) {
+            onDelete(account.id);
+            onCloseMenu();
+            return;
+          }
+          setDeleteArmed(true);
+          setTimeout(() => setDeleteArmed(false), 3000);
         }}
       >
         <Trash2 size={12} />
-        {t('accounts.deleteAccountTitle')}
+        {deleteArmed ? t('scenarios.deleteArmedLabel') || 'Delete?' : t('accounts.deleteAccountTitle')}
       </ButtonBase>
     </div>
   );

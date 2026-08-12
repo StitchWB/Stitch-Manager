@@ -22,7 +22,6 @@ import {
   Badge,
   Button,
   ButtonBase,
-  ConfirmDialog,
   EmptyState,
   Input,
   OverflowMenu,
@@ -184,8 +183,9 @@ export function MailSidebar({
   const [renameTarget, setRenameTarget] = useState<EmailInboxProfile | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<EmailInboxProfile | null>(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
+  // Two-step delete via the row menu (no confirm modal): first click arms the
+  // item for 3s ("Delete?"), second click within the window deletes.
+  const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null);
 
   const groupedProfiles = useMemo(() => {
     const groups = new Map<MailboxProviderKind, EmailInboxProfile[]>();
@@ -266,15 +266,9 @@ export function MailSidebar({
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
-    setDeleteBusy(true);
-    try {
-      await onDeleteProfile(deleteTarget.id);
-      setDeleteTarget(null);
-    } finally {
-      setDeleteBusy(false);
-    }
+  const handleDeleteFor = async (profileId: string) => {
+    await onDeleteProfile(profileId);
+    setArmedDeleteId(null);
   };
 
   return (
@@ -393,10 +387,26 @@ export function MailSidebar({
                                 },
                                 {
                                   id: 'delete',
-                                  label: t('mail.deleteProfileAction'),
+                                  label:
+                                    armedDeleteId === profile.id ?
+                                    t('scenarios.deleteArmedLabel') || 'Delete?' :
+                                    t('mail.deleteProfileAction'),
                                   icon: <Trash2 size={12} />,
                                   tone: 'danger',
-                                  onSelect: () => setDeleteTarget(profile),
+                                  onSelect: () => {
+                                    if (armedDeleteId === profile.id) {
+                                      void handleDeleteFor(profile.id);
+                                      return;
+                                    }
+                                    setArmedDeleteId(profile.id);
+                                    setTimeout(
+                                      () =>
+                                        setArmedDeleteId(cur =>
+                                          cur === profile.id ? null : cur
+                                        ),
+                                      3000
+                                    );
+                                  },
                                 },
                               ]}
                             />
@@ -496,19 +506,6 @@ export function MailSidebar({
         />
       </ActionDialog>
 
-      <ConfirmDialog
-        isOpen={Boolean(deleteTarget)}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          void handleDeleteConfirm();
-        }}
-        title={t('mail.deleteProfileDialogTitle')}
-        message={t('mail.deleteProfileDialogDescription', { label: deleteTarget?.label ?? '' })}
-        confirmText={t('common.delete')}
-        cancelText={t('common.cancel')}
-        variant="danger"
-        isLoading={deleteBusy}
-      />
     </aside>
   );
 }

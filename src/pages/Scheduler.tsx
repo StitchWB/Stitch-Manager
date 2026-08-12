@@ -37,7 +37,7 @@ import {
 } from './Scheduler/components/SchedulerTaskForm';
 import { formatDistanceToNow } from 'date-fns';
 import type { SchedulerTemplate } from '../lib/backend/modules/scheduler';
-import { Button, ConfirmDialog, EmptyState, GlassCard, IconButton, Modal, ProgressBar, StatCard, StatusBadge, Toggle } from '@/components/ui';
+import { Button, ConfirmActionButton, EmptyState, GlassCard, IconButton, Modal, ProgressBar, StatCard, StatusBadge, Toggle } from '@/components/ui';
 
 function parseJsonObject(raw: string): Record<string, unknown> {
   try {
@@ -225,9 +225,9 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
     useState<SchedulerTaskFormState>(defaultTemplateFormState);
   const [templateError, setTemplateError] = useState<string | null>(null);
 
-  const [templateDeleteOpen, setTemplateDeleteOpen] = useState(false);
+
   const [templateDeleteLoading, setTemplateDeleteLoading] = useState(false);
-  const [templateDeleteTarget, setTemplateDeleteTarget] = useState<SchedulerTemplate | null>(null);
+
 
   const prefilledState = useMemo(
     () => (searchParams.get('prefill') === 'composed' ? getPrefilledStateFromCache() : null),
@@ -488,18 +488,11 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
     }
   };
 
-  const openDeleteTemplate = (tpl: SchedulerTemplate) => {
-    setTemplateDeleteTarget(tpl);
-    setTemplateDeleteOpen(true);
-  };
-
-  const confirmDeleteTemplate = async () => {
-    if (!templateDeleteTarget) return;
+  // Two-step delete (no confirm modal): first click arms, second deletes.
+  const confirmDeleteTemplate = async (tpl: SchedulerTemplate) => {
     setTemplateDeleteLoading(true);
     try {
-      await deleteTemplate(templateDeleteTarget.id);
-      setTemplateDeleteOpen(false);
-      setTemplateDeleteTarget(null);
+      await deleteTemplate(tpl.id);
     } finally {
       setTemplateDeleteLoading(false);
     }
@@ -639,13 +632,16 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
                         <IconButton title={t('scheduler.editTemplateTooltip')} onClick={() => openEditTemplate(tpl)}>
                           <Pencil size={16} />
                         </IconButton>
-                        <IconButton
+                        <ConfirmActionButton
+                          iconOnly
                           title={t('scheduler.titleDeleteTemplate')}
                           variant="danger"
-                          onClick={() => openDeleteTemplate(tpl)}
+                          isLoading={templateDeleteLoading}
+                          armedLabel={<Trash2 size={16} />}
+                          onConfirm={() => void confirmDeleteTemplate(tpl)}
                         >
                           <Trash2 size={16} />
-                        </IconButton>
+                        </ConfirmActionButton>
                       </div>
                     </div>
                   </GlassCard>
@@ -837,20 +833,6 @@ label={t('scheduler.successRateLabel')}
         </div>
       </Modal>
 
-      <ConfirmDialog
-        isOpen={templateDeleteOpen}
-        onClose={() => {
-          setTemplateDeleteOpen(false);
-          setTemplateDeleteTarget(null);
-        }}
-        onConfirm={() => void confirmDeleteTemplate()}
-        title="Delete template"
-        message={templateDeleteTarget ? `Delete template "${templateDeleteTarget.name}"?` : ''}
-        confirmText="Delete"
-        cancelText="Cancel"
-        variant="danger"
-        isLoading={templateDeleteLoading}
-      />
     </div>
   );
 }

@@ -6,6 +6,9 @@ import Header from '../components/layout/Header';
 import { useProfilesViewModel, type ProfileListFilter } from '../hooks/useProfilesViewModel';
 import AddAccountModal from '../components/AddAccountModal';
 import { ProfileSettingsModal } from '../components/profiles/ProfileSettingsModal';
+import { CreateProfileModal, type CreateProfileMode } from '../components/profiles/CreateProfileModal';
+import { ScenarioRecordModal } from '../components/scenarioRecorder/ScenarioRecordModal';
+import { type BrowserEngineId } from '@/lib/browser/engines';
 
 import { useAccountsStore } from '../stores/accounts';
 import type { ProviderName } from '../types/ui';
@@ -325,20 +328,34 @@ export default function Accounts() {
     }
   }, [selectedIds, archiveAccounts, clearSelection]);
 
-  const handleCreateStandaloneProfile = useCallback(async () => {
-    try {
-      const alias = `standalone_profile_${Date.now()}@local.profile`;
-      await saveProfileSettings({ alias, settings: createDefaultProfileSettings() });
-      toast.success(`${t('accounts.profileCreateSuccess')}: ${alias}`);
-      await loadProfiles();
-      handleEntityFilterChange('profiles');
-    } catch (error) {
-      console.error('[Accounts] Failed to create standalone profile:', error);
-      toast.error(
-        `${t('accounts.profileCreateFailed')}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }, [loadProfiles, handleEntityFilterChange]);
+  const [createProfileOpen, setCreateProfileOpen] = useState(false);
+  const [recordNewAlias, setRecordNewAlias] = useState<string | null>(null);
+
+  // New-profile flow: create (then open settings) or create-and-record
+  // (launch the browser with the recorder overlay right away).
+  const handleCreateProfileSubmit = useCallback(
+    async (alias: string, engine: BrowserEngineId, mode: CreateProfileMode) => {
+      try {
+        const settings = createDefaultProfileSettings();
+        settings.engine = engine;
+        await saveProfileSettings({ alias, settings });
+        toast.success(`${t('accounts.profileCreateSuccess')}: ${alias}`);
+        await loadProfiles();
+        handleEntityFilterChange('profiles');
+        if (mode === 'record') {
+          setRecordNewAlias(alias);
+        } else {
+          setProfileSettingsAlias(alias);
+        }
+      } catch (error) {
+        console.error('[Accounts] Failed to create profile:', error);
+        toast.error(
+          `${t('accounts.profileCreateFailed')}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [loadProfiles, handleEntityFilterChange, setProfileSettingsAlias]
+  );
 
   const { visibleProfileItems, shardAvailable } = useProfilesViewModel({
     profileAliases,
@@ -522,7 +539,7 @@ export default function Accounts() {
             onRefreshSheets={handleRefreshSheets}
             onToggleSheetsConfig={handleToggleSheetsConfig}
             onOpenAutoReg={handleOpenAutoReg}
-            onCreateStandaloneProfile={handleCreateStandaloneProfile}
+            onCreateProfile={() => setCreateProfileOpen(true)}
             onAddAccount={handleAddAccountOpen}
             onToggleVisibleColumn={handleToggleVisibleColumn}
             onResetVisibleColumns={handleResetVisibleColumns}
@@ -590,7 +607,6 @@ export default function Accounts() {
                 onSelectAll: selectAll,
                 onClearSelection: clearSelection,
                 onDelete: handleRemoveAccount,
-                onDeleteSelected: handleRemoveSelectedAccounts,
                 onActivate: setActiveAccount,
                 onCheckStatus: handleCheckStatus,
                 isAccountRefreshing,
@@ -625,6 +641,26 @@ export default function Accounts() {
         onSaved={() => {
           void loadProfiles();
         }}
+      />
+
+      <CreateProfileModal
+        isOpen={createProfileOpen}
+        onClose={() => setCreateProfileOpen(false)}
+        onSubmit={handleCreateProfileSubmit}
+        shardAvailable={shardAvailable}
+        existingAliases={profileAliases}
+      />
+
+      <ScenarioRecordModal
+        alias={recordNewAlias}
+        isOpen={Boolean(recordNewAlias)}
+        onClose={() => setRecordNewAlias(null)}
+        quickStart
+        defaultUrl={
+          profileOpenTarget === 'custom' && profileCustomUrl.trim()
+            ? profileCustomUrl.trim()
+            : 'https://google.com'
+        }
       />
 
       {selectedIds.size > 0 && (

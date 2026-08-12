@@ -30,3 +30,8 @@ export const BROWSER_ENGINE_LABELS: Record<BrowserEngineId, string> = {
   cloakbrowser: 'CloakBrowser',
   shardbrowser: 'ShardBrowser',
 };
+
+export const BROWSER_ENGINE_SHORT_LABELS: Record<BrowserEngineId, string> = {
+  cloakbrowser: 'Cloak',
+  shardbrowser: 'Shard',
+};

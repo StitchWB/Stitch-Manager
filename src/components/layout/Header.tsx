@@ -3,7 +3,8 @@ import { Bell, Globe, X, Info, CheckCircle, AlertTriangle, AlertCircle } from 'l
 import { useAppStore } from '../../stores/app';
 import { useAiProxyStore, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
 import { t } from '@/lib/i18n';
-import { ButtonBase, IconButton } from '@/components/ui';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { IconButton } from '@/components/ui/IconButton';
 
 
 
@@ -77,7 +78,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
   return (
     <header
-      className="h-12 bg-black/60 border-b border-white/[0.06] flex items-center shrink-0 sticky top-0 z-[60]"
+      className="h-12 bg-black/60 border-b border-white/[0.06] flex items-center shrink-0 sticky top-0 z-[60] backdrop-blur-md"
       role="banner"
     >
       {/* Left: Title, subtitle, icon */}

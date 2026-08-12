@@ -3,7 +3,7 @@ import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   GlassCard, Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
-  Button, Badge, EmptyState, ConfirmDialog, Toggle,
+  Button, Badge, EmptyState, ConfirmActionButton, Toggle,
 } from '@/components/ui';
 import type { ProviderConfig } from '@/lib/backend/modules/opencodeConfig';
 import { ProviderEditorModal } from './ProviderEditorModal';
@@ -23,7 +23,7 @@ export function ProvidersSection({
 }: ProvidersSectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+
 
   const providerIds = Object.keys(providers);
 
@@ -37,7 +37,6 @@ export function ProvidersSection({
     delete next[id];
     onChange(next);
     toast.success('Provider deleted');
-    setDeleteId(null);
   };
 
   if (providerIds.length === 0) {
@@ -115,9 +114,14 @@ export function ProvidersSection({
                       >
                         <Edit2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeleteId(id)}>
+                      <ConfirmActionButton
+                        iconOnly
+                        variant="ghost"
+                        size="sm"
+                        armedLabel={<Trash2 className="w-4 h-4" />}
+                        onConfirm={() => handleDelete(id)}>
                         <Trash2 className="w-4 h-4" />
-                      </Button>
+                      </ConfirmActionButton>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -135,15 +139,6 @@ export function ProvidersSection({
         onClose={() => setIsModalOpen(false)}
       />
 
-      <ConfirmDialog
-        isOpen={deleteId !== null}
-        onClose={() => setDeleteId(null)}
-        onConfirm={() => deleteId && handleDelete(deleteId)}
-        title="Delete Provider"
-        message={`Are you sure you want to delete "${deleteId}"?`}
-        confirmText="Delete"
-        variant="danger"
-      />
     </>
   );
 }

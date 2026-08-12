@@ -22,6 +22,7 @@ import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
 import { version as appVersion } from '../../../package.json';
 import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface NavItemProps {
   to: string;
@@ -88,14 +89,14 @@ export default function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col shrink-0 transition-all duration-300 ease-in-out border-r border-white/10 relative z-40 bg-[#111116]/80 backdrop-blur-3xl',
+        'flex flex-col shrink-0 transition-all duration-300 ease-in-out border-r border-white/10 relative z-40 bg-vsc-sidebar-solid/80 backdrop-blur-3xl group',
         sidebarCollapsed ? 'w-16' : 'w-52'
       )}>
 
       {/* Collapse Toggle Button — integrated into border-right */}
       <ButtonBase
         onClick={toggleSidebar}
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-8 rounded-full bg-vsc-sidebar text-slate-400 flex items-center justify-center shadow-lg hover:text-white hover:bg-vsc-panel transition-colors z-50 border border-white/20">
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-8 rounded-full bg-vsc-sidebar text-slate-400 flex items-center justify-center shadow-lg hover:text-white hover:bg-vsc-panel transition-colors z-50 border border-white/20 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity">
 
         {sidebarCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
       </ButtonBase>
@@ -205,7 +206,13 @@ export default function Sidebar() {
             sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
           )}>
 
-          <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+          {sidebarCollapsed ? (
+            <Tooltip content={t('sidebar.localMode')} side="right">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+            </Tooltip>
+          ) : (
+            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+          )}
           {!sidebarCollapsed &&
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
               {t('sidebar.localMode')}

@@ -8,7 +8,7 @@ import type { AccountRelationEdge, RelationType } from '../lib/accounts/relation
 import type { AccountsTableVisibleColumns } from '../stores/uiPreferences';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { AccountRow } from './accounts/AccountRow';
-import { AccountInspectorPanel, ConfirmDialog } from '@/components/ui';
+import { AccountInspectorPanel } from '@/components/ui';
 import {
   Checkbox,
   EmptyState,
@@ -32,7 +32,6 @@ export interface AccountsTableProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   onDelete: (accountId: number) => Promise<void>;
-  onDeleteSelected: (ids: number[]) => Promise<void>;
   onActivate: (provider: string, accountId: number | null) => Promise<void>;
   onCheckStatus: (accountId: number) => Promise<void>;
   isAccountRefreshing: (accountId: number) => boolean;
@@ -49,11 +48,6 @@ export interface AccountsTableProps {
   selectedProvider?: string | null;
 }
 
-type DeleteDialogState =
-  | { isOpen: false }
-  | { isOpen: true; mode: 'single'; accountId: number }
-  | { isOpen: true; mode: 'bulk'; accountIds: number[] };
-
 export default function AccountsTable({
   accounts,
   relationHintsById,
@@ -66,7 +60,6 @@ export default function AccountsTable({
   onSelectAll,
   onClearSelection,
   onDelete,
-  onDeleteSelected,
   onActivate,
   onCheckStatus,
   isAccountRefreshing,
@@ -83,8 +76,7 @@ export default function AccountsTable({
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [inspectedAccountId, setInspectedAccountId] = useState<number | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ isOpen: false });
-  const [isDeleting, setIsDeleting] = useState(false);
+
   const [panelWidth, setPanelWidth] = useState<number>(
     () => useUIPreferencesStore.getState().getComponentPreference<number>('accountsInspector.width', 500),
   );
@@ -162,7 +154,6 @@ export default function AccountsTable({
       const tag = target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
       if (openMenuId != null) return;
-      if (deleteDialog.isOpen) return;
 
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -184,7 +175,7 @@ export default function AccountsTable({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [inspectedAccountId, accounts, openMenuId, deleteDialog.isOpen]);
+  }, [inspectedAccountId, accounts, openMenuId]);
 
   // Panel resizer: drag to adjust width (clamp 400–720), persist on mouseup
   const handleResizerMouseDown = (e: React.MouseEvent) => {
@@ -233,30 +224,13 @@ export default function AccountsTable({
     await onActivate(account.provider, active ? null : account.id);
   };
 
-  const handleConfirmDelete = async () => {
-    if (!deleteDialog.isOpen) return;
-    setIsDeleting(true);
-
-    try {
-      if (deleteDialog.mode === 'single') {
-        await onDelete(deleteDialog.accountId);
-        if (deleteDialog.accountId === inspectedAccountId) {
-          setInspectedAccountId(null);
-        }
-      } else {
-        await onDeleteSelected(deleteDialog.accountIds);
-        if (deleteDialog.accountIds.includes(inspectedAccountId ?? -1)) {
-          setInspectedAccountId(null);
-        }
-      }
-      setDeleteDialog({ isOpen: false });
-    } finally {
-      setIsDeleting(false);
+  // Delete is two-step at the trigger (row menu / inspector menu); this runs
+  // the actual deletion once armed.
+  const handleDeleteAccount = async (accountId: number) => {
+    await onDelete(accountId);
+    if (accountId === inspectedAccountId) {
+      setInspectedAccountId(null);
     }
-  };
-
-  const openSingleDelete = (accountId: number) => {
-    setDeleteDialog({ isOpen: true, mode: 'single', accountId });
   };
 
   if (isLoading && accounts.length === 0) {
@@ -402,7 +376,7 @@ export default function AccountsTable({
                     confirmationMessage: t('accounts.copyTokenSensitiveConfirm'),
                   })
                 }
-                onDelete={openSingleDelete}
+                onDelete={(id) => void handleDeleteAccount(id)}
                 onOpenProfileSession={onOpenProfileSession}
                 onConfirmProfileSession={onConfirmProfileSession}
                 onClearProfileSession={onClearProfileSession}
@@ -459,7 +433,7 @@ export default function AccountsTable({
                   })
                 }
                 onUpdate={onUpdate}
-                onRequestDelete={openSingleDelete}
+                onRequestDelete={(id) => void handleDeleteAccount(id)}
                 onClose={() => setInspectedAccountId(null)}
               />
             </div>
@@ -467,27 +441,6 @@ export default function AccountsTable({
         )}
       </AnimatePresence>
 
-      <ConfirmDialog
-        isOpen={deleteDialog.isOpen}
-        onClose={() => {
-          if (!isDeleting) setDeleteDialog({ isOpen: false });
-        }}
-        onConfirm={handleConfirmDelete}
-        title={
-          deleteDialog.isOpen && deleteDialog.mode === 'bulk'
-            ? t('accounts.deleteBulkTitle')
-            : t('accounts.deleteAccountTitle')
-        }
-        message={
-          deleteDialog.isOpen && deleteDialog.mode === 'bulk'
-            ? t('accounts.deleteBulkMessage', { count: deleteDialog.accountIds.length })
-            : t('accounts.deleteAccountMessage')
-        }
-        confirmText={t('accounts.confirmDelete')}
-        cancelText={t('common.cancel')}
-        variant="danger"
-        isLoading={isDeleting}
-      />
     </div>
   );
 }
