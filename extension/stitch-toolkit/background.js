@@ -1509,23 +1509,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (type === 'stitch:emergency-stop') {
-    console.log('[bg] Emergency stop received from content script (page unload)');
-    void (async () => {
-      try {
-        if (sessionManager.isRecording()) {
-          await stopRecordSession({ skipNotifyTab: true, persist: true });
-        } else if (sessionManager.isReplaying()) {
-          await applyReplayControl('stop');
-        }
-      } catch (e) {
-        console.error('[bg] Emergency stop failed:', e instanceof Error ? e.message : String(e));
-      }
-    })();
-    sendResponse({ ok: true });
-    return true;
-  }
-
   if (type === 'stitch:popup-start-replay') {
     void (async () => {
       try {

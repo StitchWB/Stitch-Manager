@@ -488,7 +488,6 @@ function applyOverlayState(payload) {
     setupEventListeners();
     if (_frameContext.isTop) {
       startPollInterval();
-      setupBeforeUnloadHandler();
     }
   }
 
@@ -498,7 +497,6 @@ function applyOverlayState(payload) {
     cleanupOverlayDrag();
     if (_frameContext.isTop) {
       clearPollInterval();
-      removeBeforeUnloadHandler();
     }
   }
 
@@ -522,10 +520,12 @@ function applyOverlayState(payload) {
     state.scenarioName = payload?.scenarioName || state.scenarioName;
     state.startUrl = payload?.startUrl || state.startUrl;
     state.lastUrl = state.lastUrl || state.startUrl || location.href;
-    // Fresh top-level document entering a native-hosted session: emit the
-    // load nav step (the injected recorder emitted the same) so multi-page
-    // scenarios keep navigation markers for replay.
-    if (prevMode !== 'record' && _frameContext.isTop && state.hudSuppressed) {
+    // Fresh top-level document entering a record session: emit the load nav
+    // step (the injected recorder emitted the same) so multi-page scenarios
+    // keep navigation markers for replay. Full-page navigation no longer
+    // kills the session (the old beforeunload emergency-stop is gone; real
+    // tab closes are handled by chrome.tabs.onRemoved in the service worker).
+    if (prevMode !== 'record' && _frameContext.isTop) {
       state.lastUrl = location.href;
       sendRecordEvent('nav', { selector: null, value: null, meta: { reason: 'load' } });
     }
