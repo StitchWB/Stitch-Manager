@@ -2720,6 +2720,8 @@ addMailboxFromSheets: "Import from Google Sheets",
     scenario_record_modal: {
       advanced_diagnostics: "Advanced diagnostics",
       browser_runtime: "Browser runtime",
+      capture_mode_extension: "Capture: extension",
+      capture_mode_injected: "Capture: built-in script",
       correlation: "Correlation ID",
       engine: "Engine",
       extension_runner: "Extension runner",
@@ -2728,7 +2730,7 @@ addMailboxFromSheets: "Import from Google Sheets",
       install_runtime_tip: "Installs the browser runtime required by the native runner to launch the browser.",
       job: "Job",
       native_runner: "Native runner",
-      native_runner_tip: "Browser events are captured directly by the built-in runner; no extension needed.",
+      native_runner_tip: "Stitch launches the profile browser (proxy/geo/engine). Capture is delegated to the Stitch extension when it connects; the built-in script is the fallback.",
       profile: "Profile",
       python_stderr: "Python stderr",
       recorder_runtime_missing_install_it_to_start_recor: "Recorder runtime is missing — install it to start recording.",
@@ -2748,7 +2750,9 @@ addMailboxFromSheets: "Import from Google Sheets",
       st_recording: "Recording • steps: {count}",
       st_starting: "Starting browser…",
       st_stopping: "Stopping and saving…",
-      start_url: "Start URL"
+      start_url: "Start URL",
+      who_launches_extension: "Extension — you launch the browser yourself; Stitch receives events from the extension over the WS bridge.",
+      who_launches_native: "Native — Stitch launches the browser with the profile identity (proxy/geo/engine); the extension captures, built-in script is the fallback."
     },
     scenario_replay_modal: {
       engine_cloakbrowser: "Engine cloakbrowser"

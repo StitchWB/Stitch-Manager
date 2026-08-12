@@ -2,6 +2,9 @@ export type ScenarioStepKind = 'click' | 'change' | 'submit' | 'nav' | 'proxy.sw
 
 export type ScenarioRunnerMode = 'native' | 'extension';
 
+/** Which engine actually captures browser events in a native run. */
+export type ScenarioCaptureMode = 'extension' | 'injected';
+
 export interface ScenarioRecordedStep {
   kind: ScenarioStepKind | string;
   ts: string;

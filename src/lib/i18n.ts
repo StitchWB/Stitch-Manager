@@ -2727,6 +2727,8 @@ export interface Translations {
     scenario_record_modal: {
       advanced_diagnostics: string;
       browser_runtime: string;
+      capture_mode_extension: string;
+      capture_mode_injected: string;
       correlation: string;
       engine: string;
       extension_runner: string;
@@ -2756,6 +2758,8 @@ export interface Translations {
       st_starting: string;
       st_stopping: string;
       start_url: string;
+      who_launches_extension: string;
+      who_launches_native: string;
     }
     scenario_replay_modal: {
       engine_cloakbrowser: string;
