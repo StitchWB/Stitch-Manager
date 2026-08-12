@@ -31,7 +31,6 @@ const trackedInputElements = [];
 const cleanupController = {
   listeners: [],
   pollIntervalId: null,
-  beforeUnloadHandler: null,
   scrollTimer: null,
   scrollTarget: null,
   scrollHandler: null,
@@ -95,28 +94,5 @@ function clearPollInterval() {
   if (cleanupController.pollIntervalId) {
     clearInterval(cleanupController.pollIntervalId);
     cleanupController.pollIntervalId = null;
-  }
-}
-
-function setupBeforeUnloadHandler() {
-  if (cleanupController.beforeUnloadHandler) return;
-  cleanupController.beforeUnloadHandler = (e) => {
-    // Native-hosted sessions are owned by the Python recorder: full-page
-    // navigation is a normal flow there, not an emergency. hudSuppressed is
-    // the content-side marker of a native-hosted session.
-    if (isRecording() && !state.hudSuppressed) {
-      chrome.runtime.sendMessage({
-        type: 'stitch:emergency-stop',
-        payload: { runId: state.runId, ts: nowIso() },
-      });
-    }
-  };
-  window.addEventListener('beforeunload', cleanupController.beforeUnloadHandler);
-}
-
-function removeBeforeUnloadHandler() {
-  if (cleanupController.beforeUnloadHandler) {
-    window.removeEventListener('beforeunload', cleanupController.beforeUnloadHandler);
-    cleanupController.beforeUnloadHandler = null;
   }
 }
