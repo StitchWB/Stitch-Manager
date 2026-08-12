@@ -201,7 +201,30 @@ def _build_provider(provider_name: str, config: dict):
                 "Registration: using plugin package for %s from %s",
                 provider_name, pkg_dir,
             )
-            return PluginScenarioProvider(pkg_dir, loader=loader, **base_kwargs)
+            # v1.1: pass card/billing config fields so the plugin adapter
+            # can seed config.* into the store for ${config.*} templating
+            # (stripe.fill_checkout capability).  All optional — tolerate
+            # absence (empty string when not configured).
+            return PluginScenarioProvider(
+                pkg_dir,
+                loader=loader,
+                **base_kwargs,
+                card_number=config.get("card_number") or config.get("cardNumber"),
+                card_expiry=config.get("card_expiry") or config.get("cardExpiry"),
+                card_cvc=config.get("card_cvc") or config.get("cardCvc"),
+                cardholder_name=config.get("cardholder_name")
+                or config.get("cardholderName"),
+                billing_country=config.get("billing_country")
+                or config.get("billingCountry"),
+                billing_address=config.get("billing_address")
+                or config.get("billingAddress"),
+                billing_city=config.get("billing_city")
+                or config.get("billingCity"),
+                billing_state=config.get("billing_state")
+                or config.get("billingState"),
+                billing_zip=config.get("billing_zip")
+                or config.get("billingZip"),
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Plugin resolution for %s failed, falling back to built-in: %s",

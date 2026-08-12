@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 import logging
 import os
-import re
 import tempfile
 import time
 from collections.abc import Callable
@@ -27,14 +26,14 @@ from .capabilities import (
     captcha_solve_capability,
     extract_capability,
     imap_otp_capability,
+    resolve_all_selectors,
     resolve_selector,
+    resolve_template,
     stripe_fill_checkout_capability,
     totp_register_capability,
 )
 
 logger = logging.getLogger(__name__)
-
-_TEMPLATE_RE = re.compile(r"\$\{([^}]+)\}")
 
 
 def _read_back_value(elem: Any) -> str | None:
@@ -256,25 +255,11 @@ class ScenarioExecutor:
     def _resolve_value(self, value: str | None, *, warn: bool = True) -> str:
         """Resolve ``${key}`` placeholders against ``self._store``.
 
-        Plain keys (``account.email``, ``verification_code``, ...).  Missing
-        keys interpolate to empty string and emit a single warning per key
-        when ``warn`` is True.  Values without placeholders pass through
-        unchanged.  ``None`` -> ``""``.
+        Delegates to the shared :func:`resolve_template` helper so
+        capability handlers can resolve ``${config.*}`` references with
+        the same logic without duplicating the regex.
         """
-        if not value:
-            return ""
-        if "${" not in value:
-            return value
-
-        def _replace(match: re.Match[str]) -> str:
-            key = match.group(1)
-            if key in self._store:
-                return str(self._store[key])
-            if warn:
-                logger.warning("executor: missing store key %r in template", key)
-            return ""
-
-        return _TEMPLATE_RE.sub(_replace, value)
+        return resolve_template(value, self._store, warn=warn)
 
     # ── basic step handlers ────────────────────────────────────────────
 
@@ -295,18 +280,80 @@ class ScenarioExecutor:
         return StepResult(step.id, step.kind, True, matched_candidate=idx)
 
     def _fill(self, step: ScenarioStep) -> StepResult:
+        meta = step.meta or {}
+        split_chars = bool(meta.get("split_chars"))
+        js_set_value = bool(meta.get("js_set_value"))
+        resolved_value = self._resolve_value(step.value)
+
+        # split_chars + multiple elements → distribute one char per element.
+        if split_chars:
+            elems, idx = resolve_all_selectors(
+                self._browser, step, self._timeout_s(step)
+            )
+            if not elems:
+                # Fall back to single-element resolution; tolerant of empty.
+                elem, idx = resolve_selector(
+                    self._browser, step, self._timeout_s(step)
+                )
+                if elem is None:
+                    return StepResult(
+                        step.id, step.kind, False,
+                        error="fill: element not found", matched_candidate=idx,
+                    )
+                # Single element → type whole value (tolerant).
+                return self._fill_single(
+                    step, elem, idx, resolved_value, js_set_value
+                )
+            if len(resolved_value) != len(elems):
+                return StepResult(
+                    step.id, step.kind, False,
+                    error=(
+                        f"fill: split_chars value length {len(resolved_value)} "
+                        f"!= element count {len(elems)}"
+                    ),
+                    matched_candidate=idx,
+                )
+            for char, elem in zip(resolved_value, elems, strict=True):
+                try:
+                    elem.clear()
+                except Exception:  # noqa: BLE001
+                    pass
+                elem.input(char)
+            return StepResult(step.id, step.kind, True, matched_candidate=idx)
+
+        # Non-split path: single element.
         elem, idx = resolve_selector(self._browser, step, self._timeout_s(step))
         if elem is None:
             return StepResult(
                 step.id, step.kind, False,
                 error="fill: element not found", matched_candidate=idx,
             )
-        try:
-            elem.clear()
-        except Exception:  # noqa: BLE001
-            pass
-        resolved_value = self._resolve_value(step.value)
-        elem.input(resolved_value)
+        return self._fill_single(step, elem, idx, resolved_value, js_set_value)
+
+    def _fill_single(
+        self,
+        step: ScenarioStep,
+        elem: Any,
+        idx: int | None,
+        resolved_value: str,
+        js_set_value: bool,
+    ) -> StepResult:
+        """Fill a single element with read-back verification.
+
+        When ``js_set_value`` is truthy, set the value via browser JS using
+        the native setter pattern (Object.getOwnPropertyDescriptor +
+        dispatch input/change events) instead of native typing — needed for
+        hidden inputs that cannot be typed into directly (openai birthday).
+        Then run the normal read-back verification.
+        """
+        if js_set_value:
+            self._js_set_value(elem, resolved_value)
+        else:
+            try:
+                elem.clear()
+            except Exception:  # noqa: BLE001
+                pass
+            elem.input(resolved_value)
 
         # Read-back verification: AWS signin remounts the form while the
         # Shortbread cookie banner script loads, silently losing the typed
@@ -342,11 +389,14 @@ class ScenarioExecutor:
                         error="fill: element disappeared during read-back retry",
                         matched_candidate=idx,
                     )
-                try:
-                    elem.clear()
-                except Exception:  # noqa: BLE001
-                    pass
-                elem.input(resolved_value)
+                if js_set_value:
+                    self._js_set_value(elem, resolved_value)
+                else:
+                    try:
+                        elem.clear()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    elem.input(resolved_value)
 
         return StepResult(
             step.id, step.kind, False,
@@ -356,6 +406,60 @@ class ScenarioExecutor:
             ),
             matched_candidate=idx,
         )
+
+    def _js_set_value(self, elem: Any, value: str) -> None:
+        """Set ``value`` on ``elem`` via browser JS using the native setter.
+
+        Uses the repo's established pattern (kiro_v2/browser.py:1430,
+        openai/browser.py:661): ``Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype, 'value').set`` + dispatch input/change
+        events.  Needed for hidden inputs that reject native typing.
+        """
+        # DrissionPage ChromiumElement exposes a str locator via .attr() or
+        # a JS-evaluable selector.  We use the element's own JS context via
+        # page.run_js when available; element.run_js as fallback.
+        run_js = getattr(self._browser, "run_js", None)
+        if run_js is None:
+            # No JS channel — fall back to native input (best-effort).
+            try:
+                elem.clear()
+            except Exception:  # noqa: BLE001
+                pass
+            elem.input(value)
+            return
+        # Escape single quotes for safe JS string interpolation.
+        safe_value = value.replace("\\", "\\\\").replace("'", "\\'")
+        script = (
+            "const el = arguments[0];"
+            "if (el) {"
+            "  const setter = Object.getOwnPropertyDescriptor("
+            "    window.HTMLInputElement.prototype, 'value').set;"
+            f"  setter.call(el, '{safe_value}');"
+            "  el.dispatchEvent(new Event('input', {bubbles:true}));"
+            "  el.dispatchEvent(new Event('change', {bubbles:true}));"
+            "}"
+        )
+        try:
+            run_js(script, elem)
+        except Exception:  # noqa: BLE001 — best-effort JS set
+            # Fallback: page-level querySelector if element arg unsupported.
+            try:
+                run_js(
+                    "const el = document.querySelector(arguments[0]);"
+                    "if (el) {"
+                    "  const setter = Object.getOwnPropertyDescriptor("
+                    "    window.HTMLInputElement.prototype, 'value').set;"
+                    f"  setter.call(el, '{safe_value}');"
+                    "  el.dispatchEvent(new Event('input', {bubbles:true}));"
+                    "  el.dispatchEvent(new Event('change', {bubbles:true}));"
+                    "}"
+                )
+            except Exception:  # noqa: BLE001
+                try:
+                    elem.clear()
+                except Exception:  # noqa: BLE001
+                    pass
+                elem.input(value)
 
     def _press(self, step: ScenarioStep) -> StepResult:
         key = step.value or "Enter"
@@ -483,7 +587,7 @@ class ScenarioExecutor:
         return stripe_fill_checkout_capability(step, self._browser, self._store)
 
     def _totp_register(self, step: ScenarioStep) -> StepResult:
-        return totp_register_capability(step)
+        return totp_register_capability(step, self._browser, self._store)
 
     def _account_save(self, step: ScenarioStep) -> StepResult:
         return account_save_capability(step, self._store)

@@ -214,6 +214,39 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── drift ────────────────────────────────────────────────────────────────
+
+
+def _cmd_drift(args: argparse.Namespace) -> int:
+    from stitch_plugin_tools.drift import run_drift
+
+    return run_drift(
+        server_url=args.server_url,
+        admin_key=args.admin_key,
+        plugin_id=args.plugin,
+        version=args.version,
+        window_hours=args.window_hours,
+        package_dir=args.package_dir,
+        apply=args.apply,
+    )
+
+
+# ── publish-selectors ────────────────────────────────────────────────────────
+
+
+def _cmd_publish_selectors(args: argparse.Namespace) -> int:
+    from stitch_plugin_tools.publish_selectors import run_publish_selectors
+
+    return run_publish_selectors(
+        server_url=args.server_url,
+        admin_key=args.admin_key,
+        plugin_id=args.plugin_id,
+        plugin_version=args.plugin_version,
+        package_dir=args.package_dir,
+        note=args.note,
+    )
+
+
 # ── argparse ──────────────────────────────────────────────────────────────
 
 
@@ -280,6 +313,65 @@ def _build_parser() -> argparse.ArgumentParser:
         "--service", default="engine", help="service identifier (default: engine)"
     )
     p_pack.set_defaults(func=_cmd_pack_engine)
+
+    p_drift = sub.add_parser(
+        "drift",
+        help="fetch drift report + propose selector weight rerank",
+    )
+    p_drift.add_argument(
+        "--server-url", default=None, help="server base URL (or STITCH_PUBLISH_URL)"
+    )
+    p_drift.add_argument(
+        "--admin-key", default=None, help="admin key (or STITCH_ADMIN_KEY)"
+    )
+    p_drift.add_argument(
+        "--plugin", required=True, help="plugin id to filter drift by"
+    )
+    p_drift.add_argument(
+        "--version", default=None, help="optional version filter"
+    )
+    p_drift.add_argument(
+        "--window-hours",
+        type=int,
+        default=None,
+        help="time window in hours (default: 168 = 7 days)",
+    )
+    p_drift.add_argument(
+        "--package-dir",
+        default=None,
+        help="package dir with scenario.json to rerank (owner's prepared_area copy)",
+    )
+    p_drift.add_argument(
+        "--apply",
+        action="store_true",
+        help="write the reranked scenario.json back to --package-dir",
+    )
+    p_drift.set_defaults(func=_cmd_drift)
+
+    p_pub_sel = sub.add_parser(
+        "publish-selectors",
+        help="publish a selector overlay pack (hot update, no plugin bump)",
+    )
+    p_pub_sel.add_argument(
+        "--server-url", default=None, help="server base URL (or STITCH_PUBLISH_URL)"
+    )
+    p_pub_sel.add_argument(
+        "--admin-key", default=None, help="admin key (or STITCH_ADMIN_KEY)"
+    )
+    p_pub_sel.add_argument(
+        "--plugin-id", required=True, help="plugin id to publish the overlay for"
+    )
+    p_pub_sel.add_argument(
+        "--plugin-version", required=True, help="plugin version to publish the overlay for"
+    )
+    p_pub_sel.add_argument(
+        "--package-dir", required=True,
+        help="package dir with scenario.json (owner's prepared_area copy)",
+    )
+    p_pub_sel.add_argument(
+        "--note", default=None, help="optional note attached to the pack",
+    )
+    p_pub_sel.set_defaults(func=_cmd_publish_selectors)
 
     return parser
 

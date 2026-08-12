@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Users, RefreshCw, AlertTriangle, Package, FolderOpen, GitPullRequest } from 'lucide-react';
+import {
+  Users,
+  RefreshCw,
+  AlertTriangle,
+  Package,
+  FolderOpen,
+  GitPullRequest,
+  FileEdit,
+  CheckCircle2,
+  Trash2,
+  Send,
+  Copy,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, EmptyState, SectionHeader, Toggle } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -15,6 +27,13 @@ import {
   type InstalledCommunityPackage,
   type LocalPackage,
 } from '@/lib/backend/modules/community';
+import {
+  listOverrides,
+  createOverride,
+  validateOverride,
+  clearOverride,
+  type OverrideEntry,
+} from '@/lib/backend/modules/overrides';
 import { CommunityCatalogCard } from './CommunityCatalogCard';
 import { SubmitForReviewModal } from './SubmitForReviewModal';
 
@@ -31,12 +50,16 @@ export function CommunitySection() {
   const [catalog, setCatalog] = useState<CommunityCatalogPlugin[]>([]);
   const [installed, setInstalled] = useState<InstalledCommunityPackage[]>([]);
   const [localPackages, setLocalPackages] = useState<LocalPackage[]>([]);
+  const [overrides, setOverrides] = useState<OverrideEntry[]>([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
   const [, setIsLoadingInstalled] = useState(false);
   const [isLoadingLocal, setIsLoadingLocal] = useState(false);
+  const [isLoadingOverrides, setIsLoadingOverrides] = useState(false);
   const [catalogOffline, setCatalogOffline] = useState(false);
   const [actionPluginId, setActionPluginId] = useState<string | null>(null);
+  const [overrideActionPluginId, setOverrideActionPluginId] = useState<string | null>(null);
   const [submitPackageId, setSubmitPackageId] = useState<string | null>(null);
+  const [submitOverridePluginId, setSubmitOverridePluginId] = useState<string | null>(null);
 
   const loadConsent = useCallback(async () => {
     try {
@@ -93,12 +116,26 @@ export function CommunitySection() {
     }
   }, []);
 
+  const loadOverrides = useCallback(async () => {
+    setIsLoadingOverrides(true);
+    try {
+      const data = await listOverrides();
+      setOverrides(data.overrides || []);
+    } catch (err) {
+      console.error('[Community] failed to load overrides:', err);
+      setOverrides([]);
+    } finally {
+      setIsLoadingOverrides(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadConsent();
     void loadCatalog();
     void loadInstalled();
     void loadLocalPackages();
-  }, [loadConsent, loadCatalog, loadInstalled, loadLocalPackages]);
+    void loadOverrides();
+  }, [loadConsent, loadCatalog, loadInstalled, loadLocalPackages, loadOverrides]);
 
   const handleConsentChange = async (checked: boolean) => {
     setConsent(checked);
@@ -173,6 +210,74 @@ export function CommunitySection() {
       );
     } finally {
       setActionPluginId(null);
+    }
+  };
+
+  // ── Override handlers ────────────────────────────────────────────────
+
+  const handleCreateOverride = async (pluginId: string) => {
+    setOverrideActionPluginId(pluginId);
+    try {
+      const result = await createOverride({ plugin_id: pluginId });
+      if (result.success) {
+        toast.success(t('settings.overrides.createSuccess'));
+        await loadOverrides();
+      } else {
+        toast.error(result.error || t('settings.overrides.createFailed'));
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t('settings.overrides.createFailed'),
+      );
+    } finally {
+      setOverrideActionPluginId(null);
+    }
+  };
+
+  const handleValidateOverride = async (pluginId: string) => {
+    setOverrideActionPluginId(pluginId);
+    try {
+      const result = await validateOverride({ plugin_id: pluginId });
+      if (result.valid) {
+        toast.success(t('settings.overrides.validateSuccess'));
+      } else {
+        toast.error(result.error || t('settings.overrides.validateFailed'));
+      }
+      await loadOverrides();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t('settings.overrides.validateFailed'),
+      );
+    } finally {
+      setOverrideActionPluginId(null);
+    }
+  };
+
+  const handleClearOverride = async (pluginId: string) => {
+    setOverrideActionPluginId(pluginId);
+    try {
+      const result = await clearOverride({ plugin_id: pluginId });
+      if (result.success) {
+        toast.success(t('settings.overrides.removeSuccess'));
+        await loadOverrides();
+      } else {
+        toast.error(result.error || t('settings.overrides.removeFailed'));
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t('settings.overrides.removeFailed'),
+      );
+    } finally {
+      setOverrideActionPluginId(null);
+    }
+  };
+
+  const handleCopyOverridePath = async (path: string) => {
+    try {
+      await navigator.clipboard.writeText(path);
+      toast.success(t('settings.overrides.pathCopied'));
+    } catch {
+      toast.error(t('settings.overrides.copyPath'));
     }
   };
 
@@ -391,11 +496,159 @@ export function CommunitySection() {
             </div>
           )}
         </div>
+
+        {/* Overrides block */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-medium text-slate-200">
+                {t('settings.overrides.title')}
+              </h4>
+              <p className="text-xs text-slate-500">
+                {t('settings.overrides.description')}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void loadOverrides()}
+              disabled={isLoadingOverrides}
+              leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+            >
+              {t('settings.overrides.refresh')}
+            </Button>
+          </div>
+          {overrides.length === 0 ? (
+            <EmptyState
+              icon={FileEdit}
+              title={t('settings.overrides.emptyTitle')}
+              description={t('settings.overrides.emptyDescription')}
+              compact
+            />
+          ) : (
+            <div className="space-y-2">
+              {overrides.map(entry => {
+                const pkg = localPackages.find(p => p.id === entry.plugin_id);
+                const hasOverride = entry.has_override;
+                const isValid = entry.has_override && entry.valid;
+                const isInvalid = entry.has_override && !entry.valid;
+                return (
+                  <div
+                    key={entry.plugin_id}
+                    className="rounded-lg border border-white/10 bg-white/[0.02] p-3 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-slate-200">
+                            {pkg?.name || entry.plugin_id}
+                          </span>
+                          {pkg && (
+                            <span className="text-xs text-slate-500 font-mono">
+                              {pkg.version}
+                            </span>
+                          )}
+                          {hasOverride && isValid && (
+                            <Badge variant="success" size="sm" withDot>
+                              {t('settings.overrides.statusActive')}
+                            </Badge>
+                          )}
+                          {isInvalid && (
+                            <Badge variant="danger" size="sm" withDot>
+                              {t('settings.overrides.statusInvalid')}
+                            </Badge>
+                          )}
+                          {!hasOverride && (
+                            <Badge variant="outline" size="sm">
+                              {t('settings.overrides.statusNone')}
+                            </Badge>
+                          )}
+                        </div>
+                        {hasOverride && entry.path && (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <p className="text-xs text-slate-600 font-mono truncate flex-1">
+                              {t('settings.overrides.pathLabel')}: {entry.path}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void handleCopyOverridePath(entry.path)}
+                              className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                              title={t('settings.overrides.copyPath')}
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                        {isInvalid && entry.error && (
+                          <p className="mt-1 text-xs text-red-400/80 truncate">
+                            {entry.error}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {!hasOverride && (
+                        <Button
+                          size="xs"
+                          variant="primary"
+                          onClick={() => void handleCreateOverride(entry.plugin_id)}
+                          isLoading={overrideActionPluginId === entry.plugin_id}
+                          disabled={overrideActionPluginId !== null}
+                          leftIcon={<FileEdit className="w-3 h-3" />}
+                        >
+                          {t('settings.overrides.create')}
+                        </Button>
+                      )}
+                      {hasOverride && (
+                        <>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => void handleValidateOverride(entry.plugin_id)}
+                            isLoading={overrideActionPluginId === entry.plugin_id}
+                            disabled={overrideActionPluginId !== null}
+                            leftIcon={<CheckCircle2 className="w-3 h-3" />}
+                          >
+                            {t('settings.overrides.validate')}
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="danger"
+                            onClick={() => void handleClearOverride(entry.plugin_id)}
+                            isLoading={overrideActionPluginId === entry.plugin_id}
+                            disabled={overrideActionPluginId !== null}
+                            leftIcon={<Trash2 className="w-3 h-3" />}
+                          >
+                            {t('settings.overrides.remove')}
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="primary"
+                            onClick={() => setSubmitOverridePluginId(entry.plugin_id)}
+                            disabled={overrideActionPluginId !== null}
+                            leftIcon={<Send className="w-3 h-3" />}
+                          >
+                            {t('settings.overrides.sendPatch')}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <SubmitForReviewModal
         packageId={submitPackageId}
         onClose={() => setSubmitPackageId(null)}
+      />
+      <SubmitForReviewModal
+        packageId={submitOverridePluginId}
+        onClose={() => setSubmitOverridePluginId(null)}
+        overrideMode
       />
     </SectionHeader>
   );

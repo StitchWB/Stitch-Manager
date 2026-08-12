@@ -10,10 +10,9 @@ the request and dropped.
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 
@@ -27,15 +26,10 @@ from .community import (
     list_installed_community,
     uninstall_community,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from .github_pr import submit_catalog_pr
 
 logger = logging.getLogger(__name__)
 
-_GH_API = "https://api.github.com"
-_CATALOG_OWNER = "WhiteBite"
-_CATALOG_REPO = "stitch-plugin-catalog"
 _PACKAGE_FILES = ("plugin.json", "scenario.json", "selectors.json", "profile.json")
 
 
@@ -137,84 +131,25 @@ async def cmd_submit_for_review(params: dict) -> dict:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
-            return await _submit_pr_flow(client, pkg_dir, manifest.id, manifest.version)
-    except httpx.HTTPError as exc:
-        return {"success": False, "error": f"github api error: {exc}"}
-
-
-async def _submit_pr_flow(
-    client: httpx.AsyncClient,
-    pkg_dir: Path,
-    plugin_id: str,
-    version: str,
-) -> dict[str, Any]:
-    """Run the full GitHub PR submission flow.  Token is in client headers."""
-    # 1. GET /user → login
-    resp = await client.get(f"{_GH_API}/user")
-    if resp.status_code != 200:
-        return {"success": False, "error": f"invalid token (status {resp.status_code})"}
-    login = resp.json().get("login", "")
-    if not login:
-        return {"success": False, "error": "could not determine github user"}
-
-    # 2. Ensure fork exists
-    fork_resp = await client.get(f"{_GH_API}/repos/{login}/{_CATALOG_REPO}")
-    if fork_resp.status_code == 404:
-        create = await client.post(
-            f"{_GH_API}/repos/{_CATALOG_OWNER}/{_CATALOG_REPO}/forks"
-        )
-        if create.status_code not in (200, 202):
-            return {"success": False, "error": f"fork failed (status {create.status_code})"}
-    elif fork_resp.status_code != 200:
-        return {"success": False, "error": f"fork check failed (status {fork_resp.status_code})"}
-
-    # 3. Get catalog main head + create branch
-    refs = await client.get(
-        f"{_GH_API}/repos/{login}/{_CATALOG_REPO}/git/refs/heads/main"
-    )
-    if refs.status_code != 200:
-        return {"success": False, "error": f"catalog main head fetch failed (status {refs.status_code})"}
-    main_sha = refs.json().get("object", {}).get("sha", "")
-    if not main_sha:
-        return {"success": False, "error": "catalog main head sha missing"}
-
-    branch = f"submit/{plugin_id}-{version}"
-    create_branch = await client.post(
-        f"{_GH_API}/repos/{login}/{_CATALOG_REPO}/git/refs",
-        json={"ref": f"refs/heads/{branch}", "sha": main_sha},
-    )
-    if create_branch.status_code not in (200, 201, 422):
-        return {"success": False, "error": f"branch create failed (status {create_branch.status_code})"}
-
-    # 4. PUT the 4 package files
-    rel_path = f"plugins/{plugin_id}/{version}"
+    branch = f"submit/{manifest.id}-{manifest.version}"
+    rel_path = f"plugins/{manifest.id}/{manifest.version}"
+    files = []
     for fname in _PACKAGE_FILES:
         fpath = pkg_dir / fname
         if not fpath.is_file():
             continue
-        content = base64.b64encode(fpath.read_bytes()).decode("ascii")
-        put = await client.put(
-            f"{_GH_API}/repos/{login}/{_CATALOG_REPO}/contents/{rel_path}/{fname}",
-            json={"message": f"add {plugin_id}@{version}: {fname}", "content": content, "branch": branch},
-        )
-        if put.status_code not in (200, 201):
-            return {"success": False, "error": f"upload {fname} failed (status {put.status_code})"}
+        files.append((f"{rel_path}/{fname}", fpath.read_bytes()))
 
-    # 5. Open PR
-    pr = await client.post(
-        f"{_GH_API}/repos/{_CATALOG_OWNER}/{_CATALOG_REPO}/pulls",
-        json={
-            "title": f"plugin: {plugin_id}@{version}",
-            "head": f"{login}:{branch}",
-            "base": "main",
-            "body": f"Submitting plugin `{plugin_id}` v{version} for review.",
-        },
-    )
-    if pr.status_code not in (200, 201):
-        return {"success": False, "error": f"pr create failed (status {pr.status_code})"}
-    pr_url = pr.json().get("html_url", "")
-    if not pr_url:
-        return {"success": False, "error": "pr created but url missing"}
-    return {"success": True, "pr_url": pr_url}
+    pr_body = f"Submitting plugin `{manifest.id}` v{manifest.version} for review."
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            return await submit_catalog_pr(
+                client,
+                files=files,
+                branch=branch,
+                pr_title=f"plugin: {manifest.id}@{manifest.version}",
+                pr_body=pr_body,
+            )
+    except httpx.HTTPError as exc:
+        return {"success": False, "error": f"github api error: {exc}"}

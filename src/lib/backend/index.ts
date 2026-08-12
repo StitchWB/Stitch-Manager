@@ -559,3 +559,27 @@ export {
 } from './modules/community';
 
 export * as community from './modules/community';
+
+// ============================================
+// Local Overrides
+// ============================================
+
+export {
+  listOverrides,
+  createOverride,
+  validateOverride,
+  clearOverride,
+  submitOverride,
+  type OverrideEntry,
+  type ListOverridesResponse,
+  type CreateOverrideParams,
+  type CreateOverrideResult,
+  type ValidateOverrideParams,
+  type ValidateOverrideResult,
+  type ClearOverrideParams,
+  type ClearOverrideResult,
+  type SubmitOverrideParams,
+  type SubmitOverrideResult,
+} from './modules/overrides';
+
+export * as overrides from './modules/overrides';
