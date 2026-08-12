@@ -396,7 +396,20 @@ function ScenarioRecordForm({
       footer={
       <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs text-slate-400 flex items-center">{statusText}</div>
+            <div className="text-xs text-slate-400 flex items-center gap-2">
+            {statusText}
+            {recorder.state.captureMode && (recorder.state.status === 'recording' || recorder.state.status === 'stopping') ?
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${
+          recorder.state.captureMode === 'extension' ?
+          'border-violet-500/20 bg-violet-500/10 text-violet-200' :
+          'border-slate-500/20 bg-slate-500/10 text-slate-300'}`}>
+
+                {recorder.state.captureMode === 'extension' ?
+          t('recorder.scenario_record_modal.capture_mode_extension') || 'Capture: extension' :
+          t('recorder.scenario_record_modal.capture_mode_injected') || 'Capture: built-in script'}
+              </span> :
+          null}
+          </div>
             <div className="flex flex-wrap justify-end gap-2">
               <Button variant="secondary" onClick={onClose}>
                 {t('common.close')}
@@ -532,7 +545,7 @@ function ScenarioRecordForm({
             {
               label: t('recorder.scenario_record_modal.native_runner') || 'Native runner',
               value: 'native',
-              tooltip: t('recorder.scenario_record_modal.native_runner_tip') || 'Browser events are captured directly by the built-in runner; no extension needed.'
+              tooltip: t('recorder.scenario_record_modal.native_runner_tip') || 'Stitch launches the profile browser (proxy/geo/engine). Capture is delegated to the Stitch extension when it connects; the built-in script is the fallback.'
             },
             {
               label: t('recorder.scenario_record_modal.extension_runner') || 'Extension runner',
@@ -540,6 +553,15 @@ function ScenarioRecordForm({
               tooltip: t('recorder.scenario_record_modal.extension_runner_tip') || 'Records via the Stitch extension: requires the unpacked extension and a live browser.'
             }]
             } />
+
+          <div className="text-[11px] leading-relaxed rounded-md border border-white/10 bg-black/20 px-3 py-2 space-y-1">
+            <div className={runnerMode === 'native' ? 'text-slate-200' : 'text-slate-500'}>
+              {t('recorder.scenario_record_modal.who_launches_native') || 'Native — Stitch launches the browser with the profile identity (proxy/geo/engine); the extension captures, built-in script is the fallback.'}
+            </div>
+            <div className={runnerMode === 'extension' ? 'text-slate-200' : 'text-slate-500'}>
+              {t('recorder.scenario_record_modal.who_launches_extension') || 'Extension — you launch the browser yourself; Stitch receives events from the extension over the WS bridge.'}
+            </div>
+          </div>
 
           {runnerMode === 'native' ?
           <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">

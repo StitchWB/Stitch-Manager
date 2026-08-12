@@ -8,7 +8,7 @@ import {
   type PythonJobStartResponse,
 } from '@/lib/backend/modules/pythonJobs';
 import type { ObsEvent } from '@/lib/observability/types';
-import type { ScenarioRecordStatus, ScenarioRunnerMode } from './types';
+import type { ScenarioCaptureMode, ScenarioRecordStatus, ScenarioRunnerMode } from './types';
 import type { BrowserEngineId } from '@/lib/browser/engines';
 
 type ScenarioRecorderOptions = {
@@ -27,6 +27,8 @@ type ScenarioRecorderState = {
   jobId: string | null;
   correlationId: string;
   stepCount: number;
+  /** Native runs only: which engine captures events (extension bridge vs injected script). */
+  captureMode: ScenarioCaptureMode | null;
   lastEvent: string | null;
   scenarioPath: string | null;
   sessionDir: string | null;
@@ -51,6 +53,7 @@ export function useScenarioRecorder() {
     jobId: null,
     correlationId: newCorrelationId(),
     stepCount: 0,
+    captureMode: null,
     lastEvent: null,
     scenarioPath: null,
     sessionDir: null,
@@ -74,6 +77,7 @@ export function useScenarioRecorder() {
       jobId: null,
       correlationId: newCorrelationId(),
       stepCount: 0,
+      captureMode: null,
       lastEvent: null,
       scenarioPath: null,
       sessionDir: null,
@@ -97,6 +101,7 @@ export function useScenarioRecorder() {
       correlationId,
       jobId: null,
       stepCount: 0,
+      captureMode: null,
       lastEvent: null,
       scenarioPath: null,
       sessionDir: null,
@@ -298,6 +303,7 @@ export function useScenarioRecorder() {
 
           // Our python protocol emits message as event-name for type=event
           let stepCount = prev.stepCount;
+          let captureMode = prev.captureMode;
           let scenarioPath = prev.scenarioPath;
           let sessionDir = prev.sessionDir;
           let commandFilePath = prev.commandFilePath;
@@ -333,6 +339,10 @@ export function useScenarioRecorder() {
             if (msg === 'scenario.record.control.stop') {
               status = 'stopping';
             }
+            if (msg === 'scenario.record.capture_mode' && data && typeof data === 'object' && !Array.isArray(data)) {
+              const recordData = data as Record<string, unknown>;
+              captureMode = recordData.mode === 'extension' ? 'extension' : 'injected';
+            }
           }
 
           if (runnerType === 'result') {
@@ -359,6 +369,7 @@ export function useScenarioRecorder() {
             ...prev,
             events: nextEvents,
             stepCount,
+            captureMode,
             scenarioPath,
             sessionDir,
             commandFilePath,
@@ -424,11 +435,12 @@ export function useScenarioRecorder() {
       url: opts?.url,
       scenarioName: opts?.scenarioName,
       runnerMode: opts?.runnerMode ?? 'native',
+      captureMode: state.captureMode,
       proxy: opts?.proxy,
       configJson: opts?.configJson,
       commandFilePath: state.commandFilePath,
     };
-  }, [state.jobId, state.correlationId, state.commandFilePath]);
+  }, [state.jobId, state.correlationId, state.commandFilePath, state.captureMode]);
 
   return {
     state,

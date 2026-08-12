@@ -2720,6 +2720,8 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     scenario_record_modal: {
       advanced_diagnostics: "Расширенная диагностика",
       browser_runtime: "Рантайм браузера",
+      capture_mode_extension: "Захват: расширение",
+      capture_mode_injected: "Захват: встроенный скрипт",
       correlation: "Correlation ID",
       engine: "Движок",
       extension_runner: "Раннер расширения",
@@ -2728,7 +2730,7 @@ addMailboxFromSheets: "Импорт из Google Sheets",
       install_runtime_tip: "Ставит браузерный рантайм, нужный встроенному раннеру для запуска браузера.",
       job: "Задача",
       native_runner: "Встроенный раннер",
-      native_runner_tip: "События браузера снимаются напрямую встроенным раннером, расширение не требуется.",
+      native_runner_tip: "Stitch запускает браузер профиля (прокси/гео/движок). Захват отдаётся расширению Stitch при подключении; запасной вариант — встроенный скрипт.",
       profile: "Профиль",
       python_stderr: "Python stderr",
       recorder_runtime_missing_install_it_to_start_recor: "Рантайм рекордера не установлен — установите его, чтобы начать запись.",
@@ -2748,7 +2750,9 @@ addMailboxFromSheets: "Импорт из Google Sheets",
       st_recording: "Запись • шагов: {count}",
       st_starting: "Запуск браузера…",
       st_stopping: "Остановка и сохранение…",
-      start_url: "Стартовый URL"
+      start_url: "Стартовый URL",
+      who_launches_extension: "Расширение — браузер запускаете вы; Stitch принимает события от расширения по WS-мосту.",
+      who_launches_native: "Нативный — браузер запускает Stitch с идентичностью профиля (прокси/гео/движок); захватывает расширение, запасной вариант — встроенный скрипт."
     },
     scenario_replay_modal: {
       engine_cloakbrowser: "Engine cloakbrowser"
