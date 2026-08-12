@@ -53,7 +53,7 @@ import {
 import { useReplayPresets, type ReplayRunPreset } from '@/lib/scenarioRecorder/replayPresets';
 import { useReplayVersioning } from '@/lib/scenarioRecorder/useReplayVersioning';
 import type { ScenarioRunnerMode } from '@/lib/scenarioRecorder/types';
-import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
+import { BROWSER_ENGINE_LABELS, normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 
 type ScenarioReplayModalProps = {
   alias: string | null;
@@ -805,8 +805,8 @@ function ScenarioReplayForm({
               } />
 
             {runnerMode === 'native' ?
-            <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">{t("recorder.scenario_replay_modal.engine_cloakbrowser")}
-
+            <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+              {t('recorder.scenario_record_modal.engine') || 'Engine'}: {BROWSER_ENGINE_LABELS[engine]}
             </div> :
             null}
           </div>

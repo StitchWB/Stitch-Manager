@@ -2753,9 +2753,6 @@ addMailboxFromSheets: "Импорт из Google Sheets",
       start_url: "Стартовый URL",
       who_launches_extension: "Расширение — браузер запускаете вы; Stitch принимает события от расширения по WS-мосту.",
       who_launches_native: "Нативный — браузер запускает Stitch с идентичностью профиля (прокси/гео/движок); захватывает расширение, запасной вариант — встроенный скрипт."
-    },
-    scenario_replay_modal: {
-      engine_cloakbrowser: "Engine cloakbrowser"
     }
   },
   scenarios: {
