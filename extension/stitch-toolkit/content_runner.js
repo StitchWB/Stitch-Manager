@@ -19,12 +19,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === 'stitch:control') {
-    const command = String(payload.command || '').toLowerCase();
-    console.debug(`[Stitch] Received control: ${command}`);
-    chrome.runtime.sendMessage({
-      type: 'stitch:overlay-control',
-      payload: { command },
-    });
+    // Authoritative pause/resume state arrives via stitch:overlay-state
+    // (applyOverlayState sets state.paused). This message must NOT bounce
+    // back as stitch:overlay-control — that re-entered applyRecordControl
+    // in the service worker, which re-sent stitch:control, forming an
+    // infinite background↔content ping-pong on every pause/resume.
     sendResponse?.({ ok: true });
     return true;
   }

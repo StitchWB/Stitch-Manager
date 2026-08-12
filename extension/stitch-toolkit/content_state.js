@@ -5,6 +5,7 @@ const state = {
   startUrl: null,
   lastUrl: null,
   mode: 'idle',
+  hudSuppressed: false,
   recordStepCount: 0,
   overlaySteps: [],   // Step list for overlay rendering
   replayCurrent: 0,
@@ -100,7 +101,10 @@ function clearPollInterval() {
 function setupBeforeUnloadHandler() {
   if (cleanupController.beforeUnloadHandler) return;
   cleanupController.beforeUnloadHandler = (e) => {
-    if (isRecording()) {
+    // Native-hosted sessions are owned by the Python recorder: full-page
+    // navigation is a normal flow there, not an emergency. hudSuppressed is
+    // the content-side marker of a native-hosted session.
+    if (isRecording() && !state.hudSuppressed) {
       chrome.runtime.sendMessage({
         type: 'stitch:emergency-stop',
         payload: { runId: state.runId, ts: nowIso() },

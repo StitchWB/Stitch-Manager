@@ -85,9 +85,9 @@ class SessionManager {
     return this.update({ type: 'SET_PAUSED', paused });
   }
 
-  async startRecordSession(runId, scenarioName, startUrl, origin, tabId) {
+  async startRecordSession(runId, scenarioName, startUrl, origin, tabId, nativeHosted = false) {
     return this.update([
-      { type: 'START_RECORD', runId, scenarioName, startUrl, origin, tabId },
+      { type: 'START_RECORD', runId, scenarioName, startUrl, origin, tabId, nativeHosted },
     ]);
   }
 
@@ -217,6 +217,7 @@ class SessionManager {
           scenarioName: update.scenarioName,
           startUrl: update.startUrl,
           origin: update.origin,
+          nativeHosted: Boolean(update.nativeHosted),
           steps: [],
           stepCount: 0,
           paused: false,
