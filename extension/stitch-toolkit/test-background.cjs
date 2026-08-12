@@ -36,6 +36,7 @@ const storageArea = () => {
 
 const listeners = { onMessage: [], onInstalled: [], onStartup: [], onAlarm: [], onRemoved: [] };
 const sentTabMessages = [];
+const tabsUpdateCalls = [];
 const wsInstances = [];
 
 class MockWebSocket {
@@ -74,7 +75,7 @@ global.chrome = {
     async query() { return [{ id: 1, url: 'https://example.com/', status: 'complete' }]; },
     async get(tabId) { return { id: tabId, url: 'https://example.com/', status: 'complete' }; },
     async create(opts) { return { id: 2, url: opts?.url || 'about:blank' }; },
-    async update() { return {}; },
+    async update(tabId, opts) { tabsUpdateCalls.push({ tabId, opts }); return {}; },
     async sendMessage(tabId, message) { sentTabMessages.push({ tabId, message }); return { ok: true }; },
     onRemoved: { addListener: fn => listeners.onRemoved.push(fn) },
     onUpdated: { addListener: () => {}, removeListener: () => {} },
@@ -136,11 +137,15 @@ try {
 }
 
 function sendRuntimeMessage(message) {
+  return sendRuntimeMessageFrom(1, message);
+}
+
+function sendRuntimeMessageFrom(tabId, message) {
   return new Promise(resolve => {
     for (const fn of listeners.onMessage) {
       let responded = false;
       const sendResponse = resp => { if (!responded) { responded = true; resolve(resp); } };
-      const async = fn(message, { tab: { id: 1 } }, sendResponse);
+      const async = fn(message, { tab: { id: tabId } }, sendResponse);
       if (!async && !responded) continue; // handler declined; try next
       if (!async) return;
       // async handler: wait a beat for sendResponse
@@ -245,6 +250,59 @@ async function run() {
   const overlaySync = await sendRuntimeMessage({ type: 'stitch:overlay-sync' });
   if (overlaySync && overlaySync.ok && overlaySync.payload && overlaySync.payload.mode === 'idle') pass('stitch:overlay-sync responds idle');
   else fail('stitch:overlay-sync broken: ' + JSON.stringify(overlaySync || null));
+
+  console.log('');
+  console.log('6. Native-hosted record session (Python native recorder bridge)');
+  if (bridges.record) {
+    sentTabMessages.length = 0;
+    tabsUpdateCalls.length = 0;
+    chrome.tabs.query = async () => [
+      { id: 1, url: 'https://example.com/', status: 'complete' },
+      { id: 2, url: 'https://example.com/2', status: 'complete' },
+    ];
+    // Race coverage: the tab is still about:blank when start_record arrives
+    // (Python navigates it right after); the session must wait, not fail.
+    let tabGetCalls = 0;
+    chrome.tabs.get = async (tabId) => {
+      tabGetCalls += 1;
+      if (tabGetCalls === 1) return { id: tabId, url: 'about:blank', status: 'loading' };
+      return { id: tabId, url: 'https://example.com/', status: 'complete' };
+    };
+    bridges.record._message({
+      type: 'start_record',
+      payload: { runId: 'native_rec_test', alias: 'test@local', scenarioName: 'native', startUrl: 'https://example.com/', nativeHosted: true },
+    });
+    await new Promise(r => setTimeout(r, 700));
+
+    const rec = sessionManager.getState().record;
+    if (sessionManager.isRecording() && rec && rec.nativeHosted === true) pass('nativeHosted session started');
+    else fail('nativeHosted session not started: ' + JSON.stringify(rec || null));
+    if (tabGetCalls >= 2) pass('waited for the tab to leave about:blank');
+    else fail('no wait for http tab (get calls: ' + tabGetCalls + ')');
+
+    if (tabsUpdateCalls.length === 0) pass('no tab re-navigation on nativeHosted start');
+    else fail('unexpected tabs.update calls: ' + JSON.stringify(tabsUpdateCalls));
+
+    const broadcasts = sentTabMessages.filter(x => x.message && x.message.type === 'stitch:overlay-state' && x.message.payload && x.message.payload.mode === 'record');
+    const tabIds = new Set(broadcasts.map(x => x.tabId));
+    if (tabIds.has(1) && tabIds.has(2)) pass('record state broadcast to all tabs');
+    else fail('broadcast missing tabs: ' + JSON.stringify([...tabIds]));
+    if (broadcasts.length > 0 && broadcasts.every(x => x.message.payload.suppressOverlay === true)) pass('broadcast payload carries suppressOverlay');
+    else fail('suppressOverlay missing in broadcast payload');
+
+    const sync = await sendRuntimeMessageFrom(2, { type: 'stitch:overlay-sync' });
+    if (sync && sync.ok && sync.payload && sync.payload.mode === 'record' && sync.payload.suppressOverlay === true) pass('overlay-sync from non-session tab returns record payload');
+    else fail('overlay-sync for non-session tab broken: ' + JSON.stringify(sync || null));
+
+    bridges.record._message({ type: 'stop_record', payload: { runId: 'native_rec_test' } });
+    await new Promise(r => setTimeout(r, 100));
+    const idleBroadcasts = sentTabMessages.filter(x => x.message && x.message.type === 'stitch:overlay-state' && x.message.payload && x.message.payload.mode === 'idle');
+    const idleTabIds = new Set(idleBroadcasts.map(x => x.tabId));
+    if (idleTabIds.has(1) && idleTabIds.has(2)) pass('stop broadcasts idle to all tabs');
+    else fail('idle broadcast missing tabs: ' + JSON.stringify([...idleTabIds]));
+    if (!sessionManager.isRecording()) pass('nativeHosted session stopped');
+    else fail('still recording after nativeHosted stop');
+  }
 
   finish();
 }

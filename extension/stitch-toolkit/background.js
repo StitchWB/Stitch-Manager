@@ -335,10 +335,17 @@ function getOverlayPayload() {
 
   if (mode === 'record') {
     const record = sessionManager.getState().record;
+    const nativeHosted = Boolean(record?.nativeHosted);
     return {
       mode: 'record',
       paused: sessionManager.isPaused(),
       status: sessionManager.isPaused() ? 'paused' : 'running',
+      runId: record?.runId || null,
+      scenarioName: record?.scenarioName || null,
+      startUrl: record?.startUrl || null,
+      // Tells the content overlay to capture silently: the native recorder
+      // overlay is the visible HUD in native-hosted sessions.
+      suppressOverlay: nativeHosted,
       record: {
         stepCount: sessionManager.getStepCount(),
         steps: sessionManager.getSteps(),
@@ -381,6 +388,12 @@ function getOverlayPayloadForTab(tabId) {
   if (tabId == null) return getOverlayPayload();
   const stateTabId = sessionManager.getState().tabId;
   if (stateTabId == null) return getOverlayPayload();
+  const state = sessionManager.getState();
+  if (state.mode === 'record' && state.record?.nativeHosted) {
+    // Native-hosted capture runs in every tab of the recorder browser;
+    // any tab asking for a sync gets the live record state.
+    return getOverlayPayload();
+  }
   if (tabId !== stateTabId) {
     return {
       mode: 'idle',
@@ -394,6 +407,19 @@ function getOverlayPayloadForTab(tabId) {
 }
 
 async function pushOverlayState(tabId = sessionManager.getState().tabId) {
+  const state = sessionManager.getState();
+  if (state.mode === 'record' && state.record?.nativeHosted) {
+    // Broadcast to every tab so capture starts/stops and pause state syncs
+    // across the whole recorder browser, not just the session tab.
+    const payload = getOverlayPayload();
+    const tabs = await chrome.tabs.query({}).catch(() => []);
+    for (const t of Array.isArray(tabs) ? tabs : []) {
+      if (t?.id != null) {
+        await sendToTab(t.id, { type: 'stitch:overlay-state', payload });
+      }
+    }
+    return;
+  }
   if (tabId == null) return;
   await sendToTab(tabId, {
     type: 'stitch:overlay-state',
@@ -744,12 +770,30 @@ async function startRecordSession(payload) {
   // 'popup' / 'toolkit' = started locally from the panel; scenario is persisted on stop.
   const origin = originRaw === 'popup' || originRaw === 'toolkit' ? originRaw : 'bridge';
   const requestedUrl = String(payload?.startUrl || '').trim();
-  const tabId = payload?.tabId
-    ? Number(payload.tabId)
-    : await ensureTabForUrl(isHttpUrl(requestedUrl) ? requestedUrl : null);
+  // nativeHosted: the Python native recorder owns the browser (identity, tabs,
+  // proxy) and shows its own overlay HUD. The extension is a pure capture
+  // engine here: never re-navigate the tab, capture in every tab, HUD hidden.
+  const nativeHosted = Boolean(payload?.nativeHosted);
+  let tabId = payload?.tabId ? Number(payload.tabId) : null;
+  if (tabId == null && nativeHosted) {
+    tabId = await getActiveTabId();
+  }
+  if (tabId == null) {
+    tabId = await ensureTabForUrl(isHttpUrl(requestedUrl) ? requestedUrl : null);
+  }
 
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
-  const tabUrl = String(tab?.url || '').trim();
+  let tab = await chrome.tabs.get(tabId).catch(() => null);
+  let tabUrl = String(tab?.url || '').trim();
+  if (nativeHosted && !isHttpUrl(tabUrl)) {
+    // Python is navigating this tab to startUrl right now; give it a moment
+    // instead of failing the session on a transient about:blank.
+    const deadline = Date.now() + 10000;
+    while (!isHttpUrl(tabUrl) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      tab = await chrome.tabs.get(tabId).catch(() => null);
+      tabUrl = String(tab?.url || '').trim();
+    }
+  }
   if (!isHttpUrl(tabUrl)) {
     throw new Error('Open a regular website tab (http/https) before starting extension recording');
   }
@@ -764,7 +808,8 @@ async function startRecordSession(payload) {
     scenarioName,
     isHttpUrl(requestedUrl) ? requestedUrl : tabUrl,
     origin,
-    tabId
+    tabId,
+    nativeHosted
   );
   _replayTask = null;
 
@@ -803,6 +848,7 @@ async function stopRecordSession(options = {}) {
 
   await sessionManager.setFinalizing(true);
   const tabId = state.tabId;
+  const wasNativeHosted = Boolean(record?.nativeHosted);
 
   if (!opts.skipNotifyTab && tabId != null) {
     await sendToTab(tabId, { type: 'stitch:stop-record', payload: {} });
@@ -816,16 +862,25 @@ async function stopRecordSession(options = {}) {
     await persistLocalScenario(scenario);
   }
 
-  if (tabId != null) {
+  const idlePayload = {
+    mode: 'idle',
+    paused: false,
+    status: 'idle',
+    record: { stepCount: 0, steps: [] },
+    replay: { current: 0, total: 0, steps: [] },
+  };
+  if (wasNativeHosted) {
+    // Stop capture in every tab, not just the session tab.
+    const tabs = await chrome.tabs.query({}).catch(() => []);
+    for (const t of Array.isArray(tabs) ? tabs : []) {
+      if (t?.id != null) {
+        await sendToTab(t.id, { type: 'stitch:overlay-state', payload: idlePayload });
+      }
+    }
+  } else if (tabId != null) {
     await sendToTab(tabId, {
       type: 'stitch:overlay-state',
-      payload: {
-        mode: 'idle',
-        paused: false,
-        status: 'idle',
-        record: { stepCount: 0, steps: [] },
-        replay: { current: 0, total: 0, steps: [] },
-      },
+      payload: idlePayload,
     });
   }
 

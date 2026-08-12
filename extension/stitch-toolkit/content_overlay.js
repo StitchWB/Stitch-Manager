@@ -342,9 +342,20 @@ function renderOverlayControls() {
 }
 
 function isOverlayEvent(event) {
-  if (!overlay.shell?.host || typeof event?.composedPath !== 'function') return false;
+  if (typeof event?.composedPath !== 'function') return false;
   const path = event.composedPath();
-  return Array.isArray(path) && path.includes(overlay.shell.host);
+  if (!Array.isArray(path)) return false;
+  if (overlay.shell?.host && path.includes(overlay.shell.host)) return true;
+  // The native recorder overlay (Python-injected HUD, marked
+  // data-stitch-recorder="1") is Stitch-owned UI too: when the extension is
+  // the capture engine in a native-hosted session, clicks on that HUD must
+  // not become recorded steps.
+  for (const node of path) {
+    if (node && node.nodeType === 1 && typeof node.getAttribute === 'function') {
+      if (node.getAttribute('data-stitch-recorder') === '1') return true;
+    }
+  }
+  return false;
 }
 
 function renderOverlay() {
@@ -361,6 +372,14 @@ function renderOverlay() {
 
   ensureOverlay();
   if (!overlay.shell) return;
+
+  // Native-hosted record: the extension captures silently while the native
+  // recorder overlay is the visible HUD.
+  if (state.hudSuppressed && isRecording()) {
+    overlay._isVisible = false;
+    overlay.shell.setVisible(false);
+    return;
+  }
 
   const active = isRecording() || isReplay();
   const wasVisible = overlay._isVisible;
@@ -495,6 +514,7 @@ function applyOverlayState(payload) {
   if (mode === 'record') {
     state.mode = 'record';
     state.paused = Boolean(payload?.paused);
+    state.hudSuppressed = Boolean(payload?.suppressOverlay);
     state.replayStatus = 'idle';
     const count = Number(payload?.record?.stepCount ?? 0);
     state.recordStepCount = Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;
@@ -502,6 +522,13 @@ function applyOverlayState(payload) {
     state.scenarioName = payload?.scenarioName || state.scenarioName;
     state.startUrl = payload?.startUrl || state.startUrl;
     state.lastUrl = state.lastUrl || state.startUrl || location.href;
+    // Fresh top-level document entering a native-hosted session: emit the
+    // load nav step (the injected recorder emitted the same) so multi-page
+    // scenarios keep navigation markers for replay.
+    if (prevMode !== 'record' && _frameContext.isTop && state.hudSuppressed) {
+      state.lastUrl = location.href;
+      sendRecordEvent('nav', { selector: null, value: null, meta: { reason: 'load' } });
+    }
     // Store step list from background for overlay rendering
     state.overlaySteps = Array.isArray(payload?.record?.steps) ? payload.record.steps : state.overlaySteps || [];
     renderOverlay();
@@ -511,6 +538,7 @@ function applyOverlayState(payload) {
   if (mode === 'replay') {
     state.mode = 'replay';
     state.paused = Boolean(payload?.paused);
+    state.hudSuppressed = false;
     state.replayStatus = String(
       payload?.status || (state.paused ? 'paused' : 'running')
     ).toLowerCase();
@@ -527,6 +555,7 @@ function applyOverlayState(payload) {
 
   state.mode = 'idle';
   state.paused = false;
+  state.hudSuppressed = false;
   state.replayStatus = 'idle';
   state.replayCurrent = 0;
   state.replayTotal = 0;
