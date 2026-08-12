@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..scenario.parse_v2 import parse_scenario_v2
+from ..scenario.schema import SelectorCandidate
 from .dependency_resolver import (
     DependencyResolutionError,
     ResolvedDependency,
@@ -84,6 +85,18 @@ class PluginScenarioProvider:
         thirty_three_mail_config: dict[str, Any] | None = None,
         mailtm_inbox_config: dict[str, Any] | None = None,
         browser_factory: Callable[[], Any] | None = None,
+        # v1.1: registration config fields seeded into the store as
+        # config.<name> so capabilities (e.g. stripe.fill_checkout) can
+        # resolve ${config.*} templates.  All optional — tolerate absence.
+        card_number: str | None = None,
+        card_expiry: str | None = None,
+        card_cvc: str | None = None,
+        cardholder_name: str | None = None,
+        billing_country: str | None = None,
+        billing_address: str | None = None,
+        billing_city: str | None = None,
+        billing_state: str | None = None,
+        billing_zip: str | None = None,
         loader: PluginLoader | None = None,
         **_unused: Any,
     ) -> None:
@@ -99,6 +112,19 @@ class PluginScenarioProvider:
         # _cleanup_profile_dir).
         self._profile_dir: str | None = None
         self._last_executor_result: ExecutorResult | None = None
+        # Registration config fields — seeded into the store as config.* by
+        # register() so stripe.fill_checkout can resolve ${config.*}.
+        self._config_fields: dict[str, Any] = {
+            "config.card_number": card_number,
+            "config.card_expiry": card_expiry,
+            "config.card_cvc": card_cvc,
+            "config.cardholder_name": cardholder_name,
+            "config.billing_country": billing_country,
+            "config.billing_address": billing_address,
+            "config.billing_city": billing_city,
+            "config.billing_state": billing_state,
+            "config.billing_zip": billing_zip,
+        }
 
         # Read + validate manifest.
         manifest_path = self._package_dir / "plugin.json"
@@ -112,6 +138,10 @@ class PluginScenarioProvider:
         self._scenario: ScenarioV2 | None = None
         self._profile: dict[str, Any] = {}
         self._selectors: dict[str, Any] = {}
+        # v1.1 LOCAL OVERRIDES (plan §8): "override" when a user-edited
+        # override scenario is loaded, "package" otherwise.  Surfaced in
+        # _build_result as ``scenario_source`` for provenance.
+        self._scenario_source: str = "package"
         self._load_entry_files()
 
         # Resolve dependencies (plan §3.3 — depends chaining).  Pre-parse
@@ -149,6 +179,21 @@ class PluginScenarioProvider:
         scenario_raw = json.loads(scenario_path.read_text(encoding="utf-8"))
         self._scenario = parse_scenario_v2(scenario_raw)
 
+        # v1.1 SELECTOR-PACK channel (plan §8): if a selectors_overlay.json
+        # exists in the package dir (downloaded by sync, or placed manually
+        # for plugins-local dev packages), merge it into the scenario.  For
+        # each step id present in the overlay, REPLACE step.selector_candidates
+        # with the overlay list.  Invalid overlay entries are skipped with a
+        # warning; the scenario object is otherwise untouched.
+        self._apply_selector_overlay()
+
+        # v1.1 LOCAL OVERRIDES (plan §8): if a user-edited override
+        # scenario exists at <data_dir>/overrides/<manifest.id>/scenario.json
+        # AND parses → use it instead of the package scenario.  Parse
+        # failure → warn + keep package scenario.  The override wins at
+        # run time; provenance is tracked in _scenario_source.
+        self._apply_local_override()
+
         # Selectors (v1.1 selector-pack channel — read + validated, not
         # the primary selector source in v1; scenario has inline candidates).
         selectors_rel = entry.get("selectors", "selectors.json")
@@ -176,6 +221,96 @@ class PluginScenarioProvider:
                 logger.warning(
                     "profile.json unreadable in %s", self._package_dir
                 )
+
+    def _apply_selector_overlay(self) -> None:
+        """Merge ``selectors_overlay.json`` into the parsed scenario (plan §8).
+
+        Overlay shape: ``{step_id: [{kind, value, weight?}, ...]}``.  For each
+        step id present in the overlay, the scenario step's
+        ``selector_candidates`` are REPLACED with the overlay list.  Steps
+        absent from the overlay keep their inline candidates.  Invalid
+        candidate entries (missing kind or value) are skipped with a warning;
+        if a step's overlay list has zero valid candidates, that step's
+        override is skipped entirely (inline candidates kept).
+
+        Parse failure of the overlay file is non-fatal — the scenario is
+        left with its inline candidates and a warning is logged.
+        """
+        if self._scenario is None:
+            return
+        overlay_path = self._package_dir / "selectors_overlay.json"
+        if not overlay_path.is_file():
+            return
+        try:
+            overlay_raw = json.loads(overlay_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "selectors_overlay.json unreadable in %s: %s",
+                self._package_dir, exc,
+            )
+            return
+        if not isinstance(overlay_raw, dict) or not overlay_raw:
+            return
+
+        from dataclasses import replace
+
+        new_steps: list[ScenarioStep] = []
+        for step in self._scenario.steps:
+            override = overlay_raw.get(step.id)
+            if not isinstance(override, list):
+                new_steps.append(step)
+                continue
+
+            candidates: list[SelectorCandidate] = []
+            for idx, item in enumerate(override):
+                cand = _parse_overlay_candidate(item, step.id, idx)
+                if cand is None:
+                    continue
+                candidates.append(cand)
+
+            if not candidates:
+                logger.warning(
+                    "overlay for step %s has zero valid candidates — "
+                    "keeping inline candidates",
+                    step.id,
+                )
+                new_steps.append(step)
+                continue
+
+            new_steps.append(
+                replace(step, selector_candidates=candidates)
+            )
+
+        self._scenario = replace(self._scenario, steps=new_steps)
+
+    def _apply_local_override(self) -> None:
+        """Apply a user-edited local override scenario (plan §8 v1.1).
+
+        If ``<data_dir>/overrides/<manifest.id>/scenario.json`` exists AND
+        parses → replace ``self._scenario`` with the override and mark
+        provenance ``"override"``.  Parse failure → warn + keep package
+        scenario (provenance stays ``"package"``).  No override file →
+        no-op.
+        """
+        if self._scenario is None:
+            return
+        from .layout import _base_dir
+
+        override_path = _base_dir() / "overrides" / self._manifest.id / "scenario.json"
+        if not override_path.is_file():
+            return
+        try:
+            override_raw = json.loads(override_path.read_text(encoding="utf-8"))
+            override_scenario = parse_scenario_v2(override_raw)
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "override scenario for %s unreadable at %s: %s — keeping package scenario",
+                self._manifest.id, override_path, exc,
+            )
+            return
+        self._scenario = override_scenario
+        self._scenario_source = "override"
+        logger.warning("override active for %s", self._manifest.id)
 
     # ── Duck-typed provider interface ───────────────────────────────────
 
@@ -269,11 +404,18 @@ class PluginScenarioProvider:
         # Seed store with credentials so scenario steps can reference them
         # via ${account.email} / ${account.password} / ${account.name}.
         # The same store dict is shared across all dep + main scenarios.
+        # v1.1: also seed config.* from the registration config kwargs so
+        # capabilities (e.g. stripe.fill_checkout) can resolve ${config.*}.
         store: dict[str, Any] = {
             "account.email": email,
             "account.password": password,
             "account.name": name,
         }
+        # Tolerate absence: only seed non-None config values; absent keys
+        # resolve to empty string via resolve_template.
+        store.update(
+            {k: v for k, v in self._config_fields.items() if v is not None}
+        )
 
         # Track whether the run reached account.save (terminal success) so
         # the finally block can decide whether to keep or clean up the
@@ -458,6 +600,7 @@ class PluginScenarioProvider:
             "steps_completed": result.steps_completed,
             "human_pause": result.human_pause,
             "human_pause_reason": result.human_pause_reason,
+            "scenario_source": self._scenario_source,
         }
 
     def _fail(self, email: str | None, error: str) -> dict[str, Any]:
@@ -467,6 +610,7 @@ class PluginScenarioProvider:
             "provider": self._service,
             "email": email or "",
             "error": error,
+            "scenario_source": self._scenario_source,
         }
 
     def build_failure_report(self, *, consent: bool = False) -> dict[str, Any] | None:
@@ -505,6 +649,42 @@ def _should_skip_billing(kwargs: dict[str, Any]) -> bool:
         or os.environ.get("KIRO_V2_SKIP_BILLING", "0") == "1"
         or bool(kwargs.get("skipBilling") or kwargs.get("skip_billing"))
     )
+
+
+def _parse_overlay_candidate(
+    item: Any, step_id: str, idx: int
+) -> SelectorCandidate | None:
+    """Parse one overlay candidate entry into a SelectorCandidate.
+
+    Returns None (and logs a warning) when the entry is missing ``kind``
+    or ``value``.  Mirrors the tolerant parse in ``parse_v2`` but emits a
+    warning instead of raising — an overlay with one bad entry should not
+    abort the whole merge.
+    """
+    if not isinstance(item, dict):
+        logger.warning(
+            "overlay step %s: candidate[%d] not a dict — skipped",
+            step_id, idx,
+        )
+        return None
+    value = item.get("value")
+    if not isinstance(value, str):
+        logger.warning(
+            "overlay step %s: candidate[%d] missing string 'value' — skipped",
+            step_id, idx,
+        )
+        return None
+    kind = item.get("kind", "css")
+    if not isinstance(kind, str):
+        logger.warning(
+            "overlay step %s: candidate[%d] 'kind' not a string — skipped",
+            step_id, idx,
+        )
+        return None
+    weight = item.get("weight", 1.0)
+    if not isinstance(weight, int | float) or isinstance(weight, bool):
+        weight = 1.0
+    return SelectorCandidate(kind=kind, value=value, weight=float(weight))
 
 
 def _strip_billing_steps(scenario: ScenarioV2) -> ScenarioV2:

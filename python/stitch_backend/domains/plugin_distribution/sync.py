@@ -3,13 +3,22 @@
 Implements plan §3.1 item 2 (canary + kill-switch + LKG) and §3.2 item 6
 (anti-replay / anti-downgrade).  Uses ``autoreg.plugin.install`` for atomic
 installation with signature verification and version monotonicity.
+
+v1.1 SELECTOR-PACK channel (plan §8): after the install/skip-current
+decision, the manifest's ``selectors_version`` for each plugin entry is
+compared against the locally stored overlay meta.  When the server has a
+newer pack, it is downloaded, sha256-verified, and atomic-written into
+``<plugin cache dir>/<version>/selectors_overlay.json`` (+ ``.meta.json``).
+Monotonic: a downgrade attempt is warned + skipped (the old overlay stays).
 """
 
 from __future__ import annotations
 
 import hashlib
 import io
+import json
 import logging
+import os
 import shutil
 import tempfile
 import zipfile
@@ -43,6 +52,12 @@ class SyncReport:
     skipped: list[str] = field(default_factory=list)
     rolled_back: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+
+
+# ── Selector overlay file names (plan §8) ─────────────────────────────────────
+
+_OVERLAY_FILENAME = "selectors_overlay.json"
+_OVERLAY_META_FILENAME = ".selectors_meta.json"
 
 
 class PluginSyncService:
@@ -128,6 +143,11 @@ class PluginSyncService:
                 installed = list_installed_versions(plugin_id)
                 if version in installed:
                     report.skipped.append(f"{plugin_id}@{version} (current)")
+                    # Overlay sync still runs for already-installed versions
+                    # (hot selector updates land without a plugin bump).
+                    await self._sync_selector_overlay(
+                        plugin_id, version, entry, state.token, report
+                    )
                     continue
 
                 if _is_older(version, installed):
@@ -138,6 +158,11 @@ class PluginSyncService:
                     plugin_id, version, state.token, state.pubkey
                 )
                 report.updated.append(f"{plugin_id}@{version}")
+                # Fresh install — also pull the latest overlay if the manifest
+                # advertises one.
+                await self._sync_selector_overlay(
+                    plugin_id, version, entry, state.token, report
+                )
             except Exception as exc:  # noqa: BLE001 — per-plugin error isolation
                 report.errors.append(f"{plugin_id}@{version}: {exc}")
                 logger.warning("Sync failed for %s@%s: %s", plugin_id, version, exc)
@@ -160,6 +185,144 @@ class PluginSyncService:
             install_package(tmp_dir, public_key_b64=pubkey)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    # ── Selector overlay sync (plan §8) ──────────────────────────────────────
+
+    async def _sync_selector_overlay(
+        self,
+        plugin_id: str,
+        version: str,
+        manifest_entry: dict[str, Any],
+        token: str,
+        report: SyncReport,
+    ) -> None:
+        """Download a newer selector overlay pack if the manifest advertises one.
+
+        Monotonic: never downgrade.  On a downgrade attempt (manifest version
+        < local version) the old overlay is kept and a warning is logged.
+        Sha256 mismatch on the downloaded pack → keep the old overlay + warn.
+        """
+        remote_version = int(manifest_entry.get("selectors_version", 0) or 0)
+        remote_sha = str(manifest_entry.get("selectors_sha256", "") or "")
+
+        # No overlay published for this plugin@version — nothing to do.
+        if remote_version <= 0:
+            return
+
+        pkg_dir = plugin_cache_path(plugin_id, version)
+        if not pkg_dir.is_dir():
+            # Plugin not installed (e.g. canary-skipped) — cannot place overlay.
+            return
+
+        local_version = _read_local_overlay_version(pkg_dir)
+
+        # Monotonic: skip downgrade.
+        if local_version >= remote_version:
+            logger.info(
+                "selector overlay %s@%s: local v%d >= remote v%d — skip",
+                plugin_id, version, local_version, remote_version,
+            )
+            return
+
+        # Download the pack.
+        url = (
+            f"{server_url()}/plugins/{plugin_id}/{version}"
+            f"/selectors/{remote_version}"
+        )
+        client = self._ensure_client()
+        resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code == 404:
+            # Pack was deleted server-side between manifest + fetch — not an
+            # error, just nothing to apply.
+            logger.info(
+                "selector overlay %s@%s v%d not found on server — skip",
+                plugin_id, version, remote_version,
+            )
+            return
+        resp.raise_for_status()
+        body = resp.json()
+
+        # Verify sha256 (defend against transport corruption / server bug).
+        actual_sha = _canonical_selectors_sha(body.get("selectors", {}))
+        if actual_sha != remote_sha:
+            logger.warning(
+                "selector overlay %s@%s v%d sha256 mismatch "
+                "(expected %s, got %s) — keep old overlay",
+                plugin_id, version, remote_version, remote_sha, actual_sha,
+            )
+            report.errors.append(
+                f"{plugin_id}@{version}: selector overlay sha256 mismatch"
+            )
+            return
+
+        # Atomic-write overlay + meta.
+        _atomic_write_overlay(pkg_dir, body.get("selectors", {}), remote_version)
+        logger.info(
+            "selector overlay %s@%s updated to v%d",
+            plugin_id, version, remote_version,
+        )
+
+
+def _read_local_overlay_version(pkg_dir: Path) -> int:
+    """Read the locally stored selectors_version for a package dir (0 if none)."""
+    meta_path = pkg_dir / _OVERLAY_META_FILENAME
+    if not meta_path.is_file():
+        return 0
+    try:
+        raw = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    if not isinstance(raw, dict):
+        return 0
+    try:
+        return int(raw.get("selectors_version", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _canonical_selectors_sha(selectors: dict[str, Any]) -> str:
+    """sha256 of the canonical-JSON encoding of the selectors payload.
+
+    Mirrors the server's ``selectors._canonical_sha256`` so client + server
+    agree on the hash of the same payload.
+    """
+    canonical = json.dumps(selectors, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _atomic_write_overlay(
+    pkg_dir: Path, selectors: dict[str, Any], selectors_version: int
+) -> None:
+    """Atomic-write the overlay + meta files into ``pkg_dir``.
+
+    Writes to a temp file in the same directory, then ``os.replace`` (atomic
+    on both POSIX + Windows for files).  The meta file is written first so
+    a crash between the two leaves an old meta pointing at a not-yet-written
+    overlay — the next sync re-downloads (idempotent).
+    """
+    overlay_path = pkg_dir / _OVERLAY_FILENAME
+    meta_path = pkg_dir / _OVERLAY_META_FILENAME
+
+    overlay_text = json.dumps(selectors, ensure_ascii=False, indent=2) + "\n"
+    meta_text = json.dumps({"selectors_version": selectors_version}) + "\n"
+
+    # Meta first (crash-safe: old meta + old overlay is consistent).
+    _atomic_write_text(meta_path, meta_text)
+    _atomic_write_text(overlay_path, overlay_text)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically (temp file + os.replace)."""
+    tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
 
 # ── Cohort + version helpers ─────────────────────────────────────────────────
