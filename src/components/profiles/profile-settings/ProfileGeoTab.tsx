@@ -113,9 +113,9 @@ export function ProfileGeoTab({
       </div>
 
       <div className="text-xs text-slate-500">{t("settings.profile_geo_tab.current_mode")}
-        {hasManualGeo ? 'Manual coordinates' : 'Auto geolocation'}
-        {' • '}{t("settings.profile_geo_tab.locale")}{localeManual ? 'Manual' : 'Auto'}
-        {' • '}{t("settings.profile_geo_tab.timezone")}{timezoneManual ? 'Manual' : 'Auto'}
+        {hasManualGeo ? (t("settings.profile_geo_tab.manual_coordinates") || 'Manual coordinates') : (t("settings.profile_geo_tab.auto_geolocation") || 'Auto geolocation')}
+        {' • '}{t("settings.profile_geo_tab.locale")}{localeManual ? (t("settings.profile_geo_tab.manual") || 'Manual') : t("settings.profile_geo_tab.auto")}
+        {' • '}{t("settings.profile_geo_tab.timezone")}{timezoneManual ? (t("settings.profile_geo_tab.manual") || 'Manual') : t("settings.profile_geo_tab.auto")}
       </div>
     </section>);
 

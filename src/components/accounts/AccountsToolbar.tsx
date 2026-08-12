@@ -12,7 +12,6 @@ import {
   Share2,
   Tag,
   Upload,
-  UserPlus,
 } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
@@ -20,6 +19,7 @@ import { getAccountStatusLabel } from '../../lib/accountStatus';
 import {
   ActionButtonGroup,
   Button,
+  Checkbox,
   FilterDropdown,
   IconButton,
   Input,
@@ -87,7 +87,7 @@ interface AccountsToolbarProps {
   onRefreshSheets: () => void;
   onToggleSheetsConfig: () => void;
   onOpenAutoReg: () => void;
-  onCreateStandaloneProfile: () => void;
+  onCreateProfile: () => void;
   onAddAccount: () => void;
   onToggleVisibleColumn: (column: keyof AccountsVisibleColumns, value: boolean) => void;
   onResetVisibleColumns: () => void;
@@ -141,7 +141,7 @@ export function AccountsToolbar({
   onRefreshSheets,
   onToggleSheetsConfig,
   onOpenAutoReg,
-  onCreateStandaloneProfile,
+  onCreateProfile,
   onAddAccount,
   onToggleVisibleColumn,
   onResetVisibleColumns,
@@ -269,42 +269,29 @@ export function AccountsToolbar({
               </>
             ) : null}
 
-            {/* Compact IconButtons: Auto-Reg, Create Profile */}
+            {/* Compact IconButton: Auto-Reg (accounts tab only) */}
             {isAccountsList ? (
               <>
                 <div className="h-6 w-px bg-white/10 shrink-0" />
-                <div className="flex items-center gap-1">
-                  <Tooltip content={t('sidebar.autoReg')}>
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      onClick={onOpenAutoReg}
-                      className="h-8 w-8 rounded-lg"
-                    >
-                      <Bot size={16} />
-                    </IconButton>
-                  </Tooltip>
-
-                  <Tooltip content={t('accounts.profilesCreateButton')}>
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      onClick={onCreateStandaloneProfile}
-                      className="h-8 w-8 rounded-lg"
-                    >
-                      <UserPlus size={16} />
-                    </IconButton>
-                  </Tooltip>
-                </div>
+                <Tooltip content={t('sidebar.autoReg')}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    onClick={onOpenAutoReg}
+                    className="h-8 w-8 rounded-lg"
+                  >
+                    <Bot size={16} />
+                  </IconButton>
+                </Tooltip>
               </>
             ) : null}
 
             {/* Divider before primary button */}
             <div className="h-6 w-px bg-white/10 shrink-0" />
 
-            {/* Primary Add Account Button */}
+            {/* Primary action: Add Account (accounts tab) / Create Profile (profiles tab) */}
             <Button
-              onClick={onAddAccount}
+              onClick={normalizedEntityFilter === 'profiles' ? onCreateProfile : onAddAccount}
               variant="primary"
               size="sm"
               leftIcon={<Plus size={16} />}
@@ -469,15 +456,12 @@ export function AccountsToolbar({
 
                 {/* Show archived toggle */}
                 <div className="h-5 w-px bg-white/10 shrink-0" />
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    className="accent-slate-500 w-3.5 h-3.5"
-                    checked={showArchived}
-                    onChange={e => onShowArchivedChange(e.target.checked)}
-                  />
-                  {t('accounts.showArchived')}
-                </label>
+                <Checkbox
+                  className="gap-1.5 py-0 px-0 hover:bg-transparent whitespace-nowrap"
+                  label={<span className="text-xs text-slate-400">{t('accounts.showArchived')}</span>}
+                  checked={showArchived}
+                  onChange={e => onShowArchivedChange(e.target.checked)}
+                />
               </ToolbarFiltersGroup>
             )}
           </div>

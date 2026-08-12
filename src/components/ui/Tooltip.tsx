@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
@@ -9,6 +9,7 @@ export interface TooltipProps {
   children: React.ReactNode;
   side?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
+  wrapperClassName?: string;
   delay?: number;
   sideOffset?: number;
 }
@@ -18,15 +19,19 @@ export function Tooltip({
   children,
   side = 'top',
   className,
+  wrapperClassName,
   delay = 0.2,
   sideOffset = 8,
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
-  // Use callback ref to measure after mount.
+  // Use callback ref to measure after mount. The state copy only serves as
+  // an effect trigger; the mutable ref holds the node for DOM adjustments.
+  const tooltipNodeRef = useRef<HTMLDivElement | null>(null);
   const [tooltipEl, setTooltipEl] = useState<HTMLDivElement | null>(null);
   const tooltipRef = useCallback((node: HTMLDivElement | null) => {
+    tooltipNodeRef.current = node;
     setTooltipEl(node);
   }, []);
 
@@ -52,19 +57,21 @@ export function Tooltip({
     setIsVisible(true);
   };
 
-  // Adjust position after tooltip is rendered to account for its size
+  // Adjust position after tooltip is rendered to account for its size.
+  // Writes straight to the DOM node instead of setState-in-effect to avoid
+  // cascading renders (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (isVisible && tooltipEl) {
-      const tooltipRect = tooltipEl.getBoundingClientRect();
-      setPosition(prev => {
-        let newX = prev.x;
-        let newY = prev.y;
-        if (side === 'top') newY = prev.y - tooltipRect.height;
-        else if (side === 'left') newX = prev.x - tooltipRect.width;
-        return { x: newX, y: newY };
-      });
+    const node = tooltipNodeRef.current;
+    if (isVisible && node) {
+      const tooltipRect = node.getBoundingClientRect();
+      let newX = position.x;
+      let newY = position.y;
+      if (side === 'top') newY = position.y - tooltipRect.height;
+      else if (side === 'left') newX = position.x - tooltipRect.width;
+      node.style.left = `${newX}px`;
+      node.style.top = `${newY}px`;
     }
-  }, [isVisible, tooltipEl, side]);
+  }, [isVisible, tooltipEl, side, position.x, position.y]);
 
   const getTransform = () => {
     if (side === 'top' || side === 'bottom') return 'translateX(-50%)';
@@ -75,7 +82,7 @@ export function Tooltip({
   return (
     <>
       <div
-        className="relative inline-flex items-center justify-center"
+        className={cn('relative inline-flex items-center justify-center', wrapperClassName)}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setIsVisible(false)}
         onFocus={handleMouseEnter}

@@ -152,6 +152,8 @@ export function AccountInspectorPanel({
   const [showPassword, setShowPassword] = useState(false);
   const [isRefreshingToken, setIsRefreshingToken] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  // Two-step delete via overflow menu (no confirm modal): first click arms 3s.
+  const [deleteArmed, setDeleteArmed] = useState(false);
   const [showSessionData, setShowSessionData] = useState(false);
   const [tokenExpiryDiff, setTokenExpiryDiff] = useState<number | null>(() =>
     account.expiresAt ? new Date(account.expiresAt).getTime() - Date.now() : null,
@@ -554,10 +556,19 @@ export function AccountInspectorPanel({
                 <ButtonBase
                   type="button"
                   className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-rose-300 hover:bg-rose-500/10"
-                  onClick={() => { onRequestDelete(account.id); setOverflowOpen(false); }}
+                  onClick={() => {
+                    if (deleteArmed) {
+                      setDeleteArmed(false);
+                      setOverflowOpen(false);
+                      onRequestDelete(account.id);
+                      return;
+                    }
+                    setDeleteArmed(true);
+                    setTimeout(() => setDeleteArmed(false), 3000);
+                  }}
                 >
                   <Trash2 size={12} />
-                  {t('common.delete')}
+                  {deleteArmed ? t('scenarios.deleteArmedLabel') || 'Delete?' : t('common.delete')}
                 </ButtonBase>
               </div>
             </>

@@ -1,7 +1,7 @@
 import { t } from "@/lib/i18n";import { Link2, Copy, FolderOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Button, ConfirmDialog, IconButton, Input, Select, Textarea, Toggle } from '@/components/ui';
-import { type ProfileSettingsV1, type ProfileSettingsBrowserWindowMode, getProfileSettings } from '@/lib/backend/modules/profiles';
+import { Button, IconButton, Input, Select, Textarea, Toggle } from '@/components/ui';
+import { type ProfileSettingsV1, type ProfileSettingsBrowserWindowMode } from '@/lib/backend/modules/profiles';
 import {
   parsePositiveIntOrNull,
   windowModeOptions,
@@ -13,7 +13,6 @@ import { safeInvoke } from '@/lib/backend/core';
 
 interface ProfileMainTabProps {
   draft: ProfileSettingsV1;
-  alias?: string;
   browserWindowMode: ProfileSettingsBrowserWindowMode;
   browserWindowWidth: number | null;
   browserWindowHeight: number | null;
@@ -35,7 +34,6 @@ interface ProfileMainTabProps {
 
 export function ProfileMainTab({
   draft,
-  alias,
   browserWindowMode,
   browserWindowWidth,
   browserWindowHeight,
@@ -68,32 +66,16 @@ export function ProfileMainTab({
 
   const currentEngine = normalizeBrowserEngine(draft.engine);
 
-  const [engineConfirm, setEngineConfirm] = useState<BrowserEngineId | null>(null);
+  const windowModeLabels: Record<string, string> = {
+    'fit-screen': t("profiles.profile_settings_modal.window_mode_fit_screen") || 'Fit screen (recommended)',
+    'fixed': t("profiles.profile_settings_modal.window_mode_fixed") || 'Fixed size',
+    'auto': t("profiles.profile_settings_modal.window_mode_auto") || 'Auto fallback'
+  };
 
-  const handleEngineToggle = async (engine: BrowserEngineId) => {
+  // Engine switching is a plain toggle: applies immediately, switches back
+  // on the opposite click. No confirmation by design.
+  const handleEngineToggle = (engine: BrowserEngineId) => {
     if (engine === currentEngine) return;
-    // Fresh profiles (no prior usage) switch silently — same rule as the
-    // profiles table. A profile has prior usage when it was launched
-    // (storage.lastUrl set) or an engine was explicitly saved before and
-    // differs from the target (browser state may exist for that engine).
-    // Switching engine then changes the profile's browser identity.
-    let hasPriorUsage = false;
-    if (alias) {
-      try {
-        const record = await getProfileSettings({ alias });
-        const lastUrl = record?.settings?.storage?.lastUrl?.trim();
-        const explicitEngine = record?.settings?.engine ?? null;
-        hasPriorUsage =
-          Boolean(lastUrl) ||
-          (explicitEngine !== null && normalizeBrowserEngine(explicitEngine) !== engine);
-      } catch {
-        // If settings can't be loaded, don't block the switch.
-      }
-    }
-    if (hasPriorUsage) {
-      setEngineConfirm(engine);
-      return;
-    }
     onUpdate({ ...draft, engine });
   };
 
@@ -124,7 +106,7 @@ export function ProfileMainTab({
 
       <div className="grid grid-cols-2 gap-3">
         <Select
-          label="Window mode"
+          label={t("settings.profile_main_tab.window_mode") || 'Window mode'}
           value={browserWindowMode}
           onValueChange={(value) =>
           onPatchBrowserWindow({
@@ -134,14 +116,14 @@ export function ProfileMainTab({
 
           {windowModeOptions.map((option) =>
           <option key={option.value} value={option.value}>
-              {option.label}
+              {windowModeLabels[option.value] ?? option.label}
             </option>
           )}
         </Select>
 
         <div className="flex items-end pb-1">
           <Toggle
-            label="Maximize on start"
+            label={t("settings.profile_main_tab.maximize_on_start") || 'Maximize on start'}
             checked={browserWindowMaximize}
             onChange={(checked) => onPatchBrowserWindow({ maximizeOnStart: checked })} />
 
@@ -150,7 +132,7 @@ export function ProfileMainTab({
         {browserWindowMode === 'fixed' ?
         <>
             <Select
-            label="Window preset"
+            label={t("settings.profile_main_tab.window_preset") || 'Window preset'}
             value=""
             onValueChange={(value) => {
               if (!value) return;
@@ -176,7 +158,7 @@ export function ProfileMainTab({
           </div>
 
             <Input
-            label="Window width"
+            label={t("settings.profile_main_tab.window_width") || 'Window width'}
             type="number"
             min={640}
             max={8192}
@@ -191,7 +173,7 @@ export function ProfileMainTab({
 
 
             <Input
-            label="Window height"
+            label={t("settings.profile_main_tab.window_height") || 'Window height'}
             type="number"
             min={480}
             max={8192}
@@ -209,7 +191,7 @@ export function ProfileMainTab({
       </div>
 
       <Input
-        label="Last URL"
+        label={t("settings.profile_main_tab.last_url") || 'Last URL'}
         value={draft.storage.lastUrl ?? ''}
         onChange={(e) =>
         onUpdate({
@@ -221,7 +203,7 @@ export function ProfileMainTab({
 
 
       <Input
-        label="Last scenario path"
+        label={t("settings.profile_main_tab.last_scenario_path") || 'Last scenario path'}
         value={draft.storage.lastScenarioPath ?? ''}
         onChange={(e) =>
         onUpdate({
@@ -236,8 +218,8 @@ export function ProfileMainTab({
             size="sm"
             variant="ghost"
             className="p-2 rounded bg-white/[0.04] hover:bg-white/10 text-slate-300"
-            onClick={() => void onCopyPath(draft.storage.lastScenarioPath, 'Scenario path')}
-            title="Copy path">
+            onClick={() => void onCopyPath(draft.storage.lastScenarioPath, t("settings.profile_main_tab.scenario_path") || 'Scenario path')}
+            title={t("settings.profile_main_tab.copy_path") || 'Copy path'}>
 
               <Copy size={14} />
             </IconButton>
@@ -245,8 +227,8 @@ export function ProfileMainTab({
             size="sm"
             variant="ghost"
             className="p-2 rounded bg-white/[0.04] hover:bg-white/10 text-slate-300"
-            onClick={() => void onOpenPath(draft.storage.lastScenarioPath, 'Scenario path')}
-            title="Open folder">
+            onClick={() => void onOpenPath(draft.storage.lastScenarioPath, t("settings.profile_main_tab.scenario_path") || 'Scenario path')}
+            title={t("settings.profile_main_tab.open_folder") || 'Open folder'}>
 
               <FolderOpen size={14} />
             </IconButton>
@@ -255,7 +237,7 @@ export function ProfileMainTab({
 
 
       <Textarea
-        label="Notes"
+        label={t("settings.profile_main_tab.notes") || 'Notes'}
         value={draft.storage.notes ?? ''}
         onChange={(e) =>
         onUpdate({
@@ -268,24 +250,9 @@ export function ProfileMainTab({
 
       <div className="text-xs text-slate-500">{t("settings.profile_main_tab.window")}
         {summaryWindowSizeHint}
-        {' • '}{t("settings.profile_main_tab.maximize")}{summaryMaximizeOnStart ? 'On' : 'Off'}
+        {' • '}{t("settings.profile_main_tab.maximize")}{summaryMaximizeOnStart ? (t("settings.profile_main_tab.on") || 'On') : (t("settings.profile_main_tab.off") || 'Off')}
       </div>
 
-      <ConfirmDialog
-        isOpen={engineConfirm !== null}
-        onClose={() => setEngineConfirm(null)}
-        onConfirm={() => {
-          if (engineConfirm !== null) {
-            onUpdate({ ...draft, engine: engineConfirm });
-          }
-          setEngineConfirm(null);
-        }}
-        title={t('accounts.profileEngineConfirmTitle')}
-        message={t('accounts.profileEngineConfirmMessage')}
-        confirmText={t('accounts.profileEngineConfirmAction')}
-        cancelText={t('common.cancel')}
-        variant="warning"
-      />
     </section>);
 
 }

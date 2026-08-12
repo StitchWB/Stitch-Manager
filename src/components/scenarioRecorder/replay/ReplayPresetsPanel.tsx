@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Input } from '@/components/ui';
+import { Button, ConfirmActionButton, Input } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import type { ReplayRunPreset } from '@/lib/scenarioRecorder/replayPresets';
 
@@ -139,9 +139,13 @@ export function ReplayPresetsPanel({
                 >
                   {t('recorder.replay.presetRenameAction')}
                 </Button>
-                <Button size="xs" variant="danger" onClick={() => onRequestDeletePreset(preset)}>
+                <ConfirmActionButton
+                  size="xs"
+                  variant="danger"
+                  armedLabel={t('scenarios.deleteArmedLabel') || 'Delete?'}
+                  onConfirm={() => onRequestDeletePreset(preset)}>
                   {t('common.delete')}
-                </Button>
+                </ConfirmActionButton>
               </div>
             </div>
           ))}

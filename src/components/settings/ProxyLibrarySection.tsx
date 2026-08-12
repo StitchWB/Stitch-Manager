@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Trash2, Upload, Save, AlertCircle, CheckCircle2, Globe, Eye, EyeOff } from 'lucide-react';
 
 import {
-  ConfirmDialog,
+  ConfirmActionButton,
   SectionHeader,
   Button,
   Checkbox,
@@ -109,7 +109,7 @@ export function ProxyLibrarySection() {
   const [testingEntryId, setTestingEntryId] = useState<string | null>(null);
   const [forceUpdateDialog, setForceUpdateDialog] = useState<ForceUpdateDialogState | null>(null);
   const [forceDeleteDialog, setForceDeleteDialog] = useState<ForceDeleteDialogState | null>(null);
-  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -317,23 +317,15 @@ export function ProxyLibrarySection() {
     setSelectedIds([]);
   };
 
+  // Two-step batch delete (no confirm modal): the toolbar button arms on the
+  // first click and executes on the second (ConfirmActionButton).
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return;
-    setBatchDeleteDialogOpen(true);
-  };
-
-  const handleConfirmBatchDelete = async () => {
-    if (selectedIds.length === 0) {
-      setBatchDeleteDialogOpen(false);
-      return;
-    }
-
     for (const id of selectedIds) {
       await handleDelete(id, true);
     }
     await load();
     setSelectedIds([]);
-    setBatchDeleteDialogOpen(false);
   };
 
   const handleBulkImport = async () => {
@@ -619,14 +611,14 @@ export function ProxyLibrarySection() {
 
               {t('proxyLibrary.batchDisable')}
             </Button>
-            <Button
+            <ConfirmActionButton
               size="xs"
               variant="danger"
               disabled={selectedIds.length === 0}
-              onClick={() => void handleBatchDelete()}>
+              onConfirm={() => void handleBatchDelete()}>
 
               {t('proxyLibrary.batchDelete')}
-            </Button>
+            </ConfirmActionButton>
           </div>
           {loading ?
           <div className="text-sm text-slate-400">{t('proxyLibrary.loading')}</div> :
@@ -747,75 +739,73 @@ export function ProxyLibrarySection() {
           </div> :
         null}
 
-        <ConfirmDialog
-          isOpen={Boolean(forceUpdateDialog?.isOpen)}
-          onClose={() => setForceUpdateDialog(null)}
-          onConfirm={() => {
-            if (!forceUpdateDialog) return;
-            void (async () => {
-              try {
-                const updated = await updateProxyLibraryEntry({
-                  id: forceUpdateDialog.id,
-                  draft: forceUpdateDialog.draft,
-                  options: { force: true }
-                });
-                setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
-                cancelEdit();
-              } catch (forceErr) {
-                setError(
-                  forceErr instanceof Error ? forceErr.message : t('proxyLibrary.updateError')
-                );
-              } finally {
-                setForceUpdateDialog(null);
-              }
-            })();
-          }}
-          title={t('proxyLibrary.forceDeleteConfirm')}
-          message={
-          forceUpdateDialog ?
-          `${forceUpdateDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceUpdateDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceUpdateDialog.usage.scenarioPaths.join('\n') || '-'}` :
-          ''
-          }
-          confirmText={t('common.confirm')}
-          cancelText={t('common.cancel')}
-          variant="warning" />
+        {forceUpdateDialog ?
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200 space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {t('proxyLibrary.forceDeleteConfirm')}
+            </div>
+            <div className="text-xs whitespace-pre-wrap">
+              {`${forceUpdateDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceUpdateDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceUpdateDialog.usage.scenarioPaths.join('\n') || '-'}`}
+            </div>
+            <div className="flex items-center gap-2">
+              <ConfirmActionButton
+                size="xs"
+                variant="secondary"
+                onConfirm={() => {
+                  const dialog = forceUpdateDialog;
+                  setForceUpdateDialog(null);
+                  void (async () => {
+                    try {
+                      const updated = await updateProxyLibraryEntry({
+                        id: dialog.id,
+                        draft: dialog.draft,
+                        options: { force: true }
+                      });
+                      setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
+                      cancelEdit();
+                    } catch (forceErr) {
+                      setError(
+                        forceErr instanceof Error ? forceErr.message : t('proxyLibrary.updateError')
+                      );
+                    }
+                  })();
+                }}>
+                {t('common.confirm')}
+              </ConfirmActionButton>
+              <Button size="xs" variant="secondary" onClick={() => setForceUpdateDialog(null)}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </div> :
+        null}
 
-
-        <ConfirmDialog
-          isOpen={Boolean(forceDeleteDialog?.isOpen)}
-          onClose={() => setForceDeleteDialog(null)}
-          onConfirm={() => {
-            if (!forceDeleteDialog) return;
-            void (async () => {
-              try {
-                await handleDelete(forceDeleteDialog.id, true);
-              } finally {
-                setForceDeleteDialog(null);
-              }
-            })();
-          }}
-          title={t('proxyLibrary.forceDeleteConfirm')}
-          message={
-          forceDeleteDialog ?
-          `${forceDeleteDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceDeleteDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceDeleteDialog.usage.scenarioPaths.join('\n') || '-'}` :
-          ''
-          }
-          confirmText={t('common.delete')}
-          cancelText={t('common.cancel')}
-          variant="danger" />
-
-
-        <ConfirmDialog
-          isOpen={batchDeleteDialogOpen}
-          onClose={() => setBatchDeleteDialogOpen(false)}
-          onConfirm={() => {
-            void handleConfirmBatchDelete();
-          }}
-          title={t('proxyLibrary.batchDelete')}
-          message={t('proxyLibrary.forceDeletePrompt', { count: selectedIds.length })}
-          confirmText={t('common.delete')}
-          cancelText={t('common.cancel')}
-          variant="danger" />
+        {forceDeleteDialog ?
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300 space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {t('proxyLibrary.forceDeleteConfirm')}
+            </div>
+            <div className="text-xs whitespace-pre-wrap">
+              {`${forceDeleteDialog.errorMessage}\n\n${t('proxyLibrary.referencesProfiles')}:\n${forceDeleteDialog.usage.profileAliases.join('\n') || '-'}\n\n${t('proxyLibrary.referencesScenarios')}:\n${forceDeleteDialog.usage.scenarioPaths.join('\n') || '-'}`}
+            </div>
+            <div className="flex items-center gap-2">
+              <ConfirmActionButton
+                size="xs"
+                variant="danger"
+                onConfirm={() => {
+                  const dialog = forceDeleteDialog;
+                  setForceDeleteDialog(null);
+                  void handleDelete(dialog.id, true);
+                }}>
+                {t('common.delete')}
+              </ConfirmActionButton>
+              <Button size="xs" variant="secondary" onClick={() => setForceDeleteDialog(null)}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </div> :
+        null}
 
       </div>
     </SectionHeader>);

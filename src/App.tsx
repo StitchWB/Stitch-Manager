@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import Layout from './components/layout/Layout';
 
 import { t } from '@/lib/i18n';
@@ -17,9 +18,9 @@ import { useAiProxyStore } from './stores/aiProxy';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
 import { safeInvoke } from './lib/backend';
-import type { Account, ProxyStatus, ScheduledTask } from './types/generated';
+import type { Account, ProxyStatus, ScheduledTask, SettingsData } from './types/generated';
 import type { TotpKey } from './lib/backend/modules/totp';
-import type { RegistrationJob } from './types/ui';
+import type { RegistrationJob, RegistrationStatus } from './types/ui';
 import type { BackgroundManagerConfig } from './lib/backend/modules/backgroundManager';
 
 /** Shape returned by backend get_registration_status — richer than the frontend RegistrationStatus union. */
@@ -88,7 +89,7 @@ type WindowWithIdleCallback = Window & {
 function RouteLoadingFallback() {
   return (
     <div className="h-full w-full min-h-[200px] flex items-center justify-center text-sm text-vsc-text-muted">
-      Loading page...
+      {t('common.loading') || 'Loading...'}
     </div>
   );
 }
@@ -254,16 +255,20 @@ function App() {
         // Populate registration store (use runtime store directly, not facade)
         if (data.registrationStatus) {
           const rs = data.registrationStatus;
+          const status: RegistrationStatus =
+            rs.status === 'running' || rs.status === 'completed' || rs.status === 'failed' || rs.status === 'cancelled'
+              ? rs.status
+              : 'pending';
           useRuntimeStore.setState({
             isRunning: rs.isRunning,
-            status: (rs.status ?? 'pending') as any,
+            status,
             activeProvider: rs.provider ?? 'all',
           });
         }
-        
+
         // Populate settings store
         if (data.settings) {
-          useSettingsStore.getState().setSettings(data.settings as any);
+          useSettingsStore.getState().setSettings(data.settings as SettingsData);
         }
         if (data.backgroundManagerConfig) {
           useSettingsStore.getState().setBackgroundManagerConfig(data.backgroundManagerConfig);
@@ -402,12 +407,14 @@ function App() {
         closeButton
         gap={10}
         visibleToasts={3}
+        icons={{
+          success: <CheckCircle2 size={15} />,
+          error: <AlertCircle size={15} />,
+          warning: <AlertTriangle size={15} />,
+          info: <Info size={15} />,
+        }}
         toastOptions={{
-          style: {
-            backdropFilter: 'blur(12px)',
-            color: '#e2e8f0',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
-          },
+          style: { color: '#e2e8f0' },
           className: 'sonner-toast',
         }}
         theme="dark"

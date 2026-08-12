@@ -11,6 +11,9 @@ export interface ConfirmActionButtonProps
   armedLabel?: React.ReactNode;
   /** How long the armed state persists before resetting (ms). */
   armedTimeoutMs?: number;
+  /** When true, strips size-based padding so the button renders as a square
+   * icon-only control (pair with explicit h-/w- classes in className). */
+  iconOnly?: boolean;
 }
 
 const DEFAULT_ARMED_TIMEOUT_MS = 3000;
@@ -24,6 +27,7 @@ export function ConfirmActionButton({
   onConfirm,
   armedLabel,
   armedTimeoutMs = DEFAULT_ARMED_TIMEOUT_MS,
+  iconOnly = false,
   className,
   children,
   disabled,
@@ -64,6 +68,7 @@ export function ConfirmActionButton({
       onClick={handleClick}
       className={cn(
         className,
+        iconOnly && 'p-0',
         armed &&
           'bg-red-500/30 border-red-500/70 text-red-100 hover:bg-red-500/40 hover:border-red-400 hover:text-white shadow-[0_0_12px_rgba(239,68,68,0.35)]'
       )}

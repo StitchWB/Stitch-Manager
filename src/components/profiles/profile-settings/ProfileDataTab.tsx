@@ -33,7 +33,7 @@ export function ProfileDataTab({
         <div className="text-sm text-slate-200 mt-1">{cookiesHint}</div>
         <div className="mt-2 flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={onToggleCookieEditor}>
-            {showCookieEditor ? 'Hide editor' : 'Edit cookies'}
+            {showCookieEditor ? (t("settings.profile_data_tab.hide_editor") || 'Hide editor') : (t("settings.profile_data_tab.edit_cookies") || 'Edit cookies')}
           </Button>
           <Button size="sm" variant="secondary" onClick={() => void onPickCookieFile()}>
             <Upload size={14} className="mr-1" />{t("settings.profile_data_tab.import_file")}
@@ -54,7 +54,7 @@ export function ProfileDataTab({
           storage: { ...draft.storage, cookies: e.target.value || null }
         })
         }
-        hint="Paste JSON array/object or absolute path to cookies file"
+        hint={t("settings.profile_data_tab.cookies_hint") || 'Paste JSON array/object or absolute path to cookies file'}
         placeholder='[{"name":"sid","value":"..."}] or C:\\cookies.json'
         className="h-44 min-h-[176px] font-mono text-xs" />
 

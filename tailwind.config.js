@@ -23,7 +23,9 @@ export default {
         // VS Code / Deep Space Theme
         'vsc-bg': '#050508',
         'vsc-sidebar': 'rgba(10, 12, 20, 0.7)',
+        'vsc-sidebar-solid': '#111116',
         'vsc-panel': 'rgba(15, 18, 30, 0.7)',
+        'vsc-panel-solid': '#0f121e',
         'vsc-input': 'rgba(20, 25, 40, 0.6)',
         'vsc-hover': 'rgba(255, 255, 255, 0.04)',
         'vsc-border': 'rgba(255, 255, 255, 0.06)',
@@ -60,6 +62,8 @@ export default {
       },
       boxShadow: {
         'glow-sm': '0 0 10px rgba(139, 92, 246, 0.2)',
+        'glow-primary': '0 0 10px rgba(99, 102, 241, 0.2)',
+        'glow-danger': '0 0 10px rgba(239, 68, 68, 0.25)',
         'glow': '0 0 20px rgba(99, 102, 241, 0.4)',
         'glow-md': '0 0 20px rgba(139, 92, 246, 0.3)',
         'glow-lg': '0 0 30px rgba(99, 102, 241, 0.5)',

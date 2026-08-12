@@ -33,6 +33,10 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'error',
     'no-console': ['error', { allow: ['warn', 'error'] }],
     'ui-kit/no-hardcoded-ui': 'error',
+    // Confirm modals are banned app-wide: the standard confirm pattern is the
+    // two-step ConfirmActionButton (first click arms red, second executes).
+    // The UI kit itself (ConfirmDialog/ConfirmDialogHost) is exempt inside the rule.
+    'ui-kit/no-confirm-dialog': 'error',
     'i18next/no-literal-string': [
       'error',
       {

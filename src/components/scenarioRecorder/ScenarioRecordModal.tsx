@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Modal, Button, Input, Textarea, Checkbox, SegmentedControl } from '@/components/ui';
+import { Modal, Button, Input, Textarea, Checkbox, SegmentedControl, Tooltip } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { getProfileSettings, saveProfileSettings } from '@/lib/backend/modules/profiles';
 import { useScenarioRecorder } from '@/lib/scenarioRecorder/useScenarioRecorder';
@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
 import type { ScenarioRunnerMode } from '@/lib/scenarioRecorder/types';
 import { useExtensionBridgeProbe } from '@/lib/scenarioRecorder/useExtensionBridgeProbe';
-import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
+import { BROWSER_ENGINE_LABELS, normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 
 type ScenarioRecordModalProps = {
   alias: string | null;
@@ -24,34 +24,62 @@ type ScenarioRecordModalProps = {
   quickStart?: boolean;
 };
 
-export function ScenarioRecordModal({
+export function ScenarioRecordModal(props: ScenarioRecordModalProps) {
+  // Recorder stays mounted across close/open so an in-flight job keeps being
+  // tracked even if the dialog is dismissed.
+  const recorder = useScenarioRecorder();
+  if (!props.isOpen) return null;
+  return <ScenarioRecordForm {...props} recorder={recorder} />;
+}
+
+type ScenarioRecordFormProps = ScenarioRecordModalProps & {
+  recorder: ReturnType<typeof useScenarioRecorder>;
+};
+
+/**
+ * Mounted only while open: per-open state resets naturally via lazy
+ * initializers (no setState-in-effect hydration).
+ */
+function ScenarioRecordForm({
   alias,
   isOpen,
   onClose,
   defaultUrl = 'https://google.com',
   defaultScenarioName,
-  quickStart = false
-}: ScenarioRecordModalProps) {
-  const recorder = useScenarioRecorder();
+  quickStart = false,
+  recorder
+}: ScenarioRecordFormProps) {
   const displayAlias = formatProfileAlias(alias);
   const persistedScenarioPathRef = useRef<string | null>(null);
   const lastSavedToastRef = useRef<string | null>(null);
+  const autoStartedRef = useRef(false);
   const [runtimeModalOpen, setRuntimeModalOpen] = useState(false);
   const [url, setUrl] = useState(defaultUrl);
-  const [name, setName] = useState(defaultScenarioName?.trim() || 'scenario');
+  const [name, setName] = useState(() => defaultScenarioName?.trim() || 'scenario');
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [configJson, setConfigJson] = useState<string>('');
   const [runtimeInstalled, setRuntimeInstalled] = useState<boolean | null>(null);
   const [runtimeCheckError, setRuntimeCheckError] = useState<string | null>(null);
-  const [runtimeChecking, setRuntimeChecking] = useState(false);
-  const [autoStarted, setAutoStarted] = useState(false);
+  const [runtimeChecking, setRuntimeChecking] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [proxyPreflightError, setProxyPreflightError] = useState<string | null>(null);
-  const [noOverlay, setNoOverlay] = useState(false);
-  const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
-  const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
+  const [noOverlay, setNoOverlay] = useState(() => {
+    try {
+      return localStorage.getItem(`stitch.recorder.noOverlay.${alias || 'global'}`) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>(() => {
+    try {
+      return localStorage.getItem(`stitch.recorder.runnerMode.${alias || 'global'}`) === 'extension'
+        ? 'extension'
+        : 'native';
+    } catch {
+      return 'native';
+    }
+  });
   const [engine, setEngine] = useState<BrowserEngineId>('cloakbrowser');
-  const [engineHydrated, setEngineHydrated] = useState(false);
 
   const noOverlayPrefKey = useMemo(() => `stitch.recorder.noOverlay.${alias || 'global'}`, [alias]);
   const runnerModePrefKey = useMemo(
@@ -136,19 +164,6 @@ export function ScenarioRecordModal({
     };
   }, [alias, defaultUrl, isOpen, engine]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const proposed = defaultScenarioName?.trim();
-    if (!proposed) return;
-    setName(proposed);
-  }, [defaultScenarioName, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    // Keep URL resolved from profile settings; only fallback when empty.
-    setUrl((prev) => prev?.trim() ? prev : defaultUrl);
-  }, [defaultUrl, isOpen]);
-
   const refreshRuntime = useCallback(async () => {
     setRuntimeChecking(true);
     setRuntimeCheckError(null);
@@ -161,20 +176,26 @@ export function ScenarioRecordModal({
     }
   }, []);
 
+  // Initial runtime check: state updates arrive via promise callbacks, not
+  // synchronously in the effect body.
   useEffect(() => {
-    if (!isOpen) return;
-    void refreshRuntime();
-  }, [isOpen, refreshRuntime]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    try {
-      const raw = localStorage.getItem(noOverlayPrefKey);
-      setNoOverlay(raw === '1');
-    } catch {
-      setNoOverlay(false);
-    }
-  }, [isOpen, noOverlayPrefKey]);
+    let cancelled = false;
+    void checkBrowserRuntimeOnce()
+      .then((r) => {
+        if (cancelled) return;
+        setRuntimeInstalled(r.installed);
+        setRuntimeCheckError(r.error);
+      })
+      .catch(() => {
+        // best effort: runtime status stays unknown
+      })
+      .finally(() => {
+        if (!cancelled) setRuntimeChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -186,67 +207,22 @@ export function ScenarioRecordModal({
     }}, [isOpen, noOverlay, noOverlayPrefKey]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    try {
-      const raw = localStorage.getItem(runnerModePrefKey);
-      setRunnerMode(raw === 'extension' ? 'extension' : 'native');
-      setRunnerModeHydrated(true);
-    } catch {
-      setRunnerMode('native');
-      setRunnerModeHydrated(true);
-    }
-  }, [isOpen, runnerModePrefKey]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setRunnerModeHydrated(false);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
     try {
       localStorage.setItem(runnerModePrefKey, runnerMode);
     } catch {
 
       // best effort only
-    }}, [isOpen, runnerMode, runnerModePrefKey]);
+    }}, [runnerMode, runnerModePrefKey]);
 
-  // Engine preference (defaults to cloakbrowser; hydrated from profile settings)
+  // Engine preference persists across opens; the settings load above may
+  // override it with the profile's saved engine.
   useEffect(() => {
-    if (!isOpen) return;
-    try {
-      setEngine('cloakbrowser');
-      setEngineHydrated(true);
-    } catch {
-      setEngine('cloakbrowser');
-      setEngineHydrated(true);
-    }
-  }, [isOpen, enginePrefKey]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setEngineHydrated(false);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
     try {
       localStorage.setItem(enginePrefKey, engine);
     } catch {
 
       // best effort only
-    }}, [isOpen, engine, enginePrefKey]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setAutoStarted(false);
-      setShowAdvanced(false);
-      persistedScenarioPathRef.current = null;
-      lastSavedToastRef.current = null;
-    }
-  }, [isOpen]);
+    }}, [engine, enginePrefKey]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -322,17 +298,17 @@ export function ScenarioRecordModal({
   const statusText = useMemo(() => {
     switch (recorder.state.status) {
       case 'starting':
-        return 'Starting browser...';
+        return t('recorder.scenario_record_modal.st_starting') || 'Starting browser…';
       case 'recording':
-        return `Recording • steps: ${recorder.state.stepCount}`;
+        return t('recorder.scenario_record_modal.st_recording', { count: recorder.state.stepCount }) || `Recording • steps: ${recorder.state.stepCount}`;
       case 'stopping':
-        return 'Stopping and saving...';
+        return t('recorder.scenario_record_modal.st_stopping') || 'Stopping and saving…';
       case 'done':
-        return 'Saved';
+        return t('recorder.scenario_record_modal.st_done') || 'Saved';
       case 'error':
-        return 'Error';
+        return t('recorder.scenario_record_modal.st_error') || 'Error';
       default:
-        return 'Idle';
+        return t('recorder.scenario_record_modal.st_idle') || 'Idle';
     }
   }, [recorder.state.status, recorder.state.stepCount]);
 
@@ -391,24 +367,17 @@ export function ScenarioRecordModal({
   );
 
   useEffect(() => {
-    if (!quickStart || autoStarted) return;
-    if (!isOpen) return;
+    if (!quickStart || autoStartedRef.current) return;
     if (!canStart) return;
     if (loadingSettings) return;
-    if (!runnerModeHydrated) return;
-    if (!engineHydrated) return;
     if (isNativeRunner && runtimeInstalled !== true) return;
     if (!isNativeRunner && extensionBridge.state.connected !== true) return;
     if (recorder.state.status !== 'idle') return;
 
-    setAutoStarted(true);
+    autoStartedRef.current = true;
     void startRecording();
   }, [
   quickStart,
-  autoStarted,
-  isOpen,
-  runnerModeHydrated,
-  engineHydrated,
   canStart,
   loadingSettings,
   isNativeRunner,
@@ -432,10 +401,12 @@ export function ScenarioRecordModal({
               <Button variant="secondary" onClick={onClose}>
                 {t('common.close')}
               </Button>
-              {isNativeRunner ?
-            <Button variant="secondary" onClick={() => setRuntimeModalOpen(true)}>
-                  {t('common.installRuntime') || 'Install runtime'}
-                </Button> :
+              {isNativeRunner && runtimeInstalled !== true ?
+            <Tooltip content={t('recorder.scenario_record_modal.install_runtime_tip') || 'Installs the browser runtime required by the native runner.'}>
+                   <Button variant="secondary" onClick={() => setRuntimeModalOpen(true)}>
+                     {t('common.installRuntime') || 'Install runtime'}
+                   </Button>
+                 </Tooltip> :
             null}
               <Button
               variant="danger"
@@ -526,26 +497,26 @@ export function ScenarioRecordModal({
             }>
 
             {isNativeRunner ?
-            `Runtime ${
+            `${t('recorder.scenario_record_modal.browser_runtime') || 'Runtime'}: ${
             runtimeInstalled === true ?
-            'ready' :
+            t('recorder.scenario_record_modal.runtime_ready') || 'ready' :
             runtimeInstalled === false ?
-            'missing' :
-            'checking'}` :
+            t('recorder.scenario_record_modal.runtime_missing') || 'missing' :
+            t('recorder.scenario_record_modal.runtime_checking') || 'checking…'}` :
 
-            'Runner extension'}
+            t('recorder.scenario_record_modal.runner_extension') || 'Extension runner'}
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
-            label="Scenario name"
+            label={t('recorder.scenario_record_modal.scenario_name') || 'Scenario name'}
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="h-9" />
 
           <Input
-            label="Start URL"
+            label={t('recorder.scenario_record_modal.start_url') || 'Start URL'}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="h-9" />
@@ -558,14 +529,22 @@ export function ScenarioRecordModal({
             value={runnerMode}
             onChange={(value) => setRunnerMode(value as ScenarioRunnerMode)}
             options={[
-            { label: 'Native runner', value: 'native' },
-            { label: 'Extension runner', value: 'extension' }]
+            {
+              label: t('recorder.scenario_record_modal.native_runner') || 'Native runner',
+              value: 'native',
+              tooltip: t('recorder.scenario_record_modal.native_runner_tip') || 'Browser events are captured directly by the built-in runner; no extension needed.'
+            },
+            {
+              label: t('recorder.scenario_record_modal.extension_runner') || 'Extension runner',
+              value: 'extension',
+              tooltip: t('recorder.scenario_record_modal.extension_runner_tip') || 'Records via the Stitch extension: requires the unpacked extension and a live browser.'
+            }]
             } />
 
           {runnerMode === 'native' ?
-          <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">{t("recorder.scenario_record_modal.engine_cloakbrowser")}
-
-          </div> :
+          <div className="text-[11px] text-slate-400 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+              {t('recorder.scenario_record_modal.engine') || 'Engine'}: {BROWSER_ENGINE_LABELS[engine]}
+            </div> :
           null}
         </div>
         {runnerMode === 'extension' ?
@@ -650,10 +629,10 @@ export function ScenarioRecordModal({
                 </div>
                 <div className="mt-2 text-sm text-slate-200">
                   {runtimeInstalled === true ?
-                'Installed' :
+                t('recorder.scenario_record_modal.runtime_installed') || 'Installed' :
                 runtimeInstalled === false ?
-                'Not installed' :
-                'Unknown'}
+                t('recorder.scenario_record_modal.runtime_not_installed') || 'Not installed' :
+                t('recorder.scenario_record_modal.runtime_unknown') || 'Unknown'}
                 </div>
                 {runtimeCheckError &&
               <div className="mt-1 text-xs text-red-300">{runtimeCheckError}</div>
@@ -677,7 +656,7 @@ export function ScenarioRecordModal({
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-slate-400">{t("recorder.scenario_record_modal.runner_config_json")}</div>
                   <div className="text-[11px] text-slate-500">
-                    {loadingSettings ? 'Loading…' : 'From profile settings'}
+                    {loadingSettings ? t('common.loading') || 'Loading…' : t('recorder.scenario_record_modal.from_profile_settings') || 'From profile settings'}
                   </div>
                 </div>
                 <Textarea
