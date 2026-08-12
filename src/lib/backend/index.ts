@@ -532,3 +532,30 @@ export {
 } from './modules/telemetry';
 
 export * as telemetry from './modules/telemetry';
+
+// ============================================
+// Community Plugins
+// ============================================
+
+export {
+  getCommunityCatalog,
+  installCommunityPlugin,
+  uninstallCommunityPlugin,
+  listInstalledCommunity,
+  listLocalPackages,
+  submitForReview,
+  type CommunityCatalogPlugin,
+  type GetCommunityCatalogResponse,
+  type InstallCommunityPluginParams,
+  type InstallCommunityPluginResult,
+  type UninstallCommunityPluginParams,
+  type UninstallCommunityPluginResult,
+  type InstalledCommunityPackage,
+  type ListInstalledCommunityResponse,
+  type LocalPackage,
+  type ListLocalPackagesResponse,
+  type SubmitForReviewParams,
+  type SubmitForReviewResult,
+} from './modules/community';
+
+export * as community from './modules/community';

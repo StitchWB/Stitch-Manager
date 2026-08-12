@@ -54,11 +54,11 @@ async def main_async() -> int:
         WsServerState,
         event,
         log,
-        now_iso,
         read_control_commands,
         result,
         wait_for_client_connected,
     )
+    from scenario_io import build_scenario_container, normalize_step, write_scenario
 
     args = parse_args()
     _stderr(f"Step 2: Python {sys.version.split()[0]} on {sys.platform}")
@@ -125,23 +125,10 @@ async def main_async() -> int:
                 if msg_type == "record_event":
                     payload = obj.get("payload")
                     if isinstance(payload, dict):
-                        kind = str(payload.get("kind") or "unknown")
-                        step = {
-                            "kind": kind,
-                            "ts": str(payload.get("ts") or now_iso()),
-                            "url": payload.get("url")
-                            if isinstance(payload.get("url"), str)
-                            else None,
-                            "selector": payload.get("selector")
-                            if isinstance(payload.get("selector"), str)
-                            else None,
-                            "value": payload.get("value")
-                            if isinstance(payload.get("value"), str)
-                            else None,
-                            "meta": payload.get("meta")
-                            if isinstance(payload.get("meta"), dict)
-                            else {},
-                        }
+                        # Canonical v1 step (includes frameSrc for iframe
+                        # provenance) — shared with the native recorder.
+                        step = normalize_step(payload)
+                        kind = step["kind"]
                         steps.append(step)
                         event(
                             "scenario.record.step",
@@ -254,16 +241,14 @@ async def main_async() -> int:
 
     await send_json({"type": "stop_record", "payload": {"runId": run_id}})
 
-    scenario = {
-        "version": 1,
-        "name": args.scenario_name,
-        "runId": run_id,
-        "alias": args.alias,
-        "startedUrl": args.url,
-        "recordedAt": now_iso(),
-        "steps": steps,
-    }
-    scenario_path.write_text(json.dumps(scenario, ensure_ascii=False, indent=2), encoding="utf-8")
+    scenario = build_scenario_container(
+        name=args.scenario_name,
+        run_id=run_id,
+        alias=args.alias,
+        started_url=args.url,
+        steps=steps,
+    )
+    write_scenario(scenario_path, scenario)
 
     server.close()
     await server.wait_closed()

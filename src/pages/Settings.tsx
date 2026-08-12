@@ -46,6 +46,7 @@ import {
   ExtensionSettingsSection,
   BackgroundManagerSettingsSection,
   TelemetrySection,
+  CommunitySection,
 } from '../components/settings';
 
 const SETTINGS_SECRET_MASK = '********';
@@ -859,6 +860,7 @@ export default function Settings() {
             />
             <DatabaseSection dbPath={dbPath} onCopy={copy} />
             <TelemetrySection />
+            <CommunitySection />
           </div>
         );
       case 'automation':

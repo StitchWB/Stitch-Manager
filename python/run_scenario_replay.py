@@ -983,7 +983,7 @@ async def _run_step(page: Any, step: dict[str, Any], timeout_ms: int = 15_000) -
                 raise
         return
 
-    if kind in ("submit", "press"):
+    if kind in ("submit", "press", "keydown"):
         key = value if (value and value.strip()) else "Enter"
         # Playwright expects key names like "Enter", "Tab", "ArrowDown".
         # In case recorder saved lowercase, normalize a bit.
@@ -994,9 +994,34 @@ async def _run_step(page: Any, step: dict[str, Any], timeout_ms: int = 15_000) -
             key = key[:1].upper() + key[1:]
 
         if selector:
-            await page.locator(selector).first.press(key, timeout=timeout_ms)
+            try:
+                await page.locator(selector).first.press(key, timeout=timeout_ms)
+            except Exception:
+                # Extension keydowns may target elements that re-rendered;
+                # fall back to the focused element like a real keypress would.
+                await page.keyboard.press(key)
         else:
             await page.keyboard.press(key)
+        return
+
+    if kind in ("scroll",):
+        # Restore scroll position: element-scoped when the step carries a
+        # selector, window-scoped otherwise (matches the extension recorder).
+        meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
+        raw_top = meta.get("scrollTop")
+        raw_left = meta.get("scrollLeft")
+        top = raw_top if isinstance(raw_top, (int, float)) else 0
+        left = raw_left if isinstance(raw_left, (int, float)) else 0
+        if selector:
+            await page.locator(selector).first.evaluate(
+                "(el, pos) => { el.scrollTop = pos.top; el.scrollLeft = pos.left; }",
+                {"top": top, "left": left},
+            )
+        else:
+            await page.evaluate(
+                "(pos) => window.scrollTo({ left: pos.left, top: pos.top, behavior: 'instant' })",
+                {"top": top, "left": left},
+            )
         return
 
     if kind in ("manual.pause", "manual", "manual.captcha", "captcha"):
