@@ -33,6 +33,11 @@ PYTHON_ROOT = Path(__file__).resolve().parent
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
+# Test seam: override the extension replay bridge port (None → canonical 18732).
+# Tests point it at an ephemeral port so a fake "extension" client can connect
+# without colliding with a real replay session.
+_REPLAY_BRIDGE_PORT_OVERRIDE: int | None = None
+
 
 def _now_iso() -> str:
     return (
@@ -1311,7 +1316,7 @@ async def main_async() -> int:
         the report carries ``engine: "extension"`` and ``tracePath: None``.
         """
         nonlocal passed, failed, failed_steps
-        from extension_bridge_host import ReplayBridgeHost
+        from extension_bridge_host import BRIDGE_REPLAY_PORT, ReplayBridgeHost
         from extension_runner_common import read_control_commands
 
         bridge_state: dict[str, Any] = {"finished": False, "error": None}
@@ -1388,6 +1393,11 @@ async def main_async() -> int:
             from_step=from_step,
             steps=replay_steps,
             on_message=on_bridge_message,
+            port=(
+                _REPLAY_BRIDGE_PORT_OVERRIDE
+                if _REPLAY_BRIDGE_PORT_OVERRIDE is not None
+                else BRIDGE_REPLAY_PORT
+            ),
         )
         if not await bridge.start():
             _result(
