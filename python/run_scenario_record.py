@@ -117,6 +117,10 @@ class RecordedStep:
     frameSrc: str | None = None
 
 
+class CaptureUnavailable(RuntimeError):
+    """Extension capture is mandatory for this engine but no client connected."""
+
+
 def _parse_proxy_switch_raw(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, str):
         return None
@@ -1271,22 +1275,14 @@ async def main_async() -> int:
         _result(False, error={"code": "import_error", "message": str(e), "details": traceback.format_exc()})
         return 1
 
-    if _normalize_engine(args.engine) != "cloakbrowser":
-        # The capture path is Playwright-specific (context init scripts,
-        # bindings, console channel). ShardBrowser's DrissionPage facade
-        # exposes none of those, so fail fast instead of crashing mid-launch.
-        _result(
-            False,
-            error={
-                "code": "engine_not_supported_for_record",
-                "message": (
-                    f"Scenario recording does not support engine '{args.engine}' yet: "
-                    "capture needs the Playwright context APIs that only the "
-                    "CloakBrowser path provides. Use engine 'cloakbrowser' for recording."
-                ),
-            },
-        )
-        return 1
+    engine_norm = _normalize_engine(args.engine)
+    if engine_norm != "cloakbrowser":
+        # Non-Cloak engines (ShardBrowser) expose no Playwright context: the
+        # injected recorder and the native overlay cannot be installed there.
+        # Capture is extension-only (the toolkit extension is loaded into the
+        # engine by the browser wrapper); orchestration stays on the
+        # control-file / WS-bridge path.
+        overlay_enabled = False
 
     run_id = f"rec_{int(time.time())}"
     paths = get_paths()
@@ -1691,17 +1687,31 @@ async def main_async() -> int:
         nonlocal stop_requested
         stop_requested = True
 
-    if _normalize_engine(args.engine) == "cloakbrowser":
-        bridge = ExtensionBridgeHost(
-            run_id=run_id,
-            alias=args.alias,
-            scenario_name=args.scenario_name,
-            start_url=args.url,
-            on_event=lambda payload: on_record(payload) if capture_via_extension else None,
-            on_stopped=_bridge_stop,
-            native_hosted=True,
+    bridge = ExtensionBridgeHost(
+        run_id=run_id,
+        alias=args.alias,
+        scenario_name=args.scenario_name,
+        start_url=args.url,
+        on_event=lambda payload: on_record(payload) if capture_via_extension else None,
+        on_stopped=_bridge_stop,
+        native_hosted=True,
+    )
+    bridge_started = await bridge.start()
+    if not bridge_started and engine_norm != "cloakbrowser":
+        # ShardBrowser has no injected-recorder fallback: without the bridge
+        # there is no capture at all, so refuse before launching the engine.
+        await bridge.close()
+        _result(
+            False,
+            error={
+                "code": "extension_capture_unavailable",
+                "message": (
+                    "Record bridge could not start (websockets missing or port busy). "
+                    "ShardBrowser capture is extension-only, so recording cannot start."
+                ),
+            },
         )
-        bridge_started = await bridge.start()
+        return 1
 
     async def update_overlay(
         page: Any,
@@ -2148,7 +2158,9 @@ async def main_async() -> int:
             raise
         try:
             local_page = await local_launcher.open(url, wait_until="domcontentloaded")
-            local_ctx = local_page.context
+            # ShardBrowser pages are a DrissionPage facade without a
+            # Playwright context; everything ctx-based is guarded on this.
+            local_ctx = getattr(local_page, "context", None)
         except Exception as e:
             import traceback
             _log("error", f"Failed to open browser page: {e}", step="init")
@@ -2160,16 +2172,28 @@ async def main_async() -> int:
         context_bindings_installed = False
         context_scripts_installed = False
         nonlocal capture_via_extension, bridge_decided
+        if not bridge_started and engine_norm != "cloakbrowser":
+            raise CaptureUnavailable(
+                "Record bridge is unavailable; ShardBrowser capture is "
+                "extension-only, so recording cannot start."
+            )
         if bridge_started and not bridge_decided:
             # The extension service worker starts with the browser; give it a
             # short grace window to attach before falling back to injection.
             bridge_decided = True
             capture_via_extension = await bridge.wait_client(timeout_s=5.0)
-            if not capture_via_extension and bridge is not None:
-                # Fallback chosen: refuse late extension clients so a rogue
-                # extension HUD session never starts next to the injected
-                # recorder (which would double-capture).
-                bridge.stop_accepting()
+            if not capture_via_extension:
+                if bridge is not None:
+                    # Fallback chosen: refuse late extension clients so a rogue
+                    # extension HUD session never starts next to the injected
+                    # recorder (which would double-capture).
+                    bridge.stop_accepting()
+                if engine_norm != "cloakbrowser":
+                    raise CaptureUnavailable(
+                        "Stitch extension did not connect to the record bridge. "
+                        "ShardBrowser capture is extension-only (there is no "
+                        "injected-script fallback), so recording cannot start."
+                    )
             _event(
                 "scenario.record.capture_mode",
                 {
@@ -2181,15 +2205,19 @@ async def main_async() -> int:
             # Extension content stack captures; the native overlay HUD keeps
             # orchestration (tabs, proxy.switch, manual, close). Install
             # bindings + overlay WITHOUT the injected recorder to avoid
-            # double-capture.
-            await ensure_recorder_installed(local_ctx, include_recorder=False)
-            await attach_console_listeners(local_ctx)
-            if bridge is not None:
-                # Page is loaded: release queued hellos → start_record.
-                await bridge.arm()
+            # double-capture. ShardBrowser has no ctx: nothing to install —
+            # the extension is the whole capture path there.
+            if local_ctx is not None:
+                await ensure_recorder_installed(local_ctx, include_recorder=False)
+                await attach_console_listeners(local_ctx)
         else:
             await ensure_recorder_installed(local_ctx)
             await attach_console_listeners(local_ctx)
+        if capture_via_extension and bridge is not None:
+            # Page is loaded: release queued hellos → start_record. Runs on
+            # restarts too (proxy.switch), when the extension of the fresh
+            # browser reconnects to the bridge.
+            await bridge.arm()
         await update_overlay_all(
             local_ctx,
             status="Recording",
@@ -2405,22 +2433,24 @@ async def main_async() -> int:
                 )
                 break
 
-            await apply_pending_tab_controls(ctx)
+            if ctx is not None:
+                await apply_pending_tab_controls(ctx)
 
-            try:
-                await ensure_recorder_installed(ctx, include_recorder=not capture_via_extension)
-                # Ensure console listeners attached to any new pages
-                await attach_console_listeners(ctx)
-            except Exception:
-                recovered = await recover_recording_context("context_unavailable")
-                if not recovered:
-                    _log(
-                        "warn",
-                        "Recorder context unavailable and recovery failed - stopping record",
-                        step="record",
-                    )
-                    break
-                continue
+            if ctx is not None:
+                try:
+                    await ensure_recorder_installed(ctx, include_recorder=not capture_via_extension)
+                    # Ensure console listeners attached to any new pages
+                    await attach_console_listeners(ctx)
+                except Exception:
+                    recovered = await recover_recording_context("context_unavailable")
+                    if not recovered:
+                        _log(
+                            "warn",
+                            "Recorder context unavailable and recovery failed - stopping record",
+                            step="record",
+                        )
+                        break
+                    continue
 
             await update_tabs_overlay(ctx)
 
@@ -2443,26 +2473,37 @@ async def main_async() -> int:
             if stop_requested:
                 _log("info", "Stop requested from browser overlay", step="record")
                 break
-            try:
-                live_pages = [p for p in getattr(ctx, "pages", []) if p and not p.is_closed()]
-            except Exception:
-                live_pages = []
-            if not live_pages:
-                recovered = await recover_recording_context("all_pages_closed")
-                if not recovered:
-                    _log(
-                        "warn",
-                        "All pages closed and recovery failed - stopping record",
-                        step="record",
-                    )
-                    break
-                continue
+            if ctx is not None:
+                try:
+                    live_pages = [p for p in getattr(ctx, "pages", []) if p and not p.is_closed()]
+                except Exception:
+                    live_pages = []
+                if not live_pages:
+                    recovered = await recover_recording_context("all_pages_closed")
+                    if not recovered:
+                        _log(
+                            "warn",
+                            "All pages closed and recovery failed - stopping record",
+                            step="record",
+                        )
+                        break
+                    continue
+            elif page is None or page.is_closed():
+                _log("warn", "Recorder page closed - stopping record", step="record")
+                break
 
         await update_overlay_all(
             ctx, status="Saving", reason="", paused_flag=False, count=len(steps)
         )
         if capture_via_extension and bridge is not None:
             await bridge.send({"type": "stop_record", "payload": {"runId": run_id}})
+    except CaptureUnavailable as e:
+        _log("error", str(e), step="init")
+        await close_recording_session()
+        if bridge is not None:
+            await bridge.close()
+        _result(False, error={"code": "extension_capture_unavailable", "message": str(e)})
+        return 1
     except Exception as e:
         import traceback
         error_msg = str(e)

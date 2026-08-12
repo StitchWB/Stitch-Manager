@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -366,6 +367,21 @@ class AsyncShardBrowserWrapper:
             )
         self._shard_profile_id = getattr(profile, "id", self._shard_profile_id)
 
+        # Load the Stitch toolkit extension into the engine. ShardBrowser has
+        # no Playwright context (raw CDP via DrissionPage), so the extension
+        # bridge is the only scenario-capture path there; the native recorder
+        # hosts the record WS server and arms it once the page is ready.
+        extra_args: list[str] = []
+        ext_path = (
+            Path(__file__).resolve().parent.parent.parent.parent
+            / "extension"
+            / "stitch-toolkit"
+        )
+        if ext_path.exists():
+            extra_args.append(f"--load-extension={ext_path}")
+            extra_args.append("--disable-background-timer-throttling")
+            extra_args.append("--disable-renderer-backgrounding")
+
         # Spawn the engine with a CDP endpoint (synchronous, no event loop).
         with patch_engine_spawn():
             sess = sdk.launch(
@@ -373,6 +389,7 @@ class AsyncShardBrowserWrapper:
                 proxy=self._proxy,
                 headless=self._headless,
                 cdp=True,
+                extra_args=extra_args or None,
             )
         if not sess.cdp_url:
             sess.stop()
