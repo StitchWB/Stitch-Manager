@@ -1271,6 +1271,23 @@ async def main_async() -> int:
         _result(False, error={"code": "import_error", "message": str(e), "details": traceback.format_exc()})
         return 1
 
+    if _normalize_engine(args.engine) != "cloakbrowser":
+        # The capture path is Playwright-specific (context init scripts,
+        # bindings, console channel). ShardBrowser's DrissionPage facade
+        # exposes none of those, so fail fast instead of crashing mid-launch.
+        _result(
+            False,
+            error={
+                "code": "engine_not_supported_for_record",
+                "message": (
+                    f"Scenario recording does not support engine '{args.engine}' yet: "
+                    "capture needs the Playwright context APIs that only the "
+                    "CloakBrowser path provides. Use engine 'cloakbrowser' for recording."
+                ),
+            },
+        )
+        return 1
+
     run_id = f"rec_{int(time.time())}"
     paths = get_paths()
 
