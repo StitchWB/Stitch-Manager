@@ -64,9 +64,31 @@ class PluginManifest:
     outputs: list[str]
     signature: str = ""
 
+    # Optional alias ids that this package also serves (multi-service manifests).
+    # ``service`` is always the canonical id; ``services`` lists additional ids
+    # that should resolve to this package.  Absent → empty list (only
+    # ``service`` matches).  Duplicates of ``service`` are tolerated.
+    services: list[str] = field(default_factory=list)
+
     # Extra/unknown fields preserved for forward-compat inspection.
     # NOT used by the engine in v1 (tolerant reader ignores them at parse time).
     extras: dict[str, Any] = field(default_factory=dict)
+
+    def service_ids(self) -> list[str]:
+        """Return all service ids this package serves.
+
+        Always starts with the canonical ``service``, followed by any
+        ``services`` aliases not already seen (deduped, order-preserving).
+        Used by the loader to match a requested id against a package's
+        declared service surface.
+        """
+        seen: set[str] = {self.service}
+        ids = [self.service]
+        for s in self.services:
+            if s not in seen:
+                seen.add(s)
+                ids.append(s)
+        return ids
 
     @property
     def signature_bytes(self) -> bytes | None:
@@ -178,6 +200,13 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         raise ManifestValidationError("outputs", "must be a list of strings")
     outputs = list(outputs_raw)
 
+    services_raw = raw.get("services", [])
+    if not isinstance(services_raw, list) or not all(
+        isinstance(s, str) for s in services_raw
+    ):
+        raise ManifestValidationError("services", "must be a list of strings")
+    services = list(services_raw)
+
     signature = raw.get("signature", "")
     if not isinstance(signature, str):
         raise ManifestValidationError("signature", "must be a string")
@@ -185,6 +214,7 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     known = {
         "schema", "id", "name", "version", "service", "kind",
         "engine", "depends", "entry", "capabilities", "outputs", "signature",
+        "services",
     }
     extras = {k: v for k, v in raw.items() if k not in known}
 
@@ -201,6 +231,7 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         capabilities=capabilities,
         outputs=outputs,
         signature=signature,
+        services=services,
         extras=extras,
     )
 

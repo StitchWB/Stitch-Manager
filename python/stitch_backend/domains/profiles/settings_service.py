@@ -55,13 +55,13 @@ class ProfileSettingsRepo(BaseRepository[ProfileSettings]):
             existing.config_json = config_json
             existing.cookies = cookies
             existing.notes = notes
-            existing.updated_at = cast("Any", self)._utcnow()
+            existing.updated_at = datetime.now(UTC)
             await self._db.flush()
             await self._db.refresh(existing)
             return existing
         return await self.create(
             alias=alias, config_json=config_json,
-            cookies=cookies, notes=notes, updated_at=cast("Any", self)._utcnow(),
+            cookies=cookies, notes=notes, updated_at=datetime.now(UTC),
         )
 
     async def rename_alias(self, old_alias: str, new_alias: str) -> None:
