@@ -180,29 +180,6 @@ def _build_provider(provider_name: str, config: dict):
     that uvicorn's file watcher triggers a real reload — otherwise code changes
     to browser.py / provider.py are invisible until the whole process restarts.
     """
-    if not _autoreg_providers_available():
-        raise ValueError(
-            "Auto-registration is unavailable in this build "
-            "(autoreg providers are not installed)."
-        )
-
-    import sys as _sys
-
-    _RELOAD_PREFIXES = (  # noqa: N806 — constant tuple
-        "autoreg.providers.kiro_v2",
-        "autoreg.providers.fireworks",
-        "autoreg.providers.qoder",
-        "autoreg.providers.windsurf",
-        "autoreg.providers.trae",
-        "autoreg.providers.openai",
-        "autoreg.providers.github",
-        "autoreg.providers.bitbucket",
-        "autoreg.providers.v0_app",
-    )
-    for _key in list(_sys.modules):
-        if any(_key == p or _key.startswith(p + ".") for p in _RELOAD_PREFIXES):
-            del _sys.modules[_key]
-
     base_kwargs = _build_provider_kwargs(config)
 
     # ── Plugin package resolution (plan §3.3 decision 9) ──────────────
@@ -230,6 +207,36 @@ def _build_provider(provider_name: str, config: dict):
             "Plugin resolution for %s failed, falling back to built-in: %s",
             provider_name, exc,
         )
+
+    # No plugin package resolved — built-in providers are required from here.
+    # In the open-core build (no autoreg/providers/), raise a clear runtime
+    # error instead of letting the lazy imports below crash with ImportError.
+    if not _autoreg_providers_available():
+        raise RuntimeError(
+            f"provider '{provider_name}' not available in this build "
+            "(autoreg providers are not installed)."
+        )
+
+    # Purge built-in provider subpackage cache so uvicorn's file watcher
+    # triggers a real reload.  Only reached when built-in providers are
+    # available — skipped in the open-core build to avoid side-effecting
+    # sys.modules when providers are absent.
+    import sys as _sys
+
+    _RELOAD_PREFIXES = (  # noqa: N806 — constant tuple
+        "autoreg.providers.kiro_v2",
+        "autoreg.providers.fireworks",
+        "autoreg.providers.qoder",
+        "autoreg.providers.windsurf",
+        "autoreg.providers.trae",
+        "autoreg.providers.openai",
+        "autoreg.providers.github",
+        "autoreg.providers.bitbucket",
+        "autoreg.providers.v0_app",
+    )
+    for _key in list(_sys.modules):
+        if any(_key == p or _key.startswith(p + ".") for p in _RELOAD_PREFIXES):
+            del _sys.modules[_key]
 
     if provider_name == "fireworks":
         from autoreg.providers.fireworks import FireworksProvider

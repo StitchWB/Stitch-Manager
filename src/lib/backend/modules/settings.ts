@@ -35,6 +35,7 @@ export async function getSettings(): Promise<SettingsData> {
 type ExtendedSettingsData = SettingsData & {
   captchaSoundFile?: string;
   telemetry_consent?: string;
+  community_enabled?: string;
 };
 
 export async function updateSettings(

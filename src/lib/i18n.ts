@@ -287,6 +287,7 @@ export interface Translations {
     profileEngineLabel: string;
     profileEngineSaveFailed: string;
     profileEngineSaved: string;
+    profileEngineShardMissing: string;
     profileGeoTab: string;
     profileHealthNeedsLink: string;
     profileHealthNoSession: string;
@@ -2329,11 +2330,26 @@ export interface Translations {
       export: string;
       import: string;
       locale: string;
+      no_changes: string;
       proxy: string;
       reset_all: string;
       reset_tab: string;
+      tab_data: string;
+      tab_geo: string;
+      tab_main: string;
+      tab_proxy: string;
       timezone: string;
+      unsaved_changes: string;
       window: string;
+      window_mode_auto: string;
+      window_mode_fit_screen: string;
+      window_mode_fixed: string;
+    }
+    create_modal: {
+      title: string;
+      create: string;
+      create_and_record: string;
+      alias_prefix: string;
     }
   }
   proxyLibrary: {
@@ -2664,13 +2680,34 @@ export interface Translations {
       advanced_diagnostics: string;
       browser_runtime: string;
       correlation: string;
-      engine_cloakbrowser: string;
+      engine: string;
+      extension_runner: string;
+      extension_runner_tip: string;
+      from_profile_settings: string;
+      install_runtime_tip: string;
       job: string;
+      native_runner: string;
+      native_runner_tip: string;
       profile: string;
       python_stderr: string;
       recorder_runtime_missing_install_it_to_start_recor: string;
       runner_config_json: string;
+      runner_extension: string;
+      runtime_checking: string;
+      runtime_installed: string;
+      runtime_missing: string;
+      runtime_not_installed: string;
+      runtime_ready: string;
+      runtime_unknown: string;
+      scenario_name: string;
       scenario_path: string;
+      st_done: string;
+      st_error: string;
+      st_idle: string;
+      st_recording: string;
+      st_starting: string;
+      st_stopping: string;
+      start_url: string;
     }
     scenario_replay_modal: {
       engine_cloakbrowser: string;
@@ -3117,29 +3154,47 @@ export interface Translations {
     profile_data_tab: {
       clear_data: string;
       cookies: string;
+      cookies_hint: string;
       cookies_storage: string;
+      edit_cookies: string;
+      hide_editor: string;
       import_file: string;
     }
     profile_geo_tab: {
       auto: string;
+      auto_geolocation: string;
       clear_geo: string;
       current_mode: string;
       dede: string;
       engb: string;
       enus: string;
       locale: string;
+      manual: string;
       manual_coordinates: string;
       ruru: string;
       timezone: string;
     }
     profile_main_tab: {
       clear_main: string;
+      copy_path: string;
       defaults: string;
+      last_scenario_path: string;
+      last_url: string;
       main_defaults: string;
       maximize: string;
+      maximize_on_start: string;
+      notes: string;
+      off: string;
+      on: string;
+      open_folder: string;
       pick_preset: string;
+      scenario_path: string;
       used_when_mode_is_fixed_size: string;
       window: string;
+      window_height: string;
+      window_mode: string;
+      window_preset: string;
+      window_width: string;
     }
     proxy: {
       description: string;
@@ -3221,6 +3276,58 @@ export interface Translations {
       scrubbedNotice: string;
       close: string;
       consentOffNotice: string;
+    }
+    community: {
+      title: string;
+      description: string;
+      trustBanner: string;
+      consentLabel: string;
+      consentDescription: string;
+      consentOffNotice: string;
+      catalogTitle: string;
+      catalogDescription: string;
+      refresh: string;
+      emptyTitle: string;
+      emptyDescription: string;
+      loadFailed: string;
+      offlineTitle: string;
+      offlineDescription: string;
+      communityBadge: string;
+      servicesLabel: string;
+      authorLabel: string;
+      versionLabel: string;
+      install: string;
+      installing: string;
+      installed: string;
+      uninstall: string;
+      uninstalling: string;
+      installSuccess: string;
+      installFailed: string;
+      uninstallSuccess: string;
+      uninstallFailed: string;
+      installedTitle: string;
+      installedDescription: string;
+      installedEmpty: string;
+      authorCabinetTitle: string;
+      authorCabinetDescription: string;
+      authorCabinetEmpty: string;
+      authorCabinetLoadFailed: string;
+      submitForReview: string;
+      submitForReviewTitle: string;
+      submitForReviewDescription: string;
+      githubTokenLabel: string;
+      githubTokenPlaceholder: string;
+      githubTokenHint: string;
+      githubTokenNotPersisted: string;
+      submit: string;
+      submitting: string;
+      submitSuccess: string;
+      submitFailed: string;
+      prLinkLabel: string;
+      openPr: string;
+      cancel: string;
+      noLocalPackages: string;
+      pathLabel: string;
     }
     settingsSaved: string;
     title: string;

@@ -1,9 +1,14 @@
-"""PluginLoader — dual-format resolver (plan §3.3 decision 9, §4.5).
+"""PluginLoader — multi-source resolver (plan §3.3 decision 9, §4.5, §3.5).
 
 Resolution precedence for ``resolve(service_id)``:
     1. ``plugins-local/{id}/``  — dev source (unsigned allowed in dev_mode)
-    2. ``plugins/{id}/{ver}/``  — server cache, newest version wins
-    3. ``None``                 — caller falls back to built-in provider modules
+    2. ``plugins/{id}/{ver}/``  — server cache, newest version wins (signed)
+    3. ``community/{id}/{ver}/`` — community packages (unsigned, trust=community)
+    4. ``None``                 — caller falls back to built-in provider modules
+
+Community source is gated by ``include_community`` (default True) AND the
+settings key ``community_enabled`` (value "false" disables).  Community
+packages are unsigned but must still parse a valid manifest.
 
 Pinning contract: resolution happens ONCE per loader instance.  Callers
 create a fresh ``PluginLoader`` at the start of each run so a package
@@ -53,10 +58,13 @@ class PluginLoader:
         *,
         dev_mode: bool | None = None,
         public_key_b64: str | None = None,
+        include_community: bool = True,
     ) -> None:
         self._dev_mode = _resolve_dev_mode(dev_mode)
         self._public_key_b64 = public_key_b64 or crypto.load_embedded_pubkey()
         self._resolved: dict[str, Path | None] = {}
+        self._sources: dict[str, str | None] = {}
+        self._include_community = include_community and _community_enabled()
 
     @property
     def dev_mode(self) -> bool:
@@ -71,12 +79,33 @@ class PluginLoader:
         if service_id in self._resolved:
             return self._resolved[service_id]
 
-        result = (
-            self._resolve_from_local(service_id)
-            or self._resolve_from_cache(service_id)
-        )
+        result, source = self._resolve_with_source(service_id)
         self._resolved[service_id] = result
+        self._sources[service_id] = source
         return result
+
+    def last_source(self, service_id: str) -> str | None:
+        """Return the source (``"local"``/``"cache"``/``"community"``) of the
+        last resolution, or ``None`` if not resolved / resolved to None.
+
+        Only meaningful after ``resolve(service_id)`` has been called on
+        this loader instance.
+        """
+        return self._sources.get(service_id)
+
+    def _resolve_with_source(self, service_id: str) -> tuple[Path | None, str | None]:
+        """Try each source in precedence order; return (path, source_name)."""
+        local = self._resolve_from_local(service_id)
+        if local is not None:
+            return local, "local"
+        cache = self._resolve_from_cache(service_id)
+        if cache is not None:
+            return cache, "cache"
+        if self._include_community:
+            community = self._resolve_from_community(service_id)
+            if community is not None:
+                return community, "community"
+        return None, None
 
     # ── plugins-local ──────────────────────────────────────────────────────
 
@@ -174,6 +203,65 @@ class PluginLoader:
         return crypto.verify_package(
             package_dir, manifest.signature, self._public_key_b64
         )
+
+    # ── community ───────────────────────────────────────────────────────────
+
+    def _resolve_from_community(self, service_id: str) -> Path | None:
+        """Resolve from ``<base>/community/<id>/<version>/`` (unsigned, trust=community).
+
+        Newest version wins.  Packages are unsigned (no signature check);
+        the manifest must still parse a valid ``plugin.json``.
+        """
+        community_root = _community_dir()
+        if not community_root.is_dir():
+            return None
+        candidates: list[tuple[tuple[int, int, int], str, Path]] = []
+        for plugin_id_entry in sorted(community_root.iterdir()):
+            if not plugin_id_entry.is_dir():
+                continue
+            for version_entry in sorted(plugin_id_entry.iterdir()):
+                if not version_entry.is_dir() or version_entry.name.startswith("."):
+                    continue
+                manifest = _try_read_manifest(version_entry)
+                if manifest is None or service_id not in manifest.service_ids():
+                    continue
+                api = manifest.engine.get("api")
+                if isinstance(api, int) and api > ENGINE_API:
+                    logger.warning(
+                        "skipping community package %s: manifest engine.api=%d > ENGINE_API=%d",
+                        version_entry, api, ENGINE_API,
+                    )
+                    continue
+                try:
+                    ver_tuple = parse_semver(manifest.version)
+                except ValueError:
+                    continue
+                candidates.append((ver_tuple, plugin_id_entry.name, version_entry))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda c: (c[0], c[1]))
+        return candidates[-1][2]
+
+
+def _community_dir() -> Path:
+    """``<base>/community`` — installed community packages."""
+    from .layout import _base_dir
+
+    return _base_dir() / "community"
+
+
+def _community_enabled() -> bool:
+    """Read the ``STITCH_COMMUNITY_ENABLED`` env var (default True).
+
+    Mirrors ``STITCH_DEV_MODE``: the value ``"false"``/``"0"``/``"no"``
+    disables the community source.  The stitch_backend settings service
+    bridges the DB setting ``communityEnabled`` to this env var so the
+    autoreg package stays free of stitch_backend imports.
+    """
+    raw = os.environ.get("STITCH_COMMUNITY_ENABLED", "").strip().lower()
+    if not raw:
+        return True
+    return raw not in ("false", "0", "no", "off")
 
 
 def _resolve_dev_mode(flag: bool | None) -> bool:

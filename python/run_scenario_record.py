@@ -54,6 +54,9 @@ PYTHON_ROOT = Path(__file__).resolve().parent
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
+from extension_bridge_host import ExtensionBridgeHost
+from scenario_io import build_scenario_container, write_scenario
+
 
 def _now_iso() -> str:
     return (
@@ -1219,9 +1222,15 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--headless", action="store_true", help="Run browser in headless mode")
     p.add_argument(
         "--engine",
-        choices=["cloackbrowser"],
-        default="cloackbrowser",
-        help="Browser engine (default: cloackbrowser)",
+        choices=[
+            "cloakbrowser",
+            "cloackbrowser",  # legacy typo, kept for backward compatibility
+            "shardbrowser",
+            "shardx",
+            "shard",
+        ],
+        default="cloakbrowser",
+        help="Browser engine (default: cloakbrowser); ProfileLauncher normalizes aliases",
     )
     p.add_argument(
         "--config-json",
@@ -1251,7 +1260,7 @@ async def main_async() -> int:
     # Enhanced error logging for debugging startup failures
     try:
 
-        from autoreg.browser.profile_launcher import ProfileLauncher
+        from autoreg.browser.profile_launcher import ProfileLauncher, _normalize_engine
         from autoreg.core.paths import get_paths
     except Exception as e:
         import traceback
@@ -1641,9 +1650,38 @@ async def main_async() -> int:
                     cmd = payload.get("command")
                     if isinstance(cmd, str):
                         on_control(cmd)
+                        cmd_norm = cmd.strip().lower()
+                        if cmd_norm in ("pause", "resume", "continue", "stop"):
+                            pending_bridge_controls.append(cmd_norm)
                 command_pos = fh.tell()
         except Exception:
             return
+
+    # ── Stage-2 convergence: extension capture bridge (fallback-safe) ────────
+    # CloakBrowser always loads the Stitch toolkit extension. If the extension
+    # connects to this bridge, its richer content stack becomes the capture
+    # source and the injected recorder is skipped. Otherwise (ShardBrowser,
+    # broken/absent extension) the injected-script recorder stays in charge.
+    capture_via_extension = False
+    bridge_decided = False
+    pending_bridge_controls: list[str] = []
+    bridge: ExtensionBridgeHost | None = None
+    bridge_started = False
+
+    def _bridge_stop() -> None:
+        nonlocal stop_requested
+        stop_requested = True
+
+    if _normalize_engine(args.engine) == "cloakbrowser":
+        bridge = ExtensionBridgeHost(
+            run_id=run_id,
+            alias=args.alias,
+            scenario_name=args.scenario_name,
+            start_url=args.url,
+            on_event=lambda payload: on_record(payload) if capture_via_extension else None,
+            on_stopped=_bridge_stop,
+        )
+        bridge_started = await bridge.start()
 
     async def update_overlay(
         page: Any,
@@ -2002,14 +2040,12 @@ async def main_async() -> int:
             # avoid excessive disk writes
             if len(steps) == last_len and (time.time() - last_save_ts) < 2.0:
                 return
-            scenario = {
-                "version": 1,
-                "name": args.scenario_name,
-                "runId": run_id,
-                "alias": args.alias,
-                "startedUrl": args.url,
-                "recordedAt": _now_iso(),
-                "steps": [
+            scenario = build_scenario_container(
+                name=args.scenario_name,
+                run_id=run_id,
+                alias=args.alias,
+                started_url=args.url,
+                steps=[
                     {
                         "kind": s.kind,
                         "ts": s.ts,
@@ -2021,10 +2057,8 @@ async def main_async() -> int:
                     }
                     for s in steps
                 ],
-            }
-            scenario_path.write_text(
-                json.dumps(scenario, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+            write_scenario(scenario_path, scenario)
             last_len = len(steps)
             last_save_ts = time.time()
         except Exception:
@@ -2096,8 +2130,26 @@ async def main_async() -> int:
 
         context_bindings_installed = False
         context_scripts_installed = False
-        await ensure_recorder_installed(local_ctx)
-        await attach_console_listeners(local_ctx)
+        nonlocal capture_via_extension, bridge_decided
+        if bridge_started and not bridge_decided:
+            # The extension service worker starts with the browser; give it a
+            # short grace window to attach before falling back to injection.
+            bridge_decided = True
+            capture_via_extension = await bridge.wait_client(timeout_s=5.0)
+            _event(
+                "scenario.record.capture_mode",
+                {
+                    "runId": run_id,
+                    "mode": "extension" if capture_via_extension else "injected",
+                },
+            )
+        if capture_via_extension:
+            # Extension content stack captures and shows its own HUD; the
+            # injected recorder/overlay would double-capture, so skip it.
+            await attach_console_listeners(local_ctx)
+        else:
+            await ensure_recorder_installed(local_ctx)
+            await attach_console_listeners(local_ctx)
         await update_overlay_all(
             local_ctx,
             status="Recording",
@@ -2143,7 +2195,8 @@ async def main_async() -> int:
                     pass
                 page = replacement
                 active_page_id = _page_id(replacement) or active_page_id
-                await ensure_recorder_installed(ctx)
+                if not capture_via_extension:
+                    await ensure_recorder_installed(ctx)
                 await attach_console_listeners(ctx)
                 await update_overlay_all(
                     ctx,
@@ -2235,6 +2288,10 @@ async def main_async() -> int:
         while time.time() < deadline:
             await asyncio.sleep(0.5)
             _read_control_file()
+            if capture_via_extension and bridge is not None and pending_bridge_controls:
+                for ctrl in pending_bridge_controls:
+                    await bridge.send({"type": "control", "payload": {"command": ctrl}})
+                pending_bridge_controls.clear()
             export_snapshot()
             if pending_proxy_restart is not None:
                 restart_payload = pending_proxy_restart
@@ -2312,7 +2369,8 @@ async def main_async() -> int:
             await apply_pending_tab_controls(ctx)
 
             try:
-                await ensure_recorder_installed(ctx)
+                if not capture_via_extension:
+                    await ensure_recorder_installed(ctx)
                 # Ensure console listeners attached to any new pages
                 await attach_console_listeners(ctx)
             except Exception:
@@ -2365,6 +2423,8 @@ async def main_async() -> int:
         await update_overlay_all(
             ctx, status="Saving", reason="", paused_flag=False, count=len(steps)
         )
+        if capture_via_extension and bridge is not None:
+            await bridge.send({"type": "stop_record", "payload": {"runId": run_id}})
     except Exception as e:
         import traceback
         error_msg = str(e)
@@ -2374,6 +2434,8 @@ async def main_async() -> int:
         sys.stderr.write(error_traceback)
         sys.stderr.flush()
         await close_recording_session()
+        if bridge is not None:
+            await bridge.close()
         _result(False, error={"code": "record_failed", "message": error_msg, "traceback": error_traceback})
         return 1
 
@@ -2396,6 +2458,8 @@ async def main_async() -> int:
         pass
 
     _event("scenario.record.saved", {"path": str(scenario_path), "steps": len(steps)})
+    if bridge is not None:
+        await bridge.close()
     _result(True, data={"scenarioPath": str(scenario_path), "steps": len(steps), "runId": run_id})
     return 0
 

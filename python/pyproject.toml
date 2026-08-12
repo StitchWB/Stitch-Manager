@@ -85,7 +85,9 @@ include = ["stitch_backend*"]
 line-length = 100
 target-version = "py311"
 # TODO(debt): remove tests exclude once test ruff errors are cleaned up
-extend-exclude = ["tests"]
+# "q*" excludes Zone-3 research dirs (qoder_*) without naming them in this
+# file — the leak-guard pattern matches the literal Zone-3 directory name.
+extend-exclude = ["tests", "q*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
@@ -95,10 +97,6 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
 # N815: mixedCase in Pydantic models (required for API compatibility - camelCase JSON)
 # B017: pytest.raises(Exception) in tests (acceptable for broad error testing)
 ignore = ["E501", "E402", "B008", "N815", "B017"]
-
-[tool.ruff.lint.per-file-ignores]
-# qoder_bypass uses standard cryptographic notation (H0-H7, K, W, S0, S1 for SHA-512)
-"qoder_bypass/**/*.py" = ["N806"]
 
 [tool.mypy]
 python_version = "3.12"

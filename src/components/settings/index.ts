@@ -13,3 +13,4 @@ export { GoogleSheetsSettingsSection } from './GoogleSheetsSettingsSection';
 export { ExtensionSettingsSection } from './ExtensionSettingsSection';
 export { BackgroundManagerSettingsSection } from './BackgroundManagerSettingsSection';
 export { TelemetrySection } from './TelemetrySection';
+export { CommunitySection } from './CommunitySection';
