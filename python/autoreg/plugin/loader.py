@@ -88,7 +88,7 @@ class PluginLoader:
             if not entry.is_dir():
                 continue
             manifest = _try_read_manifest(entry)
-            if manifest is None or manifest.service != service_id:
+            if manifest is None or service_id not in manifest.service_ids():
                 continue
             api = manifest.engine.get("api")
             if isinstance(api, int) and api > ENGINE_API:
@@ -127,7 +127,7 @@ class PluginLoader:
                 if not version_entry.is_dir():
                     continue
                 manifest = _try_read_manifest(version_entry)
-                if manifest is None or manifest.service != service_id:
+                if manifest is None or service_id not in manifest.service_ids():
                     continue
                 api = manifest.engine.get("api")
                 if isinstance(api, int) and api > ENGINE_API:
