@@ -335,7 +335,7 @@ function getOverlayPayload() {
 
   if (mode === 'record') {
     const record = sessionManager.getState().record;
-    const nativeHosted = Boolean(record?.nativeHosted);
+    const suppressOverlay = Boolean(record?.suppressOverlay);
     return {
       mode: 'record',
       paused: sessionManager.isPaused(),
@@ -343,9 +343,10 @@ function getOverlayPayload() {
       runId: record?.runId || null,
       scenarioName: record?.scenarioName || null,
       startUrl: record?.startUrl || null,
-      // Tells the content overlay to capture silently: the native recorder
-      // overlay is the visible HUD in native-hosted sessions.
-      suppressOverlay: nativeHosted,
+      // Tells the content overlay to capture silently when a native HUD (or
+      // no HUD) is in charge. Shard keeps it false so the extension HUD is
+      // the visible control surface.
+      suppressOverlay,
       record: {
         stepCount: sessionManager.getStepCount(),
         steps: sessionManager.getSteps(),
@@ -488,7 +489,7 @@ async function runDomStep(tabId, step) {
     return { ok: true, skipped: true, reason: 'manual-step' };
   }
 
-  if (kind === 'nav') {
+  if (kind === 'nav' || kind === 'goto' || kind === 'navigate') {
     const target = String(step?.url || '').trim();
     if (!target) throw new Error('nav step has no url');
     if (!/^https?:\/\//i.test(target)) {
@@ -771,9 +772,12 @@ async function startRecordSession(payload) {
   const origin = originRaw === 'popup' || originRaw === 'toolkit' ? originRaw : 'bridge';
   const requestedUrl = String(payload?.startUrl || '').trim();
   // nativeHosted: the Python native recorder owns the browser (identity, tabs,
-  // proxy) and shows its own overlay HUD. The extension is a pure capture
-  // engine here: never re-navigate the tab, capture in every tab, HUD hidden.
+  // proxy). Never re-navigate the tab and capture in every tab. The HUD is
+  // controlled separately by suppressOverlay: Cloak hides it (the native
+  // overlay is the HUD); Shard shows it (it is the only control surface).
   const nativeHosted = Boolean(payload?.nativeHosted);
+  const suppressOverlay =
+    payload?.suppressOverlay === undefined ? nativeHosted : Boolean(payload.suppressOverlay);
   let tabId = payload?.tabId ? Number(payload.tabId) : null;
   if (tabId == null && nativeHosted) {
     tabId = await getActiveTabId();
@@ -809,7 +813,8 @@ async function startRecordSession(payload) {
     isHttpUrl(requestedUrl) ? requestedUrl : tabUrl,
     origin,
     tabId,
-    nativeHosted
+    nativeHosted,
+    suppressOverlay
   );
   _replayTask = null;
 
@@ -885,13 +890,32 @@ async function stopRecordSession(options = {}) {
   }
 
   await sessionManager.stopRecordSession();
+  // Notify the Python bridge (if any) that the session ended. Required when
+  // the operator stops from the extension HUD — the only control surface in
+  // ShardBrowser — because Python otherwise waits for its own timeout.
+  if (String(record.origin || 'bridge') === 'bridge') {
+    sendWs('record', {
+      type: 'record_stopped',
+      payload: { runId: record.runId || null },
+    });
+  }
   void saveSessionToStorage();
   return { ok: true, saved: shouldPersist && Boolean(scenario), scenario };
 }
 
 async function startReplaySession(payload) {
   const startUrl = String(payload?.startUrl || 'https://google.com').trim();
-  const tabId = await ensureTabForUrl(startUrl);
+  // nativeHosted: Python owns the browser (identity/proxy) and already opened
+  // startUrl. Reuse the active tab instead of re-navigating — avoids a
+  // redundant full page load on engines like ShardBrowser.
+  const nativeHosted = Boolean(payload?.nativeHosted);
+  let tabId = null;
+  if (nativeHosted) {
+    tabId = await getActiveTabId();
+  }
+  if (tabId == null) {
+    tabId = await ensureTabForUrl(startUrl);
+  }
 
   const fromStep = Number(payload?.fromStep || 1);
   const steps = Array.isArray(payload?.steps) ? payload.steps : [];
@@ -908,6 +932,7 @@ async function startReplaySession(payload) {
     stopped: false,
     manualContinue: false,
     status: 'running',
+    nativeHosted,
     _unpauseResolve: null,
     _manualResolve: null,
   };

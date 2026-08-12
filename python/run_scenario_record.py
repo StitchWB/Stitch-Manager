@@ -117,7 +117,7 @@ class RecordedStep:
     frameSrc: str | None = None
 
 
-class CaptureUnavailable(RuntimeError):
+class CaptureUnavailableError(RuntimeError):
     """Extension capture is mandatory for this engine but no client connected."""
 
 
@@ -1254,6 +1254,17 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable in-browser recorder overlay UI (recording stays active)",
     )
+    p.add_argument(
+        "--capture",
+        choices=["auto", "extension", "injected"],
+        default="auto",
+        help=(
+            "Capture engine for native runs. auto: extension bridge when it "
+            "connects, injected-script fallback (Cloak only). extension: "
+            "require the extension bridge. injected: force the injected "
+            "script (Cloak only; Shard has no injected path)."
+        ),
+    )
     return p.parse_args()
 
 
@@ -1675,8 +1686,27 @@ async def main_async() -> int:
     # ── Stage-2 convergence: extension capture bridge (fallback-safe) ────────
     # CloakBrowser always loads the Stitch toolkit extension. If the extension
     # connects to this bridge, its richer content stack becomes the capture
-    # source and the injected recorder is skipped. Otherwise (ShardBrowser,
-    # broken/absent extension) the injected-script recorder stays in charge.
+    # source and the injected recorder is skipped. Otherwise (broken/absent
+    # extension) the injected-script recorder stays in charge — Cloak only;
+    # Shard has no injected path. --capture overrides the selection.
+    capture_mode = str(getattr(args, "capture", "auto") or "auto").strip().lower()
+    if capture_mode == "injected" and engine_norm != "cloakbrowser":
+        _result(
+            False,
+            error={
+                "code": "capture_mode_unavailable",
+                "message": (
+                    "Injected-script capture is only available on CloakBrowser; "
+                    "ShardBrowser capture is extension-only."
+                ),
+            },
+        )
+        return 1
+
+    use_bridge = capture_mode in ("auto", "extension")
+    # Fallback to the injected recorder is allowed only for auto + Cloak.
+    injected_fallback_allowed = capture_mode == "auto" and engine_norm == "cloakbrowser"
+
     capture_via_extension = False
     bridge_decided = False
     pending_bridge_controls: list[str] = []
@@ -1687,31 +1717,41 @@ async def main_async() -> int:
         nonlocal stop_requested
         stop_requested = True
 
-    bridge = ExtensionBridgeHost(
-        run_id=run_id,
-        alias=args.alias,
-        scenario_name=args.scenario_name,
-        start_url=args.url,
-        on_event=lambda payload: on_record(payload) if capture_via_extension else None,
-        on_stopped=_bridge_stop,
-        native_hosted=True,
+    # Cloak: the native overlay is the HUD, so the extension HUD is always
+    # suppressed (even with --no-overlay, which wants no HUD at all). Shard has
+    # no native overlay, so the extension HUD is the only control surface and
+    # stays visible unless the operator explicitly passes --no-overlay.
+    suppress_extension_hud = (
+        True if engine_norm == "cloakbrowser" else bool(args.no_overlay)
     )
-    bridge_started = await bridge.start()
-    if not bridge_started and engine_norm != "cloakbrowser":
-        # ShardBrowser has no injected-recorder fallback: without the bridge
-        # there is no capture at all, so refuse before launching the engine.
-        await bridge.close()
-        _result(
-            False,
-            error={
-                "code": "extension_capture_unavailable",
-                "message": (
-                    "Record bridge could not start (websockets missing or port busy). "
-                    "ShardBrowser capture is extension-only, so recording cannot start."
-                ),
-            },
+
+    if use_bridge:
+        bridge = ExtensionBridgeHost(
+            run_id=run_id,
+            alias=args.alias,
+            scenario_name=args.scenario_name,
+            start_url=args.url,
+            on_event=lambda payload: on_record(payload) if capture_via_extension else None,
+            on_stopped=_bridge_stop,
+            native_hosted=True,
+            suppress_overlay=suppress_extension_hud,
         )
-        return 1
+        bridge_started = await bridge.start()
+        if not bridge_started and not injected_fallback_allowed:
+            # No injected fallback (Shard, or --capture extension): without the
+            # bridge there is no capture at all, so refuse before launching.
+            await bridge.close()
+            _result(
+                False,
+                error={
+                    "code": "extension_capture_unavailable",
+                    "message": (
+                        "Record bridge could not start (websockets missing or port busy). "
+                        "Extension capture is required, so recording cannot start."
+                    ),
+                },
+            )
+            return 1
 
     async def update_overlay(
         page: Any,
@@ -2172,35 +2212,38 @@ async def main_async() -> int:
         context_bindings_installed = False
         context_scripts_installed = False
         nonlocal capture_via_extension, bridge_decided
-        if not bridge_started and engine_norm != "cloakbrowser":
-            raise CaptureUnavailable(
-                "Record bridge is unavailable; ShardBrowser capture is "
-                "extension-only, so recording cannot start."
-            )
-        if bridge_started and not bridge_decided:
-            # The extension service worker starts with the browser; give it a
-            # short grace window to attach before falling back to injection.
-            bridge_decided = True
-            capture_via_extension = await bridge.wait_client(timeout_s=5.0)
-            if not capture_via_extension:
-                if bridge is not None:
-                    # Fallback chosen: refuse late extension clients so a rogue
-                    # extension HUD session never starts next to the injected
-                    # recorder (which would double-capture).
-                    bridge.stop_accepting()
-                if engine_norm != "cloakbrowser":
-                    raise CaptureUnavailable(
-                        "Stitch extension did not connect to the record bridge. "
-                        "ShardBrowser capture is extension-only (there is no "
-                        "injected-script fallback), so recording cannot start."
-                    )
-            _event(
-                "scenario.record.capture_mode",
-                {
-                    "runId": run_id,
-                    "mode": "extension" if capture_via_extension else "injected",
-                },
-            )
+        if use_bridge:
+            if not bridge_started and not injected_fallback_allowed:
+                raise CaptureUnavailableError(
+                    "Record bridge is unavailable and there is no injected-script "
+                    "fallback, so recording cannot start."
+                )
+            if bridge_started and not bridge_decided:
+                # The extension service worker starts with the browser; give it
+                # a short grace window to attach before falling back to injection.
+                bridge_decided = True
+                capture_via_extension = await bridge.wait_client(timeout_s=5.0)
+                if not capture_via_extension:
+                    if bridge is not None:
+                        # Fallback chosen: refuse late extension clients so a rogue
+                        # extension HUD session never starts next to the injected
+                        # recorder (which would double-capture).
+                        bridge.stop_accepting()
+                    if not injected_fallback_allowed:
+                        raise CaptureUnavailableError(
+                            "Stitch extension did not connect to the record bridge "
+                            "and there is no injected-script fallback, so recording "
+                            "cannot start."
+                        )
+                _event(
+                    "scenario.record.capture_mode",
+                    {
+                        "runId": run_id,
+                        "mode": "extension" if capture_via_extension else "injected",
+                    },
+                )
+        # --capture injected: bridge is not used; capture_via_extension stays
+        # False and the injected-script recorder below is the capture path.
         if capture_via_extension:
             # Extension content stack captures; the native overlay HUD keeps
             # orchestration (tabs, proxy.switch, manual, close). Install
@@ -2497,7 +2540,7 @@ async def main_async() -> int:
         )
         if capture_via_extension and bridge is not None:
             await bridge.send({"type": "stop_record", "payload": {"runId": run_id}})
-    except CaptureUnavailable as e:
+    except CaptureUnavailableError as e:
         _log("error", str(e), step="init")
         await close_recording_session()
         if bridge is not None:
