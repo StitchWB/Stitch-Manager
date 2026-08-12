@@ -3,6 +3,8 @@
  */
 
 import type { ProviderEmailStrategy, ProviderEmailStrategies } from '../types';
+import { createLogger } from '../../../lib/observability/logger';
+const log = createLogger('Migration');
 
 const DEFAULT_EMAIL_STRATEGY: ProviderEmailStrategy = {
   strategy: 'custom',
@@ -52,7 +54,7 @@ export const loadProviderStrategies = (): ProviderEmailStrategies => {
 export const saveProviderStrategies = (strategies: ProviderEmailStrategies): void => {
   try {
     localStorage.setItem('providerEmailStrategies', JSON.stringify(strategies));
-    if (import.meta.env.DEV) console.debug('[MIGRATION] Saved provider strategies to localStorage');
+    log.debug('Saved provider strategies to localStorage');
   } catch (error) {
     console.warn('[MIGRATION] Failed to save provider strategies:', error);
   }

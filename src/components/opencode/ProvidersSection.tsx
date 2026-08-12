@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { t } from '@/lib/i18n';
 import {
   GlassCard, Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
   Button, Badge, EmptyState, ConfirmActionButton, Toggle,
@@ -29,25 +30,25 @@ export function ProvidersSection({
 
   const handleSave = (id: string, provider: ProviderConfig) => {
     onChange({ ...providers, [id]: provider });
-    toast.success('Provider saved');
+    toast.success(t('opencode.toasts.providerSaved'));
   };
 
   const handleDelete = (id: string) => {
     const next = { ...providers };
     delete next[id];
     onChange(next);
-    toast.success('Provider deleted');
+    toast.success(t('opencode.toasts.providerDeleted'));
   };
 
   if (providerIds.length === 0) {
     return (
       <EmptyState
         icon={Plus}
-        title="No providers configured"
-        description="Add your first provider to get started"
+        title={t('opencode.empty.noProviders')}
+        description={t('opencode.empty.noProvidersDesc')}
         action={
           <Button onClick={() => { setEditingId(null); setIsModalOpen(true); }}>
-            <Plus className="w-4 h-4" /> Add Provider
+            <Plus className="w-4 h-4" /> {t('opencode.buttons.addProvider')}
           </Button>
         }
       />
@@ -58,13 +59,16 @@ export function ProvidersSection({
     <>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold">Providers</h3>
+          <h3 className="text-lg font-semibold">{t('opencode.titles.providers')}</h3>
           <p className="text-sm text-vsc-text-muted">
-            {providerIds.length} configured, {providerIds.length - disabledProviders.length} enabled
+            {t('opencode.stats.providers', {
+              configured: providerIds.length,
+              enabled: providerIds.length - disabledProviders.length
+            })}
           </p>
         </div>
         <Button onClick={() => { setEditingId(null); setIsModalOpen(true); }}>
-          <Plus className="w-4 h-4" /> Add Provider
+          <Plus className="w-4 h-4" /> {t('opencode.buttons.addProvider')}
         </Button>
       </div>
 
@@ -72,11 +76,11 @@ export function ProvidersSection({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Enabled</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Base URL</TableHead>
-              <TableHead>Models</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t('opencode.table.enabled')}</TableHead>
+              <TableHead>{t('opencode.table.name')}</TableHead>
+              <TableHead>{t('opencode.fields.baseUrl')}</TableHead>
+              <TableHead>{t('opencode.table.models')}</TableHead>
+              <TableHead className="text-right">{t('opencode.table.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

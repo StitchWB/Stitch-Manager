@@ -45,6 +45,8 @@ export type {
   RegistrationResult,
   RegistrationHistoryEntry,
 } from './runtime.store';
+import { createLogger } from '../../lib/observability/logger';
+const log = createLogger('RegistrationStore');
 
 // Combined state interface for backward compatibility
 interface RegistrationState {
@@ -169,10 +171,7 @@ export const useRegistrationStore = <T = RegistrationState>(
   // Trigger save helper - always read latest from store, not from render closure
   const triggerSave = () => {
     const loaded = usePersistenceStore.getState().settingsLoaded;
-    if (import.meta.env.DEV) console.debug(
-      '[REGISTRATION_STORE] triggerSave called, settingsLoaded:',
-      loaded
-    );
+    log.debug('triggerSave called, settingsLoaded:', loaded);
     debouncedSave(loaded);
   };
 
@@ -232,12 +231,9 @@ export const useRegistrationStore = <T = RegistrationState>(
 
   // Immediate save for critical moments
   const saveImmediately = async () => {
-    if (import.meta.env.DEV) console.debug(
-      '[REGISTRATION_STORE] saveImmediately: called, settingsLoaded:',
-      persistenceStore.settingsLoaded
-    );
+    log.debug('saveImmediately: called, settingsLoaded:', persistenceStore.settingsLoaded);
     if (!persistenceStore.settingsLoaded) {
-      if (import.meta.env.DEV) console.debug('[REGISTRATION_STORE] saveImmediately: settings not loaded, skipping');
+      log.debug('saveImmediately: settings not loaded, skipping');
       return;
     }
 
@@ -245,7 +241,7 @@ export const useRegistrationStore = <T = RegistrationState>(
     clearSaveTimeout();
 
     // Save immediately without debounce
-    if (import.meta.env.DEV) console.debug('[REGISTRATION_STORE] saveImmediately: calling saveSettings directly');
+    log.debug('saveImmediately: calling saveSettings directly');
     await saveSettings();
   };
 

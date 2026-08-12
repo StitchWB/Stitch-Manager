@@ -173,6 +173,14 @@ module.exports = {
       },
     },
     {
+      // The logger is the single module allowed to use console directly;
+      // everything else must go through createLogger().
+      files: ['src/lib/observability/logger.ts'],
+      rules: {
+        'no-console': 'off',
+      },
+    },
+    {
       files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx', 'src/__tests__/**/*.ts', 'src/__tests__/**/*.tsx'],
       rules: {
         'i18next/no-literal-string': 'off',

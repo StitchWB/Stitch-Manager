@@ -13,6 +13,8 @@
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { getWsUrl } from '@/lib/backend/core/url';
+import { createLogger } from '../observability/logger';
+const log = createLogger('WsEvents');
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -159,7 +161,7 @@ function connect(): void {
 
   ws.onopen = () => {
     reconnectDelayMs = RECONNECT_BASE_MS;
-    console.debug('[WS-Events] Connected');
+    log.debug('Connected');
   };
 
   ws.onmessage = (ev) => handleMessage(ev.data as string);

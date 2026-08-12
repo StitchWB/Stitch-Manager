@@ -13,6 +13,8 @@ import {
   Toggle } from
 '@/components/ui';
 import { t } from '@/lib/i18n';
+import { createLogger } from '../../lib/observability/logger';
+const log = createLogger('ProxyLibrary');
 import {
   createOrGetProxyLibraryEntry,
   deleteProxyLibraryEntry,
@@ -125,7 +127,11 @@ export function ProxyLibrarySection() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // Deferred: load() sets state synchronously at its start, and the
+    // set-state-in-effect rule forbids that in the effect body itself.
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   const sortedItems = useMemo(() => {
@@ -261,10 +267,10 @@ export function ProxyLibrarySection() {
 
   const handleDelete = async (id: string, force = false) => {
     setError(null);
-    if (import.meta.env.DEV) console.debug('[handleDelete] Starting delete for id:', id, 'force:', force);
+    log.debug('Starting delete for id:', id, 'force:', force);
     try {
       const res = await deleteProxyLibraryEntry({ id, options: { force } });
-      if (import.meta.env.DEV) console.debug('[handleDelete] Delete result:', res);
+      log.debug('Delete result:', res);
       if (res.changed) {
         setItems((prev) => {
           const filtered = prev.filter((it) => it.id !== id);
@@ -272,7 +278,7 @@ export function ProxyLibrarySection() {
         });
       }
     } catch (e) {
-      if (import.meta.env.DEV) console.debug('[handleDelete] Error:', e);
+      log.debug('Error:', e);
       if (e instanceof ProxyLibraryError && e.code === 'proxy_in_use') {
         // Always show force-delete dialog, even if usage lookup fails
         const usage = await getProxyLibraryUsage(id).catch(() => null);

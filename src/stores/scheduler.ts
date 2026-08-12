@@ -4,6 +4,8 @@ import { listen, type UnlistenFn } from '../lib/events';
 import { toast } from 'sonner';
 import type { ScheduledTask, TaskType, Schedule, TaskExecution } from '../types/generated';
 import type { SchedulerTemplate } from '../lib/backend/modules/scheduler';
+import { createLogger } from '../lib/observability/logger';
+const log = createLogger('Scheduler');
 
 interface SchedulerState {
   tasks: ScheduledTask[];
@@ -138,7 +140,7 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
     try {
       const result = await safeInvoke<string>('execute_task_now', { taskId });
       toast.success('Task executed successfully');
-      if (import.meta.env.DEV) console.debug('[Scheduler] Execution result:', result);
+      log.debug('Execution result:', result);
       await get().fetchTasks();
     } catch (error) {
       console.error('[Scheduler] Failed to execute task:', error);

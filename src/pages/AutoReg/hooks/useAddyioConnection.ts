@@ -8,6 +8,8 @@ import {
 import { t } from '@/lib/i18n';
 import type { AddyIoAccountDetails } from '../../../types/generated';
 import type { IMAPConfig } from '../../../stores/registration/types';
+import { createLogger } from '../../../lib/observability/logger';
+const log = createLogger('Addyio');
 
 interface UseAddyioConnectionProps {
   addyioApiToken?: string;
@@ -33,8 +35,8 @@ export const useAddyioConnection = ({
   const [addyioConnectionMessage, setAddyioConnectionMessage] = useState('');
 
   const handleTestAddyioConnection = useCallback(async () => {
-    if (import.meta.env.DEV) console.debug('[ADDYIO] handleTestAddyioConnection called');
-    if (import.meta.env.DEV) console.debug('[ADDYIO] API token:', addyioApiToken ? '***set***' : 'empty');
+    log.debug('handleTestAddyioConnection called');
+    log.debug('API token:', addyioApiToken ? '***set***' : 'empty');
 
     if (!addyioApiToken) {
       console.error('[ADDYIO] No API token configured');

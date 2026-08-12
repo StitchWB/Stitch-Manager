@@ -15,6 +15,8 @@ import {
   bulkDeleteAccounts,
   BackendError,
 } from '../lib/backend';
+import { createLogger } from '../lib/observability/logger';
+const log = createLogger('AccountsStore');
 
 // ============================================
 // Types
@@ -305,7 +307,7 @@ export const useAccountsStore = create<AccountsState>()(
         },
 
         deleteAccounts: async accountIds => {
-          if (import.meta.env.DEV) console.debug('[Store] deleteAccounts called with:', accountIds);
+          log.debug('deleteAccounts called with:', accountIds);
           const previousAccounts = get().accounts;
 
           // Optimistic update
@@ -317,7 +319,7 @@ export const useAccountsStore = create<AccountsState>()(
           try {
             // Use bulk delete command
             const result = await bulkDeleteAccounts({ accountIds });
-            if (import.meta.env.DEV) console.debug('[Store] bulkDeleteAccounts result:', result);
+            log.debug('bulkDeleteAccounts result:', result);
 
             // If some deletions failed, show error but keep optimistic update for succeeded ones
             if (result.failed > 0) {

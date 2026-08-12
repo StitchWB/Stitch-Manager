@@ -88,31 +88,54 @@ function beep() {
     // noop
   }}
 
-export function ScenarioReplayModal({
+export function ScenarioReplayModal(props: ScenarioReplayModalProps) {
+  // Keep the replay engine mounted across close/open so an in-flight replay
+  // keeps being tracked even if the dialog is dismissed.
+  const replay = useScenarioReplay();
+  if (!props.isOpen) return null;
+  return <ScenarioReplayForm {...props} replay={replay} />;
+}
+
+type ScenarioReplayFormProps = ScenarioReplayModalProps & {
+  replay: ReturnType<typeof useScenarioReplay>;
+};
+
+/**
+ * Mounted only while open: per-open state resets naturally via lazy
+ * initializers (no setState-in-effect hydration/reset effects).
+ */
+function ScenarioReplayForm({
   alias,
   isOpen,
   onClose,
   defaultUrl = 'https://google.com',
   defaultScenarioPath = '',
-  quickStart = false
-}: ScenarioReplayModalProps) {
-  const replay = useScenarioReplay();
+  quickStart = false,
+  replay
+}: ScenarioReplayFormProps) {
   const displayAlias = formatProfileAlias(alias);
   const [runtimeModalOpen, setRuntimeModalOpen] = useState(false);
-  const [scenarioPath, setScenarioPath] = useState('');
-  const scenarioPathTouchedRef = useRef(false);
+  const [scenarioPath, setScenarioPath] = useState(() => defaultScenarioPath?.trim() ?? '');
+  const scenarioPathTouchedRef = useRef(Boolean(defaultScenarioPath?.trim()));
   const [startUrl, setStartUrl] = useState(defaultUrl);
   const [configJson, setConfigJson] = useState<string>('');
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [continueOnError, setContinueOnError] = useState(false);
-  const [autoStarted, setAutoStarted] = useState(false);
+  const autoStartedRef = useRef(false);
   const [preflightLoading, setPreflightLoading] = useState(false);
-  const [preflight, setPreflight] = useState<ReplayPreflightResult | null>(null);
+  const [preflightState, setPreflightState] = useState<ReplayPreflightResult | null>(null);
+  const preflight = scenarioPath.trim() ? preflightState : null;
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>('native');
-  const [runnerModeHydrated, setRunnerModeHydrated] = useState(false);
+  const [runnerMode, setRunnerMode] = useState<ScenarioRunnerMode>(() => {
+    try {
+      return localStorage.getItem(`stitch.replay.runnerMode.${alias || 'global'}`) === 'extension' ?
+      'extension' :
+      'native';
+    } catch {
+      return 'native';
+    }
+  });
   const [engine, setEngine] = useState<BrowserEngineId>('cloakbrowser');
-  const [engineHydrated, setEngineHydrated] = useState(false);
   const [recentScenarioPaths, setRecentScenarioPaths] = useState<string[]>([]);
   const [indexedScenarios, setIndexedScenarios] = useState<ScenarioRecordItem[]>([]);
   const [indexedLoading, setIndexedLoading] = useState(false);
@@ -255,45 +278,6 @@ export function ScenarioReplayModal({
   }, [alias, refreshIndexedScenarios]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setAutoStarted(false);
-      setPreflight(null);
-      setShowAdvanced(false);
-      setRecentScenarioPaths([]);
-      setRetryFromFailedStep(false);
-      setExplicitRetryStep(null);
-      setSelectedVersionNo(null);
-      setSelectedTags([]);
-      setRunStatusFilter('all');
-      setEngineHydrated(false);
-      scenarioPathTouchedRef.current = false;
-      return;
-    }
-    setStartUrl(defaultUrl);
-    setScenarioPath(defaultScenarioPath?.trim() ?? '');
-    scenarioPathTouchedRef.current = Boolean(defaultScenarioPath?.trim());
-    setAutoStarted(false);
-  }, [defaultScenarioPath, defaultUrl, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    try {
-      const raw = localStorage.getItem(runnerModePrefKey);
-      setRunnerMode(raw === 'extension' ? 'extension' : 'native');
-      setRunnerModeHydrated(true);
-    } catch {
-      setRunnerMode('native');
-      setRunnerModeHydrated(true);
-    }
-  }, [isOpen, runnerModePrefKey]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setRunnerModeHydrated(false);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
     if (!isOpen) return;
     try {
       localStorage.setItem(runnerModePrefKey, runnerMode);
@@ -302,24 +286,8 @@ export function ScenarioReplayModal({
       // best effort only
     }}, [isOpen, runnerMode, runnerModePrefKey]);
 
-  // Engine preference (defaults to cloakbrowser; hydrated from profile settings)
-  useEffect(() => {
-    if (!isOpen) return;
-    try {
-      setEngine('cloakbrowser');
-      setEngineHydrated(true);
-    } catch {
-      setEngine('cloakbrowser');
-      setEngineHydrated(true);
-    }
-  }, [isOpen, enginePrefKey]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setEngineHydrated(false);
-    }
-  }, [isOpen]);
-
+  // Engine preference persists across opens; the settings load below may
+  // override it with the profile's saved engine.
   useEffect(() => {
     if (!isOpen) return;
     try {
@@ -330,20 +298,17 @@ export function ScenarioReplayModal({
     }}, [isOpen, engine, enginePrefKey]);
 
   useEffect(() => {
-    if (!isOpen || !scenarioPath.trim()) {
-      setPreflight(null);
-      return;
-    }
+    if (!scenarioPath.trim()) return;
 
     let cancelled = false;
     const run = async () => {
       setPreflightLoading(true);
       try {
         const result = await replayPreflight(scenarioPath.trim());
-        if (!cancelled) setPreflight(result);
+        if (!cancelled) setPreflightState(result);
       } catch {
         if (!cancelled) {
-          setPreflight({
+          setPreflightState({
             valid: false,
             totalSteps: 0,
             droppedSteps: 0,
@@ -414,11 +379,6 @@ export function ScenarioReplayModal({
       cancelled = true;
     };
   }, [alias, defaultScenarioPath, defaultUrl, engine, isOpen, refreshIndexedScenarios]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setScenarioQuery(readReplayListQuery(alias));
-  }, [alias, isOpen]);
 
   useEffect(() => {
     if (replay.state.status === 'manual_pause') {
@@ -625,26 +585,20 @@ export function ScenarioReplayModal({
   );
 
   useEffect(() => {
-    if (!quickStart || autoStarted) return;
-    if (!isOpen || !alias) return;
+    if (!quickStart || autoStartedRef.current) return;
+    if (!alias) return;
     if (!canStart) return;
-    if (!runnerModeHydrated) return;
-    if (!engineHydrated) return;
     if (isNativeRunner && runtimeInstalled !== true) return;
     if (!isNativeRunner && extensionBridge.state.connected !== true) return;
     if (replay.state.status !== 'idle') return;
 
-    setAutoStarted(true);
+    autoStartedRef.current = true;
     void startReplay();
   }, [
   alias,
-  autoStarted,
   canStart,
-  isOpen,
   isNativeRunner,
   extensionBridge.state.connected,
-  runnerModeHydrated,
-  engineHydrated,
   quickStart,
   replay.state.status,
   runtimeInstalled,
