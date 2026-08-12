@@ -56,11 +56,13 @@ export function SchedulerScenarioPicker({
   }, []);
 
   useEffect(() => {
-    if (!profileAlias) {
-      setScenarios([]);
-      setScenarioError(null);
-      return;
-    }
+      if (!profileAlias) {
+        queueMicrotask(() => {
+          setScenarios([]);
+          setScenarioError(null);
+        });
+        return;
+      }
 
     let cancelled = false;
     const loadScenarios = async () => {

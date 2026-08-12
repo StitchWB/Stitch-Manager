@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Bot, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -7,6 +8,7 @@ import {
 import type { ModelOption } from '@/components/ui';
 import type { OpenCodeConfig, OhMyOpenAgentConfig, AgentConfig } from '@/lib/backend/modules/opencodeConfig';
 import { AddAgentModal } from './AddAgentModal';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface AgentsSectionProps {
   opencodeConfig: OpenCodeConfig;
@@ -83,8 +85,8 @@ export function AgentsSection({
       <EmptyState
         icon={Bot}
         title="No agents configured"
-        description="Agents define which model handles each task type"
-        action={<Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Agent</Button>}
+        description={t('opencode.ui.agentsDescShort')}
+        action={<Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4" /> {t('opencode.buttons.addAgent')}</Button>}
       />
     );
   }
@@ -93,12 +95,12 @@ export function AgentsSection({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Agents</h3>
+          <h3 className="text-lg font-semibold">{t('opencode.ui.agentsTitle')}</h3>
           <p className="text-sm text-vsc-text-muted">
-            Which model each agent role uses ({allIds.length} agents)
+            {t('opencode.ui.agentsDesc', { count: allIds.length })}
           </p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Agent</Button>
+        <Button onClick={() => setIsAddModalOpen(true)}><Plus className="w-4 h-4" /> {t('opencode.buttons.addAgent')}</Button>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -124,21 +126,21 @@ export function AgentsSection({
 
               {/* Primary model */}
               <ModelPicker
-                label="Model"
+                label={t('opencode.table.model')}
                 value={model}
                 options={modelOptions}
                 onChange={(v) => updateAgent(id, { model: v })}
-                placeholder="Select model"
+                placeholder={t('opencode.ui.selectModel')}
               />
 
               {/* Variant — segmented buttons */}
               <div>
                 <span className="block text-sm font-medium text-slate-300 mb-1.5">
-                  Reasoning effort
+                  {t('opencode.ui.reasoningEffort')}
                 </span>
                 <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/5 border border-white/10 p-1">
                   {VARIANTS.map(v => (
-                    <button
+                    <ButtonBase
                       key={v}
                       type="button"
                       onClick={() => updateAgent(id, {
@@ -152,7 +154,7 @@ export function AgentsSection({
                       }
                     >
                       {v}
-                    </button>
+                    </ButtonBase>
                   ))}
                 </div>
               </div>
@@ -160,16 +162,16 @@ export function AgentsSection({
               {/* Fallbacks as chips */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-sm font-medium text-slate-300">Fallback models</span>
+                  <span className="text-sm font-medium text-slate-300">{t('opencode.ui.fallbackModels')}</span>
                   <Button
                     variant="ghost" size="sm"
                     onClick={() => setPickerFor({ agentId: id, index: fallbacks.length })}
                   >
-                    <Plus className="w-3 h-3 mr-1" /> Add
+                    <Plus className="w-3 h-3 mr-1" /> {t('opencode.ui.add')}
                   </Button>
                 </div>
                 {fallbacks.length === 0 ? (
-                  <div className="text-xs text-vsc-text-muted">No fallbacks — agent fails if primary model is unavailable</div>
+                  <div className="text-xs text-vsc-text-muted">{t('opencode.ui.noFallbacks')}</div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {fallbacks.map((fb, i) => {
@@ -190,13 +192,13 @@ export function AgentsSection({
                             <span className="text-[10px] text-vsc-text-muted">{option.provider}/</span>
                           )}
                           <span className="truncate max-w-[160px]">{shortName}</span>
-                          <button
+                          <ButtonBase
                             type="button"
                             onClick={() => updateAgent(id, { fallback_models: fallbacks.filter((_, j) => j !== i) })}
                             className="text-slate-500 hover:text-red-400 transition-colors"
                           >
                             <X size={12} />
-                          </button>
+                          </ButtonBase>
                         </span>
                       );
                     })}
@@ -212,10 +214,10 @@ export function AgentsSection({
                         updateAgent(id, { fallback_models: [...fallbacks, { model: v }] });
                         setPickerFor(null);
                       }}
-                      placeholder="Pick fallback model"
+                      placeholder={t('opencode.ui.pickFallback')}
                     />
                     <Button variant="ghost" size="sm" className="mt-1" onClick={() => setPickerFor(null)}>
-                      Cancel
+                      {t('common.cancel')}
                     </Button>
                   </div>
                 )}

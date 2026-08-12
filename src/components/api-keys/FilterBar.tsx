@@ -1,5 +1,6 @@
 import { cn } from '../../lib/utils';
 import type { KeyFilter } from '../../types/apiKeys';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface FilterBarProps {
   active: KeyFilter;
@@ -18,7 +19,7 @@ export function FilterBar({ active, onChange, counts }: FilterBarProps) {
   return (
     <div className="flex items-center gap-1.5" role="tablist" aria-label="Filter API keys by status">
       {chips.map(({ key, label, dot }) => (
-        <button
+        <ButtonBase
           key={key}
           role="tab"
           aria-selected={active === key}
@@ -38,7 +39,7 @@ export function FilterBar({ active, onChange, counts }: FilterBarProps) {
           )}>
             ({counts[key] ?? 0})
           </span>
-        </button>
+        </ButtonBase>
       ))}
     </div>
   );

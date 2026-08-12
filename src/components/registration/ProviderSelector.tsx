@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { ChevronDown } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
@@ -98,7 +99,7 @@ export function ProviderSelector({
           {selectedProvider?.icon ?? activeProvider.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">Провайдер</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">{t('uiTexts.providerLabel')}</div>
           <div className="text-sm font-semibold text-white truncate">
             {selectedProvider?.name ?? activeProvider}
           </div>

@@ -144,6 +144,7 @@ export function ProfileScenariosPanel({
   }, [alias, fetchScenarioItems, isOpen]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (!isOpen) {
       setQuery('');
       setFavoritesOnly(false);
@@ -156,6 +157,7 @@ export function ProfileScenariosPanel({
       setPendingDeleteId(null);
       setDeleteLoadingId(null);
     }
+    });
   }, [isOpen]);
 
   useEffect(() => {

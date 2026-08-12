@@ -75,7 +75,9 @@ export function MailManualConnectModal({
   useEffect(() => {
     if (!isOpen) return;
     if (hasOpenedOnce) return;
+      queueMicrotask(() => {
     setHasOpenedOnce(true);
+      });
 
     if (defaultSource && defaultSource !== source) {
       onSourceChange(defaultSource);
@@ -100,9 +102,11 @@ export function MailManualConnectModal({
 
   // Reset the once-open flag when modal closes
   useEffect(() => {
+    queueMicrotask(() => {
     if (!isOpen) {
       setHasOpenedOnce(false);
     }
+    });
   }, [isOpen]);
 
   const sourceOptions = useMemo(

@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { t } from '@/lib/i18n';
 import { Activity, AlertCircle, CheckCircle2, Clock, Zap } from 'lucide-react';
 import type { KeyMetrics } from '@/types/metrics';
 
@@ -29,7 +30,7 @@ export const KeyMetricsDisplay = memo(function KeyMetricsDisplay({ metrics }: Ke
       {/* Success Rate */}
       <div className="flex items-center gap-1.5">
         <CheckCircle2 className={`w-3.5 h-3.5 ${successRateColor}`} />
-        <span className="text-slate-400">Success:</span>
+        <span className="text-slate-400">{t('apiKeys.success')}</span>
         <span className={`font-semibold ${successRateColor}`}>
           {successRatePercent}%
         </span>
@@ -38,16 +39,16 @@ export const KeyMetricsDisplay = memo(function KeyMetricsDisplay({ metrics }: Ke
       {/* Average Latency */}
       <div className="flex items-center gap-1.5">
         <Clock className="w-3.5 h-3.5 text-sky-400" />
-        <span className="text-slate-400">Latency:</span>
+        <span className="text-slate-400">{t('apiKeys.latency')}</span>
         <span className="font-semibold text-slate-200">
-          {avgLatencyMs}ms
+          {t('apiKeys.latencyValue', { count: avgLatencyMs })}
         </span>
       </div>
       
       {/* Usage Count */}
       <div className="flex items-center gap-1.5">
         <Activity className="w-3.5 h-3.5 text-violet-400" />
-        <span className="text-slate-400">Requests:</span>
+        <span className="text-slate-400">{t('apiKeys.requests')}</span>
         <span className="font-semibold text-slate-200">
           {metrics.usageCount}
         </span>
@@ -56,7 +57,7 @@ export const KeyMetricsDisplay = memo(function KeyMetricsDisplay({ metrics }: Ke
       {/* Tokens */}
       <div className="flex items-center gap-1.5">
         <Zap className="w-3.5 h-3.5 text-amber-400" />
-        <span className="text-slate-400">Tokens:</span>
+        <span className="text-slate-400">{t('apiKeys.tokens')}</span>
         <span className="font-semibold text-slate-200">
           {formatNumber(metrics.totalTokens)}
         </span>
@@ -65,7 +66,7 @@ export const KeyMetricsDisplay = memo(function KeyMetricsDisplay({ metrics }: Ke
       {/* Last Used */}
       <div className="flex items-center gap-1.5 col-span-2">
         <Clock className="w-3.5 h-3.5 text-slate-500" />
-        <span className="text-slate-400">Last used:</span>
+        <span className="text-slate-400">{t('apiKeys.lastUsed')}</span>
         <span className="text-slate-300">{lastUsedText}</span>
       </div>
       
@@ -74,7 +75,7 @@ export const KeyMetricsDisplay = memo(function KeyMetricsDisplay({ metrics }: Ke
         <div className="flex items-start gap-1.5 col-span-2 mt-1 p-2 bg-red-500/10 border border-red-500/20 rounded">
           <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div className="text-red-400 font-medium text-xs">Last Error</div>
+            <div className="text-red-400 font-medium text-xs">{t('apiKeys.lastError')}</div>
             <div className="text-red-300/80 text-xs truncate" title={metrics.lastError}>
               {metrics.lastError}
             </div>

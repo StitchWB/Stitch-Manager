@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { Search, AlertCircle, XCircle, Code, Code2 } from 'lucide-react';
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
 import { useAppStore } from '../stores/app';
@@ -344,14 +345,9 @@ export default function PatcherV2() {
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
               <section className="glass-card overflow-hidden relative">
                 {/* Loading Overlay for Rescan */}
-                {scanning && (
-                  <div className="absolute inset-0 bg-black/40 backdrop-blur-sm z-10 flex items-center justify-center">
-                    <div className="flex items-center gap-3 bg-vsc-bg/90 px-4 py-3 rounded-lg border border-white/10">
-                      <Search size={16} className="animate-spin text-primary" />
-                      <span className="text-sm text-white">{t('patcher.scanning')}</span>
-                    </div>
-                  </div>
-                )}
+                  {scanning && (
+                    <LoadingOverlay message={t('patcher.scanning')} />
+                  )}
                 
                 <IDEGrid ides={detectedIDEs} selectedIDE={selectedIDE} onSelectIDE={setSelectedIDE} />
 

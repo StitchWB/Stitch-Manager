@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { createPortal } from 'react-dom';
 import { Command } from 'cmdk';
 import { ChevronDown, Check, Search } from 'lucide-react';
@@ -122,7 +123,7 @@ export function ModelPicker({
             </div>
             <Command.List className="max-h-72 overflow-y-auto py-1">
               <Command.Empty className="px-3 py-4 text-sm text-slate-500 text-center">
-                No models found
+                {t('uiTexts.noModelsFound')}
               </Command.Empty>
               {groups.map(([provider, models]) => (
                 <Command.Group

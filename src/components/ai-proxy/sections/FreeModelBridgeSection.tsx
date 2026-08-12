@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { t } from '@/lib/i18n';
 import { toast } from 'sonner';
 
 import { getProxySettings, updateProxySettings } from '@/lib/backend/modules/aiProxy';
@@ -58,12 +59,12 @@ export function FreeModelBridgeSection() {
       if (resp.ok) {
         const data = await resp.json();
         const fmModels = (data.data || []).filter((m: { id: string }) => m.id?.startsWith('FM-'));
-        setFreemodelTestResult({ ok: true, msg: `${fmModels.length} FreeModel models available` });
+        setFreemodelTestResult({ ok: true, msg: t('aiHub.fmModelsAvailable', { count: fmModels.length }) });
       } else {
         setFreemodelTestResult({ ok: false, msg: `HTTP ${resp.status}` });
       }
     } catch (e) {
-      setFreemodelTestResult({ ok: false, msg: e instanceof Error ? e.message : 'Connection failed' });
+      setFreemodelTestResult({ ok: false, msg: e instanceof Error ? e.message : t('aiGateway.cred.connectionFailed') });
     } finally {
       setIsTestingFreemodel(false);
     }
@@ -72,14 +73,14 @@ export function FreeModelBridgeSection() {
   return (
     <GlassCard>
       <div className="p-5 space-y-4">
-        <h3 className="text-sm font-medium text-white/90">FreeModel Bridge</h3>
+        <h3 className="text-sm font-medium text-white/90">{t('aiHub.fmTitle')}</h3>
         <p className="text-xs text-slate-400">
-          Access Claude models via FreeModel. Set your API key to enable FM-* models in the proxy.
+          {t('aiHub.fmDesc')}
         </p>
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">API Key</label>
+            <label className="text-xs text-slate-400 mb-1 block">{t('aiHub.apiKeyLabel')}</label>
             <div className="flex gap-2">
               <Input
                 type="password"
@@ -95,7 +96,7 @@ export function FreeModelBridgeSection() {
                 isLoading={isSavingFreemodel}
                 disabled={freemodelApiKey === freemodelSavedKey}
               >
-                Save
+                {t('common.save')}
               </Button>
             </div>
           </div>
@@ -107,7 +108,7 @@ export function FreeModelBridgeSection() {
               onClick={handleTestFreemodel}
               isLoading={isTestingFreemodel}
             >
-              Test Connection
+              {t('aiKeys.testConnection')}
             </Button>
             {freemodelTestResult && (
               <span className={`text-xs ${freemodelTestResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -117,8 +118,8 @@ export function FreeModelBridgeSection() {
           </div>
 
           <div className="text-xs text-slate-500 pt-2 border-t border-white/5">
-            <p>Available models: FM-claude-sonnet-4-6, FM-claude-opus-4-8, FM-claude-haiku-4-5</p>
-            <p className="mt-1">Gateway: http://127.0.0.1:25583</p>
+            <p>{t('aiHub.fmAvailableModels')}</p>
+            <p className="mt-1">{t('aiHub.fmGateway')}</p>
           </div>
         </div>
       </div>

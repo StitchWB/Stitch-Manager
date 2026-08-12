@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '@/lib/i18n';
 import { ChevronDown, Plus, Trash2, RefreshCw, MoreVertical, ShieldCheck, AlertTriangle, XOctagon, HelpCircle } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
@@ -9,6 +10,7 @@ import { getHealthSummary } from './KeyHealthBadge';
 import type { ApiKeyEntry } from '@/types/apiKeys';
 import type { CustomProvider } from '@/lib/backend/modules/customProviders';
 import type { KeyHealthRecord, KeyHealthStatus } from '@/lib/backend/modules/keyHealth';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface ProviderCardProps {
   provider: CustomProvider;
@@ -93,15 +95,15 @@ export function ProviderCard({
         {/* Stats */}
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-            <div className="text-xs text-slate-400 mb-0.5">Keys</div>
+            <div className="text-xs text-slate-400 mb-0.5">{t('apiKeys.keys')}</div>
             <div className="text-sm font-semibold text-white">{totalKeys}</div>
           </div>
           <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-            <div className="text-xs text-slate-400 mb-0.5">Success</div>
+            <div className="text-xs text-slate-400 mb-0.5">{t('apiKeys.success')}</div>
             <div className="text-sm font-semibold text-emerald-400">{successRate}%</div>
           </div>
           <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-            <div className="text-xs text-slate-400 mb-0.5">Latency</div>
+            <div className="text-xs text-slate-400 mb-0.5">{t('apiKeys.latency')}</div>
             <div className="text-sm font-semibold text-sky-400">{avgLatency}</div>
           </div>
         </div>
@@ -145,7 +147,7 @@ export function ProviderCard({
         {/* Models */}
         {models.length > 0 && (
           <div className="mb-3">
-            <div className="text-xs text-slate-400 mb-1.5">Models</div>
+            <div className="text-xs text-slate-400 mb-1.5">{t('apiKeys.modelsLabel')}</div>
             <div className="flex flex-wrap gap-1.5">
               {models.map(model => (
                 <Badge key={model} variant="info" size="sm">
@@ -154,7 +156,7 @@ export function ProviderCard({
               ))}
               {moreModelsCount > 0 && (
                 <Badge variant="outline" size="sm">
-                  +{moreModelsCount} more
+                  {t('apiKeys.moreCount', { count: moreModelsCount })}
                 </Badge>
               )}
             </div>
@@ -169,7 +171,7 @@ export function ProviderCard({
             leftIcon={<Plus className="w-3.5 h-3.5" />}
             onClick={onAddKeys}
           >
-            Add Keys
+            {t('apiKeys.addKeys')}
           </Button>
           <Button
             variant="secondary"
@@ -178,7 +180,7 @@ export function ProviderCard({
             onClick={onTestAll}
             disabled={isTestingAll || totalKeys === 0}
           >
-            Test All
+            {t('apiKeys.testAllLabel')}
           </Button>
           <Button
             variant="danger"
@@ -186,7 +188,7 @@ export function ProviderCard({
             leftIcon={<Trash2 className="w-3.5 h-3.5" />}
             onClick={onDelete}
           >
-            Delete
+            {t('common.delete')}
           </Button>
         </div>
       </div>
@@ -194,20 +196,20 @@ export function ProviderCard({
       {/* Expandable Keys List */}
       {totalKeys > 0 && (
         <div>
-          <button
+          <ButtonBase
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
             className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
           >
             <span className="text-xs font-medium text-slate-300">
-              Keys ({totalKeys})
+              {t('apiKeys.keysCount', { count: totalKeys })}
             </span>
             <ChevronDown
               className={`w-4 h-4 text-slate-400 transition-transform ${
                 isExpanded ? 'rotate-180' : ''
               }`}
             />
-          </button>
+          </ButtonBase>
 
           {isExpanded && (
             <div className="px-4 pb-4 space-y-2">

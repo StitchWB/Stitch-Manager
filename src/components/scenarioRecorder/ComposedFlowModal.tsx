@@ -152,24 +152,28 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
 
   useEffect(() => {
     if (!isOpen || !alias) return;
+      queueMicrotask(() => {
     void refresh();
+      });
   }, [alias, isOpen, refresh]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setSelectedFlowId('');
-      setFlow(null);
-      setRunState({ jobId: null, status: 'idle', error: null, lastJobStatus: null });
-      setSelectedSheetId('');
-      setSelectedSheetColumn('');
-      setSelectedNodeId(null);
-      setSelectedEdgeId(null);
-      setAutoFollowRunningNode(false);
-      return;
-    }
-    if (alias && !flow) {
-      setFlow(createEmptyComposedFlow(alias));
-    }
+      if (!isOpen) {
+        queueMicrotask(() => {
+          setSelectedFlowId('');
+          setFlow(null);
+          setRunState({ jobId: null, status: 'idle', error: null, lastJobStatus: null });
+          setSelectedSheetId('');
+          setSelectedSheetColumn('');
+          setSelectedNodeId(null);
+          setSelectedEdgeId(null);
+          setAutoFollowRunningNode(false);
+        });
+        return;
+      }
+      if (alias && !flow) {
+        queueMicrotask(() => setFlow(createEmptyComposedFlow(alias)));
+      }
   }, [alias, flow, isOpen]);
 
   useEffect(() => {
@@ -183,17 +187,21 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
       return;
     }
 
-    setFlow(parsed);
-    setRunState({ jobId: null, status: 'idle', error: null, lastJobStatus: null });
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
-  }, [flows, selectedFlowId]);
+        queueMicrotask(() => {
+          setFlow(parsed);
+          setRunState({ jobId: null, status: 'idle', error: null, lastJobStatus: null });
+          setSelectedNodeId(null);
+          setSelectedEdgeId(null);
+        });
+    }, [flows, selectedFlowId]);
 
   useEffect(() => {
     if (!flow || !selectedNodeId) return;
     const exists = flow.nodes.some((node) => node.id === selectedNodeId);
     if (!exists) {
+        queueMicrotask(() => {
       setSelectedNodeId(null);
+        });
     }
   }, [flow, selectedNodeId]);
 
@@ -205,7 +213,9 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
       return successId === selectedEdgeId || errorId === selectedEdgeId;
     });
     if (!edgeExists) {
+        queueMicrotask(() => {
       setSelectedEdgeId(null);
+        });
     }
   }, [flow, selectedEdgeId]);
 
@@ -287,21 +297,21 @@ export function ComposedFlowModal({ alias, isOpen, onClose }: ComposedFlowModalP
     [compilePreview, flow, flowValidation]
   );
 
-  useEffect(() => {
-    if (!flow) {
-      setSelectedNodeId(null);
-      return;
-    }
-    if (flow.nodes.length === 0) {
-      setSelectedNodeId(null);
-      return;
-    }
-    if (!selectedNodeId) return;
-    const exists = flow.nodes.some((node) => node.id === selectedNodeId);
-    if (!exists) {
-      setSelectedNodeId(null);
-    }
-  }, [flow, selectedNodeId]);
+    useEffect(() => {
+      if (!flow) {
+        queueMicrotask(() => setSelectedNodeId(null));
+        return;
+      }
+      if (flow.nodes.length === 0) {
+        queueMicrotask(() => setSelectedNodeId(null));
+        return;
+      }
+      if (!selectedNodeId) return;
+      const exists = flow.nodes.some((node) => node.id === selectedNodeId);
+      if (!exists) {
+        queueMicrotask(() => setSelectedNodeId(null));
+      }
+    }, [flow, selectedNodeId]);
 
   const { flowCanvasNodes, flowCanvasEdges, selectedEdgeMeta, edgeTargetOptions } =
   useComposerGraphState({

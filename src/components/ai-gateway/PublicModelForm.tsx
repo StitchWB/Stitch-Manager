@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '@/lib/i18n';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { PublicModel } from '@/lib/backend/modules/aiGateway';
 import { Button, Input, Textarea, Checkbox, Modal } from '@/components/ui';
@@ -54,7 +55,7 @@ export function PublicModelForm({ model, open, onClose }: PublicModelFormProps) 
 
   const footer = (
     <div className="flex justify-end gap-3">
-      <Button variant="outline" onClick={onClose}>Cancel</Button>
+      <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
       <Button disabled={loading} onClick={handleSubmit}>
         {loading ? 'Saving...' : model ? 'Update' : 'Create'}
       </Button>
@@ -65,7 +66,7 @@ export function PublicModelForm({ model, open, onClose }: PublicModelFormProps) 
     <Modal isOpen={open} onClose={onClose} title={model ? 'Edit Public Model' : 'Add Public Model'} size="md" footer={footer}>
       <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium">Model ID</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.modelId')}</label>
           <Input
             value={id}
             onChange={e => setId(e.target.value)}
@@ -73,28 +74,28 @@ export function PublicModelForm({ model, open, onClose }: PublicModelFormProps) 
             disabled={!!model}
             required
           />
-          <p className="text-xs text-slate-400 mt-1">Unique identifier exposed to clients</p>
+          <p className="text-xs text-slate-400 mt-1">{t('aiGateway.form.modelIdHint')}</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium">Display Name (optional)</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.displayName')}</label>
           <Input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="e.g., GPT-4 Turbo" />
         </div>
 
         <div>
-          <label className="text-sm font-medium">Contract (JSON)</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.contract')}</label>
           <Textarea
             value={contract}
             onChange={e => setContract(e.target.value)}
             placeholder='{"max_tokens": 4096, "supports_streaming": true}'
             rows={5}
           />
-          <p className="text-xs text-slate-400 mt-1">Capabilities and constraints for this model</p>
+          <p className="text-xs text-slate-400 mt-1">{t('aiGateway.form.contractHint')}</p>
         </div>
 
         <div className="flex items-center space-x-2">
           <Checkbox id="pub-enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-          <label htmlFor="pub-enabled" className="text-sm font-medium">Enabled</label>
+          <label htmlFor="pub-enabled" className="text-sm font-medium">{t('aiGateway.enabled')}</label>
         </div>
 
         {error && <div className="text-sm text-red-400">{error}</div>}

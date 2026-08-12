@@ -146,8 +146,10 @@ export function HoloneSection() {
     let disposed = false;
 
     // Initial fetch — WS may connect after the change happened
-    fetchStatus();
-    fetchFindings();
+      queueMicrotask(() => {
+        void fetchStatus();
+        void fetchFindings();
+      });
 
     // WS event listeners (primary update path)
     const statusPromise = listen<HoloneStatus>('holone.status_changed', (event) => {

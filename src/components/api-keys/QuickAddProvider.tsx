@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '@/lib/i18n';
 import { CheckCircle2, XCircle, Link as LinkIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -79,7 +80,7 @@ export function QuickAddProvider({ isOpen, onClose, onProviderAdded }: QuickAddP
       {/* Header */}
       <div className="flex items-center gap-2">
         <LinkIcon className="w-4 h-4 text-slate-400" />
-        <h3 className="text-sm font-semibold text-slate-200">Quick Add</h3>
+        <h3 className="text-sm font-semibold text-slate-200">{t('apiKeys.quickAdd')}</h3>
       </div>
 
       {/* Name */}
@@ -109,7 +110,7 @@ export function QuickAddProvider({ isOpen, onClose, onProviderAdded }: QuickAddP
         isLoading={isTesting}
         leftIcon={isTesting ? undefined : <ExternalLink className="w-3.5 h-3.5" />}
       >
-        Test Connection
+        {t('apiKeys.testConnection')}
       </Button>
 
       {/* Test Result */}
@@ -141,7 +142,7 @@ export function QuickAddProvider({ isOpen, onClose, onProviderAdded }: QuickAddP
           {testResult.success && models.length > 0 && (
             <>
               <p className="text-xs text-slate-400">
-                {models.length} model{models.length !== 1 ? 's' : ''} available
+                {t('apiKeys.modelsAvailable', { count: models.length })}
               </p>
               <div className="flex flex-wrap gap-1">
                 {previewModels.map((m) => (
@@ -151,7 +152,7 @@ export function QuickAddProvider({ isOpen, onClose, onProviderAdded }: QuickAddP
                 ))}
                 {hasMore && (
                   <Badge variant="outline" size="sm">
-                    +{models.length - 10} more
+                    {t('apiKeys.moreCount', { count: models.length - 10 })}
                   </Badge>
                 )}
               </div>
@@ -167,7 +168,7 @@ export function QuickAddProvider({ isOpen, onClose, onProviderAdded }: QuickAddP
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button variant="ghost" size="sm" onClick={handleCancel} disabled={isAdding}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button
           variant="primary"
@@ -177,7 +178,7 @@ export function QuickAddProvider({ isOpen, onClose, onProviderAdded }: QuickAddP
           isLoading={isAdding}
           rightIcon={isAdding ? undefined : <ExternalLink className="w-3.5 h-3.5" />}
         >
-          Add Provider &amp; Keys →
+          {t('apiKeys.addProviderKeys')}
         </Button>
       </div>
     </GlassCard>

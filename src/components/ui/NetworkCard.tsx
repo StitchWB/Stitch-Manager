@@ -122,7 +122,7 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
             {config.rotationEnabled && listSummary && (
               <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/30 rounded px-2.5 py-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>{listSummary} — управляйте в библиотеке</span>
+                <span>{listSummary} — {t('uiTexts.networkManage')}</span>
               </div>
             )}
 
@@ -154,7 +154,7 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
             rightIcon={<ExternalLink className="w-3 h-3" />}
             className="w-full justify-between text-slate-500 hover:text-slate-300 border border-white/[0.06] hover:border-white/[0.12] rounded-md px-2 py-1 text-[10px]"
           >
-            Библиотека прокси (ротация, тестирование)
+            {t('uiTexts.proxyLibraryTitle')}
           </Button>
         </>
       )}

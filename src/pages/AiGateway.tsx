@@ -218,7 +218,7 @@ export default function AiGateway() {
             <div className="text-sm text-slate-400 space-y-1">
               <div>{t('aiGateway.adapter')}: {view.endpoint.adapterType}</div>
               <div>{t('aiGateway.baseUrl')}: {view.endpoint.baseUrl}</div>
-              <div>{t('aiGateway.status')}: {view.endpoint.enabled ? t('aiGateway.enabled') : t('aiGateway.disabled')}</div>
+              <div>{t('aiGateway.statusLabel')}: {view.endpoint.enabled ? t('aiGateway.enabled') : t('aiGateway.disabled')}</div>
             </div>
           </div>
 
@@ -252,7 +252,7 @@ export default function AiGateway() {
               <div className="text-sm text-slate-400 mb-2">{view.publicModel.displayName}</div>
             )}
             <div className="text-sm text-slate-400">
-              {t('aiGateway.status')}: {view.publicModel.enabled ? t('aiGateway.enabled') : t('aiGateway.disabled')}
+              {t('aiGateway.statusLabel')}: {view.publicModel.enabled ? t('aiGateway.enabled') : t('aiGateway.disabled')}
             </div>
             {view.publicModel.contract && (
               <div className="mt-4">

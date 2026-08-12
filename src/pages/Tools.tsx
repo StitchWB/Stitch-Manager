@@ -196,6 +196,7 @@ export default function Tools() {
       }
 
       try {
+        // eslint-disable-next-line react-hooks/immutability -- addDebugLog is a hoisted function declaration
         addDebugLog(`→ check_card_rust: ${cardSnapshot.number.substring(0,6)}...`);
         const data = await safeInvoke<CardCheckResult>('check_card_rust', { cardData: payload });
         addDebugLog(`← ${data.success ? data.status : 'ERROR'}: ${data.message}`);
@@ -477,14 +478,14 @@ export default function Tools() {
     return err;
   };
 
-  const addDebugLog = (msg: string) => {
+  function addDebugLog(msg: string) {
     const time = new Date().toLocaleTimeString('ru-RU', { hour12: false });
     log.debug(`[CardCheck ${time}] ${msg}`);
     setDebugLogs(prev => {
       const next = [{ time, msg }, ...prev].slice(0, 20);
       return next;
     });
-  };
+  }
 
   /* ── JSX ── */
   return (

@@ -412,9 +412,11 @@ export function useGoogleSheetsDataset(
   const clearError = useCallback(() => setError(null), []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (autoFetch) {
       void refresh();
     }
+    });
   }, [autoFetch, refresh]);
 
   return {

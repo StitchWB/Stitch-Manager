@@ -18,7 +18,7 @@ export default function IDEInfoPanel({ ide, isOperating, operation }: IDEInfoPan
     try {
       await launchIDE(ide.id);
       toast.success(`Запущен ${ide.displayName}`);
-    } catch (error) {
+    } catch {
       toast.error(`Не удалось запустить ${ide.displayName}`);
     }
   };
@@ -37,7 +37,7 @@ export default function IDEInfoPanel({ ide, isOperating, operation }: IDEInfoPan
             onClick={handleLaunchIDE}
             leftIcon={<Play size={14} />}
           >
-            Запустить {ide.displayName}
+            {t('uiTexts.launchIde', { name: ide.displayName ?? '' })}
           </Button>
         )}
       </div>

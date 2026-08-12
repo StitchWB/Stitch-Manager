@@ -1,7 +1,9 @@
 import { memo, useEffect, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Activity, AlertCircle, CheckCircle2, DollarSign, Key } from 'lucide-react';
 import { getMetricsSummary } from '@/api/metrics';
 import type { MetricsSummary } from '@/types/metrics';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 /**
  * Display overall metrics summary
@@ -70,14 +72,14 @@ export const MetricsSummaryDisplay = memo(function MetricsSummaryDisplay() {
             ? 'Метрики будут доступны после запуска backend сервера и первых API запросов'
             : 'Не удалось загрузить метрики'}
         </p>
-        <button
+        <ButtonBase
           onClick={() => window.location.reload()}
           className="mt-1 px-3 py-1.5 text-xs font-medium text-amber-400 hover:text-amber-300 
                      bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 
                      rounded-lg transition-colors"
         >
-          Попробовать снова
-        </button>
+          {t('apiKeys.tryAgain')}
+        </ButtonBase>
       </div>
     );
   }
@@ -98,7 +100,7 @@ export const MetricsSummaryDisplay = memo(function MetricsSummaryDisplay() {
       <div className="flex flex-col gap-1 p-3 bg-white/5 border border-white/10 rounded-lg">
         <div className="flex items-center gap-1.5 text-slate-400 text-xs">
           <Key className="w-3.5 h-3.5" />
-          <span>Total Keys</span>
+          <span>{t('apiKeys.totalKeys')}</span>
         </div>
         <div className="text-xl font-bold text-slate-100">
           {summary.totalKeys}
@@ -109,7 +111,7 @@ export const MetricsSummaryDisplay = memo(function MetricsSummaryDisplay() {
       <div className="flex flex-col gap-1 p-3 bg-white/5 border border-white/10 rounded-lg">
         <div className="flex items-center gap-1.5 text-slate-400 text-xs">
           <Activity className="w-3.5 h-3.5" />
-          <span>Requests</span>
+          <span>{t('apiKeys.requests')}</span>
         </div>
         <div className="text-xl font-bold text-slate-100">
           {formatNumber(summary.totalRequests)}
@@ -120,7 +122,7 @@ export const MetricsSummaryDisplay = memo(function MetricsSummaryDisplay() {
       <div className="flex flex-col gap-1 p-3 bg-white/5 border border-white/10 rounded-lg">
         <div className="flex items-center gap-1.5 text-slate-400 text-xs">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Success</span>
+          <span>{t('apiKeys.success')}</span>
         </div>
         <div className="text-xl font-bold text-emerald-400">
           {formatNumber(summary.totalSuccess)}
@@ -131,7 +133,7 @@ export const MetricsSummaryDisplay = memo(function MetricsSummaryDisplay() {
       <div className="flex flex-col gap-1 p-3 bg-white/5 border border-white/10 rounded-lg">
         <div className="flex items-center gap-1.5 text-slate-400 text-xs">
           <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-          <span>Errors</span>
+          <span>{t('apiKeys.errors')}</span>
         </div>
         <div className="text-xl font-bold text-red-400">
           {formatNumber(summary.totalErrors)}
@@ -142,7 +144,7 @@ export const MetricsSummaryDisplay = memo(function MetricsSummaryDisplay() {
       <div className="flex flex-col gap-1 p-3 bg-white/5 border border-white/10 rounded-lg">
         <div className="flex items-center gap-1.5 text-slate-400 text-xs">
           <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>Success Rate</span>
+          <span>{t('apiKeys.successRate')}</span>
         </div>
         <div className={`text-xl font-bold ${successRateColor}`}>
           {successRatePercent}%
@@ -153,7 +155,7 @@ export const MetricsSummaryDisplay = memo(function MetricsSummaryDisplay() {
       <div className="flex flex-col gap-1 p-3 bg-white/5 border border-white/10 rounded-lg">
         <div className="flex items-center gap-1.5 text-slate-400 text-xs">
           <DollarSign className="w-3.5 h-3.5" />
-          <span>Total Cost</span>
+          <span>{t('apiKeys.totalCost')}</span>
         </div>
         <div className="text-xl font-bold text-slate-100">
           ${summary.totalCost.toFixed(2)}

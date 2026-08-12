@@ -5,6 +5,7 @@ import { t } from '@/lib/i18n';
 import type { EmailMessage, ProviderCapabilities } from '@/lib/backend/modules/emailInbox';
 import { MailHtmlSandbox } from './MailHtmlSandbox';
 import { VerificationCodeChip } from './VerificationCodeChip';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface MailMessageViewerProps {
   message: EmailMessage | null;
@@ -46,7 +47,9 @@ export function MailMessageViewer({
 
   // Reset remote-image trust whenever a different message is opened.
   useEffect(() => {
+    queueMicrotask(() => {
     setShowRemoteImages(false);
+    });
   }, [message?.id]);
 
   const effectiveMode = useMemo<'plain' | 'html'>(() => {
@@ -66,13 +69,13 @@ export function MailMessageViewer({
           <AlertTriangle size={22} className="text-red-400" />
           <p className="text-sm text-red-200 max-w-sm">{loadError}</p>
           {onClearLoadError ? (
-            <button
+            <ButtonBase
               type="button"
               onClick={onClearLoadError}
               className="text-xs text-slate-400 hover:text-white underline underline-offset-2"
             >
               {t('common.dismiss')}
-            </button>
+            </ButtonBase>
           ) : null}
         </div>
       ) : !message ? (
@@ -106,7 +109,7 @@ export function MailMessageViewer({
               </h2>
               <div className="flex items-center gap-1 shrink-0">
                 {capabilities?.canMarkAsRead && !message.isRead && onMarkRead ? (
-                  <button
+                  <ButtonBase
                     type="button"
                     title={t('mail.markReadAction')}
                     disabled={busy}
@@ -116,10 +119,10 @@ export function MailMessageViewer({
                     className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
                   >
                     <MailOpen size={14} />
-                  </button>
+                  </ButtonBase>
                 ) : null}
                 {capabilities?.canDelete && onDelete ? (
-                  <button
+                  <ButtonBase
                     type="button"
                     title={t('mail.deleteAction')}
                     disabled={busy}
@@ -129,7 +132,7 @@ export function MailMessageViewer({
                     className="p-1.5 rounded text-slate-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </ButtonBase>
                 ) : null}
               </div>
             </div>
@@ -183,7 +186,7 @@ export function MailMessageViewer({
                 />
 
                 {effectiveMode === 'html' && message.html ? (
-                  <button
+                  <ButtonBase
                     type="button"
                     onClick={() => setShowRemoteImages(value => !value)}
                     title={
@@ -197,7 +200,7 @@ export function MailMessageViewer({
                     {showRemoteImages
                       ? t('mail.hideRemoteImagesAction')
                       : t('mail.showRemoteImagesAction')}
-                  </button>
+                  </ButtonBase>
                 ) : null}
               </div>
             ) : null}

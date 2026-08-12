@@ -40,13 +40,17 @@ export function ReportPreviewModal({
   const [actionInProgress, setActionInProgress] = useState<'send' | 'discard' | null>(null);
 
   useEffect(() => {
-    if (!reportId) {
-      setPreview(null);
-      return;
-    }
-    let cancelled = false;
-    setIsLoading(true);
-    setPreview(null);
+      if (!reportId) {
+        queueMicrotask(() => {
+          setPreview(null);
+        });
+        return;
+      }
+      let cancelled = false;
+      queueMicrotask(() => {
+        setIsLoading(true);
+        setPreview(null);
+      });
     getReportPreview({ id: reportId })
       .then(data => {
         if (!cancelled) setPreview(data);

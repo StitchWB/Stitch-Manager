@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '@/lib/i18n';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { UpstreamModel, ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
 import { Button, Input, Checkbox, Modal } from '@/components/ui';
@@ -16,10 +17,11 @@ export function UpstreamModelForm({ endpoint, model, open, onClose }: UpstreamMo
   const [upstreamModelId, setUpstreamModelId] = useState(model?.upstreamModelId || '');
   const [displayName, setDisplayName] = useState(model?.displayName || '');
   const [enabled, setEnabled] = useState(model?.enabled ?? true);
-  const [supportsVision, setSupportsVision] = useState(model?.capabilities?.supports_vision ?? false);
-  const [supportsTools, setSupportsTools] = useState(model?.capabilities?.supports_tools ?? false);
-  const [supportsStreaming, setSupportsStreaming] = useState(model?.capabilities?.supports_streaming ?? true);
-  const [supportsJsonMode, setSupportsJsonMode] = useState(model?.capabilities?.supports_json_mode ?? false);
+  const capBool = (v: unknown, fallback: boolean) => (v === undefined ? fallback : Boolean(v));
+  const [supportsVision, setSupportsVision] = useState(capBool(model?.capabilities?.supports_vision, false));
+  const [supportsTools, setSupportsTools] = useState(capBool(model?.capabilities?.supports_tools, false));
+  const [supportsStreaming, setSupportsStreaming] = useState(capBool(model?.capabilities?.supports_streaming, true));
+  const [supportsJsonMode, setSupportsJsonMode] = useState(capBool(model?.capabilities?.supports_json_mode, false));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +64,7 @@ export function UpstreamModelForm({ endpoint, model, open, onClose }: UpstreamMo
 
   const footer = (
     <div className="flex justify-end gap-3">
-      <Button variant="outline" onClick={onClose}>Cancel</Button>
+      <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
       <Button disabled={loading} onClick={handleSubmit}>
         {loading ? 'Saving...' : model ? 'Update' : 'Create'}
       </Button>
@@ -73,7 +75,7 @@ export function UpstreamModelForm({ endpoint, model, open, onClose }: UpstreamMo
     <Modal isOpen={open} onClose={onClose} title={model ? 'Edit Upstream Model' : 'Add Upstream Model'} size="sm" footer={footer}>
       <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium">Upstream Model ID</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.upstreamModelId')}</label>
           <Input
             value={upstreamModelId}
             onChange={e => setUpstreamModelId(e.target.value)}
@@ -84,35 +86,35 @@ export function UpstreamModelForm({ endpoint, model, open, onClose }: UpstreamMo
         </div>
 
         <div>
-          <label className="text-sm font-medium">Display Name (optional)</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.displayName')}</label>
           <Input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="e.g., GPT-4 Turbo" />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Capabilities</label>
+          <label className="text-sm font-medium">{t('aiGateway.form.capabilities')}</label>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center space-x-2">
               <Checkbox id="vision" checked={supportsVision} onChange={e => setSupportsVision(e.target.checked)} />
-              <label htmlFor="vision" className="text-sm">Vision</label>
+              <label htmlFor="vision" className="text-sm">{t('aiGateway.form.vision')}</label>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox id="tools" checked={supportsTools} onChange={e => setSupportsTools(e.target.checked)} />
-              <label htmlFor="tools" className="text-sm">Tools</label>
+              <label htmlFor="tools" className="text-sm">{t('aiGateway.form.tools')}</label>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox id="streaming" checked={supportsStreaming} onChange={e => setSupportsStreaming(e.target.checked)} />
-              <label htmlFor="streaming" className="text-sm">Streaming</label>
+              <label htmlFor="streaming" className="text-sm">{t('aiGateway.form.streaming')}</label>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox id="json" checked={supportsJsonMode} onChange={e => setSupportsJsonMode(e.target.checked)} />
-              <label htmlFor="json" className="text-sm">JSON Mode</label>
+              <label htmlFor="json" className="text-sm">{t('aiGateway.form.jsonMode')}</label>
             </div>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
           <Checkbox id="model-enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-          <label htmlFor="model-enabled" className="text-sm font-medium">Enabled</label>
+          <label htmlFor="model-enabled" className="text-sm font-medium">{t('aiGateway.enabled')}</label>
         </div>
 
         {error && <div className="text-sm text-red-400">{error}</div>}

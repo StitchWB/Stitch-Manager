@@ -95,7 +95,9 @@ export function useAutomationTab() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     loadSettings();
+    });
   }, [loadSettings]);
 
   const handleRegUpdate = async (updates: Partial<AutomationConfig>) => {

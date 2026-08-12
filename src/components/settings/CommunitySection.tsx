@@ -35,6 +35,7 @@ import {
   type OverrideEntry,
 } from '@/lib/backend/modules/overrides';
 import { CommunityCatalogCard } from './CommunityCatalogCard';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 import { SubmitForReviewModal } from './SubmitForReviewModal';
 
 function isOfflineError(err: unknown): boolean {
@@ -130,11 +131,13 @@ export function CommunitySection() {
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void loadConsent();
     void loadCatalog();
     void loadInstalled();
     void loadLocalPackages();
     void loadOverrides();
+    });
   }, [loadConsent, loadCatalog, loadInstalled, loadLocalPackages, loadOverrides]);
 
   const handleConsentChange = async (checked: boolean) => {
@@ -569,14 +572,14 @@ export function CommunitySection() {
                             <p className="text-xs text-slate-600 font-mono truncate flex-1">
                               {t('settings.overrides.pathLabel')}: {entry.path}
                             </p>
-                            <button
-                              type="button"
-                              onClick={() => void handleCopyOverridePath(entry.path)}
-                              className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
-                              title={t('settings.overrides.copyPath')}
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
+                              <ButtonBase
+                                type="button"
+                                onClick={() => void handleCopyOverridePath(entry.path)}
+                                className="text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                                title={t('settings.overrides.copyPath')}
+                              >
+                                <Copy className="w-3 h-3" />
+                              </ButtonBase>
                           </div>
                         )}
                         {isInvalid && entry.error && (

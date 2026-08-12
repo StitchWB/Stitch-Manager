@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { t } from '@/lib/i18n';
 import { Plus, Trash2, Edit2, Globe, RotateCw } from 'lucide-react';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { PublicModel } from '@/lib/backend/modules/aiGateway';
@@ -25,15 +26,15 @@ export function PublicModelsList({ onAddModel, onEditModel, onSelectModel }: Pub
   };
 
   if (loading.publicModels) {
-    return <div className="p-4 text-center text-slate-400">Loading models...</div>;
+    return <div className="p-4 text-center text-slate-400">{t('aiGateway.list.loadingModels')}</div>;
   }
 
   if (errors.publicModels) {
     return (
       <div className="p-4 text-center text-red-400">
-        <div className="mb-2">Error: {errors.publicModels}</div>
+        <div className="mb-2">{t('aiGateway.list.error')}: {errors.publicModels}</div>
         <Button size="sm" variant="outline" onClick={() => fetchPublicModels()}>
-          <RotateCw className="h-4 w-4 mr-2" />Retry
+          <RotateCw className="h-4 w-4 mr-2" />{t('aiGateway.list.retry')}
         </Button>
       </div>
     );
@@ -43,9 +44,9 @@ export function PublicModelsList({ onAddModel, onEditModel, onSelectModel }: Pub
     return (
       <div className="bg-white/5 border border-white/10 rounded-lg p-8 text-center">
         <Globe className="mx-auto h-12 w-12 text-slate-400 mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No Public Models</h3>
-        <p className="text-slate-400 mb-4">Create public model aliases to expose to clients</p>
-        <Button onClick={onAddModel}><Plus className="h-4 w-4 mr-2" />Add Public Model</Button>
+        <h3 className="text-lg font-semibold mb-2">{t('aiGateway.list.noPublicModels')}</h3>
+        <p className="text-slate-400 mb-4">{t('aiGateway.list.noPublicModelsDesc')}</p>
+        <Button onClick={onAddModel}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.list.addPublicModel')}</Button>
       </div>
     );
   }
@@ -53,8 +54,8 @@ export function PublicModelsList({ onAddModel, onEditModel, onSelectModel }: Pub
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Public Models</h2>
-        <Button size="sm" onClick={onAddModel}><Plus className="h-4 w-4 mr-2" />Add Model</Button>
+        <h2 className="text-xl font-semibold">{t('aiGateway.list.publicModelsTitle')}</h2>
+        <Button size="sm" onClick={onAddModel}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.list.addModel')}</Button>
       </div>
 
       {publicModels.map(model => (
@@ -69,7 +70,7 @@ export function PublicModelsList({ onAddModel, onEditModel, onSelectModel }: Pub
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold truncate">{model.id}</h3>
-                  {model.enabled && <Badge variant="success">Enabled</Badge>}
+                  {model.enabled && <Badge variant="success">{t('aiGateway.enabled')}</Badge>}
                 </div>
                 {model.displayName && (
                   <div className="text-sm text-slate-400">{model.displayName}</div>

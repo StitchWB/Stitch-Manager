@@ -11,6 +11,8 @@ interface IDECardProps {
 }
 
 export default function IDECard({ ide, isActive, onSelect }: IDECardProps) {
+  // eslint-disable-next-line react-hooks/static-components -- getIDEIcon returns a stable component reference, not a new component
+  const IdeIcon = getIDEIcon(ide.type);
   const gradient = getIDEGradient(ide.type);
 
   return (
@@ -35,10 +37,8 @@ export default function IDECard({ ide, isActive, onSelect }: IDECardProps) {
           ${isActive ? `bg-gradient-to-br ${gradient}` : 'bg-white/10'}
         `}
       >
-        {(() => {
-          const Icon = getIDEIcon(ide.type);
-          return <Icon className="w-4 h-4" />;
-        })()}
+          {/* eslint-disable-next-line react-hooks/static-components -- getIDEIcon returns a stable component reference */}
+          <IdeIcon className="w-4 h-4" />
       </div>
 
       <span className="relative z-10 tracking-wide">{getIDELabel(ide.type)}</span>

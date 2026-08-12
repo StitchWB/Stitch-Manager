@@ -3,6 +3,7 @@ import { Pause, Play, Square } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { Badge, Button, GlassCard, Input } from '@/components/ui';
 import { registrationControl } from '../../lib/backend';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface LaunchPadProps {
   count: number;
@@ -101,14 +102,14 @@ export function LaunchPad({
         ) : canStart ? (
           <Badge variant="success" size="sm" withDot withPulse>{t('autoReg.readyToStart')}</Badge>
         ) : onConfigureMail ? (
-          <button
+          <ButtonBase
             type="button"
             onClick={onConfigureMail}
             title={t('autoReg.configureMailFirst')}
             className="cursor-pointer rounded transition-opacity hover:opacity-75"
           >
             <Badge variant="warning" size="sm">{t('autoReg.configureMailFirst')}</Badge>
-          </button>
+          </ButtonBase>
         ) : (
           <Badge variant="warning" size="sm">{t('autoReg.configureMailFirst')}</Badge>
         )}

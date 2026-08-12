@@ -56,7 +56,7 @@ function resetStore() {
 
 describe('TOTP code generation', () => {
   // Inline minimal TOTP implementation mirroring the frontend (otplib)
-  function generateCode(secret: string, period = 30): string {
+  function generateCode(secret: string, _period = 30): string {
     const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
     const padded = secret.replace(/\s/g, '').toUpperCase();
     // Decode base32

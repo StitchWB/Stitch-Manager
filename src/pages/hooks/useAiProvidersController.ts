@@ -203,8 +203,9 @@ export function useAiProvidersController() {
     setProxyError(null);
   }, [proxySettings]);
 
-  const handleStartStopProxy = useCallback(async () => {
-    if (proxyBusy) return;
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- intentional manual memoization
+    const handleStartStopProxy = useCallback(async () => {
+      if (proxyBusy) return;
 
     setProxyBusy(true);
     setProxyError(null);
@@ -302,14 +303,15 @@ export function useAiProvidersController() {
     let weeklyLimitReached = 0;
     let withQuotaSignal = 0;
 
-    for (const account of enabled) {
-      const name = account.name.toLowerCase().trim();
-      const quota = openAiAccountQuotasMap[name];
-      const meta = account as AiProxyAccount & { cooldownUntil?: number | null };
+      for (const account of enabled) {
+        const name = account.name.toLowerCase().trim();
+        const quota = openAiAccountQuotasMap[name];
+        const meta = account as AiProxyAccount & { cooldownUntil?: number | null };
 
-      if (meta.cooldownUntil && meta.cooldownUntil * 1000 > Date.now()) {
-        inCooldown += 1;
-      }
+        // eslint-disable-next-line react-hooks/purity -- time-dependent cooldown summary
+        if (meta.cooldownUntil && meta.cooldownUntil * 1000 > Date.now()) {
+          inCooldown += 1;
+        }
 
       if (quota) {
         withQuotaSignal += 1;
@@ -349,7 +351,9 @@ export function useAiProvidersController() {
   const effectiveExportIncludeSecrets = exportFormat === 'csv' ? false : exportIncludeSecrets;
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (exportFormat === 'csv' && exportIncludeSecrets) setExportIncludeSecrets(false);
+    });
   }, [exportFormat, exportIncludeSecrets]);
 
   const handleDelete = useCallback(
@@ -631,11 +635,13 @@ export function useAiProvidersController() {
   }, [authScan, fetchAccounts]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void fetchAccounts();
     void fetchCapabilitiesAndModels();
     void fetchProviderQuotas();
     void fetchHistorySummary();
     void refreshProxyInfo();
+    });
   }, [
     fetchAccounts,
     fetchCapabilitiesAndModels,

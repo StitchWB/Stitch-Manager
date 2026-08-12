@@ -83,7 +83,7 @@ function NodeCard({ data, stageNumber }: { data: StageNodeData; stageNumber: num
           <div className="flex items-center gap-2">
             <div className="flex -space-x-0.5">
               {data.providerLogos.slice(0, 3).map(p => (
-                <span key={p.provider} className="flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-[#1e293b]" title={`${p.provider}: ${p.enabled}/${p.total}`}>
+                  <span key={p.provider} className="flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-slate-800" title={`${p.provider}: ${p.enabled}/${p.total}`}>
                   <ProviderLogo provider={p.provider} size={12} colored />
                 </span>
               ))}
@@ -91,7 +91,7 @@ function NodeCard({ data, stageNumber }: { data: StageNodeData; stageNumber: num
             <span className="truncate text-[11px] text-slate-400">{data.detail}</span>
           </div>
         ) : (
-          <div className="truncate rounded-md border border-white/[0.06] bg-[#1e293b]/50 px-2 py-1 text-[11px] text-slate-300" title={data.detail}>
+            <div className="truncate rounded-md border border-white/[0.06] bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300" title={data.detail}>
             {data.detail}
           </div>
         )}

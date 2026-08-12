@@ -47,15 +47,17 @@ export function AccountInboxButton({
 
   // Load profiles ourselves only when the parent did not pass them in.
   useEffect(() => {
-    if (providedProfiles !== undefined) {
-      // Parent owns the data — stay in "use providedProfiles" mode.
-      setInternalProfiles(null);
-      setIsLoading(false);
-      return;
-    }
+      if (providedProfiles !== undefined) {
+        // Parent owns the data - stay in "use providedProfiles" mode.
+        queueMicrotask(() => {
+          setInternalProfiles(null);
+          setIsLoading(false);
+        });
+        return;
+      }
 
     let cancelled = false;
-    setIsLoading(true);
+    queueMicrotask(() => setIsLoading(true));
     void emailInboxListProfiles()
       .then(list => {
         if (cancelled) return;

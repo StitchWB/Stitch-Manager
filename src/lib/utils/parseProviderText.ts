@@ -10,7 +10,7 @@ export interface ParsedProviderData {
   models: string[];
 }
 
-const URL_PATTERN = /https?:\/\/[^\s<>"'{}|\\^`\[\]]+/gi;
+const URL_PATTERN = /https?:\/\/[^\s<>"'{}|\\^`[\]]+/gi;
 const KEY_PATTERN = /\b([a-zA-Z0-9_-]{20,})\b/g;
 const NAME_PATTERN = /^([^\n|]+?)(?:\s*\||\s*$)/m;
 const MODELS_SECTION = /(?:лучшие модели|models?|топ модели|available models)[:\s]*\n?([\s\S]*?)(?:\n\n|\nby|@|$)/gi;
@@ -26,7 +26,7 @@ export function parseProviderText(text: string): ParsedProviderData {
   }
 
   // Extract base URL - prefer URL after "URL:" label
-  const urlLabelMatch = text.match(/URL[:\s]*\s*(https?:\/\/[^\s<>"'{}|\\^`\[\]]+)/i);
+  const urlLabelMatch = text.match(/URL[:\s]*\s*(https?:\/\/[^\s<>"'{}|\\^`[\]]+)/i);
   if (urlLabelMatch) {
     result.baseUrl = urlLabelMatch[1].trim();
   } else {

@@ -1582,6 +1582,11 @@ async def main_async() -> int:
                     return
 
         cmd = raw_cmd.lower()
+        if cmd in ("pause", "resume", "continue", "stop", "abort", "cancel"):
+            # Forward transport controls to the extension capture engine
+            # regardless of the control source (command file, native overlay
+            # binding, console fallback). Queued here, sent in the record loop.
+            pending_bridge_controls.append(cmd)
         if cmd == "pause":
             paused = True
             _event("scenario.record.control.pause", {"runId": run_id})
@@ -1650,9 +1655,6 @@ async def main_async() -> int:
                     cmd = payload.get("command")
                     if isinstance(cmd, str):
                         on_control(cmd)
-                        cmd_norm = cmd.strip().lower()
-                        if cmd_norm in ("pause", "resume", "continue", "stop"):
-                            pending_bridge_controls.append(cmd_norm)
                 command_pos = fh.tell()
         except Exception:
             return
@@ -1680,6 +1682,7 @@ async def main_async() -> int:
             start_url=args.url,
             on_event=lambda payload: on_record(payload) if capture_via_extension else None,
             on_stopped=_bridge_stop,
+            native_hosted=True,
         )
         bridge_started = await bridge.start()
 
@@ -1925,7 +1928,7 @@ async def main_async() -> int:
                         except Exception:
                             pass
 
-        await ensure_recorder_installed(ctx)
+        await ensure_recorder_installed(ctx, include_recorder=not capture_via_extension)
         await attach_console_listeners(ctx)
         await update_tabs_overlay(ctx)
 
@@ -1935,12 +1938,13 @@ async def main_async() -> int:
     context_scripts_installed = False
     context_bindings_installed = False
 
-    async def _install_context_scripts(ctx: Any) -> None:
+    async def _install_context_scripts(ctx: Any, *, include_recorder: bool) -> None:
         nonlocal context_scripts_installed
         if context_scripts_installed:
             return
         try:
-            await ctx.add_init_script(RECORDER_INIT_SCRIPT)
+            if include_recorder:
+                await ctx.add_init_script(RECORDER_INIT_SCRIPT)
             if overlay_enabled:
                 await ctx.add_init_script(RECORDER_OVERLAY_SCRIPT)
             context_scripts_installed = True
@@ -1972,7 +1976,7 @@ async def main_async() -> int:
             pass
         context_bindings_installed = True
 
-    async def install_recorder_on_page(page: Page) -> None:
+    async def install_recorder_on_page(page: Page, *, include_recorder: bool = True) -> None:
         # Prefer context-level bindings; keep page-level expose as best-effort fallback.
         # Some pages may block init scripts briefly; this ensures bridge appears eventually.
         try:
@@ -1986,17 +1990,19 @@ async def main_async() -> int:
 
         # Ensure init scripts apply for future navigations on this page.
         try:
-            await page.add_init_script(RECORDER_INIT_SCRIPT)
+            if include_recorder:
+                await page.add_init_script(RECORDER_INIT_SCRIPT)
             if overlay_enabled:
                 await page.add_init_script(RECORDER_OVERLAY_SCRIPT)
         except Exception:
             pass
 
         # Install into the currently loaded document so recording works immediately.
-        try:
-            await page.evaluate(RECORDER_INIT_SCRIPT)
-        except Exception:
-            pass
+        if include_recorder:
+            try:
+                await page.evaluate(RECORDER_INIT_SCRIPT)
+            except Exception:
+                pass
         if overlay_enabled:
             try:
                 await page.evaluate(RECORDER_OVERLAY_SCRIPT)
@@ -2019,17 +2025,19 @@ async def main_async() -> int:
             except Exception:
                 pass
 
-    async def ensure_recorder_installed(ctx: Any) -> None:
+    async def ensure_recorder_installed(ctx: Any, *, include_recorder: bool = True) -> None:
         # Make overlay resilient across navigations and new tabs.
+        # include_recorder=False (extension capture): bindings + overlay HUD only —
+        # the injected recorder would double-capture next to the extension.
         await _install_context_bindings(ctx)
-        await _install_context_scripts(ctx)
+        await _install_context_scripts(ctx, include_recorder=include_recorder)
         try:
             pages = [p for p in getattr(ctx, "pages", []) if p and not p.is_closed()]
         except Exception:
             pages = []
         for p in pages:
             try:
-                await install_recorder_on_page(p)
+                await install_recorder_on_page(p, include_recorder=include_recorder)
             except Exception:
                 continue
 
@@ -2100,6 +2108,10 @@ async def main_async() -> int:
             context_scripts_installed, \
             active_page_id, \
             active_proxy_library_id
+        if bridge is not None and bridge.started:
+            # The extension says hello during browser launch, before the
+            # start URL loads; hold start_record until the page is ready.
+            bridge.disarm()
         try:
             _log("info", f"Creating ProfileLauncher with profile_id={args.alias}, headless={args.headless}, proxy={'yes' if proxy_url else 'no'}", step="init")
             local_launcher = ProfileLauncher(
@@ -2136,6 +2148,11 @@ async def main_async() -> int:
             # short grace window to attach before falling back to injection.
             bridge_decided = True
             capture_via_extension = await bridge.wait_client(timeout_s=5.0)
+            if not capture_via_extension and bridge is not None:
+                # Fallback chosen: refuse late extension clients so a rogue
+                # extension HUD session never starts next to the injected
+                # recorder (which would double-capture).
+                bridge.stop_accepting()
             _event(
                 "scenario.record.capture_mode",
                 {
@@ -2144,9 +2161,15 @@ async def main_async() -> int:
                 },
             )
         if capture_via_extension:
-            # Extension content stack captures and shows its own HUD; the
-            # injected recorder/overlay would double-capture, so skip it.
+            # Extension content stack captures; the native overlay HUD keeps
+            # orchestration (tabs, proxy.switch, manual, close). Install
+            # bindings + overlay WITHOUT the injected recorder to avoid
+            # double-capture.
+            await ensure_recorder_installed(local_ctx, include_recorder=False)
             await attach_console_listeners(local_ctx)
+            if bridge is not None:
+                # Page is loaded: release queued hellos → start_record.
+                await bridge.arm()
         else:
             await ensure_recorder_installed(local_ctx)
             await attach_console_listeners(local_ctx)
@@ -2195,8 +2218,7 @@ async def main_async() -> int:
                     pass
                 page = replacement
                 active_page_id = _page_id(replacement) or active_page_id
-                if not capture_via_extension:
-                    await ensure_recorder_installed(ctx)
+                await ensure_recorder_installed(ctx, include_recorder=not capture_via_extension)
                 await attach_console_listeners(ctx)
                 await update_overlay_all(
                     ctx,
@@ -2369,8 +2391,7 @@ async def main_async() -> int:
             await apply_pending_tab_controls(ctx)
 
             try:
-                if not capture_via_extension:
-                    await ensure_recorder_installed(ctx)
+                await ensure_recorder_installed(ctx, include_recorder=not capture_via_extension)
                 # Ensure console listeners attached to any new pages
                 await attach_console_listeners(ctx)
             except Exception:

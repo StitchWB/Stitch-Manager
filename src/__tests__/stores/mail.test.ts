@@ -275,7 +275,7 @@ describe('mail store', () => {
       };
 
       // For this test, upsert_profile should fail
-      globalThis.fetch = jest.fn<any>().mockImplementation((url: string, opts: { body: string }) => {
+      globalThis.fetch = jest.fn<any>().mockImplementation((url: string, _opts: { body: string }) => {
         const cmd = url.replace('/api/', '');
         if (cmd === 'email_inbox_connect') {
           return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(session) });

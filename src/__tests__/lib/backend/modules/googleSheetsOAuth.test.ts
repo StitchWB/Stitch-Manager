@@ -22,6 +22,7 @@ describe('googleSheets OAuth commands', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.resetModules();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- require() is required after jest.resetModules()
     const mod = require(MODULE_PATH);
     getGoogleOAuthStatus = mod.getGoogleOAuthStatus;
     startGoogleOAuth = mod.startGoogleOAuth;

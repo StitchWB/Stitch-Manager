@@ -5,6 +5,7 @@ import type { Credential, ProviderEndpoint } from '@/lib/backend/modules/aiGatew
 import { testCredentialConnection } from '@/lib/backend/modules/aiGateway';
 import { Button, Badge } from '@/components/ui';
 import { appToast } from '@/lib/observability/toast';
+import { t } from '@/lib/i18n';
 
 interface CredentialsListProps {
   endpoint: ProviderEndpoint;
@@ -38,10 +39,10 @@ export function CredentialsList({ endpoint, onAddCredential, onEditCredential }:
           'ai-gateway'
         );
       } else {
-        appToast.error(result.error || 'Connection failed', 'ai-gateway');
+        appToast.error(result.error || t('aiGateway.cred.connectionFailed'), 'ai-gateway');
       }
     } catch (e) {
-      appToast.error(e instanceof Error ? e.message : 'Test failed', 'ai-gateway');
+      appToast.error(e instanceof Error ? e.message : t('aiGateway.cred.testFailed'), 'ai-gateway');
     } finally {
       setTestingId(null);
     }
@@ -50,34 +51,34 @@ export function CredentialsList({ endpoint, onAddCredential, onEditCredential }:
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <Badge variant="success">Active</Badge>;
+        return <Badge variant="success">{t('aiGateway.status.active')}</Badge>;
       case 'cooldown':
-        return <Badge variant="warning">Cooldown</Badge>;
+        return <Badge variant="warning">{t('aiGateway.status.cooldown')}</Badge>;
       case 'rate_limited':
-        return <Badge variant="warning">Rate Limited</Badge>;
+        return <Badge variant="warning">{t('aiGateway.status.rateLimited')}</Badge>;
       case 'quota_exhausted':
-        return <Badge variant="danger">Quota Exhausted</Badge>;
+        return <Badge variant="danger">{t('aiGateway.status.quotaExhausted')}</Badge>;
       case 'auth_failed':
-        return <Badge variant="danger">Auth Failed</Badge>;
+        return <Badge variant="danger">{t('aiGateway.status.authFailed')}</Badge>;
       case 'degraded':
-        return <Badge variant="warning">Degraded</Badge>;
+        return <Badge variant="warning">{t('aiGateway.status.degraded')}</Badge>;
       case 'disabled':
-        return <Badge variant="default">Disabled</Badge>;
+        return <Badge variant="default">{t('aiGateway.status.disabled')}</Badge>;
       default:
-        return <Badge variant="outline">Unknown</Badge>;
+        return <Badge variant="outline">{t('aiGateway.status.unknown')}</Badge>;
     }
   };
 
   if (loading.credentials) {
-    return <div className="p-4 text-center text-slate-400">Loading credentials...</div>;
+    return <div className="p-4 text-center text-slate-400">{t('aiGateway.list.loadingCredentials')}</div>;
   }
 
   if (errors.credentials) {
     return (
       <div className="p-4 text-center text-red-400">
-        <div className="mb-2">Error: {errors.credentials}</div>
+        <div className="mb-2">{t('aiGateway.list.error')}: {errors.credentials}</div>
         <Button size="sm" variant="outline" onClick={() => fetchCredentials(endpoint.id)}>
-          <RotateCw className="h-4 w-4 mr-2" />Retry
+          <RotateCw className="h-4 w-4 mr-2" />{t('aiGateway.list.retry')}
         </Button>
       </div>
     );
@@ -87,9 +88,9 @@ export function CredentialsList({ endpoint, onAddCredential, onEditCredential }:
     return (
       <div className="bg-white/5 border border-white/10 rounded-lg p-8 text-center">
         <Key className="mx-auto h-12 w-12 text-slate-400 mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No Credentials</h3>
-        <p className="text-slate-400 mb-4">Add API keys or OAuth tokens for this provider endpoint</p>
-        <Button onClick={onAddCredential}><Plus className="h-4 w-4 mr-2" />Add Credential</Button>
+        <h3 className="text-lg font-semibold mb-2">{t('aiGateway.list.noCredentials')}</h3>
+        <p className="text-slate-400 mb-4">{t('aiGateway.list.noCredentialsDesc')}</p>
+        <Button onClick={onAddCredential}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.cred.addTitle')}</Button>
       </div>
     );
   }
@@ -97,8 +98,8 @@ export function CredentialsList({ endpoint, onAddCredential, onEditCredential }:
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Credentials ({credentials.length})</h3>
-        <Button size="sm" onClick={onAddCredential}><Plus className="h-4 w-4 mr-2" />Add Credential</Button>
+        <h3 className="text-lg font-semibold">{t('aiGateway.list.credentialsTitle')} ({credentials.length})</h3>
+        <Button size="sm" onClick={onAddCredential}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.cred.addTitle')}</Button>
       </div>
 
       {credentials.map(credential => (
@@ -127,7 +128,7 @@ export function CredentialsList({ endpoint, onAddCredential, onEditCredential }:
                   {credential.consecutiveFailures > 0 && (
                     <span className="ml-2 text-amber-400">
                       <AlertCircle className="h-3 w-3 inline mr-1" />
-                      {credential.consecutiveFailures} failures
+                      {t('aiGateway.list.failures', { count: credential.consecutiveFailures })}
                     </span>
                   )}
                 </div>

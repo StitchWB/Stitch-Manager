@@ -107,9 +107,11 @@ export default function PatcherSettingsDrawer({
   }, [detectIDEs]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (isOpen) {
       loadData();
     }
+    });
   }, [isOpen, loadData]);
 
   const handleSaveKiro = async () => {
@@ -311,9 +313,9 @@ export default function PatcherSettingsDrawer({
                                 {ide.path || ide.installPath}
                               </div>
                               {ide.version && (
-                                <div className="text-[10px] text-slate-600 mt-0.5">
-                                  v{ide.version}
-                                </div>
+                                  <div className="text-[10px] text-slate-600 mt-0.5">
+                                    {`v${ide.version}`}
+                                  </div>
                               )}
                             </div>
                             <div className="flex items-center gap-1">
@@ -382,9 +384,10 @@ export default function PatcherSettingsDrawer({
                           <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-slate-400 cursor-help transition-colors" />
                         </Tooltip>
                       </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          {/* eslint-disable-next-line no-restricted-syntax -- custom-styled switch; kit Toggle has a different visual contract */}
+                          <input
+                            type="checkbox"
                           checked={config.proxyEnabled ?? false}
                           onChange={async (e) => {
                             const enabled = e.target.checked;

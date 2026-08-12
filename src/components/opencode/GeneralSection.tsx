@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
+import { t } from '@/lib/i18n';
 import { Plus, X } from 'lucide-react';
 import { GlassCard, Input, Toggle, ModelPicker, Button } from '@/components/ui';
 import type { ModelOption } from '@/components/ui';
 import type { OpenCodeConfig, OhMyOpenAgentConfig, CompactionConfig } from '@/lib/backend/modules/opencodeConfig';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface GeneralSectionProps {
   config: OpenCodeConfig;
@@ -47,34 +49,34 @@ export function GeneralSection({ config, ohMyConfig, onChange, onOhMyChange }: G
     <div className="space-y-6">
       <GlassCard className="p-6 space-y-4">
         <div>
-          <h3 className="text-lg font-semibold mb-1">Default Models</h3>
+          <h3 className="text-lg font-semibold mb-1">{t('opencode.ui.defaultModels')}</h3>
           <p className="text-sm text-vsc-text-muted">
-            Primary and fallback model used by the agent
+            {t('opencode.ui.defaultModelsDesc')}
           </p>
         </div>
 
         <ModelPicker
-          label="Default Model"
+          label={t('opencode.ui.defaultModel')}
           value={config.model || ''}
           options={modelOptions}
           onChange={(v) => onChange(prev => ({ ...prev, model: v }))}
-          placeholder="Select default model"
+          placeholder={t('opencode.ui.selectDefaultModel')}
         />
 
         <ModelPicker
-          label="Small Model (fast tasks)"
+          label={t('opencode.ui.smallModel')}
           value={config.small_model || ''}
           options={modelOptions}
           onChange={(v) => onChange(prev => ({ ...prev, small_model: v }))}
-          placeholder="Select small model"
+          placeholder={t('opencode.ui.selectSmallModel')}
         />
       </GlassCard>
 
       <GlassCard className="p-6 space-y-4">
         <div>
-          <h3 className="text-lg font-semibold mb-1">Compaction</h3>
+          <h3 className="text-lg font-semibold mb-1">{t('opencode.ui.compaction')}</h3>
           <p className="text-sm text-vsc-text-muted">
-            Context window compaction when conversations get long
+            {t('opencode.ui.compactionDesc')}
           </p>
         </div>
 
@@ -114,44 +116,44 @@ export function GeneralSection({ config, ohMyConfig, onChange, onOhMyChange }: G
       {plugins.includes('oh-my-openagent') ? (
         <GlassCard className="p-6 space-y-4">
           <div>
-            <h3 className="text-lg font-semibold mb-1">Oh-My-OpenAgent</h3>
+            <h3 className="text-lg font-semibold mb-1">{t('opencode.ui.oma')}</h3>
             <p className="text-sm text-vsc-text-muted">
-              System settings from oh-my-openagent.json
+              {t('opencode.ui.omaDesc')}
             </p>
           </div>
 
           <ModelPicker
-            label="Default Model"
+            label={t('opencode.ui.defaultModel')}
             value={ohMyConfig.default_model || ''}
             options={modelOptions}
             onChange={(v) => onOhMyChange(prev => ({ ...prev, default_model: v }))}
-            placeholder="Select default model"
+            placeholder={t('opencode.ui.selectDefaultModel')}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Toggle
-              label="Google Auth"
+              label={t('opencode.ui.googleAuth')}
               checked={ohMyConfig.google_auth ?? false}
               onChange={(v) => onOhMyChange(prev => ({ ...prev, google_auth: v }))}
-              tooltip="Enable Google OAuth for Gemini models"
+              tooltip={t('opencode.ui.googleAuthTip')}
             />
             <Toggle
-              label="Auto Multimodal Routing"
+              label={t('opencode.ui.autoMultimodal')}
               checked={(ohMyConfig.hooks?.auto_multimodal_routing as boolean) ?? true}
               onChange={(v) => onOhMyChange(prev => ({
                 ...prev,
                 hooks: { ...prev.hooks, auto_multimodal_routing: v },
               }))}
-              tooltip="Automatically route image inputs to multimodal-capable models"
+              tooltip={t('opencode.ui.autoMultimodalTip')}
             />
           </div>
         </GlassCard>
       ) : (
         <GlassCard className="p-6">
           <div>
-            <h3 className="text-lg font-semibold mb-1">Oh-My-OpenAgent</h3>
+            <h3 className="text-lg font-semibold mb-1">{t('opencode.ui.oma')}</h3>
             <p className="text-sm text-vsc-text-muted">
-              Add &apos;oh-my-openagent&apos; to Plugins to enable these settings
+              {t('opencode.ui.omaDisabled')}
             </p>
           </div>
         </GlassCard>
@@ -160,14 +162,14 @@ export function GeneralSection({ config, ohMyConfig, onChange, onOhMyChange }: G
       {/* MCP Servers */}
       <GlassCard className="p-6 space-y-4">
         <div>
-          <h3 className="text-lg font-semibold mb-1">MCP Servers</h3>
+          <h3 className="text-lg font-semibold mb-1">{t('opencode.ui.mcpServers')}</h3>
           <p className="text-sm text-vsc-text-muted">
-            Model Context Protocol servers (enable/disable)
+            {t('opencode.ui.mcpDesc')}
           </p>
         </div>
 
         {Object.keys(mcpServers).length === 0 ? (
-          <div className="text-sm text-vsc-text-muted">No MCP servers configured</div>
+          <div className="text-sm text-vsc-text-muted">{t('opencode.ui.noMcp')}</div>
         ) : (
           <div className="space-y-2">
             {Object.entries(mcpServers).map(([name, server]) => {
@@ -200,9 +202,9 @@ export function GeneralSection({ config, ohMyConfig, onChange, onOhMyChange }: G
       {/* Plugins */}
       <GlassCard className="p-6 space-y-4">
         <div>
-          <h3 className="text-lg font-semibold mb-1">Plugins</h3>
+          <h3 className="text-lg font-semibold mb-1">{t('opencode.ui.plugins')}</h3>
           <p className="text-sm text-vsc-text-muted">
-            OpenCode plugins loaded at startup
+            {t('opencode.ui.pluginsDesc')}
           </p>
         </div>
 
@@ -213,7 +215,7 @@ export function GeneralSection({ config, ohMyConfig, onChange, onOhMyChange }: G
               className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-md bg-white/5 border border-white/10 text-xs"
             >
               {p}
-              <button
+              <ButtonBase
                 type="button"
                 onClick={() => onChange(prev => ({
                   ...prev,
@@ -223,7 +225,7 @@ export function GeneralSection({ config, ohMyConfig, onChange, onOhMyChange }: G
                 title="Remove plugin"
               >
                 <X size={12} />
-              </button>
+              </ButtonBase>
             </span>
           ))}
         </div>

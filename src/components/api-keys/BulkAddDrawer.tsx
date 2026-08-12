@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { t } from '@/lib/i18n';
 import { X, Clipboard, CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -6,6 +7,8 @@ import { maskKey } from '../../lib/utils/maskKey';
 import { parseProviderText } from '../../lib/utils/parseProviderText';
 import type { ApiKeyEntry } from '../../types/apiKeys';
 import type { BulkTestKeyResult } from '../../lib/backend/modules/opencodeConfig';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Input, Textarea } from '@/components/ui';
 
 interface BulkAddDrawerProps {
   isOpen: boolean;
@@ -50,15 +53,17 @@ export function BulkAddDrawer({
   const [isCreating, setIsCreating] = useState(false);
   const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
 
-  // Pre-fill keys when drawer opens with prefillKeys
+  // Pre-fill keys when drawer opens with prefillKeys (deferred: no sync setState in effect)
   useEffect(() => {
-    if (isOpen && prefillKeys.length > 0) {
-      setRawKeys(prefillKeys.join('\n'));
-    } else if (!isOpen) {
-      setRawKeys('');
-      setResults([]);
-      setAddedKeys(new Set());
-    }
+    queueMicrotask(() => {
+      if (isOpen && prefillKeys.length > 0) {
+        setRawKeys(prefillKeys.join('\n'));
+      } else if (!isOpen) {
+        setRawKeys('');
+        setResults([]);
+        setAddedKeys(new Set());
+      }
+    });
   }, [isOpen, prefillKeys]);
 
   const existingKeySet = new Set(existingKeys.map(k => k.key));
@@ -95,7 +100,7 @@ export function BulkAddDrawer({
       // Check if URL matches current provider
       if (parsed.baseUrl && defaultBaseUrl && !parsed.baseUrl.includes(defaultBaseUrl) && !defaultBaseUrl.includes(parsed.baseUrl)) {
         toast.warning(
-          `URL не совпадает с текущим провайдером!\nОбнаружен: ${parsed.baseUrl}\nОжидался: ${defaultBaseUrl}\n\nВозможно стоит переключиться на Custom таб.`,
+          t('apiKeys.urlMismatch', { detected: parsed.baseUrl, expected: defaultBaseUrl }),
           { duration: 8000 }
         );
       }
@@ -117,14 +122,14 @@ export function BulkAddDrawer({
       }
 
       const parts = [];
-      if (parsed.name) parts.push(`Provider: ${parsed.name}`);
-      if (parsed.baseUrl) parts.push(`URL: ${parsed.baseUrl}`);
-      if (parsed.keys.length > 0) parts.push(`${parsed.keys.length} keys`);
-      if (parsed.models.length > 0) parts.push(`${parsed.models.length} models`);
+      if (parsed.name) parts.push(t('apiKeys.partProvider', { name: parsed.name }));
+      if (parsed.baseUrl) parts.push(t('apiKeys.partUrl', { url: parsed.baseUrl }));
+      if (parsed.keys.length > 0) parts.push(t('apiKeys.partKeys', { count: parsed.keys.length }));
+      if (parsed.models.length > 0) parts.push(t('apiKeys.partModels', { count: parsed.models.length }));
 
-      toast.success(parts.length > 0 ? `Smart parsed: ${parts.join(' · ')}` : 'Nothing found in clipboard');
+      toast.success(parts.length > 0 ? t('apiKeys.smartParsed', { parts: parts.join(' · ') }) : t('apiKeys.nothingFound'));
     } catch {
-      toast.error('Failed to read clipboard');
+      toast.error(t('apiKeys.clipboardReadFailed'));
     }
   }, [baseUrl, defaultBaseUrl]);
 
@@ -264,13 +269,13 @@ export function BulkAddDrawer({
               <p className="text-xs text-slate-500 truncate max-w-[280px] mt-0.5">{baseUrl}</p>
             )}
           </div>
-          <button
+          <ButtonBase
             onClick={onClose}
             className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
             aria-label="Close drawer"
           >
             <X className="w-4 h-4" />
-          </button>
+          </ButtonBase>
         </div>
 
         {/* Body */}
@@ -278,12 +283,11 @@ export function BulkAddDrawer({
           {/* Provider Name (create mode) */}
           {createProviderMode && (
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Name</label>
-              <input
-                type="text"
+              <label className="text-xs text-slate-500 mb-1 block">{t('apiKeys.name')}</label>
+              <Input
                 value={providerName}
                 onChange={(e) => setProviderName(e.target.value)}
-                placeholder="My Provider"
+                placeholder={t('apiKeys.phMyProvider')}
                 className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50"
               />
             </div>
@@ -291,9 +295,8 @@ export function BulkAddDrawer({
 
           {/* Base URL */}
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Base URL</label>
-            <input
-              type="text"
+            <label className="text-xs text-slate-500 mb-1 block">{t('apiKeys.baseUrl')}</label>
+            <Input
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://api.openai.com"
@@ -304,27 +307,27 @@ export function BulkAddDrawer({
           {/* Keys textarea */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs text-slate-500">API Keys (one per line)</label>
+              <label className="text-xs text-slate-500">{t('apiKeys.keysOnePerLine')}</label>
               <div className="flex items-center gap-2">
-                <button
+                <ButtonBase
                   onClick={handleSmartPaste}
                   className="inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
-                  title="Paste full post — auto-extracts URL, keys & models"
+                  title={t('apiKeys.smartPasteTip')}
                 >
                   <Sparkles className="w-3 h-3" />
-                  Smart Paste
-                </button>
-                <button
+                  {t('apiKeys.smartPaste')}
+                </ButtonBase>
+                <ButtonBase
                   onClick={handlePaste}
                   className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 transition-colors"
-                  title="Paste keys only"
+                  title={t('apiKeys.pasteTip')}
                 >
                   <Clipboard className="w-3 h-3" />
-                  Paste
-                </button>
+                  {t('apiKeys.paste')}
+                </ButtonBase>
               </div>
             </div>
-            <textarea
+            <Textarea
               value={rawKeys}
               onChange={(e) => setRawKeys(e.target.value)}
               rows={8}
@@ -332,13 +335,13 @@ export function BulkAddDrawer({
               className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-200 font-mono placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 resize-y"
             />
             <p className="text-xs text-slate-500 mt-1">
-              {parsedKeys.length} key{parsedKeys.length !== 1 ? 's' : ''} parsed
+              {t('apiKeys.keysParsed', { count: parsedKeys.length })}
               {testedCount > 0 && ` · ${testedCount} tested`}
             </p>
           </div>
 
           {/* Test All button */}
-          <button
+          <ButtonBase
             onClick={handleTestAll}
             disabled={isTesting || parsedKeys.length === 0}
             className={cn(
@@ -352,8 +355,8 @@ export function BulkAddDrawer({
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            {isTesting ? 'Testing...' : `Test All (${parsedKeys.length})`}
-          </button>
+            {isTesting ? t('apiKeys.testing') : t('apiKeys.testAll', { count: parsedKeys.length })}
+          </ButtonBase>
 
           {/* Results */}
           {results.length > 0 && (
@@ -377,18 +380,18 @@ export function BulkAddDrawer({
                       <span className="text-xs text-red-400 truncate max-w-[120px]">{r.error}</span>
                     )}
                     {isDuplicate ? (
-                      <span className="text-xs text-slate-500 italic shrink-0">already added</span>
+                      <span className="text-xs text-slate-500 italic shrink-0">{t('apiKeys.alreadyAdded')}</span>
                     ) : isAlreadyAdded ? (
-                      <span className="text-xs text-emerald-500 shrink-0">added</span>
+                      <span className="text-xs text-emerald-500 shrink-0">{t('apiKeys.added')}</span>
                     ) : r.status === 'testing' ? null : (
-                      <button
+                      <ButtonBase
                         onClick={() => handleAddOne(r)}
                         className="p-0.5 rounded hover:bg-white/10 text-slate-400 hover:text-emerald-400 transition-colors shrink-0"
                         aria-label="Add key"
                         title="Add key"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                      </button>
+                      </ButtonBase>
                     )}
                   </div>
                 );
@@ -400,7 +403,7 @@ export function BulkAddDrawer({
         {/* Footer */}
         <div className="px-4 py-3 border-t border-white/10">
           {createProviderMode ? (
-            <button
+            <ButtonBase
               onClick={handleCreateProvider}
               disabled={validCount === 0 || isCreating}
               className={cn(
@@ -415,9 +418,9 @@ export function BulkAddDrawer({
                 <CheckCircle2 className="w-4 h-4" />
               )}
               {isCreating ? 'Creating...' : `Create Provider & Add Keys (${validCount})`}
-            </button>
+            </ButtonBase>
           ) : (
-            <button
+            <ButtonBase
               onClick={handleAddAllValid}
               disabled={validCount === 0}
               className={cn(
@@ -427,12 +430,11 @@ export function BulkAddDrawer({
               )}
             >
               <CheckCircle2 className="w-4 h-4" />
-              Add All Valid ({validCount})
-            </button>
+              {t('apiKeys.addAllValid', { count: validCount })}
+            </ButtonBase>
           )}
         </div>
       </div>
     </>
   );
 }
-

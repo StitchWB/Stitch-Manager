@@ -119,15 +119,15 @@ function getFolderDepth(folder: EmailFolder): number {
   if (!delim) return 0;
   // Count delimiter occurrences in path. This is a fast approximation; if a
   // server uses multi-character delimiters they'll still count as one segment.
-  let depth = 0;
-  let from = 0;
-  while (true) {
-    const idx = folder.path.indexOf(delim, from);
-    if (idx < 0) break;
-    depth += 1;
-    from = idx + delim.length;
-  }
-  return depth;
+    let depth = 0;
+    let from = 0;
+    let idx = folder.path.indexOf(delim, from);
+    while (idx >= 0) {
+      depth += 1;
+      from = idx + delim.length;
+      idx = folder.path.indexOf(delim, from);
+    }
+    return depth;
 }
 
 function getProfileBadgeTone(

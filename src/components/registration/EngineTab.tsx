@@ -1,4 +1,5 @@
-import { t } from "@/lib/i18n"; import { useState, useEffect } from 'react';
+import { t } from "@/lib/i18n";
+import { useState, useEffect } from 'react';
 import {
   Settings2,
   ChevronDown,
@@ -19,6 +20,7 @@ import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
 import { Button, GlassCard, Input, Select, Toggle, Textarea, Badge } from '@/components/ui';
 import { NumberInput } from '../ui/NumberInput';
 import type { BrowserEngineId } from '@/lib/browser/engines';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 export type { BrowserEngineId };
 
@@ -204,7 +206,7 @@ export function BrowserSection({
         ? 'ShardX SDK не установлен (pip install shardx)'
         : hint;
     const btn = (
-      <button
+      <ButtonBase
         type="button"
         disabled={disabled || blocked}
         onClick={() => onBrowserEngineChange(id)}
@@ -217,7 +219,7 @@ export function BrowserSection({
         )}
       >
         {label}
-      </button>
+      </ButtonBase>
     );
     return blocked ? <Tooltip content={tooltip}>{btn}</Tooltip> : btn;
   };
@@ -226,7 +228,7 @@ export function BrowserSection({
     <div className="grid gap-1 rounded-md bg-white/[0.02] p-2">
       <div className="flex items-center gap-2 px-0.5 pb-1">
         <span className="text-[9px] uppercase font-medium text-slate-600 tracking-wider">
-          Движок
+          {t('uiTexts.engineLabel')}
         </span>
       </div>
       <div className="flex gap-1">
@@ -244,7 +246,7 @@ export function BrowserSection({
       {browserEngine === 'cloakbrowser' && (
         <div className="px-0.5 pt-0.5 space-y-0.5">
           <p className="text-[9px] text-slate-500">
-            Патченный Chromium + JS-спуфинг отпечатков.
+            {t('uiTexts.cloakDesc')}
           </p>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[9px] text-slate-500 truncate">
@@ -258,7 +260,7 @@ export function BrowserSection({
       {browserEngine === 'shardbrowser' && (
         <div className="px-0.5 pt-0.5 space-y-0.5">
           <p className="text-[9px] text-slate-500">
-            Спуфинг на уровне движка Chromium (WebGPU/шрифты/TLS/QUIC).
+            {t('uiTexts.shardDesc')}
           </p>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[9px] text-slate-500 truncate">
@@ -268,17 +270,17 @@ export function BrowserSection({
                   ? `Движок ${shardInfo.engineVersion ?? ''} установлен${shardInfo.fingerprints ? ` · отпечатков: ${shardInfo.fingerprints}` : ''}`
                   : 'Движок не установлен (~170 МБ)'}
               {shardInfo?.updateError ? (
-                <span className="text-red-400"> · ошибка: {shardInfo.updateError}</span>
+                <span className="text-red-400"> · {t('uiTexts.errorLabel')}: {shardInfo.updateError}</span>
               ) : null}
             </span>
-            <button
+            <ButtonBase
               type="button"
               disabled={disabled || shardInfo?.updating || engineBusy}
               onClick={handleUpdateEngine}
               className="shrink-0 text-[9px] font-semibold text-indigo-300 hover:text-indigo-200 disabled:opacity-50 cursor-pointer"
             >
               {shardInfo?.updating ? 'Качается…' : shardInfo?.engineInstalled ? 'Обновить' : 'Скачать сейчас'}
-            </button>
+            </ButtonBase>
           </div>
         </div>
       )}
@@ -390,9 +392,11 @@ export function LaunchSection({
   // Sync cardMode when cardsText changes - preserve user's manual choice if they have cards
   // but default to auto when cardsText is empty
   useEffect(() => {
+    queueMicrotask(() => {
     if (!cardsText && cardMode === 'manual') {
       setCardMode('auto');
     }
+    });
   }, [cardsText, cardMode]);
 
   const handleFindLive = async () => {
@@ -656,7 +660,7 @@ export function LaunchSection({
         {provider === 'kiro_v2' && onKiroPlanChange &&
           <div className="border-t border-white/[0.06] py-1.5">
             <div className="text-[10px] font-semibold text-slate-600 tracking-wide pb-1.5">
-              Тариф Kiro
+              {t('uiTexts.kiroPlan')}
             </div>
             <div className="flex flex-wrap gap-1">
               {[
@@ -668,7 +672,7 @@ export function LaunchSection({
               ].map(opt => {
                 const active = (kiroPlan || 'free') === opt.value;
                 return (
-                  <button
+                  <ButtonBase
                     key={opt.value}
                     type="button"
                     disabled={disabled}
@@ -685,7 +689,7 @@ export function LaunchSection({
                     <span className={cn('text-[9px] font-normal', active ? 'text-indigo-400/80' : 'text-slate-600')}>
                       {opt.sub}
                     </span>
-                  </button>
+                  </ButtonBase>
                 );
               })}
             </div>
@@ -715,5 +719,4 @@ export function LaunchSection({
     </div>);
 
 }
-
 

@@ -64,7 +64,9 @@ function LazyMount({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (mounted) return;
     if (typeof IntersectionObserver === 'undefined') {
+        queueMicrotask(() => {
       setMounted(true);
+        });
       return;
     }
     const el = ref.current;

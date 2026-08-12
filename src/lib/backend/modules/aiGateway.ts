@@ -20,8 +20,8 @@ export interface ProviderEndpoint {
   baseUrl: string;
   enabled: boolean;
   defaultHeaders?: Record<string, string> | null;
-  discoveryPolicy?: Record<string, any> | null;
-  healthPolicy?: Record<string, any> | null;
+  discoveryPolicy?: Record<string, unknown> | null;
+  healthPolicy?: Record<string, unknown> | null;
   circuitState: string;
   circuitOpenedAt?: string | null;
   circuitRetryAt?: string | null;
@@ -55,7 +55,7 @@ export interface UpstreamModel {
   enabled: boolean;
   discoverySource: string;
   lastDiscoveredAt?: string | null;
-  capabilities?: Record<string, any> | null;
+  capabilities?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt?: string | null;
 }
@@ -75,7 +75,7 @@ export interface PublicModel {
   id: string;
   displayName?: string | null;
   enabled: boolean;
-  contract?: Record<string, any> | null;
+  contract?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt?: string | null;
 }
@@ -102,8 +102,8 @@ export async function createProviderEndpoint(params: {
   baseUrl: string;
   enabled?: boolean;
   defaultHeaders?: Record<string, string> | null;
-  discoveryPolicy?: Record<string, any> | null;
-  healthPolicy?: Record<string, any> | null;
+  discoveryPolicy?: Record<string, unknown> | null;
+  healthPolicy?: Record<string, unknown> | null;
 }): Promise<ProviderEndpoint> {
   return safeInvoke('create_provider_endpoint', params);
 }
@@ -123,8 +123,8 @@ export async function updateProviderEndpoint(params: {
   baseUrl?: string;
   enabled?: boolean;
   defaultHeaders?: Record<string, string> | null;
-  discoveryPolicy?: Record<string, any> | null;
-  healthPolicy?: Record<string, any> | null;
+  discoveryPolicy?: Record<string, unknown> | null;
+  healthPolicy?: Record<string, unknown> | null;
 }): Promise<ProviderEndpoint | null> {
   return safeInvoke('update_provider_endpoint', params);
 }
@@ -185,7 +185,7 @@ export async function createUpstreamModel(params: {
   displayName?: string | null;
   enabled?: boolean;
   discoverySource?: string;
-  capabilities?: Record<string, any> | null;
+  capabilities?: Record<string, unknown> | null;
 }): Promise<UpstreamModel> {
   return safeInvoke('create_upstream_model', params);
 }
@@ -204,7 +204,7 @@ export async function updateUpstreamModel(params: {
   id: string;
   displayName?: string | null;
   enabled?: boolean;
-  capabilities?: Record<string, any> | null;
+  capabilities?: Record<string, unknown> | null;
 }): Promise<UpstreamModel | null> {
   return safeInvoke('update_upstream_model', params);
 }
@@ -245,7 +245,7 @@ export async function createPublicModel(params: {
   id: string;
   displayName?: string | null;
   enabled?: boolean;
-  contract?: Record<string, any> | null;
+  contract?: Record<string, unknown> | null;
 }): Promise<PublicModel> {
   return safeInvoke('create_public_model', params);
 }
@@ -262,7 +262,7 @@ export async function updatePublicModel(params: {
   id: string;
   displayName?: string | null;
   enabled?: boolean;
-  contract?: Record<string, any> | null;
+  contract?: Record<string, unknown> | null;
 }): Promise<PublicModel | null> {
   return safeInvoke('update_public_model', params);
 }

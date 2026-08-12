@@ -100,7 +100,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   }, [providerFilter]);
 
   useEffect(() => {
-    loadKeys();
+    queueMicrotask(() => void loadKeys());
   }, [loadKeys]);
 
   const refreshAiProxyAccounts = useCallback(async () => {
@@ -113,7 +113,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   }, []);
 
   useEffect(() => {
-    refreshAiProxyAccounts();
+    queueMicrotask(() => void refreshAiProxyAccounts());
   }, [refreshAiProxyAccounts]);
 
   const persistKeys = useCallback(async (newKeys: ApiKeyEntry[]) => {
@@ -150,7 +150,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
       setKeys(newKeys);
     } catch (error) {
       console.error('Failed to save keys:', error);
-      toast.error('Failed to save API keys');
+      toast.error(t('aiHub.saveKeysFailed'));
     }
   }, [providerFilter]);
 
@@ -167,9 +167,9 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
       };
       const nextKeys = keys.map(k => k.key === entry.key ? updated : k);
       await persistKeys(nextKeys);
-      toast.success(result.success ? 'Key is valid' : 'Key is invalid');
-    } catch (error) {
-      toast.error('Test failed');
+      toast.success(result.success ? t('aiHub.keyValid') : t('aiHub.keyInvalid'));
+    } catch {
+      toast.error(t('aiHub.testFailed'));
     } finally {
       setTestingKeys(prev => {
         const next = new Set(prev);
@@ -307,7 +307,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
     return (
       <GlassCard className="p-4">
         <div className="flex items-center justify-center py-8">
-          <div className="text-sm text-slate-500">Loading keys...</div>
+            <div className="text-sm text-slate-500">{t('aiHub.loadingKeys')}</div>
         </div>
       </GlassCard>
     );
@@ -320,9 +320,9 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
       <GlassCard className="p-4">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">API Keys</h3>
+            <h3 className="text-sm font-semibold text-slate-200">{t('aiHub.apiKeysTitle')}</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              {keys.length} {keys.length === 1 ? 'key' : 'keys'} configured
+              {t('aiHub.keysConfigured', { count: keys.length })}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -332,7 +332,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
               leftIcon={<Plus size={12} />}
               onClick={() => setIsAddModalOpen(true)}
             >
-              Add Key
+              {t('aiHub.addKey')}
             </Button>
             <Button
               variant="secondary"
@@ -340,7 +340,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
               leftIcon={<Plus size={12} />}
               onClick={() => setIsBulkDrawerOpen(true)}
             >
-              Bulk Add
+              {t('aiHub.bulkAdd')}
             </Button>
           </div>
         </div>
@@ -373,7 +373,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
           setNewBaseUrl('');
           setNewPrefix('');
         }}
-        title={`Add Key to ${providerLabel[providerFilter] || providerFilter}`}
+        title={t('aiHub.addKeyTitle', { provider: providerLabel[providerFilter] || providerFilter })}
         size="md"
         isLoading={isSaving}
         footer={
@@ -389,10 +389,10 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
                 setNewPrefix('');
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="primary" size="sm" onClick={handleAddKey} isLoading={isSaving}>
-              Add Key
+              {t('aiHub.addKey')}
             </Button>
           </div>
         }

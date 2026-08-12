@@ -403,8 +403,10 @@ export function SchedulerTaskForm({
   showEnabled = false,
 }: SchedulerTaskFormProps) {
   const navigate = useNavigate();
-  const stateRef = useRef(state);
-  stateRef.current = state;
+    const stateRef = useRef(state);
+    useEffect(() => {
+      stateRef.current = state;
+    }, [state]);
   const set = useCallback(
     (patch: Partial<SchedulerTaskFormState>) => onChange({ ...stateRef.current, ...patch }),
     [onChange]
@@ -466,7 +468,9 @@ export function SchedulerTaskForm({
   }, [state.profileAlias, state.taskType]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void refreshComposedFlows();
+    });
   }, [refreshComposedFlows]);
 
   const composedFlowOptions = useMemo(

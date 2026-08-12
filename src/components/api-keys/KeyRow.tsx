@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { t } from '@/lib/i18n';
 import { CheckCircle2, XCircle, AlertCircle, Trash2, Copy, RefreshCw, ChevronDown, Activity } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { maskKey } from '../../lib/utils/maskKey';
@@ -8,6 +9,7 @@ import { getProviderKeyMetrics } from '@/api/metrics';
 import type { ApiKeyEntry } from '../../types/apiKeys';
 import type { KeyMetrics } from '@/types/metrics';
 import type { KeyHealthStatus } from '@/lib/backend/modules/keyHealth';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 interface KeyRowProps {
   entry: ApiKeyEntry;
@@ -54,10 +56,10 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
     }
   }, [pendingDelete]);
 
-  // Load metrics when expanded
+  // Load metrics when expanded (deferred: no sync setState in effect)
   useEffect(() => {
     if (expanded && !metrics && !metricsLoading) {
-      setMetricsLoading(true);
+      queueMicrotask(() => setMetricsLoading(true));
       getProviderKeyMetrics(provider)
         .then((allMetrics) => {
           // Find metrics for this specific key
@@ -110,7 +112,7 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
         <span className={cn('text-xs ml-1', status.iconColor)}>{status.label}</span>
         {healthStatus && <KeyHealthBadge status={healthStatus} />}
         {entry.models && entry.models.length > 0 && (
-          <span className="text-xs text-slate-500 ml-1">{entry.models.length} models</span>
+          <span className="text-xs text-slate-500 ml-1">{t('apiKeys.models', { count: entry.models.length })}</span>
         )}
         {entry.lastTested && (
           <span className="text-xs text-slate-500 ml-auto mr-1">{timeAgo(entry.lastTested)}</span>
@@ -118,7 +120,7 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
 
         {/* Hover actions */}
         <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <button
+          <ButtonBase
             className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-sky-400 transition-colors"
             onClick={(e) => { e.stopPropagation(); handleTest(); }}
             disabled={isTesting}
@@ -130,16 +132,16 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
             ) : (
               <RefreshCw className="w-3.5 h-3.5" />
             )}
-          </button>
-          <button
+          </ButtonBase>
+          <ButtonBase
             className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
             onClick={(e) => { e.stopPropagation(); handleCopy(); }}
             aria-label="Copy key"
             title="Copy key"
           >
             <Copy className="w-3.5 h-3.5" />
-          </button>
-          <button
+          </ButtonBase>
+          <ButtonBase
             className={cn(
               'p-1 rounded hover:bg-white/10 transition-colors',
               pendingDelete
@@ -151,7 +153,7 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
             title={pendingDelete ? 'Click again to confirm' : 'Delete key'}
           >
             <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          </ButtonBase>
         </div>
 
         <ChevronDown className={cn(
@@ -165,41 +167,41 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
         <div className="px-3 pb-3 pt-1 border-t border-white/5 space-y-2">
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <div>
-              <span className="text-slate-500">Status</span>
+              <span className="text-slate-500">{t('apiKeys.status')}</span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <StatusIcon className={cn('w-3.5 h-3.5', status.iconColor)} />
                 <span className={status.iconColor}>{status.label}</span>
               </div>
             </div>
             <div>
-              <span className="text-slate-500">Provider</span>
+              <span className="text-slate-500">{t('apiKeys.provider')}</span>
               <p className="text-slate-300 mt-0.5">{provider}</p>
             </div>
             <div>
-              <span className="text-slate-500">Added</span>
+              <span className="text-slate-500">{t('apiKeys.addedLabel')}</span>
               <p className="text-slate-300 mt-0.5">{new Date(entry.addedAt).toLocaleDateString()}</p>
             </div>
             {entry.lastTested && (
               <div>
-                <span className="text-slate-500">Last Tested</span>
+                <span className="text-slate-500">{t('apiKeys.lastTested')}</span>
                 <p className="text-slate-300 mt-0.5">{timeAgo(entry.lastTested)}</p>
               </div>
             )}
             {entry.baseUrl && (
               <div className="col-span-2">
-                <span className="text-slate-500">Base URL</span>
+                <span className="text-slate-500">{t('apiKeys.baseUrl')}</span>
                 <p className="text-slate-300 mt-0.5 font-mono text-xs break-all">{entry.baseUrl}</p>
               </div>
             )}
             {entry.lastError && (
               <div className="col-span-2">
-                <span className="text-slate-500">Last Error</span>
+                <span className="text-slate-500">{t('apiKeys.lastError')}</span>
                 <p className="text-red-400 mt-0.5 text-xs break-all">{entry.lastError}</p>
               </div>
             )}
             {entry.models && entry.models.length > 0 && (
               <div className="col-span-2">
-                <span className="text-slate-500">Models ({entry.models.length})</span>
+                <span className="text-slate-500">{t('apiKeys.models', { count: entry.models.length })}</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {entry.models.slice(0, 20).map((m) => (
                     <span key={m} className="text-xs bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-slate-400 font-mono">
@@ -207,7 +209,7 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
                     </span>
                   ))}
                   {entry.models.length > 20 && (
-                    <span className="text-xs text-slate-500">+{entry.models.length - 20} more</span>
+                    <span className="text-xs text-slate-500">{t('apiKeys.moreCount', { count: entry.models.length - 20 })}</span>
                   )}
                 </div>
               </div>
@@ -224,7 +226,7 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
             <div className="pt-2 border-t border-white/5">
               <div className="flex items-center gap-1.5 mb-2">
                 <Activity className="w-3.5 h-3.5 text-sky-400" />
-                <span className="text-xs font-semibold text-slate-300">Usage Metrics</span>
+                <span className="text-xs font-semibold text-slate-300">{t('apiKeys.usageMetrics')}</span>
               </div>
               <KeyMetricsDisplay metrics={metrics} />
             </div>
@@ -232,7 +234,7 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 pt-1">
-            <button
+            <ButtonBase
               className="inline-flex items-center gap-1.5 rounded-md bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 text-xs text-sky-300 hover:bg-sky-500/20 transition-colors"
               onClick={handleTest}
               disabled={isTesting}
@@ -243,24 +245,24 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
               ) : (
                 <RefreshCw className="w-3 h-3" />
               )}
-              Test Now
-            </button>
-            <button
+              {t('apiKeys.testNow')}
+            </ButtonBase>
+            <ButtonBase
               className="inline-flex items-center gap-1.5 rounded-md bg-white/5 border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:bg-white/10 transition-colors"
               onClick={handleCopy}
               aria-label="Copy Key"
             >
               <Copy className="w-3 h-3" />
-              Copy Key
-            </button>
-            <button
+              {t('apiKeys.copyKey')}
+            </ButtonBase>
+            <ButtonBase
               className="inline-flex items-center gap-1.5 rounded-md bg-red-500/10 border border-red-500/20 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/20 transition-colors"
               onClick={handleDelete}
               aria-label="Delete"
             >
               <Trash2 className="w-3 h-3" />
-              Delete
-            </button>
+              {t('common.delete')}
+            </ButtonBase>
           </div>
         </div>
       )}

@@ -580,12 +580,15 @@ export function useIdentityGraphPanel({
   }, [filteredIdentities, activeIdentityId]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (!activeIdentity && activeIdentityId) {
       setActiveIdentityId(null);
     }
+    });
   }, [activeIdentity, activeIdentityId]);
 
   useEffect(() => {
+    queueMicrotask(() => {
     if (accountAuthLinkState.channel === 'browser' && !accountAuthLinkState.profileAlias) {
       if (profileOptions.length > 0) {
         setAccountAuthLinkState(prev => ({
@@ -594,6 +597,7 @@ export function useIdentityGraphPanel({
         }));
       }
     }
+    });
   }, [accountAuthLinkState.channel, accountAuthLinkState.profileAlias, profileOptions]);
 
   const activeIdentityLinks = useMemo(() => {
