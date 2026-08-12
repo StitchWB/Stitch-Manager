@@ -304,6 +304,62 @@ async function run() {
     else fail('still recording after nativeHosted stop');
   }
 
+  console.log('');
+  console.log('7. record_stopped reaches the bridge on stop (Shard HUD stop path)');
+  if (bridges.record) {
+    bridges.record.sent.length = 0;
+    bridges.record._message({
+      type: 'start_record',
+      payload: { runId: 'stop_notify_test', alias: 'test@local', scenarioName: 's', startUrl: 'https://example.com/', nativeHosted: true, suppressOverlay: false },
+    });
+    await new Promise(r => setTimeout(r, 120));
+    if (sessionManager.isRecording()) pass('bridge session started for stop-notify test');
+    else fail('bridge session not started');
+
+    // suppressOverlay decoupled from nativeHosted (Shard shows the HUD).
+    const recState = sessionManager.getState().record;
+    if (recState && recState.nativeHosted === true && recState.suppressOverlay === false) pass('suppressOverlay decoupled from nativeHosted');
+    else fail('suppressOverlay not decoupled: ' + JSON.stringify(recState || null));
+
+    // Stop via the same path the extension HUD uses (overlay-control stop).
+    await sendRuntimeMessage({ type: 'stitch:overlay-control', payload: { command: 'stop' } });
+    await new Promise(r => setTimeout(r, 120));
+    const stoppedMsg = bridges.record.sent.find(p => p.type === 'record_stopped');
+    if (stoppedMsg) pass('record_stopped sent to bridge on HUD stop');
+    else fail('record_stopped NOT sent to bridge on HUD stop');
+    if (!sessionManager.isRecording()) pass('session closed after HUD stop');
+    else fail('session still recording after HUD stop');
+  }
+
+  console.log('');
+  console.log('8. Native-hosted replay reuses the active tab (no re-navigation)');
+  if (bridges.replay) {
+    tabsUpdateCalls.length = 0;
+    chrome.tabs.query = async () => [{ id: 7, url: 'https://example.com/', status: 'complete', active: true }];
+    chrome.tabs.get = async (tabId) => ({ id: tabId, url: 'https://example.com/', status: 'complete' });
+    bridges.replay._open();
+    bridges.replay._message({
+      type: 'start_replay',
+      payload: {
+        runId: 'native_replay_test',
+        alias: 'test@local',
+        scenarioPath: '/tmp/s.json',
+        startUrl: 'https://example.com/',
+        fromStep: 1,
+        // Empty steps: isolates session start (no nav step execution), so any
+        // tabs.update here would come from ensureTabForUrl, not a step.
+        steps: [],
+        nativeHosted: true,
+      },
+    });
+    await new Promise(r => setTimeout(r, 120));
+    if (tabsUpdateCalls.length === 0) pass('nativeHosted replay does not re-navigate the tab');
+    else fail('nativeHosted replay re-navigated: ' + JSON.stringify(tabsUpdateCalls));
+    // Stop the replay session to clean up state.
+    bridges.replay._message({ type: 'control', payload: { command: 'stop' } });
+    await new Promise(r => setTimeout(r, 80));
+  }
+
   finish();
 }
 
