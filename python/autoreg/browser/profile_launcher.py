@@ -28,9 +28,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ..core.paths import get_paths
-from .async_cloakbrowser_wrapper import AsyncCloakBrowserWrapper
 from .async_shardbrowser_wrapper import AsyncShardBrowserWrapper
 from .cloakbrowser_profile_manager import CloakBrowserProfileManager
+from .playwright_cdp_attachment import PlaywrightCdpAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -857,8 +857,8 @@ class ProfileLauncher:
 
         return wrapper
 
-    async def _start_cloakbrowser(self) -> AsyncCloakBrowserWrapper:
-        """Start CloakBrowser via sync manager wrapped in async façade."""
+    async def _start_cloakbrowser(self) -> Any:
+        """Start CloakBrowser and drive it with real Playwright over CDP."""
         proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
         tz = self._effective_timezone()
         geo = self._effective_geolocation()
@@ -886,21 +886,19 @@ class ProfileLauncher:
             maximize_on_start=maximize_on_start,
         )
 
-        # Wrap in async façade
-        wrapper = AsyncCloakBrowserWrapper(manager)
-        await wrapper.start()
-        self._manager = wrapper
+        # Drive the running browser with REAL Playwright attached over CDP
+        # (console events, bindings, persistent init scripts, multi-tab and
+        # tracing are all native on this path).
+        attachment = PlaywrightCdpAttachment(manager)
+        await attachment.start()
+        self._manager = attachment
 
         # Cookie injection
         cookies = _load_cookies_from_config(self._config)
-        if cookies and hasattr(wrapper._manager, "add_cookies"):
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: wrapper._manager.add_cookies(cookies),
-            )
+        if cookies:
+            await attachment.add_cookies(cookies)
 
-        return wrapper
+        return attachment
 
     async def open(
         self,
