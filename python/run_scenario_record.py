@@ -288,8 +288,19 @@ RECORDER_INIT_SCRIPT = r"""
       if (!_isTopFrame && _frameSrc) {
         payload.frameSrc = _frameSrc;
       }
-      // Primary channel: console-based protocol. More reliable than window bindings on some pages.
-      console.info('__STITCH_REC_STEP__' + JSON.stringify(payload));
+      // Prefer the context-level binding (works on CloakBrowser, which
+      // suppresses console CDP notifications); console protocol is the
+      // fallback channel. Mirrors sendControl/emitProxySwitch below.
+      let delivered = false;
+      try {
+        if (typeof window.__stitchRecordEvent === 'function') {
+          window.__stitchRecordEvent(payload);
+          delivered = true;
+        }
+      } catch {}
+      if (!delivered) {
+        console.info('__STITCH_REC_STEP__' + JSON.stringify(payload));
+      }
       window.__stitchRecorderStepCount = (window.__stitchRecorderStepCount || 0) + 1;
       if (typeof window.__stitchRecorderOverlaySetCount === 'function') {
         window.__stitchRecorderOverlaySetCount(window.__stitchRecorderStepCount);
