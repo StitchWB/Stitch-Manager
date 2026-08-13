@@ -1,11 +1,12 @@
-"""CloakBrowser profile manager — sync Chromium-based profile launcher using DrissionPage CDP.
+"""CloakBrowser profile manager — launch/stop for CloakBrowser Chromium profiles.
 
 Provides consistent anti-detection across all browser automation flows.
 
 Architecture:
 - Sync API (no asyncio)
-- CloakBrowser subprocess launch
-- DrissionPage CDP connection
+- CloakBrowser subprocess launch (--remote-debugging-port)
+- Launch-only: driving (pages, env overrides, cookies) is done by the
+  Playwright CDP attachment (playwright_cdp_attachment.py)
 - Chrome profile locks (SingletonLock)
 """
 
@@ -23,8 +24,6 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
-
-from DrissionPage import ChromiumPage
 
 from ..core.auth_proxy_server import AuthProxyServer
 from ..core.paths import get_paths
@@ -146,7 +145,6 @@ class CloakBrowserProfileManager:
         self._auto_lock = auto_lock
         self.maximize_on_start = maximize_on_start
 
-        self._page: ChromiumPage | None = None
         self._chrome_proc: sp.Popen | None = None
         self._debug_port: int | None = None
         self._lock: Any | None = None
@@ -420,9 +418,9 @@ class CloakBrowserProfileManager:
             time.sleep(0.5)
         return False
 
-    def start(self) -> ChromiumPage:
-        if self._page is not None:
-            return self._page
+    def start(self) -> None:
+        if self._chrome_proc is not None and self._chrome_proc.poll() is None:
+            return
 
         t0 = time.time()
         if self._auto_lock:
@@ -485,95 +483,23 @@ class CloakBrowserProfileManager:
                 f"CloakBrowser CDP not ready on port {debug_port} after 30s. "
                 f"Stderr: {stderr_text or '(no output captured)'}")
 
-        logger.info(f"CDP ready, connecting DrissionPage to port {debug_port}...")
-        self._page = ChromiumPage(f"127.0.0.1:{debug_port}")
-        self._page.set.load_mode("normal")
+        logger.info(f"CDP ready on port {debug_port} (driving is handled by the Playwright CDP attachment)")
 
         # NOTE: No CDP fingerprint spoofing on this path. CloakBrowser already
         # spoofs identity at the engine (blink) level and persists it in the
-        # profile's user-data-dir. Stacking our CDP SpoofProfile on top produced
-        # inconsistent double-spoofing (a stronger detection signal than either
-        # layer alone) and silently stomped the configured tz/locale with the
-        # SpoofProfile's own IP-geo detection. Only environment overrides
-        # (timezone / headers / geolocation) are applied below — those must
-        # match the proxy egress, which the engine cannot know about.
-
-        # Timezone via CDP
-        if self.timezone_id:
-            try:
-                self._page.run_cdp("Emulation.setTimezoneOverride", timezoneId=self.timezone_id)
-                logger.info(f"Timezone set: {self.timezone_id}")
-            except Exception as e:
-                logger.warning(f"Timezone override failed: {e}")
-
-        # Extra headers
-        if self.extra_http_headers:
-            try:
-                self._page.run_cdp(
-                    "Network.setExtraHTTPHeaders",
-                    headers=self.extra_http_headers,
-                )
-                logger.info(f"Extra HTTP headers set: {list(self.extra_http_headers.keys())}")
-            except Exception as e:
-                logger.warning(f"Extra headers failed: {e}")
-
-        # Geolocation via CDP
-        if self.geolocation and isinstance(self.geolocation, dict):
-            try:
-                self._page.run_cdp(
-                    "Emulation.setGeolocationOverride",
-                    latitude=self.geolocation.get("latitude", 0),
-                    longitude=self.geolocation.get("longitude", 0),
-                    accuracy=self.geolocation.get("accuracy", 50),
-                )
-                logger.info(f"Geolocation set: {self.geolocation}")
-            except Exception as e:
-                logger.warning(f"Geolocation override failed: {e}")
+        # profile's user-data-dir. Environment overrides (timezone / headers /
+        # geolocation) are applied by the Playwright CDP attachment after it
+        # connects — they must match the proxy egress, which the engine cannot
+        # know about.
 
         if DEBUG_TIMING:
             _safe_stderr(f"[CloakBrowserProfileManager] TIMING: start() total: {time.time() - t0:.2f}s")
 
         logger.info(f"Browser ready (profile: {self.profile_path})")
-        return self._page
-
-    def get_page(self) -> ChromiumPage:
-        if self._page is None:
-            return self.start()
-        return self._page
-
-    def open(self, url: str, *, wait_until: str = "load") -> ChromiumPage:
-        page = self.get_page()
-        page.get(url)
-        return page
-
-    def add_cookies(self, cookies: list[dict[str, Any]]) -> None:
-        page = self.get_page()
-        for c in cookies:
-            try:
-                cookie: dict[str, Any] = dict(c)
-                if "expires" in cookie:
-                    try:
-                        exp = float(cookie["expires"])
-                        if exp > 10_000_000_000:
-                            exp = exp / 1000.0
-                        cookie["expires"] = exp
-                    except Exception:
-                        cookie.pop("expires", None)
-                page.run_cdp("Network.setCookie", **cookie)
-            except Exception as e:
-                logger.debug(f"Cookie injection failed: {e}")
 
     def stop(self) -> None:
-        page = self._page
         proc = self._chrome_proc
-        self._page = None
         self._chrome_proc = None
-
-        if page is not None:
-            try:
-                page.quit(timeout=3)
-            except Exception:
-                pass
 
         if proc is not None and proc.poll() is None:
             try:

@@ -65,8 +65,9 @@ patchright>=1.0.0
 # spoofing; patched Chromium auto-downloads from ProxyShard CDN on first use.
 shardx>=0.1.0
 
-# Optional: Regular Playwright (fallback if Patchright not available)
-# playwright>=1.40.0
+# Playwright — drives CloakBrowser over CDP for scenario record/replay
+# (connect_over_cdp attach; no browser download needed). >=1.60 for attach options.
+playwright>=1.60.0
 
 # Aliyun/slider captcha gap detection (ONNX deep-learning model)
 captcha-recognizer>=1.0.2
