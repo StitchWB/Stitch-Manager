@@ -1,31 +1,32 @@
-"""Freemodel Bridge service — manages the bridge Python subprocess.
+"""Freemodel Bridge service — manages the bridge sidecar subprocess.
 
-Ported from Rust ``freemodel_bridge.rs`` and ``services/freemodel_bridge/``.
-The bridge is a Python script that proxies AI model requests.
+Thin domain wrapper over the :class:`SidecarSupervisor`. Keeps the domain
+logic (locating the bridge script, domain operations like ``test_connection``
+and ``update_settings``); the subprocess lifecycle itself lives in the
+supervisor.
+
+The FreeModel bridge is a *sidecar* (a local helper process) that ALSO backs
+an AI inference provider (FreeModel). The AI-provider side lives in
+``ai_proxy``; only the process lifecycle lives here.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import os
-import time
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from stitch_backend.config import REPO_ROOT
+from stitch_backend.domains.sidecar import LaunchPlan, SidecarSpec, get_supervisor
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Singleton process state
-_process: asyncio.subprocess.Process | None = None
-_config: dict[str, Any] = {"port": 0, "api_key": "", "enabled": False}
-_start_time: float | None = None
-_error: str | None = None
+SIDECAR_NAME = "freemodel_bridge"
+DEFAULT_PORT = 8320
 
 
 def _resolve_bridge_script() -> Path | None:
@@ -40,140 +41,77 @@ def _resolve_bridge_script() -> Path | None:
     return None
 
 
-async def _wait_for_ready(port: int, timeout: float = 15.0) -> bool:
-    """Poll the bridge health endpoint until it responds or timeout."""
-    url = f"http://127.0.0.1:{port}/v1/models"
-    deadline = time.time() + timeout
-    async with httpx.AsyncClient(timeout=2) as client:
-        while time.time() < deadline:
-            # Check if process died
-            if _process is not None and _process.returncode is not None:
-                return False
-            try:
-                resp = await client.get(url)
-                if resp.status_code < 500:
-                    return True
-            except (httpx.ConnectError, httpx.TimeoutException, OSError):
-                pass
-            await asyncio.sleep(0.5)
-    return False
+def _prepare(settings: dict | None) -> LaunchPlan:
+    settings = settings or {}
+    script = _resolve_bridge_script()
+    if script is None:
+        raise RuntimeError("Bridge script not found")
+    port = int(settings.get("port", DEFAULT_PORT))
+    api_key = (settings.get("apiKey") or settings.get("api_key") or "").strip()
+    return LaunchPlan(
+        command=["python", str(script)],
+        env={
+            "FREEMODEL_PORT": str(port),
+            "FREEMODEL_API_KEY": api_key,
+            "FREEMODEL_HOST": "127.0.0.1",
+        },
+        port=port,
+        health_url=f"http://127.0.0.1:{port}/v1/models",
+        health_ok=lambda code: code < 500,
+        readiness_timeout=15.0,
+        config={"port": port, "api_key": api_key, "enabled": True},
+    )
+
+
+def register_sidecar() -> None:
+    """Register the freemodel bridge spec with the supervisor (idempotent)."""
+    sup = get_supervisor()
+    if not sup.is_registered(SIDECAR_NAME):
+        sup.register(
+            SidecarSpec(
+                name=SIDECAR_NAME,
+                display_name="FreeModel Bridge",
+                prepare=_prepare,
+            )
+        )
 
 
 class FreemodelBridgeService:
-    """Manages the FreeModel bridge subprocess lifecycle."""
+    """Backward-compatible facade over the :class:`SidecarSupervisor`."""
 
     @staticmethod
-    async def start(settings: dict[str, Any]) -> dict[str, Any]:
-        """Start the bridge subprocess."""
-        global _process, _config, _start_time, _error
-
-        # Stop existing process if running (prevents orphan processes)
-        if _process is not None and _process.returncode is None:
-            await FreemodelBridgeService.stop()
-            await asyncio.sleep(0.5)
-
-        port = int(settings.get("port", 8320))
-        api_key = (settings.get("apiKey") or settings.get("api_key") or "").strip()
-
-        script = _resolve_bridge_script()
-        if not script:
-            _error = "Bridge script not found"
-            return FreemodelBridgeService.status()
-
-        _config = {"port": port, "api_key": api_key, "enabled": True}
-
-        try:
-            env = {
-                "FREEMODEL_PORT": str(port),
-                "FREEMODEL_API_KEY": api_key,
-                "FREEMODEL_HOST": "127.0.0.1",
-            }
-            _process = await asyncio.create_subprocess_exec(
-                "python", str(script),
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-                env={**os.environ, **env},
-            )
-            _start_time = time.time()
-            _error = None
-            logger.info("[FreeBridge] Started on port %d (pid=%d)", port, _process.pid)
-
-            # Wait for the bridge to become ready (health-check gate)
-            ready = await _wait_for_ready(port, timeout=15.0)
-            if not ready:
-                logger.warning("[FreeBridge] Process started but not ready within 15s")
-        except Exception as exc:
-            _error = str(exc)
-            logger.error("[FreeBridge] Failed to start: %s", exc, exc_info=True)
-
-        return FreemodelBridgeService.status()
+    async def start(settings: dict[str, Any] | None = None) -> dict[str, Any]:
+        register_sidecar()
+        # Legacy behaviour: starting while running restarts (force=True).
+        return await get_supervisor().start(SIDECAR_NAME, settings, force=True)
 
     @staticmethod
     async def stop() -> dict[str, Any]:
-        """Stop the bridge subprocess."""
-        global _process, _start_time, _error
-
-        if _process and _process.returncode is None:
-            _process.terminate()
-            try:
-                await asyncio.wait_for(_process.wait(), timeout=5)
-            except TimeoutError:
-                _process.kill()
-            logger.info("[FreeBridge] Stopped (pid=%d)", _process.pid)
-
-        _process = None
-        _start_time = None
-        _config["enabled"] = False
-        return FreemodelBridgeService.status()
+        register_sidecar()
+        return await get_supervisor().stop(SIDECAR_NAME)
 
     @staticmethod
     def status() -> dict[str, Any]:
-        """Return current bridge status."""
-        if _error and not _process:
-            return {
-                "status": "error", "port": None, "pid": None,
-                "uptimeSeconds": None, "error": _error,
-            }
-        if _process is None:
-            return {
-                "status": "stopped", "port": None, "pid": None,
-                "uptimeSeconds": None, "error": None,
-            }
-        if _process.returncode is not None:
-            rc = _process.returncode
-            # SIGTERM (-15) is a normal stop; anything else is an error
-            if rc != 0 and rc != -15:
-                return {
-                    "status": "error", "port": None, "pid": None,
-                    "uptimeSeconds": None,
-                    "error": f"Bridge process exited with code {rc}",
-                }
-            return {
-                "status": "stopped", "port": None, "pid": None,
-                "uptimeSeconds": None, "error": None,
-            }
-        uptime = int(time.time() - _start_time) if _start_time else 0
-        return {
-            "status": "running",
-            "port": _config.get("port"),
-            "pid": _process.pid,
-            "uptimeSeconds": uptime,
-            "error": None,
-        }
+        register_sidecar()
+        return get_supervisor().status(SIDECAR_NAME)
 
     @staticmethod
     async def update_settings(settings: dict[str, Any]) -> dict[str, Any]:
         """Update bridge settings; restart if running."""
-        is_running = _process is not None and _process.returncode is None
-        if is_running:
-            await FreemodelBridgeService.stop()
-        return await FreemodelBridgeService.start(settings)
+        register_sidecar()
+        sup = get_supervisor()
+        if sup.is_running(SIDECAR_NAME):
+            await sup.stop(SIDECAR_NAME)
+        return await sup.start(SIDECAR_NAME, settings, force=True)
 
     @staticmethod
     async def test_connection(model: str | None = None) -> dict[str, Any]:
         """Test bridge with a simple chat completion request."""
-        port = _config.get("port", 0)
-        api_key = _config.get("api_key", "")
+        register_sidecar()
+        sup = get_supervisor()
+        config = sup.get_config(SIDECAR_NAME)
+        port = config.get("port") or sup.status(SIDECAR_NAME).get("port") or 0
+        api_key = config.get("api_key", "")
 
         if not port:
             raise RuntimeError("Bridge is not configured")

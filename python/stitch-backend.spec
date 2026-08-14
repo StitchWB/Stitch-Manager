@@ -68,6 +68,9 @@ a = Analysis(
         (str(ROOT.parent / 'resources' / 'icons' / 'app-icon.ico'), 'resources/icons'),
         # HoloNe rules for security inspector (bundled in package)
         (str(ROOT / 'stitch_backend' / 'domains' / 'ai_proxy' / 'holone_rules'), 'stitch_backend/domains/ai_proxy/holone_rules'),
+        # Vendored D3-vin turnstile solver service (launched as a subprocess by
+        # autoreg.captcha.turnstile_api / turnstile_solver supervisor).
+        (str(ROOT.parent / 'vendor' / 'turnstile-solver'), 'vendor/turnstile-solver'),
         # NOTE: src-tauri/binaries (holone/stitch-cli-proxy-api sidecars, ~96 MB)
         # are intentionally NOT bundled — the native gateway replaced them and
         # the UI's start_ai_proxy command no longer touches the sidecars.

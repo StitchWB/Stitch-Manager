@@ -138,6 +138,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.email_counter.commands  # noqa: F401
     import stitch_backend.domains.email_inbox.commands  # noqa: F401
     import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
+    import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
@@ -171,6 +172,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     readonly_count = sum(1 for c in commands if get_command_meta(c).readonly)
     logger.info("Registered %d command(s), %d readonly", len(commands), readonly_count)
     logger.debug("Registered commands: %s", commands)
+
+    # Register sidecar subprocess specs with the supervisor so stop_all() on
+    # shutdown knows about every sidecar (freemodel bridge, turnstile solver).
+    try:
+        from stitch_backend.domains.freemodel_bridge.service import (
+            register_sidecar as _register_freemodel,
+        )
+        from stitch_backend.domains.turnstile_solver.service import (
+            register_sidecar as _register_turnstile,
+        )
+
+        _register_freemodel()
+        _register_turnstile()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Sidecar registration skipped: %s", _exc)
+
+    # Load-or-create the per-install local chat token so the chat endpoint can
+    # authenticate with it (replaces the shared static bearer).
+    try:
+        from stitch_backend.domains.ai_proxy.chat_router import (
+            ensure_local_chat_token as _ensure_chat_token,
+        )
+
+        await _ensure_chat_token()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Local chat token init skipped: %s", _exc)
 
     # Prewarm the heavy optional shardx import (pulls patchright/playwright,
     # ~1 s) in a daemon thread so the first get_browser_engines probe and the
@@ -244,10 +271,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Stitch Backend shutting down …")
 
     # Stop replenishment service if running
-    from stitch_backend.domains.replenishment.service import (
-        get_replenishment_service as _get_replen,
-    )
-    await _get_replen().stop()
+    try:
+        from stitch_backend.domains.replenishment.service import (
+            get_replenishment_service as _get_replen,
+        )
+        await _get_replen().stop()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Replenishment stop failed: %s", _exc)
+
+    # Stop all sidecar subprocesses (turnstile solver, freemodel bridge, ...).
+    # stop_all() also fixes the prior bug where the FreeModel bridge was never
+    # stopped on shutdown (orphaned subprocess on app exit).
+    try:
+        from stitch_backend.domains.sidecar import get_supervisor as _get_sidecar_sup
+
+        await _get_sidecar_sup().stop_all()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Sidecar shutdown skipped: %s", _exc)
 
     # ponytail: native gateway runs with Stitch process; no sidecar shutdown needed
     # Legacy OmniRoute/HoloNe sidecar shutdown removed

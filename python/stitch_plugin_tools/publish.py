@@ -42,7 +42,7 @@ ENV_ADMIN_KEY = "STITCH_ADMIN_KEY"
 ENV_SIGNING_KEY = "STITCH_SIGNING_KEY"
 
 
-# ── Packaging ──────────────────────────────────────────────────────────────────
+# ── Packaging ──────────────────────────────────────────────────────────
 
 
 def zip_package(package_dir: Path) -> bytes:
@@ -62,7 +62,7 @@ def zip_package(package_dir: Path) -> bytes:
     return buf.getvalue()
 
 
-# ── Config resolution ──────────────────────────────────────────────────────────
+# ── Config resolution ──────────────────────────────────────────────────
 
 
 def resolve_publish_config(
@@ -93,7 +93,7 @@ def resolve_publish_config(
     return url, key, signing_pem
 
 
-# ── Publish ────────────────────────────────────────────────────────────────────
+# ── Publish ────────────────────────────────────────────────────────────
 
 
 async def publish_package(
@@ -153,7 +153,7 @@ async def publish_package(
             await http.aclose()
 
 
-# ── Dev install ────────────────────────────────────────────────────────────────
+# ── Dev install ────────────────────────────────────────────────────────
 
 
 def dev_install(package_dir: Path) -> Path:
@@ -171,12 +171,14 @@ def dev_install(package_dir: Path) -> Path:
     return dest
 
 
-# ── Engine-pack assembly ───────────────────────────────────────────────────────
+# ── Engine-pack assembly ───────────────────────────────────────────────
 
 
 # Solver modules to bundle from autoreg/captcha/ into the engine-pack.
-# Both are self-contained (no autoreg.* imports) — copied verbatim.
-_ENGINE_PACK_SOLVERS = ("turnstile", "aliyun_slider")
+# Only aliyun_slider is copied here — turnstile is replaced by the unified
+# solver from engine-pack/captcha/ which supports local_service, remote_http,
+# and opencv_dom backends.
+_ENGINE_PACK_SOLVERS = ("aliyun_slider",)
 
 
 def pack_engine(
@@ -186,32 +188,24 @@ def pack_engine(
     name: str = "Engine Pack",
     service: str = "engine",
 ) -> Path:
-    """Assemble an engine-pack from the real ``autoreg/captcha/`` solvers.
+    """Assemble an engine-pack from the canonical source tree.
 
-    Copies the captcha solver modules from the open-core source tree into a
-    publish-ready engine-pack directory.  The assembled pack passes
-    ``stitch_plugin_tools sign`` + ``verify`` unchanged.
+    The engine-pack consists of:
+      1. ``plugin.json`` — manifest with ``captcha_backends`` config
+      2. ``captcha/turnstile.py`` — unified multi-backend solver
+      3. ``captcha/aliyun_slider.py`` — aliyun slider solver (from autoreg)
+      4. ``vendor/turnstile-solver/`` — bundled D3-vin HTTP service
+      5. ``captcha/checkbox_template.png`` — OpenCV template (optional)
 
-    Import-handling decisions per solver module (plan §4.6):
+    The unified TurnstileSolver (item 2) replaces the old separate
+    turnstile.py + turnstile_api.py pair.  It supports three backends:
+      - ``local_service`` : launch bundled D3-vin at <pack>/vendor/...
+      - ``remote_http``   : call a central farm endpoint (config-only switch)
+      - ``opencv_dom``    : pure in-browser fallback (always available)
 
-    - ``turnstile.py`` — self-contained (stdlib only: ``os``, ``random``,
-      ``time``, ``collections.abc``, ``pathlib``).  Zero ``autoreg.*``
-      imports.  Copied verbatim.  References ``checkbox_template.png`` via
-      ``Path(__file__).parent``; the template is NOT bundled (file does not
-      exist in the repo) and the solver degrades gracefully (returns
-      ``False`` on missing template).
-
-    - ``aliyun_slider.py`` — self-contained (stdlib + lazy ``cv2``,
-      ``numpy``, ``captcha_recognizer``).  Zero ``autoreg.*`` imports.
-      Copied verbatim.  External deps are engine runtime deps, not bundled.
-
-    Both solvers have zero ``autoreg.*`` imports — no import rewriting
-    needed.  This is the intended design: the pack ships method code, the
-    engine API stays open.
-
-    The captcha source directory is located via the plugin package path
-    (``autoreg/plugin/crypto.py`` → ``autoreg/captcha/``) so no
-    ``autoreg.captcha`` import is needed here (zone-boundary clean).
+    The captcha_backends config lives in plugin.json extras so that
+    operators can switch from local_service → remote_http without
+    rebuilding the pack — just update the manifest on the server.
 
     Args:
         out_dir: Target directory for the engine-pack. Created if absent.
@@ -221,21 +215,18 @@ def pack_engine(
 
     Returns:
         The path to the assembled engine-pack directory.
-
-    Raises:
-        FileNotFoundError: if the captcha source directory or a solver
-            module is not found.
     """
     import json
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Locate the real captcha source dir via the plugin package path:
-    # autoreg/plugin/crypto.py -> autoreg/plugin/ -> autoreg/ -> autoreg/captcha/
-    captcha_src = Path(crypto.__file__).parent.parent / "captcha"
-    if not captcha_src.is_dir():
-        raise FileNotFoundError(f"captcha source not found: {captcha_src}")
+    # Locate source directories via the plugin package path (zone-boundary clean):
+    # crypto.__file__ → autoreg/plugin/crypto.py → autoreg/plugin/ → autoreg/
+    plugin_dir = Path(crypto.__file__).parent           # autoreg/plugin/
+    autoreg_root = plugin_dir.parent                     # autoreg/
+    captcha_src = autoreg_root / "captcha"               # autoreg/captcha/
 
+    # ── 1. plugin.json with captcha_backends config ──────────────────────
     manifest = {
         "schema": SCHEMA_ID,
         "id": "engine-pack",
@@ -246,20 +237,74 @@ def pack_engine(
         "engine": {"min": "0.3.0", "api": 2},
         "depends": [],
         "entry": {},
-        "capabilities": [],
+        "capabilities": ["captcha.solve"],
         "outputs": [],
         "signature": "",
+        # Captcha backend configuration — declarative, swappable without code.
+        # Default: local_service (bundled D3-vin). To use a central farm,
+        # change type to "remote_http" and set endpoint + auth_token.
+        "captcha_backends": {
+            "turnstile": {
+                "type": "local_service",
+                "service_dir": "vendor/turnstile-solver",
+                "service_entrypoint": "api.py",
+                "service_port_env": "TURNSTILE_SOLVER_PORT",
+                "service_host_env": "TURNSTILE_API_HOST",
+                "headless": True,
+                "fallback": "opencv_dom",
+            }
+        },
     }
     (out_dir / MANIFEST_FILENAME).write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
 
+    # ── 2. Unified TurnstileSolver from engine-pack source ───────────────
+    # This is the single source of truth — replaces old turnstile.py +
+    # turnstile_api.py pair.  Supports local_service, remote_http, opencv_dom.
+    engine_pack_src = plugin_dir / "engine-pack" / "captcha"
     captcha_dst = out_dir / "captcha"
-    captcha_dst.mkdir(exist_ok=True)
-    for solver in _ENGINE_PACK_SOLVERS:
-        src = captcha_src / f"{solver}.py"
-        if not src.is_file():
-            raise FileNotFoundError(f"solver module not found: {src}")
-        shutil.copy2(src, captcha_dst / src.name)
+    if engine_pack_src.is_dir():
+        shutil.copytree(
+            engine_pack_src, captcha_dst, dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        # Add aliyun_slider from autoreg/captcha/ (not part of unified pack).
+        aliyun_src = captcha_src / "aliyun_slider.py"
+        if aliyun_src.is_file():
+            shutil.copy2(aliyun_src, captcha_dst / "aliyun_slider.py")
+    else:
+        # Fallback: build captcha dir from individual sources (greenfield).
+        captcha_dst.mkdir(exist_ok=True)
+        legacy_turnstile = autoreg_root / "captcha" / "turnstile.py"
+        if legacy_turnstile.is_file():
+            shutil.copy2(legacy_turnstile, captcha_dst / "turnstile.py")
+        for solver in _ENGINE_PACK_SOLVERS:
+            src = captcha_src / f"{solver}.py"
+            if src.is_file():
+                shutil.copy2(src, captcha_dst / src.name)
+
+    # ── 3. OpenCV checkbox template (optional, degrades gracefully) ──────
+    template_src = captcha_src / "checkbox_template.png"
+    if template_src.is_file():
+        shutil.copy2(template_src, out_dir / "captcha" / template_src.name)
+
+    # ── 4. Bundled D3-vin turnstile SERVICE ──────────────────────────────
+    # Makes the engine-pack self-sufficient: the solver launches this service
+    # when type=local_service.  Copied from repo's vendor/ submodule.
+    # Excludes: .git, __pycache__, *.pyc, proxies.txt (user-specific config).
+    repo_root = Path(crypto.__file__).resolve().parents[3]
+    service_src = repo_root / "vendor" / "turnstile-solver"
+    if service_src.is_dir():
+        service_dst = out_dir / "vendor" / "turnstile-solver"
+        if service_dst.exists():
+            shutil.rmtree(service_dst)
+        shutil.copytree(
+            service_src,
+            service_dst,
+            ignore=shutil.ignore_patterns(
+                ".git", "__pycache__", "*.pyc", "proxies.txt",
+            ),
+        )
 
     return out_dir

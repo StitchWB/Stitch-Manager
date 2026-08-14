@@ -17,6 +17,7 @@ import base64
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
@@ -29,6 +30,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from .manifest import MANIFEST_FILENAME, PluginManifest, validate_manifest
 
 SIGNATURE_PREFIX = "ed25519:"
+
+# Env var + bundled-file hooks for the verification public key (plan §3.1 item 4).
+_PUBKEY_ENV = "STITCH_PLUGIN_PUBKEY"
+_PUBKEY_FILENAME = "plugin_pubkey.txt"
 
 
 # ── Canonical package hash ────────────────────────────────────────────────
@@ -124,13 +129,49 @@ def load_public_key(public_key_b64: str) -> Ed25519PublicKey:
     return Ed25519PublicKey.from_public_bytes(raw)
 
 
-def load_embedded_pubkey() -> str | None:
-    """Return the public key embedded in the binary at build time.
+def _pubkey_file_candidates() -> list[Path]:
+    """Locations searched for the bundled ``plugin_pubkey.txt``.
 
-    Stub — real embedding (plan §3.1 item 4) lands when the binary build
-    pipeline exists.  Returns ``None`` until then; callers must supply the
-    pubkey explicitly via config / env.
+    Covers the dev source tree and PyInstaller frozen builds (``sys._MEIPASS``
+    temp extraction dir).  The file ships WITH the app — the public key is not
+    a secret, so bundling it is safe; security rests on the offline private key.
     """
+    here = Path(__file__).resolve().parent  # autoreg/plugin/
+    candidates = [here / _PUBKEY_FILENAME]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        base = Path(meipass)
+        candidates.append(base / _PUBKEY_FILENAME)
+        candidates.append(base / "autoreg" / "plugin" / _PUBKEY_FILENAME)
+    return candidates
+
+
+def load_embedded_pubkey() -> str | None:
+    """Return the public key used to verify signed plugins / engine-packs.
+
+    Resolution order:
+      1. ``STITCH_PLUGIN_PUBKEY`` env var (base64 raw 32-byte ed25519 pubkey).
+         Lets CI / local runs verify without rebuilding the binary.
+      2. A ``plugin_pubkey.txt`` bundled next to this module (dev tree and
+         frozen builds).
+      3. ``None`` — callers must supply a pubkey explicitly or reject the
+         signature.
+
+    The public key is NOT a secret; embedding/shipping it is safe.  Security
+    comes from the offline private signing key.
+    """
+    env_val = os.environ.get(_PUBKEY_ENV, "").strip()
+    if env_val:
+        return env_val
+
+    for candidate in _pubkey_file_candidates():
+        try:
+            if candidate.is_file():
+                val = candidate.read_text(encoding="utf-8").strip()
+                if val:
+                    return val
+        except OSError:
+            continue
     return None
 
 
