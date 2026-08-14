@@ -88,6 +88,10 @@ CORE_TOOLS = [
     "start_freemodel_bridge",
     "stop_freemodel_bridge",
     "get_freemodel_bridge_status",
+    # Turnstile solver (3)
+    "start_turnstile_solver",
+    "stop_turnstile_solver",
+    "get_turnstile_solver_status",
     # Replenishment (3)
     "get_replenishment_status",
     "start_replenishment",

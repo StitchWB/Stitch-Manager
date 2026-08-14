@@ -206,7 +206,8 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
         return 2
     print(f"engine-pack assembled at {result}")
     print(f"  version: {args.version}")
-    print(f"  solvers: {', '.join(('turnstile', 'aliyun_slider'))}")
+    print(f"  solvers: {', '.join(('turnstile', 'turnstile_api', 'aliyun_slider'))}")
+    print("  bundled: vendor/turnstile-solver service + checkbox_template.png")
     print(
         f"  sign with: python -m stitch_plugin_tools sign {result} "
         f"--key <private.key>"

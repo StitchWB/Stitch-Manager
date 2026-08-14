@@ -30,6 +30,22 @@
 
 ---
 
+> ⚠️ **Disclaimer / Отказ от ответственности**
+>
+> This project is provided **as is** for educational and personal account
+> management purposes. Users are solely responsible for complying with the
+> Terms of Service of any target application or service. The authors assume
+> no liability for account suspensions, API blocks, IP bans, or any other
+> consequences arising from use of this software.
+>
+> Проект предоставляется **«как есть»** в образовательных целях и для
+> управления личными аккаунтами. Пользователь несёт полную ответственность
+> за соблюдение условий использования (ToS) целевых приложений и сервисов.
+> Авторы не несут ответственности за блокировки аккаунтов, API, IP или иные
+> последствия использования данного ПО.
+
+---
+
 # 🇺🇸 English
 
 ## 🎯 What is Stitch Manager?

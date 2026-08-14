@@ -62,6 +62,8 @@ WRITE_COMMANDS: set[str] = {
     "create_ai_proxy_account",
     "start_freemodel_bridge",
     "stop_freemodel_bridge",
+    "start_turnstile_solver",
+    "stop_turnstile_solver",
     "start_replenishment",
     "stop_replenishment",
     "create_aws_account",

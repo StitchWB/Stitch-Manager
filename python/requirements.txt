@@ -61,6 +61,12 @@ numpy>=1.24.0
 # Patchright (stealth Playwright fork - bypasses Cloudflare Turnstile)
 patchright>=1.0.0
 
+# D3-vin turnstile solver service (vendored at vendor/turnstile-solver) —
+# Quart HTTP server that returns Turnstile tokens via a real browser.
+# rich is used by its startup banner; psutil by its process management.
+quart>=0.19.0
+rich>=13.0.0
+
 # ShardX (ShardBrowser) anti-detect engine SDK — engine-level fingerprint
 # spoofing; patched Chromium auto-downloads from ProxyShard CDN on first use.
 shardx>=0.1.0
