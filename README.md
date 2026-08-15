@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="stitch-ide-logo.png" alt="Stitch Manager Logo" width="200">
+  <img src="resources/branding/stitch-ide-logo.png" alt="Stitch Manager Logo" width="200">
 </p>
 
 <h1 align="center">Stitch Manager</h1>
