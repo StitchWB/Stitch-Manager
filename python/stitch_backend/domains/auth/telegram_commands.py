@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -79,34 +79,44 @@ async def _ensure_telegram_user(db: AsyncSession) -> User:
     )
 
 
+async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any]:
+    """Activate a one-time code and create a local session.
+
+    Returns ``(user, entitlements, raw_token, expires_at)``.  Raises on
+    activation / session failure — callers map the error (command:
+    ``{success: False, error}``; auth route: 401 with a friendly detail).
+    """
+    hwid = derive_hwid()
+    activation = ActivationService()
+    state = await activation.activate(code, hwid)
+
+    async def _op(db: AsyncSession) -> tuple[User, str, Any]:
+        user = await _ensure_telegram_user(db)
+        raw_token, expires_at = await auth_service.create_session(db, user.id)
+        return user, raw_token, expires_at
+
+    user, raw_token, expires_at = await run_in_session(_op)
+    return user, list(state.entitlements), raw_token, expires_at
+
+
 @register_command("login_telegram")
 async def cmd_login_telegram(params: dict) -> dict:
     """Exchange a Telegram-bot code for a local session.
 
     Params: ``{code: str}``.  Returns ``{success, user, entitlements,
     session_token}`` on success or ``{success: False, error: str}`` on
-    failure.
+    failure.  The web login flow uses ``POST /api/auth/login_telegram``
+    (same core, sets the session cookie); this command stays for the
+    desktop command-dispatcher path.
     """
     code = str(params.get("code", "")).strip()
     if not code:
         return {"success": False, "error": "Code is required"}
 
-    hwid = derive_hwid()
-    activation = ActivationService()
     try:
-        state = await activation.activate(code, hwid)
+        user, entitlements, raw_token, _expires_at = await exchange_telegram_code(code)
     except Exception as exc:  # noqa: BLE001 — surface as command error
         return {"success": False, "error": _map_activation_error(exc)}
-
-    async def _op(db: AsyncSession) -> tuple[User, str]:
-        user = await _ensure_telegram_user(db)
-        raw_token, _expires_at = await auth_service.create_session(db, user.id)
-        return user, raw_token
-
-    try:
-        user, raw_token = await run_in_session(_op)
-    except Exception as exc:  # noqa: BLE001 — surface as command error
-        return {"success": False, "error": f"Session creation failed: {exc}"}
 
     return {
         "success": True,
@@ -115,7 +125,7 @@ async def cmd_login_telegram(params: dict) -> dict:
             "username": user.username,
             "role": user.role,
         },
-        "entitlements": list(state.entitlements),
+        "entitlements": entitlements,
         "session_token": raw_token,
     }
 
