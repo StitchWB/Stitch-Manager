@@ -15,7 +15,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
+
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.domains.auth.roles import role_at_least, valid_role
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,7 @@ def _list_scenario_files() -> list[dict[str, Any]]:
                     if isinstance(data, dict):
                         data["_syncPath"] = str(full)
                         data["_syncDir"] = str(Path(dirpath).name)
+                        data.setdefault("min_role", "user")
                         results.append(data)
                 except Exception:
                     continue
@@ -51,6 +55,45 @@ def _list_scenario_files() -> list[dict[str, Any]]:
 
 def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _scenario_min_role(data: dict | None) -> str:
+    """Read min_role from scenario data, defaulting to 'user'."""
+    if not isinstance(data, dict):
+        return "user"
+    role = data.get("min_role")
+    return role if isinstance(role, str) and role else "user"
+
+
+def _enforce_tier(data: dict | None, caller_role: str | None) -> str:
+    """Raise 403 if *data*'s min_role exceeds *caller_role*'s tier.
+
+    Returns the resolved min_role.  Guests (``None``) are below every
+    tier, so even ``min_role='user'`` scenarios are locked for them.
+    """
+    min_role = _scenario_min_role(data)
+    if not role_at_least(caller_role, min_role):
+        raise HTTPException(status_code=403, detail=f"Requires tier: {min_role}")
+    return min_role
+
+
+def _find_scenario_dir(scenario_id: str) -> Path | None:
+    """Find a scenario directory by runId or folder name."""
+    if not scenario_id:
+        return None
+    _ensure_dirs()
+    for dirpath in SCENARIOS_DIR.iterdir():
+        if not dirpath.is_dir():
+            continue
+        sf = dirpath / "scenario.json"
+        if sf.exists():
+            try:
+                data = json.loads(sf.read_text(encoding="utf-8"))
+                if data.get("runId") == scenario_id or dirpath.name == scenario_id:
+                    return dirpath
+            except Exception:
+                continue
+    return None
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -73,6 +116,10 @@ async def cmd_list_recorded(params: dict) -> list:
             "tags": s.get("tags", []),
             "provider": s.get("provider", ""),
             "accountAlias": s.get("accountAlias", ""),
+            "min_role": s.get("min_role", "user"),
+            "locked": not role_at_least(
+                params.get("_caller_role"), s.get("min_role", "user")
+            ),
         })
     return items
 
@@ -100,6 +147,21 @@ async def cmd_upsert_scenario(params: dict) -> dict:
         data["recordedAt"] = _now_iso()
     if "runId" not in data:
         data["runId"] = run_id
+
+    # min_role is server-managed: new files get "user", re-upsert
+    # preserves the existing tier (set via set_recorded_scenario_tier).
+    if scenario_path.exists():
+        try:
+            existing = json.loads(scenario_path.read_text(encoding="utf-8"))
+            data["min_role"] = (
+                existing["min_role"]
+                if isinstance(existing, dict) and existing.get("min_role")
+                else "user"
+            )
+        except Exception:
+            data["min_role"] = "user"
+    else:
+        data["min_role"] = "user"
 
     scenario_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -129,6 +191,8 @@ async def cmd_update_scenario(params: dict) -> dict:
     except (json.JSONDecodeError, OSError):
         raise ValueError(f"Failed to read scenario: {sync_dir}") from None
 
+    _enforce_tier(data, params.get("_caller_role"))
+
     if isinstance(updates, dict):
         data.update(updates)
 
@@ -157,6 +221,9 @@ async def cmd_duplicate_scenario(params: dict) -> dict:
         raise ValueError(f"Source scenario not found: {source_dir}")
 
     data = json.loads(source_path.read_text(encoding="utf-8"))
+
+    _enforce_tier(data, params.get("_caller_role"))
+
     new_id = str(uuid.uuid4())[:8]
     name = new_name or f"{data.get('name', 'scenario')}_copy"
     safe_name = "".join(c if c.isalnum() or c in "-_ " else "_" for c in name).strip()
@@ -197,8 +264,11 @@ async def cmd_delete_scenario(params: dict) -> dict:
             try:
                 data = json.loads(sf.read_text(encoding="utf-8"))
                 if data.get("runId") == scenario_id or dirpath.name == scenario_id:
+                    _enforce_tier(data, params.get("_caller_role"))
                     shutil.rmtree(dirpath, ignore_errors=True)
                     return {"deleted": scenario_id}
+            except HTTPException:
+                raise
             except Exception:
                 continue
 
@@ -267,6 +337,43 @@ async def cmd_reindex(params: dict) -> dict:
     return {"indexed": count}
 
 
+@register_command("set_recorded_scenario_tier", admin_only=True)
+async def cmd_set_scenario_tier(params: dict) -> dict:
+    """Set the min_role tier for a scenario (admin only).
+
+    Returns the updated item (same shape as ``update_recorded_scenario``)
+    plus the new ``min_role``.
+    """
+    scenario_id = str(params.get("scenarioId", ""))
+    min_role = str(params.get("min_role", "")).strip()
+    if not valid_role(min_role):
+        raise HTTPException(status_code=400, detail=f"Invalid role: {min_role}")
+
+    scenario_dir = _find_scenario_dir(scenario_id)
+    if scenario_dir is None:
+        raise HTTPException(status_code=404, detail=f"Scenario not found: {scenario_id}")
+
+    sf = scenario_dir / "scenario.json"
+    try:
+        data = json.loads(sf.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        raise ValueError(f"Failed to read scenario: {scenario_id}") from None
+
+    data["min_role"] = min_role
+    data["updatedAt"] = _now_iso()
+    sf.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "id": data.get("runId", ""),
+        "name": data.get("name", ""),
+        "recordedAt": data.get("recordedAt", ""),
+        "version": data.get("version", 1),
+        "syncPath": str(sf),
+        "syncDir": scenario_dir.name,
+        "min_role": min_role,
+    }
+
+
 @register_command("replay_preflight")
 async def cmd_replay_preflight(params: dict) -> dict:
     """Check if a scenario is ready for replay."""
@@ -280,6 +387,8 @@ async def cmd_replay_preflight(params: dict) -> dict:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         return {"ready": False, "error": str(exc), "scenarioPath": scenario_path}
+
+    _enforce_tier(data, params.get("_caller_role"))
 
     return {
         "ready": True,
@@ -371,4 +480,15 @@ async def cmd_rollback_scenario(params: dict) -> dict:
     version = int(req.get("version", 1))
 
     # In this simplified version, just return the current scenario
+    scenario_dir = _find_scenario_dir(scenario_id)
+    if scenario_dir is not None:
+        sf = scenario_dir / "scenario.json"
+        try:
+            data = json.loads(sf.read_text(encoding="utf-8"))
+            _enforce_tier(data, params.get("_caller_role"))
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
     return {"scenarioId": scenario_id, "version": version, "rolledBack": True}

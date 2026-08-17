@@ -1627,7 +1627,10 @@ tabs: {
     back: "Назад",
     role: {
       admin: "Админ",
-      user: "Пользователь"
+      user: "Пользователь",
+      vip: "VIP",
+      premium: "Премиум",
+      elite: "Элита"
     },
     guest: {
       title: "Добро пожаловать",
@@ -1679,6 +1682,9 @@ tabs: {
       role: "Роль",
       roleAdmin: "Админ",
       roleUser: "Пользователь",
+      roleVip: "VIP",
+      rolePremium: "Премиум",
+      roleElite: "Элита",
       create: "Создать",
       creating: "Создание...",
       delete: "Удалить",
@@ -1695,6 +1701,7 @@ tabs: {
       errorValidation: "Имя пользователя и пароль обязательны",
       created: "Пользователь создан",
       deleted: "Пользователь удалён",
+      updated: "Роль обновлена",
       createFailed: "Не удалось создать пользователя",
       deleteFailed: "Не удалось удалить пользователя",
       loadFailed: "Не удалось загрузить пользователей"
@@ -3004,6 +3011,7 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     tags: "Теги",
     tagsFilterLabel: "Теги",
     tagsHint: "Через запятую. Пример: login, checkout, smoke",
+    tierLocked: "Требуется более высокий уровень",
     title: "Сценарии",
     toggleFavorite: "Избранное",
     update: "Обновить",

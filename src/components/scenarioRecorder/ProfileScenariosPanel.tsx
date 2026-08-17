@@ -13,6 +13,7 @@ import {
   Tag,
   LayoutGrid,
   List,
+  Lock,
   GitBranch } from
 'lucide-react';
 import {
@@ -21,6 +22,7 @@ import {
   Input,
   Textarea,
   Badge,
+  Select,
   MultiFilterDropdown,
   ConfirmActionButton,
   IconButton,
@@ -38,6 +40,7 @@ import {
   listRecordedScenarios,
   reindexRecordedScenarios,
   setRecordedScenarioFavorite,
+  setRecordedScenarioTier,
   updateRecordedScenario,
   duplicateRecordedScenario,
   listScenarioRevisions,
@@ -51,6 +54,7 @@ import { t } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
 import { useUIPreferencesStore } from '@/stores/uiPreferences';
+import { useAuthStore } from '@/stores/auth';
 
 type ProfileScenariosPanelProps = {
   alias: string | null;
@@ -81,6 +85,8 @@ export function ProfileScenariosPanel({
 
   const viewMode = useUIPreferencesStore((state) => state.scenariosPage.viewMode);
   const setScenariosViewMode = useUIPreferencesStore((state) => state.setScenariosViewMode);
+  const currentUser = useAuthStore((state) => state.user);
+  const isAdmin = currentUser?.role === 'admin';
 
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
@@ -88,6 +94,7 @@ export function ProfileScenariosPanel({
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editTagsText, setEditTagsText] = useState('');
+  const [editTier, setEditTier] = useState<string>('user');
 
   const [duplicateLoading, setDuplicateLoading] = useState(false);
 
@@ -259,6 +266,7 @@ export function ProfileScenariosPanel({
       const meta = safeMeta(item.metadata);
       setEditDescription(meta.description ?? '');
       setEditTagsText((meta.tags ?? []).join(', '));
+      setEditTier(item.min_role ?? 'user');
       setEditOpen(true);
     },
     [safeMeta]
@@ -281,7 +289,19 @@ export function ProfileScenariosPanel({
         metadata: nextMeta,
         revisionReason: 'metadata'
       });
-      setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
+
+      if (isAdmin && editTier !== (editItem.min_role ?? 'user')) {
+        await setRecordedScenarioTier(editItem.id, editTier);
+        if (alias) {
+          const next = await fetchScenarioItems(alias);
+          setItems(next);
+        } else {
+          setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
+        }
+      } else {
+        setItems((prev) => prev.map((it) => it.id === updated.id ? updated : it));
+      }
+
       toast.success(t('common.saved'));
       setEditOpen(false);
       setEditItem(null);
@@ -290,7 +310,7 @@ export function ProfileScenariosPanel({
     } finally {
       setEditSaving(false);
     }
-  }, [editDescription, editItem, editName, editTagsText, parseTagsFromText, safeMeta]);
+  }, [alias, editDescription, editItem, editName, editTagsText, editTier, fetchScenarioItems, isAdmin, parseTagsFromText, safeMeta]);
 
   const toggleFavorite = useCallback(async (item: ScenarioRecordItem) => {
     try {
@@ -516,17 +536,18 @@ export function ProfileScenariosPanel({
                 <div className="divide-y divide-white/10">
                   {filtered.map((item) => {
               const meta = safeMeta(item.metadata);
+              const isLocked = item.locked === true;
               return (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2 hover:bg-white/[0.04]">
+                  className={`grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2 hover:bg-white/[0.04]${isLocked ? ' opacity-50' : ''}`}>
                   
                         <div
-                    className="min-w-0 text-left cursor-pointer"
-                    onClick={() => onReplay(item.scenarioPath)}
+                    className={`min-w-0 text-left ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    onClick={() => { if (!isLocked) onReplay(item.scenarioPath); }}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onReplay(item.scenarioPath); }}}
+                    onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onReplay(item.scenarioPath); }}}
                     title={item.name}>
 
                           <div className="flex items-center gap-2 min-w-0">
@@ -537,6 +558,12 @@ export function ProfileScenariosPanel({
                             {item.missing ?
                       <Badge variant="warning" size="sm" className="normal-case">
                                 {t('scenarios.missingFile')}
+                              </Badge> :
+                      null}
+                            {isLocked ? <Lock size={14} className="text-amber-400 shrink-0" /> : null}
+                            {isLocked && item.min_role ?
+                      <Badge variant="warning" size="sm" className="normal-case">
+                                {t(`auth.role.${item.min_role}`)}
                               </Badge> :
                       null}
                           </div>
@@ -573,9 +600,10 @@ export function ProfileScenariosPanel({
                           <IconButton
                       size="md"
                       variant="ghost"
-                      onClick={() => void toggleFavorite(item)}
+                      disabled={isLocked}
+                      onClick={() => { if (!isLocked) void toggleFavorite(item); }}
                       aria-label={t('scenarios.toggleFavorite')}
-                      title={t('scenarios.toggleFavorite')}>
+                      title={isLocked ? t('scenarios.tierLocked') : t('scenarios.toggleFavorite')}>
                       
                             <Heart size={16} className={item.favorite ? 'text-pink-300' : ''} />
                           </IconButton>
@@ -583,8 +611,10 @@ export function ProfileScenariosPanel({
                       size="sm"
                       variant="secondary"
                       onClick={() => openEdit(item)}
+                      disabled={isLocked}
                       leftIcon={<Pencil size={14} />}
-                      className="h-8">
+                      className="h-8"
+                      title={isLocked ? t('scenarios.tierLocked') : undefined}>
                       
                             {t('common.edit')}
                           </Button>
@@ -593,10 +623,11 @@ export function ProfileScenariosPanel({
                       size="md"
                       variant="ghost"
                       isLoading={duplicateLoading}
-                      onConfirm={() => void confirmDuplicate(item)}
+                      disabled={isLocked}
+                      onConfirm={() => { if (!isLocked) void confirmDuplicate(item); }}
                       armedLabel={<Repeat2 size={16} />}
                       aria-label={t('scenarios.duplicateScenario')}
-                      title={t('scenarios.duplicateScenario')}>
+                      title={isLocked ? t('scenarios.tierLocked') : t('scenarios.duplicateScenario')}>
 
                             <Repeat2 size={16} />
                           </ConfirmActionButton>
@@ -638,6 +669,7 @@ export function ProfileScenariosPanel({
                           </IconButton>
                           <Tooltip
                       content={
+                      isLocked ? t('scenarios.tierLocked') :
                       pendingDeleteId === item.id ?
                       t('scenarios.deleteArmedHint') :
                       t('common.delete')
@@ -648,7 +680,7 @@ export function ProfileScenariosPanel({
                         size="sm"
                         variant="danger"
                         onClick={() => void handleDeleteClick(item)}
-                        disabled={deleteLoadingId === item.id}
+                        disabled={isLocked || deleteLoadingId === item.id}
                         leftIcon={<Trash2 size={14} />}
                         className={
                         pendingDeleteId === item.id ?
@@ -670,11 +702,12 @@ export function ProfileScenariosPanel({
 
         filtered.map((item) => {
           const meta = safeMeta(item.metadata);
+          const isLocked = item.locked === true;
           return (
             <div
               key={item.id}
               className={`rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-colors ${
-              viewMode === 'cards' ? 'px-4 py-3' : 'px-3 py-2'}`
+              viewMode === 'cards' ? 'px-4 py-3' : 'px-3 py-2'}${isLocked ? ' opacity-50' : ''}`
               }>
               
                     <div
@@ -685,11 +718,11 @@ export function ProfileScenariosPanel({
                 }>
                 
                       <div
-                  className="min-w-0 flex-1 text-left cursor-pointer"
-                  onClick={() => onReplay(item.scenarioPath)}
+                  className={`min-w-0 flex-1 text-left ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                  onClick={() => { if (!isLocked) onReplay(item.scenarioPath); }}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onReplay(item.scenarioPath); }}}
+                  onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onReplay(item.scenarioPath); }}}
                   title={item.name}>
 
                         <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -700,6 +733,12 @@ export function ProfileScenariosPanel({
                           {item.missing ?
                     <Badge variant="warning" size="sm" className="normal-case">
                               {t('scenarios.missingFile')}
+                            </Badge> :
+                    null}
+                          {isLocked ? <Lock size={14} className="text-amber-400 shrink-0" /> : null}
+                          {isLocked && item.min_role ?
+                    <Badge variant="warning" size="sm" className="normal-case">
+                              {t(`auth.role.${item.min_role}`)}
                             </Badge> :
                     null}
                         </div>
@@ -779,9 +818,10 @@ export function ProfileScenariosPanel({
                         <IconButton
                     size="md"
                     variant="ghost"
-                    onClick={() => void toggleFavorite(item)}
+                    disabled={isLocked}
+                    onClick={() => { if (!isLocked) void toggleFavorite(item); }}
                     aria-label={t('scenarios.toggleFavorite')}
-                    title={t('scenarios.toggleFavorite')}>
+                    title={isLocked ? t('scenarios.tierLocked') : t('scenarios.toggleFavorite')}>
                     
                           <Heart size={16} className={item.favorite ? 'text-pink-300' : ''} />
                         </IconButton>
@@ -789,13 +829,16 @@ export function ProfileScenariosPanel({
                     size="sm"
                     variant="secondary"
                     onClick={() => openEdit(item)}
+                    disabled={isLocked}
                     leftIcon={<Pencil size={14} />}
-                    className="h-8">
+                    className="h-8"
+                    title={isLocked ? t('scenarios.tierLocked') : undefined}>
                     
                           {t('common.edit')}
                         </Button>
                         <Tooltip
                     content={
+                    isLocked ? t('scenarios.tierLocked') :
                     pendingDeleteId === item.id ?
                     t('scenarios.deleteArmedHint') :
                     t('common.delete')
@@ -806,7 +849,7 @@ export function ProfileScenariosPanel({
                       size="sm"
                       variant="danger"
                       onClick={() => void handleDeleteClick(item)}
-                      disabled={deleteLoadingId === item.id}
+                      disabled={isLocked || deleteLoadingId === item.id}
                       leftIcon={<Trash2 size={14} />}
                       className={
                       pendingDeleteId === item.id ?
@@ -824,10 +867,11 @@ export function ProfileScenariosPanel({
                     size="md"
                     variant="ghost"
                     isLoading={duplicateLoading}
-                    onConfirm={() => void confirmDuplicate(item)}
+                    disabled={isLocked}
+                    onConfirm={() => { if (!isLocked) void confirmDuplicate(item); }}
                     armedLabel={<Repeat2 size={16} />}
                     aria-label={t('scenarios.duplicateScenario')}
-                    title={t('scenarios.duplicateScenario')}>
+                    title={isLocked ? t('scenarios.tierLocked') : t('scenarios.duplicateScenario')}>
 
                           <Repeat2 size={16} />
                         </ConfirmActionButton>
@@ -914,6 +958,21 @@ export function ProfileScenariosPanel({
           value={editTagsText}
           onChange={(e) => setEditTagsText(e.target.value)}
           placeholder={t('scenarios.tagsHint')} />
+        
+          {isAdmin ? (
+          <Select
+            label={t('auth.users.role')}
+            value={editTier}
+            onValueChange={setEditTier}
+            options={[
+              { value: 'user', label: t('auth.users.roleUser') },
+              { value: 'vip', label: t('auth.users.roleVip') },
+              { value: 'premium', label: t('auth.users.rolePremium') },
+              { value: 'elite', label: t('auth.users.roleElite') },
+              { value: 'admin', label: t('auth.users.roleAdmin') },
+            ]}
+          />
+          ) : null}
         
         </div>
       </Modal>

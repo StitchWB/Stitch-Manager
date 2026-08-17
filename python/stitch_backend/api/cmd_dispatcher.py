@@ -85,20 +85,26 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
             detail=f"Unknown command: '{name}'",
         ) from None
 
-    # Role gate: admin_only commands require an admin session when auth is
-    # enabled.  Auth disabled (single-trusted-user desktop) → open.
+    # Caller identity: resolve once, enforce admin_only, and inject the role
+    # into params (``_caller_role``) so tier-gated handlers (scenarios etc.)
+    # can authorize without re-resolving the session.  Auth disabled
+    # (single-trusted-user desktop) → caller is treated as admin; a guest
+    # session (auth on, no user) resolves to None (below every tier).
     meta = get_command_meta(name)
-    if meta.admin_only:
-        from stitch_backend.config import get_settings
+    caller_role: str | None = "admin"
+    from stitch_backend.config import get_settings
+
+    if get_settings().auth_enabled:
         from stitch_backend.domains.auth.router import _current_user_optional
 
-        if get_settings().auth_enabled:
-            user, _raw = await _current_user_optional(request)
-            if user is None or user.role != "admin":
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Command '{name}' requires admin role",
-                )
+        user, _raw = await _current_user_optional(request)
+        caller_role = user.role if user is not None else None
+    if meta.admin_only and caller_role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Command '{name}' requires admin role",
+        )
+    body["_caller_role"] = caller_role
 
     # Determine effective timeout from command metadata.
     #   None  → use DEFAULT_COMMAND_TIMEOUT
