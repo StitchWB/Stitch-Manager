@@ -148,13 +148,21 @@ function extractInvokeErrorMessage(error: unknown): string {
  * const accounts = await safeInvoke<Account[]>('list_accounts', { provider: 'kiro' });
  * ```
  */
-export async function safeInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+export async function safeInvoke<T>(
+  command: string,
+  args?: Record<string, unknown>,
+  opts?: { noCache?: boolean },
+): Promise<T> {
   const key = getRequestKey(command, args);
-  
-  // Check cache first (for sequential StrictMode calls)
-  const cached = _responseCache.get(key);
-  if (cached && cached.expires > Date.now()) {
-    return cached.data as T;
+
+  // noCache: secrets must not linger in the renderer response cache
+  // (security review: expired entries were never evicted from the Map).
+  if (!opts?.noCache) {
+    // Check cache first (for sequential StrictMode calls)
+    const cached = _responseCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+      return cached.data as T;
+    }
   }
   
   // Check if identical request is already in flight
@@ -191,7 +199,9 @@ export async function safeInvoke<T>(command: string, args?: Record<string, unkno
       markBackendOnline();
       
       // Cache successful result for short TTL (dedupes sequential calls)
-      _responseCache.set(key, { data, expires: Date.now() + CACHE_TTL_MS });
+      if (!opts?.noCache) {
+        _responseCache.set(key, { data, expires: Date.now() + CACHE_TTL_MS });
+      }
 
       return data as T;
     } catch (error) {

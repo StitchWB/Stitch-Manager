@@ -14,6 +14,7 @@ import { Terminal, AlertCircle, Loader2, ArrowLeft, Send } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth';
 import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
+import { STITCH_BOT_URL } from '@/lib/links';
 import { cn } from '../../lib/utils';
 
 export default function TelegramLogin() {
@@ -98,9 +99,26 @@ export default function TelegramLogin() {
             </div>
 
             {/* Description */}
-            <p className="text-center text-slate-400 text-sm leading-relaxed mb-6 px-2">
+            <p className="text-center text-slate-400 text-sm leading-relaxed mb-4 px-2">
               {t('auth.tg.description')}
             </p>
+
+            {/* Open-bot shortcut — jumps straight to the bot chat */}
+            <a
+              href={STITCH_BOT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="telegram-open-bot-link"
+              className={cn(
+                'w-full h-10 rounded-lg font-medium text-sm transition-all duration-200 select-none mb-6',
+                'bg-white/[0.04] border border-white/[0.08] text-slate-200',
+                'hover:bg-white/[0.08] hover:text-white hover:border-indigo-500/30 active:scale-[0.98]',
+                'flex items-center justify-center gap-2'
+              )}
+            >
+              <Send className="w-4 h-4 text-indigo-400" />
+              {t('auth.tg.openBot')}
+            </a>
 
             <form onSubmit={onSubmit} className="space-y-4" noValidate>
               {/* Code */}

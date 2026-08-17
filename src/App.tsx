@@ -70,6 +70,8 @@ const Friends = lazy(() => import('./pages/Friends'));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
 const NotebookLM = lazy(() => import('./pages/NotebookLM'));
 const Users = lazy(() => import('./pages/Users'));
+const Codes = lazy(() => import('./pages/Codes'));
+const Monitoring = lazy(() => import('./pages/Monitoring'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -509,6 +511,8 @@ function App() {
             <Route path="/ai/notebooklm" element={<AdminRoute><NotebookLM /></AdminRoute>} />
             <Route path="/notebooklm" element={<Navigate to="/ai/notebooklm" replace />} />
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
+            <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />
+            <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
             <Route path="/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

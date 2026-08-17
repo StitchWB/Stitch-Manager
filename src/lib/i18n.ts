@@ -1653,6 +1653,7 @@ export interface Translations {
       submit: string;
       back: string;
       errorGeneric: string;
+      openBot: string;
     };
     login: {
       tgLink: string;
@@ -1703,6 +1704,130 @@ export interface Translations {
       createFailed: string;
       deleteFailed: string;
       loadFailed: string;
+    };
+  };
+  codes: {
+    title: string;
+    subtitle: string;
+    description: string;
+    stats: {
+      total: string;
+      unused: string;
+      used: string;
+      revoked: string;
+      expired: string;
+    };
+    filter: {
+      all: string;
+      unusedOnly: string;
+      label: string;
+    };
+    columns: {
+      id: string;
+      hashPrefix: string;
+      entitlements: string;
+      status: string;
+      tgUser: string;
+      label: string;
+      createdAt: string;
+      expiresAt: string;
+      usedAt: string;
+      actions: string;
+    };
+    statuses: {
+      unused: string;
+      used: string;
+      revoked: string;
+      expired: string;
+    };
+    issue: {
+      title: string;
+      count: string;
+      countHint: string;
+      ttl: string;
+      ttl60min: string;
+      ttl24h: string;
+      ttl7d: string;
+      ttlNoExpiry: string;
+      label: string;
+      labelPlaceholder: string;
+      entitlements: string;
+      entitlementsPlaceholder: string;
+      entitlementsHint: string;
+      submit: string;
+      submitting: string;
+      cancel: string;
+    };
+    issued: {
+      title: string;
+      warning: string;
+      copyAll: string;
+      copied: string;
+      copyFailed: string;
+      close: string;
+    };
+    revoke: {
+      title: string;
+      message: string;
+      confirm: string;
+      cancel: string;
+    };
+    toasts: {
+      issued: string;
+      revoked: string;
+      revokeFailed: string;
+      issueFailed: string;
+      loadFailed: string;
+      errorUnknown: string;
+      errorUsed: string;
+      errorRejected: string;
+      errorUnreachable: string;
+      errorDisabled: string;
+      errorNoKey: string;
+    };
+    empty: string;
+    loading: string;
+    retry: string;
+  };
+  monitoring: {
+    title: string;
+    subtitle: string;
+    refresh: string;
+    generatedAt: string;
+    loading: string;
+    noProxies: string;
+    sections: {
+      services: string;
+      bot: string;
+      proxies: string;
+    };
+    statuses: {
+      up: string;
+      down: string;
+      stale: string;
+      unknown: string;
+    };
+    fields: {
+      latency: string;
+      lastCheck: string;
+      route: string;
+      age: string;
+      uptime: string;
+      pollingErrors: string;
+      detail: string;
+      url: string;
+      status: string;
+      dbOk: string;
+      candidates: string;
+      lastHeartbeat: string;
+      secondsAgo: string;
+    };
+    errors: {
+      loadFailed: string;
+      unreachable: string;
+      rejected: string;
+      noAccess: string;
+      disabled: string;
     };
   };
   common: {
@@ -3572,6 +3697,9 @@ export interface Translations {
     status: string;
     source: string;
     firstSeen: string;
+    key: string;
+    refresh: string;
+    tokenRejected: string;
   }
   marketplace: {
     title: string;

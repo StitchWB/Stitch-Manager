@@ -22,6 +22,8 @@ import {
   UserCircle,
   Store,
   ShieldOff,
+  Ticket,
+  Activity,
 } from
   'lucide-react';
 import { useAppStore } from '../../stores/app';
@@ -264,6 +266,22 @@ export default function Sidebar() {
             to="/users"
             icon={<UserCircle size={20} />}
             label={t('auth.users.title')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && authEnabled && (
+          <NavItem
+            to="/codes"
+            icon={<Ticket size={20} />}
+            label={t('codes.title')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && authEnabled && (
+          <NavItem
+            to="/monitoring"
+            icon={<Activity size={20} />}
+            label={t('monitoring.title')}
             collapsed={sidebarCollapsed} />
         )}
       </nav>

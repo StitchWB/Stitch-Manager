@@ -5,4 +5,7 @@
  * touching components. Consumed by the sidebar footer Telegram button and any
  * other surface that needs to open the main Telegram channel.
  */
-export const MAIN_TELEGRAM_URL = 'https://t.me/TODO_REPLACE_WITH_REAL_LINK';
+export const MAIN_TELEGRAM_URL = 'https://t.me/whitebite_devsoft';
+
+/** Stitch login bot — issues one-time codes via /login (TelegramLogin page). */
+export const STITCH_BOT_URL = 'https://t.me/whitebite_stitch_bot';
