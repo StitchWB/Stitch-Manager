@@ -1646,7 +1646,8 @@ export const en: Translations = {
       codePlaceholder: "Enter code",
       submit: "Sign in",
       back: "Back",
-      errorGeneric: "Telegram login failed. Please try again."
+      errorGeneric: "Telegram login failed. Please try again.",
+      openBot: "Open the bot in Telegram"
     },
     login: {
       tgLink: "Login via Telegram"
@@ -1697,6 +1698,130 @@ export const en: Translations = {
       createFailed: "Failed to create user",
       deleteFailed: "Failed to delete user",
       loadFailed: "Failed to load users"
+    }
+  },
+  codes: {
+    title: "Codes",
+    subtitle: "Distribution server activation codes",
+    description: "Issue, list, and revoke activation codes for the distribution server.",
+    stats: {
+      total: "Total",
+      unused: "Unused",
+      used: "Used",
+      revoked: "Revoked",
+      expired: "Expired"
+    },
+    filter: {
+      all: "All codes",
+      unusedOnly: "Unused only",
+      label: "Filter"
+    },
+    columns: {
+      id: "ID",
+      hashPrefix: "Hash prefix",
+      entitlements: "Entitlements",
+      status: "Status",
+      tgUser: "Telegram user",
+      label: "Label",
+      createdAt: "Created",
+      expiresAt: "Expires",
+      usedAt: "Used at",
+      actions: "Actions"
+    },
+    statuses: {
+      unused: "Unused",
+      used: "Used",
+      revoked: "Revoked",
+      expired: "Expired"
+    },
+    issue: {
+      title: "Issue new codes",
+      count: "Count",
+      countHint: "1–100 codes per batch",
+      ttl: "TTL",
+      ttl60min: "60 minutes",
+      ttl24h: "24 hours",
+      ttl7d: "7 days",
+      ttlNoExpiry: "No expiry",
+      label: "Label",
+      labelPlaceholder: "Optional batch label",
+      entitlements: "Entitlements",
+      entitlementsPlaceholder: "comma-separated, e.g. kiro, windsurf",
+      entitlementsHint: "Defaults to * (all entitlements) when empty",
+      submit: "Issue",
+      submitting: "Issuing...",
+      cancel: "Cancel"
+    },
+    issued: {
+      title: "Issued codes",
+      warning: "These codes will not be shown again. Copy them now.",
+      copyAll: "Copy all",
+      copied: "Codes copied to clipboard",
+      copyFailed: "Failed to copy codes",
+      close: "Close"
+    },
+    revoke: {
+      title: "Revoke code",
+      message: "Revoke activation code #{codeId}? This cannot be undone.",
+      confirm: "Revoke",
+      cancel: "Cancel"
+    },
+    toasts: {
+      issued: "Codes issued",
+      revoked: "Code revoked",
+      revokeFailed: "Failed to revoke code",
+      issueFailed: "Failed to issue codes",
+      loadFailed: "Failed to load codes",
+      errorUnknown: "Unknown code",
+      errorUsed: "Code already used",
+      errorRejected: "Distribution server rejected the admin key",
+      errorUnreachable: "Distribution server unreachable",
+      errorDisabled: "Distribution server disabled",
+      errorNoKey: "Distribution admin key not configured"
+    },
+    empty: "No codes yet",
+    loading: "Loading codes...",
+    retry: "Retry"
+  },
+  monitoring: {
+    title: "Monitoring",
+    subtitle: "Stitch services health",
+    refresh: "Refresh",
+    generatedAt: "Generated",
+    loading: "Loading monitoring data...",
+    noProxies: "No proxies configured",
+    sections: {
+      services: "Services",
+      bot: "Bot",
+      proxies: "Proxies"
+    },
+    statuses: {
+      up: "Up",
+      down: "Down",
+      stale: "Stale",
+      unknown: "Unknown"
+    },
+    fields: {
+      latency: "Latency",
+      lastCheck: "Last check",
+      route: "Route",
+      age: "Age",
+      uptime: "Uptime",
+      pollingErrors: "Polling errors",
+      detail: "Detail",
+      url: "URL",
+      status: "Status",
+      dbOk: "Database",
+      candidates: "Candidates",
+      lastHeartbeat: "Last heartbeat",
+      secondsAgo: "{count}s ago"
+    },
+    errors: {
+      loadFailed: "Failed to load monitoring data",
+      unreachable: "Monitoring server unreachable",
+      rejected: "Monitoring server rejected the request",
+      noAccess: "You don't have access to monitoring",
+      disabled: "Monitoring is disabled or not configured"
     }
   },
   common: {
@@ -4115,6 +4240,9 @@ addMailboxFromSheets: "Import from Google Sheets",
     status: "Status",
     source: "Source",
     firstSeen: "Found",
+    key: "Key",
+    refresh: "Refresh",
+    tokenRejected: "AiApiRadar admin token rejected — check AIRADAR_ADMIN_TOKEN",
   },
   marketplace: {
     title: "Marketplace",

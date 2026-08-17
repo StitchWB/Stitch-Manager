@@ -44,6 +44,8 @@ export interface GetFoundKeysParams {
   tier?: string;
   status?: string;
   platform?: string;
+  /** verify_status filter, e.g. "live" for probe-confirmed keys */
+  verify?: string;
   limit?: number;
   offset?: number;
 }
@@ -57,7 +59,10 @@ export async function getFoundKeys(params?: GetFoundKeysParams): Promise<FoundKe
 
 /**
  * Fetch one decrypted key (copied to clipboard by the caller, never stored).
+ * noCache: the plaintext must not sit in the renderer response cache.
  */
 export async function getFoundKeySecret(id: number): Promise<{ id: number; key: string }> {
-  return safeInvoke<{ id: number; key: string }>('get_found_key_secret', { id });
+  return safeInvoke<{ id: number; key: string }>(
+    'get_found_key_secret', { id }, { noCache: true },
+  );
 }
