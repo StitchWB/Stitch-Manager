@@ -45,6 +45,7 @@ from stitch_backend.config import get_settings
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import get_db, run_in_session
 from stitch_backend.domains.auth import service as auth_service
+from stitch_backend.domains.auth.roles import SELECTABLE_ROLES
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,7 +100,7 @@ class LoginResponse(BaseModel):
 class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
-    role: str = Field("user", pattern="^(admin|user)$")
+    role: str = Field("user", pattern="^(" + "|".join(SELECTABLE_ROLES) + ")$")
 
 
 class SetupRequest(BaseModel):
@@ -501,6 +502,38 @@ async def create_user(body: CreateUserRequest) -> UserPublic:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exc.detail,
         ) from exc
+    return _user_public(user)
+
+
+class UpdateRoleRequest(BaseModel):
+    """Body for PUT /api/auth/users/{user_id}/role."""
+
+    role: str
+
+
+@router.put(
+    "/users/{user_id}/role",
+    response_model=UserPublic,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def update_user_role(user_id: int, body: UpdateRoleRequest) -> UserPublic:
+    """Change a user's role/tier (admin only).
+
+    400 on unknown role / unknown user / demoting the last admin;
+    403 for non-admin callers (via :func:`require_role`).
+    """
+    try:
+        user = await run_in_session(
+            lambda db: auth_service.update_user_role(db, user_id, body.role)
+        )
+    except StitchError as exc:
+        detail = exc.detail
+        code = (
+            status.HTTP_404_NOT_FOUND
+            if "not found" in detail.lower()
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=code, detail=detail) from exc
     return _user_public(user)
 
 

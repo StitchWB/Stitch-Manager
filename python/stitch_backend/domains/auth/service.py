@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.core.exceptions import StitchError
 
+from . import roles
 from .models import Session, User
 
 logger = logging.getLogger(__name__)
@@ -265,8 +266,10 @@ async def create_user(
     db: AsyncSession, *, username: str, password: str, role: str = "user"
 ) -> User:
     """Create a new user.  Raises :class:`StitchError` (409) on duplicate username."""
-    if role not in ("admin", "user"):
-        raise StitchError(f"Invalid role: {role!r} (expected 'admin' or 'user')")
+    if not roles.valid_role(role):
+        raise StitchError(
+            f"Invalid role: {role!r} (expected one of {roles.SELECTABLE_ROLES})"
+        )
     if not username or not username.strip():
         raise StitchError("Username must not be empty")
     if not password:
@@ -282,6 +285,26 @@ async def create_user(
     except IntegrityError as exc:
         await db.rollback()
         raise StitchError(f"User already exists: {username}") from exc
+    return user
+
+
+async def update_user_role(db: AsyncSession, user_id: int, role: str) -> User:
+    """Change a user's role (tier ladder: user<vip<premium<elite<admin).
+
+    Raises :class:`StitchError` on unknown user, unknown role, or when
+    demoting the last admin.
+    """
+    if not roles.valid_role(role):
+        raise StitchError(
+            f"Invalid role: {role!r} (expected one of {roles.SELECTABLE_ROLES})"
+        )
+    user = await get_user(db, user_id)
+    if user is None:
+        raise StitchError(f"User not found: {user_id}")
+    if user.role == "admin" and role != "admin" and await count_admins(db) <= 1:
+        raise StitchError("Cannot demote the last admin")
+    user.role = role
+    await db.flush()
     return user
 
 

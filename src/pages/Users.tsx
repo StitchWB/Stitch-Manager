@@ -14,14 +14,21 @@ import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../lib/utils';
-import { listUsers, createUser, deleteUser, type AuthUser } from '../lib/backend/modules/auth';
+import { listUsers, createUser, deleteUser, updateUserRole, type AuthUser } from '../lib/backend/modules/auth';
 import { askConfirm } from '../components/ui/ConfirmDialogHost';
-import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 
-type NewUserRole = 'admin' | 'user';
+type NewUserRole = AuthUser['role'];
+
+const ROLE_OPTIONS: { value: NewUserRole; labelKey: string }[] = [
+  { value: 'user', labelKey: 'auth.users.roleUser' },
+  { value: 'vip', labelKey: 'auth.users.roleVip' },
+  { value: 'premium', labelKey: 'auth.users.rolePremium' },
+  { value: 'elite', labelKey: 'auth.users.roleElite' },
+  { value: 'admin', labelKey: 'auth.users.roleAdmin' },
+];
 
 export default function Users() {
   const currentUser = useAuthStore(state => state.user);
@@ -38,6 +45,7 @@ export default function Users() {
   const [newRole, setNewRole] = useState<NewUserRole>('user');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [roleUpdatingId, setRoleUpdatingId] = useState<string | number | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -122,6 +130,20 @@ export default function Users() {
     }
   };
 
+  const onRoleChange = async (user: AuthUser, nextRole: string) => {
+    if (nextRole === user.role) return;
+    setRoleUpdatingId(user.id);
+    try {
+      await updateUserRole(user.id, nextRole);
+      toast.success(t('auth.users.updated'));
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('auth.users.updated'));
+    } finally {
+      setRoleUpdatingId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Header
@@ -167,10 +189,7 @@ export default function Users() {
                   label={t('auth.users.role')}
                   value={newRole}
                   onValueChange={v => setNewRole(v as NewUserRole)}
-                  options={[
-                    { value: 'user', label: t('auth.users.roleUser') },
-                    { value: 'admin', label: t('auth.users.roleAdmin') },
-                  ]}
+                  options={ROLE_OPTIONS.map(opt => ({ value: opt.value, label: t(opt.labelKey) }))}
                 />
                 <Button
                   type="submit"
@@ -256,12 +275,14 @@ export default function Users() {
                             </div>
                           </td>
                           <td className="px-5 py-3">
-                            <Badge
-                              variant={u.role === 'admin' ? 'info' : 'default'}
-                              size="sm"
-                            >
-                              {u.role === 'admin' ? t('auth.users.roleAdmin') : t('auth.users.roleUser')}
-                            </Badge>
+                            <Select
+                              value={u.role}
+                              onValueChange={v => void onRoleChange(u, v)}
+                              disabled={roleUpdatingId === u.id}
+                              containerClassName="w-36"
+                              shellClassName="h-7 w-full"
+                              options={ROLE_OPTIONS.map(opt => ({ value: opt.value, label: t(opt.labelKey) }))}
+                            />
                           </td>
                           <td className="px-5 py-3 text-right">
                             <Button

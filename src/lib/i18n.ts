@@ -1634,6 +1634,9 @@ export interface Translations {
     role: {
       admin: string;
       user: string;
+      vip: string;
+      premium: string;
+      elite: string;
     };
     guest: {
       title: string;
@@ -1685,6 +1688,9 @@ export interface Translations {
       role: string;
       roleAdmin: string;
       roleUser: string;
+      roleVip: string;
+      rolePremium: string;
+      roleElite: string;
       create: string;
       creating: string;
       delete: string;
@@ -1701,6 +1707,7 @@ export interface Translations {
       errorValidation: string;
       created: string;
       deleted: string;
+      updated: string;
       createFailed: string;
       deleteFailed: string;
       loadFailed: string;
@@ -3010,6 +3017,7 @@ export interface Translations {
     tags: string;
     tagsFilterLabel: string;
     tagsHint: string;
+    tierLocked: string;
     title: string;
     toggleFavorite: string;
     update: string;

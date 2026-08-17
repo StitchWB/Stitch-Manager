@@ -150,6 +150,8 @@ export interface ScenarioRecordItem {
   missing: boolean;
   metadata?: ScenarioMetadata | null;
   activeVersion?: number;
+  min_role?: string;
+  locked?: boolean;
 }
 
 export interface ScenarioReindexResult {
@@ -275,6 +277,13 @@ export async function setRecordedScenarioFavorite(params: {
   return safeInvoke<void>('set_recorded_scenario_favorite', {
     scenarioId: params.scenarioId,
     favorite: params.favorite,
+  });
+}
+
+export async function setRecordedScenarioTier(scenarioId: string, minRole: string): Promise<void> {
+  return safeInvoke<void>('set_recorded_scenario_tier', {
+    scenarioId,
+    min_role: minRole,
   });
 }
 

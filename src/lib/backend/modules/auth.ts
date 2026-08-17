@@ -19,7 +19,7 @@ import { getApiBaseUrl } from '../core/url';
 export interface AuthUser {
   id: string | number;
   username: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'vip' | 'premium' | 'elite';
 }
 
 export interface TelegramLoginResult {
@@ -155,7 +155,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     return {
       id: data.id ?? data.username,
       username: data.username,
-      role: data.role === 'admin' ? 'admin' : 'user',
+      role: data.role,
     };
   } catch {
     return null;
@@ -216,7 +216,7 @@ export async function listUsers(): Promise<AuthUser[]> {
   return data.map(u => ({
     id: u.id,
     username: u.username,
-    role: u.role === 'admin' ? 'admin' : 'user',
+    role: u.role,
   }));
 }
 
@@ -224,7 +224,7 @@ export async function listUsers(): Promise<AuthUser[]> {
  * POST /api/auth/users — create a new user (admin only).
  * @throws {Error} with `status` property = 409 on duplicate username, 400 on validation, 401/403 on auth.
  */
-export async function createUser(username: string, password: string, role: 'admin' | 'user'): Promise<AuthUser> {
+export async function createUser(username: string, password: string, role: AuthUser['role']): Promise<AuthUser> {
   const response = await fetch(`${getApiBaseUrl()}/api/auth/users`, {
     method: 'POST',
     credentials: 'include',
@@ -242,6 +242,35 @@ export async function createUser(username: string, password: string, role: 'admi
 
   if (!data?.user) {
     const err = new Error('Failed to create user') as Error & { status: number };
+    err.status = response.status;
+    throw err;
+  }
+
+  return data.user;
+}
+
+/**
+ * PUT /api/auth/users/{id}/role — update a user's role (admin only).
+ * @throws {Error} with `status` property = 400 on validation (e.g. last-admin guard), 401/403 on auth.
+ */
+export async function updateUserRole(id: string | number, role: string): Promise<AuthUser> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/users/${id}/role`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+
+  const data = (await parseJson(response)) as { user?: AuthUser; detail?: string } | null;
+
+  if (!response.ok) {
+    const err = new Error(data?.detail ?? 'Failed to update role') as Error & { status: number };
+    err.status = response.status;
+    throw err;
+  }
+
+  if (!data?.user) {
+    const err = new Error('Failed to update role') as Error & { status: number };
     err.status = response.status;
     throw err;
   }

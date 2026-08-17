@@ -1627,7 +1627,10 @@ export const en: Translations = {
     back: "Back",
     role: {
       admin: "Admin",
-      user: "User"
+      user: "User",
+      vip: "VIP",
+      premium: "Premium",
+      elite: "Elite"
     },
     guest: {
       title: "Welcome",
@@ -1679,6 +1682,9 @@ export const en: Translations = {
       role: "Role",
       roleAdmin: "Admin",
       roleUser: "User",
+      roleVip: "VIP",
+      rolePremium: "Premium",
+      roleElite: "Elite",
       create: "Create",
       creating: "Creating...",
       delete: "Delete",
@@ -1695,6 +1701,7 @@ export const en: Translations = {
       errorValidation: "Username and password are required",
       created: "User created",
       deleted: "User deleted",
+      updated: "Role updated",
       createFailed: "Failed to create user",
       deleteFailed: "Failed to delete user",
       loadFailed: "Failed to load users"
@@ -3004,6 +3011,7 @@ addMailboxFromSheets: "Import from Google Sheets",
     tags: "Tags",
     tagsFilterLabel: "Tags",
     tagsHint: "Comma-separated. Example: login, checkout, smoke",
+    tierLocked: "Requires a higher tier",
     title: "Scenarios",
     toggleFavorite: "Favorite",
     update: "Update",
