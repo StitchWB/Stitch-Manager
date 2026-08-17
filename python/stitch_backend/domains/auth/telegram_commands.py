@@ -68,14 +68,18 @@ async def _ensure_telegram_user(db: AsyncSession) -> User:
     """Return the local ``telegram`` user, creating it if absent.
 
     The password is a random 32-byte hex string — login is via TG code, not
-    password, so nobody needs to know it.
+    password, so nobody needs to know it.  The FIRST user ever created gets
+    role ``admin`` (bootstrap, same spirit as ``/api/auth/setup``) so the
+    owner logging in via Telegram lands with full access; later TG logins
+    are regular users.
     """
     user = await auth_service.get_user_by_username(db, _TELEGRAM_USERNAME)
     if user is not None:
         return user
     random_pw = secrets.token_hex(32)
+    role = "admin" if await auth_service.count_users(db) == 0 else _TELEGRAM_ROLE
     return await auth_service.create_user(
-        db, username=_TELEGRAM_USERNAME, password=random_pw, role=_TELEGRAM_ROLE
+        db, username=_TELEGRAM_USERNAME, password=random_pw, role=role
     )
 
 
