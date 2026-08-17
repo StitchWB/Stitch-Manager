@@ -4239,6 +4239,8 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     key: "Ключ",
     refresh: "Обновить",
     tokenRejected: "AiApiRadar отклонил токен — проверьте AIRADAR_ADMIN_TOKEN",
+    clipboardWarning:
+      "Скопированный ключ остаётся в истории буфера обмена, пока вы не скопируете что-то другое.",
   },
   marketplace: {
     title: "Маркетплейс",

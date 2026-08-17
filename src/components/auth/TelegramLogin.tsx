@@ -14,7 +14,7 @@ import { Terminal, AlertCircle, Loader2, ArrowLeft, Send } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth';
 import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
-import { STITCH_BOT_URL } from '@/lib/links';
+import { STITCH_BOT_LOGIN_URL } from '@/lib/links';
 import { cn } from '../../lib/utils';
 
 export default function TelegramLogin() {
@@ -105,7 +105,7 @@ export default function TelegramLogin() {
 
             {/* Open-bot shortcut — jumps straight to the bot chat */}
             <a
-              href={STITCH_BOT_URL}
+              href={STITCH_BOT_LOGIN_URL}
               target="_blank"
               rel="noopener noreferrer"
               data-testid="telegram-open-bot-link"
