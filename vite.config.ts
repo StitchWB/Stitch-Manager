@@ -45,9 +45,18 @@ export default defineConfig({
         ws: true,
       },
     },
-    // Pre-transform critical modules on startup to reduce waterfall
+    // Pre-transform the module graph on server start. The desktop shell opens
+    // seconds after the port binds; without warmup the WebView pays the full
+    // cold-waterfall cost (~300+ modules, depth-limited) on every launch.
+    // Warmup transforms server-side with full parallelism; browser requests
+    // then join in-flight transforms or hit the cache.
     warmup: {
-      clientFiles: ['./src/main.tsx', './src/App.tsx'],
+      clientFiles: ['./src/main.tsx', './src/App.tsx', './src/**/*.{ts,tsx}'],
+    },
+    watch: {
+      // Keep Vite's default ignores and stop dist*/ backup folders from
+      // triggering full page reloads mid-session.
+      ignored: ['**/.git/**', '**/node_modules/**', '**/dist*/**'],
     },
   },
   build: {

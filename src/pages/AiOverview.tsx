@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   ArrowRight,
+  BookOpen,
   Cable,
   KeyRound,
   LayoutDashboard,
@@ -126,6 +127,15 @@ export default function AiOverview() {
           to: '/ai/opencode-config',
           icon: Settings2,
           tone: 'text-fuchsia-300 bg-fuchsia-500/10',
+        },
+        {
+          title: 'NotebookLM',
+          description: isRu
+            ? 'Ноутбуки, вопросы и аудио-обзоры'
+            : 'Notebooks, questions and audio overviews',
+          to: '/ai/notebooklm',
+          icon: BookOpen,
+          tone: 'text-teal-300 bg-teal-500/10',
         },
       ],
     },

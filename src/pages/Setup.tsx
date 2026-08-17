@@ -7,14 +7,14 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Terminal, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { Terminal, AlertCircle, Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../lib/utils';
 
 export default function Setup() {
-  const { setup, busy, error, clearError } = useAuthStore();
+  const { setup, busy, error, clearError, required, setAuthView } = useAuthStore();
   const language = useAppStore(state => state.language);
   void language; // re-render on language change
 
@@ -75,6 +75,18 @@ export default function Setup() {
           <div className="h-px w-full bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
 
           <div className="px-8 pt-10 pb-8">
+            {/* Back link — only when auth is optional (!required) */}
+            {!required && (
+              <button
+                type="button"
+                onClick={() => setAuthView('welcome')}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors mb-6 -mt-2"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                {t('auth.back')}
+              </button>
+            )}
+
             {/* Logo + title + first-admin badge */}
             <div className="flex flex-col items-center text-center mb-8">
               <div className="relative mb-4">

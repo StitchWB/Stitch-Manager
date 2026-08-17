@@ -17,10 +17,11 @@ import {
   KeyRound,
   Radar,
   HeartHandshake,
-  BookOpen,
   Send,
   LogOut,
   UserCircle,
+  Store,
+  ShieldOff,
 } from
   'lucide-react';
 import { useAppStore } from '../../stores/app';
@@ -72,7 +73,16 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
 
 export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, language } = useAppStore();
-  const { enabled: authEnabled, user: authUser, logout: authLogout, busy: authBusy } = useAuthStore();
+  const {
+    enabled: authEnabled,
+    required: authRequired,
+    hasUsers: authHasUsers,
+    user: authUser,
+    guest: authGuest,
+    logout: authLogout,
+    busy: authBusy,
+    exitGuest,
+  } = useAuthStore();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -217,13 +227,11 @@ export default function Sidebar() {
           label={t('sidebar.friends')}
           collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/notebooklm"
-            icon={<BookOpen size={20} />}
-            label={t('sidebar.notebooklm')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/marketplace"
+          icon={<Store size={20} />}
+          label={t('sidebar.marketplace')}
+          collapsed={sidebarCollapsed} />
 
         {isAdmin && (
           <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
@@ -303,6 +311,52 @@ export default function Sidebar() {
                 className="text-slate-500 hover:text-red-400"
               >
                 <LogOut size={16} />
+              </IconButton>
+            </Tooltip>
+          </div>
+        )}
+
+        {/* Guest chip — auth enabled, not required, user chose guest mode.
+            Shows a subtle "Guest" badge and a button to opt into protection
+            (Setup when no users exist, Login otherwise). */}
+        {authEnabled && !authRequired && authGuest && !authUser && (
+          <div className={cn(
+            'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
+            sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2'
+          )}>
+            {sidebarCollapsed ? (
+              <Tooltip content={t('auth.guest.badge')} side="right">
+                <div className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0">
+                  <ShieldOff className="w-4 h-4" />
+                </div>
+              </Tooltip>
+            ) : (
+              <>
+                <div className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0">
+                  <ShieldOff className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <span className="text-xs font-medium text-slate-200 truncate">
+                    {t('auth.guest.badge')}
+                  </span>
+                  <Badge variant="default" size="sm" className="mt-0.5 self-start">
+                    {t('auth.guest.badge')}
+                  </Badge>
+                </div>
+              </>
+            )}
+            <Tooltip
+              content={authHasUsers ? t('auth.guest.login') : t('auth.guest.createLocal')}
+              side={sidebarCollapsed ? 'right' : 'top'}
+            >
+              <IconButton
+                onClick={() => exitGuest(authHasUsers ? 'login' : 'setup')}
+                size="md"
+                variant="ghost"
+                aria-label={authHasUsers ? t('auth.guest.login') : t('auth.guest.createLocal')}
+                className="text-slate-500 hover:text-indigo-400"
+              >
+                <ShieldCheck size={16} />
               </IconButton>
             </Tooltip>
           </div>

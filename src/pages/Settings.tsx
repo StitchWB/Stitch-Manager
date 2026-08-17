@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Settings as SettingsIcon,
   Repeat,
@@ -11,8 +12,12 @@ import {
   Mail,
   Monitor,
   Chrome,
+  Store,
+  Lock,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAppStore } from '../stores/app';
+import { useAuthStore } from '../stores/auth';
 import { useLogsStore } from '../stores/logs';
 import { useRegistrationStore } from '../stores/registration';
 import { useUIState } from '../hooks/useUIState';
@@ -46,7 +51,6 @@ import {
   ExtensionSettingsSection,
   BackgroundManagerSettingsSection,
   TelemetrySection,
-  CommunitySection,
 } from '../components/settings';
 
 const SETTINGS_SECRET_MASK = '********';
@@ -58,7 +62,7 @@ import {
   saveEmailGenerationDomain,
 } from '../stores/registration/utils/migration';
 import { AutomationTab } from '../components/registration/AutomationTab';
-import { LoadingSpinner, TabButton, SegmentedControl } from '@/components/ui';
+import { LoadingSpinner, TabButton, SegmentedControl, Toggle } from '@/components/ui';
 
 type SettingsCategory =
   | 'appearance'
@@ -130,6 +134,19 @@ export default function Settings() {
 
   const addLog = useLogsStore(state => state.addLog);
   const { copy } = useCopyToClipboard();
+
+  // Auth policy toggle (system section) — admin-only, visible only when
+  // auth is enabled and the current user is an admin.
+  const authEnabled = useAuthStore(state => state.enabled);
+  const authUser = useAuthStore(state => state.user);
+  const enforceLogin = useAuthStore(state => state.enforceLogin);
+  const setLoginPolicy = useAuthStore(state => state.setLoginPolicy);
+  const [enforceLoginDraft, setEnforceLoginDraft] = useState(true);
+  const [policyBusy, setPolicyBusy] = useState(false);
+  // Sync the draft when the store value changes (init / after policy update).
+  useEffect(() => {
+    setEnforceLoginDraft(enforceLogin);
+  }, [enforceLogin]);
 
   const [activeCategory, setActiveCategory] = useUIState<SettingsCategory>(
     'settings-active-category',
@@ -862,7 +879,72 @@ export default function Settings() {
             />
             <DatabaseSection dbPath={dbPath} onCopy={copy} />
             <TelemetrySection />
-            <CommunitySection />
+            {/* Marketplace link — plugins are now managed on the dedicated page */}
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                  <Store className="w-4 h-4 text-indigo-300" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-medium text-slate-200">
+                    {t('marketplace.title')}
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    {t('marketplace.subtitle')}
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/marketplace"
+                className="text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors shrink-0"
+              >
+                {t('marketplace.title')} →
+              </Link>
+            </div>
+            {/* Login enforcement toggle — admin-only, visible only when auth
+                is enabled and the current user is an admin. Bound to
+                status.enforce_login; on change calls POST /api/auth/policy
+                then refreshes the auth status store. */}
+            {authEnabled && authUser?.role === 'admin' && (
+              <div
+                className="rounded-lg border border-white/10 bg-white/[0.02] p-4 flex items-center justify-between gap-3"
+                data-testid="auth-policy-toggle-row"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                    <Lock className="w-4 h-4 text-indigo-300" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-medium text-slate-200">
+                      {t('settings.authPolicy.title')}
+                    </h4>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      {t('settings.authPolicy.description')}
+                    </p>
+                  </div>
+                </div>
+                <Toggle
+                  label=""
+                  checked={enforceLoginDraft}
+                  disabled={policyBusy}
+                  onChange={async v => {
+                    const prev = enforceLoginDraft;
+                    setEnforceLoginDraft(v);
+                    setPolicyBusy(true);
+                    try {
+                      await setLoginPolicy(v);
+                      toast.success(t('settings.authPolicy.updated'));
+                    } catch {
+                      // Revert the toggle on error.
+                      setEnforceLoginDraft(prev);
+                      toast.error(t('settings.authPolicy.updateFailed'));
+                    } finally {
+                      setPolicyBusy(false);
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
         );
       case 'automation':

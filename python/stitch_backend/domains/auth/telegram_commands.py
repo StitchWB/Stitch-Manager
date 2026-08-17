@@ -1,0 +1,130 @@
+"""Telegram-code login commands — exchange a TG-bot code for a local session.
+
+Two commands wired to the command registry:
+
+  - ``login_telegram`` ``{code: str}`` → exchanges the one-time code at the
+    distribution server via :class:`ActivationService`, ensures a local
+    ``telegram`` user exists (role ``user``; created with a random password
+    since login is via TG code, not password), creates a session, and
+    returns ``{success, user, entitlements, session_token}``.
+
+    On failure returns ``{success: False, error: str}`` with a
+    human-readable error mapped from the server response:
+
+      * 404 → "Code not found"
+      * 409 → "Code already used"
+      * 403 → "Code revoked"
+      * connection error → "Server unreachable"
+
+  - ``get_telegram_status`` (readonly) → ``{activated, entitlements}`` from
+    :meth:`ActivationService.load` (for the UI badge).
+"""
+
+from __future__ import annotations
+
+import logging
+import secrets
+from typing import TYPE_CHECKING
+
+import httpx
+
+from stitch_backend.core.command_registry import register_command
+from stitch_backend.database import run_in_session
+from stitch_backend.domains.auth import service as auth_service
+from stitch_backend.domains.plugin_distribution.activation import (
+    ActivationService,
+    derive_hwid,
+)
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from stitch_backend.domains.auth.models import User
+
+logger = logging.getLogger(__name__)
+
+#: Username + role for the Telegram-code login user.
+_TELEGRAM_USERNAME = "telegram"
+_TELEGRAM_ROLE = "user"
+
+
+def _map_activation_error(exc: Exception) -> str:
+    """Map a server/transport error to a human-readable string."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status == 404:
+            return "Code not found"
+        if status == 409:
+            return "Code already used"
+        if status == 403:
+            return "Code revoked"
+        return f"Activation failed ({status})"
+    if isinstance(exc, (httpx.ConnectError, httpx.RequestError)):
+        return "Server unreachable"
+    return f"Activation failed: {exc}"
+
+
+async def _ensure_telegram_user(db: AsyncSession) -> User:
+    """Return the local ``telegram`` user, creating it if absent.
+
+    The password is a random 32-byte hex string — login is via TG code, not
+    password, so nobody needs to know it.
+    """
+    user = await auth_service.get_user_by_username(db, _TELEGRAM_USERNAME)
+    if user is not None:
+        return user
+    random_pw = secrets.token_hex(32)
+    return await auth_service.create_user(
+        db, username=_TELEGRAM_USERNAME, password=random_pw, role=_TELEGRAM_ROLE
+    )
+
+
+@register_command("login_telegram")
+async def cmd_login_telegram(params: dict) -> dict:
+    """Exchange a Telegram-bot code for a local session.
+
+    Params: ``{code: str}``.  Returns ``{success, user, entitlements,
+    session_token}`` on success or ``{success: False, error: str}`` on
+    failure.
+    """
+    code = str(params.get("code", "")).strip()
+    if not code:
+        return {"success": False, "error": "Code is required"}
+
+    hwid = derive_hwid()
+    activation = ActivationService()
+    try:
+        state = await activation.activate(code, hwid)
+    except Exception as exc:  # noqa: BLE001 — surface as command error
+        return {"success": False, "error": _map_activation_error(exc)}
+
+    async def _op(db: AsyncSession) -> tuple[User, str]:
+        user = await _ensure_telegram_user(db)
+        raw_token, _expires_at = await auth_service.create_session(db, user.id)
+        return user, raw_token
+
+    try:
+        user, raw_token = await run_in_session(_op)
+    except Exception as exc:  # noqa: BLE001 — surface as command error
+        return {"success": False, "error": f"Session creation failed: {exc}"}
+
+    return {
+        "success": True,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+        },
+        "entitlements": list(state.entitlements),
+        "session_token": raw_token,
+    }
+
+
+@register_command("get_telegram_status", readonly=True)
+async def cmd_get_telegram_status(params: dict) -> dict:
+    """Return ``{activated, entitlements}`` from the persisted activation."""
+    activation = ActivationService()
+    state = activation.load()
+    if state is None:
+        return {"activated": False, "entitlements": []}
+    return {"activated": True, "entitlements": list(state.entitlements)}

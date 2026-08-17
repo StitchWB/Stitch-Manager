@@ -3,16 +3,19 @@
  *
  * Tests the auth store's init() flow and the App gate logic:
  *   - disabled → app renders (no login/setup)
- *   - enabled + !hasUsers → setup renders
- *   - enabled + hasUsers + !user → login renders
- *   - enabled + hasUsers + user → app renders
+ *   - required + !hasUsers → setup renders (mandatory)
+ *   - required + hasUsers + !user → login renders (mandatory)
+ *   - required + hasUsers + user → app renders
+ *   - !required + !hasUsers + !user → welcome gate renders (guest path)
+ *   - !required + !user, click "continue without login" → app renders (guest)
+ *   - !required + hasUsers + !user → welcome gate renders with Login secondary
  *
  * Mocks the auth backend module (fetch-based) rather than the store, so the
  * store's real init() logic is exercised.
  */
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth';
 
@@ -21,6 +24,7 @@ jest.mock('../../lib/backend/modules/auth', () => ({
   getAuthStatus: jest.fn(),
   getCurrentUser: jest.fn(),
   loginUser: jest.fn(),
+  loginTelegram: jest.fn(),
   logoutUser: jest.fn(),
   setupUser: jest.fn(),
   listUsers: jest.fn(),
@@ -167,6 +171,7 @@ const authModule = jest.requireMock('../../lib/backend/modules/auth') as {
   getAuthStatus: jest.Mock;
   getCurrentUser: jest.Mock;
   loginUser: jest.Mock;
+  loginTelegram: jest.Mock;
   logoutUser: jest.Mock;
   setupUser: jest.Mock;
 };
@@ -180,11 +185,14 @@ describe('Auth gate', () => {
     useAuthStore.setState({
       enabled: false,
       hasUsers: false,
+      required: false,
       checked: false,
       user: null,
       busy: false,
       error: null,
       sessionExpired: false,
+      guest: false,
+      authView: 'welcome',
     });
   });
 
@@ -192,8 +200,8 @@ describe('Auth gate', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('renders Setup when auth enabled and no users exist', async () => {
-    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false });
+  it('renders Setup when auth required and no users exist', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: true });
     authModule.getCurrentUser.mockResolvedValue(null);
 
     render(
@@ -207,8 +215,8 @@ describe('Auth gate', () => {
     });
   });
 
-  it('renders Login when auth enabled, users exist, but no session', async () => {
-    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true });
+  it('renders Login when auth required, users exist, but no session', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: true });
     authModule.getCurrentUser.mockResolvedValue(null);
 
     render(
@@ -223,7 +231,7 @@ describe('Auth gate', () => {
   });
 
   it('renders the app (Dashboard) when auth is disabled', async () => {
-    authModule.getAuthStatus.mockResolvedValue({ enabled: false, has_users: false });
+    authModule.getAuthStatus.mockResolvedValue({ enabled: false, has_users: false, required: false });
 
     render(
       <MemoryRouter>
@@ -237,7 +245,7 @@ describe('Auth gate', () => {
   });
 
   it('renders the app (Dashboard) when auth enabled and user is logged in', async () => {
-    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true });
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: true });
     authModule.getCurrentUser.mockResolvedValue({
       id: 1,
       username: 'admin',
@@ -252,6 +260,264 @@ describe('Auth gate', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('layout')).toBeTruthy();
+    });
+  });
+
+  it('renders WelcomeGate when auth enabled, not required, no users, no guest', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+    });
+    // Three buttons: TG (primary), password login (always visible), continue.
+    expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
+    // No users → hint link to create a local account (replaces old setup button).
+    expect(screen.getByTestId('guest-no-account-hint')).toBeTruthy();
+    // Old secondary setup button is removed.
+    expect(screen.queryByTestId('guest-setup-btn')).toBeNull();
+    // Mandatory surfaces are NOT rendered
+    expect(screen.queryByTestId('setup-page')).toBeNull();
+    expect(screen.queryByTestId('login-page')).toBeNull();
+  });
+
+  it('renders WelcomeGate with Login secondary when auth not required and users exist', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+    });
+    // Three buttons always present; TG + password login + continue.
+    expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
+    // Users exist → no "create local account" hint link.
+    expect(screen.queryByTestId('guest-no-account-hint')).toBeNull();
+    expect(screen.queryByTestId('guest-setup-btn')).toBeNull();
+  });
+
+  it('enters the app as guest when "Continue without login" is clicked', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('guest-continue-btn'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('layout')).toBeTruthy();
+    });
+    // Guest mode is now active in the store
+    expect(useAuthStore.getState().guest).toBe(true);
+    // Mandatory surfaces are NOT rendered
+    expect(screen.queryByTestId('setup-page')).toBeNull();
+    expect(screen.queryByTestId('login-page')).toBeNull();
+  });
+
+  it('navigates to Setup when "No account? Create a local one" hint is clicked (!required, !has_users)', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-no-account-hint')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('guest-no-account-hint'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('setup-page')).toBeTruthy();
+    });
+    // authView is now 'setup'
+    expect(useAuthStore.getState().authView).toBe('setup');
+  });
+
+  it('navigates to Login when "Login" is clicked (!required, has_users)', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('guest-login-btn'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('login-page')).toBeTruthy();
+    });
+    expect(useAuthStore.getState().authView).toBe('login');
+  });
+
+  it('required path is still mandatory: no guest button when required=true', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: true });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('login-page')).toBeTruthy();
+    });
+    // No guest affordance on the mandatory login surface
+    expect(screen.queryByTestId('guest-continue-btn')).toBeNull();
+    expect(screen.queryByTestId('guest-setup-btn')).toBeNull();
+    expect(screen.queryByTestId('guest-login-btn')).toBeNull();
+    expect(screen.queryByTestId('guest-telegram-btn')).toBeNull();
+  });
+
+  it('welcome gate shows three buttons (Telegram, password, continue)', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    });
+    expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
+    expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+  });
+
+  it('navigates to TelegramLogin when TG button is clicked', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('guest-telegram-btn'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('telegram-page')).toBeTruthy();
+    });
+    expect(useAuthStore.getState().authView).toBe('telegram');
+  });
+
+  it('login page shows Telegram link', () => {
+    // The Login page is mocked as a stub for gate tests; render the real
+    // component to verify the TG link is present.
+    const RealLogin = jest.requireActual('../../pages/Login').default;
+
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: null,
+      authView: 'login',
+    });
+
+    render(
+      <MemoryRouter>
+        <RealLogin />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('login-tg-link')).toBeTruthy();
+  });
+
+  it('calls login_telegram on submit and refreshes session on success', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+    authModule.loginTelegram.mockResolvedValue({
+      success: true,
+      user: { id: 1, username: 'tg', role: 'admin' },
+      entitlements: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    // Wait for welcome gate
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    });
+
+    // Click TG button → TelegramLogin renders
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('guest-telegram-btn'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('telegram-page')).toBeTruthy();
+    });
+
+    // Type code and submit
+    const codeInput = screen.getByTestId('telegram-code-input');
+    await act(async () => {
+      fireEvent.change(codeInput, { target: { value: '123456' } });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('telegram-submit-btn'));
+    });
+
+    // Verify loginTelegram was called with the code
+    await waitFor(() => {
+      expect(authModule.loginTelegram).toHaveBeenCalledWith('123456');
+    });
+
+    // Verify init() was called again (getAuthStatus called twice: once on
+    // mount, once after TG login success).
+    await waitFor(() => {
+      expect(authModule.getAuthStatus).toHaveBeenCalledTimes(2);
     });
   });
 });
