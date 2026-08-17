@@ -190,6 +190,12 @@ class Account(Base):
         String, comment="FK → accounts.id of the donor that referred this account"
     )
 
+    # ═══════ Cooldown ═══════════════════════════════════════════════════════
+    cooldown_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        comment="When this account becomes selectable again after a failure (UTC)",
+    )
+
     # ═══════ Provider Metadata ══════════════════════════════════════════════
     provider_metadata: Mapped[dict | None] = mapped_column(
         JSON,

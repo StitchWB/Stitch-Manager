@@ -27,6 +27,10 @@ interface AccountProfileSessionSectionProps {
   onOpenProfileSession?: () => void;
   onConfirmProfileSession?: () => void;
   onClearProfileSession?: () => void;
+  /** Web-session (web2api) providers get the cookie-harvest pair instead. */
+  isWebSession?: boolean;
+  onOpenWebLogin?: () => void;
+  onCaptureWebCookies?: () => void;
   compact?: boolean;
 }
 
@@ -35,6 +39,9 @@ export function AccountProfileSessionSection({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  isWebSession,
+  onOpenWebLogin,
+  onCaptureWebCookies,
   compact,
 }: AccountProfileSessionSectionProps) {
   const profileSessionStatus = getProfileSessionStatus(tagsList);
@@ -100,6 +107,34 @@ export function AccountProfileSessionSection({
         >
           {t('accounts.profileSessionClear')}
         </ButtonBase>
+        {isWebSession && (
+          <>
+            <ButtonBase
+              onClick={onOpenWebLogin}
+              disabled={!onOpenWebLogin}
+              className={cn(
+                'px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest rounded-md border transition-colors',
+                onOpenWebLogin
+                  ? 'border-sky-500/30 text-sky-300 hover:bg-sky-500/10'
+                  : 'border-white/5 text-slate-500 opacity-50 cursor-not-allowed'
+              )}
+            >
+              {t('accounts.webLoginOpen')}
+            </ButtonBase>
+            <ButtonBase
+              onClick={onCaptureWebCookies}
+              disabled={!onCaptureWebCookies}
+              className={cn(
+                'px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest rounded-md border transition-colors',
+                onCaptureWebCookies
+                  ? 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10'
+                  : 'border-white/5 text-slate-500 opacity-50 cursor-not-allowed'
+              )}
+            >
+              {t('accounts.webLoginCapture')}
+            </ButtonBase>
+          </>
+        )}
       </div>
     </div>
   );

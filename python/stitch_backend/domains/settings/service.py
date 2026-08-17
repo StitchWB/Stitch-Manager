@@ -47,7 +47,7 @@ _JSON_KEYS = {"customIdePaths"}
 PASSWORD_MASK = "********"
 _PASSWORD_KEYS = {
     "imapPassword", "proxyPassword", "addyioApiToken", "gmailAppPassword",
-    "icloudAppPassword",
+    "icloudAppPassword", "localChatToken",
 }
 
 

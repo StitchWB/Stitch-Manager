@@ -25,6 +25,7 @@ from .capabilities import (
     branch_capability,
     captcha_solve_capability,
     extract_capability,
+    firebase_auth_capability,
     imap_otp_capability,
     resolve_all_selectors,
     resolve_selector,
@@ -84,12 +85,14 @@ class ScenarioExecutor:
         store: dict[str, Any] | None = None,
         imap_config: dict[str, Any] | None = None,
         imap_factory: Callable[[dict[str, Any]], Any] | None = None,
+        proxy: str | None = None,
     ) -> None:
         self._scenario = scenario
         self._browser = browser
         self._store = store if store is not None else {}
         self._imap_config = imap_config
         self._imap_factory = imap_factory
+        self._proxy = proxy
         self._steps_by_id = {s.id: i for i, s in enumerate(scenario.steps)}
 
     # ── public ─────────────────────────────────────────────────────────
@@ -589,8 +592,11 @@ class ScenarioExecutor:
     def _totp_register(self, step: ScenarioStep) -> StepResult:
         return totp_register_capability(step, self._browser, self._store)
 
+    def _firebase_auth(self, step: ScenarioStep) -> StepResult:
+        return firebase_auth_capability(step, self._store, proxy=self._proxy)
+
     def _account_save(self, step: ScenarioStep) -> StepResult:
-        return account_save_capability(step, self._store)
+        return account_save_capability(step, self._store, browser=self._browser)
 
 
 _KIND_TO_METHOD: dict[str, str] = {
@@ -609,5 +615,6 @@ _KIND_TO_METHOD: dict[str, str] = {
     "captcha.solve": "_captcha_solve",
     "stripe.fill_checkout": "_stripe_fill_checkout",
     "totp.register": "_totp_register",
+    "firebase.auth": "_firebase_auth",
     "account.save": "_account_save",
 }

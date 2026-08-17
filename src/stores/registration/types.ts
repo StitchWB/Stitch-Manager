@@ -61,26 +61,10 @@ export interface ProviderEmailStrategy {
   addyioDomain?: string;
 }
 
-// Provider-specific configurations (email strategy only, IMAP is global)
-export interface ProviderEmailStrategies {
-  kiro: ProviderEmailStrategy;
-  kiro_v2: ProviderEmailStrategy;
-  windsurf: ProviderEmailStrategy;
-  trae: ProviderEmailStrategy;
-  github: ProviderEmailStrategy;
-  aws: ProviderEmailStrategy;
-  copilot: ProviderEmailStrategy;
-  openai: ProviderEmailStrategy;
-  fireworks: ProviderEmailStrategy;
-  qoder: ProviderEmailStrategy;
-  v0_app: ProviderEmailStrategy;
-  bitbucket: ProviderEmailStrategy;
-  claude: ProviderEmailStrategy;
-  anthropic: ProviderEmailStrategy;
-  gemini: ProviderEmailStrategy;
-  antigravity: ProviderEmailStrategy;
-  aws_builder_id: ProviderEmailStrategy;
-}
+// Provider-specific configurations (email strategy only, IMAP is global).
+// Partial over the full Provider union so newly added providers (web-*)
+// don't break indexing; missing entries fall back to defaults at use sites.
+export type ProviderEmailStrategies = Partial<Record<ProviderName, ProviderEmailStrategy>>;
 
 // Proxy configuration
 export interface ProxyConfig {
@@ -224,7 +208,7 @@ export const DEFAULT_EMAIL_STRATEGY: ProviderEmailStrategy = {
 };
 
 export const DEFAULT_CONFIG: RegistrationConfig = {
-  provider: 'kiro',
+  provider: 'kiro_v2',
   credentials: {
     email: '',
     password: '',

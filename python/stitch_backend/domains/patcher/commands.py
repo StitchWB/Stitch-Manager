@@ -11,6 +11,7 @@ import asyncio
 import logging
 import re
 import shutil
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -100,9 +101,15 @@ def _find_extension_path(ide: str) -> Path | None:
 
 
 def _read_patch_version(file_path: Path) -> str | None:
-    """Extract patch version marker from a patched file."""
+    """Extract patch version marker from a patched file.
+
+    Only the head of the file is read: patch markers are injected at the very
+    top (right after ``"use strict";``), and extension bundles can be tens of
+    megabytes — reading the whole file made detect_ides take ~10 seconds.
+    """
     try:
-        content = file_path.read_text(encoding="utf-8", errors="replace")
+        with open(file_path, encoding="utf-8", errors="replace") as f:
+            content = f.read(8192)
     except OSError:
         return None
 
@@ -120,6 +127,12 @@ def _read_patch_version(file_path: Path) -> str | None:
     return None
 
 
+#: Guards the process-list cache. detect_ides scans several IDEs in a thread
+#: pool; without a lock every worker ran psutil.process_iter() simultaneously
+#: (thundering herd), each full process scan taking seconds on Windows.
+_process_scan_lock = threading.Lock()
+
+
 def _get_running_processes() -> set[str]:
     """Get set of running process names (cached for 30 seconds)."""
     if not hasattr(_get_running_processes, '_cache'):
@@ -127,19 +140,31 @@ def _get_running_processes() -> set[str]:
         cast("Any", _get_running_processes)._cache_time = 0
 
     current_time = time.time()
-    if cast("Any", _get_running_processes)._cache is None or current_time - cast("Any", _get_running_processes)._cache_time > 30:
+    cache = cast("Any", _get_running_processes)._cache
+    cache_time = cast("Any", _get_running_processes)._cache_time
+    if cache is not None and current_time - cache_time <= 30:
+        return cast("set[str]", cache)
+
+    # Re-check under the lock so only one thread pays for the psutil scan.
+    with _process_scan_lock:
+        cache = cast("Any", _get_running_processes)._cache
+        cache_time = cast("Any", _get_running_processes)._cache_time
+        current_time = time.time()
+        if cache is not None and current_time - cache_time <= 30:
+            return cast("set[str]", cache)
         try:
             import psutil
-            cast("Any", _get_running_processes)._cache = {
+            cache = {
                 proc.info["name"].lower()
                 for proc in psutil.process_iter(["name"])
                 if proc.info["name"]
             }
-            cast("Any", _get_running_processes)._cache_time = current_time
         except Exception:
-            cast("Any", _get_running_processes)._cache = set()
+            cache = set()
+        cast("Any", _get_running_processes)._cache = cache
+        cast("Any", _get_running_processes)._cache_time = current_time
 
-    return cast("set[str]", cast("Any", _get_running_processes)._cache)
+    return cast("set[str]", cache)
 
 
 def _is_ide_running(ide: str) -> bool:

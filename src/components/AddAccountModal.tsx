@@ -2,8 +2,8 @@ import { useState, useRef } from 'react';
 import type { ProviderName } from '../types/ui';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
-import { PROVIDERS } from '../constants/providers';
-import { Button, Input, Modal, Select } from '@/components/ui';
+import { PROVIDERS, getProvider } from '../constants/providers';
+import { Button, Input, Modal, Select, Textarea } from '@/components/ui';
 
 interface AddAccountModalProps {
   isOpen: boolean;
@@ -13,6 +13,7 @@ interface AddAccountModalProps {
     email: string;
     password: string;
     token?: string;
+    cookies?: string;
   }) => Promise<void>;
 }
 
@@ -22,6 +23,10 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
+  const [cookies, setCookies] = useState('');
+  // Data-driven: web-session providers declare `webSession: true` in
+  // constants/providers.ts — no provider-id special-casing here.
+  const isWebSession = getProvider(provider)?.webSession === true;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -40,12 +45,14 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
         email,
         password,
         token: token || undefined,
+        cookies: isWebSession && cookies.trim() ? cookies.trim() : undefined,
       });
       // Reset form on success
       setProvider('kiro');
       setEmail('');
       setPassword('');
       setToken('');
+      setCookies('');
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -137,10 +144,29 @@ export default function AddAccountModal({ isOpen, onClose, onSubmit }: AddAccoun
           value={password}
           onChange={e => setPassword(e.target.value)}
           disabled={isSubmitting}
-          required
+          required={!isWebSession}
           placeholder="••••••••"
           aria-required="true"
         />
+
+        {/* Cookies input for web-session providers (data-driven flag) */}
+        {isWebSession && (
+          <div>
+            <Textarea
+              label={`${t('accounts.cookies')} (${t('accounts.tokenOptional')})`}
+              id="cookies-input"
+              value={cookies}
+              onChange={e => setCookies(e.target.value)}
+              disabled={isSubmitting}
+              placeholder="SID=...; HSID=...; SSID=...; APISID=...; SAPISID=...; __Secure-1PSID=..."
+              className="font-mono"
+              rows={3}
+            />
+            <p id="cookies-hint" className="mt-1 text-xs text-slate-500">
+              {t('accounts.cookiesHint')}
+            </p>
+          </div>
+        )}
 
         {/* Token Input (Optional) */}
         <div>

@@ -84,6 +84,9 @@ class AccountResponse(BaseModel):
     ref_max_count: int = Field(40, alias="refMaxCount")
     referred_by_id: str | None = Field(None, alias="referredById")
 
+    # Cooldown (web-gemini and future web adapters)
+    cooldown_until: str | None = Field(None, alias="cooldownUntil")
+
     # Timestamps
     created_at: str = Field(alias="createdAt")
     updated_at: str | None = Field(None, alias="updatedAt")
@@ -201,6 +204,9 @@ class AddAccountRequest(BaseModel):
     api_key: str | None = Field(None, alias="apiKey")
     display_name: str | None = Field(None, alias="displayName")
     metadata: str | None = None
+    # Web-session cookie jar (web-gemini and future web adapters), e.g.
+    # "SID=...; HSID=...; ...; __Secure-1PSID=...". Stored encrypted.
+    cookies: str | None = None
 
 
 class DeleteAccountRequest(BaseModel):

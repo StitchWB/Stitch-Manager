@@ -24,6 +24,24 @@ function getRequestKey(command: string, args?: Record<string, unknown>): string 
 let _backendOffline = false;
 let _offlineToastId: string | number | null = null;
 
+// ── Auth session-expiry hook ────────────────────────────────────────────────
+// When auth is enabled and a regular /api/* call (via safeInvoke) comes back
+// 401, the session cookie has expired or been revoked. The auth store
+// registers a handler here during init() so the app can drop the user back
+// to the login page without a hard refresh. Auth endpoints (/api/auth/*)
+// do NOT go through safeInvoke — they use fetch directly in
+// src/lib/backend/modules/auth.ts — so their expected 401s (bad credentials,
+// no session) never reach this handler.
+let _onAuthExpired: (() => void) | null = null;
+
+/**
+ * Register (or clear) the global auth-expired callback. Called when a
+ * non-auth /api/* request returns 401 while the user is logged in.
+ */
+export function setAuthExpiredHandler(handler: (() => void) | null): void {
+  _onAuthExpired = handler;
+}
+
 function isConnectionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const msg = error.message.toLowerCase();
@@ -150,6 +168,7 @@ export async function safeInvoke<T>(command: string, args?: Record<string, unkno
     try {
       const response = await fetch(`${API_BASE_URL}/api/${command}`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -157,6 +176,12 @@ export async function safeInvoke<T>(command: string, args?: Record<string, unkno
       });
 
       const data = await response.json();
+
+      // Session expired on a regular API call → drop the user back to login.
+      // The handler is a no-op when auth is disabled (desktop mode).
+      if (response.status === 401 && _onAuthExpired) {
+        _onAuthExpired();
+      }
 
       if (!response.ok) {
         throw data;

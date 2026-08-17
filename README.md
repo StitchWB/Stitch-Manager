@@ -15,16 +15,15 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/WhiteBite/Stitch-Account-Manager?style=flat-square&color=6366f1" alt="Release">
+  <img src="https://img.shields.io/github/v/release/WhiteBite/Stitch-Manager?style=flat-square&color=6366f1" alt="Release">
   <img src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square&logo=fastapi" alt="Python FastAPI">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react" alt="React 18">
-  <img src="https://img.shields.io/github/license/WhiteBite/Stitch-Account-Manager?style=flat-square&color=green" alt="License">
+  <img src="https://img.shields.io/github/license/WhiteBite/Stitch-Manager?style=flat-square&color=green" alt="License">
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS">
   <img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux">
 </p>
 
@@ -221,16 +220,15 @@ Get the latest release for your platform:
 
 | Platform | Download                                                                                                                                                            |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows  | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest)      |
-| macOS    | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal)                                                                           |
-| Linux    | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) or [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
+| Windows  | [`stitch-setup-X.Y.Z.exe`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (installer) or [`stitch-portable-X.Y.Z.zip`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (portable) |
+| Linux    | [`stitch-linux-X.Y.Z`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (standalone binary)                                                              |
 
 ### Build from Source
 
 ```bash
 # Clone
-git clone https://github.com/WhiteBite/Stitch-Account-Manager.git
-cd Stitch-Account-Manager
+git clone https://github.com/WhiteBite/Stitch-Manager.git
+cd Stitch-Manager
 
 # Install dependencies
 npm install
@@ -400,16 +398,15 @@ Machine ID — это уникальный идентификатор, испо�
 
 | Платформа | Скачать                                                                                                                                                              |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows   | [`.msi`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.exe`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest)      |
-| macOS     | [`.dmg`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) (Universal)                                                                            |
-| Linux     | [`.deb`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) или [`.AppImage`](https://github.com/WhiteBite/Stitch-Account-Manager/releases/latest) |
+| Windows   | [`stitch-setup-X.Y.Z.exe`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (установщик) или [`stitch-portable-X.Y.Z.zip`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (portable) |
+| Linux     | [`stitch-linux-X.Y.Z`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (автономный бинарник)                                                            |
 
 ### Сборка из исходников
 
 ```bash
 # Клонировать
-git clone https://github.com/WhiteBite/Stitch-Account-Manager.git
-cd Stitch-Account-Manager
+git clone https://github.com/WhiteBite/Stitch-Manager.git
+cd Stitch-Manager
 
 # Установить зависимости
 npm install

@@ -14,15 +14,26 @@ import {
   Repeat,
   Wrench,
   ShieldCheck,
-  KeyRound
+  KeyRound,
+  Radar,
+  HeartHandshake,
+  BookOpen,
+  Send,
+  LogOut,
+  UserCircle,
 } from
   'lucide-react';
 import { useAppStore } from '../../stores/app';
+import { useAuthStore } from '../../stores/auth';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
 import { version as appVersion } from '../../../package.json';
 import { ButtonBase } from '@/components/ui/ButtonBase';
+import { IconButton } from '@/components/ui/IconButton';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { Badge } from '@/components/ui/Badge';
+import { openUrlInBrowser } from '@/lib/backend/modules/aiProxy';
+import { MAIN_TELEGRAM_URL } from '@/lib/links';
 
 interface NavItemProps {
   to: string;
@@ -57,11 +68,11 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
         </div>
       }
     </NavLink>);
-
 }
 
 export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, language } = useAppStore();
+  const { enabled: authEnabled, user: authUser, logout: authLogout, busy: authBusy } = useAuthStore();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -85,6 +96,10 @@ export default function Sidebar() {
   void language;
 
   if (!mounted) return null;
+
+  // Role-based visibility: USER sees only /, /accounts, /radar, /friends, /chat.
+  // ADMIN sees everything. When auth is disabled, show everything (desktop mode).
+  const isAdmin = !authEnabled || authUser?.role === 'admin';
 
   return (
     <aside
@@ -134,90 +149,200 @@ export default function Sidebar() {
           label={t('sidebar.accounts')}
           collapsed={sidebarCollapsed} />
 
-        <NavItem
-          to="/autoreg"
-          icon={<RefreshCw size={20} />}
-          label={t('sidebar.autoReg')}
-          collapsed={sidebarCollapsed} />
+        {isAdmin && (
+          <NavItem
+            to="/autoreg"
+            icon={<RefreshCw size={20} />}
+            label={t('sidebar.autoReg')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && (
+          <NavItem
+            to="/patcher"
+            icon={<Code size={20} />}
+            label={t('sidebar.idePatch')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && (
+          <NavItem
+            to="/ai"
+            icon={<ShieldCheck size={20} />}
+            label={t('sidebar.aiHub')}
+            collapsed={sidebarCollapsed} />
+        )}
 
         <NavItem
-          to="/patcher"
-          icon={<Code size={20} />}
-          label={t('sidebar.idePatch')}
+          to="/radar"
+          icon={<Radar size={20} />}
+          label={t('sidebar.radar')}
           collapsed={sidebarCollapsed} />
+
+        {isAdmin && (
+          <NavItem
+            to="/automation"
+            icon={<Repeat size={20} />}
+            label={t('sidebar.automation')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && (
+          <NavItem
+            to="/mail"
+            icon={<Mail size={20} />}
+            label={t('sidebar.mail')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && (
+          <NavItem
+            to="/tools"
+            icon={<Wrench size={20} />}
+            label={t('sidebar.tools')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && (
+          <NavItem
+            to="/totp"
+            icon={<KeyRound size={20} />}
+            label="2FA"
+            collapsed={sidebarCollapsed} />
+        )}
 
         <NavItem
-          to="/ai"
-          icon={<ShieldCheck size={20} />}
-          label={t('sidebar.aiHub')}
+          to="/friends"
+          icon={<HeartHandshake size={20} />}
+          label={t('sidebar.friends')}
           collapsed={sidebarCollapsed} />
 
-        <NavItem
-          to="/automation"
-          icon={<Repeat size={20} />}
-          label={t('sidebar.automation')}
-          collapsed={sidebarCollapsed} />
+        {isAdmin && (
+          <NavItem
+            to="/notebooklm"
+            icon={<BookOpen size={20} />}
+            label={t('sidebar.notebooklm')}
+            collapsed={sidebarCollapsed} />
+        )}
 
-        <NavItem
-          to="/mail"
-          icon={<Mail size={20} />}
-          label={t('sidebar.mail')}
-          collapsed={sidebarCollapsed} />
+        {isAdmin && (
+          <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
+            {!sidebarCollapsed &&
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                {t('sidebar.system')}
+              </p>
+            }
+          </div>
+        )}
 
-        <NavItem
-          to="/tools"
-          icon={<Wrench size={20} />}
-          label={t('sidebar.tools')}
-          collapsed={sidebarCollapsed} />
+        {isAdmin && (
+          <NavItem
+            to="/settings"
+            icon={<Settings size={20} />}
+            label={t('sidebar.settings')}
+            collapsed={sidebarCollapsed} />
+        )}
 
-        <NavItem
-          to="/totp"
-          icon={<KeyRound size={20} />}
-          label="2FA"
-          collapsed={sidebarCollapsed} />
+        {isAdmin && (
+          <NavItem
+            to="/logs"
+            icon={<FileText size={20} />}
+            label={t('sidebar.logs')}
+            collapsed={sidebarCollapsed} />
+        )}
 
-        <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
-          {!sidebarCollapsed &&
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-              {t('sidebar.system')}
-            </p>
-          }
-        </div>
-
-        <NavItem
-          to="/settings"
-          icon={<Settings size={20} />}
-          label={t('sidebar.settings')}
-          collapsed={sidebarCollapsed} />
-
-        <NavItem
-          to="/logs"
-          icon={<FileText size={20} />}
-          label={t('sidebar.logs')}
-          collapsed={sidebarCollapsed} />
-
+        {isAdmin && authEnabled && (
+          <NavItem
+            to="/users"
+            icon={<UserCircle size={20} />}
+            label={t('auth.users.title')}
+            collapsed={sidebarCollapsed} />
+        )}
       </nav>
 
       {/* Footer */}
-      <div className={cn('border-t border-white/5', sidebarCollapsed ? 'p-2' : 'p-4')}>
-        <div
-          className={cn(
+      <div className={cn('border-t border-white/5', sidebarCollapsed ? 'p-2 space-y-2' : 'p-4 space-y-2')}>
+        {/* Auth user chip + logout — only when auth is enabled */}
+        {authEnabled && authUser && (
+          <div className={cn(
             'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
-            sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
+            sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2'
           )}>
-
-          {sidebarCollapsed ? (
-            <Tooltip content={t('sidebar.localMode')} side="right">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+            {sidebarCollapsed ? (
+              <Tooltip content={`${authUser.username} (${t(`auth.role.${authUser.role}`)})`} side="right">
+                <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                  <UserCircle className="w-4 h-4" />
+                </div>
+              </Tooltip>
+            ) : (
+              <>
+                <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                  <UserCircle className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <span className="text-xs font-medium text-slate-200 truncate">
+                    {authUser.username}
+                  </span>
+                  <Badge
+                    variant={authUser.role === 'admin' ? 'info' : 'default'}
+                    size="sm"
+                    className="mt-0.5 self-start"
+                  >
+                    {t(`auth.role.${authUser.role}`)}
+                  </Badge>
+                </div>
+              </>
+            )}
+            <Tooltip content={t('auth.logout')} side={sidebarCollapsed ? 'right' : 'top'}>
+              <IconButton
+                onClick={() => void authLogout()}
+                size="md"
+                variant="ghost"
+                disabled={authBusy}
+                aria-label={t('auth.logout')}
+                className="text-slate-500 hover:text-red-400"
+              >
+                <LogOut size={16} />
+              </IconButton>
             </Tooltip>
-          ) : (
-            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
-          )}
-          {!sidebarCollapsed &&
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
-              {t('sidebar.localMode')}
-            </span>
-          }
+          </div>
+        )}
+
+        {/* Local mode indicator — hidden when auth is enabled (replaced by user chip) */}
+        {!authEnabled && (
+          <div
+            className={cn(
+              'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
+              sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
+            )}
+          >
+            {sidebarCollapsed ? (
+              <Tooltip content={t('sidebar.localMode')} side="right">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+              </Tooltip>
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+            )}
+            {!sidebarCollapsed &&
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                {t('sidebar.localMode')}
+              </span>
+            }
+          </div>
+        )}
+
+        {/* Telegram channel — always visible */}
+        <div className={cn('flex', sidebarCollapsed ? 'justify-center' : 'justify-end')}>
+          <Tooltip content={t('sidebar.telegramChannel')} side={sidebarCollapsed ? 'right' : 'top'}>
+            <IconButton
+              onClick={() => void openUrlInBrowser(MAIN_TELEGRAM_URL)}
+              size="md"
+              variant="ghost"
+              aria-label={t('sidebar.telegramChannel')}
+            >
+              <Send size={16} />
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
     </aside>);

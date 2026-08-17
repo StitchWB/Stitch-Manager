@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import io
 import json
 import os
 import secrets
@@ -26,6 +27,7 @@ import sys
 import tempfile
 import time
 import traceback
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -50,6 +52,7 @@ from stitch_backend.domains.plugin_distribution.activation import (  # noqa: E40
 )
 from stitch_backend.domains.plugin_distribution.sync import PluginSyncService  # noqa: E402
 from stitch_plugin_tools.publish import publish_package  # noqa: E402
+from stitch_plugin_tools.watermark import inject_watermark, marker_for  # noqa: E402
 
 # ── Constants ───────────────────────────────────────────────────────────────────
 
@@ -86,13 +89,17 @@ def _insert_activation_code(db_path: Path, code: str) -> None:
 
     The server uses WAL mode, so concurrent sqlite3 access is safe.
     Tables are created on server startup via create_all_tables().
+
+    The ``code_hash`` column stores the sha256 of the raw code (mirroring
+    :func:`stitch_server.auth.hash_code`) — the raw code is never persisted.
     """
+    code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ss_activation_codes (code, entitlements, used, created_at) "
+            "INSERT INTO ss_activation_codes (code_hash, entitlements, used, created_at) "
             "VALUES (?, ?, 0, ?)",
-            (code, '["*"]', datetime.now(UTC).isoformat()),
+            (code_hash, '["*"]', datetime.now(UTC).isoformat()),
         )
         conn.commit()
     finally:
@@ -460,6 +467,172 @@ async def _run() -> int:
             "v1.0.1_picked_up",
             v101_ok and v100_ok,
             "v1.0.1 active, v1.0.0 LKG",
+        )
+
+        # ── Step 10: Gated distribution — issue-code via admin API ───────
+        print("\n=== Step 10: Issue activation code via admin API ===")
+        admin_headers = {"X-Admin-Key": admin_key}
+        issue_resp = httpx.post(
+            f"{server_url}/admin/issue-code",
+            json={"entitlements": [_KIRO_AUTOREG]},
+            headers=admin_headers,
+            timeout=30.0,
+        )
+        assert issue_resp.status_code == 200, issue_resp.text
+        gated_code = issue_resp.json()["codes"][0]
+        print(f"  issued code (limited to {_KIRO_AUTOREG}): {gated_code[:8]}...")
+        record(
+            "issue_code_via_admin_api",
+            True,
+            f"code={gated_code[:8]}..., ents=[{_KIRO_AUTOREG}]",
+        )
+
+        # ── Step 11: Activate with limited entitlements ──────────────────
+        print("\n=== Step 11: Activate with limited entitlements ===")
+        gated_hwid = hashlib.sha256(
+            secrets.token_bytes(32)
+        ).hexdigest()
+        gated_client_data = tmpdir / "client_data_gated"
+        gated_client_data.mkdir(parents=True, exist_ok=True)
+
+        # Use a separate activation service with a different data dir
+        gated_env = os.environ.copy()
+        gated_env["STITCH_PLUGINS_DIR"] = str(gated_client_data)
+        # Temporarily set env for the activation service
+        orig_plugins_dir = os.environ.get("STITCH_PLUGINS_DIR")
+        os.environ["STITCH_PLUGINS_DIR"] = str(gated_client_data)
+        try:
+            gated_activation = ActivationService()
+            gated_state = await gated_activation.activate(
+                gated_code, gated_hwid
+            )
+        finally:
+            if orig_plugins_dir is not None:
+                os.environ["STITCH_PLUGINS_DIR"] = orig_plugins_dir
+            else:
+                os.environ.pop("STITCH_PLUGINS_DIR", None)
+
+        print(f"  token: {gated_state.token[:8]}...")
+        print(f"  entitlements: {gated_state.entitlements}")
+        record(
+            "activate_limited_entitlements",
+            gated_state.entitlements == [_KIRO_AUTOREG],
+            f"ents={gated_state.entitlements}",
+        )
+
+        # ── Step 12: Manifest filtering — limited token sees only kiro ─
+        print("\n=== Step 12: Manifest filtering (limited entitlements) ===")
+        manifest_resp = httpx.get(
+            f"{server_url}/manifest",
+            headers={"Authorization": f"Bearer {gated_state.token}"},
+            timeout=30.0,
+        )
+        assert manifest_resp.status_code == 200, manifest_resp.text
+        manifest_plugins = manifest_resp.json()["plugins"]
+        plugin_ids = [p["id"] for p in manifest_plugins]
+        print(f"  visible plugins: {plugin_ids}")
+        has_kiro = _KIRO_AUTOREG in plugin_ids
+        no_aws = _AWS_BUILDER_ID not in plugin_ids
+        record(
+            "manifest_filters_limited",
+            has_kiro and no_aws,
+            f"visible={plugin_ids}",
+        )
+
+        # ── Step 13: 403 on non-entitled plugin ──────────────────────────
+        print("\n=== Step 13: 403 on non-entitled plugin download ===")
+        forbidden_resp = httpx.get(
+            f"{server_url}/plugins/{_AWS_BUILDER_ID}/1.0.0",
+            headers={"Authorization": f"Bearer {gated_state.token}"},
+            timeout=30.0,
+        )
+        print(f"  status: {forbidden_resp.status_code}")
+        record(
+            "forbidden_non_entitled",
+            forbidden_resp.status_code == 403,
+            f"status={forbidden_resp.status_code}",
+        )
+
+        # ── Step 14: Watermarked variant publish + download ─────────────
+        print(
+            "\n=== Step 14: Publish watermarked variants + verify marker ==="
+        )
+        n_variants = 4
+        variant_markers = []
+        for idx in range(n_variants):
+            variant_pkg = _copy_package(
+                _PACKAGES_SRC / _KIRO_AUTOREG,
+                packages_work / f"{_KIRO_AUTOREG}-variant-{idx}",
+            )
+            # Bump version to avoid collision with 1.0.0/1.0.1
+            vmanifest = _load_json(variant_pkg / "plugin.json")
+            vmanifest["version"] = "2.0.0"
+            _save_json(variant_pkg / "plugin.json", vmanifest)
+
+            inject_watermark(
+                variant_pkg,
+                plugin_id=_KIRO_AUTOREG,
+                version="2.0.0",
+                variant_idx=idx,
+            )
+            marker = marker_for(_KIRO_AUTOREG, "2.0.0", idx)
+            variant_markers.append(marker)
+
+            result_v = await publish_package(
+                variant_pkg,
+                server_url=server_url,
+                admin_key=admin_key,
+                signing_key_pem=priv_pem,
+                rollout_percent=100,
+                variant_index=idx,
+            )
+            assert result_v.get("stored"), f"variant {idx} publish failed"
+            print(
+                f"  published variant {idx}: marker={marker[:30]}..."
+            )
+        record(
+            "publish_watermarked_variants",
+            True,
+            f"n={n_variants}",
+        )
+
+        # ── Step 15: Download variant and verify honeypot marker ─────────
+        print("\n=== Step 15: Download variant + verify honeypot marker ===")
+        # The gated token can access kiro-autoreg@2.0.0
+        download_resp = httpx.get(
+            f"{server_url}/plugins/{_KIRO_AUTOREG}/2.0.0",
+            headers={"Authorization": f"Bearer {gated_state.token}"},
+            timeout=30.0,
+        )
+        assert download_resp.status_code == 200, download_resp.text
+
+        # Extract scenario.json from the downloaded zip
+        with zipfile.ZipFile(io.BytesIO(download_resp.content)) as zf:
+            scenario_data = json.loads(zf.read("scenario.json"))
+
+        # Find the honeypot candidate in the scenario
+        token_hash = hashlib.sha256(
+            gated_state.token.encode("utf-8")
+        ).hexdigest()
+        expected_idx = int(token_hash, 16) % n_variants
+        expected_marker = variant_markers[expected_idx]
+        expected_value = f'[data-stitch="{expected_marker}"]'
+
+        marker_found = False
+        for step in scenario_data.get("steps", []):
+            for cand in step.get("selector_candidates", []):
+                if cand.get("value") == expected_value:
+                    marker_found = True
+                    break
+
+        print(
+            f"  expected variant idx={expected_idx}, marker={expected_marker[:30]}..."
+        )
+        print(f"  marker found in scenario: {marker_found}")
+        record(
+            "variant_honeypot_marker_present",
+            marker_found,
+            f"idx={expected_idx}, marker={expected_marker[:30]}...",
         )
 
     except Exception as exc:

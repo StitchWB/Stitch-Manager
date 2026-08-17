@@ -218,12 +218,10 @@ def _build_provider(provider_name: str, config: dict):
                 or config.get("billingCountry"),
                 billing_address=config.get("billing_address")
                 or config.get("billingAddress"),
-                billing_city=config.get("billing_city")
-                or config.get("billingCity"),
-                billing_state=config.get("billing_state")
-                or config.get("billingState"),
-                billing_zip=config.get("billing_zip")
-                or config.get("billingZip"),
+                billing_city=config.get("billing_city") or config.get("billingCity"),
+                billing_state=config.get("billing_state") or config.get("billingState"),
+                billing_zip=config.get("billing_zip") or config.get("billingZip"),
+                kiro_plan=config.get("kiro_plan") or config.get("kiroPlan"),
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -999,6 +997,74 @@ class RegistrationService:
                         except Exception as _eng_exc:
                             log_callback(
                                 f"[db] Browser engine save failed (non-fatal): {_eng_exc}"
+                            )
+
+                    # ── kiro_v2 also registers an AWS Builder ID ──────────
+                    # Persist a companion aws_builder_id account so the AWS
+                    # identity appears in the account list (parity with the
+                    # legacy v1 behaviour). It reuses the SAME browser
+                    # profile/cookies/engine as the kiro_v2 account — both
+                    # sessions live in one profile — so "Open browser" on the
+                    # AWS account restores the logged-in AWS session.
+                    if provider_name == "kiro_v2":
+                        try:
+                            async def _save_aws(session):
+                                svc = AccountService(session)
+                                aws_acc = await svc.add_registered_account(
+                                    provider="aws_builder_id",
+                                    email=reg_email,
+                                    password=config.get("password"),
+                                    display_name=reg_email,
+                                    account_type="free",
+                                )
+                                return aws_acc.id
+
+                            aws_account_id = await run_in_session(_save_aws)
+                            log_callback(
+                                f"[db] AWS Builder ID account saved: "
+                                f"id={aws_account_id} email={reg_email}"
+                            )
+
+                            # Attach the same browser session to the AWS account.
+                            if _profile_path and aws_account_id:
+                                try:
+                                    import sqlite3 as _sqlite3
+
+                                    from stitch_backend.config import get_settings as _get_settings
+                                    _db_path = _get_settings().database_url.split("///", 1)[-1]
+                                    with _sqlite3.connect(_db_path) as _conn:
+                                        _conn.execute(
+                                            "UPDATE accounts SET browser_profile_path=?, "
+                                            "cookies=?, session_data=? WHERE id=?",
+                                            (_profile_path, _cookies, _session_data,
+                                             str(aws_account_id)),
+                                        )
+                                        _conn.commit()
+                                except Exception as _aws_bp_exc:
+                                    log_callback(
+                                        f"[db] AWS browser profile save failed "
+                                        f"(non-fatal): {_aws_bp_exc}"
+                                    )
+
+                            if aws_account_id:
+                                try:
+                                    from stitch_backend.domains.accounts.models import Account
+
+                                    async def _set_aws_engine(session):
+                                        acc = await session.get(Account, str(aws_account_id))
+                                        if acc is not None:
+                                            acc.browser_engine = _engine
+                                            acc.shard_profile_id = _shard_id
+
+                                    await run_in_session(_set_aws_engine)
+                                except Exception as _aws_eng_exc:
+                                    log_callback(
+                                        f"[db] AWS browser engine save failed "
+                                        f"(non-fatal): {_aws_eng_exc}"
+                                    )
+                        except Exception as _aws_exc:
+                            log_callback(
+                                f"[db] AWS account save failed (non-fatal): {_aws_exc}"
                             )
                 except Exception as db_exc:
                     import traceback as _tb

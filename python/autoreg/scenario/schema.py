@@ -19,6 +19,7 @@ StepKind = Literal[
     "captcha.solve",
     "stripe.fill_checkout",
     "totp.register",
+    "firebase.auth",
     "account.save",
     # Tolerated unknown kinds are mapped to "noop" by parse_scenario_v2.
     "noop",

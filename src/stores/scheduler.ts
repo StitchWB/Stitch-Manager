@@ -44,6 +44,13 @@ interface SchedulerState {
   deleteTemplate: (templateId: number) => Promise<void>;
 }
 
+/** Shallow-compare two task lists by content (order-sensitive). */
+function sameTasks(a: ScheduledTask[], b: ScheduledTask[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export const useSchedulerStore = create<SchedulerState>((set, get) => ({
   tasks: [],
   templates: [],
@@ -55,7 +62,13 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
     set({ loading: true });
     try {
       const tasks = await safeInvoke<ScheduledTask[]>('get_scheduled_tasks');
-      set({ tasks, loading: false });
+      set(state => ({
+        // Keep the existing array reference when nothing changed, so periodic
+        // heartbeat refreshes don't retrigger downstream effects (e.g. the
+        // UnifiedActivityFeed getTaskExecutions cascade) on every poll.
+        tasks: sameTasks(state.tasks, tasks) ? state.tasks : tasks,
+        loading: false,
+      }));
     } catch (error) {
       console.error('[Scheduler] Failed to fetch tasks:', error);
       toast.error('Failed to load scheduled tasks');

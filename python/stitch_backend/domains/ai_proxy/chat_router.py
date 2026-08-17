@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -20,7 +21,24 @@ from stitch_backend.domains.ai_proxy.qoder_chat_gateway import (
     QoderCredentials,
     QoderProviderError,
 )
-from stitch_backend.domains.ai_proxy.service import get_zai_token_db_path
+from stitch_backend.domains.ai_proxy.service import (
+    get_web_deepseek_settings,
+    get_web_gemini_settings,
+    get_web_qwen_settings,
+    get_zai_token_db_path,
+)
+from stitch_backend.domains.ai_proxy.web.deepseek_adapter import (
+    DeepSeekWebAdapter,
+    load_web_deepseek_accounts,
+)
+from stitch_backend.domains.ai_proxy.web.gemini_adapter import (
+    GeminiWebAdapter,
+    load_web_gemini_accounts,
+)
+from stitch_backend.domains.ai_proxy.web.qwen_adapter import (
+    QwenWebAdapter,
+    load_web_qwen_accounts,
+)
 from stitch_backend.domains.ai_proxy.zai_chat_gateway import (
     ChatCompletionRequest,
     InvalidChatCompletionRequestError,
@@ -35,8 +53,55 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
 chat_router = APIRouter(tags=["Chat"])
-_LOCAL_CHAT_BEARER = "Bearer proxypal-local"
+
+# Per-install local chat token. Generated once, persisted in the settings table
+# under ``localChatToken`` (masked in get_settings), cached in-process. This
+# replaces the shared static bearer so a token leaked from one install is not
+# valid on another.
+_LOCAL_CHAT_TOKEN: str | None = None
+_TOKEN_SETTINGS_KEY = "localChatToken"
+
+
+async def ensure_local_chat_token() -> str:
+    """Load-or-create the per-install local chat token and cache it.
+
+    Reads the raw settings row directly (not ``get_all``, which masks password
+    keys). Creates and persists a random 32-byte hex token on first use.
+    """
+    global _LOCAL_CHAT_TOKEN
+    if _LOCAL_CHAT_TOKEN:
+        return _LOCAL_CHAT_TOKEN
+
+    import secrets
+
+    from sqlalchemy import select
+
+    from stitch_backend.database import run_in_session
+    from stitch_backend.domains.settings.models import Setting
+
+    async def _load(session):
+        result = await session.execute(
+            select(Setting).where(Setting.key == _TOKEN_SETTINGS_KEY)
+        )
+        row = result.scalars().first()
+        return row.value if row is not None else None
+
+    token = await run_in_session(_load)
+    if not token:
+        token = secrets.token_hex(32)
+
+        async def _save(session):
+            from stitch_backend.domains.settings.service import SettingsService
+
+            await SettingsService(session).update({_TOKEN_SETTINGS_KEY: token})
+
+        await run_in_session(_save)
+        logger.info("Generated a new per-install local chat token")
+    _LOCAL_CHAT_TOKEN = token
+    return _LOCAL_CHAT_TOKEN
 _ALLOWED_CHAT_ORIGINS = {
     "http://localhost:25584",
     "http://127.0.0.1:25584",
@@ -153,33 +218,42 @@ async def create_chat_completion(
         raise HTTPException(status_code=422, detail={"error": {"message": "Request body must be a JSON object"}})
 
     chat_request = _parse_chat_request(payload)
-    if chat_request.provider == "qoder":
-        adapter = await _build_qoder_adapter(session)
-        try:
-            response = await adapter.create_chat_completion(chat_request)
-        except QoderProviderError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail={"error": {"code": exc.code, "message": "Qoder chat completion failed"}},
-            ) from None
-        finally:
-            await adapter.close()
-        return StreamingResponse(
-            _to_sse(response),
-            media_type="text/event-stream",
-            headers={
-                "X-Routed-Provider": "qoder",
-                "X-Routed-Model": chat_request.model,
-                "X-Requested-Model": chat_request.model,
-            },
-        )
-
-    if chat_request.provider != "zai":
+    handler = _CHAT_COMPLETION_HANDLERS.get(chat_request.provider)
+    if handler is None:
         raise HTTPException(
             status_code=404,
-            detail={"error": {"message": "Use the native gateway for non-Z.AI chat completions"}},
+            detail={"error": {"message": "Use the native gateway for this provider's chat completions"}},
         )
+    return await handler(session, chat_request)
 
+
+async def _handle_qoder_chat(
+    session: AsyncSession, chat_request: ChatCompletionRequest
+) -> StreamingResponse:
+    adapter = await _build_qoder_adapter(session)
+    try:
+        response = await adapter.create_chat_completion(chat_request)
+    except QoderProviderError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": {"code": exc.code, "message": "Qoder chat completion failed"}},
+        ) from None
+    finally:
+        await adapter.close()
+    return StreamingResponse(
+        _to_sse(response),
+        media_type="text/event-stream",
+        headers={
+            "X-Routed-Provider": "qoder",
+            "X-Routed-Model": chat_request.model,
+            "X-Requested-Model": chat_request.model,
+        },
+    )
+
+
+async def _handle_zai_chat(
+    session: AsyncSession, chat_request: ChatCompletionRequest
+) -> StreamingResponse:
     gateway = await _build_gateway(session)
     try:
         response = await gateway.create_chat_completion(chat_request)
@@ -188,7 +262,6 @@ async def create_chat_completion(
             status_code=502,
             detail={"error": {"code": exc.code, "message": "Z.AI chat completion failed"}},
         ) from None
-
     return StreamingResponse(
         _to_sse(response),
         media_type="text/event-stream",
@@ -198,6 +271,171 @@ async def create_chat_completion(
             "X-Requested-Model": chat_request.model,
         },
     )
+
+
+async def _handle_web_gemini_chat(
+    session: AsyncSession, chat_request: ChatCompletionRequest
+) -> StreamingResponse:
+    # D5: ALL DB reads happen in the builder BEFORE the response streams.
+    adapter = await _build_web_gemini_adapter(session)
+    # Release the write-DB connection before streaming: the engine pool is
+    # pool_size=1, and a yield-dependency session stays checked out until the
+    # StreamingResponse is exhausted. Holding it would stall every other app
+    # write — and the adapter's own cooldown marking — for the whole stream.
+    await session.close()
+    request_payload: dict[str, object] = {
+        "model": chat_request.model,
+        "messages": chat_request.raw_messages or [],
+        "tools": chat_request.tools,
+    }
+    return StreamingResponse(
+        _stream_web_gemini(adapter, request_payload),
+        media_type="text/event-stream",
+        headers={
+            "X-Routed-Provider": "web-gemini",
+            "X-Routed-Model": chat_request.model,
+            "X-Requested-Model": chat_request.model,
+        },
+    )
+
+
+async def _build_web_gemini_adapter(session: AsyncSession) -> GeminiWebAdapter:
+    """Load settings + ORM accounts (D1) before any streaming begins (D5)."""
+    settings = await get_web_gemini_settings(session)
+    if not settings["enabled"]:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"message": "web-gemini provider is disabled"}},
+        )
+    accounts = await load_web_gemini_accounts(session)
+    return GeminiWebAdapter(
+        accounts=accounts, settings=settings, proxy=await _resolve_outbound_proxy()
+    )
+
+
+async def _resolve_outbound_proxy() -> str | None:
+    """Global outbound proxy per D6 (never direct when proxy is configured)."""
+    from stitch_backend.core.http_gateway import ProxyUnavailableError, gateway
+
+    try:
+        return await gateway().get_outbound_proxy_url()
+    except ProxyUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"message": "Outbound proxy is unavailable"}},
+        ) from None
+
+
+async def _handle_web_deepseek_chat(
+    session: AsyncSession, chat_request: ChatCompletionRequest
+) -> StreamingResponse:
+    # D5: ALL DB reads happen in the builder BEFORE the response streams.
+    adapter = await _build_web_deepseek_adapter(session)
+    # Release the write-DB connection before streaming (pool_size=1) — same
+    # discipline as web-gemini.
+    await session.close()
+    request_payload: dict[str, object] = {
+        "model": chat_request.model,
+        "messages": chat_request.raw_messages or [],
+        "tools": chat_request.tools,
+    }
+    return StreamingResponse(
+        _stream_web_deepseek(adapter, request_payload),
+        media_type="text/event-stream",
+        headers={
+            "X-Routed-Provider": "web-deepseek",
+            "X-Routed-Model": chat_request.model,
+            "X-Requested-Model": chat_request.model,
+        },
+    )
+
+
+async def _build_web_deepseek_adapter(session: AsyncSession) -> DeepSeekWebAdapter:
+    """Load settings + ORM accounts (D1) before any streaming begins (D5)."""
+    settings = await get_web_deepseek_settings(session)
+    if not settings["enabled"]:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"message": "web-deepseek provider is disabled"}},
+        )
+    accounts = await load_web_deepseek_accounts(session)
+    return DeepSeekWebAdapter(
+        accounts=accounts, settings=settings, proxy=await _resolve_outbound_proxy()
+    )
+
+
+async def _stream_web_deepseek(
+    adapter: DeepSeekWebAdapter, request: dict[str, object]
+) -> AsyncGenerator[str, None]:
+    """Pass through the adapter's OpenAI SSE chunks (true streaming)."""
+    async for chunk in adapter.stream_chat_completion(request):
+        yield chunk
+
+
+async def _handle_web_qwen_chat(
+    session: AsyncSession, chat_request: ChatCompletionRequest
+) -> StreamingResponse:
+    # D5: ALL DB reads happen in the builder BEFORE the response streams.
+    adapter = await _build_web_qwen_adapter(session)
+    # Release the write-DB connection before streaming (pool_size=1).
+    await session.close()
+    request_payload: dict[str, object] = {
+        "model": chat_request.model,
+        "messages": chat_request.raw_messages or [],
+        "tools": chat_request.tools,
+    }
+    return StreamingResponse(
+        _stream_web_qwen(adapter, request_payload),
+        media_type="text/event-stream",
+        headers={
+            "X-Routed-Provider": "web-qwen",
+            "X-Routed-Model": chat_request.model,
+            "X-Requested-Model": chat_request.model,
+        },
+    )
+
+
+async def _build_web_qwen_adapter(session: AsyncSession) -> QwenWebAdapter:
+    """Load settings + ORM accounts (D1) before any streaming begins (D5)."""
+    settings = await get_web_qwen_settings(session)
+    if not settings["enabled"]:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"message": "web-qwen provider is disabled"}},
+        )
+    accounts = await load_web_qwen_accounts(session)
+    return QwenWebAdapter(
+        accounts=accounts, settings=settings, proxy=await _resolve_outbound_proxy()
+    )
+
+
+async def _stream_web_qwen(
+    adapter: QwenWebAdapter, request: dict[str, object]
+) -> AsyncGenerator[str, None]:
+    """Pass through the adapter's OpenAI SSE chunks (true streaming)."""
+    async for chunk in adapter.stream_chat_completion(request):
+        yield chunk
+
+
+async def _stream_web_gemini(
+    adapter: GeminiWebAdapter, request: dict[str, object]
+) -> AsyncGenerator[str, None]:
+    """Pass through the adapter's OpenAI SSE chunks (true streaming)."""
+    async for chunk in adapter.stream_chat_completion(request):
+        yield chunk
+
+
+# Dispatch for the local /v1/chat/completions endpoint. Adding a provider =
+# adding an entry. Native-gateway providers (openai/anthropic/kiro/...) are
+# served by litellm_gateway / kiro_gateway, NOT this endpoint — they hit a
+# different mount and never reach this handler.
+_CHAT_COMPLETION_HANDLERS = {
+    "qoder": _handle_qoder_chat,
+    "zai": _handle_zai_chat,
+    "web-gemini": _handle_web_gemini_chat,
+    "web-deepseek": _handle_web_deepseek_chat,
+    "web-qwen": _handle_web_qwen_chat,
+}
 
 
 async def _get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -213,8 +451,9 @@ def _parse_chat_request(payload: dict) -> ChatCompletionRequest:
 
 
 def _require_local_chat_auth(request: Request) -> None:
-    if not _timing_safe_equal(request.headers.get("authorization") or "", _LOCAL_CHAT_BEARER):
-        raise HTTPException(status_code=401, detail={"error": {"message": "Unauthorized"}})
+    from stitch_backend.domains.ai_proxy.local_auth import require_local_chat_auth
+
+    require_local_chat_auth(request.headers.get("authorization"))
 
 
 def _require_allowed_origin(request: Request) -> None:

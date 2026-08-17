@@ -103,9 +103,16 @@ async def publish_package(
     admin_key: str,
     signing_key_pem: bytes | None = None,
     rollout_percent: int = 0,
+    variant_index: int | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     """Sign (optional), zip, and publish a package to the server.
+
+    When ``variant_index`` is provided, the upload is stored as a watermarked
+    variant (``PluginVariant`` row) rather than the legacy
+    ``PluginVersion.package_path``.  The caller is responsible for injecting
+    the watermark BEFORE calling this function — see
+    :func:`stitch_plugin_tools.watermark.inject_watermark`.
 
     Returns the parsed JSON response from ``/admin/publish``.  Raises
     :class:`httpx.HTTPStatusError` on a non-2xx response and
@@ -140,6 +147,8 @@ async def publish_package(
     }
     if manifest.signature:
         data["package_signature"] = manifest.signature
+    if variant_index is not None:
+        data["variant_index"] = str(variant_index)
     headers = {"X-Admin-Key": admin_key}
 
     own_client = client is None

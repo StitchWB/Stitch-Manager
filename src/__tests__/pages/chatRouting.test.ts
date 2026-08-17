@@ -1,5 +1,10 @@
 import { describe, expect, it } from '@jest/globals';
-import { isZaiChatModel, resolveChatCompletionsUrl } from '../../pages/chatRouting';
+import {
+  isWebBridgeChatModel,
+  isZaiChatModel,
+  resolveChatCompletionsUrl,
+  resolveWebBridgeProvider,
+} from '../../pages/chatRouting';
 
 describe('chat routing', () => {
   it('routes Z.AI provider models to the FastAPI chat endpoint', () => {
@@ -22,6 +27,45 @@ describe('chat routing', () => {
       source: 'aiProxy',
     };
 
+    expect(resolveChatCompletionsUrl(model, 25584)).toBe('/api/v1/chat/completions');
+  });
+
+  it('routes web-gemini models to the FastAPI chat endpoint', () => {
+    const model = {
+      id: 'gemini-3.6-flash',
+      provider: 'web-gemini',
+      ownedBy: 'web-gemini',
+      source: 'aiProxy',
+    };
+
+    expect(isWebBridgeChatModel(model)).toBe(true);
+    expect(resolveWebBridgeProvider(model)).toBe('web-gemini');
+    expect(resolveChatCompletionsUrl(model, 25584)).toBe('/api/v1/chat/completions');
+  });
+
+  it('routes web-deepseek models to the FastAPI chat endpoint', () => {
+    const model = {
+      id: 'deepseek-chat',
+      provider: 'web-deepseek',
+      ownedBy: 'web-deepseek',
+      source: 'aiProxy',
+    };
+
+    expect(isWebBridgeChatModel(model)).toBe(true);
+    expect(resolveWebBridgeProvider(model)).toBe('web-deepseek');
+    expect(resolveChatCompletionsUrl(model, 25584)).toBe('/api/v1/chat/completions');
+  });
+
+  it('recognizes web-bridge models by id prefix', () => {
+    const model = {
+      id: 'web-gemini/gemini-3.6-flash',
+      provider: 'unknown',
+      ownedBy: 'unknown',
+      source: 'aiProxy',
+    };
+
+    expect(isWebBridgeChatModel(model)).toBe(true);
+    expect(resolveWebBridgeProvider(model)).toBe('web-gemini');
     expect(resolveChatCompletionsUrl(model, 25584)).toBe('/api/v1/chat/completions');
   });
 

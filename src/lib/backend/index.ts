@@ -79,6 +79,18 @@ export {
 } from './modules/accounts';
 
 // ============================================
+// NotebookLM (own surface)
+// ============================================
+
+export {
+  notebooklmListNotebooks,
+  notebooklmCreateNotebook,
+  notebooklmAsk,
+  notebooklmGenerateAudio,
+  type NotebookLMNotebook,
+} from './modules/notebooklm';
+
+// ============================================
 // Fingerprint Profiles
 // ============================================
 
@@ -583,3 +595,24 @@ export {
 } from './modules/overrides';
 
 export * as overrides from './modules/overrides';
+
+// ============================================
+// Radar & Friends (community feed)
+// ============================================
+
+export {
+  getFriends,
+  getRadarOffers,
+  getRadarStats,
+  type FriendType,
+  type FriendBadge,
+  type FriendItem,
+  type FriendsResponse,
+  type RadarEffort,
+  type RadarOffer,
+  type RadarOffersResponse,
+  type RadarStats,
+  type GetRadarOffersParams,
+} from './modules/radar';
+
+export * as radar from './modules/radar';

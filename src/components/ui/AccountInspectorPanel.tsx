@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatDateTime } from '../../lib/utils';
+import { getProvider } from '@/constants/providers';
+import type { ProviderName } from '@/types/ui';
 import { ProviderLogo } from './ProviderLogo';
 import { Tooltip } from './Tooltip';
 import { Badge } from './Badge';
@@ -109,6 +111,8 @@ export interface AccountInspectorPanelProps {
   onOpenProfileSession?: (id: number) => void;
   onConfirmProfileSession?: (id: number) => void;
   onClearProfileSession?: (id: number) => void;
+  onOpenWebLogin?: (id: number) => void;
+  onCaptureWebCookies?: (id: number) => void;
   onToggleAutoRefreshQuota?: (account: Account) => void;
   onCopyRefUrl?: (refUrl: string) => void;
   onRefreshRefUrl?: (id: number) => void;
@@ -130,6 +134,8 @@ export function AccountInspectorPanel({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  onOpenWebLogin,
+  onCaptureWebCookies,
   onToggleAutoRefreshQuota,
   onCopyRefUrl,
   onRefreshRefUrl,
@@ -619,6 +625,8 @@ export function AccountInspectorPanel({
             onOpenProfileSession={onOpenProfileSession}
             onConfirmProfileSession={onConfirmProfileSession}
             onClearProfileSession={onClearProfileSession}
+            onOpenWebLogin={onOpenWebLogin}
+            onCaptureWebCookies={onCaptureWebCookies}
             onRefresh={onRefresh}
           />
         )}
@@ -917,6 +925,8 @@ interface SessionTabProps {
   onOpenProfileSession?: (id: number) => void;
   onConfirmProfileSession?: (id: number) => void;
   onClearProfileSession?: (id: number) => void;
+  onOpenWebLogin?: (id: number) => void;
+  onCaptureWebCookies?: (id: number) => void;
   onRefresh?: (id: number) => void;
 }
 
@@ -930,6 +940,8 @@ function SessionTab({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  onOpenWebLogin,
+  onCaptureWebCookies,
   onRefresh,
 }: SessionTabProps) {
   const formatSessionJSON = (jsonString: string | null): string => {
@@ -1032,12 +1044,15 @@ function SessionTab({
         </div>
       )}
 
-      {/* Profile session controls */}
+      {/* Profile session controls (+ web-session harvest for web2api providers) */}
       <AccountProfileSessionSection
         tagsList={data.tags}
         onOpenProfileSession={onOpenProfileSession ? () => onOpenProfileSession(account.id) : undefined}
         onConfirmProfileSession={onConfirmProfileSession ? () => onConfirmProfileSession(account.id) : undefined}
         onClearProfileSession={onClearProfileSession ? () => onClearProfileSession(account.id) : undefined}
+        isWebSession={getProvider(account.provider as ProviderName)?.webSession === true}
+        onOpenWebLogin={onOpenWebLogin ? () => onOpenWebLogin(account.id) : undefined}
+        onCaptureWebCookies={onCaptureWebCookies ? () => onCaptureWebCookies(account.id) : undefined}
         compact
       />
 

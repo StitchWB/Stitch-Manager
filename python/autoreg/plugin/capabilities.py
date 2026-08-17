@@ -220,7 +220,10 @@ def branch_capability(
         elif condition == "url_contains":
             matched = meta.get("value", "") in (browser.url or "")
         elif condition == "var_equals":
-            matched = store.get(meta.get("name", "")) == meta.get("value", "")
+            # Tolerant key: scenarios write "var" (kiro-autoreg), older
+            # authors wrote "name" — accept both.
+            var_name = meta.get("name") or meta.get("var") or ""
+            matched = store.get(var_name) == meta.get("value", "")
         else:
             return StepResult(
                 step.id, step.kind, False, error=f"branch: unknown condition '{condition}'"
@@ -268,11 +271,23 @@ def _extract_body(msg: Any) -> str:
 def _poll_imap_once(
     conn_factory: Callable[[dict[str, Any]], Any],
     imap_config: dict[str, Any],
-    subject_pattern: str,
+    subject_patterns: list[str],
     body_regex: str,
     recency_s: int,
+    code_source: str = "body",
+    subject_code_regex: str = "",
 ) -> str | None:
-    """Poll IMAP once for a verification code. Returns code or ``None``."""
+    """Poll IMAP once for a verification code. Returns code or ``None``.
+
+    ``subject_patterns`` are tried IN ORDER (primary first, fallback after)
+    so a broad fallback never shadows a precise primary match on the same
+    poll iteration.  An empty list disables subject filtering.
+
+    ``code_source`` selects where the code lives:
+      * ``"body"`` (default) — match ``body_regex`` against the email body.
+      * ``"subject"`` — match ``subject_code_regex`` against the Subject
+        header (windsurf: "229743 - Verify your Email with Windsurf").
+    """
     from email.utils import parsedate_to_datetime
 
     conn = conn_factory(imap_config)
@@ -283,23 +298,41 @@ def _poll_imap_once(
         if status != "OK" or not data[0]:
             return None
         msg_ids = data[0].split()
-        subject_re = re.compile(subject_pattern) if subject_pattern else None
+        subject_res = [re.compile(p) for p in subject_patterns if p]
+        # Cache fetched (subject, body, age-ok) per message so the fallback
+        # pass does not re-fetch over the network.
+        fetched: list[tuple[str, str]] = []
         for msg_id in reversed(msg_ids[-10:]):
             _, msg_data = conn.fetch(msg_id, "(RFC822)")
             if not msg_data or not msg_data[0]:
                 continue
             msg = email_mod.message_from_bytes(msg_data[0][1])
-            if subject_re and not subject_re.search(msg.get("Subject", "")):
-                continue
             try:
                 msg_date = parsedate_to_datetime(msg["Date"])
                 if time.time() - msg_date.timestamp() > recency_s:
                     continue
             except Exception:  # noqa: BLE001
                 pass
-            match = re.search(body_regex, _extract_body(msg))
-            if match:
-                return match.group(1) if match.groups() else match.group(0)
+            fetched.append((msg.get("Subject", ""), _extract_body(msg)))
+
+        if code_source == "subject":
+            subject_code_re = re.compile(
+                subject_code_regex or r"(\d{6})"
+            )
+            for subject, _body in fetched:
+                m = subject_code_re.search(subject)
+                if m:
+                    return m.group(1) if m.groups() else m.group(0)
+            return None
+
+        patterns: list[re.Pattern[str] | None] = subject_res or [None]
+        for subject_re in patterns:
+            for subject, body in fetched:
+                if subject_re is not None and not subject_re.search(subject):
+                    continue
+                match = re.search(body_regex, body)
+                if match:
+                    return match.group(1) if match.groups() else match.group(0)
         return None
     finally:
         try:
@@ -317,11 +350,20 @@ def imap_otp_capability(
     """Poll IMAP for a verification code (plan §4.3 imap.otp)."""
     meta = step.meta or {}
     to_key = meta.get("to", "otp.code")
-    subject_pattern = meta.get("subject_pattern", "")
+    subject_patterns = [
+        p
+        for p in (
+            meta.get("subject_pattern", ""),
+            meta.get("subject_pattern_fallback", ""),
+        )
+        if p
+    ]
     body_regex = meta.get("body_regex", r"\b(\d{6})\b")
     recency_s = int(meta.get("recency_s", 600))
     poll_interval_s = float(meta.get("poll_interval_s", 5))
     timeout_s = int(meta.get("timeout_s", 120))
+    code_source = meta.get("code_source", "body")
+    subject_code_regex = meta.get("subject_code_regex", "")
 
     if not imap_config:
         return StepResult(
@@ -332,7 +374,8 @@ def imap_otp_capability(
     while time.time() < deadline:
         try:
             code = _poll_imap_once(
-                factory, imap_config, subject_pattern, body_regex, recency_s
+                factory, imap_config, subject_patterns, body_regex, recency_s,
+                code_source=code_source, subject_code_regex=subject_code_regex,
             )
             if code:
                 store[to_key] = code
@@ -374,8 +417,12 @@ def _resolve_aliyun_solver() -> type:
 
 
 def _solve_turnstile(browser: Any, step: ScenarioStep) -> bool:
-    solver_cls = _resolve_turnstile_solver()
     timeout = int((step.meta or {}).get("timeout", 60))
+    # Resolution: engine-pack unified solver first (local_service → remote_http
+    # → opencv_dom), then autoreg.captcha fallback (OpenCV/DOM only).
+    # The unified solver handles the D3-vin HTTP service internally — no
+    # separate TurnstileApiSolver path needed.
+    solver_cls = _resolve_turnstile_solver()
     return bool(
         solver_cls(browser, log_callback=logger.info).solve(method="auto", timeout=timeout)
     )
@@ -392,7 +439,18 @@ def _solve_aliyun(browser: Any, step: ScenarioStep) -> bool:
 def _solve_im_human(browser: Any, step: ScenarioStep) -> bool:
     timeout = int((step.meta or {}).get("timeout", 60))
     click_fn = getattr(browser, "click_im_human_checkbox", None)
-    return bool(click_fn(timeout=timeout)) if click_fn else False
+    if click_fn is not None:
+        return bool(click_fn(timeout=timeout))
+    # Generic fallback (bare ChromiumPage): click via the step's own
+    # selector candidates — the kiro-autoreg scenario carries them.
+    elem, _idx = resolve_selector(browser, step, 3.0)
+    if elem is None:
+        return False
+    try:
+        elem.click()
+    except Exception:  # noqa: BLE001
+        return False
+    return True
 
 
 _CAPTCHA_SOLVERS: dict[str, Callable[[Any, ScenarioStep], bool]] = {
@@ -497,27 +555,117 @@ def stripe_fill_checkout_capability(
                 "then click Resume -- or click Skip to leave billing for later."
             ),
         )
+
+    # Parity with built-in _attach_billing: the OAuth bounce pre-fetches
+    # the Stripe checkout URL — wait briefly for it before touching fields.
+    wait_for_url = meta.get("wait_for_url")
+    if wait_for_url and wait_for_url not in (getattr(browser, "url", "") or ""):
+        wait_s = float(meta.get("wait_for_url_timeout_s", 30))
+        deadline = time.time() + wait_s
+        while time.time() < deadline:
+            if wait_for_url in (getattr(browser, "url", "") or ""):
+                break
+            time.sleep(0.5)
+        else:
+            return StepResult(
+                step.id, step.kind, False,
+                error=f"stripe.fill_checkout: checkout URL never opened ({wait_for_url})",
+            )
+
     attach = getattr(browser, "attach_card_and_billing", None)
-    if attach is None:
-        return StepResult(
-            step.id, step.kind, False,
-            error="stripe.fill_checkout: browser does not support Stripe billing",
-        )
     try:
-        ok = attach(
-            card_number=card_number, card_expiry=card_expiry, card_cvc=card_cvc,
-            cardholder_name=cardholder_name,
-            country=billing_country,
-            address_line1=billing_address,
-            city=billing_city,
-            zip_code=billing_zip,
-            state=billing_state,
-        )
+        if attach is not None:
+            ok = attach(
+                card_number=card_number, card_expiry=card_expiry, card_cvc=card_cvc,
+                cardholder_name=cardholder_name,
+                country=billing_country,
+                address_line1=billing_address,
+                city=billing_city,
+                zip_code=billing_zip,
+                state=billing_state,
+            )
+        else:
+            # Bare ChromiumPage (plugin path): drive the shared Stripe
+            # mixins directly — they take page= explicitly, so no browser
+            # subclass is required.
+            ok = _fill_stripe_via_mixin(
+                browser,
+                card_number=card_number,
+                card_expiry=card_expiry,
+                card_cvc=card_cvc,
+                cardholder_name=cardholder_name,
+                country=billing_country,
+                address_line1=billing_address,
+                city=billing_city,
+                zip_code=billing_zip,
+                state=billing_state,
+            )
         if not ok:
             return StepResult(step.id, step.kind, False, error="stripe.fill_checkout: submit failed")
+        # Post-submit: wait for the success redirect (built-in parity:
+        # app.kiro.dev/account/home).  Not reaching it is a SOFT success —
+        # the built-in treats "no obvious error" as attached.
+        success_url = meta.get("success_url")
+        if success_url:
+            submit_timeout = float(meta.get("submit_timeout_s", 90))
+            deadline = time.time() + submit_timeout
+            while time.time() < deadline:
+                if success_url in (getattr(browser, "url", "") or ""):
+                    return StepResult(
+                        step.id, step.kind, True, meta={"billing_added": True}
+                    )
+                time.sleep(1.0)
+            return StepResult(
+                step.id, step.kind, True,
+                meta={"billing_added": True, "note": "no_success_redirect"},
+            )
         return StepResult(step.id, step.kind, True, meta={"billing_added": True})
     except Exception as e:  # noqa: BLE001
         return StepResult(step.id, step.kind, False, error=f"stripe.fill_checkout: {e}")
+
+
+def _fill_stripe_via_mixin(
+    page: Any,
+    *,
+    card_number: str,
+    card_expiry: str,
+    card_cvc: str,
+    cardholder_name: str = "",
+    country: str = "",
+    address_line1: str = "",
+    city: str = "",
+    zip_code: str = "",
+    state: str = "",
+) -> bool:
+    """Fill Stripe checkout on a bare ``ChromiumPage`` via the shared mixins.
+
+    Lazy import: the Zone-1 export guard (scripts/check_export_leaks.py)
+    only blocks column-0 imports, and lazy import also keeps DrissionPage
+    out of the module import path for headless test environments.
+    """
+    from ..browser.mixins.stripe_billing import StripeBillingMixin  # noqa: PLC0415
+
+    def _opt(v: str) -> str | None:
+        return v or None
+
+    mixin = StripeBillingMixin()
+    if not mixin.fill_stripe_card(
+        card_number=card_number,
+        expiry=card_expiry,
+        cvc=card_cvc,
+        cardholder_name=_opt(cardholder_name),
+        page=page,
+    ):
+        return False
+    mixin.fill_stripe_address(
+        country=_opt(country),
+        line1=_opt(address_line1),
+        city=_opt(city),
+        zip_code=_opt(zip_code),
+        state=_opt(state),
+        page=page,
+    )
+    return bool(mixin.submit_stripe_billing(page=page))
 
 
 # ── totp.register ──────────────────────────────────────────────────────
@@ -737,13 +885,274 @@ def totp_register_capability(
         return _fail(str(exc))
 
 
+def _capture_session(browser: Any, meta: dict[str, Any]) -> dict[str, Any]:
+    """Capture cookies + session metadata from a live browser.
+
+    Mirrors ``KiroV2Browser.get_session_data`` (providers/kiro_v2/browser.py):
+    cookies via CDP ``Network.getAllCookies`` filtered to ``cookie_domains``
+    (substring match — same semantics as ``AWS_COOKIE_DOMAINS`` there), plus
+    ``session_data`` JSON with last_url / timestamp / user_agent.  Cookie
+    failure degrades to an empty list rather than failing the terminal step.
+    """
+    import json as _json  # noqa: PLC0415 — keep module import surface light
+
+    cookie_domains = meta.get("cookie_domains") or []
+    cookies: list[dict[str, Any]] = []
+    try:
+        run_cdp = getattr(browser, "run_cdp", None)
+        if run_cdp is not None:
+            resp = run_cdp("Network.getAllCookies")
+            raw = resp.get("cookies") if isinstance(resp, dict) else []
+        else:
+            raw = browser.cookies() or []
+        for c in raw or []:
+            if not isinstance(c, dict):
+                c = {
+                    "name": getattr(c, "name", ""),
+                    "value": getattr(c, "value", ""),
+                    "domain": getattr(c, "domain", ""),
+                }
+            if cookie_domains and not any(
+                d in (c.get("domain") or "") for d in cookie_domains
+            ):
+                continue
+            cookies.append(c)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("account.save: cookie capture failed: %s", exc)
+
+    try:
+        run_js = getattr(browser, "run_js", None)
+        user_agent = run_js("return navigator.userAgent") if run_js else ""
+    except Exception:  # noqa: BLE001
+        user_agent = ""
+    session_meta = {
+        "last_url": getattr(browser, "url", "") or "",
+        "timestamp": time.time(),
+        "user_agent": user_agent,
+    }
+    return {
+        "cookies": _json.dumps(cookies),
+        "session_data": _json.dumps(session_meta),
+    }
+
+
 def account_save_capability(
-    step: ScenarioStep, store: dict[str, Any]
+    step: ScenarioStep, store: dict[str, Any], browser: Any = None
 ) -> StepResult:
-    """Collect outputs and mark terminal (plan §4.3, §4.4)."""
+    """Collect outputs and mark terminal (plan §4.3, §4.4).
+
+    When ``account.session`` is declared among outputs, a browser is
+    available, and nothing stored a session earlier, capture it here —
+    this is what makes the account reusable after a plugin-path
+    registration (previously ``account.session`` silently stayed empty).
+    """
     meta = step.meta or {}
     output_keys = meta.get("outputs", [])
     if not isinstance(output_keys, list):
         output_keys = []
+    if (
+        browser is not None
+        and "account.session" in output_keys
+        and store.get("account.session") is None
+    ):
+        store["account.session"] = _capture_session(browser, meta)
     outputs = {key: store.get(key) for key in output_keys}
     return StepResult(step.id, step.kind, True, terminal=True, meta={"outputs": outputs})
+
+
+# ── firebase.auth ────────────────────────────────────────────────────────
+
+
+def _firebase_login_direct(
+    requests_mod: Any, firebase_api_key: str, email: str, password: str,
+    proxy: str | None, timeout: int,
+) -> dict[str, Any]:
+    """Sign in with email/password against the public identitytoolkit API."""
+    url = (
+        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+        f"?key={firebase_api_key}"
+    )
+    resp = requests_mod.post(
+        url,
+        json={"email": email, "password": password, "returnSecureToken": True},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ),
+        },
+        timeout=timeout,
+        verify=False,
+        proxies={"http": proxy, "https": proxy} if proxy else None,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "idToken": data.get("idToken"),
+        "refreshToken": data.get("refreshToken"),
+        "expiresIn": int(data.get("expiresIn", 3600)),
+    }
+
+
+def _firebase_login_worker(
+    requests_mod: Any, worker_url: str, worker_secret: str,
+    firebase_api_key: str, email: str, password: str,
+    proxy: str | None, timeout: int,
+) -> dict[str, Any]:
+    """Sign in via the Cloudflare Worker proxy (blocked-region fallback path)."""
+    resp = requests_mod.post(
+        f"{worker_url}/login",
+        json={"email": email, "password": password, "api_key": firebase_api_key},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "X-Secret-Key": worker_secret,
+        },
+        timeout=timeout,
+        verify=False,
+        proxies={"http": proxy, "https": proxy} if proxy else None,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "idToken": data.get("idToken"),
+        "refreshToken": data.get("refreshToken"),
+        "expiresIn": int(data.get("expiresIn", 3600)),
+    }
+
+
+def _firebase_get_api_key(
+    requests_mod: Any, register_api: str, id_token: str,
+    proxy: str | None, timeout: int,
+) -> dict[str, Any]:
+    """Exchange a Firebase ID token for the service API key (register API)."""
+    resp = requests_mod.post(
+        register_api,
+        json={"firebase_id_token": id_token},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ),
+        },
+        timeout=timeout,
+        verify=False,
+        proxies={"http": proxy, "https": proxy} if proxy else None,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "apiKey": data.get("api_key"),
+        "name": data.get("name"),
+        "apiServerUrl": data.get("api_server_url"),
+    }
+
+
+def firebase_auth_capability(
+    step: ScenarioStep, store: dict[str, Any], proxy: str | None = None
+) -> StepResult:
+    """Firebase email/password → service API key (windsurf-style exchange).
+
+    Generic capability: all endpoints/keys come from ``meta`` (the method's
+    data), so the same capability serves any Firebase-backed service.  Flow:
+    signInWithPassword (worker → direct identitytoolkit) → exchange the ID
+    token at ``register_api`` for the service ``apiKey``.  Retries with
+    backoff while the account is still propagating (``EMAIL_NOT_FOUND``).
+
+    Meta:
+        firebase_api_key, register_api  — required
+        worker_url, worker_secret       — optional (blocked-region proxy)
+        email, password                 — templates (default ${account.*})
+        to_api_key                      — store key (default account.api_key)
+        to_name                         — optional store key for returned name
+        max_retries                     — default 8
+    """
+    import requests as requests_mod  # noqa: PLC0415 — lazy, Zone-1 guard
+
+    try:
+        import urllib3  # noqa: PLC0415
+
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    except Exception:  # noqa: BLE001
+        pass
+
+    meta = step.meta or {}
+    firebase_api_key = resolve_template(meta.get("firebase_api_key"), store, warn=False)
+    register_api = resolve_template(meta.get("register_api"), store, warn=False)
+    worker_url = resolve_template(meta.get("worker_url"), store, warn=False)
+    worker_secret = resolve_template(meta.get("worker_secret"), store, warn=False)
+    email = resolve_template(
+        meta.get("email", "${account.email}"), store, warn=False
+    )
+    password = resolve_template(
+        meta.get("password", "${account.password}"), store, warn=False
+    )
+    to_api_key = meta.get("to_api_key", "account.api_key")
+    to_name = meta.get("to_name")
+    max_retries = int(meta.get("max_retries", 8))
+    timeout = int(meta.get("timeout_s", 30))
+
+    if not firebase_api_key or not register_api:
+        return StepResult(
+            step.id, step.kind, False,
+            error="firebase.auth: firebase_api_key and register_api are required",
+        )
+    if not email or not password:
+        return StepResult(
+            step.id, step.kind, False,
+            error="firebase.auth: email/password not resolvable from store",
+        )
+
+    last_error: str | None = None
+    for attempt in range(1, max_retries + 1):
+        if attempt > 1:
+            time.sleep(min(attempt * 4, 20))
+        try:
+            # Login: worker first (if configured), then direct identitytoolkit.
+            tokens: dict[str, Any] | None = None
+            if worker_url and worker_secret:
+                try:
+                    tokens = _firebase_login_worker(
+                        requests_mod, worker_url, worker_secret,
+                        firebase_api_key, email, password, proxy, timeout,
+                    )
+                except Exception:  # noqa: BLE001 — fall through to direct
+                    tokens = None
+            if not tokens or not tokens.get("idToken"):
+                tokens = _firebase_login_direct(
+                    requests_mod, firebase_api_key, email, password, proxy, timeout
+                )
+            id_token = tokens.get("idToken")
+            if not id_token:
+                last_error = "firebase.auth: no idToken in login response"
+                continue
+
+            key_info = _firebase_get_api_key(
+                requests_mod, register_api, id_token, proxy, timeout
+            )
+            api_key = key_info.get("apiKey")
+            if api_key and len(str(api_key)) > 10:
+                store[to_api_key] = api_key
+                if to_name and key_info.get("name"):
+                    store[to_name] = key_info["name"]
+                return StepResult(
+                    step.id, step.kind, True,
+                    meta={"to": to_api_key, "api_key_prefix": str(api_key)[:12]},
+                )
+            last_error = "firebase.auth: empty apiKey in register response"
+        except Exception as e:  # noqa: BLE001
+            last_error = str(e)
+            # Don't retry a definitive credential error.
+            if "INVALID_PASSWORD" in last_error or "INVALID_LOGIN_CREDENTIALS" in last_error:
+                break
+            logger.debug("firebase.auth attempt %d failed: %s", attempt, last_error)
+
+    return StepResult(
+        step.id, step.kind, False,
+        error=f"firebase.auth: could not obtain api key ({last_error})",
+    )

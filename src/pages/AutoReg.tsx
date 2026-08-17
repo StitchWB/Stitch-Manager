@@ -47,7 +47,7 @@ export function computeEmailDomain(imap: {
 export default function AutoRegNext() {
   const location = useLocation();
   const autoRegSupportedProviders = useMemo<ProviderName[]>(
-    () => ['kiro', 'kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'qoder', 'bitbucket', 'v0_app'],
+    () => ['kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'qoder', 'bitbucket', 'v0_app'],
     []
   );
 
@@ -82,11 +82,12 @@ export default function AutoRegNext() {
   const stableSetCount = useMemo(() => useRegistrationStore.getState().setCount, []);
   const stableSetLogVerbosity = useMemo(() => useRegistrationStore.getState().setLogVerbosity, []);
 
-  // Normalize unsupported providers (e.g. old persisted value 'openai')
-  // so AutoReg always points to an implemented backend flow.
+  // Normalize unsupported providers so AutoReg always points to an
+  // implemented backend flow. Legacy kiro v1 ('kiro') was removed from the
+  // backend — migrate any persisted 'kiro' value to 'kiro_v2'.
   useEffect(() => {
     if (!autoRegSupportedProviders.includes(config.provider as ProviderName)) {
-      stableSetProvider('kiro');
+      stableSetProvider('kiro_v2');
     }
   }, [config.provider, autoRegSupportedProviders, stableSetProvider]);
 

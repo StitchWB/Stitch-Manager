@@ -49,7 +49,6 @@ export const useRegistrationFlow = ({
     // that doesn't have an implementation, we must fail fast instead of silently
     // registering Kiro.
     const supportedProviders: ProviderName[] = [
-      'kiro',
       'kiro_v2',
       'aws',
       'windsurf',

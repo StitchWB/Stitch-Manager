@@ -235,9 +235,14 @@ export default function Accounts() {
     setSelectedIds,
   });
 
-  const handleAddAccount = async (d: { provider: ProviderName; email: string; password: string }) => {
+  const handleAddAccount = async (d: {
+    provider: ProviderName;
+    email: string;
+    password: string;
+    cookies?: string;
+  }) => {
     try {
-      await useAccountsStore.getState().addAccount(d.provider, d.email, d.password);
+      await useAccountsStore.getState().addAccount(d.provider, d.email, d.password, d.cookies);
       fetchAccounts();
     } catch (e) {
       console.error(e);
@@ -249,6 +254,8 @@ export default function Accounts() {
     handleOpenProfileSession,
     handleConfirmProfileSession,
     handleClearProfileSession,
+    handleOpenWebLogin,
+    handleCaptureWebCookies,
     handleAuthorizeKiroAccount,
     handleUpdateAccount,
     handleExportCSV,
@@ -615,6 +622,8 @@ export default function Accounts() {
                 onOpenProfileSession: handleOpenProfileSession,
                 onConfirmProfileSession: handleConfirmProfileSession,
                 onClearProfileSession: handleClearProfileSession,
+                onOpenWebLogin: handleOpenWebLogin,
+                onCaptureWebCookies: handleCaptureWebCookies,
                 onAuthorizeKiroAccount: handleAuthorizeKiroAccount,
                 onCopyRefUrl: handleCopyRefUrl,
                 onRefreshRefUrl: handleRefreshRefUrl,
