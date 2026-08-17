@@ -85,11 +85,25 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
             detail=f"Unknown command: '{name}'",
         ) from None
 
+    # Role gate: admin_only commands require an admin session when auth is
+    # enabled.  Auth disabled (single-trusted-user desktop) → open.
+    meta = get_command_meta(name)
+    if meta.admin_only:
+        from stitch_backend.config import get_settings
+        from stitch_backend.domains.auth.router import _current_user_optional
+
+        if get_settings().auth_enabled:
+            user, _raw = await _current_user_optional(request)
+            if user is None or user.role != "admin":
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Command '{name}' requires admin role",
+                )
+
     # Determine effective timeout from command metadata.
     #   None  → use DEFAULT_COMMAND_TIMEOUT
     #   -1    → opt out (no timeout)
     #   float → per-command timeout
-    meta = get_command_meta(name)
     if meta.timeout == -1:
         effective_timeout: float | None = None
     elif meta.timeout is None:

@@ -68,10 +68,16 @@ class CommandMeta(NamedTuple):
             * ``-1`` — disable the timeout entirely (opt out).  Use for
               long-running commands that legitimately exceed the default.
             * A positive float — per-command timeout in seconds.
+        admin_only: True if the command requires the ``admin`` role when
+            auth is enabled.  Host-touching / destructive commands (file
+            read/write dialogs, DB path, migrations) set this so a regular
+            web user can never reach the host through the dispatcher.
+            Ignored when auth is disabled (single-trusted-user desktop).
     """
 
     readonly: bool = False
     timeout: float | None = None
+    admin_only: bool = False
 
 
 def register_command(
@@ -79,6 +85,7 @@ def register_command(
     *,
     readonly: bool = False,
     timeout: float | None = None,
+    admin_only: bool = False,
 ) -> Callable[[CommandHandler], CommandHandler]:
     """Decorator: register *handler* as the handler for command *name*.
 
@@ -90,13 +97,17 @@ def register_command(
             False.
         timeout: Per-command timeout in seconds.  ``None`` (default) uses
             the dispatcher default (25.0s).  ``-1`` disables the timeout.
+        admin_only: If True, the dispatcher rejects non-admin sessions with
+            403 when auth is enabled.  Defaults to False.
     """
 
     def decorator(handler: CommandHandler) -> CommandHandler:
         if name in _COMMAND_REGISTRY:
             logger.warning("Command '%s' already registered — overwriting", name)
         _COMMAND_REGISTRY[name] = handler
-        _COMMAND_META[name] = CommandMeta(readonly=readonly, timeout=timeout)
+        _COMMAND_META[name] = CommandMeta(
+            readonly=readonly, timeout=timeout, admin_only=admin_only
+        )
         return handler
 
     return decorator

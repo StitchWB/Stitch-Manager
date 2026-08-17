@@ -40,7 +40,7 @@ def _run_tk_dialog(dialog_fn, **kwargs) -> Any:
 
 # ── Commands ───────────────────────────────────────────────────────────────────
 
-@register_command("open_file_dialog")
+@register_command("open_file_dialog", admin_only=True)
 async def cmd_open_file_dialog(params: dict) -> dict:
     """Open a file picker dialog.
 
@@ -87,7 +87,7 @@ async def cmd_open_file_dialog(params: dict) -> dict:
     return {"selected": result}
 
 
-@register_command("save_file_dialog")
+@register_command("save_file_dialog", admin_only=True)
 async def cmd_save_file_dialog(params: dict) -> dict:
     """Open a save-file picker dialog.
 
@@ -133,7 +133,7 @@ async def cmd_save_file_dialog(params: dict) -> dict:
     return {"selected": result or None}
 
 
-@register_command("read_file_text")
+@register_command("read_file_text", admin_only=True)
 async def cmd_read_file_text(params: dict) -> dict:
     """Read a text file by path. Replaces `convertFileSrc(path)` + fetch.
 
