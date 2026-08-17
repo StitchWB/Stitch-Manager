@@ -13,7 +13,6 @@
  */
 
 import { getApiBaseUrl } from '../core/url';
-import { safeInvoke } from '../core/invoke';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -294,15 +293,26 @@ export async function setLoginPolicy(enforceLogin: boolean): Promise<boolean> {
 }
 
 /**
- * POST /api/login_telegram — exchange a one-time Telegram code for a session.
- *
- * Unlike the other auth wrappers, this goes through `safeInvoke` because the
- * command lives under /api/{command} (not /api/auth/*). The backend returns
- * { success, user?, entitlements?, error? }.
- *
- * On success the caller (auth store) re-runs init() so the session/user state
- * refreshes and the gate closes.
+ * POST /api/auth/login_telegram — exchange a one-time Telegram code for a
+ * session cookie. Direct fetch like the other auth wrappers: a 401 on a bad
+ * code is expected and must NOT trip the safeInvoke session-expiry hook.
+ * On success the backend sets the HttpOnly session cookie and the caller
+ * (auth store) re-runs init() so the gate closes.
  */
 export async function loginTelegram(code: string): Promise<TelegramLoginResult> {
-  return safeInvoke<TelegramLoginResult>('login_telegram', { code });
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/login_telegram`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+
+  const data = (await parseJson(response)) as
+    | (TelegramLoginResult & { detail?: string })
+    | null;
+
+  if (!response.ok) {
+    throw new Error(data?.detail ?? data?.error ?? 'Telegram login failed');
+  }
+  return (data ?? { success: false }) as TelegramLoginResult;
 }

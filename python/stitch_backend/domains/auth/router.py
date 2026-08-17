@@ -60,6 +60,7 @@ COOKIE_NAME = "stitch_session"
 #: against this set).  Kept here so the router owns the contract.
 PUBLIC_PATHS: frozenset[str] = frozenset({
     "/api/auth/login",
+    "/api/auth/login_telegram",
     "/api/auth/status",
     "/api/auth/setup",
 })
@@ -305,6 +306,61 @@ async def login(
         secure=secure,
     )
     return LoginResponse(user=_user_public(user))
+
+
+class TelegramLoginRequest(BaseModel):
+    """Body for POST /api/auth/login_telegram."""
+
+    code: str
+
+
+@router.post("/login_telegram")
+async def login_telegram(
+    body: TelegramLoginRequest,
+    request: Request,
+    response: Response,
+) -> dict:
+    """Exchange a one-time Telegram-bot code for a session cookie.
+
+    Public (listed in ``PUBLIC_PATHS``) — the one-time code IS the
+    credential.  The core lives in :mod:`telegram_commands` and is shared
+    with the ``login_telegram`` command (desktop dispatcher path).
+    """
+    from stitch_backend.domains.auth.telegram_commands import (
+        _map_activation_error,
+        exchange_telegram_code,
+    )
+
+    code = body.code.strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Code is required")
+
+    try:
+        user, entitlements, raw_token, expires_at = await exchange_telegram_code(code)
+    except Exception as exc:  # noqa: BLE001 — friendly 401, same as /login
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_map_activation_error(exc),
+        ) from exc
+
+    # Set cookie — Secure when the request came over https.
+    secure = request.url.scheme == "https" or request.headers.get(
+        "x-forwarded-proto", ""
+    ).lower() == "https"
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=raw_token,
+        expires=expires_at,
+        path="/",
+        httponly=True,
+        samesite="strict",
+        secure=secure,
+    )
+    return {
+        "success": True,
+        "user": _user_public(user).model_dump(),
+        "entitlements": entitlements,
+    }
 
 
 @router.post("/setup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
