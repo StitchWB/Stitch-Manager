@@ -13,6 +13,7 @@
  */
 
 import { getApiBaseUrl } from '../core/url';
+import { safeInvoke } from '../core/invoke';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -22,9 +23,29 @@ export interface AuthUser {
   role: 'admin' | 'user';
 }
 
+export interface TelegramLoginResult {
+  success: boolean;
+  user?: AuthUser;
+  entitlements?: unknown[];
+  error?: string;
+}
+
 export interface AuthStatus {
   enabled: boolean;
   has_users: boolean;
+  /**
+   * True when the backend requires authentication
+   * (server env flag OR (has_users AND enforce_login)).
+   * When false, all /api/* work without a session and the frontend offers a
+   * "continue without login" guest path.
+   */
+  required: boolean;
+  /**
+   * Admin-controllable login-enforcement toggle.  When false, a device
+   * with users does NOT require login (admin opted out).  Defaults to
+   * true when the backend omits the field (older backends).
+   */
+  enforce_login: boolean;
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -42,9 +63,10 @@ async function parseJson(response: Response): Promise<unknown> {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * GET /api/auth/status — whether auth is enabled and any users exist.
- * Never throws: returns { enabled: false } on network failure so the app
- * falls open to the desktop (unauthenticated) path instead of hanging.
+ * GET /api/auth/status — whether auth is enabled, any users exist, and whether
+ * a session is required. Never throws: returns { enabled: false } on network
+ * failure so the app falls open to the desktop (unauthenticated) path instead
+ * of hanging.
  */
 export async function getAuthStatus(): Promise<AuthStatus> {
   try {
@@ -53,14 +75,21 @@ export async function getAuthStatus(): Promise<AuthStatus> {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
-    if (!response.ok) return { enabled: false, has_users: false };
+    if (!response.ok) return { enabled: false, has_users: false, required: false, enforce_login: true };
     const data = (await parseJson(response)) as Partial<AuthStatus> | null;
-    return {
-      enabled: Boolean(data?.enabled),
-      has_users: Boolean(data?.has_users),
-    };
+    const enabled = Boolean(data?.enabled);
+    const hasUsers = Boolean(data?.has_users);
+    // Per backend contract: required = server env flag OR (has_users AND
+    // enforce_login).  Default to enabled || hasUsers when the field is
+    // missing (older backends) so existing VDS deployments with users
+    // stay mandatory.
+    const required =
+      typeof data?.required === 'boolean' ? data.required : enabled || hasUsers;
+    const enforceLogin =
+      typeof data?.enforce_login === 'boolean' ? data.enforce_login : true;
+    return { enabled, has_users: hasUsers, required, enforce_login: enforceLogin };
   } catch {
-    return { enabled: false, has_users: false };
+    return { enabled: false, has_users: false, required: false, enforce_login: true };
   }
 }
 
@@ -238,4 +267,42 @@ export async function deleteUser(id: string | number): Promise<void> {
     err.status = response.status;
     throw err;
   }
+}
+
+/**
+ * POST /api/auth/policy — persist the enforce_login login-enforcement toggle.
+ * Admin-only; returns the persisted value.
+ * @throws {Error} with `status` property = 401 (unauthenticated) or 403 (non-admin).
+ */
+export async function setLoginPolicy(enforceLogin: boolean): Promise<boolean> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/policy`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ enforce_login: enforceLogin }),
+  });
+
+  const data = (await parseJson(response)) as { enforce_login?: boolean; detail?: string } | null;
+
+  if (!response.ok) {
+    const err = new Error(data?.detail ?? 'Failed to update login policy') as Error & { status: number };
+    err.status = response.status;
+    throw err;
+  }
+
+  return Boolean(data?.enforce_login);
+}
+
+/**
+ * POST /api/login_telegram — exchange a one-time Telegram code for a session.
+ *
+ * Unlike the other auth wrappers, this goes through `safeInvoke` because the
+ * command lives under /api/{command} (not /api/auth/*). The backend returns
+ * { success, user?, entitlements?, error? }.
+ *
+ * On success the caller (auth store) re-runs init() so the session/user state
+ * refreshes and the gate closes.
+ */
+export async function loginTelegram(code: string): Promise<TelegramLoginResult> {
+  return safeInvoke<TelegramLoginResult>('login_telegram', { code });
 }

@@ -520,8 +520,8 @@ async def _run() -> int:
             f"ents={gated_state.entitlements}",
         )
 
-        # ── Step 12: Manifest filtering — limited token sees only kiro ─
-        print("\n=== Step 12: Manifest filtering (limited entitlements) ===")
+        # ── Step 12: Manifest returns ALL plugins with entitled flag ──
+        print("\n=== Step 12: Manifest returns ALL plugins (entitled flag) ===")
         manifest_resp = httpx.get(
             f"{server_url}/manifest",
             headers={"Authorization": f"Bearer {gated_state.token}"},
@@ -529,14 +529,16 @@ async def _run() -> int:
         )
         assert manifest_resp.status_code == 200, manifest_resp.text
         manifest_plugins = manifest_resp.json()["plugins"]
-        plugin_ids = [p["id"] for p in manifest_plugins]
-        print(f"  visible plugins: {plugin_ids}")
-        has_kiro = _KIRO_AUTOREG in plugin_ids
-        no_aws = _AWS_BUILDER_ID not in plugin_ids
+        plugin_map = {p["id"]: p for p in manifest_plugins}
+        print(f"  visible plugins: {list(plugin_map)}")
+        has_kiro = _KIRO_AUTOREG in plugin_map
+        has_aws = _AWS_BUILDER_ID in plugin_map
+        kiro_entitled = plugin_map.get(_KIRO_AUTOREG, {}).get("entitled") is True
+        aws_not_entitled = plugin_map.get(_AWS_BUILDER_ID, {}).get("entitled") is False
         record(
-            "manifest_filters_limited",
-            has_kiro and no_aws,
-            f"visible={plugin_ids}",
+            "manifest_all_plugins_with_entitled_flag",
+            has_kiro and has_aws and kiro_entitled and aws_not_entitled,
+            f"visible={list(plugin_map)}, kiro_entitled={kiro_entitled}, aws_entitled={not aws_not_entitled}",
         )
 
         # ── Step 13: 403 on non-entitled plugin ──────────────────────────

@@ -573,6 +573,25 @@ export {
 export * as community from './modules/community';
 
 // ============================================
+// Marketplace (official + community plugin feed)
+// ============================================
+
+export {
+  getMarketplace,
+  installMarketplacePlugin,
+  uninstallMarketplacePlugin,
+  type MarketplaceSource,
+  type MarketplaceItem,
+  type GetMarketplaceResponse,
+  type InstallMarketplacePluginParams,
+  type InstallMarketplacePluginResult,
+  type UninstallMarketplacePluginParams,
+  type UninstallMarketplacePluginResult,
+} from './modules/marketplace';
+
+export * as marketplace from './modules/marketplace';
+
+// ============================================
 // Local Overrides
 // ============================================
 

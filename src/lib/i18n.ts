@@ -1227,6 +1227,7 @@ export interface Translations {
       freemodel: string;
       integrations: string;
       monitor: string;
+      notebooklm: string;
       opencodeConfig: string;
       providers: string;
       routing: string;
@@ -1629,9 +1630,32 @@ export interface Translations {
     errorNetwork: string;
     logout: string;
     sessionExpired: string;
+    back: string;
     role: {
       admin: string;
       user: string;
+    };
+    guest: {
+      title: string;
+      subtitle: string;
+      continue: string;
+      createLocal: string;
+      login: string;
+      loginPassword: string;
+      noAccountHint: string;
+      badge: string;
+      hint: string;
+    };
+    tg: {
+      title: string;
+      description: string;
+      codePlaceholder: string;
+      submit: string;
+      back: string;
+      errorGeneric: string;
+    };
+    login: {
+      tgLink: string;
     };
     setup: {
       title: string;
@@ -3482,6 +3506,12 @@ export interface Translations {
       prLinkLabel: string;
       noOverrideToSubmit: string;
     }
+    authPolicy: {
+      title: string;
+      description: string;
+      updated: string;
+      updateFailed: string;
+    }
     settingsSaved: string;
     title: string;
   }
@@ -3543,6 +3573,28 @@ export interface Translations {
     source: string;
     firstSeen: string;
   }
+  marketplace: {
+    title: string;
+    subtitle: string;
+    searchPlaceholder: string;
+    installedSection: string;
+    availableSection: string;
+    install: string;
+    remove: string;
+    installing: string;
+    removing: string;
+    unavailableForRole: string;
+    activationRequired: string;
+    sourceOfficial: string;
+    sourceCommunity: string;
+    refresh: string;
+    errorToast: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    loadError: string;
+    versionLabel: string;
+    installedVersionLabel: string;
+  }
   sidebar: {
     accounts: string;
     aiHub: string;
@@ -3555,6 +3607,7 @@ export interface Translations {
     localMode: string;
     logs: string;
     mail: string;
+    marketplace: string;
     notebooklm: string;
     radar: string;
     scenarios: string;

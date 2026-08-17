@@ -2,7 +2,10 @@
 
 Reads ``STITCH_SERVER_URL`` from the environment directly — the existing
 ``stitch_backend.config.Settings`` model is NOT modified (per task scope).
-Empty URL = standalone mode: plugins-local only, no sync, no heartbeat.
+
+By default the desktop client talks to the real distribution server at
+``https://stitch.whitebite.ru``.  To force standalone mode (plugins-local
+only, no sync, no heartbeat) set ``STITCH_SERVER_URL=""`` explicitly.
 
 The activation file lives at ``<data_dir>/.activation`` where ``<data_dir>``
 is the stitch-manager data dir.  ``STITCH_PLUGINS_DIR`` overrides the base
@@ -19,17 +22,34 @@ from stitch_backend.config import _app_data_dir
 
 _ACTIVATION_FILENAME = ".activation"
 
+#: Default distribution server URL used when ``STITCH_SERVER_URL`` is unset.
+#: Set ``STITCH_SERVER_URL=""`` to force standalone mode.
+_DEFAULT_SERVER_URL = "https://stitch.whitebite.ru"
+
 logger = logging.getLogger(__name__)
 
 
 def server_url() -> str:
-    """Return the configured server URL (no trailing slash), or "" for standalone."""
-    return os.environ.get("STITCH_SERVER_URL", "").rstrip("/")
+    """Return the configured server URL (no trailing slash), or "" for standalone.
+
+    When ``STITCH_SERVER_URL`` is present in the environment (including the
+    empty string), its value is returned (trailing slash stripped).  When
+    absent, the default ``https://stitch.whitebite.ru`` is returned.
+    """
+    env = os.environ.get("STITCH_SERVER_URL")
+    if env is not None:
+        return env.rstrip("/")
+    return _DEFAULT_SERVER_URL
 
 
 def standalone_mode() -> bool:
-    """True when no server URL is configured — plugins-local only, no sync."""
-    return not server_url()
+    """True when ``STITCH_SERVER_URL`` is explicitly set to empty string.
+
+    Standalone mode means plugins-local only, no sync, no heartbeat.  The
+    desktop client talks to the real server by default; standalone must be
+    opted into explicitly via ``STITCH_SERVER_URL=""``.
+    """
+    return os.environ.get("STITCH_SERVER_URL") == ""
 
 
 def data_dir() -> Path:

@@ -140,13 +140,25 @@ class Settings(BaseSettings):
     reg_default_retries: int = 3
 
     # ── App-level auth (VDS / multi-user mode) ────────────────────────────────
-    # On by default — desktop requires login too.  Disable via
-    # ``STITCH_AUTH_ENABLED=0`` for headless / dev runs.  The env var name
-    # uses the ``STITCH_`` prefix (accepted via ``AliasChoices``); the bare
-    # ``AUTH_ENABLED`` name is also accepted for backwards compatibility.
+    # On by default — the auth subsystem (login/setup/me/users) is always
+    # wired up.  Disable via ``STITCH_AUTH_ENABLED=0`` for headless / dev
+    # runs (the middleware becomes a no-op and the auth endpoints return
+    # synthetic responses).  The env var name uses the ``STITCH_`` prefix
+    # (accepted via ``AliasChoices``); the bare ``AUTH_ENABLED`` name is
+    # also accepted for backwards compatibility.
     auth_enabled: bool = Field(
         True,
         validation_alias=AliasChoices("auth_enabled", "STITCH_AUTH_ENABLED"),
+    )
+    # Force login to be mandatory from first run (VDS / multi-user
+    # deployments).  When ``False`` (desktop default), the app is usable
+    # without login until the first user is created via ``/api/auth/setup``
+    # — after which ``has_users > 0`` makes login mandatory.  Effective
+    # ``required = auth_required OR (has_users > 0)``.  VDS sets
+    # ``STITCH_AUTH_REQUIRED=1`` to enforce auth from the first run.
+    auth_required: bool = Field(
+        False,
+        validation_alias=AliasChoices("auth_required", "STITCH_AUTH_REQUIRED"),
     )
     # Bootstrap only — used by the lifespan / ``create-admin`` CLI to seed the
     # first admin account.  Never logged.  Reads ``STITCH_ADMIN_PASSWORD``.

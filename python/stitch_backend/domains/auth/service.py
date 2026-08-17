@@ -27,6 +27,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +52,55 @@ SESSION_TTL = timedelta(days=7)
 #: A pre-computed dummy hash used to keep login timing roughly constant when
 #: the requested user does not exist.  Format: ``scrypt$<salt>$<hash>``.
 _DUMMY_HASH = "scrypt$" + ("00" * _SALT_BYTES) + "$" + ("00" * _SCRYPT_DKLEN)
+
+# ── Login policy (enforce_login) ──────────────────────────────────────────────
+
+#: Settings table key for the admin-controllable login-enforcement toggle.
+#: Stored as a string ("true"/"false") in the shared ``settings`` table so it
+#: rides the same persistence mechanism as every other setting.
+ENFORCE_LOGIN_KEY = "auth.enforce_login"
+
+#: Default value when the setting row is absent (fresh install).  ``True``
+#: preserves the v2 contract: a device with users requires login until an
+#: admin explicitly opts out.
+ENFORCE_LOGIN_DEFAULT = True
+
+
+async def get_enforce_login(db: AsyncSession) -> bool:
+    """Return the persisted ``enforce_login`` setting.
+
+    Defaults to :data:`ENFORCE_LOGIN_DEFAULT` (``True``) when the setting
+    row is absent or malformed — a fresh install keeps the v2 contract
+    (users ⇒ login required) until an admin explicitly opts out.
+    """
+    from stitch_backend.domains.settings.models import Setting
+
+    stmt = select(Setting).where(Setting.key == ENFORCE_LOGIN_KEY)
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+    if row is None or row.value is None:
+        return ENFORCE_LOGIN_DEFAULT
+    return row.value.lower() in ("true", "1", "yes")
+
+
+async def set_enforce_login(db: AsyncSession, value: bool) -> bool:
+    """Persist the ``enforce_login`` setting and return the new value."""
+    from datetime import UTC, datetime
+
+    from stitch_backend.domains.settings.models import Setting
+
+    raw = "true" if value else "false"
+    now = datetime.now(UTC).isoformat()
+    stmt = sqlite_insert(Setting).values(
+        key=ENFORCE_LOGIN_KEY, value=raw, updated_at=now
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["key"],
+        set_={"value": raw, "updated_at": now},
+    )
+    await db.execute(stmt)
+    await db.flush()
+    return value
 
 
 # ── Password hashing ──────────────────────────────────────────────────────────

@@ -128,6 +128,15 @@ class PluginSyncService:
             rollout = entry.get("rollout_percent", 100)
             deprecated = entry.get("deprecated", [])
 
+            # Marketplace: skip non-entitled plugins (do not attempt download).
+            # Missing field → treat as entitled (backward compat with old servers).
+            if entry.get("entitled", True) is False:
+                logger.info(
+                    "Skipping non-entitled plugin %s@%s in sync", plugin_id, version,
+                )
+                report.skipped.append(f"{plugin_id}@{version} (not entitled)")
+                continue
+
             try:
                 if not _in_canary_cohort(state.token, rollout):
                     report.skipped.append(f"{plugin_id}@{version} (canary)")

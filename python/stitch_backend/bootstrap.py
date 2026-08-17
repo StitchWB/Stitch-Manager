@@ -62,6 +62,7 @@ async def bootstrap() -> None:
     import stitch_backend.domains.account_status.commands  # noqa: F401
     import stitch_backend.domains.accounts.commands  # noqa: F401
     import stitch_backend.domains.activation.commands  # noqa: F401
+    import stitch_backend.domains.auth.telegram_commands  # noqa: F401
     import stitch_backend.domains.ai_proxy.commands  # noqa: F401
     import stitch_backend.domains.ai_proxy.zai_token_commands  # noqa: F401
     import stitch_backend.domains.api_keys.commands  # noqa: F401
@@ -88,6 +89,7 @@ import stitch_backend.domains.keys.commands  # noqa: F401
     import stitch_backend.domains.patcher.commands  # noqa: F401  # noqa: F401
     import stitch_backend.domains.plugin_distribution.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.community_commands  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.marketplace_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
     import stitch_backend.domains.profiles.commands  # noqa: F401
     import stitch_backend.domains.prompts.commands  # noqa: F401

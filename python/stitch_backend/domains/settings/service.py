@@ -40,6 +40,8 @@ _BOOL_KEYS = {
     "autoRotateEnabled", "spoofMachineIdEnabled", "tokenRefreshEnabled",
     "realisticTyping", "humanDelays", "screenshotsOnError", "captchaSoundEnabled",
     "autoReplenishEnabled", "proxyList",
+    # Auth policy — admin-controllable login enforcement toggle.
+    "auth.enforce_login",
 }
 _FLOAT_KEYS = {"uiScale", "speedMultiplier"}
 _JSON_KEYS = {"customIdePaths"}

@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
+  BookOpen,
   Cable,
   LayoutDashboard,
   MessageSquare,
@@ -25,7 +26,8 @@ type AiTabId =
   | 'monitor'
   | 'chat'
   | 'tools'
-  | 'antigravity';
+  | 'antigravity'
+  | 'notebooklm';
 
 interface AiTab {
   id: AiTabId;
@@ -44,6 +46,7 @@ const AI_TABS: AiTab[] = [
   { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
   { id: 'chat', label: 'aiHub.tabs.chat', to: '/ai/chat', icon: MessageSquare },
   { id: 'tools', label: 'aiHub.tabs.tools', to: '/ai/tools', icon: Wrench },
+  { id: 'notebooklm', label: 'aiHub.tabs.notebooklm', to: '/ai/notebooklm', icon: BookOpen },
 ];
 
 function activeTab(pathname: string): AiTabId {
@@ -57,6 +60,7 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/chat')) return 'chat';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
   if (pathname.startsWith('/ai/tools') || pathname.startsWith('/ai/holone')) return 'tools';
+  if (pathname.startsWith('/ai/notebooklm')) return 'notebooklm';
   // Redirect old api-keys route to providers
   if (pathname.startsWith('/ai/api-keys')) return 'providers';
   return 'providers';

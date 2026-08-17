@@ -43,6 +43,8 @@ import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
+import WelcomeGate from './components/auth/WelcomeGate';
+import TelegramLogin from './components/auth/TelegramLogin';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProviders = lazy(() => import('./pages/AiProviders'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
@@ -65,6 +67,7 @@ const Totp = lazy(() => import('./pages/Totp'));
 const AiGateway = lazy(() => import('./pages/AiGateway'));
 const Radar = lazy(() => import('./pages/Radar'));
 const Friends = lazy(() => import('./pages/Friends'));
+const Marketplace = lazy(() => import('./pages/Marketplace'));
 const NotebookLM = lazy(() => import('./pages/NotebookLM'));
 const Users = lazy(() => import('./pages/Users'));
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -165,6 +168,7 @@ function RouteTracker() {
         '/chat',
         '/scenarios',
         '/tools',
+        '/marketplace',
       ];
       // Simple check - if it starts with a known route base
       const isValid = validRoutes.some(
@@ -198,9 +202,12 @@ function App() {
 
   // Auth gate state
   const authEnabled = useAuthStore(state => state.enabled);
+  const authRequired = useAuthStore(state => state.required);
   const authHasUsers = useAuthStore(state => state.hasUsers);
   const authChecked = useAuthStore(state => state.checked);
   const authUser = useAuthStore(state => state.user);
+  const authGuest = useAuthStore(state => state.guest);
+  const authView = useAuthStore(state => state.authView);
   const authInit = useAuthStore(state => state.init);
 
   const hasInitialized = useRef(false);
@@ -250,10 +257,12 @@ function App() {
   // is still on the login/setup surface).
   useEffect(() => {
     if (!authChecked) return;
-    // When auth is enabled, only initialize the app once the user is logged
+    // When auth is required, only initialize the app once the user is logged
     // in — otherwise the /api/initialize_app call would 401 and trigger the
-    // session-expired handler.
-    if (authEnabled && !authUser) return;
+    // session-expired handler. When auth is optional (guest mode or auth
+    // disabled), the backend serves /api/* without a session.
+    if (authEnabled && authRequired && !authUser) return;
+    if (authEnabled && !authUser && !authGuest) return;
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
@@ -352,7 +361,7 @@ function App() {
     return () => {
       unsubscribeFromLogs();
     };
-  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs, fetchTotpKeys, authChecked, authEnabled, authUser]);
+  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs, fetchTotpKeys, authChecked, authEnabled, authRequired, authUser, authGuest]);
 
   // Idle route prefetch to speed up first navigation.
   useEffect(() => {
@@ -409,19 +418,46 @@ function App() {
   }, []);
 
   // Auth gate. Order matters:
-  //   1. !checked            → themed loading splash
-  //   2. enabled && !hasUsers → <Setup/> (first-run onboarding)
-  //   3. enabled && !user     → <Login/>
-  //   4. otherwise            → the normal app
+  //   1. !checked                              → themed loading splash
+  //   2. required && !hasUsers && !user         → <Setup/>   (mandatory)
+  //   3. required && hasUsers && !user          → <Login/>   (mandatory, TG reachable via link)
+  //   4. required && authView='telegram'        → <TelegramLogin/>  (from Login link)
+  //   5. !required && !user && !guest          → <WelcomeGate/>  (opt-in)
+  //   6. !required && !user && guest            → the normal app (guest mode)
+  //   7. !required && !user && authView='setup' → <Setup/>   (with back link)
+  //   8. !required && !user && authView='login' → <Login/>   (with back link)
+  //   9. !required && !user && authView='telegram' → <TelegramLogin/>  (with back link)
+  //  10. otherwise (user present)               → the normal app
   if (!authChecked) {
     return <AuthLoadingSplash />;
   }
-  if (authEnabled && !authHasUsers) {
-    return <Setup />;
-  }
-  if (authEnabled && !authUser) {
+  if (authEnabled && authUser) {
+    // Logged in — render the app.
+  } else if (authEnabled && authRequired) {
+    // Mandatory auth: no escape. Setup when no users, else Login.
+    // TG login is reachable from Login via a tertiary link.
+    if (authView === 'telegram') {
+      return <TelegramLogin />;
+    }
+    if (!authHasUsers) {
+      return <Setup />;
+    }
     return <Login />;
+  } else if (authEnabled && !authGuest) {
+    // Optional auth, not yet a guest: show welcome gate or the optional
+    // setup/login/telegram surface the user navigated to from the gate.
+    if (authView === 'setup') {
+      return <Setup />;
+    }
+    if (authView === 'login') {
+      return <Login />;
+    }
+    if (authView === 'telegram') {
+      return <TelegramLogin />;
+    }
+    return <WelcomeGate />;
   }
+  // Otherwise: auth disabled, or guest mode, or user present → render the app.
 
   return (
     <>
@@ -438,6 +474,7 @@ function App() {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/radar" element={<Radar />} />
             <Route path="/friends" element={<Friends />} />
+            <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/chat" element={<Chat />} />
             {/* Admin-only routes — guarded by AdminRoute */}
             <Route path="/autoreg" element={<AdminRoute><AutoReg /></AdminRoute>} />
@@ -469,7 +506,8 @@ function App() {
             <Route path="/scenarios" element={<AdminRoute><Scenarios /></AdminRoute>} />
             <Route path="/tools" element={<AdminRoute><Tools /></AdminRoute>} />
             <Route path="/totp" element={<AdminRoute><Totp /></AdminRoute>} />
-            <Route path="/notebooklm" element={<AdminRoute><NotebookLM /></AdminRoute>} />
+            <Route path="/ai/notebooklm" element={<AdminRoute><NotebookLM /></AdminRoute>} />
+            <Route path="/notebooklm" element={<Navigate to="/ai/notebooklm" replace />} />
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
             <Route path="/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="*" element={<NotFound />} />
