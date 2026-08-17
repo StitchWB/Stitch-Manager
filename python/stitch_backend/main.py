@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from stitch_backend.api.middleware import install_middleware
@@ -370,6 +371,30 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ── Origin guard (security review) ───────────────────────────────────────
+    # The dispatcher has no auth layer (localhost desktop model). CORS stops
+    # honest browsers but not fetch() from a compromised localhost page with
+    # credentials:include — so reject foreign Origins server-side, and require
+    # an Origin at all on the secret-decrypting command (raw-socket clients
+    # like curl/malware send none; the renderer always sends one).
+    _NO_ORIGIN_SENSITIVE = {"/api/get_found_key_secret"}
+
+    @app.middleware("http")
+    async def origin_guard(request, call_next):
+        if request.url.path.startswith("/api/"):
+            origin = request.headers.get("origin")
+            if origin is not None and origin not in settings.cors_origin_list:
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": {"message": "origin not allowed"}},
+                )
+            if origin is None and request.url.path in _NO_ORIGIN_SENSITIVE:
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": {"message": "origin required"}},
+                )
+        return await call_next(request)
 
     # ── Middleware (timing, error mapping) ─────────────────────────────────────
     install_middleware(app)
