@@ -109,8 +109,10 @@ export default function Sidebar() {
 
   if (!mounted) return null;
 
-  // Role-based visibility: USER sees only /, /accounts, /radar, /friends, /chat.
-  // ADMIN sees everything. When auth is disabled, show everything (desktop mode).
+  // Role-based visibility: the whole product surface is open to any
+  // authenticated user; only the admin zone (users / codes / monitoring)
+  // requires the admin role. When auth is disabled, show everything
+  // (desktop mode).
   const isAdmin = !authEnabled || authUser?.role === 'admin';
 
   return (
@@ -161,29 +163,23 @@ export default function Sidebar() {
           label={t('sidebar.accounts')}
           collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/autoreg"
-            icon={<RefreshCw size={20} />}
-            label={t('sidebar.autoReg')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/autoreg"
+          icon={<RefreshCw size={20} />}
+          label={t('sidebar.autoReg')}
+          collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/patcher"
-            icon={<Code size={20} />}
-            label={t('sidebar.idePatch')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/patcher"
+          icon={<Code size={20} />}
+          label={t('sidebar.idePatch')}
+          collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/ai"
-            icon={<ShieldCheck size={20} />}
-            label={t('sidebar.aiHub')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/ai"
+          icon={<ShieldCheck size={20} />}
+          label={t('sidebar.aiHub')}
+          collapsed={sidebarCollapsed} />
 
         <NavItem
           to="/radar"
@@ -191,37 +187,29 @@ export default function Sidebar() {
           label={t('sidebar.radar')}
           collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/automation"
-            icon={<Repeat size={20} />}
-            label={t('sidebar.automation')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/automation"
+          icon={<Repeat size={20} />}
+          label={t('sidebar.automation')}
+          collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/mail"
-            icon={<Mail size={20} />}
-            label={t('sidebar.mail')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/mail"
+          icon={<Mail size={20} />}
+          label={t('sidebar.mail')}
+          collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/tools"
-            icon={<Wrench size={20} />}
-            label={t('sidebar.tools')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/tools"
+          icon={<Wrench size={20} />}
+          label={t('sidebar.tools')}
+          collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/totp"
-            icon={<KeyRound size={20} />}
-            label="2FA"
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/totp"
+          icon={<KeyRound size={20} />}
+          label="2FA"
+          collapsed={sidebarCollapsed} />
 
         <NavItem
           to="/friends"
@@ -235,31 +223,25 @@ export default function Sidebar() {
           label={t('sidebar.marketplace')}
           collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
-            {!sidebarCollapsed &&
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                {t('sidebar.system')}
-              </p>
-            }
-          </div>
-        )}
+        <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
+          {!sidebarCollapsed &&
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+              {t('sidebar.system')}
+            </p>
+          }
+        </div>
 
-        {isAdmin && (
-          <NavItem
-            to="/settings"
-            icon={<Settings size={20} />}
-            label={t('sidebar.settings')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/settings"
+          icon={<Settings size={20} />}
+          label={t('sidebar.settings')}
+          collapsed={sidebarCollapsed} />
 
-        {isAdmin && (
-          <NavItem
-            to="/logs"
-            icon={<FileText size={20} />}
-            label={t('sidebar.logs')}
-            collapsed={sidebarCollapsed} />
-        )}
+        <NavItem
+          to="/logs"
+          icon={<FileText size={20} />}
+          label={t('sidebar.logs')}
+          collapsed={sidebarCollapsed} />
 
         {isAdmin && authEnabled && (
           <NavItem

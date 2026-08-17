@@ -478,38 +478,39 @@ function App() {
             <Route path="/friends" element={<Friends />} />
             <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/chat" element={<Chat />} />
-            {/* Admin-only routes — guarded by AdminRoute */}
-            <Route path="/autoreg" element={<AdminRoute><AutoReg /></AdminRoute>} />
-            <Route path="/ai" element={<AdminRoute><AiOverview /></AdminRoute>} />
+            {/* Product surface — open to any authenticated user */}
+            <Route path="/autoreg" element={<AutoReg />} />
+            <Route path="/ai" element={<AiOverview />} />
             <Route path="/ai/overview" element={<Navigate to="/ai" replace />} />
-            <Route path="/ai/integrations" element={<AdminRoute><AiIntegrations /></AdminRoute>} />
+            <Route path="/ai/integrations" element={<AiIntegrations />} />
             <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai/antigravity" element={<AdminRoute><Antigravity /></AdminRoute>} />
-            <Route path="/ai/holone" element={<AdminRoute><HoloneSecurity /></AdminRoute>} />
-            <Route path="/ai/tools" element={<AdminRoute><ToolsPage /></AdminRoute>} />
+            <Route path="/ai/antigravity" element={<Antigravity />} />
+            <Route path="/ai/holone" element={<HoloneSecurity />} />
+            <Route path="/ai/tools" element={<ToolsPage />} />
             <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai/opencode-config" element={<AdminRoute><OpenCodeConfig /></AdminRoute>} />
-            <Route path="/ai/chat" element={<AdminRoute><Chat /></AdminRoute>} />
-            <Route path="/ai/analytics" element={<AdminRoute><AiAnalytics /></AdminRoute>} />
-            <Route path="/ai/gateway" element={<AdminRoute><AiGateway /></AdminRoute>} />
-            <Route path="/ai/:section" element={<AdminRoute><AiProviders /></AdminRoute>} />
+            <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
+            <Route path="/ai/chat" element={<Chat />} />
+            <Route path="/ai/analytics" element={<AiAnalytics />} />
+            <Route path="/ai/gateway" element={<AiGateway />} />
+            <Route path="/ai/:section" element={<AiProviders />} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
-            <Route path="/patcher" element={<AdminRoute><Patcher /></AdminRoute>} />
-            <Route path="/scheduler" element={<AdminRoute><Scheduler /></AdminRoute>} />
-            <Route path="/automation" element={<AdminRoute><Automation /></AdminRoute>} />
-            <Route path="/automation/:tab" element={<AdminRoute><Automation /></AdminRoute>} />
-            <Route path="/mail" element={<AdminRoute><Mail /></AdminRoute>} />
-            <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
-            <Route path="/logs" element={<AdminRoute><Logs /></AdminRoute>} />
-            <Route path="/scenarios" element={<AdminRoute><Scenarios /></AdminRoute>} />
-            <Route path="/tools" element={<AdminRoute><Tools /></AdminRoute>} />
-            <Route path="/totp" element={<AdminRoute><Totp /></AdminRoute>} />
-            <Route path="/ai/notebooklm" element={<AdminRoute><NotebookLM /></AdminRoute>} />
+            <Route path="/patcher" element={<Patcher />} />
+            <Route path="/scheduler" element={<Scheduler />} />
+            <Route path="/automation" element={<Automation />} />
+            <Route path="/automation/:tab" element={<Automation />} />
+            <Route path="/mail" element={<Mail />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/logs" element={<Logs />} />
+            <Route path="/scenarios" element={<Scenarios />} />
+            <Route path="/tools" element={<Tools />} />
+            <Route path="/totp" element={<Totp />} />
+            <Route path="/ai/notebooklm" element={<NotebookLM />} />
             <Route path="/notebooklm" element={<Navigate to="/ai/notebooklm" replace />} />
+            {/* Admin zone — guarded by AdminRoute */}
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
             <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />
             <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />

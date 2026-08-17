@@ -35,7 +35,7 @@ async def cmd_get_backend_health(params: dict) -> dict:
     }
 
 
-@register_command("get_database_path")
+@register_command("get_database_path", admin_only=True)
 async def cmd_get_database_path(params: dict) -> str:
     """Return database file path as plain string."""
     from stitch_backend.config import get_database_path as _resolve
@@ -76,7 +76,7 @@ async def cmd_open_url_in_browser(params: dict) -> dict:
     return {"success": True}
 
 
-@register_command("open_in_file_manager")
+@register_command("open_in_file_manager", admin_only=True)
 async def cmd_open_in_file_manager(params: dict) -> dict:
     path = params.get("path", "")
     if not path:
@@ -223,7 +223,7 @@ async def cmd_get_ide_paths(params: dict) -> dict:
 # Observability (replaces stubs — backed by app_logs table)
 # =============================================================================
 
-@register_command("obs_ingest")
+@register_command("obs_ingest", admin_only=True)
 async def cmd_obs_ingest(params: dict) -> dict:
     """Ingest observability event(s) into app_logs.
 

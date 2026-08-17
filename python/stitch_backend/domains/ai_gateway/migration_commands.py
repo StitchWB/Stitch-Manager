@@ -16,7 +16,7 @@ from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway.migration import migrate_legacy_credentials
 
 
-@register_command("migrate_ai_gateway_legacy_data")
+@register_command("migrate_ai_gateway_legacy_data", admin_only=True)
 async def cmd_migrate_ai_gateway_legacy_data(params: dict) -> dict:
     """Backfill ``ai_gateway_provider_endpoints`` / ``credentials`` /
     ``credential_secrets`` from the legacy ``ai_proxy_accounts``,
