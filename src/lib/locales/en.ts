@@ -4243,6 +4243,8 @@ addMailboxFromSheets: "Import from Google Sheets",
     key: "Key",
     refresh: "Refresh",
     tokenRejected: "AiApiRadar admin token rejected — check AIRADAR_ADMIN_TOKEN",
+    clipboardWarning:
+      "Copied keys stay in your clipboard history until you copy something else.",
   },
   marketplace: {
     title: "Marketplace",

@@ -163,6 +163,12 @@ export function FoundKeysSection() {
             </table>
           )
         )}
+
+        {open && items.length > 0 && (
+          <p className="text-2xs text-slate-600 pt-2">
+            {t('foundKeys.clipboardWarning')}
+          </p>
+        )}
       </GlassCard>
     </div>
   );

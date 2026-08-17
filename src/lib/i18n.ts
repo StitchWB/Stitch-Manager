@@ -3700,6 +3700,7 @@ export interface Translations {
     key: string;
     refresh: string;
     tokenRejected: string;
+    clipboardWarning: string;
   }
   marketplace: {
     title: string;
