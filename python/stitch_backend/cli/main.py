@@ -5,6 +5,7 @@ Usage::
     stitch list-commands [--filter TEXT]
     stitch run <command_name> [--args JSON]
     stitch <category> <command> [OPTIONS]
+    stitch create-admin [--username X]
 
 Examples::
 
@@ -12,6 +13,7 @@ Examples::
     stitch accounts add --provider kiro --email test@test.com
     stitch registration start --provider kiro
     stitch proxy start
+    stitch create-admin --username admin
 
 All output is JSON to stdout.
 """
@@ -83,6 +85,53 @@ def cmd_run(
         raise typer.Exit(result["error"]["code"])
 
     print(json.dumps(serialise(result["data"]), indent=2, default=str))
+
+
+@app.command("create-admin")
+def cmd_create_admin(
+    username: str = typer.Option("admin", "--username", help="Username for the new admin"),
+    password: str = typer.Option(
+        None,
+        "--password",
+        help="Password (prefer STITCH_ADMIN_PASSWORD env var or prompt)",
+        show_default=False,
+    ),
+) -> None:
+    """Create an admin user for app-level auth.
+
+    Reads the password from (in order): ``--password`` flag, the
+    ``STITCH_ADMIN_PASSWORD`` env var, or an interactive ``getpass`` prompt.
+    The password is never logged.  Exits 1 on failure (duplicate username,
+    empty password, etc.).
+    """
+    import os
+
+    from stitch_backend.config import get_settings
+    from stitch_backend.database import get_session_factory
+    from stitch_backend.domains.auth.service import create_user
+
+    settings = get_settings()
+    resolved_password = password or settings.admin_password or os.environ.get("STITCH_ADMIN_PASSWORD")
+    if not resolved_password:
+        import getpass
+
+        resolved_password = getpass.getpass(f"Password for {username!r}: ")
+    if not resolved_password:
+        print(json.dumps({"error": "Password must not be empty"}), file=sys.stderr)
+        raise typer.Exit(1)
+
+    async def _create() -> None:
+        factory = get_session_factory()
+        async with factory() as db:
+            user = await create_user(db, username=username, password=resolved_password, role="admin")
+            await db.commit()
+            print(json.dumps({"id": user.id, "username": user.username, "role": user.role}))
+
+    try:
+        asyncio.run(_create())
+    except Exception as exc:  # noqa: BLE001 — surface any error to the operator
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

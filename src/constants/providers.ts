@@ -13,6 +13,13 @@ export interface ProviderConfig {
   hexColor: string; // Hex color for charts
   disabled?: boolean; // Whether registration is disabled
   category?: 'ide' | 'cloud' | 'git' | 'ai'; // Provider category for unified UI
+  /**
+   * Web-session (web2api) provider: credentials are a browser cookie jar
+   * (and optionally a token) instead of password/OAuth. Drives the
+   * cookies field in AddAccountModal — components must NOT special-case
+   * provider ids for this.
+   */
+  webSession?: boolean;
 }
 
 export const PROVIDERS: ProviderConfig[] = [
@@ -175,6 +182,50 @@ export const PROVIDERS: ProviderConfig[] = [
     hexColor: '#f59e0b',
     disabled: false,
     category: 'cloud',
+  },
+  {
+    id: 'web-gemini',
+    name: 'Gemini Web',
+    icon: 'GW',
+    color: 'bg-sky-500/20 text-sky-400 border-sky-500/30',
+    gradient: 'from-sky-500/20 to-blue-500/20 text-sky-400',
+    hexColor: '#0ea5e9',
+    disabled: false,
+    category: 'ai',
+    webSession: true,
+  },
+  {
+    id: 'web-deepseek',
+    name: 'DeepSeek Web',
+    icon: 'DS',
+    color: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    gradient: 'from-blue-500/20 to-indigo-500/20 text-blue-400',
+    hexColor: '#4d6bfe',
+    disabled: false,
+    category: 'ai',
+    webSession: true,
+  },
+  {
+    id: 'web-qwen',
+    name: 'Qwen Web',
+    icon: 'QW',
+    color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+    gradient: 'from-indigo-500/20 to-purple-500/20 text-indigo-400',
+    hexColor: '#6366f1',
+    disabled: false,
+    category: 'ai',
+    webSession: true,
+  },
+  {
+    id: 'web-notebooklm',
+    name: 'NotebookLM',
+    icon: 'NL',
+    color: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    gradient: 'from-teal-500/20 to-cyan-500/20 text-teal-400',
+    hexColor: '#14b8a6',
+    disabled: false,
+    category: 'ai',
+    webSession: true,
   },
 ] as const;
 

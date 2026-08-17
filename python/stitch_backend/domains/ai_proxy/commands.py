@@ -361,101 +361,151 @@ async def _fetch_kiro_models(accounts: list[dict]) -> list[dict[str, str]]:
         return []
 
 
-async def _fetch_freemodel_models() -> list[dict[str, str]]:
-    """Fetch models from FreeModel bridge if running."""
-    from stitch_backend.domains.freemodel_bridge.service import FreemodelBridgeService
+# ── Inference-provider registry (model discovery) ──────────────────────────
+#
+# API-key providers that share the OpenAI-compatible /v1/models fetcher, and
+# the full API-key provider list. Kiro (account-based) and FreeModel
+# (sidecar-backed) are registered separately in build_inference_providers.
+_OPENAI_COMPATIBLE_PROVIDERS = ("openai", "antigravity", "fireworks", "dashscope")
+_API_KEY_PROVIDERS = (
+    "openai", "anthropic", "gemini", "antigravity", "fireworks", "zai", "dashscope",
+)
 
-    try:
-        status = FreemodelBridgeService.status()
-        if status.get("status") != "running":
-            return []
-        port = status.get("port", 0)
-        if not port:
-            return []
 
-        url = f"http://127.0.0.1:{port}/v1/models"
-        # localhost — bypass the outbound proxy (use_proxy=False)
-        client = await gateway().make_client(timeout=5.0, use_proxy=False)
-        async with client:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                return []
-            data = resp.json()
-            models = data.get("data", [])
-            return [
-                {"id": m["id"], "provider": "freemodel", "name": m.get("id", m["id"])}
-                for m in models if "id" in m
-            ]
-    except Exception:
-        return []
+def build_inference_providers(
+    accounts: list[dict],
+    api_keys: dict[str, list[dict]],
+    enabled_providers: set[str],
+    web_gemini_accounts: list[dict] | None = None,
+    web_gemini_settings: dict[str, bool] | None = None,
+    web_deepseek_accounts: list[dict] | None = None,
+    web_deepseek_settings: dict[str, bool] | None = None,
+    web_qwen_accounts: list[dict] | None = None,
+    web_qwen_settings: dict[str, bool] | None = None,
+):
+    """Construct the inference-provider registry from preloaded DB data.
+
+    Thin adapter over the domain factory
+    :func:`inference_provider.build_inference_provider_registry`: builds the
+    I/O-bound fetcher map (this module owns the ``_fetch_*`` functions) and
+    injects it, so the registry construction stays in the domain module
+    without a circular import. All DB data must be preloaded by the caller —
+    this performs no network I/O.
+    """
+    from functools import partial
+
+    from stitch_backend.domains.ai_proxy.inference_provider import (
+        build_inference_provider_registry,
+    )
+    from stitch_backend.domains.freemodel_bridge.service import (
+        SIDECAR_NAME as _FM_SIDECAR,
+    )
+
+    key_fetchers: dict[str, Any] = {}
+    for provider in _API_KEY_PROVIDERS:
+        if provider in _OPENAI_COMPATIBLE_PROVIDERS:
+            # partial binds the provider id now (avoids the late-binding
+            # closure trap of capturing the loop variable).
+            key_fetchers[provider] = partial(_fetch_openai_compatible_models, provider)
+        elif provider == "anthropic":
+            key_fetchers[provider] = _fetch_anthropic_models
+        elif provider == "gemini":
+            key_fetchers[provider] = _fetch_gemini_models
+        elif provider == "zai":
+            key_fetchers[provider] = _fetch_zai_models
+
+    # In-process web adapter (web-gemini): the fetcher closes over preloaded
+    # ORM accounts + settings; list_models is local (no network), so it cannot
+    # hang the bounded fetch phase.
+    web_gemini_fetcher = None
+    if (
+        web_gemini_accounts is not None
+        and web_gemini_settings is not None
+        and "web-gemini" in enabled_providers
+    ):
+        from stitch_backend.domains.ai_proxy.web.gemini_adapter import (
+            GeminiWebAdapter,
+        )
+
+        web_gemini_fetcher = GeminiWebAdapter(
+            accounts=web_gemini_accounts, settings=web_gemini_settings
+        ).list_models
+
+    # In-process web adapter (web-deepseek): same discipline as web-gemini.
+    web_deepseek_fetcher = None
+    if (
+        web_deepseek_accounts is not None
+        and web_deepseek_settings is not None
+        and "web-deepseek" in enabled_providers
+    ):
+        from stitch_backend.domains.ai_proxy.web.deepseek_adapter import (
+            DeepSeekWebAdapter,
+        )
+
+        web_deepseek_fetcher = DeepSeekWebAdapter(
+            accounts=web_deepseek_accounts, settings=web_deepseek_settings
+        ).list_models
+
+    # In-process web adapter (web-qwen): same discipline as web-gemini.
+    web_qwen_fetcher = None
+    if (
+        web_qwen_accounts is not None
+        and web_qwen_settings is not None
+        and "web-qwen" in enabled_providers
+    ):
+        from stitch_backend.domains.ai_proxy.web.qwen_adapter import (
+            QwenWebAdapter,
+        )
+
+        web_qwen_fetcher = QwenWebAdapter(
+            accounts=web_qwen_accounts, settings=web_qwen_settings
+        ).list_models
+
+    return build_inference_provider_registry(
+        accounts,
+        api_keys,
+        enabled_providers,
+        key_fetchers=key_fetchers,
+        kiro_fetcher=_fetch_kiro_models,
+        freemodel_sidecar=_FM_SIDECAR,
+        web_gemini_fetcher=web_gemini_fetcher,
+        web_deepseek_fetcher=web_deepseek_fetcher,
+        web_qwen_fetcher=web_qwen_fetcher,
+    )
 
 
 async def _fetch_all_provider_models(
     accounts: list[dict],
     api_keys: dict[str, list[dict]],
     enabled_providers: set[str],
+    web_gemini_accounts: list[dict] | None = None,
+    web_gemini_settings: dict[str, bool] | None = None,
+    web_deepseek_accounts: list[dict] | None = None,
+    web_deepseek_settings: dict[str, bool] | None = None,
+    web_qwen_accounts: list[dict] | None = None,
+    web_qwen_settings: dict[str, bool] | None = None,
 ) -> list[dict[str, str]]:
     """Fetch models from all connected providers in parallel.
 
     All DB data (accounts + API keys) must be preloaded by the caller — this
     function performs ONLY network I/O and must run OUTSIDE any DB session.
+
+    Delegates to the inference-provider registry (see
+    :func:`build_inference_providers`) instead of hardcoded per-provider
+    dispatch.
     """
-    import asyncio
-
-    tasks: list[tuple[str, asyncio.Task]] = []
-    task_names: list[str] = []
-
-    # API-key providers
-    for provider in ("openai", "anthropic", "gemini", "antigravity", "fireworks", "zai", "dashscope"):
-        keys = api_keys.get(provider, [])
-        if not keys:
-            logger.debug("[Models] No keys for %s", provider)
-            continue
-        if provider in ("openai", "antigravity", "fireworks", "dashscope"):
-            coro = _fetch_openai_compatible_models(provider, keys)
-        elif provider == "anthropic":
-            coro = _fetch_anthropic_models(keys)
-        elif provider == "gemini":
-            coro = _fetch_gemini_models(keys)
-        elif provider == "zai":
-            coro = _fetch_zai_models(keys)
-        else:
-            continue
-        tasks.append((provider, asyncio.ensure_future(coro)))
-        task_names.append(provider)
-        logger.info("[Models] Fetching models for %s (%d keys)", provider, len(keys))
-
-    # Account-based: Kiro
-    if enabled_providers & {"kiro", "kiro_v2"}:
-        tasks.append(("kiro", asyncio.ensure_future(_fetch_kiro_models(accounts))))
-        task_names.append("kiro")
-        logger.info("[Models] Fetching Kiro models (%d enabled accounts)",
-                     sum(1 for a in accounts if (a.get("provider") or "").lower() in ("kiro", "kiro_v2") and a.get("enabled")))
-
-    # FreeModel bridge
-    tasks.append(("freemodel", asyncio.ensure_future(_fetch_freemodel_models())))
-    task_names.append("freemodel")
-
-    if not tasks:
-        logger.warning("[Models] No providers configured — returning empty list")
-        return []
-
-    # Fetch all in parallel (overall deadline enforced by caller via asyncio.wait_for)
-    results = await asyncio.gather(*(t for _, t in tasks), return_exceptions=True)
-
-    # Aggregate results
-    all_models: list[dict[str, str]] = []
-    for i, result in enumerate(results):
-        name = task_names[i] if i < len(task_names) else "?"
-        if isinstance(result, list):
-            count = len(result)
-            all_models.extend(result)
-            logger.info("[Models] %s: %d models", name, count)
-        else:
-            logger.error("[Models] %s failed: %r", name, result)
-
-    logger.info("[Models] Total: %d models from %d providers", len(all_models), len(tasks))
-    return all_models
+    registry = build_inference_providers(
+        accounts,
+        api_keys,
+        enabled_providers,
+        web_gemini_accounts=web_gemini_accounts,
+        web_gemini_settings=web_gemini_settings,
+        web_deepseek_accounts=web_deepseek_accounts,
+        web_deepseek_settings=web_deepseek_settings,
+        web_qwen_accounts=web_qwen_accounts,
+        web_qwen_settings=web_qwen_settings,
+    )
+    return await registry.fetch_all_models()
 
 
 @register_command("get_available_models", readonly=True)
@@ -495,10 +545,67 @@ async def cmd_get_available_models(params: dict) -> list:
                     api_keys[provider] = keys
             except Exception as e:
                 logger.warning("[Models] Error checking keys for %s: %s", provider, e)
-        return accounts, enabled_providers, api_keys
+
+        # Web-bridge providers (in-process adapters): ORM accounts + settings,
+        # same short session. "web-gemini" joins enabled_providers when the
+        # adapter is enabled and can serve (accounts or anonymous mode).
+        from stitch_backend.domains.ai_proxy.service import get_web_gemini_settings
+        from stitch_backend.domains.ai_proxy.web.gemini_adapter import (
+            load_web_gemini_accounts,
+        )
+
+        web_gemini_settings = await get_web_gemini_settings(session)
+        web_gemini_accounts = await load_web_gemini_accounts(session)
+        if web_gemini_settings["enabled"] and (
+            web_gemini_accounts or web_gemini_settings["anonymous_allowed"]
+        ):
+            enabled_providers.add("web-gemini")
+
+        # web-deepseek: no anonymous mode — enabled only with live accounts.
+        from stitch_backend.domains.ai_proxy.service import get_web_deepseek_settings
+        from stitch_backend.domains.ai_proxy.web.deepseek_adapter import (
+            load_web_deepseek_accounts,
+        )
+
+        web_deepseek_settings = await get_web_deepseek_settings(session)
+        web_deepseek_accounts = await load_web_deepseek_accounts(session)
+        if web_deepseek_settings["enabled"] and web_deepseek_accounts:
+            enabled_providers.add("web-deepseek")
+
+        # web-qwen: no anonymous mode — enabled only with live accounts.
+        from stitch_backend.domains.ai_proxy.service import get_web_qwen_settings
+        from stitch_backend.domains.ai_proxy.web.qwen_adapter import (
+            load_web_qwen_accounts,
+        )
+
+        web_qwen_settings = await get_web_qwen_settings(session)
+        web_qwen_accounts = await load_web_qwen_accounts(session)
+        if web_qwen_settings["enabled"] and web_qwen_accounts:
+            enabled_providers.add("web-qwen")
+        return (
+            accounts,
+            enabled_providers,
+            api_keys,
+            web_gemini_accounts,
+            web_gemini_settings,
+            web_deepseek_accounts,
+            web_deepseek_settings,
+            web_qwen_accounts,
+            web_qwen_settings,
+        )
 
     try:
-        accounts, enabled_providers, api_keys = await run_in_session(_preload)
+        (
+            accounts,
+            enabled_providers,
+            api_keys,
+            web_gemini_accounts,
+            web_gemini_settings,
+            web_deepseek_accounts,
+            web_deepseek_settings,
+            web_qwen_accounts,
+            web_qwen_settings,
+        ) = await run_in_session(_preload)
     except Exception as e:
         logger.error("[Models] Failed to preload provider data: %s", e)
         if _models_cache["data"] is not None:
@@ -510,7 +617,17 @@ async def cmd_get_available_models(params: dict) -> list:
     result: list = []
     try:
         result = await asyncio.wait_for(
-            _fetch_all_provider_models(accounts, api_keys, enabled_providers),
+            _fetch_all_provider_models(
+                accounts,
+                api_keys,
+                enabled_providers,
+                web_gemini_accounts=web_gemini_accounts,
+                web_gemini_settings=web_gemini_settings,
+                web_deepseek_accounts=web_deepseek_accounts,
+                web_deepseek_settings=web_deepseek_settings,
+                web_qwen_accounts=web_qwen_accounts,
+                web_qwen_settings=web_qwen_settings,
+            ),
             timeout=15.0,
         )
     except TimeoutError:
@@ -541,6 +658,16 @@ async def cmd_get_available_models(params: dict) -> list:
     _models_cache["expires"] = now + _CACHE_TTL
 
     return result
+
+
+@register_command("get_local_chat_token", readonly=True)
+async def cmd_get_local_chat_token(params: dict) -> dict:
+    """Return the per-install local chat token for the /v1/chat/completions
+    endpoint. The frontend uses this instead of a hardcoded bearer."""
+    from stitch_backend.domains.ai_proxy.chat_router import ensure_local_chat_token
+
+    token = await ensure_local_chat_token()
+    return {"token": token}
 
 
 @register_command("get_enabled_models")

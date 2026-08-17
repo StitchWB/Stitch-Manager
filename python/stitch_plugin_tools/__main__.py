@@ -1,12 +1,15 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Six subcommands:
+Nine subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package
     publish <package_dir> [--server-url …]      sign + zip + POST /admin/publish
     dev-install <package_dir>                   copy package to plugins-local
     pack-engine <out_dir> [--version …]         assemble engine-pack from autoreg/captcha
+    drift […]                                   fetch drift report + propose selector weight rerank
+    publish-selectors […]                       publish a selector overlay pack (hot update)
+    codes {issue|list}                          issue and list activation codes (admin)
 
 The signing key is OFFLINE — the developer stores it on media not reachable
 from the build / runtime.  ``keygen`` writes the private key with
@@ -34,6 +37,10 @@ from autoreg.plugin.manifest import MANIFEST_FILENAME
 
 _PRIVATE_KEY_NAME = "private.key"
 _PUBLIC_KEY_NAME = "public.key"
+
+# Env var names — mirror stitch_plugin_tools.publish for the codes CLI.
+ENV_PUBLISH_URL = "STITCH_PUBLISH_URL"
+ENV_ADMIN_KEY = "STITCH_ADMIN_KEY"
 
 
 # ── keygen ────────────────────────────────────────────────────────────────
@@ -248,6 +255,125 @@ def _cmd_publish_selectors(args: argparse.Namespace) -> int:
     )
 
 
+# ── codes ──────────────────────────────────────────────────────────────────
+
+
+def _resolve_admin_config(
+    server_url: str | None, admin_key: str | None
+) -> tuple[str, str]:
+    """Resolve server URL + admin key from CLI flags or env vars.
+
+    Returns ``(url, key)``.  Raises :class:`ValueError` if either value
+    cannot be resolved — the caller catches and prints + returns exit code 2
+    (mirrors :func:`stitch_plugin_tools.publish.resolve_publish_config`).
+    """
+    url = (server_url or os.environ.get(ENV_PUBLISH_URL, "")).strip()
+    key = (admin_key or os.environ.get(ENV_ADMIN_KEY, "")).strip()
+    if not url:
+        raise ValueError(f"no server url (--server-url or {ENV_PUBLISH_URL})")
+    if not key:
+        raise ValueError(f"no admin key (--admin-key or {ENV_ADMIN_KEY})")
+    return url, key
+
+
+def _cmd_codes_issue(args: argparse.Namespace) -> int:
+    import asyncio
+
+    import httpx
+
+    try:
+        url, key = _resolve_admin_config(args.server_url, args.admin_key)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    # Parse comma-separated entitlements: split, strip, drop empties.
+    if args.entitlements:
+        entitlements = [e.strip() for e in args.entitlements.split(",")]
+        entitlements = [e for e in entitlements if e]
+    else:
+        entitlements = None
+
+    async def _run() -> list[str]:
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            resp = await http.post(
+                f"{url.rstrip('/')}/admin/issue-code",
+                json={"entitlements": entitlements, "count": args.count},
+                headers={"X-Admin-Key": key},
+            )
+            resp.raise_for_status()
+            return resp.json()["codes"]
+
+    try:
+        codes = asyncio.run(_run())
+    except httpx.HTTPStatusError as exc:
+        print(
+            f"error: issue-code failed: {exc.response.status_code} {exc.response.text}",
+            file=sys.stderr,
+        )
+        return 1
+    except httpx.HTTPError as exc:
+        print(f"error: issue-code failed: {exc}", file=sys.stderr)
+        return 1
+
+    for code in codes:
+        print(code)
+    return 0
+
+
+def _cmd_codes_list(args: argparse.Namespace) -> int:
+    import asyncio
+
+    import httpx
+
+    try:
+        url, key = _resolve_admin_config(args.server_url, args.admin_key)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    async def _run() -> list[dict]:
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            resp = await http.get(
+                f"{url.rstrip('/')}/admin/codes",
+                headers={"X-Admin-Key": key},
+            )
+            resp.raise_for_status()
+            return resp.json()["codes"]
+
+    try:
+        codes = asyncio.run(_run())
+    except httpx.HTTPStatusError as exc:
+        print(
+            f"error: list codes failed: {exc.response.status_code} {exc.response.text}",
+            file=sys.stderr,
+        )
+        return 1
+    except httpx.HTTPError as exc:
+        print(f"error: list codes failed: {exc}", file=sys.stderr)
+        return 1
+
+    if not codes:
+        print("(no codes issued)")
+        return 0
+
+    # Tabular output: id | code_hash_prefix | used | entitlements | created_at
+    # Raw codes are never returned by the server (only sha256 is persisted);
+    # the hash prefix lets an operator correlate a row with an issuance
+    # response (which carries the raw code) by matching sha256(raw)[:12].
+    print(
+        f"{'id':>4}  {'code_hash_prefix':12}  {'used':4}  "
+        f"{'entitlements':20}  {'created_at'}"
+    )
+    for c in codes:
+        ents = ",".join(c.get("entitlements", []))
+        print(
+            f"{c['id']:>4}  {c['code_hash_prefix']:12}  "
+            f"{'yes' if c['used'] else 'no':4}  {ents:20}  {c['created_at']}"
+        )
+    return 0
+
+
 # ── argparse ──────────────────────────────────────────────────────────────
 
 
@@ -373,6 +499,46 @@ def _build_parser() -> argparse.ArgumentParser:
         "--note", default=None, help="optional note attached to the pack",
     )
     p_pub_sel.set_defaults(func=_cmd_publish_selectors)
+
+    # ── codes ───────────────────────────────────────────────────────────
+    p_codes = sub.add_parser(
+        "codes",
+        help="issue and list activation codes (admin)",
+    )
+    codes_sub = p_codes.add_subparsers(dest="codes_command", required=True)
+
+    p_codes_issue = codes_sub.add_parser(
+        "issue", help="issue one or more activation codes"
+    )
+    p_codes_issue.add_argument(
+        "--server-url", default=None, help="server base URL (or STITCH_PUBLISH_URL)"
+    )
+    p_codes_issue.add_argument(
+        "--admin-key", default=None, help="admin key (or STITCH_ADMIN_KEY)"
+    )
+    p_codes_issue.add_argument(
+        "--entitlements",
+        default=None,
+        help="comma-separated plugin ids (default: * = all plugins)",
+    )
+    p_codes_issue.add_argument(
+        "--count",
+        type=int,
+        default=1,
+        help="number of codes to issue (default: 1, max: 100)",
+    )
+    p_codes_issue.set_defaults(func=_cmd_codes_issue)
+
+    p_codes_list = codes_sub.add_parser(
+        "list", help="list all activation codes (used + unused)"
+    )
+    p_codes_list.add_argument(
+        "--server-url", default=None, help="server base URL (or STITCH_PUBLISH_URL)"
+    )
+    p_codes_list.add_argument(
+        "--admin-key", default=None, help="admin key (or STITCH_ADMIN_KEY)"
+    )
+    p_codes_list.set_defaults(func=_cmd_codes_list)
 
     return parser
 

@@ -343,3 +343,35 @@ async def cmd_open_account_browser(params: dict) -> dict:
         "url": result.url,
         "error": result.error,
     }
+
+
+@register_command("open_web_login_browser", readonly=True, timeout=90)
+async def cmd_open_web_login_browser(params: dict) -> dict:
+    """Open the provider login page for a web-session account with CDP.
+
+    Step 1 of the harvester flow: the user logs in manually in the opened
+    window; step 2 (``capture_web_session_cookies``) pulls the cookies back.
+    """
+    account_id = int(params.get("accountId", params.get("id", 0)))
+    if not account_id:
+        return {"success": False, "error": "No accountId specified"}
+
+    from stitch_backend.domains.browser.harvest import open_web_login
+
+    return await open_web_login(account_id)
+
+
+@register_command("capture_web_session_cookies")
+async def cmd_capture_web_session_cookies(params: dict) -> dict:
+    """Capture provider cookies from the open harvest browser via CDP.
+
+    Step 2 of the harvester flow. Validates the required cookie set for the
+    provider and stores the jar string on the account (adapters consume it).
+    """
+    account_id = int(params.get("accountId", params.get("id", 0)))
+    if not account_id:
+        return {"success": False, "error": "No accountId specified"}
+
+    from stitch_backend.domains.browser.harvest import capture_web_cookies
+
+    return await capture_web_cookies(account_id)

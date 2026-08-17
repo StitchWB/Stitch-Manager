@@ -79,6 +79,7 @@ async def bootstrap() -> None:
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
     import stitch_backend.domains.key_health.commands  # noqa: F401
+import stitch_backend.domains.keys.commands  # noqa: F401
     import stitch_backend.domains.kiro_patch.commands  # noqa: F401
     import stitch_backend.domains.logging.commands  # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands  # noqa: F401

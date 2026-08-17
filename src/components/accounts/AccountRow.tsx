@@ -50,6 +50,8 @@ interface AccountRowProps {
   onCopyToken: (token: string) => Promise<void>;
   onDelete: (accountId: number) => void;
   onOpenBrowser?: (accountId: number) => Promise<void>;
+  onOpenWebLogin?: (accountId: number) => Promise<void>;
+  onCaptureWebCookies?: (accountId: number) => Promise<void>;
   onToggleAutoRefreshQuota?: (account: Account) => Promise<void>;
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
@@ -83,6 +85,8 @@ export function AccountRow({
   onCopyToken,
   onDelete,
   onOpenBrowser,
+  onOpenWebLogin,
+  onCaptureWebCookies,
   onToggleAutoRefreshQuota,
   onOpenProfileSession,
   onConfirmProfileSession,
@@ -416,6 +420,8 @@ export function AccountRow({
             profileSessionReady={data.profileSessionReady}
             onCheckStatus={onCheckStatus}
             onOpenBrowser={onOpenBrowser}
+            onOpenWebLogin={onOpenWebLogin}
+            onCaptureWebCookies={onCaptureWebCookies}
             onToggleActive={onToggleActive}
             onToggleAutoRefreshQuota={onToggleAutoRefreshQuota}
             onOpenProfileSession={onOpenProfileSession}

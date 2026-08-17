@@ -176,8 +176,10 @@ describe('AutoReg page', () => {
     const cc = getByTestId('command-center');
     const allowed = JSON.parse(cc.getAttribute('data-allowed') || '[]');
 
-    expect(allowed).toEqual(['kiro', 'kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'qoder', 'bitbucket', 'v0_app']);
+    expect(allowed).toEqual(['kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'qoder', 'bitbucket', 'v0_app']);
     expect(allowed).toContain('openai');
+    // Legacy kiro v1 was removed from the backend — must not be offered.
+    expect(allowed).not.toContain('kiro');
   });
 
   it('includes openai in supported providers allowlist', () => {

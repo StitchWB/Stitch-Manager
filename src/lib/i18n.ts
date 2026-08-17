@@ -172,6 +172,8 @@ export interface Translations {
     columnsMenuTitle: string;
     columnsReset: string;
     confirmDelete: string;
+    cookies: string;
+    cookiesHint: string;
     copyToken: string;
     copyTokenSensitiveConfirm: string;
     created: string;
@@ -316,6 +318,8 @@ export interface Translations {
     profileSessionsSubtitle: string;
     profileSessionsTitle: string;
     profileSettingsAliasMakeSafe: string;
+    webLoginCapture: string;
+    webLoginOpen: string;
     profileSettingsAliasMakeSafeApplied: string;
     profileSettingsAliasMakeSafeTooltip: string;
     profileSettingsAliasPlaceholder: string;
@@ -1612,6 +1616,71 @@ export interface Translations {
     placeholder: string;
     refreshAllAccounts: string;
   }
+  auth: {
+    title: string;
+    subtitle: string;
+    username: string;
+    usernamePlaceholder: string;
+    password: string;
+    passwordPlaceholder: string;
+    submit: string;
+    submitting: string;
+    error: string;
+    errorNetwork: string;
+    logout: string;
+    sessionExpired: string;
+    role: {
+      admin: string;
+      user: string;
+    };
+    setup: {
+      title: string;
+      subtitle: string;
+      username: string;
+      usernamePlaceholder: string;
+      password: string;
+      passwordPlaceholder: string;
+      confirmPassword: string;
+      confirmPasswordPlaceholder: string;
+      submit: string;
+      submitting: string;
+      errorMismatch: string;
+      errorExists: string;
+      errorValidation: string;
+      adminBadge: string;
+    };
+    users: {
+      title: string;
+      subtitle: string;
+      addUser: string;
+      username: string;
+      usernamePlaceholder: string;
+      password: string;
+      passwordPlaceholder: string;
+      role: string;
+      roleAdmin: string;
+      roleUser: string;
+      create: string;
+      creating: string;
+      delete: string;
+      deleteTitle: string;
+      deleteMessage: string;
+      deleteConfirm: string;
+      empty: string;
+      colUsername: string;
+      colRole: string;
+      colActions: string;
+      errorSelfDelete: string;
+      errorLastAdmin: string;
+      errorDuplicate: string;
+      errorValidation: string;
+      created: string;
+      deleted: string;
+      createFailed: string;
+      deleteFailed: string;
+      loadFailed: string;
+    };
+  };
   common: {
     actions: string;
     all: string;
@@ -3416,6 +3485,64 @@ export interface Translations {
     settingsSaved: string;
     title: string;
   }
+  friends: {
+    title: string;
+    subtitle: string;
+    open: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    loadError: string;
+  }
+  radar: {
+    title: string;
+    subtitle: string;
+    statsLine: string;
+    refresh: string;
+    tabAll: string;
+    tabEasy: string;
+    tabMedium: string;
+    tabHard: string;
+    tabDead: string;
+    searchPlaceholder: string;
+    sortTop: string;
+    sortNew: string;
+    sortAmount: string;
+    periodAll: string;
+    period24h: string;
+    period7d: string;
+    period30d: string;
+    loadedOf: string;
+    loadingMore: string;
+    errorTitle: string;
+    retry: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    claimSteps: string;
+    requirements: string;
+    reliability: string;
+    status: string;
+    engine: string;
+    source: string;
+    sourceLink: string;
+    referralRequired: string;
+    credits: string;
+    modelsMore: string;
+    loadError: string;
+    refreshError: string;
+  }
+  foundKeys: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    error: string;
+    notConfigured: string;
+    copy: string;
+    copied: string;
+    provider: string;
+    status: string;
+    source: string;
+    firstSeen: string;
+  }
   sidebar: {
     accounts: string;
     aiHub: string;
@@ -3423,15 +3550,33 @@ export interface Translations {
     autoReg: string;
     chat: string;
     dashboard: string;
+    friends: string;
     idePatch: string;
     localMode: string;
     logs: string;
     mail: string;
+    notebooklm: string;
+    radar: string;
     scenarios: string;
     scheduler: string;
     settings: string;
     system: string;
+    telegramChannel: string;
     tools: string;
+  }
+  notebooklm: {
+    title: string;
+    notebooks: string;
+    empty: string;
+    newTitle: string;
+    create: string;
+    interact: string;
+    questionPlaceholder: string;
+    ask: string;
+    audio: string;
+    audioStarted: string;
+    created: string;
+    setupHint: string;
   }
   status: {
     active: string;

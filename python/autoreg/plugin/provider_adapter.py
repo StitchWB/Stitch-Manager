@@ -85,6 +85,9 @@ class PluginScenarioProvider:
         thirty_three_mail_config: dict[str, Any] | None = None,
         mailtm_inbox_config: dict[str, Any] | None = None,
         browser_factory: Callable[[], Any] | None = None,
+        # Plan selection (kiro): seeded into the store as ``kiro_plan`` so
+        # branch steps (var_equals) can gate the plan-upgrade sub-flow.
+        kiro_plan: str | None = None,
         # v1.1: registration config fields seeded into the store as
         # config.<name> so capabilities (e.g. stripe.fill_checkout) can
         # resolve ${config.*} templates.  All optional — tolerate absence.
@@ -106,6 +109,15 @@ class PluginScenarioProvider:
         self._browser_factory = browser_factory
         self._log_callback: Callable[[str], None] | None = None
         self._browser: Any | None = None
+        # Email strategy config — used by _generate_email when register()
+        # is called without an explicit email (parity with built-in
+        # providers, which generate via CommonProvider internally).
+        self._email_strategy = email_strategy
+        self._base_email = base_email
+        self._addyio_config = addyio_config
+        self._thirty_three_mail_config = thirty_three_mail_config
+        self._mailtm_inbox_config = mailtm_inbox_config
+        self._kiro_plan = kiro_plan or "free"
         # Per-run fresh user-data dir (set by _create_browser).  None when
         # browser_factory is used (tests) or before browser launch.  Kept
         # on success for session reuse; cleaned up on failure (see
@@ -380,6 +392,14 @@ class PluginScenarioProvider:
         # do this internally; the plugin path has nobody to do it, so we
         # generate here before seeding the store.  Reuses the existing
         # generators in autoreg.shared (no new dependencies).
+        if not email:
+            email = self._generate_email()
+            if not email:
+                return self._fail(
+                    None,
+                    "no email provided and email generation via strategy "
+                    f"'{self._email_strategy}' failed or is not configured",
+                )
         if not password:
             from ..shared.password_utils import generate_secure_password
 
@@ -394,7 +414,7 @@ class PluginScenarioProvider:
 
         # Create browser.
         try:
-            browser = self._create_browser(proxy)
+            browser = self._create_browser(proxy, email=email)
         except Exception as exc:
             self.log(f"browser launch failed: {exc}")
             self._cleanup_profile_dir()
@@ -410,7 +430,13 @@ class PluginScenarioProvider:
             "account.email": email,
             "account.password": password,
             "account.name": name,
+            # Plan-selection branch var (kiro-autoreg branch_plan_selection).
+            "kiro_plan": self._kiro_plan,
         }
+        # Name split for providers with separate first/last fields (windsurf).
+        _name_parts = (name or "").split(None, 1)
+        store["account.first_name"] = _name_parts[0] if _name_parts else ""
+        store["account.last_name"] = _name_parts[1] if len(_name_parts) > 1 else ""
         # Tolerate absence: only seed non-None config values; absent keys
         # resolve to empty string via resolve_template.
         store.update(
@@ -447,6 +473,7 @@ class PluginScenarioProvider:
                     store=store,
                     imap_config=self._imap_config,
                     transport=transport,
+                    proxy=proxy,
                 )
                 self.log(
                     f"executing {len(scenario.steps)} steps "
@@ -489,7 +516,71 @@ class PluginScenarioProvider:
 
     # ── Internals ────────────────────────────────────────────────────────
 
-    def _create_browser(self, proxy: str | None = None) -> Any:
+    def _generate_email(self) -> str | None:
+        """Generate an email via the configured strategy (generator half only).
+
+        Verification is the scenario's job (imap.otp step), so only the
+        generator is built here.  Mirrors the mapping in
+        ``CommonProvider._create_email_strategy`` (Zone 2) — lazy imports
+        keep the Zone-1 export guard happy and avoid heavy imports at
+        module load.
+        """
+        strategy = (self._email_strategy or "mailtm").lower()
+        try:
+            if strategy == "static":
+                if not self._base_email:
+                    return None
+                from ..email_providers.generators.static import (
+                    StaticEmailGenerator,
+                )
+
+                gen = StaticEmailGenerator(self._base_email)
+            elif strategy == "counter":
+                if not self._base_email:
+                    return None
+                from ..email_providers.generators.counter import (
+                    CounterEmailGenerator,
+                )
+
+                gen = CounterEmailGenerator(self._base_email)
+            elif strategy in ("addyio", "addyio_counter"):
+                if not self._addyio_config:
+                    return None
+                from ..email_providers.generators.addyio import (
+                    AddyIoEmailGenerator,
+                )
+
+                gen = AddyIoEmailGenerator(self._addyio_config)
+            elif strategy in ("33mail", "thirtythreemail"):
+                cfg = self._thirty_three_mail_config
+                if not cfg or not cfg.get("username"):
+                    return None
+                from ..email_providers.generators.thirtythreemail import (
+                    ThirtyThreeMailGenerator,
+                )
+
+                gen = ThirtyThreeMailGenerator(cfg["username"])
+            elif strategy == "mailtm":
+                from ..email_providers.generators.mailtm import (
+                    MailTmEmailGenerator,
+                )
+
+                gen = MailTmEmailGenerator()
+            else:
+                logger.warning(
+                    "plugin adapter: unsupported email strategy %r", strategy
+                )
+                return None
+            ctx = gen.generate(description=f"{self._service} plugin registration")
+            email = getattr(ctx, "email", None)
+            if email:
+                self.log(f"generated email via {strategy}: {email}")
+            return email
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"email generation failed: {exc}")
+            return None
+
+    def _create_browser(self, proxy: str | None = None, email: str | None = None) -> Any:
         """Create a DrissionPage-style browser for the scenario executor.
 
         The executor duck-types the browser (``.get``, ``.ele``, ``.url``,
@@ -529,7 +620,35 @@ class PluginScenarioProvider:
             options.headless()
         if proxy:
             options.set_argument(f"--proxy-server={proxy}")
-        return ChromiumPage(options)
+        page = ChromiumPage(options)
+        # Anti-detection BEFORE any navigation (the scenario's first goto
+        # happens later in the executor) — parity with built-in providers.
+        self._apply_spoofing(page, email)
+        return page
+
+    def _apply_spoofing(self, page: Any, email: str | None) -> None:
+        """Apply pre-navigation anti-detection spoofing (parity with built-ins).
+
+        Uses the same ``ProfileStorage`` + CDP spoofer the built-in providers
+        use, keyed by the account email so the fingerprint persona stays
+        consistent for the account across runs.  Lazy imports keep the
+        Zone-1 export guard happy; any failure degrades to "no spoofing"
+        with a warning rather than failing the registration.
+        """
+        if not email:
+            return
+        try:
+            from ..core.paths import get_paths
+            from ..spoofers.cdp_spoofer import apply_pre_navigation_spoofing
+            from ..spoofers.profile_storage import ProfileStorage
+
+            profile = ProfileStorage(get_paths().tokens_dir).get_or_create(email)
+            apply_pre_navigation_spoofing(page, profile)
+            self.log("anti-detection spoofing applied")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "spoofing unavailable — continuing without it: %s", exc
+            )
 
     def _close_browser(self, browser: Any) -> None:
         """Close a browser instance, trying quit() then close()."""
@@ -589,6 +708,9 @@ class PluginScenarioProvider:
             "token": outputs.get("account.token"),
             "refresh_token": outputs.get("account.refresh_token"),
             "api_key": outputs.get("account.api_key"),
+            # TOTP secret captured by totp.register (built-in parity: the
+            # built-in provider returns it as "totp_secret").
+            "totp_secret": outputs.get("account.totp_ref"),
             "session_data": session_data,
             "kiro_account": {
                 "email": outputs.get("account.email") or email or "",
@@ -714,9 +836,10 @@ class _EventEmittingExecutor(ScenarioExecutor):
         store: dict[str, Any] | None = None,
         imap_config: dict[str, Any] | None = None,
         transport: Any = None,
+        proxy: str | None = None,
     ) -> None:
         super().__init__(
-            scenario, browser, store=store, imap_config=imap_config
+            scenario, browser, store=store, imap_config=imap_config, proxy=proxy
         )
         self._transport = transport
 

@@ -46,6 +46,7 @@ class NativeGatewayExecutor(Protocol):
 
 
 class GatewaySettings(Protocol):
+    litellm_gateway_enabled: bool
     litellm_gateway_local_api_key: str | None
 
 
@@ -142,9 +143,17 @@ def _deployment_configs(
 
 def create_native_gateway_router(
     executor_factory: Callable[[], NativeGatewayExecutor],
-    local_api_key: str,
+    local_api_key: str | None = None,
+    *,
+    auth_resolver: Callable[[], str | None] | None = None,
 ) -> APIRouter:
-    """Build Stitch's in-process OpenAI/Anthropic-compatible gateway routes."""
+    """Build Stitch's in-process OpenAI/Anthropic-compatible gateway routes.
+
+    Authentication uses either a static ``local_api_key`` (backward compat for
+    the kiro gateway and tests) or a request-time ``auth_resolver`` callable
+    (used by the litellm gateway to read the per-install token on each request,
+    avoiding capturing it at construction time before the lifespan loads it).
+    """
     router = APIRouter(prefix="/v1", tags=["Native AI Gateway"])
 
     @router.post("/chat/completions", response_model=None)
@@ -152,7 +161,7 @@ def create_native_gateway_router(
         payload: GatewayRequest,
         authorization: str | None = Header(default=None),
     ) -> JsonObject | Response:
-        _require_auth(authorization, local_api_key)
+        _require_auth(authorization, local_api_key, auth_resolver)
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
@@ -163,7 +172,7 @@ def create_native_gateway_router(
         payload: GatewayRequest,
         authorization: str | None = Header(default=None),
     ) -> JsonObject | Response:
-        _require_auth(authorization, local_api_key)
+        _require_auth(authorization, local_api_key, auth_resolver)
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
@@ -174,7 +183,7 @@ def create_native_gateway_router(
         payload: GatewayRequest,
         authorization: str | None = Header(default=None),
     ) -> JsonObject | Response:
-        _require_auth(authorization, local_api_key)
+        _require_auth(authorization, local_api_key, auth_resolver)
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
@@ -182,15 +191,21 @@ def create_native_gateway_router(
 
     @router.get("/models")
     async def models(authorization: str | None = Header(default=None)) -> JsonObject:
-        _require_auth(authorization, local_api_key)
+        _require_auth(authorization, local_api_key, auth_resolver)
         return await executor_factory().models()
 
     return router
 
 
 def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None:
-    """Return the enabled gateway router; credentials stay server-side."""
-    if not settings.litellm_gateway_local_api_key:
+    """Return the enabled gateway router; credentials stay server-side.
+
+    The gateway is gated on ``litellm_gateway_enabled``.  Authentication uses
+    the per-install token resolved at request time via
+    :func:`local_auth.get_cached_local_chat_token`, so the router can be built
+    during ``create_app()`` before the lifespan loads the token.
+    """
+    if not getattr(settings, "litellm_gateway_enabled", True):
         return None
 
     import asyncio
@@ -203,6 +218,7 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         CompletionRouter,
         LiteLLMExecutor,
     )
+    from stitch_backend.domains.ai_proxy.local_auth import get_cached_local_chat_token
     from stitch_backend.domains.api_keys.service import ApiKeysService
     from stitch_backend.domains.background_manager.schemas import (
         BackgroundManagerConfig,
@@ -289,14 +305,24 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
 
     return create_native_gateway_router(
         lambda: executor,
-        settings.litellm_gateway_local_api_key,
+        auth_resolver=get_cached_local_chat_token,
     )
 
 
-def _require_auth(authorization: str | None, local_api_key: str) -> None:
-    expected = f"Bearer {local_api_key}"
-    if not hmac.compare_digest(authorization or "", expected):
-        raise HTTPException(status_code=401, detail={"error": {"message": "Unauthorized"}})
+def _require_auth(
+    authorization: str | None,
+    local_api_key: str | None,
+    auth_resolver: Callable[[], str | None] | None,
+) -> None:
+    if auth_resolver is not None:
+        expected_token = auth_resolver()
+        if expected_token and hmac.compare_digest(authorization or "", f"Bearer {expected_token}"):
+            return
+    if local_api_key:
+        expected = f"Bearer {local_api_key}"
+        if hmac.compare_digest(authorization or "", expected):
+            return
+    raise HTTPException(status_code=401, detail={"error": {"message": "Unauthorized"}})
 
 
 def _unsupported_adapter_response(payload: GatewayRequest) -> JSONResponse | None:

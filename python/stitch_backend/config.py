@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 
-from pydantic import model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ── Project root detection ────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
 
     # ── LiteLLM gateway ────────────────────────────────────────────────────────
     litellm_gateway_enabled: bool = True
-    litellm_gateway_local_api_key: str | None = "proxypal-local"
+    litellm_gateway_local_api_key: str | None = None
     litellm_gateway_model_prefix: str = "/v1"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
@@ -113,6 +113,17 @@ class Settings(BaseSettings):
     # ── Native AI gateway ───────────────────────────────────────────────────
     proxy_port: int = 20128
 
+    # ── AiApiRadar proxy ─────────────────────────────────────────────────────
+    # Base URL for the AiApiRadar community API (offers + stats).  Overridable
+    # via the AIRADAR_API_URL env var.
+    airadadar_api_url: str = "https://api.aiapiradar.cf.whitebite.ru"
+    # Admin token for AiApiRadar's admin-gated endpoints (found keys).
+    airadar_admin_token: str = ""
+    # Base URL for the found-keys endpoints; the secret endpoint lives on the
+    # VDS instance only (vds-only on the radar side). Falls back to
+    # airadadar_api_url when empty.
+    airadar_keys_url: str = ""
+
     # ── Email / IMAP ──────────────────────────────────────────────────────────
     imap_host: str | None = None
     imap_port: int = 993
@@ -127,6 +138,22 @@ class Settings(BaseSettings):
     # ── Registration ──────────────────────────────────────────────────────────
     reg_max_concurrency: int = 3
     reg_default_retries: int = 3
+
+    # ── App-level auth (VDS / multi-user mode) ────────────────────────────────
+    # On by default — desktop requires login too.  Disable via
+    # ``STITCH_AUTH_ENABLED=0`` for headless / dev runs.  The env var name
+    # uses the ``STITCH_`` prefix (accepted via ``AliasChoices``); the bare
+    # ``AUTH_ENABLED`` name is also accepted for backwards compatibility.
+    auth_enabled: bool = Field(
+        True,
+        validation_alias=AliasChoices("auth_enabled", "STITCH_AUTH_ENABLED"),
+    )
+    # Bootstrap only — used by the lifespan / ``create-admin`` CLI to seed the
+    # first admin account.  Never logged.  Reads ``STITCH_ADMIN_PASSWORD``.
+    admin_password: str | None = Field(
+        None,
+        validation_alias=AliasChoices("admin_password", "STITCH_ADMIN_PASSWORD"),
+    )
 
     # ── Paths ─────────────────────────────────────────────────────────────────
     profiles_dir: str = str(REPO_ROOT / "profiles")

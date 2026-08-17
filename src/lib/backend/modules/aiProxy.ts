@@ -188,6 +188,15 @@ export async function getProxySettings(): Promise<ProxySettings> {
 }
 
 /**
+ * Get the per-install local chat token (for /v1/chat/completions).
+ * Replaces the previously hardcoded bearer.
+ */
+export async function getLocalChatToken(): Promise<string> {
+  const result = await safeInvoke<{ token: string }>('get_local_chat_token');
+  return result?.token ?? '';
+}
+
+/**
  * Update proxy settings
  */
 export async function updateProxySettings(settings: ProxySettings): Promise<void> {

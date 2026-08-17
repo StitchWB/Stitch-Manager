@@ -40,6 +40,12 @@ export const ProviderId = {
   FIREWORKS:     'fireworks',
   QODER:         'qoder',
   V0_APP:        'v0_app',
+
+  // Web-session (web2api) providers
+  WEB_GEMINI:    'web-gemini',
+  WEB_DEEPSEEK:  'web-deepseek',
+  WEB_QWEN:      'web-qwen',
+  WEB_NOTEBOOKLM: 'web-notebooklm',
 } as const;
 
 /** Union of all valid provider ID strings. */
@@ -203,6 +209,34 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     category: 'ai',
     hasAutoreg: true,
     isAiProxy: false,
+  },
+  [ProviderId.WEB_GEMINI]: {
+    id: ProviderId.WEB_GEMINI,
+    displayName: 'Gemini Web',
+    category: 'ai',
+    hasAutoreg: false,
+    isAiProxy: true,
+  },
+  [ProviderId.WEB_DEEPSEEK]: {
+    id: ProviderId.WEB_DEEPSEEK,
+    displayName: 'DeepSeek Web',
+    category: 'ai',
+    hasAutoreg: false,
+    isAiProxy: true,
+  },
+  [ProviderId.WEB_QWEN]: {
+    id: ProviderId.WEB_QWEN,
+    displayName: 'Qwen Web',
+    category: 'ai',
+    hasAutoreg: false,
+    isAiProxy: true,
+  },
+  [ProviderId.WEB_NOTEBOOKLM]: {
+    id: ProviderId.WEB_NOTEBOOKLM,
+    displayName: 'NotebookLM',
+    category: 'ai',
+    hasAutoreg: false,
+    isAiProxy: false, // own surface, not the chat proxy hub
   },
 };
 

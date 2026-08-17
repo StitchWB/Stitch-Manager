@@ -88,7 +88,7 @@ export type KiroEndpointStrategy = "auto" | "runtime" | "codeWhisperer"
 
 export type ProxySettings = { appMode: string; proxyPort: number; autoStart: boolean; routingStrategy: string; managementKey: string; kiroEndpointStrategy?: KiroEndpointStrategy; kiroFallbackOnError?: boolean; freemodelApiKey?: string }
 
-export type Provider = "kiro" | "kiro_v2" | "windsurf" | "trae" | "copilot" | "openai" | "claude" | "anthropic" | "gemini" | "antigravity" | "fireworks" | "qoder" | "v0_app" | "aws" | "aws_builder_id" | "github" | "bitbucket"
+export type Provider = "kiro" | "kiro_v2" | "windsurf" | "trae" | "copilot" | "openai" | "claude" | "anthropic" | "gemini" | "antigravity" | "fireworks" | "qoder" | "v0_app" | "aws" | "aws_builder_id" | "github" | "bitbucket" | "web-gemini" | "web-deepseek" | "web-qwen" | "web-notebooklm"
 
 export type ProviderCategory = "ide" | "aiproxy" | "cloud"
 

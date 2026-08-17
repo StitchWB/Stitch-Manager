@@ -21,7 +21,7 @@ import { useChatStore, type ChatSession } from '../stores/chat';
 import { useAppStore } from '../stores/app';
 import type { ContentBlock, ModelInfo } from '../types/generated';
 import { t } from '../lib/i18n';
-import { isZaiChatModel, resolveChatCompletionsUrl } from './chatRouting';
+import { isZaiChatModel, resolveChatCompletionsUrl, resolveWebBridgeProvider } from './chatRouting';
 
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
@@ -32,6 +32,7 @@ import {
   getRequestHistorySafe,
   getDailyStatsSafe,
   getCostEstimateSafe,
+  getLocalChatToken,
 } from '@/lib/backend/modules/aiProxy';
 import { fetchProxyStatusNow } from '@/stores/aiProxy';
 import {
@@ -56,8 +57,6 @@ interface SetupSnapshot {
   totalProviderAccounts: number;
   mappingCount: number;
 }
-
-const CHAT_PROXY_API_KEY = 'proxypal-local';
 
 /**
  * Chat page component for debugging the AI Proxy endpoint.
@@ -124,12 +123,33 @@ export default function Chat() {
   const [costEstimate, setCostEstimate] = useState<number | null>(null);
   const [inspectorMessageId, setInspectorMessageId] = useState<string | null>(null);
   const [errorDismissed, setErrorDismissed] = useState(false);
+  // Per-install chat token fetched from the backend (get_local_chat_token).
+  // Empty until loaded — send is disabled while unset so no request goes out
+  // without the per-install credential.
+  const [chatToken, setChatToken] = useState<string>('');
+
+  // Fetch the per-install local chat token once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    getLocalChatToken()
+      .then(token => {
+        if (!cancelled && token) setChatToken(token);
+      })
+      .catch(() => {
+        // Token stays empty; send remains disabled.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const modelList = aiProxyModels;
   const activeRouteModel = modelList.find(m => m.id === model);
   const selectedModelUsesZaiRoute = isZaiChatModel(activeRouteModel);
   const chatApiUrl = resolveChatCompletionsUrl(activeRouteModel, proxyPort);
-  const chatProvider = selectedModelUsesZaiRoute ? 'zai' : undefined;
+  const chatProvider = selectedModelUsesZaiRoute
+    ? 'zai'
+    : resolveWebBridgeProvider(activeRouteModel);
   const apiUrl = chatApiUrl; // For display purposes
 
   // Force re-render when language changes
@@ -139,7 +159,7 @@ export default function Chat() {
     apiUrl: chatApiUrl,
     model,
     provider: chatProvider,
-    apiKey: CHAT_PROXY_API_KEY,
+    apiKey: chatToken,
   });
 
   // Reset error dismissed state when a new error appears
@@ -903,7 +923,7 @@ export default function Chat() {
               onSend={sendMessage}
               onStop={stopGeneration}
               isLoading={isLoading}
-              disabled={!!setupBlockReason || !selectedModel}
+              disabled={!!setupBlockReason || !selectedModel || !chatToken}
               allowImageAttachments={selectedModelSupportsVision}
               placeholder={t('chat.placeholder') || 'Type a message...'}
             />

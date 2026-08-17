@@ -84,6 +84,8 @@ def _profile_dir_for_account(account_id: int, email: str = "") -> Path:
 _PROVIDER_URLS: dict[str, str] = {
     "kiro": "https://app.kiro.dev/home",
     "kiro_v2": "https://app.kiro.dev/home",
+    "aws": "https://account.aws.com/",
+    "aws_builder_id": "https://account.aws.com/",
     "windsurf": "https://codeium.com/profile",
     "github": "https://github.com/settings/profile",
     "trae": "https://trae.sh/",
@@ -115,6 +117,7 @@ async def launch_account_browser(
     extra_url: str | None = None,
     engine: str | None = None,
     shard_profile_id: str | None = None,
+    cdp_port: int | None = None,
 ) -> LaunchResult:
     """Launch the account's browser with a persistent profile.
 
@@ -157,6 +160,11 @@ async def launch_account_browser(
         cmd.append("--headless=new")
     if proxy_url:
         cmd.append(f"--proxy-server={proxy_url}")
+    if cdp_port:
+        # Harvester flow: a known CDP port lets us read decrypted cookies
+        # back via Network.getAllCookies while the browser is running.
+        cmd.append("--remote-debugging-address=127.0.0.1")
+        cmd.append(f"--remote-debugging-port={cdp_port}")
     cmd.append(url)
 
     # Inject cookies into the Chrome profile BEFORE launching.

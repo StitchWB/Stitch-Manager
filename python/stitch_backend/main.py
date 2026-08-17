@@ -98,6 +98,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Ensure tables exist (dev convenience; use Alembic in production)
     await create_all_tables()
 
+    # Optional app-level auth: when enabled and no users exist, bootstrap
+    # the initial admin from STITCH_ADMIN_PASSWORD (never logged).  Safe
+    # no-op when auth is off (desktop single-user mode).
+    if settings.auth_enabled and settings.admin_password:
+        try:
+            from stitch_backend.database import get_session_factory
+            from stitch_backend.domains.auth.service import bootstrap_admin
+
+            factory = get_session_factory()
+            async with factory() as _db:
+                created = await bootstrap_admin(_db, settings.admin_password)
+                if created is not None:
+                    await _db.commit()
+                    logger.info(
+                        "Auth bootstrap: created initial admin user %r",
+                        created.username,
+                    )
+        except Exception as _exc:  # noqa: BLE001
+            logger.warning("Auth bootstrap skipped: %s", _exc)
+
     # Encrypt-at-rest migration: re-encrypt any plaintext secrets left over
     # from before EncryptedText was applied (idempotent — skips encrypted rows).
     try:
@@ -133,17 +153,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.background_manager.commands  # noqa: F401
     import stitch_backend.domains.browser.commands  # noqa: F401
     import stitch_backend.domains.cards.commands  # noqa: F401
+    import stitch_backend.domains.community.commands  # noqa: F401
     import stitch_backend.domains.composed_flows.commands  # noqa: F401
     import stitch_backend.domains.email.commands  # noqa: F401
     import stitch_backend.domains.email_counter.commands  # noqa: F401
     import stitch_backend.domains.email_inbox.commands  # noqa: F401
     import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
-    import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
     import stitch_backend.domains.key_health.commands  # noqa: F401
+    import stitch_backend.domains.keys.commands  # noqa: F401
     import stitch_backend.domains.kiro_patch.commands  # noqa: F401
+    import stitch_backend.domains.notebooklm.commands  # noqa: F401
     import stitch_backend.domains.kiro_proxy.commands  # noqa: F401
     import stitch_backend.domains.logging.commands  # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands  # noqa: F401
@@ -164,6 +186,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.scheduler.commands  # noqa: F401
     import stitch_backend.domains.settings.commands  # noqa: F401
     import stitch_backend.domains.totp.commands  # noqa: F401
+    import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
     import stitch_backend.domains.utility.commands  # noqa: F401
     import stitch_backend.domains.utility.file_dialogs  # noqa: F401
     import stitch_backend.domains.utility.stubs  # noqa: F401
@@ -259,6 +282,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("KeyHealth worker started")
     except Exception as _exc:
         logger.warning("KeyHealth worker init skipped: %s", _exc)
+
+    # Warm the AiApiRadar cache so the first user-facing radar request
+    # doesn't wait ~4s on the upstream.  Fire-and-forget; failures only log.
+    try:
+        from stitch_backend.domains.community.service import warm_radar_cache
+        await warm_radar_cache()
+        logger.info("AiApiRadar cache warmup scheduled")
+    except Exception as _exc:
+        logger.warning("AiApiRadar cache warmup skipped: %s", _exc)
 
     # Emit a startup event for any domain listeners
     from stitch_backend.core.event_bus import event_bus

@@ -9,6 +9,8 @@ import {
   openAccountProfileSession,
   confirmAccountProfileSession,
   clearAccountProfileSession,
+  openWebLoginBrowser,
+  captureWebSessionCookies,
   updateAccountNotesTags,
   checkAccountStatus,
   checkFireworksApiKey,
@@ -167,6 +169,44 @@ export function useAccountsActions({
         console.error('[Accounts] Failed to clear profile session:', error);
         toast.error(
           `Failed to clear profile session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
+
+  // Web-session harvester (web2api providers): step 1 opens the provider
+  // login page, step 2 captures cookies via CDP after manual login.
+  const handleOpenWebLogin = useCallback(async (id: number) => {
+    try {
+      const res = await openWebLoginBrowser({ accountId: id });
+      if (res.success) {
+        toast.success(t('accounts.webLoginOpen'));
+      } else {
+        toast.error(res.error ?? 'Failed to open web login browser');
+      }
+    } catch (error) {
+      console.error('[Accounts] Failed to open web login browser:', error);
+      toast.error(
+        `Failed to open web login: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }, []);
+
+  const handleCaptureWebCookies = useCallback(
+    async (id: number) => {
+      try {
+        const res = await captureWebSessionCookies({ accountId: id });
+        if (res.success) {
+          toast.success(`${t('accounts.webLoginCapture')}: ${res.cookies ?? 0}`);
+          await fetchAccounts();
+        } else {
+          toast.error(res.error ?? 'Failed to capture cookies');
+        }
+      } catch (error) {
+        console.error('[Accounts] Failed to capture web cookies:', error);
+        toast.error(
+          `Failed to capture cookies: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     },
@@ -424,6 +464,8 @@ export function useAccountsActions({
     handleOpenProfileSession,
     handleConfirmProfileSession,
     handleClearProfileSession,
+    handleOpenWebLogin,
+    handleCaptureWebCookies,
     handleAuthorizeKiroAccount,
     handleUpdateAccount,
     handleExportCSV,

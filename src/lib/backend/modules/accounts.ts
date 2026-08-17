@@ -37,6 +37,8 @@ export interface AddAccountParams {
   refreshToken?: string;
   quotaLimit?: number;
   metadata?: Record<string, unknown>;
+  /** Web-session cookie jar (web-gemini and future web adapters). */
+  cookies?: string;
 }
 
 export interface DeleteAccountParams {
@@ -102,6 +104,7 @@ export async function addAccount(params: AddAccountParams): Promise<Account> {
       refreshToken: params.refreshToken,
       quotaLimit: params.quotaLimit,
       metadata,
+      cookies: params.cookies,
     },
   });
 }
@@ -356,6 +359,32 @@ export async function confirmAccountProfileSession(params: { accountId: number }
  */
 export async function clearAccountProfileSession(params: { accountId: number }): Promise<void> {
   return safeInvoke<void>('clear_account_profile_session', { account_id: params.accountId });
+}
+
+/**
+ * Web-session harvester, step 1: open the provider login page in the
+ * account's persistent browser with a known CDP port.
+ */
+export async function openWebLoginBrowser(params: {
+  accountId: number;
+}): Promise<{ success: boolean; port?: number; pid?: number; error?: string }> {
+  return safeInvoke<{ success: boolean; port?: number; pid?: number; error?: string }>(
+    'open_web_login_browser',
+    { accountId: params.accountId }
+  );
+}
+
+/**
+ * Web-session harvester, step 2: read provider cookies back via CDP and
+ * store the jar string on the account (consumed by the web2api adapters).
+ */
+export async function captureWebSessionCookies(params: {
+  accountId: number;
+}): Promise<{ success: boolean; cookies?: number; error?: string }> {
+  return safeInvoke<{ success: boolean; cookies?: number; error?: string }>(
+    'capture_web_session_cookies',
+    { accountId: params.accountId }
+  );
 }
 
 /**

@@ -40,6 +40,8 @@ export interface AccountsTableProps {
   onOpenProfileSession?: (accountId: number) => Promise<void>;
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
+  onOpenWebLogin?: (accountId: number) => Promise<void>;
+  onCaptureWebCookies?: (accountId: number) => Promise<void>;
   onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
   onCopyRefUrl?: (refUrl: string) => Promise<void>;
   onRefreshRefUrl?: (accountId: number) => Promise<void>;
@@ -68,6 +70,8 @@ export default function AccountsTable({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  onOpenWebLogin,
+  onCaptureWebCookies,
   onAuthorizeKiroAccount,
   onCopyRefUrl,
   onRefreshRefUrl,
@@ -377,9 +381,11 @@ export default function AccountsTable({
                   })
                 }
                 onDelete={(id) => void handleDeleteAccount(id)}
-                onOpenProfileSession={onOpenProfileSession}
-                onConfirmProfileSession={onConfirmProfileSession}
-                onClearProfileSession={onClearProfileSession}
+onOpenProfileSession={onOpenProfileSession}
+onConfirmProfileSession={onConfirmProfileSession}
+onClearProfileSession={onClearProfileSession}
+onOpenWebLogin={onOpenWebLogin}
+onCaptureWebCookies={onCaptureWebCookies}
                 onAuthorizeKiroAccount={onAuthorizeKiroAccount}
                 onCopyRefUrl={onCopyRefUrl}
                 onRefreshRefUrl={onRefreshRefUrl}
@@ -417,9 +423,11 @@ export default function AccountsTable({
                 onToggleActive={() => handleToggleActive(inspectedAccount)}
                 onOpenBrowser={onOpenBrowser ? (id) => { void onOpenBrowser(id); } : undefined}
                 onAuthorizeKiroAccount={onAuthorizeKiroAccount ? (id) => { void onAuthorizeKiroAccount(id); } : undefined}
-                onOpenProfileSession={onOpenProfileSession}
-                onConfirmProfileSession={onConfirmProfileSession}
-                onClearProfileSession={onClearProfileSession}
+onOpenProfileSession={onOpenProfileSession}
+onConfirmProfileSession={onConfirmProfileSession}
+onClearProfileSession={onClearProfileSession}
+onOpenWebLogin={onOpenWebLogin}
+onCaptureWebCookies={onCaptureWebCookies}
                 onToggleAutoRefreshQuota={onToggleAutoRefreshQuota}
                 onCopyRefUrl={onCopyRefUrl}
                 onRefreshRefUrl={onRefreshRefUrl}

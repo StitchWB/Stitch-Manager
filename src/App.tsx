@@ -1,11 +1,12 @@
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
-import { CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, Loader2, Terminal } from 'lucide-react';
 import Layout from './components/layout/Layout';
 
 import { t } from '@/lib/i18n';
 import { useAppStore } from './stores/app';
+import { useAuthStore } from './stores/auth';
 import { useLogsStore } from './stores/logs';
 import { useRegistrationStore } from './stores/registration';
 import { useRuntimeStore } from './stores/registration/runtime.store';
@@ -17,6 +18,7 @@ import { useSchedulerStore } from './stores/scheduler';
 import { useAiProxyStore } from './stores/aiProxy';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
+import { AdminRoute } from './components/auth/AdminRoute';
 import { safeInvoke } from './lib/backend';
 import type { Account, ProxyStatus, ScheduledTask, SettingsData } from './types/generated';
 import type { TotpKey } from './lib/backend/modules/totp';
@@ -39,6 +41,8 @@ interface RegistrationStatusResponse {
 
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
+import Login from './pages/Login';
+import Setup from './pages/Setup';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProviders = lazy(() => import('./pages/AiProviders'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
@@ -59,6 +63,10 @@ const Tools = lazy(() => import('./pages/Tools'));
 const Automation = lazy(() => import('./pages/Automation'));
 const Totp = lazy(() => import('./pages/Totp'));
 const AiGateway = lazy(() => import('./pages/AiGateway'));
+const Radar = lazy(() => import('./pages/Radar'));
+const Friends = lazy(() => import('./pages/Friends'));
+const NotebookLM = lazy(() => import('./pages/NotebookLM'));
+const Users = lazy(() => import('./pages/Users'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -90,6 +98,31 @@ function RouteLoadingFallback() {
   return (
     <div className="h-full w-full min-h-[200px] flex items-center justify-center text-sm text-vsc-text-muted">
       {t('common.loading') || 'Loading...'}
+    </div>
+  );
+}
+
+/**
+ * Themed loading splash shown while the auth gate is resolving (fetching
+ * /api/auth/status and /api/auth/me). Same Deep Space aesthetic as the
+ * login/setup pages so the transition is seamless.
+ */
+function AuthLoadingSplash() {
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0a0d]">
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99,102,241,0.18), transparent 60%), radial-gradient(ellipse 60% 50% at 20% 100%, rgba(139,92,246,0.12), transparent 60%), radial-gradient(ellipse 60% 50% at 80% 100%, rgba(59,130,246,0.10), transparent 60%)',
+        }}
+      />
+      <div className="relative flex flex-col items-center gap-4">
+        <div className="rounded-xl w-12 h-12 flex items-center justify-center bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-xl shadow-indigo-900/40">
+          <Terminal className="w-6 h-6 text-white" />
+        </div>
+        <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+      </div>
     </div>
   );
 }
@@ -163,6 +196,13 @@ function App() {
   const fetchLogs = useLogsStore(state => state.fetchLogs);
   const fetchTotpKeys = useTotpStore(state => state.fetchKeys);
 
+  // Auth gate state
+  const authEnabled = useAuthStore(state => state.enabled);
+  const authHasUsers = useAuthStore(state => state.hasUsers);
+  const authChecked = useAuthStore(state => state.checked);
+  const authUser = useAuthStore(state => state.user);
+  const authInit = useAuthStore(state => state.init);
+
   const hasInitialized = useRef(false);
 
   useEffect(() => {
@@ -197,8 +237,23 @@ function App() {
     }
   }, [theme]);
 
-  // Initialize settings and logging system
+  // Initialize auth state first. The app gate below waits for `authChecked`
+  // before rendering either the loading splash, the setup page, the login
+  // page, or the normal app. When auth is disabled, init() resolves with
+  // {enabled:false, checked:true} and the app renders exactly as before.
   useEffect(() => {
+    void authInit();
+  }, [authInit]);
+
+  // Initialize settings and logging system — only after the auth gate has
+  // resolved (so we don't fire /api/* calls that would 401 while the user
+  // is still on the login/setup surface).
+  useEffect(() => {
+    if (!authChecked) return;
+    // When auth is enabled, only initialize the app once the user is logged
+    // in — otherwise the /api/initialize_app call would 401 and trigger the
+    // session-expired handler.
+    if (authEnabled && !authUser) return;
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
@@ -297,7 +352,7 @@ function App() {
     return () => {
       unsubscribeFromLogs();
     };
-  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs, fetchTotpKeys]);
+  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs, fetchTotpKeys, authChecked, authEnabled, authUser]);
 
   // Idle route prefetch to speed up first navigation.
   useEffect(() => {
@@ -353,6 +408,21 @@ function App() {
     return () => window.clearTimeout(fallbackTimer);
   }, []);
 
+  // Auth gate. Order matters:
+  //   1. !checked            → themed loading splash
+  //   2. enabled && !hasUsers → <Setup/> (first-run onboarding)
+  //   3. enabled && !user     → <Login/>
+  //   4. otherwise            → the normal app
+  if (!authChecked) {
+    return <AuthLoadingSplash />;
+  }
+  if (authEnabled && !authHasUsers) {
+    return <Setup />;
+  }
+  if (authEnabled && !authUser) {
+    return <Login />;
+  }
+
   return (
     <>
       {/* Skip to main content link for keyboard navigation */}
@@ -366,36 +436,41 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/accounts" element={<Accounts />} />
-            <Route path="/autoreg" element={<AutoReg />} />
-            <Route path="/ai" element={<AiOverview />} />
+            <Route path="/radar" element={<Radar />} />
+            <Route path="/friends" element={<Friends />} />
+            <Route path="/chat" element={<Chat />} />
+            {/* Admin-only routes — guarded by AdminRoute */}
+            <Route path="/autoreg" element={<AdminRoute><AutoReg /></AdminRoute>} />
+            <Route path="/ai" element={<AdminRoute><AiOverview /></AdminRoute>} />
             <Route path="/ai/overview" element={<Navigate to="/ai" replace />} />
-            <Route path="/ai/integrations" element={<AiIntegrations />} />
+            <Route path="/ai/integrations" element={<AdminRoute><AiIntegrations /></AdminRoute>} />
             <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai/antigravity" element={<Antigravity />} />
-            <Route path="/ai/holone" element={<HoloneSecurity />} />
-            <Route path="/ai/tools" element={<ToolsPage />} />
+            <Route path="/ai/antigravity" element={<AdminRoute><Antigravity /></AdminRoute>} />
+            <Route path="/ai/holone" element={<AdminRoute><HoloneSecurity /></AdminRoute>} />
+            <Route path="/ai/tools" element={<AdminRoute><ToolsPage /></AdminRoute>} />
             <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
-            <Route path="/ai/chat" element={<Chat />} />
-            <Route path="/ai/analytics" element={<AiAnalytics />} />
-            <Route path="/ai/gateway" element={<AiGateway />} />
-            <Route path="/ai/:section" element={<AiProviders />} />
+            <Route path="/ai/opencode-config" element={<AdminRoute><OpenCodeConfig /></AdminRoute>} />
+            <Route path="/ai/chat" element={<AdminRoute><Chat /></AdminRoute>} />
+            <Route path="/ai/analytics" element={<AdminRoute><AiAnalytics /></AdminRoute>} />
+            <Route path="/ai/gateway" element={<AdminRoute><AiGateway /></AdminRoute>} />
+            <Route path="/ai/:section" element={<AdminRoute><AiProviders /></AdminRoute>} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
-            <Route path="/patcher" element={<Patcher />} />
-            <Route path="/scheduler" element={<Scheduler />} />
-            <Route path="/automation" element={<Automation />} />
-            <Route path="/automation/:tab" element={<Automation />} />
-            <Route path="/mail" element={<Mail />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/logs" element={<Logs />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/scenarios" element={<Scenarios />} />
-            <Route path="/tools" element={<Tools />} />
-            <Route path="/totp" element={<Totp />} />
+            <Route path="/patcher" element={<AdminRoute><Patcher /></AdminRoute>} />
+            <Route path="/scheduler" element={<AdminRoute><Scheduler /></AdminRoute>} />
+            <Route path="/automation" element={<AdminRoute><Automation /></AdminRoute>} />
+            <Route path="/automation/:tab" element={<AdminRoute><Automation /></AdminRoute>} />
+            <Route path="/mail" element={<AdminRoute><Mail /></AdminRoute>} />
+            <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
+            <Route path="/logs" element={<AdminRoute><Logs /></AdminRoute>} />
+            <Route path="/scenarios" element={<AdminRoute><Scenarios /></AdminRoute>} />
+            <Route path="/tools" element={<AdminRoute><Tools /></AdminRoute>} />
+            <Route path="/totp" element={<AdminRoute><Totp /></AdminRoute>} />
+            <Route path="/notebooklm" element={<AdminRoute><NotebookLM /></AdminRoute>} />
+            <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
             <Route path="/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -30,15 +30,53 @@ class ChatCompletionRequest:
     provider: str
     model: str
     messages: list[ZaiMessage]
+    tools: list[JsonObject] | None = None
+    tool_choice: JsonValue = None
+    # Original payload message dicts (role/content/tool_calls/name) — needed
+    # by web adapters whose prompt builders consume the raw OpenAI shape
+    # (ZaiMessage carries role/content only).
+    raw_messages: list[JsonObject] | None = None
 
     @classmethod
     def from_openai_payload(cls, payload: JsonObject) -> ChatCompletionRequest:
         provider = payload.get("provider")
         model = payload.get("model")
         messages = payload.get("messages")
-        if not isinstance(provider, str) or not isinstance(model, str) or not isinstance(messages, list):
+        if not isinstance(model, str) or not isinstance(messages, list):
             raise InvalidChatCompletionRequestError()
-        return cls(provider=provider, model=model, messages=_parse_messages(messages))
+        if not isinstance(provider, str):
+            # Web-bridge providers may be derived from the model prefix when
+            # the explicit field is absent (IDE clients send model only).
+            # Legacy providers still require the explicit field (422 below).
+            if model.startswith("web-") and "/" in model:
+                provider, model = model.split("/", 1)
+            else:
+                raise InvalidChatCompletionRequestError()
+        elif provider.startswith("web-") and model.startswith(f"{provider}/"):
+            model = model[len(provider) + 1 :]
+        if provider.startswith("web-"):
+            # OpenAI-conformant tool round-trips send assistant tool-call
+            # messages with content=null; map to "" for web bridges only so
+            # multi-turn tool use works (zai/qoder keep strict 422 behavior).
+            messages = [
+                {**m, "content": ""}
+                if isinstance(m, dict) and m.get("content") is None
+                else m
+                for m in messages
+            ]
+        tools = payload.get("tools")
+        return cls(
+            provider=provider,
+            model=model,
+            messages=_parse_messages(messages),
+            tools=(
+                [t for t in tools if isinstance(t, dict)]
+                if isinstance(tools, list)
+                else None
+            ),
+            tool_choice=payload.get("tool_choice"),
+            raw_messages=[m for m in messages if isinstance(m, dict)],
+        )
 
 
 class InvalidChatCompletionRequestError(ValueError):

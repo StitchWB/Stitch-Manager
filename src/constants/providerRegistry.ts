@@ -27,7 +27,11 @@ export type ProviderRegistryId =
   | 'freemodel'
   | 'custom'
   | 'qoder'
-  | 'v0_app';
+  | 'v0_app'
+  | 'web-gemini'
+  | 'web-deepseek'
+  | 'web-qwen'
+  | 'web-notebooklm';
 
 export type ProviderRegistryEntry = {
   id: ProviderRegistryId;
@@ -210,6 +214,50 @@ export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry
     },
     accounts: { matchProviders: ['v0_app'] },
   },
+  'web-gemini': {
+    id: 'web-gemini',
+    label: 'Gemini Web',
+    badge: {
+      bg: 'bg-sky-500/10',
+      text: 'text-sky-400',
+      border: 'border-sky-500/20',
+    },
+    accounts: { matchProviders: ['web-gemini'] },
+    aiProxy: { enabled: true },
+  },
+  'web-deepseek': {
+    id: 'web-deepseek',
+    label: 'DeepSeek Web',
+    badge: {
+      bg: 'bg-blue-500/10',
+      text: 'text-blue-400',
+      border: 'border-blue-500/20',
+    },
+    accounts: { matchProviders: ['web-deepseek'] },
+    aiProxy: { enabled: true },
+  },
+  'web-qwen': {
+    id: 'web-qwen',
+    label: 'Qwen Web',
+    badge: {
+      bg: 'bg-indigo-500/10',
+      text: 'text-indigo-400',
+      border: 'border-indigo-500/20',
+    },
+    accounts: { matchProviders: ['web-qwen'] },
+    aiProxy: { enabled: true },
+  },
+  'web-notebooklm': {
+    id: 'web-notebooklm',
+    label: 'NotebookLM',
+    badge: {
+      bg: 'bg-teal-500/10',
+      text: 'text-teal-400',
+      border: 'border-teal-500/20',
+    },
+    accounts: { matchProviders: ['web-notebooklm'] },
+    // Own surface (notebooks/artifacts), not the chat proxy hub.
+  },
 };
 
 // =============================
@@ -225,6 +273,10 @@ export const ACCOUNT_PROVIDER_FILTER_IDS = [
   'openai',
   'qoder',
   'v0_app',
+  'web-gemini',
+  'web-deepseek',
+  'web-qwen',
+  'web-notebooklm',
 ] as const;
 
 export type AccountProviderFilterId = (typeof ACCOUNT_PROVIDER_FILTER_IDS)[number];
@@ -261,6 +313,9 @@ export const AI_PROXY_PROVIDER_LIST = [
   'zai',
   'freemodel',
   'custom',
+  'web-gemini',
+  'web-deepseek',
+  'web-qwen',
 ] as const;
 
 export type AiProxyProviderName = (typeof AI_PROXY_PROVIDER_LIST)[number];

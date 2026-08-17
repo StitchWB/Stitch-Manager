@@ -17,11 +17,23 @@ logger = logging.getLogger(__name__)
 
 #: Paths polled frequently by the frontend UI — logged at DEBUG to keep
 #: the INFO access log focused on meaningful user actions.
+#: (Dashboard/scheduler heartbeats, registration & replenishment status,
+#: background manager, proxy debug drawer, key health and metrics refresh.)
 NOISY_PATHS: frozenset[str] = frozenset({
     "/api/holone/status",
     "/api/holone/findings",
     "/api/get_proxy_status",
     "/api/obs_ingest",
+    "/api/get_scheduler_status",
+    "/api/get_scheduled_tasks",
+    "/api/get_task_executions",
+    "/api/get_registration_jobs",
+    "/api/get_registration_status",
+    "/api/get_replenishment_status",
+    "/api/get_background_manager_status",
+    "/api/get_proxy_debug_logs",
+    "/api/get_key_health",
+    "/api/metrics/summary",
 })
 
 
@@ -31,6 +43,15 @@ def install_middleware(app: FastAPI) -> None:
     Middleware is applied in *reverse* order (FastAPI convention):
     the last ``add_middleware`` call runs first.
     """
+
+    # ── Auth gate (no-op when auth_enabled is off) ──────────────────────────────
+    # Mounted before timing/error middleware so unauthenticated requests are
+    # rejected before any handler runs.  The dispatch function is a complete
+    # no-op when ``auth_enabled`` is False, so desktop single-user mode is
+    # unchanged.
+    from stitch_backend.domains.auth.router import auth_middleware_dispatch
+
+    app.middleware("http")(auth_middleware_dispatch)
 
     # ── Request timing + access log ────────────────────────────────────────────
 

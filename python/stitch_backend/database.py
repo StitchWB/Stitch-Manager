@@ -224,6 +224,7 @@ async def create_all_tables() -> None:
         # Import all model modules so Base.metadata is populated
         import stitch_backend.domains.accounts.models  # noqa: F401
         import stitch_backend.domains.ai_gateway.models  # noqa: F401
+        import stitch_backend.domains.auth.models  # noqa: F401
         import stitch_backend.domains.composed_flows.models  # noqa: F401
         import stitch_backend.domains.email_counter.models  # noqa: F401
         import stitch_backend.domains.email_inbox.models  # noqa: F401

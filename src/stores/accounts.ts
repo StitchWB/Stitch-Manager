@@ -69,7 +69,12 @@ interface AccountsState {
 
   // Actions
   fetchAccounts: (provider?: ProviderName) => Promise<void>;
-  addAccount: (provider: ProviderName, email: string, password: string) => Promise<Account>;
+  addAccount: (
+    provider: ProviderName,
+    email: string,
+    password: string,
+    cookies?: string
+  ) => Promise<Account>;
   deleteAccount: (accountId: number) => Promise<void>;
   archiveAccounts: (accountIds: number[], archived: boolean) => Promise<void>;
   deleteAccounts: (accountIds: number[]) => Promise<void>;
@@ -245,10 +250,10 @@ export const useAccountsStore = create<AccountsState>()(
           }
         },
 
-        addAccount: async (provider, email, password) => {
+        addAccount: async (provider, email, password, cookies) => {
           set({ loading: true, error: null });
           try {
-            const newAccount = await addAccount({ provider, email, password });
+            const newAccount = await addAccount({ provider, email, password, cookies });
             set(state => ({
               accounts: [...state.accounts, newAccount],
               loading: false,

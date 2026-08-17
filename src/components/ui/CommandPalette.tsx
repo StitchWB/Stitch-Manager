@@ -12,12 +12,19 @@ import {
   Search,
 } from 'lucide-react';
 import { useAccountsStore } from '../../stores/accounts';
+import { useAuthStore } from '../../stores/auth';
 import { t } from '@/lib/i18n';
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { refreshAllAccounts } = useAccountsStore();
+  const authEnabled = useAuthStore(state => state.enabled);
+  const authUser = useAuthStore(state => state.user);
+
+  // When auth is disabled, show everything (desktop mode). When enabled,
+  // only admins see admin-only destinations; non-admins see the user set.
+  const isAdmin = !authEnabled || authUser?.role === 'admin';
 
   // Toggle on Cmd+K / Ctrl+K
   useEffect(() => {
@@ -81,27 +88,37 @@ export function CommandPalette() {
               >
                 {t('sidebar.accounts')}
               </CommandItem>
-              <CommandItem
-                icon={<RefreshCw />}
-                onSelect={() => runCommand(() => navigate('/autoreg'))}
-              >
-                {t('sidebar.autoReg')}
-              </CommandItem>
-              <CommandItem icon={<Code />} onSelect={() => runCommand(() => navigate('/patcher'))}>
-                {t('sidebar.idePatch')}
-              </CommandItem>
-              <CommandItem icon={<Key />} onSelect={() => runCommand(() => navigate('/api-keys'))}>
-                {t('commandPalette.apiKeys')}
-              </CommandItem>
-              <CommandItem
-                icon={<Settings />}
-                onSelect={() => runCommand(() => navigate('/settings'))}
-              >
-                {t('sidebar.settings')}
-              </CommandItem>
-              <CommandItem icon={<FileText />} onSelect={() => runCommand(() => navigate('/logs'))}>
-                {t('sidebar.logs')}
-              </CommandItem>
+              {isAdmin && (
+                <CommandItem
+                  icon={<RefreshCw />}
+                  onSelect={() => runCommand(() => navigate('/autoreg'))}
+                >
+                  {t('sidebar.autoReg')}
+                </CommandItem>
+              )}
+              {isAdmin && (
+                <CommandItem icon={<Code />} onSelect={() => runCommand(() => navigate('/patcher'))}>
+                  {t('sidebar.idePatch')}
+                </CommandItem>
+              )}
+              {isAdmin && (
+                <CommandItem icon={<Key />} onSelect={() => runCommand(() => navigate('/api-keys'))}>
+                  {t('commandPalette.apiKeys')}
+                </CommandItem>
+              )}
+              {isAdmin && (
+                <CommandItem
+                  icon={<Settings />}
+                  onSelect={() => runCommand(() => navigate('/settings'))}
+                >
+                  {t('sidebar.settings')}
+                </CommandItem>
+              )}
+              {isAdmin && (
+                <CommandItem icon={<FileText />} onSelect={() => runCommand(() => navigate('/logs'))}>
+                  {t('sidebar.logs')}
+                </CommandItem>
+              )}
             </Command.Group>
 
             <Command.Group heading={t('commandPalette.actions')} className="mb-2">

@@ -636,6 +636,69 @@ def set_zai_token_db_path_sync(session: Any, path: str) -> None:
     loop.run_until_complete(set_zai_token_db_path(session, path))
 
 
+# ── Web-Gemini settings (D8) ──────────────────────────────────────────────────
+
+WEB_GEMINI_ENABLED_KEY = "web_gemini_enabled"
+WEB_GEMINI_ANONYMOUS_ALLOWED_KEY = "web_gemini_anonymous_allowed"
+
+
+def _parse_bool(value: str | None, *, default: bool = True) -> bool:
+    """Parse a settings K/V string into a bool. Tolerates 1/0/true/false."""
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+async def get_web_gemini_settings(session: Any) -> dict[str, bool]:
+    """Read web-gemini settings from ``ai_proxy_settings`` K/V (D8).
+
+    Defaults: ``enabled=True``, ``anonymous_allowed=True`` when keys absent.
+    Tolerates ``"1"``/``"0"``/``"true"``/``"false"`` strings.
+    """
+    enabled_raw = await get_settings_kv(session, WEB_GEMINI_ENABLED_KEY)
+    anonymous_raw = await get_settings_kv(session, WEB_GEMINI_ANONYMOUS_ALLOWED_KEY)
+    return {
+        "enabled": _parse_bool(enabled_raw, default=True),
+        "anonymous_allowed": _parse_bool(anonymous_raw, default=True),
+    }
+
+
+# ── Web-DeepSeek settings (Phase 1) ──────────────────────────────────────────
+
+WEB_DEEPSEEK_ENABLED_KEY = "web_deepseek_enabled"
+
+
+async def get_web_deepseek_settings(session: Any) -> dict[str, bool]:
+    """Read web-deepseek settings from ``ai_proxy_settings`` K/V.
+
+    Defaults: ``enabled=True`` when the key is absent. DeepSeek web has no
+    anonymous mode — the adapter is usable only with configured accounts.
+    """
+    enabled_raw = await get_settings_kv(session, WEB_DEEPSEEK_ENABLED_KEY)
+    return {
+        "enabled": _parse_bool(enabled_raw, default=True),
+        "anonymous_allowed": False,
+    }
+
+
+# ── Web-Qwen settings (Phase 2a) ─────────────────────────────────────────────
+
+WEB_QWEN_ENABLED_KEY = "web_qwen_enabled"
+
+
+async def get_web_qwen_settings(session: Any) -> dict[str, bool]:
+    """Read web-qwen settings from ``ai_proxy_settings`` K/V.
+
+    Defaults: ``enabled=True`` when the key is absent. Qwen web has no
+    anonymous mode — the adapter is usable only with configured accounts.
+    """
+    enabled_raw = await get_settings_kv(session, WEB_QWEN_ENABLED_KEY)
+    return {
+        "enabled": _parse_bool(enabled_raw, default=True),
+        "anonymous_allowed": False,
+    }
+
+
 # ── Export / Import ───────────────────────────────────────────────────────────
 
 async def export_accounts_payload(

@@ -30,6 +30,8 @@ interface AccountRowMenuProps {
   profileSessionReady: boolean;
   onCheckStatus: (id: number) => Promise<void>;
   onOpenBrowser?: (accountId: number) => Promise<void>;
+  onOpenWebLogin?: (accountId: number) => Promise<void>;
+  onCaptureWebCookies?: (accountId: number) => Promise<void>;
   onToggleActive: (account: Account) => Promise<void>;
   onToggleAutoRefreshQuota?: (account: Account) => Promise<void>;
   onOpenProfileSession?: (accountId: number) => Promise<void>;
@@ -54,6 +56,8 @@ export function AccountRowMenu({
   profileSessionReady,
   onCheckStatus,
   onOpenBrowser,
+  onOpenWebLogin,
+  onCaptureWebCookies,
   onToggleActive,
   onToggleAutoRefreshQuota,
   onOpenProfileSession,
@@ -101,6 +105,34 @@ export function AccountRowMenu({
         >
           <Globe size={12} />
           {t('accountsTable.openBrowser')}
+        </ButtonBase>
+      ) : null}
+
+      {onOpenWebLogin ? (
+        <ButtonBase
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
+          onClick={() => {
+            void onOpenWebLogin(account.id);
+            onCloseMenu();
+          }}
+        >
+          <Link size={12} />
+          {t('accounts.webLoginOpen')}
+        </ButtonBase>
+      ) : null}
+
+      {onCaptureWebCookies ? (
+        <ButtonBase
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
+          onClick={() => {
+            void onCaptureWebCookies(account.id);
+            onCloseMenu();
+          }}
+        >
+          <KeyRound size={12} />
+          {t('accounts.webLoginCapture')}
         </ButtonBase>
       ) : null}
 

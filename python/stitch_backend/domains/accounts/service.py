@@ -95,6 +95,7 @@ class AccountService:
             token=req.token,
             refresh_token=req.refresh_token,
             api_key=req.api_key,
+            cookies=req.cookies,
             registration_source="manual",
             created_at=_utcnow(),
         )

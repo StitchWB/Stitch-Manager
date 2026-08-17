@@ -11,6 +11,7 @@ from stitch_backend.domains.ai_proxy.compression.api import router as compressio
 from stitch_backend.domains.ai_proxy.holone_api import router as holone_router
 from stitch_backend.domains.ai_proxy.metrics_api import router as metrics_router
 from stitch_backend.domains.api_keys.router import router as api_keys_router
+from stitch_backend.domains.auth.router import router as auth_router
 from stitch_backend.domains.profiles.router import profiles_router
 
 api_router = APIRouter(prefix="/api")
@@ -20,6 +21,7 @@ api_router = APIRouter(prefix="/api")
 api_router.include_router(cmd_router)
 
 # REST endpoints (domain routers)
+api_router.include_router(auth_router)
 api_router.include_router(profiles_router)
 api_router.include_router(api_keys_router)
 api_router.include_router(metrics_router)

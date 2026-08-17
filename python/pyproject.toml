@@ -67,7 +67,6 @@ dev = [
 
 [project.scripts]
 stitch-backend = "stitch_backend.main:run"
-stitch-desktop = "stitch_backend.desktop:main"
 stitch = "stitch_backend.cli.main:app"
 stitch-mcp = "stitch_backend.mcp_server.server:main"
 
@@ -87,7 +86,7 @@ target-version = "py311"
 # TODO(debt): remove tests exclude once test ruff errors are cleaned up
 # "q*" excludes Zone-3 research dirs (qoder_*) without naming them in this
 # file — the leak-guard pattern matches the literal Zone-3 directory name.
-extend-exclude = ["tests", "q*"]
+extend-exclude = ["tests", "q*", "*deepseek_vendor*"]  # deepseek_vendor = pinned upstream code
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
