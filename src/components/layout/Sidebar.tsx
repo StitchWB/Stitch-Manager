@@ -295,7 +295,7 @@ export default function Sidebar() {
             sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2'
           )}>
             {sidebarCollapsed ? (
-              <Tooltip content={`${authUser.username} (${t(`auth.role.${authUser.role}`)})`} side="right">
+              <Tooltip content={`${authUser.username} • ${t(`auth.role.${authUser.role}`)} • #${String(authUser.id)}`} side="right">
                 <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
                   <UserCircle className="w-4 h-4" />
                 </div>
@@ -305,32 +305,39 @@ export default function Sidebar() {
                 <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
                   <UserCircle className="w-4 h-4" />
                 </div>
-                <div className="flex-1 min-w-0 flex flex-col">
+                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                   <span className="text-xs font-medium text-slate-200 truncate">
                     {authUser.username}
                   </span>
-                  <Badge
-                    variant={authUser.role === 'admin' ? 'info' : 'default'}
-                    size="sm"
-                    className="mt-0.5 self-start"
-                  >
-                    {t(`auth.role.${authUser.role}`)}
-                  </Badge>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Badge
+                      variant={authUser.role === 'admin' ? 'info' : 'default'}
+                      size="sm"
+                      className="shrink-0"
+                    >
+                      {t(`auth.role.${authUser.role}`)}
+                    </Badge>
+                    <span className="text-[10px] text-slate-500 truncate">
+                      #{String(authUser.id)}
+                    </span>
+                  </div>
                 </div>
               </>
             )}
-            <Tooltip content={t('auth.logout')} side={sidebarCollapsed ? 'right' : 'top'}>
-              <IconButton
-                onClick={() => void authLogout()}
-                size="md"
-                variant="ghost"
-                disabled={authBusy}
-                aria-label={t('auth.logout')}
-                className="text-slate-500 hover:text-red-400"
-              >
-                <LogOut size={16} />
-              </IconButton>
-            </Tooltip>
+            <div className="shrink-0">
+              <Tooltip content={t('auth.logout')} side={sidebarCollapsed ? 'right' : 'top'}>
+                <IconButton
+                  onClick={() => void authLogout()}
+                  size="md"
+                  variant="ghost"
+                  disabled={authBusy}
+                  aria-label={t('auth.logout')}
+                  className="text-slate-500 hover:text-red-400"
+                >
+                  <LogOut size={16} />
+                </IconButton>
+              </Tooltip>
+            </div>
           </div>
         )}
 
