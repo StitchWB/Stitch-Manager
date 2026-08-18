@@ -1,0 +1,479 @@
+import { useCallback } from 'react';
+import { toast } from 'sonner';
+import { openFileDialog, readFileText } from '@/lib/fileDialog';
+import type { Account } from '../types/generated';
+import {
+  bulkExportAccounts,
+  importAccountsPayload,
+  openAccountBrowser,
+  openAccountProfileSession,
+  confirmAccountProfileSession,
+  clearAccountProfileSession,
+  openWebLoginBrowser,
+  captureWebSessionCookies,
+  updateAccountNotesTags,
+  checkAccountStatus,
+  checkFireworksApiKey,
+  updateAccountMetadata,
+} from '@/lib/backend/modules/accounts';
+import { authorizeKiroAccount } from '@/lib/backend';
+import { useAccountsStore } from '../stores/accounts';
+import { t } from '../lib/i18n';
+import {
+  normalizeJsonAccounts,
+  parseCsvAccounts,
+  validateImportRecords,
+  type ParsedAccountsResult,
+} from '../lib/accounts/importParser';
+
+interface UseAccountsActionsParams {
+  selectedIds: Set<number>;
+  filteredAccountIds: number[];
+  expiredAccountIds: number[];
+  isImporting: boolean;
+  setIsImporting: (value: boolean) => void;
+  startBulkRefresh: (accountIds: number[]) => Promise<{ success: number; failed: number } | void>;
+  fetchAccounts: () => Promise<void>;
+  deleteAccounts: (ids: number[]) => Promise<void>;
+  clearSelection: () => void;
+}
+
+export function useAccountsActions({
+  selectedIds,
+  filteredAccountIds,
+  expiredAccountIds,
+  isImporting,
+  setIsImporting,
+  startBulkRefresh,
+  fetchAccounts,
+  deleteAccounts,
+  clearSelection,
+}: UseAccountsActionsParams) {
+  // Helper: extract Fireworks API key from account (token or parsed metadata)
+  const getFireworksApiKey = (account: Account): string | null => {
+    if (account.token?.trim()) return account.token.trim();
+    if (account.metadata) {
+      try {
+        const meta = JSON.parse(account.metadata);
+        return meta.api_key || meta.apiKey || null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const handleCheckStatus = useCallback(
+    async (id: number) => {
+      const store = useAccountsStore.getState();
+      store.setQuotaChecking(id, true);
+      store.clearQuotaCheckError(id);
+      try {
+        const account = store.accounts.find(a => a.id === id);
+        if (account?.provider?.toLowerCase() === 'fireworks') {
+          const apiKey = getFireworksApiKey(account);
+          if (apiKey) {
+            const status = await checkFireworksApiKey({ apiKey });
+            if (!status.valid) {
+              // Key expired or invalid — show as exhausted
+              store.setProviderQuota(id, {
+                limit: 0,
+                used: 0,
+                remaining: 0,
+                checkedAt: Date.now(),
+                status: status.suspendState || status.accountState || undefined,
+              });
+              return;
+            }
+            if (typeof status.monthlySpendLimit === 'number' && typeof status.monthlySpendUsed === 'number') {
+              const limit = status.monthlySpendLimit;
+              const used = status.monthlySpendUsed;
+              const remaining = status.monthlySpendRemaining ?? Math.max(0, limit - used);
+              store.setProviderQuota(id, {
+                limit,
+                used,
+                remaining,
+                checkedAt: Date.now(),
+                status: status.suspendState || status.accountState || undefined,
+              });
+            }
+            return;
+          }
+        }
+        await checkAccountStatus({ accountId: id });
+        await store.refreshAccount(id);
+        await fetchAccounts();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // Do NOT set quota on API error — let it show "Failed" for retry
+        store.setQuotaCheckError(id, message);
+        console.error(`[QuotaCheck] Account ${id}: ${message}`);
+      } finally {
+        store.setQuotaChecking(id, false);
+      }
+    },
+    [fetchAccounts]
+  );
+
+  const handleOpenBrowser = useCallback(async (id: number) => {
+    try {
+      toast.info(t('accounts.openingBrowser'));
+      await openAccountBrowser({ accountId: id });
+      toast.success(t('accounts.browserOpened'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[Accounts] Failed to open browser:', error);
+      toast.error(t('accounts.browserOpenFailed', { message }));
+    }
+  }, []);
+
+  const handleOpenProfileSession = useCallback(
+    async (id: number) => {
+      try {
+        await openAccountProfileSession({ accountId: id });
+        toast.success(t('accounts.profileSessionOpen'));
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to open profile session:', error);
+        toast.error(
+          `Failed to open profile session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
+
+  const handleConfirmProfileSession = useCallback(
+    async (id: number) => {
+      try {
+        await confirmAccountProfileSession({ accountId: id });
+        toast.success(t('accounts.profileSessionConfirm'));
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to confirm profile session:', error);
+        toast.error(
+          `Failed to confirm profile session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
+
+  const handleClearProfileSession = useCallback(
+    async (id: number) => {
+      try {
+        await clearAccountProfileSession({ accountId: id });
+        toast.success(t('accounts.profileSessionClear'));
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to clear profile session:', error);
+        toast.error(
+          `Failed to clear profile session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
+
+  // Web-session harvester (web2api providers): step 1 opens the provider
+  // login page, step 2 captures cookies via CDP after manual login.
+  const handleOpenWebLogin = useCallback(async (id: number) => {
+    try {
+      const res = await openWebLoginBrowser({ accountId: id });
+      if (res.success) {
+        toast.success(t('accounts.webLoginOpen'));
+      } else {
+        toast.error(res.error ?? 'Failed to open web login browser');
+      }
+    } catch (error) {
+      console.error('[Accounts] Failed to open web login browser:', error);
+      toast.error(
+        `Failed to open web login: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }, []);
+
+  const handleCaptureWebCookies = useCallback(
+    async (id: number) => {
+      try {
+        const res = await captureWebSessionCookies({ accountId: id });
+        if (res.success) {
+          toast.success(`${t('accounts.webLoginCapture')}: ${res.cookies ?? 0}`);
+          await fetchAccounts();
+        } else {
+          toast.error(res.error ?? 'Failed to capture cookies');
+        }
+      } catch (error) {
+        console.error('[Accounts] Failed to capture web cookies:', error);
+        toast.error(
+          `Failed to capture cookies: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
+
+  const handleAuthorizeKiroAccount = useCallback(async (id: number) => {
+    try {
+      toast.info(t('accounts.authorizingKiro'));
+      await authorizeKiroAccount(id);
+      toast.success(t('accounts.authorizeKiroStarted'));
+      // The native gateway will pick up the new token automatically on next request.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[Accounts] Failed to authorize Kiro account:', error);
+      toast.error(t('accounts.authorizeKiroFailed', { message }));
+    }
+  }, []);
+
+  const handleUpdateAccount = useCallback(
+    async (accountId: number, updates: { notes?: string; tags?: string }) => {
+      await updateAccountNotesTags({
+        accountId,
+        notes: updates.notes,
+        tags: updates.tags,
+      });
+      await fetchAccounts();
+    },
+    [fetchAccounts]
+  );
+
+  const handleExportCSV = useCallback(async () => {
+    try {
+      const targets = selectedIds.size > 0 ? Array.from(selectedIds) : filteredAccountIds;
+      if (!targets.length) {
+        toast.info('No accounts to export');
+        return;
+      }
+
+      const csv = await bulkExportAccounts({ accountIds: targets, format: 'csv' });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `accounts_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      toast.success(`Exported ${targets.length} account${targets.length > 1 ? 's' : ''}`);
+    } catch (error) {
+      console.error('[Accounts] Error exporting accounts:', error);
+      toast.error(`Failed to export: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [filteredAccountIds, selectedIds]);
+
+  /** Shared logic: parse text (JSON or CSV) and import accounts */
+  const importFromText = useCallback(async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      toast.info('No content to import');
+      return;
+    }
+
+    // Auto-detect format: JSON if starts with [ or {, otherwise CSV
+    const isJson = trimmed.startsWith('[') || trimmed.startsWith('{');
+    let parsed: ParsedAccountsResult;
+
+    if (isJson) {
+      // If user pasted a single object (not array), wrap it in an array
+      const jsonInput = trimmed.startsWith('[')
+        ? JSON.parse(trimmed)
+        : [JSON.parse(trimmed)];
+      parsed = normalizeJsonAccounts(jsonInput);
+    } else {
+      parsed = { payloads: parseCsvAccounts(trimmed), errors: [] };
+    }
+
+    const { valid, errors: validationErrors } = validateImportRecords(parsed.payloads);
+    const frontendErrors = [...parsed.errors, ...validationErrors];
+
+    if (parsed.payloads.length === 0) {
+      toast.info('No account records found');
+      return;
+    }
+
+    if (valid.length === 0) {
+      const detailSummary = frontendErrors.length
+        ? ` ${frontendErrors.slice(0, 3).join(' • ')}`
+        : '';
+      toast.error(`No valid account records found.${detailSummary}`);
+      return;
+    }
+
+    const skippedInvalid = parsed.payloads.length - valid.length;
+    const result = await importAccountsPayload(JSON.stringify(valid));
+
+    const combinedTotal = parsed.payloads.length;
+    const combinedSucceeded = result.succeeded;
+    const combinedFailed = result.failed + skippedInvalid;
+    const combinedErrors = [...frontendErrors, ...result.errors];
+
+    const baseSummary = `Imported ${combinedSucceeded}/${combinedTotal}. Failed ${combinedFailed}.`;
+    const skipSummary = skippedInvalid > 0 ? ` Skipped ${skippedInvalid} invalid.` : '';
+    const detailSummary = combinedErrors.length
+      ? ` ${combinedErrors.slice(0, 3).join(' • ')}`
+      : '';
+
+    if (combinedSucceeded > 0 && combinedFailed === 0) {
+      toast.success(`${baseSummary}${skipSummary}${detailSummary}`);
+    } else if (combinedSucceeded > 0) {
+      toast.info(`${baseSummary}${skipSummary}${detailSummary}`);
+    } else {
+      toast.error(`${baseSummary}${skipSummary}${detailSummary}`);
+    }
+
+    await fetchAccounts();
+  }, [fetchAccounts]);
+
+  const handleImportAccounts = useCallback(async () => {
+    if (isImporting) return;
+    setIsImporting(true);
+
+    try {
+      const selected = await openFileDialog({
+        filters: [{ name: 'Accounts', extensions: ['json', 'csv'] }],
+      });
+
+      if (!selected) return;
+
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return;
+
+      const extension = path.split('.').pop()?.toLowerCase();
+      if (extension !== 'json' && extension !== 'csv') {
+        toast.error('Unsupported file type. Please use .json or .csv');
+        return;
+      }
+
+      const fileText = await readFileText(path);
+
+      await importFromText(fileText);
+    } catch (error) {
+      console.error('[Accounts] Import failed:', error);
+      toast.error(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsImporting(false);
+    }
+  }, [importFromText, isImporting, setIsImporting]);
+
+  const handleImportFromClipboard = useCallback(async () => {
+    if (isImporting) return;
+    setIsImporting(true);
+
+    try {
+      const text = await navigator.clipboard.readText();
+      await importFromText(text);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        toast.error('Clipboard access denied. Please allow clipboard permission.');
+      } else {
+        console.error('[Accounts] Clipboard import failed:', error);
+        toast.error(`Clipboard import failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }, [importFromText, isImporting, setIsImporting]);
+
+  const handleRefreshAll = useCallback(async () => {
+    try {
+      const targets = selectedIds.size > 0 ? Array.from(selectedIds) : filteredAccountIds;
+      if (!targets.length) {
+        toast.info('No accounts to refresh');
+        return;
+      }
+      await startBulkRefresh(targets);
+      await fetchAccounts();
+    } catch (error) {
+      console.error('[Accounts] Error refreshing accounts:', error);
+      toast.error(`Failed to refresh: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [fetchAccounts, filteredAccountIds, selectedIds, startBulkRefresh]);
+
+  const handleRefreshExpired = useCallback(async () => {
+    if (expiredAccountIds.length === 0) {
+      toast.info('No expired accounts to refresh');
+      return;
+    }
+    try {
+      await startBulkRefresh(expiredAccountIds);
+      await fetchAccounts();
+    } catch (error) {
+      console.error('[Accounts] Error refreshing expired accounts:', error);
+      toast.error(`Failed to refresh: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [expiredAccountIds, fetchAccounts, startBulkRefresh]);
+
+  const handleRemoveSelectedAccounts = useCallback(
+    async (ids?: number[]) => {
+      const targets = ids || Array.from(selectedIds);
+
+      if (!targets.length) {
+        toast.error('No accounts selected');
+        return;
+      }
+
+      try {
+        await deleteAccounts(targets);
+        toast.success(`Deleted ${targets.length} account${targets.length > 1 ? 's' : ''}`);
+        clearSelection();
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Error deleting accounts:', error);
+        toast.error(
+          `Failed to delete accounts: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [selectedIds, deleteAccounts, clearSelection, fetchAccounts]
+  );
+
+  const handleToggleAutoRefreshQuota = useCallback(
+    async (account: Account) => {
+      try {
+        let meta: Record<string, unknown> = {};
+        if (account.metadata) {
+          try {
+            meta = JSON.parse(account.metadata);
+          } catch {
+            meta = {};
+          }
+        }
+        const newValue = !meta.autoRefreshQuota;
+        meta.autoRefreshQuota = newValue;
+        await updateAccountMetadata({
+          accountId: account.id,
+          metadata: JSON.stringify(meta),
+        });
+        toast.success(
+          newValue
+            ? t('accounts.autoRefreshEnabled')
+            : t('accounts.autoRefreshDisabled')
+        );
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to toggle auto refresh:', error);
+        toast.error(
+          `Failed to toggle auto refresh: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [fetchAccounts]
+  );
+
+  return {
+    handleCheckStatus,
+    handleOpenBrowser,
+    handleOpenProfileSession,
+    handleConfirmProfileSession,
+    handleClearProfileSession,
+    handleOpenWebLogin,
+    handleCaptureWebCookies,
+    handleAuthorizeKiroAccount,
+    handleUpdateAccount,
+    handleExportCSV,
+    handleImportAccounts,
+    handleImportFromClipboard,
+    handleRefreshAll,
+    handleRefreshExpired,
+    handleRemoveSelectedAccounts,
+    handleToggleAutoRefreshQuota,
+  };
+}

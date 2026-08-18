@@ -1,0 +1,92 @@
+# Requirements for autoreg - browser automation for AWS Builder ID registration
+# Install: pip install -r python/requirements.txt
+
+# Browser automation (DrissionPage - works via CDP, no WebDriver needed)
+DrissionPage>=4.0.0
+
+# Process management (for safe Chrome cleanup)
+psutil>=5.9.0
+
+# HTTP requests
+requests>=2.31.0
+httpx>=0.25.0
+socksio>=1.0.0
+aiohttp>=3.9.0
+
+# Web2api bridges (DeepSeek web adapter: TLS fingerprint + PoW solver)
+curl_cffi>=0.7.0
+wasmtime>=14.0.0
+
+# NotebookLM domain (optional, lazy-imported)
+notebooklm-py>=0.8.0
+
+# File lock for persistent browser profiles
+filelock>=3.13.0
+
+# AWS SDK (for SSO OIDC OAuth flow)
+boto3>=1.34.0
+
+# CBOR encoding/decoding (для Web Portal API)
+cbor2>=5.6.0
+
+# SOCKS proxy support
+pysocks>=1.7.1
+aiohttp-socks>=0.8.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Web application (standalone UI)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+websockets>=12.0
+httptools>=0.6.0
+h11>=0.14.0
+anyio>=4.0.0
+
+# Database (async SQLAlchemy + SQLite driver)
+sqlalchemy>=2.0.0
+aiosqlite>=0.19.0
+
+# Async file operations (for LLM API)
+aiofiles>=23.0.0
+
+# WebView for manual OAuth (low ban risk)
+pywebview>=5.0.0
+
+# Testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+hypothesis>=6.92.0
+
+# OpenCV for Turnstile checkbox detection
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Patchright (stealth Playwright fork - bypasses Cloudflare Turnstile)
+patchright>=1.0.0
+
+# D3-vin turnstile solver service (vendored at vendor/turnstile-solver) —
+# Quart HTTP server that returns Turnstile tokens via a real browser.
+# rich is used by its startup banner; psutil by its process management.
+quart>=0.19.0
+rich>=13.0.0
+
+# ShardX (ShardBrowser) anti-detect engine SDK — engine-level fingerprint
+# spoofing; patched Chromium auto-downloads from ProxyShard CDN on first use.
+shardx>=0.1.0
+
+# Playwright — drives CloakBrowser over CDP for scenario record/replay
+# (connect_over_cdp attach; no browser download needed). >=1.60 for attach options.
+playwright>=1.60.0
+
+# Aliyun/slider captcha gap detection (ONNX deep-learning model)
+captcha-recognizer>=1.0.2
+
+# TOTP code generation (for MFA registration)
+pyotp>=2.9.0
+
+# iCloud Hide My Email pool (Apple ID session management)
+pyicloud>=1.0.0
