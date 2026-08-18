@@ -18,7 +18,11 @@ from stitch_backend.database import run_in_read_session, run_in_session
 async def cmd_connect(params: dict) -> dict:
     """Connect to a mailbox."""
     from stitch_backend.domains.email_inbox import service
-    return await service.connect(params.get("input", params))
+    input_data = params.get("input", params)
+    # Thread caller's owner_id for per-user IMAP password resolution.
+    if "_caller_user_id" in params:
+        input_data = {**input_data, "owner_id": params.get("_caller_user_id")}
+    return await service.connect(input_data)
 
 
 @register_command("email_inbox_disconnect")

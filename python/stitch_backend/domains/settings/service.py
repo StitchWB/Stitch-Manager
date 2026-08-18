@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,14 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+# Matches user-scoped setting keys: "u<uid>:<original_key>"
+_USER_KEY_RE = re.compile(r"^u(\d+):(.*)$")
+
+
+def _user_key(owner_id: int, key: str) -> str:
+    """Return the user-scoped key for ``owner_id`` and ``key``."""
+    return f"u{owner_id}:{key}"
 
 # ── Type coercion map ─────────────────────────────────────────────────────────
 # Keys whose values should be parsed as int / bool / float / json
@@ -88,13 +97,33 @@ class SettingsService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def get_all(self) -> dict[str, Any]:
-        """Return all settings as a flat dict (camelCase keys)."""
+    async def get_all(self, owner_id: int | None = None) -> dict[str, Any]:
+        """Return all settings as a flat dict (camelCase keys).
+
+        When ``owner_id`` is given, user-scoped overrides (``u<uid>:<key>``)
+        for that user are merged on top of the global keys.  When ``owner_id``
+        is ``None`` (desktop), only global keys are returned — byte-identical
+        to the pre-multi-user behaviour.
+        """
         result = await self._db.execute(select(Setting))
         rows = result.scalars().all()
+
         data: dict[str, Any] = {}
+        user_overrides: dict[str, str] = {}
+
         for row in rows:
-            data[row.key] = _parse_value(row.key, row.value)
+            m = _USER_KEY_RE.match(row.key)
+            if m:
+                # User-scoped key — only collect if it belongs to owner_id.
+                if owner_id is not None and int(m.group(1)) == owner_id:
+                    user_overrides[m.group(2)] = row.value
+                # Skip other users' keys entirely.
+            else:
+                data[row.key] = _parse_value(row.key, row.value)
+
+        # Apply user overrides on top of global values.
+        for base_key, raw_value in user_overrides.items():
+            data[base_key] = _parse_value(base_key, raw_value)
 
         # Mask passwords
         for pk in _PASSWORD_KEYS:
@@ -103,9 +132,18 @@ class SettingsService:
 
         return data
 
-    async def update(self, settings: dict[str, Any]) -> dict[str, Any]:
-        """Batch upsert settings.  Returns the full settings after update."""
+    async def update(
+        self, settings: dict[str, Any], owner_id: int | None = None
+    ) -> dict[str, Any]:
+        """Batch upsert settings.  Returns the full settings after update.
+
+        When ``owner_id`` is given, writes go to user-scoped keys
+        (``u<uid>:<key>``) ONLY — the global row is left untouched.  When
+        ``owner_id`` is ``None`` (desktop), writes go to the global key —
+        byte-identical to the pre-multi-user behaviour.
+        """
         now = datetime.now(UTC).isoformat()
+        prefix = f"u{owner_id}:" if owner_id is not None else ""
 
         for key, value in settings.items():
             # Skip masked passwords
@@ -113,7 +151,8 @@ class SettingsService:
                 continue
 
             raw = _serialise_value(key, value)
-            stmt = sqlite_insert(Setting).values(key=key, value=raw, updated_at=now)
+            db_key = f"{prefix}{key}"
+            stmt = sqlite_insert(Setting).values(key=db_key, value=raw, updated_at=now)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["key"],
                 set_={"value": raw, "updated_at": now},
@@ -121,7 +160,7 @@ class SettingsService:
             await self._db.execute(stmt)
 
         await self._db.flush()
-        return await self.get_all()
+        return await self.get_all(owner_id=owner_id)
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────

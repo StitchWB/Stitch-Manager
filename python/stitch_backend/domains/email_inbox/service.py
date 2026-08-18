@@ -125,7 +125,8 @@ async def connect(input_data: dict[str, Any]) -> dict[str, Any]:
     use_tls = imap_creds.get("useTls", imap_creds.get("use_tls", True))
 
     if password == PASSWORD_SENTINEL or not password:
-        password = await _resolve_imap_password(host)
+        owner_id = input_data.get("owner_id")
+        password = await _resolve_imap_password(host, owner_id=owner_id)
 
     conn = await asyncio.to_thread(
         imap_provider.connect, host, port, username, password, use_tls,
@@ -443,12 +444,28 @@ def _sync_state_to_dict(row: EmailInboxSyncState) -> dict[str, Any]:
     }
 
 
-async def _resolve_imap_password(host: str) -> str:
-    """Resolve sentinel password from settings table."""
+async def _resolve_imap_password(
+    host: str, owner_id: int | None = None
+) -> str:
+    """Resolve sentinel password from settings table.
+
+    When ``owner_id`` is given, the user-scoped key ``u<uid>:<key>`` is
+    tried first, falling back to the global key.  When ``owner_id`` is
+    ``None`` (desktop), only the global key is read.
+    """
     from stitch_backend.database import run_in_session
     setting_key = "gmailAppPassword" if "gmail" in host.lower() else "imapPassword"
+    user_key = f"u{owner_id}:{setting_key}" if owner_id is not None else None
 
     async def _fetch(db: AsyncSession) -> str:
+        if user_key:
+            result = await db.execute(
+                text("SELECT value FROM settings WHERE key = :k"),
+                {"k": user_key},
+            )
+            row = result.first()
+            if row and row[0]:
+                return row[0]
         result = await db.execute(
             text("SELECT value FROM settings WHERE key = :k"), {"k": setting_key},
         )
