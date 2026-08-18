@@ -3732,6 +3732,8 @@ export interface Translations {
     versionLabel: string;
     installedVersionLabel: string;
     desktopOnly: string;
+    authRequiredTitle: string;
+    authRequiredText: string;
   }
   sidebar: {
     accounts: string;

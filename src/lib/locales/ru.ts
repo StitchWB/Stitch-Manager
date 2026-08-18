@@ -4272,5 +4272,7 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     versionLabel: "Версия",
     installedVersionLabel: "Установлено",
     desktopOnly: "Доступно в десктоп-приложении",
+    authRequiredTitle: "Только для авторизованных",
+    authRequiredText: "Плагины доступны авторизованным пользователям. Войдите или получите одноразовый код в Telegram.",
   },
 };

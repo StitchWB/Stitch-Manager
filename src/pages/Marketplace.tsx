@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Store, RefreshCw, Search, Lock, Package, Download, Trash2, AlertTriangle } from 'lucide-react';
+import { Store, RefreshCw, Search, Lock, Package, Download, Trash2, AlertTriangle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -13,6 +13,7 @@ import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { isDesktopApp } from '@/lib/backend/core/url';
 import { useAppStore } from '../stores/app';
+import { useAuthStore } from '../stores/auth';
 import { useMarketplaceStore } from '../stores/marketplace';
 import type { MarketplaceItem } from '@/lib/backend/modules/marketplace';
 
@@ -192,6 +193,9 @@ export default function Marketplace() {
   const language = useAppStore(s => s.language);
   void language; // force re-render on locale change (t() is not reactive)
 
+  const user = useAuthStore(s => s.user);
+  const setAuthView = useAuthStore(s => s.setAuthView);
+
   const items = useMarketplaceStore(s => s.items);
   const activated = useMarketplaceStore(s => s.activated);
   const loading = useMarketplaceStore(s => s.loading);
@@ -207,8 +211,9 @@ export default function Marketplace() {
   const browseOnly = !isDesktopApp();
 
   useEffect(() => {
+    if (!user) return;
     void fetchMarketplace(true);
-  }, [fetchMarketplace]);
+  }, [fetchMarketplace, user]);
 
   const handleRefresh = () => {
     void fetchMarketplace(true);
@@ -240,6 +245,71 @@ export default function Marketplace() {
         (item.description?.toLowerCase().includes(q) ?? false),
     );
   }, [items, query]);
+
+  // Auth gate: unauthenticated visitors (no session user) see a lock screen
+  // instead of the plugin list. getMarketplace is not called.
+  if (!user) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <Header
+          title={t('marketplace.title')}
+          subtitle={t('marketplace.subtitle')}
+          icon={<Store size={18} />}
+        />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-md">
+            <div className="rounded-2xl border border-white/[0.06] bg-black/40 backdrop-blur-2xl shadow-2xl shadow-indigo-950/40 overflow-hidden">
+              {/* Top accent line */}
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
+              <div className="px-8 pt-10 pb-8">
+                {/* Icon + title + text */}
+                <div className="flex flex-col items-center text-center mb-8">
+                  <div className="rounded-xl w-12 h-12 flex items-center justify-center mb-4 bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-xl shadow-indigo-900/40">
+                    <Lock className="w-6 h-6 text-white" />
+                  </div>
+                  <h2 className="text-white text-xl font-black tracking-tight uppercase">
+                    {t('marketplace.authRequiredTitle')}
+                  </h2>
+                  <p className="text-slate-400 text-sm mt-1 leading-relaxed px-2">
+                    {t('marketplace.authRequiredText')}
+                  </p>
+                </div>
+
+                {/* Primary: password login */}
+                <button
+                  type="button"
+                  onClick={() => setAuthView('login')}
+                  className={cn(
+                    'w-full h-10 rounded-lg font-medium text-sm transition-all duration-200 select-none',
+                    'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-900/40',
+                    'hover:from-indigo-400 hover:to-indigo-500 hover:shadow-indigo-900/60 active:scale-[0.98]',
+                    'flex items-center justify-center gap-2'
+                  )}
+                >
+                  {t('auth.guest.login')}
+                </button>
+
+                {/* Secondary: Telegram login */}
+                <button
+                  type="button"
+                  onClick={() => setAuthView('telegram')}
+                  className={cn(
+                    'w-full h-10 mt-3 rounded-lg font-medium text-sm transition-all duration-200 select-none',
+                    'bg-white/[0.03] border border-white/[0.06] text-slate-200',
+                    'hover:bg-white/[0.05] hover:border-white/[0.10] active:scale-[0.98]',
+                    'flex items-center justify-center gap-2'
+                  )}
+                >
+                  <Send className="w-4 h-4" />
+                  {t('auth.login.tgLink')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Split into INSTALLED (first) and AVAILABLE sections.
   const installedItems = filtered.filter(i => i.installed);
