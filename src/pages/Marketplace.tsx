@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { isDesktopApp } from '@/lib/backend/core/url';
 import { useAppStore } from '../stores/app';
 import { useMarketplaceStore } from '../stores/marketplace';
 import type { MarketplaceItem } from '@/lib/backend/modules/marketplace';
@@ -44,13 +45,15 @@ function getIconColor(id: string): string {
 interface RowProps {
   item: MarketplaceItem;
   busy: boolean;
+  browseOnly: boolean;
   onInstall: (item: MarketplaceItem) => void;
   onRemove: (item: MarketplaceItem) => void;
 }
 
-function MarketplaceRow({ item, busy, onInstall, onRemove }: RowProps) {
+function MarketplaceRow({ item, busy, browseOnly, onInstall, onRemove }: RowProps) {
   const locked = !item.can_download && !item.installed;
   const unavailableMsg = t('marketplace.unavailableForRole');
+  const desktopOnlyMsg = t('marketplace.desktopOnly');
 
   const handleLockedClick = () => {
     toast.error(unavailableMsg);
@@ -125,7 +128,20 @@ function MarketplaceRow({ item, busy, onInstall, onRemove }: RowProps) {
 
       {/* Action button */}
       <div className="shrink-0">
-        {item.installed ? (
+        {browseOnly ? (
+          <Tooltip content={desktopOnlyMsg} side="left">
+            <span>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled
+                leftIcon={<Lock className="w-3.5 h-3.5" />}
+              >
+                {item.installed ? t('marketplace.remove') : t('marketplace.install')}
+              </Button>
+            </span>
+          </Tooltip>
+        ) : item.installed ? (
           <Button
             size="sm"
             variant="danger"
@@ -187,6 +203,8 @@ export default function Marketplace() {
   const uninstallPlugin = useMarketplaceStore(s => s.uninstallPlugin);
 
   const [query, setQuery] = useState('');
+
+  const browseOnly = !isDesktopApp();
 
   useEffect(() => {
     void fetchMarketplace(true);
@@ -329,6 +347,7 @@ export default function Marketplace() {
                     key={item.id}
                     item={item}
                     busy={actionInProgress === item.id}
+                    browseOnly={browseOnly}
                     onInstall={handleInstall}
                     onRemove={handleRemove}
                   />
@@ -347,6 +366,7 @@ export default function Marketplace() {
                     key={item.id}
                     item={item}
                     busy={actionInProgress === item.id}
+                    browseOnly={browseOnly}
                     onInstall={handleInstall}
                     onRemove={handleRemove}
                   />

@@ -36,6 +36,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Badge } from '@/components/ui/Badge';
 import { openUrlInBrowser } from '@/lib/backend/modules/aiProxy';
+import { isDesktopApp } from '@/lib/backend/core/url';
 import { MAIN_TELEGRAM_URL } from '@/lib/links';
 
 interface NavItemProps {
@@ -169,11 +170,13 @@ export default function Sidebar() {
           label={t('sidebar.autoReg')}
           collapsed={sidebarCollapsed} />
 
-        <NavItem
-          to="/patcher"
-          icon={<Code size={20} />}
-          label={t('sidebar.idePatch')}
-          collapsed={sidebarCollapsed} />
+        {isDesktopApp() && (
+          <NavItem
+            to="/patcher"
+            icon={<Code size={20} />}
+            label={t('sidebar.idePatch')}
+            collapsed={sidebarCollapsed} />
+        )}
 
         <NavItem
           to="/ai"

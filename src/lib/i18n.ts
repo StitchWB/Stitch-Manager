@@ -3731,6 +3731,7 @@ export interface Translations {
     loadError: string;
     versionLabel: string;
     installedVersionLabel: string;
+    desktopOnly: string;
   }
   sidebar: {
     accounts: string;
