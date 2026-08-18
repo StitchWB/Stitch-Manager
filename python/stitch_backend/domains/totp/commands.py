@@ -14,11 +14,23 @@ import logging
 import uuid
 from typing import Any
 
+from sqlalchemy import and_, or_, select
+
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.totp.models import TotpKey
 
 logger = logging.getLogger(__name__)
+
+
+def _caller_uid(params: dict) -> int | None:
+    """Extract the caller's user ID (None when auth disabled / guest)."""
+    return params.get("_caller_user_id")
+
+
+def _owner_filter(uid: int | None):
+    """WHERE clause: owner_id IS NULL OR owner_id = uid."""
+    return or_(TotpKey.owner_id.is_(None), TotpKey.owner_id == uid)
 
 
 def _key_to_dict(key: TotpKey, *, include_secret: bool = False) -> dict[str, Any]:
@@ -45,12 +57,12 @@ def _key_to_dict(key: TotpKey, *, include_secret: bool = False) -> dict[str, Any
 
 @register_command("list_totp_keys", readonly=True)
 async def cmd_list_totp_keys(params: dict) -> list[dict]:
-    """Return all TOTP keys with secrets included (needed for frontend TOTP generation)."""
-    from sqlalchemy import select
+    """Return all TOTP keys visible to the caller (with secrets for frontend)."""
+    uid = _caller_uid(params)
 
     async def _op(session):
         result = await session.execute(
-            select(TotpKey).order_by(TotpKey.created_at)
+            select(TotpKey).where(_owner_filter(uid)).order_by(TotpKey.created_at)
         )
         keys = result.scalars().all()
         return [_key_to_dict(k, include_secret=True) for k in keys]
@@ -65,6 +77,7 @@ async def cmd_list_totp_keys(params: dict) -> list[dict]:
 @register_command("add_totp_key")
 async def cmd_add_totp_key(params: dict) -> dict:
     """Add a new TOTP key. Returns the created key (with secret)."""
+    uid = _caller_uid(params)
     label = params.get("label") or params.get("Label") or "Unnamed"
     secret = (params.get("secret") or params.get("Secret") or "").strip().upper()
     issuer = params.get("issuer") or params.get("Issuer") or None
@@ -81,6 +94,7 @@ async def cmd_add_totp_key(params: dict) -> dict:
     async def _op(session):
         key = TotpKey(
             id=str(uuid.uuid4()),
+            owner_id=uid,
             label=label,
             secret=secret,
             issuer=issuer,
@@ -104,15 +118,16 @@ async def cmd_add_totp_key(params: dict) -> dict:
 @register_command("update_totp_key")
 async def cmd_update_totp_key(params: dict) -> dict:
     """Update label, issuer, or account_id for an existing key."""
-    from sqlalchemy import select
-
+    uid = _caller_uid(params)
     key_id = params.get("id") or params.get("keyId") or params.get("key_id")
     if not key_id:
         raise ValueError("Key id is required")
 
     async def _op(session):
         result = await session.execute(
-            select(TotpKey).where(TotpKey.id == str(key_id))
+            select(TotpKey).where(
+                and_(TotpKey.id == str(key_id), _owner_filter(uid))
+            )
         )
         key = result.scalar_one_or_none()
         if key is None:
@@ -142,15 +157,16 @@ async def cmd_update_totp_key(params: dict) -> dict:
 @register_command("remove_totp_key")
 async def cmd_remove_totp_key(params: dict) -> dict:
     """Delete a TOTP key by id."""
-    from sqlalchemy import select
-
+    uid = _caller_uid(params)
     key_id = params.get("id") or params.get("keyId") or params.get("key_id")
     if not key_id:
         raise ValueError("Key id is required")
 
     async def _op(session):
         result = await session.execute(
-            select(TotpKey).where(TotpKey.id == str(key_id))
+            select(TotpKey).where(
+                and_(TotpKey.id == str(key_id), _owner_filter(uid))
+            )
         )
         key = result.scalar_one_or_none()
         if key is None:
@@ -168,8 +184,7 @@ async def cmd_remove_totp_key(params: dict) -> dict:
 @register_command("link_totp_key")
 async def cmd_link_totp_key(params: dict) -> dict:
     """Link a TOTP key to an account (or unlink if accountId is null)."""
-    from sqlalchemy import select
-
+    uid = _caller_uid(params)
     key_id = params.get("id") or params.get("keyId") or params.get("key_id")
     account_id = params.get("accountId") or params.get("account_id") or None
 
@@ -178,7 +193,9 @@ async def cmd_link_totp_key(params: dict) -> dict:
 
     async def _op(session):
         result = await session.execute(
-            select(TotpKey).where(TotpKey.id == str(key_id))
+            select(TotpKey).where(
+                and_(TotpKey.id == str(key_id), _owner_filter(uid))
+            )
         )
         key = result.scalar_one_or_none()
         if key is None:

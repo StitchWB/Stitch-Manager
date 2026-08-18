@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 
 from stitch_backend.core.exceptions import AccountNotFoundError
 from stitch_backend.domains.accounts.models import Account
@@ -60,14 +60,25 @@ class AccountService:
         provider_type: str | None = None,
         provider_subtype: str | None = None,
         show_archived: bool = False,
+        owner_id: int | None = None,
     ) -> list[AccountResponse]:
-        """Unified listing: supports provider filter and archive visibility."""
+        """Unified listing: supports provider filter and archive visibility.
+
+        When *owner_id* is supplied, only legacy shared rows (owner_id IS
+        NULL) and rows owned by *owner_id* are returned (per-user
+        isolation).  When *owner_id* is None (desktop / unauthenticated),
+        only shared rows are returned.
+        """
         stmt = select(Account).order_by(Account.created_at.desc())
         effective_provider = provider or provider_type or provider_subtype
         if effective_provider:
             stmt = stmt.where(Account.provider == effective_provider)
         if not show_archived:
             stmt = stmt.where(Account.status != "archived")
+        # Per-user isolation: shared pool (NULL) OR owned by caller.
+        stmt = stmt.where(
+            or_(Account.owner_id.is_(None), Account.owner_id == owner_id)
+        )
         result = await self._db.execute(stmt)
         return [_to_response(a) for a in result.scalars().all()]
 
@@ -84,7 +95,9 @@ class AccountService:
 
     # ── Create ────────────────────────────────────────────────────────────────
 
-    async def add_account(self, req: AddAccountRequest) -> AccountResponse:
+    async def add_account(
+        self, req: AddAccountRequest, owner_id: int | None = None,
+    ) -> AccountResponse:
         account = Account(
             id=str(uuid.uuid4()),
             email=req.email,
@@ -97,6 +110,7 @@ class AccountService:
             api_key=req.api_key,
             cookies=req.cookies,
             registration_source="manual",
+            owner_id=owner_id,
             created_at=_utcnow(),
         )
         self._db.add(account)
@@ -565,14 +579,23 @@ class AccountService:
     # ── Bulk export ───────────────────────────────────────────────────────────
 
     async def bulk_export(
-        self, provider: str | None = None, ids: list[str | int] | None = None,
+        self,
+        provider: str | None = None,
+        ids: list[str | int] | None = None,
+        owner_id: int | None = None,
     ) -> list[AccountResponse]:
         if ids:
-            stmt = select(Account).where(Account.id.in_([str(i) for i in ids]))
+            stmt = select(Account).where(
+                Account.id.in_([str(i) for i in ids])
+            )
         else:
             stmt = select(Account)
             if provider:
                 stmt = stmt.where(Account.provider == provider)
+        # Per-user isolation: shared pool (NULL) OR owned by caller.
+        stmt = stmt.where(
+            or_(Account.owner_id.is_(None), Account.owner_id == owner_id)
+        )
         result = await self._db.execute(stmt)
         return [_to_response(a) for a in result.scalars().all()]
 

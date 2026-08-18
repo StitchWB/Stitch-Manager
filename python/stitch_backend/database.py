@@ -232,6 +232,7 @@ async def create_all_tables() -> None:
         import stitch_backend.domains.key_health.models  # noqa: F401
         import stitch_backend.domains.logging.models  # noqa: F401
         import stitch_backend.domains.profiles.models  # noqa: F401
+        import stitch_backend.domains.proxy_library.models  # noqa: F401
         import stitch_backend.domains.settings.models  # noqa: F401
         import stitch_backend.domains.totp.models  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
