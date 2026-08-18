@@ -1,0 +1,359 @@
+"""pywebview + uvicorn launcher for Stitch Manager v2.
+
+Usage::
+
+    # Production (serves static build from dist/)
+    python run_gui.py
+
+    # Development with an already-running reloadable backend
+    python run_gui.py --dev --external-backend
+
+By default this launcher starts the backend on port 25584.  In dev mode the
+webview loads the Vite dev-server URL.  ``--external-backend`` makes the
+launcher use an existing backend instead, which is used by start-dev.ps1.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import signal
+import socket
+import sys
+import threading
+import time
+
+# Make sure the python/ directory is on sys.path so stitch_backend is importable.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+# RU-Windows consoles are cp1251: printing '→' or '⚠' would crash the launcher.
+if sys.stdout is not None:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr is not None:
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Windowed (frozen) builds have no console — mirror all output to a log file,
+# otherwise launcher/uvicorn errors vanish and the app dies silently.
+if getattr(sys, "frozen", False) and sys.platform == "win32":
+    _log_dir = os.path.join(
+        os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "stitch-manager"
+    )
+    os.makedirs(_log_dir, exist_ok=True)
+    _log_file = open(  # noqa: SIM115 (process-lifetime handle)
+        os.path.join(_log_dir, "launcher.log"), "a", encoding="utf-8", buffering=1
+    )
+    sys.stdout = _log_file
+    sys.stderr = _log_file
+
+import requests  # noqa: E402 (available after sys.path fix)
+import uvicorn  # noqa: E402
+
+# ── Constants ──────────────────────────────────────────────────────────────────
+
+API_PORT = 25584
+VITE_DEV_PORT = 5174
+HEALTH_URL = f"http://127.0.0.1:{API_PORT}/health"
+HEALTH_TIMEOUT = 20  # seconds
+WATCHDOG_INTERVAL = 5  # seconds between health checks
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _kill_port_hog(port: int) -> None:
+    """Kill whatever process is holding *port* (Windows & Linux)."""
+    if sys.platform == "win32":
+        import subprocess as _sp
+        try:
+            out = _sp.check_output(
+                ["netstat", "-ano"], text=True, stderr=_sp.DEVNULL,
+            )
+            for line in out.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    pid = int(line.strip().split()[-1])
+                    if pid != os.getpid():
+                        print(f"[run_gui] Killing PID {pid} that holds port {port}", flush=True)
+                        os.kill(pid, signal.SIGTERM)
+        except Exception:
+            pass
+    else:
+        import subprocess as _sp
+        try:
+            pids = _sp.check_output(
+                ["lsof", "-ti", f":{port}"], text=True, stderr=_sp.DEVNULL,
+            ).strip().split()
+            for pid_str in pids:
+                pid = int(pid_str)
+                if pid != os.getpid():
+                    print(f"[run_gui] Killing PID {pid} that holds port {port}", flush=True)
+                    os.kill(pid, signal.SIGTERM)
+        except Exception:
+            pass
+
+
+def _port_in_use(port: int) -> bool:
+    """Check if a TCP port is already bound."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _icon_path() -> str | None:
+    """Locate the app icon in a PyInstaller bundle or the dev repo tree."""
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "resources", "icons", "app-icon.ico"))
+    candidates.append(
+        os.path.join(os.path.dirname(_HERE), "resources", "icons", "app-icon.ico")
+    )
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _start_uvicorn() -> None:
+    """Run uvicorn in the current thread (blocks)."""
+    uvicorn.run(
+        "stitch_backend.main:app",
+        host="127.0.0.1",
+        port=API_PORT,
+        log_level="info",
+    )
+
+
+def _wait_for_server(timeout: float = HEALTH_TIMEOUT) -> bool:
+    """Block until the backend /health endpoint responds or timeout expires."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            resp = requests.get(HEALTH_URL, timeout=2)
+            if resp.status_code == 200:
+                return True
+        except requests.ConnectionError:
+            pass
+        time.sleep(0.5)
+    return False
+
+
+def _backend_watchdog(
+    server_thread: threading.Thread,
+    window,
+) -> None:
+    """Monitor backend health.  If the uvicorn thread dies, notify the user."""
+    consecutive_failures = 0
+    while server_thread.is_alive():
+        time.sleep(WATCHDOG_INTERVAL)
+        if not server_thread.is_alive():
+            break
+        try:
+            resp = requests.get(HEALTH_URL, timeout=3)
+            if resp.status_code == 200:
+                consecutive_failures = 0
+                continue
+        except Exception:
+            pass
+        consecutive_failures += 1
+        if consecutive_failures >= 2:
+            print(
+                f"\n[WATCHDOG] Backend unresponsive ({consecutive_failures} checks).\n"
+                f"           uvicorn thread alive={server_thread.is_alive()}\n"
+                f"           Restarting backend...",
+                file=sys.stderr,
+                flush=True,
+            )
+            # Try to restart
+            new_thread = threading.Thread(target=_start_uvicorn, daemon=True)
+            new_thread.start()
+            if _wait_for_server(timeout=15):
+                print("[WATCHDOG] Backend restarted successfully.", flush=True)
+                # Switch to monitoring the new thread
+                server_thread = new_thread
+                consecutive_failures = 0
+            else:
+                print(
+                    "[WATCHDOG] Backend restart FAILED. "
+                    "Please restart the application.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                # Inject JS notification into the webview
+                try:
+                    window.evaluate_js(
+                        'document.title = "⚠ Backend offline — restart app";'
+                    )
+                except Exception:
+                    pass
+    # Thread died
+    print(
+        "\n[WATCHDOG] Backend thread died! "
+        "The application may not work correctly.\n"
+        "           Please restart the application.",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        window.evaluate_js(
+            'document.title = "⚠ Backend crashed — restart app";'
+        )
+    except Exception:
+        pass
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Stitch Manager v2 GUI launcher")
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Development mode: webview connects to Vite dev server (port 5174)",
+    )
+    parser.add_argument(
+        "--external-backend",
+        action="store_true",
+        help="Use an already-running backend instead of starting an embedded one",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Kill any existing process on the API port before starting",
+    )
+    args = parser.parse_args()
+
+    if args.external_backend and args.force:
+        parser.error("--force cannot be used with --external-backend")
+
+    server_thread: threading.Thread | None = None
+
+    if args.external_backend:
+        print(f"[run_gui] Using external backend at {HEALTH_URL}", flush=True)
+    else:
+        # Single-instance desktop app: a busy port means a zombie instance.
+        # Starting "anyway" only produces a dead backend + a window attached
+        # to the old process, so free the port unconditionally.
+        if _port_in_use(API_PORT):
+            print(f"[run_gui] Port {API_PORT} is occupied — killing old instance", flush=True)
+            _kill_port_hog(API_PORT)
+            time.sleep(1)
+
+        server_thread = threading.Thread(target=_start_uvicorn, daemon=True)
+        server_thread.start()
+
+    # 2. Decide what URL the webview will load
+    if args.dev:
+        target_url = f"http://localhost:{VITE_DEV_PORT}"
+        print(f"[DEV]  Webview → {target_url}   |   API → http://127.0.0.1:{API_PORT}", flush=True)
+    else:
+        target_url = f"http://127.0.0.1:{API_PORT}"
+        print(f"[PROD] Webview + API → {target_url}", flush=True)
+
+    # 3. Wait for the backend to be ready
+    if not _wait_for_server():
+        print("ERROR: Backend did not start in time. Aborting.", file=sys.stderr, flush=True)
+        sys.exit(1)
+
+    # 4. Launch pywebview
+    try:
+        import webview  # noqa: PLC0415 (optional dependency)
+    except ImportError:
+        print(
+            "ERROR: pywebview is not installed.\n"
+            "       pip install pywebview   (or run without GUI for API-only mode)",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+
+    # Disable unnecessary features to speed up startup
+    webview.settings['REMOTE_DEBUGGING_PORT'] = None
+    webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+
+    # Get icon path early for Win32 API calls
+    icon = _icon_path()
+
+    window = webview.create_window(
+        "Stitch Account Manager",
+        target_url,
+        width=1280,
+        height=800,
+        min_size=(1024, 768),
+        background_color="#1a1a2e",  # Match app theme for instant visual feedback
+    )
+
+    # Windows: set taskbar icon via Win32 API
+    if sys.platform == "win32" and icon:
+        def _on_loaded():
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = user32.FindWindowW(None, "Stitch Account Manager")
+                if hwnd:
+                    LR_LOADFROMFILE = 0x00000010  # noqa: N806 — Win32 API constant
+                    WM_SETICON = 0x0080  # noqa: N806 — Win32 API constant
+                    hicon = user32.LoadImageW(None, icon, 1, 32, 32, LR_LOADFROMFILE)
+                    if hicon:
+                        user32.SendMessageW(hwnd, WM_SETICON, 0, hicon)  # ICON_SMALL
+                        user32.SendMessageW(hwnd, WM_SETICON, 1, hicon)  # ICON_BIG
+            except Exception:
+                pass
+
+        window.events.loaded += _on_loaded
+
+    # Monitor only a backend owned by this process. The canonical dev launcher
+    # supervises its external reloadable backend separately.
+    if server_thread is not None:
+        watchdog_thread = threading.Thread(
+            target=_backend_watchdog,
+            args=(server_thread, window),
+            daemon=True,
+        )
+        watchdog_thread.start()
+
+    # Use EdgeChromium on Windows for faster startup (4-6s vs 20-30s with CEF)
+    start_kwargs: dict = {"debug": args.dev}
+    if sys.platform == "win32":
+        # Try EdgeChromium first (uses system WebView2, much faster)
+        try:
+            import clr  # noqa: F401 — pythonnet availability test (import itself is the check)
+            start_kwargs["gui"] = "edgechromium"
+            print("[run_gui] Using EdgeChromium (WebView2) for fast startup", flush=True)
+        except ImportError:
+            print("[run_gui] WARNING: pythonnet not installed, falling back to CEF (slow)", flush=True)
+            print("[run_gui] Install with: pip install pythonnet", flush=True)
+
+    if icon:
+        start_kwargs["icon"] = icon  # taskbar/window icon on Windows
+
+    print(f"[run_gui] Starting webview with: {start_kwargs}", flush=True)
+
+    # Add timing to understand where the delay is
+    start_time = time.time()
+    has_loaded = False
+
+    def on_loaded():
+        nonlocal has_loaded
+        if has_loaded:
+            return
+        has_loaded = True
+        elapsed = time.time() - start_time
+        print(f"[run_gui] Window loaded in {elapsed:.2f}s", flush=True)
+
+    window.events.loaded += on_loaded
+
+    try:
+        webview.start(**start_kwargs)
+    except Exception as e:
+        print(f"[run_gui] ERROR: webview.start() failed: {e}", flush=True)
+        print("[run_gui] Falling back to default GUI...", flush=True)
+        webview.start(debug=args.dev)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        # Normal Ctrl+C — pywebview/pythonnet may raise this on exit.
+        # Suppress the traceback; the process exits cleanly.
+        pass

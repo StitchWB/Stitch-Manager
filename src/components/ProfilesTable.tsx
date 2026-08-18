@@ -1,0 +1,551 @@
+import { t } from "@/lib/i18n";
+import { Globe, Trash2, Settings, FolderKanban, MoreHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
+
+import { LayoutGrid } from 'lucide-react';
+import { ScenarioReplayModal } from './scenarioRecorder/ScenarioReplayModal';
+import { ScenarioRecordModal } from './scenarioRecorder/ScenarioRecordModal';
+import { getProfileSettings, saveProfileSettings } from '@/lib/backend/modules/profiles';
+import { ProfileScenariosPanel } from './scenarioRecorder/ProfileScenariosPanel';
+import { Badge, Button, ConfirmActionButton, EmptyState, IconButton, Tooltip } from '@/components/ui';
+import { EngineToggle } from './profiles/EngineToggle';
+import { type BrowserEngineId } from '@/lib/browser/engines';
+
+export interface ProfileItem {
+  alias: string;
+  displayName?: string;
+  linkedAccountEmail: string | null;
+  linkedProvider?: string | null;
+  linkedAccountId?: number | null;
+  usedForKiro?: boolean;
+  usedTargets?: string[];
+  healthStatus?: 'ready' | 'needs_link' | 'no_session_path';
+  engine?: BrowserEngineId;
+}
+
+function getHealthBadgeConfig(healthStatus: NonNullable<ProfileItem['healthStatus']>): {
+  variant: 'success' | 'warning' | 'danger';
+  label: string;
+} {
+  switch (healthStatus) {
+    case 'ready':
+      return { variant: 'success', label: t('accounts.profileHealthReady') };
+    case 'needs_link':
+      return { variant: 'warning', label: t('accounts.profileHealthNeedsLink') };
+    case 'no_session_path':
+      return { variant: 'danger', label: t('accounts.profileHealthNoSession') };
+  }
+}
+
+interface ProfilesTableProps {
+  profiles: ProfileItem[];
+  onOpen: (alias: string, target: string, customUrl?: string) => Promise<void>;
+  onOpenScenarios?: (alias: string) => void;
+  onEdit: (alias: string) => void;
+  onDelete: (alias: string) => Promise<void>;
+  openTarget: string;
+  customUrl: string;
+  shardAvailable?: boolean;
+}
+
+export default function ProfilesTable({
+  profiles,
+  onOpen,
+  onOpenScenarios,
+  onEdit,
+  onDelete,
+  openTarget,
+  customUrl,
+  shardAvailable = false,
+}: ProfilesTableProps) {
+  const [activeRecordAlias, setActiveRecordAlias] = useState<string | null>(null);
+  const [activeRecordMeta, setActiveRecordMeta] = useState<{
+    alias: string;
+    scenarioName: string;
+    startUrl: string;
+  } | null>(null);
+  const [activeRecordQuickStart, setActiveRecordQuickStart] = useState(false);
+  const [replayAlias, setReplayAlias] = useState<string | null>(null);
+  const [replayInitialScenarioPath, setReplayInitialScenarioPath] = useState<string | null>(null);
+  const [scenariosAlias, setScenariosAlias] = useState<string | null>(null);
+  const [openMenuAlias, setOpenMenuAlias] = useState<string | null>(null);
+  const [engineOverrides, setEngineOverrides] = useState<Record<string, BrowserEngineId>>({});
+  const [engineSaving, setEngineSaving] = useState<string | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLElement | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{top: number;left: number;} | null>(null);
+  const portalRoot = typeof document !== 'undefined' ? document.body : null;
+  const canEdit = typeof onEdit === 'function';
+
+  const closeMenu = () => {
+    setOpenMenuAlias(null);
+    setMenuPosition(null);
+    menuTriggerRef.current = null;
+  };
+
+  const calculateMenuPosition = useCallback((triggerEl: HTMLElement) => {
+    menuTriggerRef.current = triggerEl;
+
+    const rect = triggerEl.getBoundingClientRect();
+    const margin = 8;
+    const menuWidth = 208; // w-52
+    const estimatedMenuHeight = menuContainerRef.current?.offsetHeight ?? 180;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const left = Math.min(
+      Math.max(rect.right - menuWidth, margin),
+      viewportWidth - menuWidth - margin
+    );
+
+    const availableBelow = Math.max(0, viewportHeight - rect.bottom - margin);
+    const availableAbove = Math.max(0, rect.top - margin);
+    const openUp = availableBelow < estimatedMenuHeight && availableAbove > availableBelow;
+
+    const top = openUp ?
+    Math.max(margin, rect.top - estimatedMenuHeight - margin) :
+    Math.min(
+      rect.bottom + margin,
+      Math.max(margin, viewportHeight - estimatedMenuHeight - margin)
+    );
+
+    return { top, left };
+  }, []);
+
+  const openMenu = (alias: string, triggerEl: HTMLElement) => {
+    const nextPos = calculateMenuPosition(triggerEl);
+    setMenuPosition(nextPos);
+    setOpenMenuAlias(alias);
+  };
+
+  const resolveTargetUrl = (target: string, custom?: string): string | undefined => {
+    if (target === 'custom') {
+      const trimmed = (custom ?? '').trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    switch (target) {
+      case 'kiro':
+        // For generic profile open/record flows, start from neutral page.
+        // Product-specific targets (Kiro registration) are handled by AutoReg flow.
+        return 'https://google.com';
+      case 'windsurf':
+        return 'https://codeium.com/profile';
+      case 'github':
+        return 'https://github.com/settings/profile';
+      case 'trae':
+        return 'https://trae.sh/';
+      default:
+        return undefined;
+    }
+  };
+
+  useEffect(() => {
+    if (!openMenuAlias) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const insideMenu = menuContainerRef.current?.contains(target) ?? false;
+      const insideTrigger = menuTriggerRef.current?.contains(target) ?? false;
+      if (!insideMenu && !insideTrigger) closeMenu();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    };
+
+    const handleScrollOrResize = () => {
+      const triggerEl = menuTriggerRef.current;
+      if (!triggerEl || !triggerEl.isConnected) {
+        closeMenu();
+        return;
+      }
+      setMenuPosition(calculateMenuPosition(triggerEl));
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [calculateMenuPosition, openMenuAlias]);
+
+  useEffect(() => {
+    if (!openMenuAlias) return;
+    const trigger = menuTriggerRef.current;
+    if (!trigger) return;
+
+    const raf = window.requestAnimationFrame(() => {
+      const currentTrigger = menuTriggerRef.current;
+      if (!currentTrigger) return;
+      setMenuPosition(calculateMenuPosition(currentTrigger));
+    });
+
+    return () => window.cancelAnimationFrame(raf);
+  }, [calculateMenuPosition, openMenuAlias]);
+
+  const buildScenarioName = (alias: string) => {
+    const now = new Date();
+    const pad = (v: number) => String(v).padStart(2, '0');
+    const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const safeAlias = alias.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    return `rec_${safeAlias}_${ts}`;
+  };
+
+  const openRecordModal = (alias: string, options?: {quickStart?: boolean;}) => {
+    setReplayAlias(null);
+    setReplayInitialScenarioPath(null);
+    setActiveRecordQuickStart(Boolean(options?.quickStart));
+    setActiveRecordAlias(alias);
+    setActiveRecordMeta({
+      alias,
+      scenarioName: buildScenarioName(alias),
+      startUrl: resolveTargetUrl(openTarget, customUrl) || 'https://google.com'
+    });
+  };
+
+  const openReplayModal = (alias: string, scenarioPath?: string | null) => {
+    setActiveRecordAlias(null);
+    setActiveRecordMeta(null);
+    setActiveRecordQuickStart(false);
+    setReplayInitialScenarioPath(scenarioPath?.trim() ? scenarioPath.trim() : null);
+    setReplayAlias(alias);
+  };
+
+  const openReplayForAlias = async (alias: string) => {
+    let initialPath: string | null = null;
+    try {
+      const record = await getProfileSettings({ alias });
+      const fromSettings = record?.settings?.storage?.lastScenarioPath?.trim();
+      if (fromSettings) {
+        initialPath = fromSettings;
+      }
+    } catch {
+
+      // best effort
+    }
+    openReplayModal(alias, initialPath);
+  };
+
+  const resolveProfileEngine = (profile: ProfileItem): BrowserEngineId => {
+    return engineOverrides[profile.alias] ?? profile.engine ?? 'cloakbrowser';
+  };
+
+  // Engine switching is a plain toggle: a click applies immediately and
+  // clicking the other option switches back. No confirmation by design.
+  const handleEngineChange = (alias: string, newEngine: BrowserEngineId) => {
+    const current = engineOverrides[alias] ?? profiles.find(p => p.alias === alias)?.engine ?? 'cloakbrowser';
+    if (current === newEngine) return;
+    void applyEngineChange(alias, newEngine);
+  };
+
+  const applyEngineChange = async (alias: string, newEngine: BrowserEngineId) => {
+    setEngineSaving(alias);
+    try {
+      const record = await getProfileSettings({ alias });
+      const settings = record?.settings ?? {
+        version: 1,
+        network: {},
+        geo: {},
+        hardware: {},
+        storage: {},
+      };
+      await saveProfileSettings({ alias, settings: { ...settings, engine: newEngine } });
+      setEngineOverrides(prev => ({ ...prev, [alias]: newEngine }));
+      toast.success(t('accounts.profileEngineSaved'));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('accounts.profileEngineSaveFailed'));
+    } finally {
+      setEngineSaving(null);
+    }
+  };
+
+  if (profiles.length === 0) {
+    return (
+      <EmptyState
+        icon={LayoutGrid}
+        title={t('accounts.noProfilesFound')}
+        description={t('accounts.noProfilesFoundDesc')} />);
+
+
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden px-2 sm:px-4">
+      <div className="flex-1 overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10 pb-8 pt-2 space-y-1">
+        {profiles.map((profile) => {
+          const isLinked = Boolean(profile.linkedAccountEmail);
+          const health = profile.healthStatus ? getHealthBadgeConfig(profile.healthStatus) : null;
+          const showAliasTooltip = !isLinked && Boolean(profile.displayName) && profile.displayName !== profile.alias;
+
+          return (
+            <div
+              key={profile.alias}
+              className="group rounded-md border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.14] transition-colors">
+              <div className="flex items-center gap-3 px-3 py-1.5 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center min-w-0">
+                    {showAliasTooltip ? (
+                      <Tooltip content={profile.alias} wrapperClassName="min-w-0">
+                        <span className="text-sm font-semibold text-slate-100 truncate">
+                          {profile.displayName ?? profile.alias}
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-100 truncate">
+                        {profile.displayName ?? profile.alias}
+                      </span>
+                    )}
+                    <span className="ml-2 inline-flex gap-1 shrink-0">
+                      <Badge
+                        variant={isLinked ? 'outline' : 'default'}
+                        size="sm"
+                        className="normal-case tracking-normal"
+                      >
+                        {isLinked ? t('accounts.profileKindLinked') : t('accounts.profileKindStandalone')}
+                      </Badge>
+                      {health ? (
+                        <Badge
+                          variant={health.variant}
+                          size="sm"
+                          withDot
+                          className="normal-case tracking-normal border-0"
+                        >
+                          {health.label}
+                        </Badge>
+                      ) : null}
+                      {profile.usedForKiro ? (
+                        <Badge variant="info" size="sm" className="normal-case tracking-normal">
+                          {t('accounts.profileUsageKiro')}
+                        </Badge>
+                      ) : null}
+                      {profile.usedTargets?.map(target => (
+                        <Badge key={target} variant="default" size="sm" className="normal-case tracking-normal">
+                          {target}
+                        </Badge>
+                      ))}
+                    </span>
+                  </div>
+                  {profile.linkedAccountEmail ? (
+                    <span className="text-[11px] font-mono text-slate-500 truncate block">
+                      {profile.linkedAccountEmail}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {!isLinked ? (
+                    <div className="w-28 shrink-0">
+                      <EngineToggle
+                        value={resolveProfileEngine(profile)}
+                        onChange={(engine) => void handleEngineChange(profile.alias, engine)}
+                        shardAvailable={shardAvailable}
+                        shortLabels
+                        size="sm"
+                        disabled={engineSaving === profile.alias}
+                      />
+                    </div>
+                  ) : null}
+
+                  <div className="flex items-center gap-0.5 shrink-0">
+                  <Tooltip content={`${t('accounts.openProfileAt')}${t('accounts.profiles_table.overlay')}`}>
+                    <IconButton
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 text-slate-400 hover:text-sky-300 hover:bg-white/10"
+                      onClick={() => {
+                        openRecordModal(profile.alias, { quickStart: true });
+                      }}
+                    >
+                      <Globe size={14} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip content={t('accounts.profiles_table.scenarios')}>
+                    <IconButton
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 text-slate-400 hover:text-indigo-300 hover:bg-white/10"
+                      onClick={() => {
+                        if (onOpenScenarios) {
+                          onOpenScenarios(profile.alias);
+                          return;
+                        }
+                        setActiveRecordAlias(null);
+                        setActiveRecordMeta(null);
+                        setActiveRecordQuickStart(false);
+                        setReplayAlias(null);
+                        setReplayInitialScenarioPath(null);
+                        setScenariosAlias(profile.alias);
+                      }}
+                    >
+                      <FolderKanban size={14} />
+                    </IconButton>
+                  </Tooltip>
+                  {canEdit ? (
+                    <Tooltip content={t('common.settings')}>
+                      <IconButton
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 text-slate-400 hover:text-slate-100 hover:bg-white/10"
+                        onClick={() => onEdit(profile.alias)}
+                      >
+                        <Settings size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
+                  <Tooltip content={t('accounts.deleteProfile')}>
+                    <ConfirmActionButton
+                      iconOnly
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                      armedLabel={<Trash2 size={14} />}
+                      onConfirm={() => void onDelete(profile.alias)}
+                    >
+                      <Trash2 size={14} />
+                    </ConfirmActionButton>
+                  </Tooltip>
+                  <div className="relative">
+                    <Tooltip content={t('common.more') || 'More'}>
+                      <IconButton
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 text-slate-400 hover:text-slate-100 hover:bg-white/10"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const triggerEl = event.currentTarget as unknown as HTMLElement;
+                          if (openMenuAlias === profile.alias) {
+                            closeMenu();
+                          } else {
+                            openMenu(profile.alias, triggerEl);
+                          }
+                        }}
+                      >
+                        <MoreHorizontal size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  </div>
+                  </div>
+                </div>
+              </div>
+            </div>);
+
+        })}
+      </div>
+
+      {openMenuAlias && menuPosition && portalRoot ?
+      createPortal(
+        <div
+          ref={menuContainerRef}
+          className="fixed z-[9999] w-52 rounded-lg border border-white/10 bg-vsc-terminal p-1 shadow-xl shadow-black/40"
+          style={{ top: menuPosition.top, left: menuPosition.left }}>
+
+              <Button
+            size="xs"
+            variant="secondary"
+            className="w-full justify-start"
+            onClick={() => {
+              closeMenu();
+              void onOpen(openMenuAlias, openTarget, customUrl);
+            }}>{t("accounts.profiles_table.open_without_overlay")}
+
+
+          </Button>
+              <Button
+            size="xs"
+            variant="secondary"
+            className="w-full justify-start"
+            onClick={() => {
+              closeMenu();
+              openRecordModal(openMenuAlias, { quickStart: true });
+            }}>
+
+                {t('common.record') || 'Record'}{t("accounts.profiles_table.overlay")}
+          </Button>
+              <Button
+            size="xs"
+            variant="secondary"
+            className="w-full justify-start"
+            onClick={() => {
+              closeMenu();
+              void openReplayForAlias(openMenuAlias);
+            }}>
+
+                {t('common.replay') || 'Replay'}
+              </Button>
+              <div className="my-1 border-t border-white/10" />
+              <ConfirmActionButton
+            size="xs"
+            variant="danger"
+            className="w-full justify-start"
+            leftIcon={<Trash2 size={12} />}
+            onConfirm={() => {
+              const aliasToDelete = openMenuAlias;
+              closeMenu();
+              void onDelete(aliasToDelete);
+            }}>
+
+                {t('accounts.deleteProfile')}
+              </ConfirmActionButton>
+            </div>,
+        portalRoot
+      ) :
+      null}
+
+      <ProfileScenariosPanel
+        alias={scenariosAlias}
+        isOpen={Boolean(scenariosAlias) && !activeRecordAlias && !replayAlias}
+        onClose={() => setScenariosAlias(null)}
+        onRecord={() => {
+          if (!scenariosAlias) return;
+          openRecordModal(scenariosAlias, { quickStart: false });
+        }}
+        onReplay={(scenarioPath?: string) => {
+          if (!scenariosAlias) return;
+          openReplayModal(scenariosAlias, scenarioPath ?? null);
+        }} />
+
+
+      <ScenarioRecordModal
+        alias={activeRecordAlias}
+        isOpen={Boolean(activeRecordAlias)}
+        onClose={() => {
+          setActiveRecordAlias(null);
+          setActiveRecordMeta(null);
+          setActiveRecordQuickStart(false);
+        }}
+        defaultUrl={activeRecordMeta?.startUrl}
+        defaultScenarioName={activeRecordMeta?.scenarioName}
+        quickStart={activeRecordQuickStart} />
+
+
+      <ScenarioReplayModal
+        alias={replayAlias}
+        isOpen={Boolean(replayAlias)}
+        onClose={() => {
+          setReplayAlias(null);
+          setReplayInitialScenarioPath(null);
+        }}
+        defaultUrl={resolveTargetUrl(openTarget, customUrl)}
+        defaultScenarioPath={replayInitialScenarioPath ?? undefined} />
+
+    </div>);
+
+}

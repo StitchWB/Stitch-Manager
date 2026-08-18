@@ -1,0 +1,10 @@
+[
+  {
+    "id": "main-telegram",
+    "type": "telegram",
+    "title": "Наш Telegram-канал",
+    "url": "https://t.me/TODO_REPLACE_WITH_REAL_LINK",
+    "description": "Официальный канал проекта",
+    "badge": "official"
+  }
+]
