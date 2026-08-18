@@ -177,6 +177,32 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("admin_password", "STITCH_ADMIN_PASSWORD"),
     )
 
+    # ── Telegram OIDC login ────────────────────────────────────────────────────
+    # ``legacy`` (default) keeps the existing HMAC widget verification; ``oidc``
+    # switches to verifying Telegram-issued OIDC ``id_token``s (RS256 via JWKS).
+    # The BotOwner flips this irreversibly after both products ship OIDC support.
+    # Invalid values fail fast at startup (model_validator below).
+    tg_auth_mode: str = Field(
+        "legacy",
+        validation_alias=AliasChoices("tg_auth_mode", "TG_AUTH_MODE"),
+    )
+    # The Telegram bot's numeric id — used as the JWT ``aud`` claim.  Defaults to
+    # @whitebite_stitch_bot's id.  Override via ``TG_BOT_CLIENT_ID`` when testing
+    # against a different bot.
+    tg_bot_client_id: str = Field(
+        "8606505679",
+        validation_alias=AliasChoices("tg_bot_client_id", "TG_BOT_CLIENT_ID"),
+    )
+
+    @model_validator(mode="after")
+    def _validate_tg_auth_mode(self) -> Settings:
+        """Fail fast when ``TG_AUTH_MODE`` is not ``legacy`` or ``oidc``."""
+        if self.tg_auth_mode not in ("legacy", "oidc"):
+            raise ValueError(
+                f"TG_AUTH_MODE must be 'legacy' or 'oidc', got {self.tg_auth_mode!r}"
+            )
+        return self
+
     # ── Paths ─────────────────────────────────────────────────────────────────
     profiles_dir: str = str(REPO_ROOT / "profiles")
     cloakbrowser_dir: str = str(REPO_ROOT / "resources" / "cloakbrowser")

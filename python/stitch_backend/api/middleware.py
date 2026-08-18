@@ -66,9 +66,11 @@ def install_middleware(app: FastAPI) -> None:
             "/health",
             "/api/events",
         ):
+            # ASCII-only format: non-ASCII arrows crash Windows cp1251
+            # console logging inside the middleware and 500 every request.
             if request.url.path in NOISY_PATHS:
                 logger.debug(
-                    "%s %s → %d  (%.1f ms)",
+                    "%s %s -> %d  (%.1f ms)",
                     request.method,
                     request.url.path,
                     response.status_code,
@@ -76,7 +78,7 @@ def install_middleware(app: FastAPI) -> None:
                 )
             else:
                 logger.info(
-                    "%s %s → %d  (%.1f ms)",
+                    "%s %s -> %d  (%.1f ms)",
                     request.method,
                     request.url.path,
                     response.status_code,

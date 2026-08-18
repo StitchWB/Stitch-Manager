@@ -241,6 +241,13 @@ async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_user_by_telegram_id(db: AsyncSession, telegram_id: int) -> User | None:
+    """Return the user bound to *telegram_id* (OIDC) or ``None``."""
+    stmt = select(User).where(User.telegram_id == telegram_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def get_user(db: AsyncSession, user_id: int) -> User | None:
     """Return the user with *user_id* or ``None``."""
     stmt = select(User).where(User.id == user_id)
@@ -263,9 +270,17 @@ async def count_admins(db: AsyncSession) -> int:
 
 
 async def create_user(
-    db: AsyncSession, *, username: str, password: str, role: str = "user"
+    db: AsyncSession,
+    *,
+    username: str,
+    password: str,
+    role: str = "user",
+    telegram_id: int | None = None,
 ) -> User:
-    """Create a new user.  Raises :class:`StitchError` (409) on duplicate username."""
+    """Create a new user.  Raises :class:`StitchError` (409) on duplicate username.
+
+    *telegram_id* optionally binds the row to a Telegram account (OIDC).
+    """
     if not roles.valid_role(role):
         raise StitchError(
             f"Invalid role: {role!r} (expected one of {roles.SELECTABLE_ROLES})"
@@ -278,6 +293,7 @@ async def create_user(
         username=username.strip(),
         password_hash=hash_password(password),
         role=role,
+        telegram_id=telegram_id,
     )
     db.add(user)
     try:

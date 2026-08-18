@@ -101,6 +101,11 @@ class AccountResponse(BaseModel):
     login_count: int = Field(0, alias="loginCount")
     account_region: str | None = Field(None, alias="accountRegion")
 
+    # Additive per-owner fields (mine/shared) — populated by the command
+    # layer when _caller_user_id is present.
+    mine: bool | None = None
+    shared: bool | None = None
+
     @model_validator(mode="before")
     @classmethod
     def _from_orm(cls, data: Any) -> Any:

@@ -68,6 +68,7 @@ async def cmd_list_accounts(params: dict) -> list:
             provider_subtype=req.provider_subtype,
             show_archived=req.show_archived,
             owner_id=owner_id,
+            caller_uid=owner_id,
         )
 
     return await run_in_read_session(_op)
@@ -523,6 +524,40 @@ async def cmd_check_kiro_account(params: dict) -> dict:
             proxy=req.proxy,
             auto_refresh=req.auto_refresh,
         )
+
+    return await run_in_session(_op)
+
+
+# ── Claim ─────────────────────────────────────────────────────────────────────
+
+
+@register_command("claim_account")
+async def cmd_claim_account(params: dict) -> Any:
+    """Claim a shared (owner_id NULL) account for the caller.
+
+    Sets ``owner_id = caller uid`` ONLY when the current owner_id is
+    NULL.  Caller must be authenticated (uid not None) else 400.
+    """
+    uid = params.get("_caller_user_id")
+    if uid is None:
+        raise ValueError("Authentication required to claim a shared account")
+    account_id = str(params.get("id") or params.get("accountId") or "")
+
+    async def _op(session):
+        from sqlalchemy import select as sa_select
+        from stitch_backend.domains.accounts.models import Account
+        result = await session.execute(
+            sa_select(Account).where(Account.id == account_id)
+        )
+        account = result.scalar_one_or_none()
+        if account is None:
+            raise ValueError(f"Account not found: {account_id}")
+        if account.owner_id is not None:
+            raise ValueError("not shared")
+        account.owner_id = uid
+        await session.flush()
+        svc = AccountService(session)
+        return svc.get_account_response(account_id)
 
     return await run_in_session(_op)
 

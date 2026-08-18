@@ -33,8 +33,12 @@ def _owner_filter(uid: int | None):
     return or_(TotpKey.owner_id.is_(None), TotpKey.owner_id == uid)
 
 
-def _key_to_dict(key: TotpKey, *, include_secret: bool = False) -> dict[str, Any]:
-    """Serialize a TotpKey row to a camelCase-friendly dict."""
+def _key_to_dict(key: TotpKey, *, include_secret: bool = False, uid: int | None = None) -> dict[str, Any]:
+    """Serialize a TotpKey row to a camelCase-friendly dict.
+
+    When ``uid`` is given, additive ``mine`` and ``shared`` fields are
+    included: ``mine`` = key.owner_id == uid, ``shared`` = owner_id is None.
+    """
     result: dict[str, Any] = {
         "id": key.id,
         "label": key.label,
@@ -48,6 +52,9 @@ def _key_to_dict(key: TotpKey, *, include_secret: bool = False) -> dict[str, Any
     }
     if include_secret:
         result["secret"] = key.secret
+    if uid is not None:
+        result["mine"] = key.owner_id == uid
+        result["shared"] = key.owner_id is None
     return result
 
 
@@ -65,7 +72,7 @@ async def cmd_list_totp_keys(params: dict) -> list[dict]:
             select(TotpKey).where(_owner_filter(uid)).order_by(TotpKey.created_at)
         )
         keys = result.scalars().all()
-        return [_key_to_dict(k, include_secret=True) for k in keys]
+        return [_key_to_dict(k, include_secret=True, uid=uid) for k in keys]
 
     return await run_in_read_session(_op)
 
@@ -202,6 +209,39 @@ async def cmd_link_totp_key(params: dict) -> dict:
             raise ValueError(f"TOTP key not found: {key_id}")
         key.account_id = str(account_id) if account_id else None
         await session.flush()
-        return _key_to_dict(key, include_secret=True)
+        return _key_to_dict(key, include_secret=True, uid=uid)
+
+    return await run_in_session(_op)
+
+
+# ── Claim ─────────────────────────────────────────────────────────────────────
+
+
+@register_command("claim_totp_key")
+async def cmd_claim_totp_key(params: dict) -> dict:
+    """Claim a shared (owner_id NULL) TOTP key for the caller.
+
+    Sets ``owner_id = caller uid`` ONLY when the current owner_id is
+    NULL.  Caller must be authenticated (uid not None) else 400.
+    """
+    uid = _caller_uid(params)
+    if uid is None:
+        raise ValueError("Authentication required to claim a shared key")
+    key_id = params.get("id") or params.get("keyId") or params.get("key_id")
+    if not key_id:
+        raise ValueError("Key id is required")
+
+    async def _op(session):
+        result = await session.execute(
+            select(TotpKey).where(TotpKey.id == str(key_id))
+        )
+        key = result.scalar_one_or_none()
+        if key is None:
+            raise ValueError(f"TOTP key not found: {key_id}")
+        if key.owner_id is not None:
+            raise ValueError("not shared")
+        key.owner_id = uid
+        await session.flush()
+        return _key_to_dict(key, include_secret=True, uid=uid)
 
     return await run_in_session(_op)

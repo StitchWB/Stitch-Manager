@@ -35,13 +35,21 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _to_response(account: Account) -> AccountResponse:
+def _to_response(account: Account, caller_uid: int | None = None) -> AccountResponse:
     """Convert an ORM model → Pydantic response DTO.
 
     Delegates to the ``@model_validator`` on AccountResponse which handles
     datetime→ISO-string, JSON→string, and field-name mismatches.
+
+    When ``caller_uid`` is given, additive ``mine`` and ``shared`` fields
+    are set on the response: ``mine`` = account.owner_id == caller_uid,
+    ``shared`` = account.owner_id is None.
     """
-    return AccountResponse.model_validate(account)
+    resp = AccountResponse.model_validate(account)
+    if caller_uid is not None:
+        resp.mine = (account.owner_id == caller_uid)
+        resp.shared = (account.owner_id is None)
+    return resp
 
 
 # ── Service ───────────────────────────────────────────────────────────────────
@@ -61,6 +69,7 @@ class AccountService:
         provider_subtype: str | None = None,
         show_archived: bool = False,
         owner_id: int | None = None,
+        caller_uid: int | None = None,
     ) -> list[AccountResponse]:
         """Unified listing: supports provider filter and archive visibility.
 
@@ -68,6 +77,9 @@ class AccountService:
         NULL) and rows owned by *owner_id* are returned (per-user
         isolation).  When *owner_id* is None (desktop / unauthenticated),
         only shared rows are returned.
+
+        When *caller_uid* is given, additive ``mine`` and ``shared``
+        fields are set on each response.
         """
         stmt = select(Account).order_by(Account.created_at.desc())
         effective_provider = provider or provider_type or provider_subtype
@@ -80,7 +92,7 @@ class AccountService:
             or_(Account.owner_id.is_(None), Account.owner_id == owner_id)
         )
         result = await self._db.execute(stmt)
-        return [_to_response(a) for a in result.scalars().all()]
+        return [_to_response(a, caller_uid=caller_uid) for a in result.scalars().all()]
 
     async def get_account(self, account_id: str) -> Account:
         stmt = select(Account).where(Account.id == str(account_id))
