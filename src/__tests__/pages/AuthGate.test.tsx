@@ -23,6 +23,9 @@ import { useAuthStore } from '../../stores/auth';
 jest.mock('../../lib/backend/modules/auth', () => ({
   getAuthStatus: jest.fn(),
   getCurrentUser: jest.fn(),
+  getMyPermissions: jest.fn(),
+  getPermissionsMatrix: jest.fn(),
+  setPermission: jest.fn(),
   loginUser: jest.fn(),
   loginTelegram: jest.fn(),
   loginTelegramOidc: jest.fn(),
@@ -31,6 +34,20 @@ jest.mock('../../lib/backend/modules/auth', () => ({
   listUsers: jest.fn(),
   createUser: jest.fn(),
   deleteUser: jest.fn(),
+  PERMISSION_KEYS: [
+    'section.autoreg',
+    'section.ai_hub',
+    'section.automation',
+    'section.mail',
+    'section.tools',
+    'section.totp',
+    'section.scenarios',
+    'section.settings',
+    'section.logs',
+    'action.export_accounts',
+    'action.bulk_delete',
+    'action.claim',
+  ],
 }));
 
 // Mock the invoke module's setAuthExpiredHandler so the store can register
@@ -171,6 +188,7 @@ import App from '../../App';
 const authModule = jest.requireMock('../../lib/backend/modules/auth') as {
   getAuthStatus: jest.Mock;
   getCurrentUser: jest.Mock;
+  getMyPermissions: jest.Mock;
   loginUser: jest.Mock;
   loginTelegram: jest.Mock;
   logoutUser: jest.Mock;
@@ -196,7 +214,11 @@ describe('Auth gate', () => {
       sessionExpired: false,
       guest: false,
       authView: 'welcome',
+      permissions: [],
+      permissionsLoaded: false,
     });
+    // Default mock for getMyPermissions — returns empty (no permissions).
+    authModule.getMyPermissions.mockResolvedValue([]);
   });
 
   afterEach(() => {

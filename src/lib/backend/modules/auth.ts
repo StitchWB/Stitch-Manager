@@ -336,6 +336,103 @@ export async function setLoginPolicy(enforceLogin: boolean): Promise<boolean> {
   return Boolean(data?.enforce_login);
 }
 
+// ── Permissions ──────────────────────────────────────────────────────────────
+
+/**
+ * All known permission keys (mirrors the backend's PERMISSION_KEYS list).
+ * Used by the auth store to seed the full set when auth is disabled so
+ * hasPermission() returns true for every key in desktop mode.
+ */
+export const PERMISSION_KEYS: readonly string[] = [
+  'section.autoreg',
+  'section.ai_hub',
+  'section.automation',
+  'section.mail',
+  'section.tools',
+  'section.totp',
+  'section.scenarios',
+  'section.settings',
+  'section.logs',
+  'action.export_accounts',
+  'action.bulk_delete',
+  'action.claim',
+] as const;
+
+/**
+ * GET /api/auth/my_permissions — the permission keys granted to the current
+ * session. Never throws: returns an empty list on failure so the UI falls
+ * back to "nothing granted" rather than hanging.
+ */
+export async function getMyPermissions(): Promise<string[]> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/my_permissions`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return [];
+    const data = (await parseJson(response)) as { permissions?: string[] } | null;
+    return Array.isArray(data?.permissions) ? data.permissions : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * GET /api/auth/admin/permissions — the full permission matrix (admin only).
+ * Returns the role list, key list, and the {role:{key:boolean}} matrix.
+ * @throws {Error} with `status` property = 401/403 on auth/permission failure.
+ */
+export async function getPermissionsMatrix(): Promise<{
+  roles: string[];
+  keys: string[];
+  matrix: Record<string, Record<string, boolean>>;
+}> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/admin/permissions`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+
+  const data = (await parseJson(response)) as
+    | { roles?: string[]; keys?: string[]; matrix?: Record<string, Record<string, boolean>>; detail?: string }
+    | null;
+
+  if (!response.ok) {
+    const err = new Error(data?.detail ?? 'Failed to load permissions matrix') as Error & { status: number };
+    err.status = response.status;
+    throw err;
+  }
+
+  return {
+    roles: Array.isArray(data?.roles) ? data.roles : [],
+    keys: Array.isArray(data?.keys) ? data.keys : [],
+    matrix: data?.matrix ?? {},
+  };
+}
+
+/**
+ * PUT /api/auth/admin/permissions — grant or revoke a permission for a role.
+ * The admin column is immutable server-side; attempts to mutate it return 400.
+ * @throws {Error} with `status` property = 400 on validation (admin column), 401/403 on auth.
+ */
+export async function setPermission(role: string, key: string, allowed: boolean): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/admin/permissions`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ role, key, allowed }),
+  });
+
+  const data = (await parseJson(response)) as { detail?: string } | null;
+
+  if (!response.ok) {
+    const err = new Error(data?.detail ?? 'Failed to update permission') as Error & { status: number };
+    err.status = response.status;
+    throw err;
+  }
+}
+
 /**
  * POST /api/auth/login_telegram — exchange a one-time Telegram code for a
  * session cookie. Direct fetch like the other auth wrappers: a 401 on a bad

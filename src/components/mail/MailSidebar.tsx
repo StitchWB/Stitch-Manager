@@ -38,6 +38,7 @@ import { AUTO_REG_MAILBOX_PROFILE_ID } from '@/lib/mail/runtime';
 import { detectMailboxProviderKind, type MailboxProviderKind } from '@/lib/mail/providerPresets';
 import { MailSidebarAccounts } from './MailSidebarAccounts';
 import { AddMailboxModal, type AddMailboxSource } from './AddMailboxModal';
+import { useAuthStore } from '@/stores/auth';
 
 type AddMailboxAction =
   | 'icloud'
@@ -186,6 +187,8 @@ export function MailSidebar({
 }: MailSidebarProps) {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const { copy } = useCopyToClipboard();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canClaim = hasPermission('action.claim');
   const [renameTarget, setRenameTarget] = useState<EmailInboxProfile | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
@@ -385,7 +388,7 @@ export function MailSidebar({
                           </ButtonBase>
 
                           <div className="flex items-center gap-1 shrink-0">
-                            {profile.shared && !profile.mine && onClaimProfile ? (
+                            {profile.shared && !profile.mine && onClaimProfile && canClaim ? (
                               <Tooltip content={t('ownership.claim')} side="top">
                                 <button
                                   type="button"

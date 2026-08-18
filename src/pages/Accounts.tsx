@@ -39,9 +39,11 @@ import { AccountsExpiredBanner } from '../components/accounts/AccountsExpiredBan
 import { useGoogleSheetsDataset } from '../hooks/useGoogleSheetsDataset';
 import { useSheetsConfigState } from '../hooks/useSheetsConfigState';
 import { FloatingActionBar, SegmentedControl } from '@/components/ui';
+import { useAuthStore } from '../stores/auth';
 
 export default function Accounts() {
   const navigate = useNavigate();
+  const hasPermission = useAuthStore(state => state.hasPermission);
   const {
     accounts: storeAccounts,
     loading,
@@ -725,6 +727,8 @@ export default function Accounts() {
               onOpenProfileSession={() => handleBatchProfileAction('open')}
               onConfirmProfileSession={() => handleBatchProfileAction('confirm')}
               onClearProfileSession={() => handleBatchProfileAction('clear')}
+              showExport={hasPermission('action.export_accounts')}
+              showDelete={hasPermission('action.bulk_delete')}
             />
           </div>
         </div>

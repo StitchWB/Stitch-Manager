@@ -21,6 +21,9 @@ interface FloatingActionBarProps {
   onOpenProfileSession?: () => void;
   onConfirmProfileSession?: () => void;
   onClearProfileSession?: () => void;
+  // Permission gates — default true so existing callers are unaffected.
+  showExport?: boolean;
+  showDelete?: boolean;
 }
 
 export function FloatingActionBar({
@@ -37,6 +40,8 @@ export function FloatingActionBar({
   onOpenProfileSession,
   onConfirmProfileSession,
   onClearProfileSession,
+  showExport = true,
+  showDelete = true,
 }: FloatingActionBarProps) {
   const progressText = refreshProgress 
     ? t('accounts.syncing', { 
@@ -161,15 +166,17 @@ export function FloatingActionBar({
               {isRefreshing ? (progressText || 'Syncing...') : (t('common.refresh') || 'Refresh')}
             </button>
 
-            <button
-              onClick={onExport}
-              disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label={`Export ${selectedCount} selected accounts`}
-            >
-              <Download className="w-3.5 h-3.5" aria-hidden="true" />
-              {t('common.export') || 'Export'}
-            </button>
+            {showExport && (
+              <button
+                onClick={onExport}
+                disabled={isRefreshing}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label={`Export ${selectedCount} selected accounts`}
+              >
+                <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('common.export') || 'Export'}
+              </button>
+            )}
 
             {onArchive && (
               <button
@@ -183,17 +190,19 @@ export function FloatingActionBar({
               </button>
             )}
 
-            <ConfirmActionButton
-              variant="ghost"
-              size="sm"
-              onConfirm={onDelete}
-              disabled={isRefreshing}
-              className="px-4 py-2 h-auto text-red-400 hover:text-red-300"
-              leftIcon={<Trash2 className="w-3.5 h-3.5" aria-hidden="true" />}
-              aria-label={`Delete ${selectedCount} selected accounts`}
-            >
-              {t('common.delete') || 'Delete'}
-            </ConfirmActionButton>
+            {showDelete && (
+              <ConfirmActionButton
+                variant="ghost"
+                size="sm"
+                onConfirm={onDelete}
+                disabled={isRefreshing}
+                className="px-4 py-2 h-auto text-red-400 hover:text-red-300"
+                leftIcon={<Trash2 className="w-3.5 h-3.5" aria-hidden="true" />}
+                aria-label={`Delete ${selectedCount} selected accounts`}
+              >
+                {t('common.delete') || 'Delete'}
+              </ConfirmActionButton>
+            )}
 
             {/* Close button */}
             <button

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 // Mock the telegramLogin helper so no real <script> is injected into jsdom.
@@ -132,6 +132,33 @@ describe('TelegramLogin component — OIDC button visibility', () => {
     expect(screen.getByTestId('telegram-code-input')).toBeTruthy();
     expect(screen.getByTestId('telegram-submit-btn')).toBeTruthy();
     expect(screen.getByTestId('tg-auth-button')).toBeTruthy();
+  });
+
+  it('registers Telegram.Login.init with client_id in oidc mode', async () => {
+    const init = jest.fn();
+    (window as unknown as { Telegram: unknown }).Telegram = { Login: { init } };
+    useAuthStore.setState({ tgAuthMode: 'oidc' });
+
+    renderTelegramLogin();
+
+    await waitFor(() => expect(init).toHaveBeenCalledTimes(1));
+    expect(init.mock.calls[0][0]).toEqual({
+      client_id: '8606505679',
+      scope: ['openid', 'profile'],
+    });
+    delete (window as unknown as { Telegram?: unknown }).Telegram;
+  });
+
+  it('does NOT call Telegram.Login.init in legacy mode', async () => {
+    const init = jest.fn();
+    (window as unknown as { Telegram: unknown }).Telegram = { Login: { init } };
+    useAuthStore.setState({ tgAuthMode: 'legacy' });
+
+    renderTelegramLogin();
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(init).not.toHaveBeenCalled();
+    delete (window as unknown as { Telegram?: unknown }).Telegram;
   });
 
   it('renders the "or" divider only in oidc mode (separates button from code form)', () => {

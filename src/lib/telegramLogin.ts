@@ -23,9 +23,18 @@ interface TelegramLoginApi {
     },
     cb: (result: TelegramAuthResult) => void,
   ): void;
-  /** Auto-init from a script tag's data-* attributes. Not used by us. */
-  init(options: unknown, cb: (result: TelegramAuthResult) => void): void;
-  /** Open the popup without explicit options (uses init() state). Not used. */
+  /**
+   * Register options + auth callback. The library's OWN document-level
+   * click handler on `.tg-auth-button` then opens the popup via open().
+   * Proven pattern (radar team): load the script once, call init(), let
+   * the library drive the button — data-* auto-init reads attributes
+   * from the SCRIPT tag and is wrong for an SPA.
+   */
+  init(
+    options: { client_id: string; scope?: string[] },
+    cb: (result: TelegramAuthResult) => void,
+  ): void;
+  /** Open the popup using init() state (called by the library on button click). */
   open(cb?: (result: TelegramAuthResult) => void): void;
 }
 

@@ -44,12 +44,14 @@ import { create } from 'zustand';
 import {
   getAuthStatus,
   getCurrentUser,
+  getMyPermissions,
   loginUser,
   loginTelegram as loginTelegramApi,
   loginTelegramOidc as loginTelegramOidcApi,
   logoutUser,
   setupUser,
   setLoginPolicy as setLoginPolicyApi,
+  PERMISSION_KEYS,
   type AuthUser,
 } from '../lib/backend/modules/auth';
 import { setAuthExpiredHandler } from '../lib/backend/core/invoke';
@@ -82,6 +84,10 @@ interface AuthState {
   guest: boolean;
   /** Which optional auth surface to show when !required && !user && !guest. */
   authView: AuthView;
+  /** Permission keys granted to the current session (empty when not loaded). */
+  permissions: string[];
+  /** True once /my_permissions has resolved (or auth is disabled). */
+  permissionsLoaded: boolean;
 
   // Actions
   init: () => Promise<void>;
@@ -102,6 +108,13 @@ interface AuthState {
   setAuthView: (view: AuthView) => void;
   /** Persist the enforce_login policy via POST /api/auth/policy (admin only). */
   setLoginPolicy: (enforceLogin: boolean) => Promise<boolean>;
+  /**
+   * Returns true when the current session may use `key`. When auth is
+   * disabled, not yet loaded, or the user is an admin, every key is
+   * granted (desktop mode / fail-open). Otherwise the key must appear in
+   * the `permissions` list fetched from /my_permissions.
+   */
+  hasPermission: (key: string) => boolean;
 }
 
 let initInFlight: Promise<void> | null = null;
@@ -130,6 +143,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
     sessionExpired: false,
     guest: false,
     authView: 'welcome',
+    permissions: [],
+    permissionsLoaded: false,
 
     init: async () => {
       // Dedupe concurrent init() calls (React StrictMode double-invoke).
@@ -138,11 +153,32 @@ export const useAuthStore = create<AuthState>((set, get) => {
         try {
           const status = await getAuthStatus();
           if (!status.enabled) {
-            set({ enabled: false, hasUsers: false, required: false, enforceLogin: true, tgAuthMode: 'legacy', checked: true, user: null });
+            // Auth disabled — desktop mode. Grant every key so the UI is
+            // fully open and hasPermission() short-circuits to true.
+            set({
+              enabled: false,
+              hasUsers: false,
+              required: false,
+              enforceLogin: true,
+              tgAuthMode: 'legacy',
+              checked: true,
+              user: null,
+              permissions: [...PERMISSION_KEYS],
+              permissionsLoaded: true,
+            });
             return;
           }
           // Auth enabled — probe the session.
           const user = await getCurrentUser();
+          // Fetch the user's permission keys once the session is known.
+          // When the user is null (not logged in) the call would 401; skip
+          // and leave permissions empty until login completes.
+          let permissions: string[] = [];
+          let permissionsLoaded = false;
+          if (user) {
+            permissions = await getMyPermissions();
+            permissionsLoaded = true;
+          }
           set({
             enabled: true,
             hasUsers: status.has_users,
@@ -158,6 +194,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
             tgAuthMode: status.tg_auth_mode === 'oidc' ? 'oidc' : 'legacy',
             checked: true,
             user,
+            permissions,
+            permissionsLoaded,
             sessionExpired: false,
             // If already authenticated, guest mode is irrelevant. Otherwise
             // default to the welcome surface when not required.
@@ -167,7 +205,17 @@ export const useAuthStore = create<AuthState>((set, get) => {
         } catch {
           // Network failure: fall open to the desktop (unauthenticated) path
           // so the user can still see the app rather than a hung gate.
-          set({ enabled: false, hasUsers: false, required: false, enforceLogin: true, tgAuthMode: 'legacy', checked: true, user: null });
+          set({
+            enabled: false,
+            hasUsers: false,
+            required: false,
+            enforceLogin: true,
+            tgAuthMode: 'legacy',
+            checked: true,
+            user: null,
+            permissions: [...PERMISSION_KEYS],
+            permissionsLoaded: true,
+          });
         } finally {
           initInFlight = null;
         }
@@ -268,7 +316,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     clearError: () => set({ error: null, sessionExpired: false }),
 
     clearSession: () => {
-      set({ user: null, sessionExpired: true, guest: false, authView: 'welcome' });
+      set({ user: null, sessionExpired: true, guest: false, authView: 'welcome', permissions: [], permissionsLoaded: false });
     },
 
     enterAsGuest: () => {
@@ -297,6 +345,15 @@ export const useAuthStore = create<AuthState>((set, get) => {
         hasUsers: status.has_users,
       });
       return persisted;
+    },
+
+    hasPermission: (key) => {
+      const { enabled, permissionsLoaded, permissions, user } = get();
+      // Fail open: desktop mode (auth disabled), not-yet-loaded, or admin
+      // role → every key granted. Otherwise the key must be in the list.
+      if (!enabled || !permissionsLoaded) return true;
+      if (user?.role === 'admin') return true;
+      return permissions.includes(key);
     },
   };
 });

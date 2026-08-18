@@ -173,7 +173,7 @@ export default function Dashboard() {
       />
 
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-[1400px] mx-auto flex flex-col gap-4">
+        <div className="max-w-[1400px] min-[2000px]:max-w-[1900px] min-[2560px]:max-w-[2200px] mx-auto flex flex-col gap-4">
           {/* System Status Strip */}
           <SystemStatusStrip />
 
