@@ -41,6 +41,7 @@ class ActivationState:
     last_server_time: str = ""
     degraded: bool = False
     last_successful_heartbeat: str = ""
+    tg_admin: bool = False
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ActivationState:
@@ -56,6 +57,7 @@ class ActivationState:
             last_server_time=str(raw.get("last_server_time", "")),
             degraded=bool(raw.get("degraded", False)),
             last_successful_heartbeat=str(raw.get("last_successful_heartbeat", "")),
+            tg_admin=bool(raw.get("tg_admin", False)),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -92,6 +94,7 @@ class ActivationService:
             pubkey=body["pubkey"],
             entitlements=list(body.get("entitlements", [])),
             server_url=server_url(),
+            tg_admin=bool(body.get("tg_admin", False)),
         )
         self._save(state)
         logger.info("Activation successful — pubkey=%s…", state.pubkey[:12])
@@ -109,6 +112,7 @@ class ActivationService:
             pubkey=body["pubkey"],
             entitlements=list(body.get("entitlements", [])),
             server_url=server_url(),
+            tg_admin=bool(body.get("tg_admin", False)),
         )
         self._save(state)
         return state
