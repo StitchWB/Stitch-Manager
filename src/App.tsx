@@ -150,6 +150,18 @@ function RouteTracker() {
     // Restore the last workspace only when the app opens at the root.
     // Explicit deep links must always win over persisted navigation state.
     if (activeRoute && activeRoute !== '/' && location.pathname === '/') {
+      // Sanitize legacy/persisted values: older builds stored full URLs or
+      // garbage here; feeding that to navigate() throws a DOMException on
+      // history.replaceState ("URL 'https:'"). Keep same-origin pathnames only.
+      let candidate = activeRoute;
+      if (/^https?:/i.test(candidate)) {
+        try {
+          candidate = new URL(candidate).pathname || '/';
+        } catch {
+          candidate = '/';
+        }
+      }
+      if (!candidate.startsWith('/')) candidate = '/';
       // Ensure the route exists in our route list
       const validRoutes = [
         '/',
@@ -175,10 +187,14 @@ function RouteTracker() {
       ];
       // Simple check - if it starts with a known route base
       const isValid = validRoutes.some(
-        r => activeRoute === r || activeRoute.startsWith(r.replace(':section', ''))
+        r => candidate === r || candidate.startsWith(r.replace(':section', ''))
       );
       if (isValid) {
-        navigate(activeRoute, { replace: true });
+        try {
+          navigate(candidate, { replace: true });
+        } catch {
+          // Never let a bad persisted route take down the whole app.
+        }
       }
     }
   }, [activeRoute, navigate, location.pathname]);

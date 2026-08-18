@@ -390,3 +390,11 @@ export async function captureWebSessionCookies(params: {
 /**
  * (duplicate declarations removed)
  */
+
+/**
+ * Claim ownership of a shared account for the current user.
+ * @throws {Error} with status 400 when the account is not shared / not claimable.
+ */
+export async function claimAccount(accountId: number): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>('claim_account', { accountId });
+}

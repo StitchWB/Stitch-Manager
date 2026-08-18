@@ -46,6 +46,7 @@ export interface AccountsTableProps {
   onCopyRefUrl?: (refUrl: string) => Promise<void>;
   onRefreshRefUrl?: (accountId: number) => Promise<void>;
   onUpdate?: (accountId: number, updates: { notes?: string; tags?: string }) => Promise<void>;
+  onClaim?: (accountId: number) => Promise<void>;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
   selectedProvider?: string | null;
 }
@@ -76,6 +77,7 @@ export default function AccountsTable({
   onCopyRefUrl,
   onRefreshRefUrl,
   onUpdate,
+  onClaim,
   onRelationEdgeClick,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -389,6 +391,7 @@ onCaptureWebCookies={onCaptureWebCookies}
                 onAuthorizeKiroAccount={onAuthorizeKiroAccount}
                 onCopyRefUrl={onCopyRefUrl}
                 onRefreshRefUrl={onRefreshRefUrl}
+                onClaim={onClaim}
                 onRelationEdgeClick={onRelationEdgeClick}
               />
             ))}

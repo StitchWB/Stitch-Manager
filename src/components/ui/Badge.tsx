@@ -1,7 +1,7 @@
 import { cn } from '../../lib/utils';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'outline';
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'outline' | 'indigo' | 'slate';
   size?: 'sm' | 'md' | 'lg';
   withDot?: boolean;
   withPulse?: boolean;
@@ -14,6 +14,8 @@ const variantClasses: Record<NonNullable<BadgeProps['variant']>, string> = {
   danger: 'bg-red-500/10 text-red-300 border border-transparent',
   info: 'bg-sky-500/10 text-sky-300 border border-transparent',
   outline: 'bg-transparent text-slate-300 border border-white/20',
+  indigo: 'bg-indigo-500/10 text-indigo-300 border border-transparent',
+  slate: 'bg-slate-500/10 text-slate-300 border border-transparent',
 };
 
 const sizeClasses: Record<NonNullable<BadgeProps['size']>, string> = {
@@ -29,6 +31,8 @@ const dotClasses: Record<NonNullable<BadgeProps['variant']>, string> = {
   danger: 'bg-red-400',
   info: 'bg-sky-400',
   outline: 'bg-slate-400',
+  indigo: 'bg-indigo-400',
+  slate: 'bg-slate-400',
 };
 
 export function Badge({

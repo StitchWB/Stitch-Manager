@@ -28,6 +28,12 @@
  * the welcome gate or the sidebar guest chip ('welcome' | 'setup' | 'login'
  * | 'telegram'). It is only consulted when !required && !user && !guest.
  *
+ * `tgAuthMode` mirrors the backend's `tg_auth_mode` from /api/auth/status:
+ * 'legacy' (one-time-code flow via the bot) or 'oidc' (official Telegram
+ * popup via oauth.telegram.org). Defaults to 'legacy' when the backend
+ * omits the field; the TelegramLogin surface renders the official OIDC
+ * button above the code form only when this is 'oidc'.
+ *
  * The shared fetch wrapper in src/lib/backend/core/invoke.ts calls
  * `setAuthExpiredHandler` to register a callback that fires when a regular
  * /api/* call returns 401. We register `clearSession` so the gate reappears
@@ -40,6 +46,7 @@ import {
   getCurrentUser,
   loginUser,
   loginTelegram as loginTelegramApi,
+  loginTelegramOidc as loginTelegramOidcApi,
   logoutUser,
   setupUser,
   setLoginPolicy as setLoginPolicyApi,
@@ -59,6 +66,8 @@ interface AuthState {
   required: boolean;
   /** Admin-controllable login-enforcement toggle (effective value from /status). */
   enforceLogin: boolean;
+  /** Which Telegram login surface the backend has wired up ('legacy' code flow vs 'oidc' popup). */
+  tgAuthMode: 'legacy' | 'oidc';
   /** True once init() has finished (success or failure). */
   checked: boolean;
   /** The currently logged-in user, or null. */
@@ -78,6 +87,8 @@ interface AuthState {
   init: () => Promise<void>;
   login: (username: string, password: string) => Promise<boolean>;
   loginTelegram: (code: string) => Promise<boolean>;
+  /** Exchange a Telegram OIDC id_token (from the official popup) for a session. */
+  loginTelegramOidc: (idToken: string) => Promise<boolean>;
   setup: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   clearError: () => void;
@@ -111,6 +122,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     hasUsers: false,
     required: false,
     enforceLogin: true,
+    tgAuthMode: 'legacy',
     checked: false,
     user: null,
     busy: false,
@@ -126,7 +138,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         try {
           const status = await getAuthStatus();
           if (!status.enabled) {
-            set({ enabled: false, hasUsers: false, required: false, enforceLogin: true, checked: true, user: null });
+            set({ enabled: false, hasUsers: false, required: false, enforceLogin: true, tgAuthMode: 'legacy', checked: true, user: null });
             return;
           }
           // Auth enabled — probe the session.
@@ -141,6 +153,9 @@ export const useAuthStore = create<AuthState>((set, get) => {
               typeof status.enforce_login === 'boolean'
                 ? status.enforce_login
                 : true,
+            // Default to 'legacy' when the backend omits the field (older
+            // backends); the OIDC button only renders when explicitly 'oidc'.
+            tgAuthMode: status.tg_auth_mode === 'oidc' ? 'oidc' : 'legacy',
             checked: true,
             user,
             sessionExpired: false,
@@ -152,7 +167,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         } catch {
           // Network failure: fall open to the desktop (unauthenticated) path
           // so the user can still see the app rather than a hung gate.
-          set({ enabled: false, hasUsers: false, required: false, enforceLogin: true, checked: true, user: null });
+          set({ enabled: false, hasUsers: false, required: false, enforceLogin: true, tgAuthMode: 'legacy', checked: true, user: null });
         } finally {
           initInFlight = null;
         }
@@ -193,6 +208,27 @@ export const useAuthStore = create<AuthState>((set, get) => {
           err instanceof Error && err.message
             ? err.message
             : 'auth.tg.errorGeneric';
+        set({ busy: false, error: message });
+        throw err;
+      }
+    },
+
+    loginTelegramOidc: async (idToken) => {
+      set({ busy: true, error: null, sessionExpired: false });
+      try {
+        const result = await loginTelegramOidcApi(idToken);
+        if (!result.success) {
+          throw new Error(result.error || 'auth.tg.oidc.errorGeneric');
+        }
+        // Success — refresh session/user state so the gate closes.
+        await get().init();
+        set({ busy: false, authView: 'welcome' });
+        return true;
+      } catch (err) {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'auth.tg.oidc.errorGeneric';
         set({ busy: false, error: message });
         throw err;
       }

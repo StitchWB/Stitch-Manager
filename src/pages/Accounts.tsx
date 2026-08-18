@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,6 +21,7 @@ import {
   saveProfileSettings,
   createDefaultProfileSettings,
   openStandaloneFingerprintProfileAndRememberUrl,
+  claimAccount,
 } from '@/lib/backend';
 import { t } from '../lib/i18n';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
@@ -37,7 +38,7 @@ import { AccountsErrorBanner } from '../components/accounts/AccountsErrorBanner'
 import { AccountsExpiredBanner } from '../components/accounts/AccountsExpiredBanner';
 import { useGoogleSheetsDataset } from '../hooks/useGoogleSheetsDataset';
 import { useSheetsConfigState } from '../hooks/useSheetsConfigState';
-import { FloatingActionBar } from '@/components/ui';
+import { FloatingActionBar, SegmentedControl } from '@/components/ui';
 
 export default function Accounts() {
   const navigate = useNavigate();
@@ -129,6 +130,7 @@ export default function Accounts() {
       onPersist: setAccountsVisibleColumns,
     });
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
+  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared'>('all');
   const [profileSettingsAlias, setProfileSettingsAlias] = useUIState(
     'accounts-profile-settings-alias',
     null as string | null,
@@ -229,8 +231,27 @@ export default function Accounts() {
       parseTags,
     });
 
+  const ownershipFilteredAccounts = useMemo(() => {
+    if (ownershipFilter === 'all') return filteredAccounts;
+    if (ownershipFilter === 'mine') return filteredAccounts.filter(a => a.mine);
+    return filteredAccounts.filter(a => a.shared && !a.mine);
+  }, [filteredAccounts, ownershipFilter]);
+
+  const handleClaimAccount = useCallback(
+    async (accountId: number) => {
+      try {
+        await claimAccount(accountId);
+        toast.success(t('ownership.claimed'));
+        fetchAccounts();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t('ownership.claim'));
+      }
+    },
+    [fetchAccounts]
+  );
+
   useConstrainSelectionToVisibleAccounts({
-    visibleAccounts: filteredAccounts,
+    visibleAccounts: ownershipFilteredAccounts,
     selectedIds,
     setSelectedIds,
   });
@@ -575,6 +596,21 @@ export default function Accounts() {
             />
           ) : null}
 
+          {resolvedViewMode === 'list' && entityFilter !== 'profiles' ? (
+            <div className="shrink-0 py-2">
+              <SegmentedControl
+                size="sm"
+                value={ownershipFilter}
+                onChange={(v) => setOwnershipFilter(v as 'all' | 'mine' | 'shared')}
+                options={[
+                  { value: 'all', label: t('ownership.filterAll') },
+                  { value: 'mine', label: t('ownership.filterMine') },
+                  { value: 'shared', label: t('ownership.filterShared') },
+                ]}
+              />
+            </div>
+          ) : null}
+
           {/* Table */}
           <div className="flex-1 overflow-auto">
             <AccountsMainPanels
@@ -600,7 +636,7 @@ export default function Accounts() {
               tagFilter={tagFilter}
               onCreateProfilesForSelected={handleCreateProfilesForSelected}
               onBatchProfileAction={handleBatchProfileAction}
-              filteredAccounts={filteredAccounts}
+              filteredAccounts={ownershipFilteredAccounts}
               loading={loading}
               searchQuery={searchQuery}
               statusFilter={statusFilter}
@@ -628,6 +664,7 @@ export default function Accounts() {
                 onCopyRefUrl: handleCopyRefUrl,
                 onRefreshRefUrl: handleRefreshRefUrl,
                 onUpdate: handleUpdateAccount,
+                onClaim: handleClaimAccount,
                 selectedProvider: providerFilter === 'all' ? null : providerFilter,
               }}
               onRelationEdgeClickInAll={handleRelationEdgeClickInAll}

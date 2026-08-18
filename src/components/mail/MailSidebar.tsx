@@ -15,6 +15,7 @@ import {
   Settings,
   ShieldAlert,
   Trash2,
+  UserPlus,
   Wand2,
 } from 'lucide-react';
 import {
@@ -25,6 +26,9 @@ import {
   EmptyState,
   Input,
   OverflowMenu,
+  OwnershipBadge,
+  SegmentedControl,
+  Tooltip,
 } from '@/components/ui';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { t } from '@/lib/i18n';
@@ -61,6 +65,7 @@ interface MailSidebarProps {
   onEditProfile: (profileId: string) => void;
   onRenameProfile: (profileId: string, nextLabel: string) => Promise<void>;
   onDeleteProfile: (profileId: string) => Promise<void>;
+  onClaimProfile?: (profileId: string) => Promise<void>;
 }
 
 const FOLDER_ICONS: Record<string, LucideIcon> = {
@@ -177,6 +182,7 @@ export function MailSidebar({
   onEditProfile,
   onRenameProfile,
   onDeleteProfile,
+  onClaimProfile,
 }: MailSidebarProps) {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const { copy } = useCopyToClipboard();
@@ -186,10 +192,17 @@ export function MailSidebar({
   // Two-step delete via the row menu (no confirm modal): first click arms the
   // item for 3s ("Delete?"), second click within the window deletes.
   const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null);
+  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared'>('all');
+
+  const filteredProfiles = useMemo(() => {
+    if (ownershipFilter === 'all') return profiles;
+    if (ownershipFilter === 'mine') return profiles.filter(p => p.mine);
+    return profiles.filter(p => p.shared && !p.mine);
+  }, [profiles, ownershipFilter]);
 
   const groupedProfiles = useMemo(() => {
     const groups = new Map<MailboxProviderKind, EmailInboxProfile[]>();
-    for (const profile of profiles) {
+    for (const profile of filteredProfiles) {
       const kind = detectMailboxProviderKind(profile);
       const bucket = groups.get(kind) ?? [];
       bucket.push(profile);
@@ -202,7 +215,7 @@ export function MailSidebar({
       kind,
       profiles: groups.get(kind) ?? [],
     }));
-  }, [profiles]);
+  }, [filteredProfiles]);
 
   const selectedFolderPath = selectedFolder?.path.trim().toLowerCase() ?? '';
 
@@ -299,7 +312,22 @@ export function MailSidebar({
           <p className="text-[11px] text-slate-500 px-1">{t('mail.profilesLoading')}</p>
         ) : null}
 
-        {!isProfilesLoading && profiles.length === 0 ? (
+        {!isProfilesLoading && profiles.length > 0 ? (
+          <div className="mb-2">
+            <SegmentedControl
+              size="sm"
+              value={ownershipFilter}
+              onChange={(v) => setOwnershipFilter(v as 'all' | 'mine' | 'shared')}
+              options={[
+                { value: 'all', label: t('ownership.filterAll') },
+                { value: 'mine', label: t('ownership.filterMine') },
+                { value: 'shared', label: t('ownership.filterShared') },
+              ]}
+            />
+          </div>
+        ) : null}
+
+        {!isProfilesLoading && filteredProfiles.length === 0 ? (
           <EmptyState
             icon={Mailbox}
             title={t('mail.sidebarProfilesEmpty')}
@@ -349,6 +377,7 @@ export function MailSidebar({
                               <p className="text-xs font-medium text-white truncate" title={profile.label}>
                                 {profile.label}
                               </p>
+                              <OwnershipBadge mine={profile.mine} shared={profile.shared} />
                             </div>
                             <p className="text-[10px] text-slate-500 truncate mt-0.5" title={profile.accountId}>
                               {profile.accountId}
@@ -356,6 +385,18 @@ export function MailSidebar({
                           </ButtonBase>
 
                           <div className="flex items-center gap-1 shrink-0">
+                            {profile.shared && !profile.mine && onClaimProfile ? (
+                              <Tooltip content={t('ownership.claim')} side="top">
+                                <button
+                                  type="button"
+                                  onClick={() => void onClaimProfile(profile.id)}
+                                  className="text-slate-500 hover:text-indigo-300 transition-colors p-1 rounded"
+                                  aria-label={t('ownership.claim')}
+                                >
+                                  <UserPlus size={12} />
+                                </button>
+                              </Tooltip>
+                            ) : null}
                             <Badge variant={tone} size="sm" withDot={tone !== 'outline'}>
                               {profile.provider === 'imap' ? 'IMAP' : 'Mail.tm'}
                             </Badge>

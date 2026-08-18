@@ -8,6 +8,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { TierBadge } from '@/components/ui/TierBadge';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -90,6 +91,9 @@ function MarketplaceRow({ item, busy, browseOnly, onInstall, onRemove }: RowProp
           </span>
           {locked && (
             <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-label={unavailableMsg} />
+          )}
+          {!item.entitled && item.required_tier && (
+            <TierBadge tier={item.required_tier} size="sm" className="shrink-0" />
           )}
           <Badge
             variant={item.source === 'official' ? 'info' : 'outline'}

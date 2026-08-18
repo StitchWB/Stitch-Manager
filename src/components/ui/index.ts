@@ -99,6 +99,7 @@ export { MultiFilterDropdown } from './MultiFilterDropdown';
 
 export { Badge } from './Badge';
 export type { BadgeProps } from './Badge';
+export { OwnershipBadge } from './OwnershipBadge';
 
 
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './Table';

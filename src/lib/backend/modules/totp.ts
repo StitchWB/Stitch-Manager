@@ -11,6 +11,9 @@ export interface TotpKey {
   algorithm: string;
   enabled: boolean;
   createdAt: string | null;
+  /** Per-user ownership flags (absent for guests / legacy shared rows). */
+  mine?: boolean;
+  shared?: boolean;
 }
 
 export interface AddTotpKeyParams {
@@ -54,4 +57,8 @@ export async function removeTotpKey(id: string): Promise<{ success: boolean; id:
 
 export async function linkTotpKey(params: LinkTotpKeyParams): Promise<TotpKey> {
   return safeInvoke<TotpKey>('link_totp_key', params as unknown as Record<string, unknown>);
+}
+
+export async function claimTotpKey(id: string): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>('claim_totp_key', { id });
 }

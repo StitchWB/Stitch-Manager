@@ -14,7 +14,8 @@ import {
   LayoutGrid,
   List,
   Lock,
-  GitBranch } from
+  GitBranch,
+  HelpCircle } from
 'lucide-react';
 import {
   Modal,
@@ -35,6 +36,7 @@ import {
   ToolbarActionsCluster,
   ToolbarSection } from
 '@/components/ui';
+import { TierBadge } from '@/components/ui/TierBadge';
 import {
   deleteRecordedScenario,
   listRecordedScenarios,
@@ -97,6 +99,9 @@ export function ProfileScenariosPanel({
   const [editTier, setEditTier] = useState<string>('user');
 
   const [duplicateLoading, setDuplicateLoading] = useState(false);
+
+  const [showLocked, setShowLocked] = useState(true);
+  const [howToGetItem, setHowToGetItem] = useState<ScenarioRecordItem | null>(null);
 
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -211,6 +216,7 @@ export function ProfileScenariosPanel({
     const q = query.trim().toLowerCase();
     return items.
     filter((item) => favoritesOnly ? item.favorite : true).
+    filter((item) => showLocked ? true : item.locked !== true).
     filter((item) => {
       if (selectedTags.length === 0) return true;
       const tags = (item.metadata?.tags ?? []).map(toTagLabel);
@@ -226,7 +232,7 @@ export function ProfileScenariosPanel({
         tags.toLowerCase().includes(q));
 
     });
-  }, [favoritesOnly, items, query, selectedTags, toTagLabel]);
+  }, [favoritesOnly, items, query, selectedTags, showLocked, toTagLabel]);
 
   const formatLastPlayed = useCallback((value?: string | null) => {
     if (!value) return '—';
@@ -459,6 +465,16 @@ export function ProfileScenariosPanel({
                 {t('scenarios.favoritesOnly')}
               </Button>
 
+              <Button
+            size="sm"
+            className="h-9"
+            variant={showLocked ? 'primary' : 'secondary'}
+            onClick={() => setShowLocked((v) => !v)}
+            leftIcon={<Lock size={14} />}>
+
+                {t('scenarios.showLocked')}
+              </Button>
+
               <MultiFilterDropdown
             values={selectedTags}
             onChange={setSelectedTags}
@@ -562,14 +578,12 @@ export function ProfileScenariosPanel({
                       null}
                             {isLocked ? <Lock size={14} className="text-amber-400 shrink-0" /> : null}
                             {isLocked && item.min_role ?
-                      <Badge variant="warning" size="sm" className="normal-case">
-                                {t(`auth.role.${item.min_role}`)}
-                              </Badge> :
+                      <TierBadge tier={item.min_role} size="sm" /> :
                       null}
                           </div>
                           <div
-                      className="mt-1 text-[11px] text-slate-500 font-mono truncate"
-                      title={item.scenarioPath}>
+                    className="mt-1 text-[11px] text-slate-500 font-mono truncate"
+                    title={item.scenarioPath}>
 
                             {item.scenarioPath}
                           </div>
@@ -597,6 +611,17 @@ export function ProfileScenariosPanel({
                 </div>
 
                         <div className="flex flex-wrap items-center justify-end gap-2">
+                          {isLocked && item.min_role && (
+                    <IconButton
+                      size="md"
+                      variant="ghost"
+                      onClick={() => setHowToGetItem(item)}
+                      aria-label={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
+                      title={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
+                      className="text-slate-400 hover:text-amber-300">
+                      <HelpCircle size={16} />
+                    </IconButton>
+                  )}
                           <IconButton
                       size="md"
                       variant="ghost"
@@ -737,9 +762,7 @@ export function ProfileScenariosPanel({
                     null}
                           {isLocked ? <Lock size={14} className="text-amber-400 shrink-0" /> : null}
                           {isLocked && item.min_role ?
-                    <Badge variant="warning" size="sm" className="normal-case">
-                              {t(`auth.role.${item.min_role}`)}
-                            </Badge> :
+                    <TierBadge tier={item.min_role} size="sm" /> :
                     null}
                         </div>
                         <div
@@ -815,6 +838,17 @@ export function ProfileScenariosPanel({
                       </div>
 
                       <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:flex-nowrap flex-shrink-0">
+                        {isLocked && item.min_role && (
+                    <IconButton
+                      size="md"
+                      variant="ghost"
+                      onClick={() => setHowToGetItem(item)}
+                      aria-label={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
+                      title={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
+                      className="text-slate-400 hover:text-amber-300">
+                      <HelpCircle size={16} />
+                    </IconButton>
+                  )}
                         <IconButton
                     size="md"
                     variant="ghost"
@@ -1031,6 +1065,23 @@ export function ProfileScenariosPanel({
             </div>
         }
         </div>
+      </Modal>
+
+      <Modal
+      isOpen={howToGetItem !== null}
+      onClose={() => setHowToGetItem(null)}
+      title={t('scenarios.howToGetTier', { tier: t(`auth.role.${howToGetItem?.min_role ?? 'user'}`) })}
+      size="sm">
+        <ul className="space-y-2 text-sm text-slate-300">
+          <li className="flex items-start gap-2">
+            <span className="text-slate-500 mt-0.5">•</span>
+            <span>{t('scenarios.howToGetTierSubscribe')}</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-slate-500 mt-0.5">•</span>
+            <span>{t('scenarios.howToGetTierAskAdmin')}</span>
+          </li>
+        </ul>
       </Modal>
     </div>;
 

@@ -18,6 +18,7 @@ jest.mock('../../lib/backend/modules/auth', () => ({
   getCurrentUser: jest.fn(),
   loginUser: jest.fn(),
   loginTelegram: jest.fn(),
+  loginTelegramOidc: jest.fn(),
   logoutUser: jest.fn(),
   setupUser: jest.fn(),
   listUsers: jest.fn(),
@@ -38,6 +39,7 @@ const authModule = jest.requireMock('../../lib/backend/modules/auth') as {
   getAuthStatus: jest.Mock;
   getCurrentUser: jest.Mock;
   setLoginPolicy: jest.Mock;
+  loginTelegramOidc: jest.Mock;
 };
 
 describe('auth store — enforce_login policy', () => {
@@ -49,6 +51,7 @@ describe('auth store — enforce_login policy', () => {
       hasUsers: false,
       required: false,
       enforceLogin: true,
+      tgAuthMode: 'legacy',
       checked: false,
       user: null,
       busy: false,
@@ -144,5 +147,147 @@ describe('auth store — enforce_login policy', () => {
 
     // Store was NOT updated (error thrown before the status refresh).
     expect(useAuthStore.getState().enforceLogin).toBe(true);
+  });
+});
+
+// ── Telegram OIDC ───────────────────────────────────────────────────────────
+
+describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Reset the store between tests so init() runs fresh.
+    useAuthStore.setState({
+      enabled: false,
+      hasUsers: false,
+      required: false,
+      enforceLogin: true,
+      tgAuthMode: 'legacy',
+      checked: false,
+      user: null,
+      busy: false,
+      error: null,
+      sessionExpired: false,
+      guest: false,
+      authView: 'welcome',
+    });
+  });
+
+  it('init() maps tg_auth_mode="oidc" from status into tgAuthMode', async () => {
+    authModule.getAuthStatus.mockResolvedValue({
+      enabled: true,
+      has_users: true,
+      required: true,
+      enforce_login: true,
+      tg_auth_mode: 'oidc',
+    });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    await useAuthStore.getState().init();
+
+    expect(useAuthStore.getState().tgAuthMode).toBe('oidc');
+  });
+
+  it('init() defaults tgAuthMode to "legacy" when backend omits the field', async () => {
+    authModule.getAuthStatus.mockResolvedValue({
+      enabled: true,
+      has_users: true,
+      required: true,
+      enforce_login: true,
+      // tg_auth_mode omitted — older backend
+    });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    await useAuthStore.getState().init();
+
+    expect(useAuthStore.getState().tgAuthMode).toBe('legacy');
+  });
+
+  it('init() falls back to "legacy" on network failure', async () => {
+    authModule.getAuthStatus.mockRejectedValue(new Error('network down'));
+
+    await useAuthStore.getState().init();
+
+    expect(useAuthStore.getState().tgAuthMode).toBe('legacy');
+    expect(useAuthStore.getState().checked).toBe(true);
+  });
+
+  it('loginTelegramOidc calls the wrapper with the id_token and re-runs init() on success', async () => {
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: null,
+      authView: 'telegram',
+    });
+
+    authModule.loginTelegramOidc.mockResolvedValue({
+      success: true,
+      user: { id: 1, username: 'tg', role: 'admin' },
+      entitlements: [],
+    });
+    // init() re-runs getAuthStatus + getCurrentUser on success.
+    authModule.getAuthStatus.mockResolvedValue({
+      enabled: true,
+      has_users: true,
+      required: true,
+      enforce_login: true,
+      tg_auth_mode: 'oidc',
+    });
+    authModule.getCurrentUser.mockResolvedValue({
+      id: 1,
+      username: 'tg',
+      role: 'admin',
+    });
+
+    const result = await useAuthStore.getState().loginTelegramOidc('id-jwt-token');
+
+    expect(authModule.loginTelegramOidc).toHaveBeenCalledWith('id-jwt-token');
+    expect(result).toBe(true);
+    // init() re-ran — getAuthStatus called again after the login wrapper.
+    expect(authModule.getAuthStatus).toHaveBeenCalled();
+    // authView reset to 'welcome' and busy cleared.
+    expect(useAuthStore.getState().authView).toBe('welcome');
+    expect(useAuthStore.getState().busy).toBe(false);
+  });
+
+  it('loginTelegramOidc sets error and rethrows on failure', async () => {
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: null,
+      authView: 'telegram',
+    });
+
+    authModule.loginTelegramOidc.mockRejectedValue(new Error('Bad id_token'));
+
+    await expect(
+      useAuthStore.getState().loginTelegramOidc('bad-token'),
+    ).rejects.toThrow('Bad id_token');
+
+    // Error surfaced in store.error; busy cleared.
+    expect(useAuthStore.getState().error).toBe('Bad id_token');
+    expect(useAuthStore.getState().busy).toBe(false);
+  });
+
+  it('loginTelegramOidc falls back to the i18n key when the wrapper throws without a message', async () => {
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: null,
+      authView: 'telegram',
+    });
+
+    authModule.loginTelegramOidc.mockRejectedValue(new Error());
+
+    await expect(
+      useAuthStore.getState().loginTelegramOidc('whatever'),
+    ).rejects.toThrow();
+
+    expect(useAuthStore.getState().error).toBe('auth.tg.oidc.errorGeneric');
   });
 });

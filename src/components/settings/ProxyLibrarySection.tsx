@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Trash2, Upload, Save, AlertCircle, CheckCircle2, Globe, Eye, EyeOff } from 'lucide-react';
+import { Trash2, Upload, Save, AlertCircle, CheckCircle2, Globe, Eye, EyeOff, UserPlus } from 'lucide-react';
 
 import {
   ConfirmActionButton,
@@ -10,13 +10,18 @@ import {
   Select,
   StatusBadge,
   Textarea,
-  Toggle } from
+  Toggle,
+  Tooltip,
+  OwnershipBadge,
+  SegmentedControl,
+} from
 '@/components/ui';
 import { t } from '@/lib/i18n';
 import { createLogger } from '../../lib/observability/logger';
 const log = createLogger('ProxyLibrary');
 import {
   createOrGetProxyLibraryEntry,
+  claimProxyLibraryEntry,
   deleteProxyLibraryEntry,
   getProxyLibraryUsage,
   importProxyLibraryBulk,
@@ -111,6 +116,8 @@ export function ProxyLibrarySection() {
   const [testingEntryId, setTestingEntryId] = useState<string | null>(null);
   const [forceUpdateDialog, setForceUpdateDialog] = useState<ForceUpdateDialogState | null>(null);
   const [forceDeleteDialog, setForceDeleteDialog] = useState<ForceDeleteDialogState | null>(null);
+  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared'>('all');
+  const [claimingId, setClaimingId] = useState<string | null>(null);
 
 
   const load = useCallback(async () => {
@@ -135,8 +142,26 @@ export function ProxyLibrarySection() {
   }, [load]);
 
   const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => a.label.localeCompare(b.label));
-  }, [items]);
+    const filtered = ownershipFilter === 'all'
+      ? items
+      : ownershipFilter === 'mine'
+        ? items.filter(it => it.mine)
+        : items.filter(it => it.shared && !it.mine);
+    return [...filtered].sort((a, b) => a.label.localeCompare(b.label));
+  }, [items, ownershipFilter]);
+
+  const handleClaim = useCallback(async (id: string) => {
+    setClaimingId(id);
+    setError(null);
+    try {
+      await claimProxyLibraryEntry(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('proxyLibrary.updateError'));
+    } finally {
+      setClaimingId(null);
+    }
+  }, [load]);
 
   const startEdit = (entry: ProxyLibraryEntry) => {
     setEditingId(entry.id);
@@ -600,6 +625,18 @@ export function ProxyLibrarySection() {
 
         <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
           <div className="text-sm font-medium text-slate-200 mb-3">{t('proxyLibrary.entries')}</div>
+          <div className="mb-3">
+            <SegmentedControl
+              size="sm"
+              value={ownershipFilter}
+              onChange={(v) => setOwnershipFilter(v as 'all' | 'mine' | 'shared')}
+              options={[
+                { value: 'all', label: t('ownership.filterAll') },
+                { value: 'mine', label: t('ownership.filterMine') },
+                { value: 'shared', label: t('ownership.filterShared') },
+              ]}
+            />
+          </div>
           <div className="mb-3 flex flex-wrap gap-2">
             <Button
               size="xs"
@@ -655,7 +692,10 @@ export function ProxyLibrarySection() {
                             className="py-0 px-0" />
 
                           </div>
-                          <div className="text-sm text-slate-100 font-medium">{entry.label}</div>
+                          <div className="text-sm text-slate-100 font-medium flex items-center gap-2">
+                            {entry.label}
+                            <OwnershipBadge mine={entry.mine} shared={entry.shared} />
+                          </div>
                           <div className="text-xs text-slate-400 mt-1">
                             {entry.proxyType}://{entry.host}:{entry.port}
                             {entry.username ? `:${showSecrets ? entry.username : '***'}` : ''}
@@ -680,6 +720,18 @@ export function ProxyLibrarySection() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {entry.shared && !entry.mine ? (
+                            <Tooltip content={t('ownership.claim')} side="top">
+                              <Button
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={() => void handleClaim(entry.id)}
+                                disabled={claimingId === entry.id}
+                              >
+                                <UserPlus className="w-4 h-4" />
+                              </Button>
+                            </Tooltip>
+                          ) : null}
                           <StatusBadge
                           status={entry.enabled ? 'active' : 'inactive'}
                           size="sm"

@@ -1650,7 +1650,12 @@ tabs: {
       submit: "Войти",
       back: "Назад",
       errorGeneric: "Не удалось войти через Telegram. Попробуйте снова.",
-      openBot: "Открыть бота в Telegram"
+      openBot: "Открыть бота в Telegram",
+      oidc: {
+        button: "Войти через Telegram",
+        orCode: "или",
+        errorGeneric: "Не удалось войти через Telegram. Попробуйте снова."
+      }
     },
     login: {
       tgLink: "Войти через Telegram"
@@ -1790,6 +1795,15 @@ tabs: {
     loading: "Загрузка кодов...",
     retry: "Повторить"
   },
+  ownership: {
+    mine: "моё",
+    shared: "общее",
+    claim: "Забрать",
+    claimed: "Успешно забрано",
+    filterAll: "Все",
+    filterMine: "Мои",
+    filterShared: "Общие"
+  },
   monitoring: {
     title: "Мониторинг",
     subtitle: "Здоровье сервисов Stitch",
@@ -1797,6 +1811,10 @@ tabs: {
     generatedAt: "Сгенерировано",
     loading: "Загрузка данных мониторинга...",
     noProxies: "Прокси не настроены",
+    alerts: "Алерты",
+    silence1h: "Тишина 1ч",
+    silenced: "Тишина до {time}",
+    noAlerts: "Нет активных алертов",
     sections: {
       services: "Сервисы",
       bot: "Бот",
@@ -3016,7 +3034,11 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     toggleFavorite: "Избранное",
     update: "Обновить",
     viewCards: "Карточки",
-    viewList: "Список"
+    viewList: "Список",
+    howToGetTier: "Как получить уровень {tier}",
+    showLocked: "Показывать заблокированные",
+    howToGetTierSubscribe: "Подпишитесь на канал(ы) и войдите снова",
+    howToGetTierAskAdmin: "Попросите администратора повысить роль"
   },
   scheduler: {
     add: "Добавить",
@@ -4274,5 +4296,12 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     desktopOnly: "Доступно в десктоп-приложении",
     authRequiredTitle: "Только для авторизованных",
     authRequiredText: "Плагины доступны авторизованным пользователям. Войдите или получите одноразовый код в Telegram.",
+  },
+  footer: {
+    tierHint: "Тир повышает подписка на каналы или админ",
+  },
+  users: {
+    tier: "Тир",
+    tierSourceBot: "Синхронизировано ботом",
   },
 };

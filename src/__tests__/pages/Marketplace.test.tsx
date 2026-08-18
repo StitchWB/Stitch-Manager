@@ -211,4 +211,26 @@ describe('Marketplace page', () => {
     // getMarketplace was NOT called (no fetch attempted).
     expect(getMarketplaceSpy).not.toHaveBeenCalled();
   });
+
+  it('shows TierBadge for locked items with required_tier', async () => {
+    jest
+      .spyOn(marketplaceModule, 'getMarketplace')
+      .mockResolvedValue({
+        activated: true,
+        items: [mk.locked({ required_tier: 'premium' })],
+      });
+
+    render(
+      <MemoryRouter>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Locked Plugin')).toBeTruthy();
+    });
+
+    // TierBadge renders the tier name via i18n (auth.role.premium = "Premium").
+    expect(screen.getByText('Premium')).toBeTruthy();
+  });
 });

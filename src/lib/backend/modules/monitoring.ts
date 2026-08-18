@@ -14,11 +14,21 @@
  */
 
 import { getApiBaseUrl } from '../core/url';
+import { safeInvoke } from '../core/invoke';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type ServiceStatus = 'up' | 'down' | 'unknown';
 export type BotStatus = 'up' | 'stale' | 'unknown';
+
+export type MonitoringAlertKind = 'bot_stale' | 'web_down' | 'proxies_down';
+
+export interface MonitoringAlert {
+  id: string;
+  ts: string;
+  kind: MonitoringAlertKind;
+  message: string;
+}
 
 export interface ServerHealth {
   status: 'up';
@@ -62,6 +72,8 @@ export interface MonitoringSnapshot {
   external: ExternalServiceHealth;
   bot: BotHealth;
   proxies: ProxyHealth[];
+  alerts: MonitoringAlert[];
+  silenced_until: string | null;
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -110,4 +122,18 @@ export async function getMonitoring(): Promise<MonitoringSnapshot> {
   }
 
   return data;
+}
+
+/**
+ * Acknowledge (silence) monitoring alerts for a given number of hours.
+ * Calls the backend admin command `ack_monitoring_alerts` via safeInvoke.
+ * @throws {Error} on auth/permission failure or when the command is unavailable.
+ */
+export async function ackMonitoringAlerts(params: {
+  hours: number;
+}): Promise<{ success: boolean; silenced_until: string | null }> {
+  return safeInvoke<{ success: boolean; silenced_until: string | null }>(
+    'ack_monitoring_alerts',
+    { hours: params.hours }
+  );
 }
