@@ -45,7 +45,13 @@ from stitch_backend.config import get_settings
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import get_db, run_in_session
 from stitch_backend.domains.auth import service as auth_service
-from stitch_backend.domains.auth.roles import SELECTABLE_ROLES
+from stitch_backend.domains.auth.permissions import (
+    PERMISSION_KEYS,
+    effective_permissions,
+    get_matrix,
+    set_permission as set_perm,
+)
+from stitch_backend.domains.auth.roles import SELECTABLE_ROLES, valid_role
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,6 +71,7 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/api/auth/telegram-oidc",
     "/api/auth/status",
     "/api/auth/setup",
+    "/api/auth/my_permissions",
 })
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -135,24 +142,28 @@ def _user_public(user: User) -> UserPublic:
     )
 
 
-def _set_session_cookie(response: Response, raw_token: str, expires_at) -> None:
+def _set_session_cookie(
+    response: Response, request: Request, raw_token: str, expires_at
+) -> None:
     """Set the session cookie on *response*.
 
-    ``Secure`` is set when the request scheme is https; ``SameSite=Lax``
-    and ``HttpOnly`` are always on.  Lax (not Strict) because users arrive
-    via cross-site top-level navigations from Telegram (t.me links): Strict
-    cookies are withheld on such navigations AND on reloads of pages reached
-    that way, which dropped sessions on refresh.  Lax still withholds the
-    cookie on cross-site POSTs, so CSRF stays covered.
+    ``Secure`` is set when the request scheme is https (or the reverse
+    proxy says so via ``X-Forwarded-Proto``); ``SameSite=Lax`` and
+    ``HttpOnly`` are always on.  Lax (not Strict) because users arrive
+    via cross-site top-level navigations from Telegram (t.me links):
+    Strict cookies are withheld on such navigations AND on reloads of
+    pages reached that way, which dropped sessions on refresh.  Lax
+    still withholds the cookie on cross-site POSTs, so CSRF stays
+    covered.
+
+    Single source of truth for session-cookie attributes — every login
+    endpoint MUST call this helper (review finding: 4 copy-pasted
+    set_cookie blocks drifted into existence and one attribute change
+    required touching 5 places).
     """
-    # The request scheme is determined by the X-Forwarded-Proto header
-    # (set by the reverse proxy on the VDS) or the connection type.
-    # FastAPI's Request.url.scheme reflects the upstream's scheme; we
-    # trust X-Forwarded-Proto when present so the cookie is marked Secure
-    # behind TLS-terminating proxies.
-    secure = False
-    # The actual request is read inside the endpoint (see login).
-    # For the cookie helper we accept the resolved flag.
+    secure = request.url.scheme == "https" or request.headers.get(
+        "x-forwarded-proto", ""
+    ).lower() == "https"
     response.set_cookie(
         key=COOKIE_NAME,
         value=raw_token,
@@ -304,19 +315,8 @@ async def login(
             detail=exc.detail,
         ) from exc
 
-    # Set cookie — Secure when the request came over https.
-    secure = request.url.scheme == "https" or request.headers.get(
-        "x-forwarded-proto", ""
-    ).lower() == "https"
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=raw_token,
-        expires=expires_at,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=secure,
-    )
+    # Set cookie — single source of truth for cookie attributes.
+    _set_session_cookie(response, request, raw_token, expires_at)
     return LoginResponse(user=_user_public(user))
 
 
@@ -360,19 +360,8 @@ async def login_telegram(
     # on next login, intended behavior).
     user = await _sync_role_and_tier(user, tg_admin, tier)
 
-    # Set cookie — Secure when the request came over https.
-    secure = request.url.scheme == "https" or request.headers.get(
-        "x-forwarded-proto", ""
-    ).lower() == "https"
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=raw_token,
-        expires=expires_at,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=secure,
-    )
+    # Set cookie — single source of truth for cookie attributes.
+    _set_session_cookie(response, request, raw_token, expires_at)
     return {
         "success": True,
         "user": _user_public(user).model_dump(),
@@ -382,9 +371,13 @@ async def login_telegram(
 
 
 class TelegramOIDCLoginRequest(BaseModel):
-    """Body for POST /api/auth/telegram-oidc."""
+    """Body for POST /api/auth/telegram-oidc.
 
-    id_token: str | None = None
+    ``max_length`` rejects oversized blobs at the parsing layer, before
+    any JWT/crypto work (recon/DoS hardening; real id_tokens are ~1-2KB).
+    """
+
+    id_token: str | None = Field(default=None, max_length=8192)
 
 
 @router.post("/telegram-oidc")
@@ -462,19 +455,8 @@ async def login_telegram_oidc(
 
     user, raw_token, expires_at = await run_in_session(_op)
 
-    # Set cookie — Secure when the request came over https.
-    secure = request.url.scheme == "https" or request.headers.get(
-        "x-forwarded-proto", ""
-    ).lower() == "https"
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=raw_token,
-        expires=expires_at,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=secure,
-    )
+    # Set cookie — single source of truth for cookie attributes.
+    _set_session_cookie(response, request, raw_token, expires_at)
     return {
         "success": True,
         "user": _user_public(user).model_dump(),
@@ -522,18 +504,7 @@ async def setup(
             detail=exc.detail,
         ) from exc
 
-    secure = request.url.scheme == "https" or request.headers.get(
-        "x-forwarded-proto", ""
-    ).lower() == "https"
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=raw_token,
-        expires=expires_at,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=secure,
-    )
+    _set_session_cookie(response, request, raw_token, expires_at)
     return LoginResponse(user=_user_public(user))
 
 
@@ -698,6 +669,85 @@ async def delete_user(
         return None
 
     await run_in_session(_op)
+    return {"success": True}
+
+
+# ── Permission matrix ─────────────────────────────────────────────────────────
+
+
+class PermissionUpdateRequest(BaseModel):
+    """Body for PUT /api/auth/admin/permissions."""
+
+    role: str
+    key: str
+    allowed: bool
+
+
+@router.get("/my_permissions")
+async def my_permissions(request: Request) -> dict[str, list[str]]:
+    """Return the current session user's effective permission keys.
+
+    - Auth disabled → ALL keys (desktop single-user mode).
+    - Authenticated → :func:`effective_permissions` for the user's role.
+    - Guest (auth on, no session) → effective for role ``'user'``.
+    """
+    settings = get_settings()
+    if not settings.auth_enabled:
+        return {"permissions": list(PERMISSION_KEYS)}
+    user, _ = await _current_user_optional(request)
+    if user is None:
+        perms = await effective_permissions("user")
+    else:
+        perms = await effective_permissions(user)
+    return {"permissions": sorted(perms)}
+
+
+@router.get(
+    "/admin/permissions",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def get_permissions_matrix() -> dict:
+    """Return the full permission matrix (admin only)."""
+    from stitch_backend.database import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as db:
+        matrix = await get_matrix(db)
+    return {
+        "roles": list(SELECTABLE_ROLES),
+        "keys": list(PERMISSION_KEYS),
+        "matrix": matrix,
+    }
+
+
+@router.put(
+    "/admin/permissions",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def set_permission_endpoint(body: PermissionUpdateRequest) -> dict[str, bool]:
+    """Upsert a single (role, key, allowed) permission row (admin only).
+
+    400 for unknown role/key or attempts to modify ``admin`` rows
+    (admin is immutable — the hard rule always grants everything).
+    """
+    if body.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Admin permissions are immutable",
+        )
+    if not valid_role(body.role):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown role: {body.role!r}",
+        )
+    if body.key not in PERMISSION_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown permission key: {body.key!r}",
+        )
+    await run_in_session(
+        lambda db: set_perm(db, body.role, body.key, body.allowed)
+    )
     return {"success": True}
 
 

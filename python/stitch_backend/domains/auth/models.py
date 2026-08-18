@@ -15,7 +15,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
@@ -102,3 +111,31 @@ class Session(Base):
 
     def __repr__(self) -> str:
         return f"<Session id={self.id} user_id={self.user_id} expires_at={self.expires_at!r}>"
+
+
+class RolePermission(Base):
+    """A single (role, key) permission override in the configurable matrix.
+
+    Composite PK ``(role, key)``.  Seeded at startup with defaults; the
+    ``admin`` role is always fully allowed regardless of stored rows (hard
+    rule applied in :func:`get_matrix`).  PUT /admin/permissions rejects
+    edits to ``admin`` rows (immutable).
+    """
+
+    __tablename__ = "role_permissions"
+
+    role: Mapped[str] = mapped_column(
+        String, primary_key=True, nullable=False, comment="Role name (user/vip/...)"
+    )
+    key: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        nullable=False,
+        comment="Permission key (section.* / action.*)",
+    )
+    allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, comment="Whether the role may use the key"
+    )
+
+    def __repr__(self) -> str:
+        return f"<RolePermission role={self.role!r} key={self.key!r} allowed={self.allowed}>"

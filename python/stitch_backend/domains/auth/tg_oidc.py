@@ -56,6 +56,11 @@ _JWKS_TIMEOUT = 10.0
 #: Clock-skew leeway for ``exp`` / ``iat`` — 5 minutes (spec).
 _LEEWAY = timedelta(minutes=5)
 
+#: Minimum interval between JWKS force-refreshes (unknown-kid path).  The
+#: endpoint is unauthenticated; without a cooldown an attacker could turn
+#: us into a JWKS-fetch hammer by sending tokens with random kids.
+_FORCE_REFRESH_COOLDOWN = 60.0
+
 
 # ── Exceptions ────────────────────────────────────────────────────────────────
 
@@ -80,6 +85,9 @@ _jwks_cache: dict[str, Any] | None = None
 #: ``time.monotonic()`` value of the last successful fetch.
 _jwks_fetched_at: float = 0.0
 
+#: ``time.monotonic()`` of the last unknown-kid force-refresh (cooldown).
+_jwks_last_forced_at: float = 0.0
+
 #: Lock guarding the fetch — lazily created so it binds to the running
 #: event loop (avoids cross-loop issues in tests).
 _jwks_lock: asyncio.Lock | None = None
@@ -94,11 +102,16 @@ def _get_lock() -> asyncio.Lock:
 
 
 def _reset_jwks_cache() -> None:
-    """Reset the module-level JWKS cache and lock (for tests)."""
-    global _jwks_cache, _jwks_fetched_at, _jwks_lock
+    """Reset the module-level JWKS cache and lock (for tests).
+
+    MUST be called before verifying tokens in a new event loop (the lazy
+    lock binds to the loop it was first used in).
+    """
+    global _jwks_cache, _jwks_fetched_at, _jwks_lock, _jwks_last_forced_at
     _jwks_cache = None
     _jwks_fetched_at = 0.0
     _jwks_lock = None
+    _jwks_last_forced_at = 0.0
 
 
 async def _fetch_jwks() -> dict[str, Any]:
@@ -163,6 +176,7 @@ async def verify_telegram_id_token(id_token: str) -> dict[str, Any]:
     :class:`TelegramJWKSUnavailableError` when the JWKS endpoint is
     unreachable (mapped to HTTP 503).
     """
+    global _jwks_last_forced_at
     settings = get_settings()
 
     # ── Parse the header to extract kid ──────────────────────────────────────
@@ -177,21 +191,16 @@ async def verify_telegram_id_token(id_token: str) -> dict[str, Any]:
         logger.warning("Telegram id_token missing kid in header")
         raise TelegramOIDCVerificationError("Missing kid in token header")
 
-    # ── Resolve the signing key from JWKS (force-refresh once on unknown kid) ──
-    try:
-        jwks = await _get_jwks()
-    except TelegramJWKSUnavailableError:
-        raise
-
+    # ── Resolve the signing key from JWKS (force-refresh on unknown kid) ──
+    jwks = await _get_jwks()
     jwk = _find_key(jwks, kid)
 
-    if jwk is None:
-        # Unknown kid — force-refresh the JWKS exactly once and retry.
+    if jwk is None and time.monotonic() - _jwks_last_forced_at >= _FORCE_REFRESH_COOLDOWN:
+        # Unknown kid — force-refresh the JWKS (at most once per cooldown
+        # window, so the unauthenticated endpoint cannot hammer Telegram).
         logger.info("Unknown kid %r — force-refreshing JWKS", kid)
-        try:
-            jwks = await _get_jwks(force_refresh=True)
-        except TelegramJWKSUnavailableError:
-            raise
+        _jwks_last_forced_at = time.monotonic()
+        jwks = await _get_jwks(force_refresh=True)
         jwk = _find_key(jwks, kid)
 
     if jwk is None:
@@ -216,8 +225,10 @@ async def verify_telegram_id_token(id_token: str) -> dict[str, Any]:
             options={"require": ["exp", "iat"]},
         )
     except jwt.PyJWTError as exc:
+        # Detail stays server-side (recon-proof); the client gets a
+        # generic reason.
         logger.warning("Telegram id_token verification failed (kid=%s): %s", kid, exc)
-        raise TelegramOIDCVerificationError(str(exc)) from exc
+        raise TelegramOIDCVerificationError("Token verification failed") from exc
 
     # ── Require sub and/or id claim presence ──────────────────────────────────
     if not claims.get("sub") and not claims.get("id"):

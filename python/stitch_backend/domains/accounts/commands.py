@@ -36,6 +36,7 @@ from stitch_backend.domains.accounts.schemas import (
     UpdateAccountTokenRequest,
 )
 from stitch_backend.domains.accounts.service import AccountService
+from stitch_backend.domains.auth.permissions import ensure_permission
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +324,7 @@ async def cmd_validate_account(params: dict) -> bool:
 
 @register_command("bulk_delete_accounts")
 async def cmd_bulk_delete_accounts(params: dict) -> dict:
+    await ensure_permission(params, "action.bulk_delete")
     req = _parse(BulkDeleteRequest, params)
 
     async def _op(session):
@@ -335,6 +337,7 @@ async def cmd_bulk_delete_accounts(params: dict) -> dict:
 
 @register_command("bulk_export_accounts", readonly=True)
 async def cmd_bulk_export_accounts(params: dict) -> list:
+    await ensure_permission(params, "action.export_accounts")
     req = _parse(BulkExportRequest, params)
     owner_id = params.get("_caller_user_id")
 
@@ -538,6 +541,7 @@ async def cmd_claim_account(params: dict) -> Any:
     Sets ``owner_id = caller uid`` ONLY when the current owner_id is
     NULL.  Caller must be authenticated (uid not None) else 400.
     """
+    await ensure_permission(params, "action.claim")
     uid = params.get("_caller_user_id")
     if uid is None:
         raise ValueError("Authentication required to claim a shared account")

@@ -17,7 +17,7 @@ import asyncio
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -97,6 +97,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     caller_role: str | None = "admin"
     caller_user_id: int | None = None
     caller_username: str | None = None
+    caller_telegram_id: int | None = None
     from stitch_backend.config import get_settings
 
     if get_settings().auth_enabled:
@@ -106,14 +107,16 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         caller_role = user.role if user is not None else None
         caller_user_id = user.id if user is not None else None
         caller_username = user.username if user is not None else None
+        caller_telegram_id = user.telegram_id if user is not None else None
     if meta.admin_only and caller_role != "admin":
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Command '{name}' requires admin role",
         )
     body["_caller_role"] = caller_role
     body["_caller_user_id"] = caller_user_id
     body["_caller_username"] = caller_username
+    body["_caller_telegram_id"] = caller_telegram_id
 
     # Determine effective timeout from command metadata.
     #   None  → use DEFAULT_COMMAND_TIMEOUT

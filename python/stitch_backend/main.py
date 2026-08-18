@@ -99,6 +99,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Ensure tables exist (dev convenience; use Alembic in production)
     await create_all_tables()
 
+    # Seed default role-permission matrix (idempotent — also inserts
+    # missing keys after upgrades so new keys appear automatically).
+    try:
+        from stitch_backend.database import get_session_factory
+        from stitch_backend.domains.auth.permissions import seed_defaults
+
+        factory = get_session_factory()
+        async with factory() as _db:
+            await seed_defaults(_db)
+            await _db.commit()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Permission seed skipped: %s", _exc)
+
     # Optional app-level auth: when enabled and no users exist, bootstrap
     # the initial admin from STITCH_ADMIN_PASSWORD (never logged).  Safe
     # no-op when auth is off (desktop single-user mode).

@@ -18,6 +18,7 @@ from sqlalchemy import and_, or_, select
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.domains.auth.permissions import ensure_permission
 from stitch_backend.domains.totp.models import TotpKey
 
 logger = logging.getLogger(__name__)
@@ -224,6 +225,7 @@ async def cmd_claim_totp_key(params: dict) -> dict:
     Sets ``owner_id = caller uid`` ONLY when the current owner_id is
     NULL.  Caller must be authenticated (uid not None) else 400.
     """
+    await ensure_permission(params, "action.claim")
     uid = _caller_uid(params)
     if uid is None:
         raise ValueError("Authentication required to claim a shared key")

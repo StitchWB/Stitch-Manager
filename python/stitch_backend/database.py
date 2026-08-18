@@ -292,28 +292,38 @@ def _add_missing_columns(sync_conn: Any) -> None:
                     table.name, column.name, exc,
                 )
 
-        # create_all skips existing tables entirely, so indexes declared on
-        # newly added columns (e.g. partial UNIQUE indexes — SQLite cannot
-        # ADD COLUMN with a UNIQUE constraint) never land on migrated DBs.
-        # Create any missing index that references a just-added column.
-        if newly_added:
-            existing_indexes = {i["name"] for i in inspector.get_indexes(table.name)}
-            for index in table.indexes:
-                if index.name in existing_indexes:
-                    continue
-                if not any(c.name in newly_added for c in index.columns):
-                    continue
-                cols = ", ".join(f'"{c.name}"' for c in index.columns)
-                unique = "UNIQUE " if index.unique else ""
-                where = ""
-                sqlite_where = index.dialect_options["sqlite"]["where"]
-                if sqlite_where is not None:
-                    where = f" WHERE {getattr(sqlite_where, 'text', str(sqlite_where))}"
+        # create_all skips existing tables entirely, so indexes declared in
+        # the ORM (e.g. partial UNIQUE indexes — SQLite cannot ADD COLUMN
+        # with a UNIQUE constraint) never land on migrated DBs.  Create any
+        # missing index whose columns all exist now; this also retries
+        # indexes whose creation failed on a PREVIOUS startup (the old
+        # ``if newly_added`` guard silently skipped them forever).
+        # IF NOT EXISTS keeps this idempotent.
+        db_columns_now = db_columns | newly_added
+        existing_indexes = {i["name"] for i in inspector.get_indexes(table.name)}
+        for index in table.indexes:
+            if index.name in existing_indexes:
+                continue
+            if not all(c.name in db_columns_now for c in index.columns):
+                continue
+            cols = ", ".join(f'"{c.name}"' for c in index.columns)
+            unique = "UNIQUE " if index.unique else ""
+            where = ""
+            sqlite_where = index.dialect_options["sqlite"].get("where")
+            if sqlite_where is not None:
+                where = f" WHERE {getattr(sqlite_where, 'text', str(sqlite_where))}"
+            try:
                 sync_conn.exec_driver_sql(
                     f'CREATE {unique}INDEX IF NOT EXISTS "{index.name}" '
                     f'ON "{table.name}" ({cols}){where}'
                 )
                 logger.info("Migrated: added index %s on %s", index.name, table.name)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not create index %s on %s (%s). "
+                    "Manual migration may be required.",
+                    index.name, table.name, exc,
+                )
 
 
 def _constant_default_sql(column: Any) -> str | None:

@@ -178,8 +178,9 @@ class Settings(BaseSettings):
     )
 
     # ── Telegram OIDC login ────────────────────────────────────────────────────
-    # ``legacy`` (default) keeps the existing HMAC widget verification; ``oidc``
-    # switches to verifying Telegram-issued OIDC ``id_token``s (RS256 via JWKS).
+    # ``legacy`` (default) keeps the one-time bot-code flow
+    # (``POST /api/auth/login_telegram``); ``oidc`` switches to verifying
+    # Telegram-issued OIDC ``id_token``s (RS256 via JWKS).
     # The BotOwner flips this irreversibly after both products ship OIDC support.
     # Invalid values fail fast at startup (model_validator below).
     tg_auth_mode: str = Field(
