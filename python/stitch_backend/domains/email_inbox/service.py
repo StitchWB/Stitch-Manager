@@ -16,7 +16,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from stitch_backend.domains.email_inbox import imap_provider, mailtm_provider
@@ -293,22 +293,41 @@ def get_provider_catalog() -> list[dict[str, Any]]:
 
 # ── Profile CRUD ──────────────────────────────────────────────────────────────
 
-async def list_profiles(db: AsyncSession) -> list[dict[str, Any]]:
-    result = await db.execute(
-        select(EmailInboxProfile).order_by(EmailInboxProfile.updated_at.desc())
-    )
+async def list_profiles(
+    db: AsyncSession, owner_id: int | None = None,
+) -> list[dict[str, Any]]:
+    # Legacy shared rows (owner_id IS NULL) are visible to every caller,
+    # including desktop (owner_id=None). Owned rows are visible only to
+    # their owner.
+    stmt = select(EmailInboxProfile).where(
+        or_(
+            EmailInboxProfile.owner_id.is_(None),
+            EmailInboxProfile.owner_id == owner_id,
+        )
+    ).order_by(EmailInboxProfile.updated_at.desc())
+    result = await db.execute(stmt)
     return [_profile_to_dict(r) for r in result.scalars().all()]
 
 
-async def get_profile(db: AsyncSession, profile_id: str) -> dict[str, Any] | None:
+async def get_profile(
+    db: AsyncSession, profile_id: str, owner_id: int | None = None,
+) -> dict[str, Any] | None:
     result = await db.execute(
-        select(EmailInboxProfile).where(EmailInboxProfile.id == profile_id)
+        select(EmailInboxProfile).where(
+            EmailInboxProfile.id == profile_id,
+            or_(
+                EmailInboxProfile.owner_id.is_(None),
+                EmailInboxProfile.owner_id == owner_id,
+            ),
+        )
     )
     row = result.scalar_one_or_none()
     return _profile_to_dict(row) if row else None
 
 
-async def upsert_profile(db: AsyncSession, input_data: dict[str, Any]) -> dict[str, Any]:
+async def upsert_profile(
+    db: AsyncSession, input_data: dict[str, Any], owner_id: int | None = None,
+) -> dict[str, Any]:
     pid = (input_data.get("id") or "").strip() or str(uuid.uuid4())
     ci = input_data.get("connectInput", input_data.get("connect_input", {}))
     provider = ci.get("provider", "imap")
@@ -317,10 +336,13 @@ async def upsert_profile(db: AsyncSession, input_data: dict[str, Any]) -> dict[s
     connect_json = json.dumps(ci, ensure_ascii=False)
     now = _now_sqlite()
 
+    # On conflict, preserve the existing owner_id (do not let a different
+    # caller hijack a shared/legacy row by re-upserting under their id).
+    # New rows get owner_id = caller's uid (None on desktop → NULL).
     stmt = sqlite_insert(EmailInboxProfile).values(
         id=pid, label=label, provider=provider,
         account_id=account_id, connect_input_json=connect_json,
-        created_at=now, updated_at=now,
+        owner_id=owner_id, created_at=now, updated_at=now,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=["id"],
@@ -332,20 +354,29 @@ async def upsert_profile(db: AsyncSession, input_data: dict[str, Any]) -> dict[s
     )
     await db.execute(stmt)
     await db.flush()
-    return (await get_profile(db, pid)) or {}
+    return (await get_profile(db, pid, owner_id)) or {}
 
 
-async def delete_profile(db: AsyncSession, profile_id: str) -> bool:
+async def delete_profile(
+    db: AsyncSession, profile_id: str, owner_id: int | None = None,
+) -> bool:
+    # UPDATE/DELETE allowed when owner_id == uid OR owner_id IS NULL
+    # (legacy shared stays editable as today).
     result = await db.execute(
-        text("DELETE FROM email_inbox_profiles WHERE id = :id"),
-        {"id": profile_id},
+        text(
+            "DELETE FROM email_inbox_profiles "
+            "WHERE id = :id AND (owner_id IS NULL OR owner_id = :uid)"
+        ),
+        {"id": profile_id, "uid": owner_id},
     )
     await db.flush()
     return int(cast("Any", result).rowcount or 0) > 0
 
 
-async def connect_profile(db: AsyncSession, profile_id: str) -> dict[str, Any]:
-    profile = await get_profile(db, profile_id)
+async def connect_profile(
+    db: AsyncSession, profile_id: str, owner_id: int | None = None,
+) -> dict[str, Any]:
+    profile = await get_profile(db, profile_id, owner_id)
     if not profile:
         raise RuntimeError(f"Profile not found: {profile_id}")
     ci = profile.get("connectInput", profile.get("connect_input", {}))

@@ -3,7 +3,7 @@
 Schema (migration ``019_email_inbox_profiles.sql``)::
 
     email_inbox_profiles:
-        id, label, provider, account_id, connect_input_json, created_at, updated_at
+        id, label, provider, account_id, connect_input_json, owner_id, created_at, updated_at
 
     email_inbox_sync_states:
         profile_id (FK→profiles), status, last_sync_at, last_error, cursor, updated_at
@@ -11,10 +11,11 @@ Schema (migration ``019_email_inbox_profiles.sql``)::
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
+from stitch_backend.security.fernet_at_rest import EncryptedText
 
 
 class EmailInboxProfile(Base):
@@ -26,7 +27,17 @@ class EmailInboxProfile(Base):
     label: Mapped[str] = mapped_column(Text, nullable=False)
     provider: Mapped[str] = mapped_column(String, nullable=False)
     account_id: Mapped[str] = mapped_column(String, nullable=False)
-    connect_input_json: Mapped[str] = mapped_column(Text, nullable=False)
+    # Encrypted at rest: legacy plaintext rows are tolerated on read
+    # (EncryptedText returns them as-is) and re-encrypted on the next
+    # startup via migrate_plaintext_to_encrypted in main.py lifespan.
+    connect_input_json: Mapped[str] = mapped_column(EncryptedText, nullable=False)
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="NULL = shared pool (legacy, visible to all callers)",
+    )
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 

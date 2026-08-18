@@ -1,8 +1,10 @@
-"""Proxy library service — CRUD for proxy entries stored as JSON in settings table.
+"""Proxy library service — CRUD for proxy entries stored as ORM rows.
 
-Mirrors the Rust ``config::proxy_library`` module.
-Entries are persisted as a single JSON blob under key ``proxy_library_v1``.
-Secrets (username/password) are stored in OS keyring when available.
+Each entry is a row in ``proxy_library_entries`` (see ``models.py``).
+Secrets (username/password) are stored as encrypted references — the
+keyring/XOR scheme is unchanged from the legacy JSON-blob era.
+A one-time migration imports the old ``proxy_library_v1`` blob as
+rows with ``owner_id = NULL`` (legacy shared pool).
 """
 
 from __future__ import annotations
@@ -14,11 +16,13 @@ import logging
 import re
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from sqlalchemy import text
+from sqlalchemy import func, or_, select, text
+
+from stitch_backend.domains.proxy_library.models import ProxyLibraryEntry
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +35,7 @@ KEYRING_REF_PREFIX = "kr:v1:"
 LEGACY_ENC_PREFIX = "enc:v1:"
 
 
-# ── Data classes ──────────────────────────────────────────────────────────────
+# ── Data classes (drafts / import results only) ──────────────────────────────
 
 
 @dataclass
@@ -44,27 +48,6 @@ class ProxyLibraryDraft:
     password: str | None = None
     enabled: bool = True
     notes: str | None = None
-
-
-@dataclass
-class ProxyLibraryEntry:
-    id: str
-    label: str
-    host: str
-    port: int
-    proxy_type: str
-    enabled: bool
-    created_at: str
-    updated_at: str
-    username: str | None = None
-    password: str | None = None
-    notes: str | None = None
-    last_test_at: str | None = None
-    last_test_ok: bool | None = None
-    last_test_latency_ms: int | None = None
-    last_test_error: str | None = None
-    last_test_ip: str | None = None
-    last_test_location: str | None = None
 
 
 @dataclass
@@ -98,9 +81,11 @@ def _trim_to_opt(value: str | None) -> str | None:
 
 
 def _stable_key(entry: ProxyLibraryEntry) -> str:
+    username = _load_secret(entry.username) if entry.username else None
+    password = _load_secret(entry.password) if entry.password else None
     return (
         f"{entry.proxy_type}|{entry.host.lower()}|{entry.port}"
-        f"|{entry.username or ''}|{entry.password or ''}"
+        f"|{username or ''}|{password or ''}"
     )
 
 
@@ -111,47 +96,14 @@ def _draft_stable_key(draft: ProxyLibraryDraft) -> str:
     )
 
 
-def _entry_to_dict(entry: ProxyLibraryEntry) -> dict[str, Any]:
-    d = asdict(entry)
-    # camelCase for frontend
-    result: dict[str, Any] = {}
-    for k, v in d.items():
-        if v is None and k in (
-            "username", "password", "notes", "last_test_at", "last_test_ok",
-            "last_test_latency_ms", "last_test_error", "last_test_ip", "last_test_location",
-        ):
-            continue
-        # Convert snake_case to camelCase
-        parts = k.split("_")
-        camel = parts[0] + "".join(p.capitalize() for p in parts[1:])
-        result[camel] = v
-    return result
-
-
 def _entry_from_dict(d: dict[str, Any]) -> ProxyLibraryEntry:
-    """Deserialize a camelCase dict into a ProxyLibraryEntry."""
+    """Deserialize a camelCase dict (from legacy blob) into an ORM instance."""
     snake: dict[str, Any] = {}
     for k, v in d.items():
         # camelCase → snake_case
         s = re.sub(r"(?<!^)(?=[A-Z])", "_", k).lower()
         snake[s] = v
     return ProxyLibraryEntry(**snake)
-
-
-def _entry_to_storable(entry: ProxyLibraryEntry) -> ProxyLibraryEntry:
-    """Encrypt secrets before persisting."""
-    out = ProxyLibraryEntry(**asdict(entry))
-    out.username = _store_secret(entry.id, "username", entry.username)
-    out.password = _store_secret(entry.id, "password", entry.password)
-    return out
-
-
-def _entry_from_storable(entry: ProxyLibraryEntry) -> ProxyLibraryEntry:
-    """Decrypt secrets after loading."""
-    out = ProxyLibraryEntry(**asdict(entry))
-    out.username = _load_secret(entry.username)
-    out.password = _load_secret(entry.password)
-    return out
 
 
 # ── Secret storage (keyring + legacy XOR encryption) ──────────────────────────
@@ -254,43 +206,59 @@ def _keyring_delete(account: str) -> None:
 # ── DB load / save ────────────────────────────────────────────────────────────
 
 
-async def load_proxy_library(db: AsyncSession) -> list[ProxyLibraryEntry]:
-    """Load all proxy entries from the settings table."""
+async def load_proxy_library(
+    db: AsyncSession, owner_id: int | None = None
+) -> list[ProxyLibraryEntry]:
+    """Load proxy entries visible to *owner_id* (NULL shared pool + own rows).
+
+    On first call when the table is completely empty, imports the legacy
+    ``proxy_library_v1`` JSON blob as rows with ``owner_id = NULL``.
+    The blob is left in place as a backup (not deleted).
+    """
+    count = (await db.execute(
+        select(func.count()).select_from(ProxyLibraryEntry)
+    )).scalar() or 0
+
+    if count == 0:
+        await _migrate_legacy_blob(db)
+
+    result = await db.execute(
+        select(ProxyLibraryEntry).where(
+            or_(
+                ProxyLibraryEntry.owner_id.is_(None),
+                ProxyLibraryEntry.owner_id == owner_id,
+            )
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def _migrate_legacy_blob(db: AsyncSession) -> None:
+    """Import the legacy JSON blob as table rows (owner_id=NULL). No-op if blob absent."""
     row = (await db.execute(
         text("SELECT value FROM settings WHERE key = :key"),
         {"key": SETTINGS_KEY},
     )).scalar_one_or_none()
 
     if not row or not row.strip():
-        return []
+        return
 
     try:
         raw_list: list[dict[str, Any]] = json.loads(row)
     except (json.JSONDecodeError, TypeError):
         logger.error("Failed to parse proxy library JSON")
-        return []
+        return
 
-    entries = []
     for d in raw_list:
         try:
             entry = _entry_from_dict(d)
-            decrypted = _entry_from_storable(entry)
-            entries.append(decrypted)
+            entry.owner_id = None  # legacy shared
+            db.add(entry)
         except Exception as exc:
             logger.warning("Skipping invalid proxy entry: %s", exc)
 
-    return entries
-
-
-async def save_proxy_library(db: AsyncSession, items: list[ProxyLibraryEntry]) -> None:
-    """Persist proxy entries as JSON in the settings table."""
-    encrypted = [_entry_to_dict(_entry_to_storable(e)) for e in items]
-    blob = json.dumps(encrypted, ensure_ascii=False)
-
-    await db.execute(
-        text("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (:k, :v, datetime('now'))"),
-        {"k": SETTINGS_KEY, "v": blob},
-    )
+    await db.flush()
+    logger.info("Migrated %d proxy entries from legacy blob", len(raw_list))
 
 
 # ── Entry construction ────────────────────────────────────────────────────────
@@ -398,10 +366,12 @@ def draft_to_proxy_url(draft: ProxyLibraryDraft) -> str:
 
 def entry_to_proxy_url(entry: ProxyLibraryEntry) -> str:
     auth = ""
-    if entry.username:
-        auth = entry.username
-        if entry.password:
-            auth += f":{entry.password}"
+    username = _load_secret(entry.username) if entry.username else None
+    password = _load_secret(entry.password) if entry.password else None
+    if username:
+        auth = username
+        if password:
+            auth += f":{password}"
         auth += "@"
     return f"{entry.proxy_type}://{auth}{entry.host}:{entry.port}"
 

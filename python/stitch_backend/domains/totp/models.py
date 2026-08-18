@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
@@ -28,6 +28,13 @@ class TotpKey(Base):
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, comment="UUID"
+    )
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id"),
+        nullable=True,
+        index=True,
+        comment="NULL = legacy shared (editable by anyone)",
     )
     label: Mapped[str] = mapped_column(
         String, nullable=False, comment="User-friendly label, e.g. 'My Kiro account'"

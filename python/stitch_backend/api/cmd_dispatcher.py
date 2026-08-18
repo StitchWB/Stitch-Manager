@@ -90,8 +90,13 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     # can authorize without re-resolving the session.  Auth disabled
     # (single-trusted-user desktop) → caller is treated as admin; a guest
     # session (auth on, no user) resolves to None (below every tier).
+    # ``_caller_user_id`` / ``_caller_username`` are also injected so
+    # per-owner handlers (proxy_library, totp) can scope reads/writes
+    # without re-resolving the session.  Auth disabled → both are None.
     meta = get_command_meta(name)
     caller_role: str | None = "admin"
+    caller_user_id: int | None = None
+    caller_username: str | None = None
     from stitch_backend.config import get_settings
 
     if get_settings().auth_enabled:
@@ -99,12 +104,16 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
 
         user, _raw = await _current_user_optional(request)
         caller_role = user.role if user is not None else None
+        caller_user_id = user.id if user is not None else None
+        caller_username = user.username if user is not None else None
     if meta.admin_only and caller_role != "admin":
         raise HTTPException(
             status_code=403,
             detail=f"Command '{name}' requires admin role",
         )
     body["_caller_role"] = caller_role
+    body["_caller_user_id"] = caller_user_id
+    body["_caller_username"] = caller_username
 
     # Determine effective timeout from command metadata.
     #   None  → use DEFAULT_COMMAND_TIMEOUT

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
@@ -41,6 +42,10 @@ logger = logging.getLogger(__name__)
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
+def _now_iso_str() -> str:
+    return datetime.now(UTC).isoformat()
+
+
 def _parse(model_cls, params: dict):
     """Instantiate a Pydantic model, tolerating camelCase *and* snake_case."""
     return model_cls.model_validate(params)
@@ -53,6 +58,7 @@ def _parse(model_cls, params: dict):
 @register_command("list_accounts", readonly=True)
 async def cmd_list_accounts(params: dict) -> list:
     req = _parse(ListAccountsRequest, params)
+    owner_id = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
@@ -61,6 +67,7 @@ async def cmd_list_accounts(params: dict) -> list:
             provider_type=req.provider_type,
             provider_subtype=req.provider_subtype,
             show_archived=req.show_archived,
+            owner_id=owner_id,
         )
 
     return await run_in_read_session(_op)
@@ -75,10 +82,11 @@ async def cmd_get_accounts(params: dict) -> list:
 @register_command("add_account")
 async def cmd_add_account(params: dict) -> Any:
     req = _parse(AddAccountRequest, params)
+    owner_id = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.add_account(req)
+        return await svc.add_account(req, owner_id=owner_id)
 
     return await run_in_session(_op)
 
@@ -327,10 +335,11 @@ async def cmd_bulk_delete_accounts(params: dict) -> dict:
 @register_command("bulk_export_accounts", readonly=True)
 async def cmd_bulk_export_accounts(params: dict) -> list:
     req = _parse(BulkExportRequest, params)
+    owner_id = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.bulk_export(req.provider, req.ids)
+        return await svc.bulk_export(req.provider, req.ids, owner_id=owner_id)
 
     return await run_in_read_session(_op)
 
@@ -420,6 +429,7 @@ async def cmd_import_accounts_payload(params: dict) -> dict:
         return {"imported": 0, "skipped": 0, "errors": [f"Invalid JSON: {e}"]}
 
     accounts = payload if isinstance(payload, list) else payload.get("accounts", [])
+    owner_id = params.get("_caller_user_id")
 
     async def _op(session):
         imported = 0
@@ -438,16 +448,26 @@ async def cmd_import_accounts_payload(params: dict) -> dict:
                 if existing.fetchone():
                     skipped += 1
                     continue
+                import uuid as _uuid
+                tags_val = acc.get("tags")
                 await session.execute(sql_text(
-                    "INSERT INTO accounts (provider, email, token, status, tags, notes)"
-                    " VALUES (:p, :e, :t, :s, :tags, :notes)"
+                    "INSERT INTO accounts "
+                    "(id, provider, email, token, status, tags, notes, owner_id, "
+                    " use_count, success_rate, quota_used, quota_limit, "
+                    " login_count, error_count, ref_used_count, ref_max_count, "
+                    " created_at) "
+                    "VALUES (:id, :p, :e, :t, :s, :tags, :notes, :owner_id, "
+                    " 0, 1.0, 0, 0, 0, 0, 0, 40, :created_at)"
                 ), {
+                    "id": str(_uuid.uuid4()),
                     "p": provider,
                     "e": email,
                     "t": acc.get("token", ""),
                     "s": acc.get("status", "active"),
-                    "tags": acc.get("tags", ""),
+                    "tags": tags_val if tags_val else None,
                     "notes": acc.get("notes", ""),
+                    "owner_id": owner_id,
+                    "created_at": _now_iso_str(),
                 })
                 imported += 1
             except Exception:

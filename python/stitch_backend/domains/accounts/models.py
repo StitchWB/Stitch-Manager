@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
@@ -146,6 +146,15 @@ class Account(Base):
     )
     registration_source: Mapped[str | None] = mapped_column(
         String, comment="manual | auto | import"
+    )
+
+    # ═══════ Owner (per-user isolation) ═════════════════════════════════════
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="NULL = shared pool (legacy, visible to all callers)",
     )
 
     # ═══════ Quota ═════════════════════════════════════════════════════════

@@ -117,9 +117,10 @@ async def cmd_get_provider_catalog(params: dict) -> list:
 async def cmd_list_profiles(params: dict) -> list:
     """List saved inbox profiles."""
     from stitch_backend.domains.email_inbox import service
+    owner_id = params.get("_caller_user_id")
 
     async def _op(db):
-        return await service.list_profiles(db)
+        return await service.list_profiles(db, owner_id=owner_id)
 
     return await run_in_read_session(_op)
 
@@ -129,9 +130,10 @@ async def cmd_get_profile(params: dict) -> dict | None:
     """Get a profile by ID."""
     from stitch_backend.domains.email_inbox import service
     profile_id = params.get("profileId", params.get("profile_id", ""))
+    owner_id = params.get("_caller_user_id")
 
     async def _op(db):
-        return await service.get_profile(db, profile_id)
+        return await service.get_profile(db, profile_id, owner_id=owner_id)
 
     return await run_in_read_session(_op)
 
@@ -141,9 +143,10 @@ async def cmd_upsert_profile(params: dict) -> dict:
     """Create or update an inbox profile."""
     from stitch_backend.domains.email_inbox import service
     input_data = params.get("input", params)
+    owner_id = params.get("_caller_user_id")
 
     async def _op(db):
-        return await service.upsert_profile(db, input_data)
+        return await service.upsert_profile(db, input_data, owner_id=owner_id)
 
     return await run_in_session(_op)
 
@@ -153,9 +156,10 @@ async def cmd_delete_profile(params: dict) -> bool:
     """Delete an inbox profile."""
     from stitch_backend.domains.email_inbox import service
     profile_id = params.get("profileId", params.get("profile_id", ""))
+    owner_id = params.get("_caller_user_id")
 
     async def _op(db):
-        return await service.delete_profile(db, profile_id)
+        return await service.delete_profile(db, profile_id, owner_id=owner_id)
 
     return await run_in_session(_op)
 
@@ -165,9 +169,10 @@ async def cmd_connect_profile(params: dict) -> dict:
     """Connect using a saved profile."""
     from stitch_backend.domains.email_inbox import service
     profile_id = params.get("profileId", params.get("profile_id", ""))
+    owner_id = params.get("_caller_user_id")
 
     async def _op(db):
-        return await service.connect_profile(db, profile_id)
+        return await service.connect_profile(db, profile_id, owner_id=owner_id)
 
     return await run_in_read_session(_op)
 
