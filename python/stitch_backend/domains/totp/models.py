@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
+from stitch_backend.security.fernet_at_rest import EncryptedText
 
 
 def _utcnow() -> datetime:
@@ -40,7 +41,7 @@ class TotpKey(Base):
         String, nullable=False, comment="User-friendly label, e.g. 'My Kiro account'"
     )
     secret: Mapped[str] = mapped_column(
-        Text, nullable=False, comment="Base32-encoded TOTP secret"
+        EncryptedText, nullable=False, comment="Base32-encoded TOTP secret"
     )
     issuer: Mapped[str | None] = mapped_column(
         String, nullable=True, comment="Issuer name, e.g. 'Kiro', 'GitHub'"
