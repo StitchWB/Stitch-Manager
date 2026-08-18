@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.domains.auth.permissions import ensure_permission
 
 # ── Query operations ─────────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ async def cmd_get_logs(params: dict) -> dict:
     Params: ``filter`` (LogFilter dict)
     Returns: ``LogQueryResult`` {logs, total, hasMore}
     """
+    await ensure_permission(params, "section.logs")
     from stitch_backend.domains.logging.service import LoggingService
 
     filter_ = params.get("filter")

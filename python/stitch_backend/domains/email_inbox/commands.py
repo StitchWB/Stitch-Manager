@@ -11,6 +11,7 @@ import asyncio
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.domains.auth.permissions import ensure_permission
 
 # ── Session commands (8) ──────────────────────────────────────────────────────
 
@@ -217,6 +218,7 @@ async def cmd_claim_email_inbox_profile(params: dict) -> dict:
     Sets ``owner_id = caller uid`` ONLY when the current owner_id is
     NULL.  Caller must be authenticated (uid not None) else 400.
     """
+    await ensure_permission(params, "action.claim")
     from sqlalchemy import select as sa_select
     from stitch_backend.domains.email_inbox.models import EmailInboxProfile
 

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.domains.auth.permissions import ensure_permission
 from stitch_backend.domains.settings.service import SettingsService
 
 
 @register_command("get_settings", readonly=True)
 async def cmd_get_settings(params: dict) -> dict:
+    await ensure_permission(params, "section.settings")
     owner_id = params.get("_caller_user_id")
 
     async def _op(session):
@@ -20,6 +22,7 @@ async def cmd_get_settings(params: dict) -> dict:
 
 @register_command("update_settings")
 async def cmd_update_settings(params: dict) -> dict:
+    await ensure_permission(params, "section.settings")
     settings = params.get("settings", params)
     owner_id = params.get("_caller_user_id")
 
