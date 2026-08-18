@@ -149,6 +149,14 @@ async def publish_package(
         data["package_signature"] = manifest.signature
     if variant_index is not None:
         data["variant_index"] = str(variant_index)
+    # Forward description/author from plugin.json extras so the server can
+    # store them on the Plugin row and serve them in the marketplace manifest.
+    description = manifest.extras.get("description")
+    if isinstance(description, str) and description:
+        data["description"] = description
+    author = manifest.extras.get("author")
+    if isinstance(author, str) and author:
+        data["author"] = author
     headers = {"X-Admin-Key": admin_key}
 
     own_client = client is None
