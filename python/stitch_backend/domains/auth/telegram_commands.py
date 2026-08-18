@@ -92,15 +92,16 @@ async def ensure_oidc_user(
     The authoritative binding is the ``telegram_id`` column (TG handles
     change; the numeric id does not), so each Telegram account keeps exactly
     one Stitch user row and the Users page shows who is who.  The username
-    is the TG handle (*preferred_username*) when free — so the name is
-    visible — with a deterministic ``tg_<id>`` fallback.
+    is the TG handle (*preferred_username*, capped for defense-in-depth)
+    when free — so the name is visible — with a deterministic ``tg_<id>``
+    fallback.
 
-    Rows created before the column existed (username ``tg_<id>`` or the
-    handle) are ADOPTED: the first OIDC login stamps ``telegram_id`` onto
-    them instead of creating a duplicate.  A pre-existing row whose name
-    matches the handle but has no ``telegram_id`` (e.g. an admin-created
-    password user) is linked the same way — account linking is intentional;
-    user creation is admin-only, so this is not an attacker vector.
+    Rows created before the column existed (username ``tg_<id>``) are
+    ADOPTED: the first OIDC login stamps ``telegram_id`` onto them instead
+    of creating a duplicate.  Handle-named rows are NOT adopted: a password
+    row whose name happens to equal a TG handle must not be claimable via
+    OIDC (privilege-escalation vector flagged in security review — TG
+    handles are reusable and guessable).
 
     The password is a random 32-byte hex string — login is via OIDC
     ``id_token``, not password.  The FIRST user ever created gets role
@@ -112,25 +113,27 @@ async def ensure_oidc_user(
         return user
 
     fallback = f"tg_{tg_id}"
-    handle = (preferred_username or "").strip()
+    handle = (preferred_username or "").strip()[:64]
 
-    # Adopt pre-column rows (stable continuity across the migration).
-    for candidate in ((fallback, handle) if handle else (fallback,)):
-        user = await auth_service.get_user_by_username(db, candidate)
-        if user is not None:
-            if user.telegram_id is None:
-                user.telegram_id = tg_id
-                await db.flush()
-            return user
+    # Adopt pre-column tg_<id> rows (stable continuity across migration).
+    user = await auth_service.get_user_by_username(db, fallback)
+    if user is not None:
+        if user.telegram_id is None:
+            user.telegram_id = tg_id
+            await db.flush()
+        return user
 
     random_pw = secrets.token_hex(32)
-    role = "admin" if await auth_service.count_users(db) == 0 else _TELEGRAM_ROLE
     username = fallback
     if handle and await auth_service.get_user_by_username(db, handle) is None:
         username = handle
     try:
         return await auth_service.create_user(
-            db, username=username, password=random_pw, role=role, telegram_id=tg_id
+            db,
+            username=username,
+            password=random_pw,
+            role=await _bootstrap_role(db),
+            telegram_id=tg_id,
         )
     except StitchError:
         # Handle raced (taken between the check and the insert) — the
@@ -140,8 +143,21 @@ async def ensure_oidc_user(
         if user is not None:
             return user
         return await auth_service.create_user(
-            db, username=fallback, password=random_pw, role=role, telegram_id=tg_id
+            db,
+            username=fallback,
+            password=random_pw,
+            role=await _bootstrap_role(db),
+            telegram_id=tg_id,
         )
+
+
+async def _bootstrap_role(db: AsyncSession) -> str:
+    """``admin`` for the first user ever (bootstrap), else ``user``.
+
+    Computed at INSERT time (not before the adoption checks) so the
+    bootstrap window is as small as possible.
+    """
+    return "admin" if await auth_service.count_users(db) == 0 else _TELEGRAM_ROLE
 
 
 async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, bool, str | None]:
