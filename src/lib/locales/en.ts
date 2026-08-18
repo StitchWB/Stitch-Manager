@@ -4275,5 +4275,6 @@ addMailboxFromSheets: "Import from Google Sheets",
     loadError: "Failed to load marketplace",
     versionLabel: "Version",
     installedVersionLabel: "Installed",
+    desktopOnly: "Available in the desktop app",
   },
 };

@@ -20,6 +20,7 @@ import { CommandPalette } from '@/components/ui/CommandPalette';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
 import { AdminRoute } from './components/auth/AdminRoute';
 import { safeInvoke } from './lib/backend';
+import { isDesktopApp } from '@/lib/backend/core/url';
 import type { Account, ProxyStatus, ScheduledTask, SettingsData } from './types/generated';
 import type { TotpKey } from './lib/backend/modules/totp';
 import type { RegistrationJob, RegistrationStatus } from './types/ui';
@@ -498,7 +499,7 @@ function App() {
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
-            <Route path="/patcher" element={<Patcher />} />
+            <Route path="/patcher" element={isDesktopApp() ? <Patcher /> : <Navigate to="/" replace />} />
             <Route path="/scheduler" element={<Scheduler />} />
             <Route path="/automation" element={<Automation />} />
             <Route path="/automation/:tab" element={<Automation />} />

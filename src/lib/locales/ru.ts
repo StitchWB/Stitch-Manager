@@ -4271,5 +4271,6 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     loadError: "Не удалось загрузить маркетплейс",
     versionLabel: "Версия",
     installedVersionLabel: "Установлено",
+    desktopOnly: "Доступно в десктоп-приложении",
   },
 };

@@ -39,3 +39,17 @@ export function getWsUrl(): string {
   const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
   return `${wsProtocol}//${host}/api/events`;
 }
+
+const DESKTOP_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
+
+/**
+ * Returns true when running inside the desktop app — either the pywebview
+ * file:// load or the Vite dev server on localhost/127.0.0.1. Returns false
+ * on the public web app (e.g. https://stitch.whitebite.ru). Used to gate
+ * desktop-only features (IDE patcher, marketplace install/uninstall).
+ */
+export function isDesktopApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const { protocol, hostname } = window.location;
+  return protocol === FILE_PROTOCOL || DESKTOP_HOSTNAMES.has(hostname);
+}
