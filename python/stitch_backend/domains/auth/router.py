@@ -505,6 +505,55 @@ async def create_user(body: CreateUserRequest) -> UserPublic:
     return _user_public(user)
 
 
+class TelegramLoginRequest(BaseModel):
+    """Body for POST /api/auth/login_telegram."""
+
+    code: str
+
+
+@router.post("/login_telegram")
+async def login_telegram(
+    body: TelegramLoginRequest,
+    request: Request,
+    response: Response,
+) -> dict:
+    """Exchange a one-time Telegram-bot code for a session cookie.
+
+    Public (listed in ``PUBLIC_PATHS``) — the one-time code IS the
+    credential.  Unlike the dispatcher command variant, this route sets
+    the HttpOnly session cookie so the login survives page reloads.
+    """
+    from stitch_backend.domains.auth.telegram_commands import (
+        _map_activation_error,
+        exchange_telegram_code,
+    )
+
+    code = body.code.strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Code is required")
+    try:
+        user, _entitlements, raw_token, expires_at = await exchange_telegram_code(code)
+    except Exception as exc:  # noqa: BLE001 — friendly 401 like /login
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_map_activation_error(exc),
+        ) from exc
+
+    secure = request.url.scheme == "https" or request.headers.get(
+        "x-forwarded-proto", ""
+    ).lower() == "https"
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=raw_token,
+        expires=expires_at,
+        path="/",
+        httponly=True,
+        samesite="strict",
+        secure=secure,
+    )
+    return {"success": True, "user": _user_public(user).model_dump()}
+
+
 class UpdateRoleRequest(BaseModel):
     """Body for PUT /api/auth/users/{user_id}/role."""
 

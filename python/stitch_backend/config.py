@@ -126,6 +126,13 @@ class Settings(BaseSettings):
     # VDS instance only (vds-only on the radar side). Falls back to
     # airadadar_api_url when empty.
     airadar_keys_url: str = ""
+    # Shared secret with AiApiRadar (same value as AIRADAR_STITCH_SECRET there):
+    # mint short-lived HS256 role assertions so Stitch-authenticated VIP+ users
+    # read found keys without a second login. Empty → AIRADAR_ADMIN_TOKEN.
+    radar_shared_secret: str = ""
+    # Minimum role allowed to read found keys
+    # (ladder: user < vip < premium < elite < admin).
+    radar_min_role: str = "vip"
 
     # ── Email / IMAP ──────────────────────────────────────────────────────────
     imap_host: str | None = None
