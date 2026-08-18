@@ -1819,18 +1819,22 @@ export interface Translations {
     updated: string;
     error: string;
     key: {
-      'section.autoreg': string;
-      'section.ai_hub': string;
-      'section.automation': string;
-      'section.mail': string;
-      'section.tools': string;
-      'section.totp': string;
-      'section.scenarios': string;
-      'section.settings': string;
-      'section.logs': string;
-      'action.export_accounts': string;
-      'action.bulk_delete': string;
-      'action.claim': string;
+      section: {
+        autoreg: string;
+        ai_hub: string;
+        automation: string;
+        mail: string;
+        tools: string;
+        totp: string;
+        scenarios: string;
+        settings: string;
+        logs: string;
+      };
+      action: {
+        export_accounts: string;
+        bulk_delete: string;
+        claim: string;
+      };
     };
   };
   monitoring: {
