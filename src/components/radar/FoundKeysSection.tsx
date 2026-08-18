@@ -11,16 +11,30 @@ import {
   type FoundKey,
 } from '@/lib/backend/modules/foundKeys';
 import { useAppStore } from '../../stores/app';
+import { useAuthStore } from '../../stores/auth';
+
+// Mirror of python/stitch_backend/domains/auth/roles.py ladder.
+const ROLE_LEVEL: Record<string, number> = {
+  user: 1, vip: 2, premium: 3, elite: 4, admin: 5,
+};
 
 /**
  * Collapsible "found keys" panel on the Radar page: masked keys discovered
  * by AiApiRadar's git_leaks collector. The full key is fetched on demand
  * (cache-bypassing) and copied straight to the clipboard — never rendered
- * or stored client-side.
+ * or stored client-side. VIP+ only when auth is enabled (backend enforces
+ * the same ladder; this is the UX mirror).
  */
 export function FoundKeysSection() {
   const language = useAppStore(s => s.language);
   void language; // force re-render on locale change (t() is not reactive)
+
+  const authEnabled = useAuthStore(s => s.enabled);
+  const authUser = useAuthStore(s => s.user);
+  const locked =
+    authEnabled &&
+    (!authUser || (ROLE_LEVEL[authUser.role] ?? 0) < ROLE_LEVEL.vip);
+  if (locked) return null;
 
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<FoundKey[]>([]);
