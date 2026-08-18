@@ -212,6 +212,52 @@ Track account health and usage:
 
 ---
 
+## 🌐 Web, Roles & Operations
+
+### Web version & authentication
+
+- Web app served from your own domain alongside the desktop client
+- Login by password or one-time Telegram code (bot `/login` command)
+- Guest mode gated by the `enforce_login` flag
+- First Telegram login from a bot-admin account is mirrored as web admin
+
+### Roles & tiers
+
+- Role ladder: `user` < `vip` < `premium` < `elite` < `admin`
+- Admin zone exposes Users, Codes and Monitoring pages plus the admin API
+- Roles are editable from the Users page
+- Scenarios declare a `min_role` tier; below-tier users see a lock and badge
+
+### Per-user data & encryption
+
+- Per-user scope: accounts, proxy library, TOTP secrets, mail inbox profiles, settings overrides, AI gateway, profiles and flows
+- Legacy rows remain shared for backward compatibility
+- Secrets encrypted at rest with Fernet; proxy credentials stored via OS keyring
+
+### Monitoring
+
+- `/monitoring` admin page surfaces server, web and external probes
+- Bot heartbeat and Telegram-proxy health tracked alongside
+- Bot emits a heartbeat every 30 seconds
+
+### Distribution & marketplace
+
+- Official plugins require activation through entitlements
+- Community plugins remain open
+- Marketplace access on web requires authentication
+
+### Ops scripts
+
+| Script                          | Purpose                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `scripts/deploy-vds.ps1`        | One-shot VDS deploy, key-based SSH, creds from `~/.secrets/ssh-vps-password` |
+| `scripts/start-bot.ps1`         | Start bot with `-Token` and `-Proxy` flags                                  |
+| `scripts/toggle-local-role.ps1` | Toggle local user role for testing                                           |
+| `scripts/proxy_autopilot.py`    | Refresh free-proxy list for the bot                                          |
+| `scripts/release-public.ps1`    | Local open-core export and publish                                           |
+
+---
+
 ## 📥 Installation
 
 ### Download
@@ -387,6 +433,52 @@ Machine ID — это уникальный идентификатор, испо�
 ✅ **Быстрые входы**: Переиспользование сессий устраняет повторный ввод учётных данных  
 ✅ **Лучшая организация**: Заметки, теги и фильтры помогают управлять большими коллекциями аккаунтов  
 ✅ **Сохранение данных**: Никогда не теряйте учётные данные регистрации или метаданные аккаунтов
+
+---
+
+## 🌐 Веб, роли и операции
+
+### Веб-версия и аутентификация
+
+- Веб-приложение на вашем домене рядом с десктоп-клиентом
+- Вход по паролю или одноразовому Telegram-коду (команда бота `/login`)
+- Гостевой режим управляется флагом `enforce_login`
+- Первый вход через Telegram от аккаунта бот-админа зеркалируется как веб-админ
+
+### Роли и уровни
+
+- Лестница ролей: `user` < `vip` < `premium` < `elite` < `admin`
+- Админ-зона открывает страницы Users, Codes и Monitoring плюс admin API
+- Роли редактируются на странице Users
+- Сценарии объявляют уровень `min_role`; ниже уровня видят замок и бейдж
+
+### Пользовательские данные и шифрование
+
+- Пер-пользовательский scope: аккаунты, библиотека прокси, TOTP-секреты, профили ящиков, переопределения настроек, AI-шлюз, профили и потоки
+- Устаревшие строки остаются общими для обратной совместимости
+- Секреты шифруются at rest через Fernet; учётные данные прокси хранятся через OS keyring
+
+### Мониторинг
+
+- Админ-страница `/monitoring` показывает серверные, веб и внешние пробы
+- Heartbeat бота и здоровье Telegram-прокси отслеживаются рядом
+- Бот отправляет heartbeat каждые 30 секунд
+
+### Дистрибуция и маркетплейс
+
+- Официальные плагины требуют активации через entitlements
+- Плагины сообщества остаются открытыми
+- Доступ к маркетплейсу на веб требует аутентификации
+
+### Скрипты операций
+
+| Скрипт                          | Назначение                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `scripts/deploy-vds.ps1`        | Одношотный деплой VDS, key-based SSH, учётные данные из `~/.secrets/ssh-vps-password` |
+| `scripts/start-bot.ps1`         | Запуск бота с флагами `-Token` и `-Proxy`                                   |
+| `scripts/toggle-local-role.ps1` | Переключение локальной роли пользователя для тестирования                   |
+| `scripts/proxy_autopilot.py`    | Обновление списка free-proxy для бота                                        |
+| `scripts/release-public.ps1`     | Локальный экспорт и публикация open-core                                    |
 
 ---
 
