@@ -91,7 +91,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     {
                         "id": plugin_id,
                         "name": plugin_id,
-                        "description": None,
+                        "description": entry.get("description"),
+                        "author": entry.get("author"),
                         "version": version,
                         "source": "official",
                         "entitled": entitled,
@@ -123,6 +124,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     "id": plugin_id,
                     "name": name,
                     "description": entry.get("description"),
+                    "author": entry.get("author"),
                     "version": version,
                     "source": "community",
                     "entitled": True,
