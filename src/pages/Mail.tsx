@@ -13,7 +13,7 @@ import {
 import type { AddMailboxAction } from '@/components/mail/MailSidebar';
 import type { MailboxProviderKind } from '@/lib/mail/providerPresets';
 import { detectMailboxProviderKind } from '@/lib/mail/providerPresets';
-import { emailInboxUpsertProfile } from '@/lib/backend/modules/emailInbox';
+import { emailInboxUpsertProfile, claimEmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 import { Button, Modal } from '@/components/ui';
 import { useMailRuntime } from '@/hooks/useMailRuntime';
 import { useMailStore } from '@/stores/mail';
@@ -401,6 +401,19 @@ export default function Mail() {
     accountParamConsumedFor.current = null;
   }, [searchParams, setQuery, setSearchParams]);
 
+  const handleClaimProfile = useCallback(
+    async (profileId: string) => {
+      try {
+        await claimEmailInboxProfile(profileId);
+        toast.success(t('ownership.claimed'));
+        await loadProfiles();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t('ownership.claim'));
+      }
+    },
+    [loadProfiles]
+  );
+
   const headerSubtitle = accountScope
     ? `${t('mail.headerScopedToAccount')}: ${accountScope.account.email}`
     : activeProfile
@@ -480,6 +493,7 @@ export default function Mail() {
               onEditProfile={handleEditProfile}
               onRenameProfile={runtime.renameProfile}
               onDeleteProfile={runtime.deleteProfile}
+              onClaimProfile={handleClaimProfile}
             />
 
             {/* Center: toolbar + message list */}

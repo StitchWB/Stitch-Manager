@@ -19,6 +19,8 @@ import { askConfirm } from '../components/ui/ConfirmDialogHost';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { TierBadge } from '@/components/ui/TierBadge';
 
 type NewUserRole = AuthUser['role'];
 
@@ -241,6 +243,9 @@ export default function Users() {
                       <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
                         {t('auth.users.colRole')}
                       </th>
+                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
+                        {t('users.tier')}
+                      </th>
                       <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24 text-right">
                         {t('auth.users.colActions')}
                       </th>
@@ -283,6 +288,17 @@ export default function Users() {
                               shellClassName="h-7 w-full"
                               options={ROLE_OPTIONS.map(opt => ({ value: opt.value, label: t(opt.labelKey) }))}
                             />
+                          </td>
+                          <td className="px-5 py-3">
+                            {u.tg_tier ? (
+                              <Tooltip content={t('users.tierSourceBot')} side="top">
+                                <span className="inline-flex">
+                                  <TierBadge tier={u.tg_tier} size="sm" />
+                                </span>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-slate-600 text-sm">—</span>
+                            )}
                           </td>
                           <td className="px-5 py-3 text-right">
                             <Button

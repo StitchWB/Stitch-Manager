@@ -26,6 +26,7 @@ export interface MarketplaceItem {
   installed: boolean;
   installed_version: string | null;
   can_download: boolean;
+  required_tier?: string;
 }
 
 export interface GetMarketplaceResponse {

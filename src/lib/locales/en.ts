@@ -1650,7 +1650,12 @@ export const en: Translations = {
       submit: "Sign in",
       back: "Back",
       errorGeneric: "Telegram login failed. Please try again.",
-      openBot: "Open the bot in Telegram"
+      openBot: "Open the bot in Telegram",
+      oidc: {
+        button: "Log in with Telegram",
+        orCode: "or",
+        errorGeneric: "Telegram login failed. Please try again."
+      }
     },
     login: {
       tgLink: "Login via Telegram"
@@ -1790,6 +1795,15 @@ export const en: Translations = {
     loading: "Loading codes...",
     retry: "Retry"
   },
+  ownership: {
+    mine: "mine",
+    shared: "shared",
+    claim: "Claim",
+    claimed: "Claimed successfully",
+    filterAll: "All",
+    filterMine: "Mine",
+    filterShared: "Shared"
+  },
   monitoring: {
     title: "Monitoring",
     subtitle: "Stitch services health",
@@ -1797,6 +1811,10 @@ export const en: Translations = {
     generatedAt: "Generated",
     loading: "Loading monitoring data...",
     noProxies: "No proxies configured",
+    alerts: "Alerts",
+    silence1h: "Silence 1h",
+    silenced: "Silenced until {time}",
+    noAlerts: "No active alerts",
     sections: {
       services: "Services",
       bot: "Bot",
@@ -3016,7 +3034,11 @@ addMailboxFromSheets: "Import from Google Sheets",
     toggleFavorite: "Favorite",
     update: "Update",
     viewCards: "Cards",
-    viewList: "List"
+    viewList: "List",
+    howToGetTier: "How to get the {tier} tier",
+    showLocked: "Show locked",
+    howToGetTierSubscribe: "Subscribe to channel(s) and log in again",
+    howToGetTierAskAdmin: "Ask an administrator to raise your role"
   },
   scheduler: {
     add: "Add",
@@ -4278,5 +4300,12 @@ addMailboxFromSheets: "Import from Google Sheets",
     desktopOnly: "Available in the desktop app",
     authRequiredTitle: "Authorized users only",
     authRequiredText: "Plugins are available to authorized users. Log in or use a one-time Telegram code.",
+  },
+  footer: {
+    tierHint: "Tier is raised by subscribing to channels or by an admin",
+  },
+  users: {
+    tier: "Tier",
+    tierSourceBot: "Synced by bot",
   },
 };

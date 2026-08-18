@@ -5,6 +5,17 @@
  * Telegram bot, receives a one-time code, and enters it here. On success the
  * store action re-runs init() so the gate closes.
  *
+ * When the backend reports `tg_auth_mode === 'oidc'` (via /api/auth/status),
+ * the official Telegram OIDC button is rendered ABOVE the code form. The
+ * button is injected by the `telegram-login.js` library — we only mount the
+ * host `<button class="tg-auth-button">` and call `Telegram.Login.auth()`
+ * programmatically on click (the library's auto-init reads data-client-id
+ * from the SCRIPT tag, which is wrong for an SPA).
+ *
+ * The one-time-code form stays available in BOTH modes as an independent
+ * fallback mechanism (the bot /login command always works, even on
+ * localhost where OIDC cannot run — HTTPS + trusted origin required).
+ *
  * Reachable from the WelcomeGate (optional mode, back → 'welcome') and from
  * the Login page tertiary link (required mode, back → 'login').
  */
@@ -16,11 +27,18 @@ import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
 import { STITCH_BOT_LOGIN_URL } from '@/lib/links';
 import { cn } from '../../lib/utils';
+import {
+  ensureTelegramLoginScript,
+  TG_OIDC_CLIENT_ID,
+  type TelegramAuthResult,
+} from '@/lib/telegramLogin';
 
 export default function TelegramLogin() {
   const loginTelegram = useAuthStore(state => state.loginTelegram);
+  const loginTelegramOidc = useAuthStore(state => state.loginTelegramOidc);
   const busy = useAuthStore(state => state.busy);
   const required = useAuthStore(state => state.required);
+  const tgAuthMode = useAuthStore(state => state.tgAuthMode);
   const setAuthView = useAuthStore(state => state.setAuthView);
   const language = useAppStore(state => state.language);
   void language; // re-render on language change
@@ -49,6 +67,56 @@ export default function TelegramLogin() {
           : t('auth.tg.errorGeneric');
       setLocalError(message);
     }
+  };
+
+  // ── OIDC popup flow ────────────────────────────────────────────────────
+  //
+  // NOTE for the nginx admin: the Telegram OAuth popup flow breaks if the
+  // login page is served with `Cross-Origin-Opener-Policy: same-origin`.
+  // COOP must be absent, or set to `same-origin-allow-popups`, on every
+  // route that renders this surface. Nothing in this repo currently sets
+  // COOP — keep it that way, or relax it explicitly in the nginx config
+  // for /login and /telegram paths.
+  const onOidcClick = async () => {
+    if (busy) return;
+    setLocalError(null);
+    try {
+      await ensureTelegramLoginScript();
+      const api = window.Telegram?.Login;
+      if (!api) {
+        setLocalError(t('auth.tg.oidc.errorGeneric'));
+        return;
+      }
+      api.auth(
+        { client_id: TG_OIDC_CLIENT_ID, scope: ['openid', 'profile'] },
+        (result: TelegramAuthResult) => handleOidcResult(result),
+      );
+    } catch {
+      setLocalError(t('auth.tg.oidc.errorGeneric'));
+    }
+  };
+
+  const handleOidcResult = (result: TelegramAuthResult) => {
+    // User closed the popup before completing — not an error, just abort.
+    if (result.error === 'popup_closed') return;
+    if (result.error) {
+      setLocalError(t('auth.tg.oidc.errorGeneric'));
+      return;
+    }
+    if (!result.id_token) {
+      setLocalError(t('auth.tg.oidc.errorGeneric'));
+      return;
+    }
+    // Fire-and-forget: the store sets `busy` while in flight and the
+    // component re-renders with the spinner. Errors are surfaced locally
+    // via the same channel as the code-form errors.
+    void loginTelegramOidc(result.id_token).catch(err => {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : t('auth.tg.oidc.errorGeneric');
+      setLocalError(message);
+    });
   };
 
   const errorMessage = localError;
@@ -102,6 +170,42 @@ export default function TelegramLogin() {
             <p className="text-center text-slate-400 text-sm leading-relaxed mb-4 px-2">
               {t('auth.tg.description')}
             </p>
+
+            {/* OIDC button — official Telegram element (rendered by the
+                library into the host <button class="tg-auth-button">).
+                Only mounted when the backend reports tg_auth_mode='oidc'.
+                The library injects its own CSS for .tg-auth-button (blue
+                pill, TG logo pseudo-element, 44px height) — do NOT override
+                its visual style; the wrapper only centers it. */}
+            {tgAuthMode === 'oidc' && (
+              <div className="flex justify-center mb-4" data-testid="tg-oidc-wrapper">
+                <button
+                  type="button"
+                  onClick={onOidcClick}
+                  disabled={busy}
+                  data-style="shine"
+                  className="tg-auth-button"
+                  data-testid="tg-auth-button"
+                >
+                  {busy ? t('auth.submitting') : t('auth.tg.oidc.button')}
+                </button>
+              </div>
+            )}
+
+            {/* Divider between OIDC button and the code form. The library
+                element is above; the code form is the independent fallback
+                below. Rendered in both modes (in oidc mode it separates the
+                two surfaces; in legacy mode it is hidden — the code form
+                stands alone). */}
+            {tgAuthMode === 'oidc' && (
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-px flex-1 bg-white/[0.06]" />
+                <span className="text-xs text-slate-500 uppercase tracking-wider">
+                  {t('auth.tg.oidc.orCode')}
+                </span>
+                <div className="h-px flex-1 bg-white/[0.06]" />
+              </div>
+            )}
 
             {/* Open-bot shortcut — jumps straight to the bot chat */}
             <a

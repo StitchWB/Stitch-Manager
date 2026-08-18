@@ -35,6 +35,7 @@ import { ButtonBase } from '@/components/ui/ButtonBase';
 import { IconButton } from '@/components/ui/IconButton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Badge } from '@/components/ui/Badge';
+import { TierBadge } from '@/components/ui/TierBadge';
 import { openUrlInBrowser } from '@/lib/backend/modules/aiProxy';
 import { isDesktopApp } from '@/lib/backend/core/url';
 import { MAIN_TELEGRAM_URL } from '@/lib/links';
@@ -279,36 +280,58 @@ export default function Sidebar() {
             'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
             sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2'
           )}>
-            {sidebarCollapsed ? (
-              <Tooltip content={`${authUser.username} • ${t(`auth.role.${authUser.role}`)} • #${String(authUser.id)}`} side="right">
-                <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
-                  <UserCircle className="w-4 h-4" />
-                </div>
-              </Tooltip>
-            ) : (
-              <>
-                <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
-                  <UserCircle className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                  <span className="text-xs font-medium text-slate-200 truncate">
-                    {authUser.username}
-                  </span>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Badge
-                      variant={authUser.role === 'admin' ? 'info' : 'default'}
-                      size="sm"
-                      className="shrink-0"
-                    >
-                      {t(`auth.role.${authUser.role}`)}
-                    </Badge>
-                    <span className="text-[10px] text-slate-500 truncate">
-                      #{String(authUser.id)}
-                    </span>
+            {(() => {
+              const showTier = authUser.tg_tier && authUser.tg_tier !== 'user';
+              const tierLine = showTier
+                ? ` · ${t(`auth.role.${authUser.tg_tier}`)} · ID ${String(authUser.id)}`
+                : ` · ID ${String(authUser.id)}`;
+              const tooltipContent = (
+                <>
+                  <div>{authUser.username} · {t(`auth.role.${authUser.role}`)}{tierLine}</div>
+                  {showTier && (
+                    <div className="text-slate-400 text-[11px] mt-0.5">{t('footer.tierHint')}</div>
+                  )}
+                </>
+              );
+              if (sidebarCollapsed) {
+                return (
+                  <Tooltip content={tooltipContent} side="right">
+                    <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                      <UserCircle className="w-4 h-4" />
+                    </div>
+                  </Tooltip>
+                );
+              }
+              return (
+                <Tooltip content={tooltipContent} side="top">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                      <UserCircle className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                      <span className="text-xs font-medium text-slate-200 truncate">
+                        {authUser.username}
+                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Badge
+                          variant={authUser.role === 'admin' ? 'info' : 'default'}
+                          size="sm"
+                          className="shrink-0"
+                        >
+                          {t(`auth.role.${authUser.role}`)}
+                        </Badge>
+                        {showTier && (
+                          <TierBadge tier={authUser.tg_tier} size="sm" className="shrink-0" />
+                        )}
+                        <span className="text-[10px] text-slate-500 truncate">
+                          #{String(authUser.id)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                </Tooltip>
+              );
+            })()}
             <div className="shrink-0">
               <Tooltip content={t('auth.logout')} side={sidebarCollapsed ? 'right' : 'top'}>
                 <IconButton

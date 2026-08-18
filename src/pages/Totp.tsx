@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderTree,
+  UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
@@ -21,11 +22,14 @@ import {
   EmptyState,
   Tooltip,
   ToolbarSearchField,
+  SegmentedControl,
+  OwnershipBadge,
 } from '@/components/ui';
 import { useTotpStore } from '../stores/totp';
 import { useAppStore } from '../stores/app';
 import { t } from '../lib/i18n';
 import type { TotpKey } from '@/lib/backend/modules/totp';
+import { claimTotpKey } from '@/lib/backend/modules/totp';
 import { TotpBadge } from '../components/totp/TotpBadge';
 import { isOtpauthUri, parseOtpauthUri } from '@/lib/otpauth';
 import { cn } from '../lib/utils';
@@ -98,6 +102,7 @@ export default function Totp() {
   const [sort, setSort] = useState<'newest' | 'alpha'>('newest');
   const [grouped, setGrouped] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared'>('all');
 
   useEffect(() => {
     void fetchKeys();
@@ -215,6 +220,11 @@ export default function Totp() {
   /* ── Filtered + sorted keys ── */
   const filteredSortedKeys = useMemo(() => {
     let result = keys;
+    if (ownershipFilter === 'mine') {
+      result = result.filter(k => k.mine);
+    } else if (ownershipFilter === 'shared') {
+      result = result.filter(k => k.shared && !k.mine);
+    }
     if (query.trim()) {
       const q = query.toLowerCase();
       result = result.filter(
@@ -229,7 +239,18 @@ export default function Totp() {
       result = [...result].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
     }
     return result;
-  }, [keys, query, sort]);
+  }, [keys, query, sort, ownershipFilter]);
+
+  /* ── Claim a shared key ── */
+  const handleClaim = useCallback(async (key: TotpKey) => {
+    try {
+      await claimTotpKey(key.id);
+      toast.success(t('ownership.claimed'));
+      await fetchKeys();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('ownership.claim'));
+    }
+  }, [fetchKeys]);
 
   /* ── Issuer autocomplete: user's own issuers first, then presets ── */
   const issuerSuggestions = useMemo(() => {
@@ -270,6 +291,7 @@ export default function Totp() {
       onCancelEdit={() => setEditId(null)}
       isDeleteArmed={armedDeleteId === key.id}
       onDelete={() => void handleDeleteClick(key)}
+      onClaim={() => void handleClaim(key)}
     />
   );
 
@@ -333,6 +355,18 @@ export default function Totp() {
           >
             <FolderTree size={14} />
           </IconButton>
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <SegmentedControl
+            size="sm"
+            value={ownershipFilter}
+            onChange={(v) => setOwnershipFilter(v as 'all' | 'mine' | 'shared')}
+            options={[
+              { value: 'all', label: t('ownership.filterAll') },
+              { value: 'mine', label: t('ownership.filterMine') },
+              { value: 'shared', label: t('ownership.filterShared') },
+            ]}
+          />
         </div>
       </div>
 
@@ -462,6 +496,7 @@ interface TotpKeyRowProps {
   onCancelEdit: () => void;
   isDeleteArmed: boolean;
   onDelete: () => void;
+  onClaim?: () => void;
 }
 
 function TotpKeyRow({
@@ -478,6 +513,7 @@ function TotpKeyRow({
   onCancelEdit,
   isDeleteArmed,
   onDelete,
+  onClaim,
 }: TotpKeyRowProps) {
   return (
     <div
@@ -537,6 +573,7 @@ function TotpKeyRow({
                 <Link2 size={12} className="text-indigo-400 shrink-0" />
               </Tooltip>
             )}
+            <OwnershipBadge mine={totpKey.mine} shared={totpKey.shared} />
           </div>
         )}
       </div>
@@ -547,6 +584,17 @@ function TotpKeyRow({
       {/* Actions */}
       {!isEditing && (
         <div className="flex items-center gap-1 shrink-0">
+          {totpKey.shared && !totpKey.mine && onClaim && (
+            <IconButton
+              onClick={onClaim}
+              variant="ghost"
+              size="sm"
+              tooltip={t('ownership.claim')}
+              className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-indigo-400 hover:text-indigo-300"
+            >
+              <UserPlus size={14} />
+            </IconButton>
+          )}
           <IconButton
             onClick={onStartEdit}
             variant="ghost"

@@ -20,6 +20,7 @@ export interface AuthUser {
   id: string | number;
   username: string;
   role: 'admin' | 'user' | 'vip' | 'premium' | 'elite';
+  tg_tier?: string | null;
 }
 
 export interface TelegramLoginResult {
@@ -45,6 +46,14 @@ export interface AuthStatus {
    * true when the backend omits the field (older backends).
    */
   enforce_login: boolean;
+  /**
+   * Which Telegram login surface the backend has wired up.
+   * - 'legacy': one-time-code flow via POST /api/auth/login_telegram (bot /login).
+   * - 'oidc':   Telegram OIDC popup flow via POST /api/auth/telegram-oidc.
+   * Defaults to 'legacy' when the backend omits the field (older backends);
+   * the frontend renders the OIDC button only when this is 'oidc'.
+   */
+  tg_auth_mode: 'legacy' | 'oidc';
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -74,7 +83,7 @@ export async function getAuthStatus(): Promise<AuthStatus> {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
-    if (!response.ok) return { enabled: false, has_users: false, required: false, enforce_login: true };
+    if (!response.ok) return { enabled: false, has_users: false, required: false, enforce_login: true, tg_auth_mode: 'legacy' };
     const data = (await parseJson(response)) as Partial<AuthStatus> | null;
     const enabled = Boolean(data?.enabled);
     const hasUsers = Boolean(data?.has_users);
@@ -86,9 +95,13 @@ export async function getAuthStatus(): Promise<AuthStatus> {
       typeof data?.required === 'boolean' ? data.required : enabled || hasUsers;
     const enforceLogin =
       typeof data?.enforce_login === 'boolean' ? data.enforce_login : true;
-    return { enabled, has_users: hasUsers, required, enforce_login: enforceLogin };
+    // Default to 'legacy' when the backend omits the field (older backends)
+    // so the existing one-time-code surface stays the working path.
+    const tgAuthMode =
+      data?.tg_auth_mode === 'oidc' ? 'oidc' : 'legacy';
+    return { enabled, has_users: hasUsers, required, enforce_login: enforceLogin, tg_auth_mode: tgAuthMode };
   } catch {
-    return { enabled: false, has_users: false, required: false, enforce_login: true };
+    return { enabled: false, has_users: false, required: false, enforce_login: true, tg_auth_mode: 'legacy' };
   }
 }
 
@@ -156,6 +169,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       id: data.id ?? data.username,
       username: data.username,
       role: data.role,
+      tg_tier: data.tg_tier ?? null,
     };
   } catch {
     return null;
@@ -217,6 +231,7 @@ export async function listUsers(): Promise<AuthUser[]> {
     id: u.id,
     username: u.username,
     role: u.role,
+    tg_tier: u.tg_tier ?? null,
   }));
 }
 
@@ -342,6 +357,38 @@ export async function loginTelegram(code: string): Promise<TelegramLoginResult> 
 
   if (!response.ok) {
     throw new Error(data?.detail ?? data?.error ?? 'Telegram login failed');
+  }
+  return (data ?? { success: false }) as TelegramLoginResult;
+}
+
+/**
+ * POST /api/auth/telegram-oidc — exchange a Telegram OIDC id_token (issued by
+ * oauth.telegram.org via the official telegram-login.js popup) for a session
+ * cookie.  Direct fetch like the other auth wrappers: a 401 on a bad token is
+ * expected and must NOT trip the safeInvoke session-expiry hook.  On success
+ * the backend sets the HttpOnly session cookie and the caller (auth store)
+ * re-runs init() so the gate closes.
+ *
+ * Backend contract (frozen):
+ *   200 → { success: true, user: {...}, entitlements: [] } + sets stitch_session
+ *   401 → { detail: ... }   (bad / malformed id_token)
+ *   403 → { detail: ... }   (backend in legacy mode, OIDC disabled)
+ *   503 → { detail: ... }   (JWKS temporarily unavailable)
+ */
+export async function loginTelegramOidc(idToken: string): Promise<TelegramLoginResult> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/telegram-oidc`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ id_token: idToken }),
+  });
+
+  const data = (await parseJson(response)) as
+    | (TelegramLoginResult & { detail?: string })
+    | null;
+
+  if (!response.ok) {
+    throw new Error(data?.detail ?? data?.error ?? 'Telegram OIDC login failed');
   }
   return (data ?? { success: false }) as TelegramLoginResult;
 }

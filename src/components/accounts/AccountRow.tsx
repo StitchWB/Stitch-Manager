@@ -1,4 +1,4 @@
-import { Play, MoreHorizontal, Key, Copy, Clock, StickyNote } from 'lucide-react';
+import { Play, MoreHorizontal, Key, Copy, Clock, StickyNote, UserPlus } from 'lucide-react';
 import {
   Badge,
   type BadgeProps,
@@ -10,6 +10,7 @@ import {
   TableRow,
   Tooltip,
   ProviderLogo,
+  OwnershipBadge,
 } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types/generated';
@@ -59,6 +60,7 @@ interface AccountRowProps {
   onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
   onCopyRefUrl?: (refUrl: string) => Promise<void>;
   onRefreshRefUrl?: (accountId: number) => Promise<void>;
+  onClaim?: (accountId: number) => Promise<void>;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
 }
 
@@ -94,6 +96,7 @@ export function AccountRow({
   onAuthorizeKiroAccount,
   onCopyRefUrl,
   onRefreshRefUrl,
+  onClaim,
   onRelationEdgeClick,
 }: AccountRowProps) {
   const data = useAccountRowData(account, relationHints, relationEdges);
@@ -162,6 +165,24 @@ export function AccountRow({
               {data.displayAlias}
             </span>
           </Tooltip>
+          <div className="flex items-center gap-1">
+            <OwnershipBadge mine={account.mine} shared={account.shared} />
+            {account.shared && !account.mine && onClaim ? (
+              <Tooltip content={t('ownership.claim')} side="top">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onClaim(account.id);
+                  }}
+                  className="text-slate-500 hover:text-indigo-300 transition-colors p-0.5 rounded shrink-0"
+                  aria-label={t('ownership.claim')}
+                >
+                  <UserPlus size={12} />
+                </button>
+              </Tooltip>
+            ) : null}
+          </div>
           {/* Subline: method • engine • date • tags • notes */}
           <div className="flex w-full items-center gap-1 text-[10px] text-slate-500">
             {data.registrationMethodLabel && (

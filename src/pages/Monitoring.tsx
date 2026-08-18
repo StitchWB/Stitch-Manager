@@ -7,16 +7,19 @@
  * glassmorphism, Header with icon, Badge/Button, toast on load error.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Activity, RefreshCw, AlertCircle, Server, Globe, Network, Bot } from 'lucide-react';
+import { Activity, RefreshCw, AlertCircle, Server, Globe, Network, Bot, BellOff, BellRing } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
 import { t } from '@/lib/i18n';
 import {
   getMonitoring,
+  ackMonitoringAlerts,
   type MonitoringSnapshot,
   type ServiceStatus,
   type BotStatus,
+  type MonitoringAlert,
+  type MonitoringAlertKind,
 } from '../lib/backend/modules/monitoring';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -108,6 +111,16 @@ export default function Monitoring() {
     }
   }, []);
 
+  const handleSilence = useCallback(async () => {
+    try {
+      await ackMonitoringAlerts({ hours: 1 });
+      toast.success(t('monitoring.silence1h'));
+      await refresh(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('monitoring.errors.loadFailed'));
+    }
+  }, [refresh]);
+
   useEffect(() => {
     void refresh(true);
     const id = window.setInterval(() => void refresh(false), 30000);
@@ -141,6 +154,7 @@ export default function Monitoring() {
               <ServiceCards snapshot={snapshot} />
               <BotCard snapshot={snapshot} />
               <ProxiesTable snapshot={snapshot} />
+              <AlertsCard snapshot={snapshot} onSilence={handleSilence} loading={loading} />
             </>
           ) : null}
         </div>
@@ -263,6 +277,81 @@ function ProxiesTable({ snapshot }: { snapshot: MonitoringSnapshot }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Alerts ──────────────────────────────────────────────────────────────────
+
+function alertIcon(kind: MonitoringAlertKind): ReactNode {
+  switch (kind) {
+    case 'bot_stale':
+      return <Bot className="w-4 h-4 text-amber-400" />;
+    case 'web_down':
+      return <Globe className="w-4 h-4 text-red-400" />;
+    case 'proxies_down':
+      return <Network className="w-4 h-4 text-red-400" />;
+    default:
+      return <AlertCircle className="w-4 h-4 text-slate-400" />;
+  }
+}
+
+function isSilenced(silencedUntil: string | null): boolean {
+  if (!silencedUntil) return false;
+  const d = new Date(silencedUntil);
+  return !Number.isNaN(d.getTime()) && d.getTime() > Date.now();
+}
+
+interface AlertsCardProps {
+  snapshot: MonitoringSnapshot;
+  onSilence: () => Promise<void>;
+  loading: boolean;
+}
+
+function AlertsCard({ snapshot, onSilence, loading }: AlertsCardProps) {
+  const alerts = [...snapshot.alerts].sort((a, b) => b.ts.localeCompare(a.ts));
+  const silenced = isSilenced(snapshot.silenced_until);
+
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-black/40 backdrop-blur-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-2">
+        <span className="text-indigo-400"><BellRing className="w-4 h-4" /></span>
+        <h2 className="text-sm font-semibold text-white">{t('monitoring.alerts')}</h2>
+        <span className="ml-auto flex items-center gap-2">
+          {silenced && (
+            <Badge variant="slate" size="sm" withDot withPulse>
+              {t('monitoring.silenced', { time: formatDate(snapshot.silenced_until) })}
+            </Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void onSilence()}
+            disabled={loading}
+            leftIcon={<BellOff className="w-3.5 h-3.5" />}
+          >
+            {t('monitoring.silence1h')}
+          </Button>
+        </span>
+      </div>
+      {alerts.length === 0 ? (
+        <div className="p-6 text-center">
+          <BellRing className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+          <p className="text-sm text-slate-500">{t('monitoring.noAlerts')}</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-white/[0.03]">
+          {alerts.map((alert: MonitoringAlert) => (
+            <div key={alert.id} className="px-5 py-3 flex items-start gap-3">
+              <span className="shrink-0 mt-0.5">{alertIcon(alert.kind)}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-slate-200">{alert.message}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{formatDate(alert.ts)}</p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -1657,6 +1657,11 @@ export interface Translations {
       back: string;
       errorGeneric: string;
       openBot: string;
+      oidc: {
+        button: string;
+        orCode: string;
+        errorGeneric: string;
+      };
     };
     login: {
       tgLink: string;
@@ -1796,6 +1801,15 @@ export interface Translations {
     loading: string;
     retry: string;
   };
+  ownership: {
+    mine: string;
+    shared: string;
+    claim: string;
+    claimed: string;
+    filterAll: string;
+    filterMine: string;
+    filterShared: string;
+  };
   monitoring: {
     title: string;
     subtitle: string;
@@ -1803,6 +1817,10 @@ export interface Translations {
     generatedAt: string;
     loading: string;
     noProxies: string;
+    alerts: string;
+    silence1h: string;
+    silenced: string;
+    noAlerts: string;
     sections: {
       services: string;
       bot: string;
@@ -3023,6 +3041,10 @@ export interface Translations {
     update: string;
     viewCards: string;
     viewList: string;
+    howToGetTier: string;
+    showLocked: string;
+    howToGetTierSubscribe: string;
+    howToGetTierAskAdmin: string;
   }
   scheduler: {
     add: string;
@@ -4282,7 +4304,14 @@ uiTexts: {
     unitCtx: string;
     unitTok: string;
     unlink: string;
-};
+  };
+  footer: {
+    tierHint: string;
+  };
+  users: {
+    tier: string;
+    tierSourceBot: string;
+  };
 }
 
 // ============================================

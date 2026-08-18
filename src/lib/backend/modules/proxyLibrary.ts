@@ -20,6 +20,9 @@ export interface ProxyLibraryEntry {
   lastTestLocation?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Per-user ownership flags (absent for guests / legacy shared rows). */
+  mine?: boolean;
+  shared?: boolean;
 }
 
 export interface ProxyLibraryDraft {
@@ -286,4 +289,12 @@ export async function getProxyLibraryRuntimeProxyCatalog(): Promise<
       host: item.host,
       port: item.port,
     }));
+}
+
+export async function claimProxyLibraryEntry(id: string): Promise<{ success: boolean }> {
+  try {
+    return await safeInvoke<{ success: boolean }>('claim_proxy_library_entry', { id });
+  } catch (error) {
+    normalizeError(error);
+  }
 }

@@ -142,6 +142,9 @@ export interface EmailInboxProfile {
   connectInput: EmailConnectInput;
   createdAt: string;
   updatedAt: string;
+  /** Per-user ownership flags (absent for guests / legacy shared rows). */
+  mine?: boolean;
+  shared?: boolean;
 }
 
 export interface EmailInboxProfileUpsertInput {
@@ -259,4 +262,8 @@ export async function emailInboxUpsertSyncState(
   input: EmailInboxSyncStateUpsertInput
 ): Promise<EmailInboxSyncState> {
   return safeInvoke<EmailInboxSyncState>('email_inbox_upsert_sync_state', { input });
+}
+
+export async function claimEmailInboxProfile(id: string): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>('claim_email_inbox_profile', { id });
 }
