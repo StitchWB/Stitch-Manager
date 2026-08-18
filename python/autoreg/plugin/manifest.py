@@ -49,6 +49,9 @@ class PluginManifest:
 
     ``kind`` is required to be ``"data"`` in v1 — it is the trust-tier hook
     for v2 (``"code"`` plugins will need manual review + canary).
+    ``"engine-pack"`` is the trusted engine module (captcha solvers).
+    ``"provider"`` is a code plugin shipping a provider class that
+    overrides/extends a built-in reger provider.
     """
 
     schema: str
@@ -152,9 +155,12 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     # the trusted engine module (captcha solvers now, hooks-runtime later) that
     # ships through the same gated channel — it is NOT a data-only plugin but
     # is signed with the same offline key, so it validates here too.
-    if kind not in ("data", "engine-pack"):
+    # "provider" is a code plugin that ships a provider class (subclass of
+    # BaseProvider) overriding/extending a built-in reger — the entry points
+    # at a Python module + class name instead of a scenario file.
+    if kind not in ("data", "engine-pack", "provider"):
         raise ManifestValidationError(
-            "kind", f'must be "data" or "engine-pack", got "{kind}"'
+            "kind", f'must be "data", "engine-pack" or "provider", got "{kind}"'
         )
 
     engine_raw = raw.get("engine")
@@ -176,6 +182,17 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     if kind == "engine-pack":
         # engine-pack is a code module, not a scenario plugin — entry is optional.
         entry = dict(entry_raw) if isinstance(entry_raw, dict) else {}
+    elif kind == "provider":
+        # provider plugin: entry points at a Python module + class name.
+        # The loader imports the module and finds the class by name.
+        if not isinstance(entry_raw, dict):
+            raise ManifestValidationError("entry", "required field missing or not an object")
+        for key in ("module", "class"):
+            if key not in entry_raw or not isinstance(entry_raw[key], str):
+                raise ManifestValidationError(
+                    f"entry.{key}", "required string missing"
+                )
+        entry = dict(entry_raw)
     else:
         if not isinstance(entry_raw, dict):
             raise ManifestValidationError("entry", "required field missing or not an object")
