@@ -3783,6 +3783,9 @@ export interface Translations {
     desktopOnly: string;
     authRequiredTitle: string;
     authRequiredText: string;
+    noDescription: string;
+    installed: string;
+    update: string;
   }
   sidebar: {
     accounts: string;
