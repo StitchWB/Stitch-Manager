@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
@@ -30,6 +30,19 @@ class User(Base):
 
     __tablename__ = "auth_users"
 
+    #: Telegram accounts bind to users via ``telegram_id`` (OIDC logins).
+    #: Uniqueness is a PARTIAL unique index (NULLs allowed) so password-only
+    #: users coexist; SQLite ALTER TABLE cannot add UNIQUE columns, so the
+    #: constraint lives in the index, not on the column.
+    __table_args__ = (
+        Index(
+            "uq_auth_users_telegram_id",
+            "telegram_id",
+            unique=True,
+            sqlite_where=text("telegram_id IS NOT NULL"),
+        ),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(
         String, unique=True, index=True, nullable=False, comment="Unique login name"
@@ -39,6 +52,19 @@ class User(Base):
     )
     role: Mapped[str] = mapped_column(
         String, nullable=False, default="user", comment="'admin' or 'user'"
+    )
+    # Tier label synced from the Telegram bot's TG_TIER_MAP on each
+    # login_telegram.  NULL for password-login users or when the tier
+    # system is disabled.  Used by the Users page "source" display.
+    tg_tier: Mapped[str | None] = mapped_column(
+        String, nullable=True, comment="Tier label from TG bot (mirrors role)"
+    )
+    #: Stable Telegram user id (OIDC ``id`` claim) — the authoritative
+    #  binding between a Telegram account and this row.  NULL for
+    #  password-only users and rows created before OIDC.  Handles
+    #  (usernames) change on Telegram; this id does not.
+    telegram_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True, comment="Telegram user id (OIDC)"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False

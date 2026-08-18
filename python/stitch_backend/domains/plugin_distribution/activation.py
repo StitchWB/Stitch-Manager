@@ -42,6 +42,7 @@ class ActivationState:
     degraded: bool = False
     last_successful_heartbeat: str = ""
     tg_admin: bool = False
+    tier: str | None = None
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ActivationState:
@@ -58,6 +59,7 @@ class ActivationState:
             degraded=bool(raw.get("degraded", False)),
             last_successful_heartbeat=str(raw.get("last_successful_heartbeat", "")),
             tg_admin=bool(raw.get("tg_admin", False)),
+            tier=str(raw.get("tier")) if raw.get("tier") else None,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -95,6 +97,7 @@ class ActivationService:
             entitlements=list(body.get("entitlements", [])),
             server_url=server_url(),
             tg_admin=bool(body.get("tg_admin", False)),
+            tier=body.get("tier") or None,
         )
         self._save(state)
         logger.info("Activation successful — pubkey=%s…", state.pubkey[:12])

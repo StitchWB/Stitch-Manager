@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.auth import service as auth_service
 from stitch_backend.domains.plugin_distribution.activation import (
@@ -83,13 +84,74 @@ async def _ensure_telegram_user(db: AsyncSession) -> User:
     )
 
 
-async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, bool]:
+async def ensure_oidc_user(
+    db: AsyncSession, tg_id: int, preferred_username: str | None
+) -> User:
+    """Return the local user for Telegram id *tg_id*, creating it if absent.
+
+    The authoritative binding is the ``telegram_id`` column (TG handles
+    change; the numeric id does not), so each Telegram account keeps exactly
+    one Stitch user row and the Users page shows who is who.  The username
+    is the TG handle (*preferred_username*) when free — so the name is
+    visible — with a deterministic ``tg_<id>`` fallback.
+
+    Rows created before the column existed (username ``tg_<id>`` or the
+    handle) are ADOPTED: the first OIDC login stamps ``telegram_id`` onto
+    them instead of creating a duplicate.  A pre-existing row whose name
+    matches the handle but has no ``telegram_id`` (e.g. an admin-created
+    password user) is linked the same way — account linking is intentional;
+    user creation is admin-only, so this is not an attacker vector.
+
+    The password is a random 32-byte hex string — login is via OIDC
+    ``id_token``, not password.  The FIRST user ever created gets role
+    ``admin`` (bootstrap, same spirit as ``/api/auth/setup``); later OIDC
+    logins are regular users.
+    """
+    user = await auth_service.get_user_by_telegram_id(db, tg_id)
+    if user is not None:
+        return user
+
+    fallback = f"tg_{tg_id}"
+    handle = (preferred_username or "").strip()
+
+    # Adopt pre-column rows (stable continuity across the migration).
+    for candidate in ((fallback, handle) if handle else (fallback,)):
+        user = await auth_service.get_user_by_username(db, candidate)
+        if user is not None:
+            if user.telegram_id is None:
+                user.telegram_id = tg_id
+                await db.flush()
+            return user
+
+    random_pw = secrets.token_hex(32)
+    role = "admin" if await auth_service.count_users(db) == 0 else _TELEGRAM_ROLE
+    username = fallback
+    if handle and await auth_service.get_user_by_username(db, handle) is None:
+        username = handle
+    try:
+        return await auth_service.create_user(
+            db, username=username, password=random_pw, role=role, telegram_id=tg_id
+        )
+    except StitchError:
+        # Handle raced (taken between the check and the insert) — the
+        # racing insert bound the telegram_id, so re-lookup wins; else
+        # fall back to the deterministic tg_<id> name.
+        user = await auth_service.get_user_by_telegram_id(db, tg_id)
+        if user is not None:
+            return user
+        return await auth_service.create_user(
+            db, username=fallback, password=random_pw, role=role, telegram_id=tg_id
+        )
+
+
+async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, bool, str | None]:
     """Activate a one-time code and create a local session.
 
-    Returns ``(user, entitlements, raw_token, expires_at, tg_admin)``.
+    Returns ``(user, entitlements, raw_token, expires_at, tg_admin, tier)``.
     ``tg_admin`` is propagated from the activate response so callers
     (``login_telegram`` route, ``cmd_login_telegram`` command) can
-    promote the local user to ``admin`` (PROMOTE ONLY — never demotes).
+    sync the local user's role.  ``tier`` is the tier label from the
+    bot's TG_TIER_MAP (None when the tier system is disabled).
 
     Raises on activation / session failure — callers map the error
     (command: ``{success: False, error}``; auth route: 401 with a
@@ -99,6 +161,7 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, 
     activation = ActivationService()
     state = await activation.activate(code, hwid)
     tg_admin = state.tg_admin
+    tier = state.tier
 
     async def _op(db: AsyncSession) -> tuple[User, str, Any]:
         user = await _ensure_telegram_user(db)
@@ -106,26 +169,43 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, 
         return user, raw_token, expires_at
 
     user, raw_token, expires_at = await run_in_session(_op)
-    return user, list(state.entitlements), raw_token, expires_at, tg_admin
+    return user, list(state.entitlements), raw_token, expires_at, tg_admin, tier
 
 
-async def _promote_to_admin_if_needed(user: User, tg_admin: bool) -> User:
-    """Promote ``user`` to admin when ``tg_admin`` is True (PROMOTE ONLY).
+async def _sync_role_and_tier(user: User, tg_admin: bool, tier: str | None) -> User:
+    """Sync the local user's role and tg_tier from the TG bot's signals.
 
-    Never demotes — a manual demotion via the Users page persists because
-    ``tg_admin=False`` leaves the role untouched.  Returns the (possibly
-    updated) user detached from a fresh session.
+    Role sync rule (bootstrap + promote-only, never demotes):
+      - First user ever (bootstrap) → ``'admin'`` so a fresh instance
+        always has an owner-admin.
+      - ``tg_admin=True`` → promote to ``'admin'``.
+      - Else if ``tier`` is in ROLE_LEVELS and above the current role →
+        promote to ``tier``.
+      - Manual role changes via the Users page persist (no demotion on
+        the next login).
+
+    ``tg_tier`` is always set to ``tier`` (None when the tier system is
+    off) so the Users page can display the source tier.
+
+    Returns the (possibly updated) user detached from a fresh session.
     """
-    if not tg_admin or user.role == "admin":
-        return user
+    from stitch_backend.domains.auth.roles import ROLE_LEVELS, role_level
 
-    async def _promote(db: AsyncSession) -> User:
+    mirror = "admin" if tg_admin else (tier if tier in ROLE_LEVELS else None)
+
+    async def _sync(db: AsyncSession) -> User:
         u = await auth_service.get_user(db, user.id)
-        if u is not None and u.role != "admin":
-            u.role = "admin"
+        if u is None:
+            return user
+        total = await auth_service.count_users(db)
+        if total <= 1:
+            u.role = "admin"  # bootstrap: first user owns the instance
+        elif mirror and role_level(mirror) > role_level(u.role):
+            u.role = mirror
+        u.tg_tier = tier
         return u
 
-    return await run_in_session(_promote)
+    return await run_in_session(_sync)
 
 
 @register_command("login_telegram")
@@ -143,11 +223,11 @@ async def cmd_login_telegram(params: dict) -> dict:
         return {"success": False, "error": "Code is required"}
 
     try:
-        user, entitlements, raw_token, _expires_at, tg_admin = await exchange_telegram_code(code)
+        user, entitlements, raw_token, _expires_at, tg_admin, tier = await exchange_telegram_code(code)
     except Exception as exc:  # noqa: BLE001 — surface as command error
         return {"success": False, "error": _map_activation_error(exc)}
 
-    user = await _promote_to_admin_if_needed(user, tg_admin)
+    user = await _sync_role_and_tier(user, tg_admin, tier)
 
     return {
         "success": True,

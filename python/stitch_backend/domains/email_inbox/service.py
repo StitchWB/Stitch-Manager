@@ -307,7 +307,7 @@ async def list_profiles(
         )
     ).order_by(EmailInboxProfile.updated_at.desc())
     result = await db.execute(stmt)
-    return [_profile_to_dict(r) for r in result.scalars().all()]
+    return [_profile_to_dict(r, uid=owner_id) for r in result.scalars().all()]
 
 
 async def get_profile(
@@ -424,16 +424,20 @@ async def upsert_sync_state(db: AsyncSession, input_data: dict[str, Any]) -> dic
 
 # ── Serializers ───────────────────────────────────────────────────────────────
 
-def _profile_to_dict(row: EmailInboxProfile) -> dict[str, Any]:
+def _profile_to_dict(row: EmailInboxProfile, uid: int | None = None) -> dict[str, Any]:
     try:
         connect_input = json.loads(row.connect_input_json)
     except (json.JSONDecodeError, TypeError):
         connect_input = {}
-    return {
+    result: dict[str, Any] = {
         "id": row.id, "label": row.label, "provider": row.provider,
         "accountId": row.account_id, "connectInput": connect_input,
         "createdAt": row.created_at, "updatedAt": row.updated_at,
     }
+    if uid is not None:
+        result["mine"] = row.owner_id == uid
+        result["shared"] = row.owner_id is None
+    return result
 
 
 def _sync_state_to_dict(row: EmailInboxSyncState) -> dict[str, Any]:

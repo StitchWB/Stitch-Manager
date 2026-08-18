@@ -30,6 +30,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from stitch_backend.core.command_registry import register_command
 from stitch_backend.domains.auth.router import require_role
 from stitch_backend.domains.plugin_distribution.config import server_url, standalone_mode
 
@@ -293,6 +294,33 @@ async def get_monitoring() -> dict[str, Any]:
     async with _make_client() as client:
         try:
             resp = await client.get(url, headers=_upstream_headers())
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise _map_upstream_error(exc) from exc
+        except httpx.HTTPError as exc:
+            raise _map_network_error(exc) from exc
+
+    return resp.json()
+
+
+@register_command("ack_monitoring_alerts")
+async def cmd_ack_monitoring_alerts(params: dict) -> dict:
+    """Silence monitoring alerts for ``hours`` (admin-only dispatcher command).
+
+    Params: ``{hours: float}`` (default 1). Proxies to upstream
+    ``POST /admin/alerts/ack``.
+    """
+    pre = _check_preconditions()
+    if pre is not None:
+        raise pre
+
+    hours = float(params.get("hours", 1) or 1)
+    url = f"{server_url()}/admin/alerts/ack"
+    async with _make_client() as client:
+        try:
+            resp = await client.post(
+                url, json={"hours": hours}, headers=_upstream_headers()
+            )
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise _map_upstream_error(exc) from exc

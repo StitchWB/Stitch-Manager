@@ -90,3 +90,7 @@ pyotp>=2.9.0
 
 # iCloud Hide My Email pool (Apple ID session management)
 pyicloud>=1.0.0
+
+# Telegram OIDC login (RS256 id_token verification via JWKS)
+PyJWT>=2.8.0
+cryptography>=42.0.0

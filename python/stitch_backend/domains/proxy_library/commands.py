@@ -60,8 +60,12 @@ def _draft_from_dict(d: dict[str, Any]) -> ProxyLibraryDraft:
     )
 
 
-def _entry_to_response(entry: ProxyLibraryEntry) -> dict[str, Any]:
-    """Serialize an ORM entry to a camelCase dict for the frontend."""
+def _entry_to_response(entry: ProxyLibraryEntry, uid: int | None = None) -> dict[str, Any]:
+    """Serialize an ORM entry to a camelCase dict for the frontend.
+
+    When ``uid`` is given, additive ``mine`` and ``shared`` fields are
+    included: ``mine`` = entry.owner_id == uid, ``shared`` = owner_id is None.
+    """
     username = _load_secret(entry.username) if entry.username else None
     password = _load_secret(entry.password) if entry.password else None
     result: dict[str, Any] = {
@@ -92,6 +96,9 @@ def _entry_to_response(entry: ProxyLibraryEntry) -> dict[str, Any]:
         result["lastTestIp"] = entry.last_test_ip
     if entry.last_test_location is not None:
         result["lastTestLocation"] = entry.last_test_location
+    if uid is not None:
+        result["mine"] = entry.owner_id == uid
+        result["shared"] = entry.owner_id is None
     return result
 
 
@@ -123,7 +130,7 @@ async def cmd_list_proxy_library(params: dict) -> list[dict]:
 
     async def _op(db):
         items = await load_proxy_library(db, uid)
-        return [_entry_to_response(e) for e in items]
+        return [_entry_to_response(e, uid=uid) for e in items]
 
     return await run_in_read_session(_op)
 
@@ -459,3 +466,34 @@ async def cmd_parse_input(params: dict) -> dict:
         }
     except ValueError as exc:
         raise ValueError(f"invalid_proxy_input|{exc}") from None
+
+
+# ── Claim ─────────────────────────────────────────────────────────────────────
+
+
+@register_command("claim_proxy_library_entry")
+async def cmd_claim_proxy_library_entry(params: dict) -> dict:
+    """Claim a shared (owner_id NULL) proxy entry for the caller.
+
+    Sets ``owner_id = caller uid`` ONLY when the current owner_id is
+    NULL.  Caller must be authenticated (uid not None) else 400.
+    """
+    uid = _caller_uid(params)
+    if uid is None:
+        raise ValueError("Authentication required to claim a shared entry")
+    entry_id = str(params.get("id", ""))
+
+    async def _op(db):
+        result = await db.execute(
+            select(ProxyLibraryEntry).where(ProxyLibraryEntry.id == entry_id)
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            raise ValueError(f"Proxy entry not found: {entry_id}")
+        if entry.owner_id is not None:
+            raise ValueError("not shared")
+        entry.owner_id = uid
+        await db.flush()
+        return _entry_to_response(entry, uid=uid)
+
+    return await run_in_session(_op)

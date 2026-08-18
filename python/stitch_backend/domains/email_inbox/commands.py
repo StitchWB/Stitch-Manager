@@ -205,3 +205,40 @@ async def cmd_upsert_sync_state(params: dict) -> dict:
         return await service.upsert_sync_state(db, input_data)
 
     return await run_in_session(_op)
+
+
+# ── Claim ─────────────────────────────────────────────────────────────────────
+
+
+@register_command("claim_email_inbox_profile")
+async def cmd_claim_email_inbox_profile(params: dict) -> dict:
+    """Claim a shared (owner_id NULL) inbox profile for the caller.
+
+    Sets ``owner_id = caller uid`` ONLY when the current owner_id is
+    NULL.  Caller must be authenticated (uid not None) else 400.
+    """
+    from sqlalchemy import select as sa_select
+    from stitch_backend.domains.email_inbox.models import EmailInboxProfile
+
+    uid = params.get("_caller_user_id")
+    if uid is None:
+        raise ValueError("Authentication required to claim a shared profile")
+    profile_id = params.get("profileId") or params.get("profile_id") or ""
+    if not profile_id:
+        raise ValueError("Profile id is required")
+
+    async def _op(db):
+        result = await db.execute(
+            sa_select(EmailInboxProfile).where(EmailInboxProfile.id == str(profile_id))
+        )
+        profile = result.scalar_one_or_none()
+        if profile is None:
+            raise ValueError(f"Inbox profile not found: {profile_id}")
+        if profile.owner_id is not None:
+            raise ValueError("not shared")
+        profile.owner_id = uid
+        await db.flush()
+        from stitch_backend.domains.email_inbox import service
+        return service._profile_to_dict(profile, uid=uid)
+
+    return await run_in_session(_op)

@@ -258,6 +258,7 @@ def _add_missing_columns(sync_conn: Any) -> None:
 
         db_columns = {col["name"] for col in inspector.get_columns(table.name)}
 
+        newly_added: set[str] = set()
         for column in table.columns:
             if column.name in db_columns:
                 continue
@@ -282,6 +283,7 @@ def _add_missing_columns(sync_conn: Any) -> None:
             ddl = f'ALTER TABLE "{table.name}" ADD COLUMN {col_spec}'
             try:
                 sync_conn.exec_driver_sql(ddl)
+                newly_added.add(column.name)
                 logger.info("Migrated: added column %s.%s", table.name, column.name)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
@@ -289,6 +291,29 @@ def _add_missing_columns(sync_conn: Any) -> None:
                     "Manual migration may be required.",
                     table.name, column.name, exc,
                 )
+
+        # create_all skips existing tables entirely, so indexes declared on
+        # newly added columns (e.g. partial UNIQUE indexes — SQLite cannot
+        # ADD COLUMN with a UNIQUE constraint) never land on migrated DBs.
+        # Create any missing index that references a just-added column.
+        if newly_added:
+            existing_indexes = {i["name"] for i in inspector.get_indexes(table.name)}
+            for index in table.indexes:
+                if index.name in existing_indexes:
+                    continue
+                if not any(c.name in newly_added for c in index.columns):
+                    continue
+                cols = ", ".join(f'"{c.name}"' for c in index.columns)
+                unique = "UNIQUE " if index.unique else ""
+                where = ""
+                sqlite_where = index.dialect_options["sqlite"]["where"]
+                if sqlite_where is not None:
+                    where = f" WHERE {getattr(sqlite_where, 'text', str(sqlite_where))}"
+                sync_conn.exec_driver_sql(
+                    f'CREATE {unique}INDEX IF NOT EXISTS "{index.name}" '
+                    f'ON "{table.name}" ({cols}){where}'
+                )
+                logger.info("Migrated: added index %s on %s", index.name, table.name)
 
 
 def _constant_default_sql(column: Any) -> str | None:

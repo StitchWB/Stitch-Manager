@@ -62,6 +62,7 @@ COOKIE_NAME = "stitch_session"
 PUBLIC_PATHS: frozenset[str] = frozenset({
     "/api/auth/login",
     "/api/auth/login_telegram",
+    "/api/auth/telegram-oidc",
     "/api/auth/status",
     "/api/auth/setup",
 })
@@ -86,6 +87,7 @@ class StatusResponse(BaseModel):
     has_users: bool
     required: bool
     enforce_login: bool
+    tg_auth_mode: str
 
 
 class LoginRequest(BaseModel):
@@ -136,8 +138,12 @@ def _user_public(user: User) -> UserPublic:
 def _set_session_cookie(response: Response, raw_token: str, expires_at) -> None:
     """Set the session cookie on *response*.
 
-    ``Secure`` is set when the request scheme is https; ``SameSite=Strict``
-    and ``HttpOnly`` are always on.
+    ``Secure`` is set when the request scheme is https; ``SameSite=Lax``
+    and ``HttpOnly`` are always on.  Lax (not Strict) because users arrive
+    via cross-site top-level navigations from Telegram (t.me links): Strict
+    cookies are withheld on such navigations AND on reloads of pages reached
+    that way, which dropped sessions on refresh.  Lax still withholds the
+    cookie on cross-site POSTs, so CSRF stays covered.
     """
     # The request scheme is determined by the X-Forwarded-Proto header
     # (set by the reverse proxy on the VDS) or the connection type.
@@ -153,7 +159,7 @@ def _set_session_cookie(response: Response, raw_token: str, expires_at) -> None:
         expires=expires_at,
         path="/",
         httponly=True,
-        samesite="strict",
+        samesite="lax",
         secure=secure,
     )
 
@@ -247,7 +253,11 @@ async def get_status() -> StatusResponse:
     settings = get_settings()
     if not settings.auth_enabled:
         return StatusResponse(
-            enabled=False, has_users=False, required=False, enforce_login=True
+            enabled=False,
+            has_users=False,
+            required=False,
+            enforce_login=True,
+            tg_auth_mode=settings.tg_auth_mode,
         )
     from stitch_backend.database import get_session_factory
 
@@ -262,6 +272,7 @@ async def get_status() -> StatusResponse:
         has_users=has_users,
         required=required,
         enforce_login=enforce_login,
+        tg_auth_mode=settings.tg_auth_mode,
     )
 
 
@@ -303,7 +314,7 @@ async def login(
         expires=expires_at,
         path="/",
         httponly=True,
-        samesite="strict",
+        samesite="lax",
         secure=secure,
     )
     return LoginResponse(user=_user_public(user))
@@ -329,7 +340,7 @@ async def login_telegram(
     """
     from stitch_backend.domains.auth.telegram_commands import (
         _map_activation_error,
-        _promote_to_admin_if_needed,
+        _sync_role_and_tier,
         exchange_telegram_code,
     )
 
@@ -338,16 +349,16 @@ async def login_telegram(
         raise HTTPException(status_code=400, detail="Code is required")
 
     try:
-        user, entitlements, raw_token, expires_at, tg_admin = await exchange_telegram_code(code)
+        user, entitlements, raw_token, expires_at, tg_admin, tier = await exchange_telegram_code(code)
     except Exception as exc:  # noqa: BLE001 — friendly 401, same as /login
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_map_activation_error(exc),
         ) from exc
 
-    # Promote to admin if the TG bot flagged this code as admin-issued
-    # (PROMOTE ONLY — never demotes; manual demotion via Users page persists).
-    user = await _promote_to_admin_if_needed(user, tg_admin)
+    # Sync role + tg_tier from the TG bot's signals (mirror — may demote
+    # on next login, intended behavior).
+    user = await _sync_role_and_tier(user, tg_admin, tier)
 
     # Set cookie — Secure when the request came over https.
     secure = request.url.scheme == "https" or request.headers.get(
@@ -359,13 +370,115 @@ async def login_telegram(
         expires=expires_at,
         path="/",
         httponly=True,
-        samesite="strict",
+        samesite="lax",
         secure=secure,
     )
     return {
         "success": True,
         "user": _user_public(user).model_dump(),
         "entitlements": entitlements,
+        "tier": tier,
+    }
+
+
+class TelegramOIDCLoginRequest(BaseModel):
+    """Body for POST /api/auth/telegram-oidc."""
+
+    id_token: str | None = None
+
+
+@router.post("/telegram-oidc")
+async def login_telegram_oidc(
+    body: TelegramOIDCLoginRequest,
+    request: Request,
+    response: Response,
+) -> dict:
+    """Verify a Telegram-issued OIDC ``id_token`` and create a session.
+
+    Gated behind ``TG_AUTH_MODE=oidc`` — returns 403 when in ``legacy``
+    mode.  When enabled, the token is verified via JWKS (RS256) and mapped
+    to a per-Telegram-id user (TG handle when available, else ``tg_<id>``).
+    The session cookie is set exactly like ``/login``.
+
+    Response contract (frozen — the frontend is built against it):
+
+      - 200 → ``{"success": true, "user": {...}, "entitlements": []}``
+      - 400 → missing/empty ``id_token``
+      - 401 → any verification failure
+      - 403 → ``TG_AUTH_MODE=legacy``
+      - 503 → JWKS endpoint unreachable
+    """
+    settings = get_settings()
+
+    if settings.tg_auth_mode != "oidc":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="OIDC login is disabled",
+        )
+
+    id_token = (body.id_token or "").strip()
+    if not id_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="id_token is required",
+        )
+
+    from stitch_backend.domains.auth.telegram_commands import ensure_oidc_user
+    from stitch_backend.domains.auth.tg_oidc import (
+        TelegramJWKSUnavailableError,
+        TelegramOIDCVerificationError,
+        verify_telegram_id_token,
+    )
+
+    try:
+        claims = await verify_telegram_id_token(id_token)
+    except TelegramJWKSUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Telegram JWKS unavailable",
+        ) from exc
+    except TelegramOIDCVerificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=exc.detail,
+        ) from exc
+
+    # Map to a deterministic per-TG-id user (tg_<id>).
+    tg_id_raw = claims.get("id", claims.get("sub"))
+    try:
+        tg_id = int(tg_id_raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Telegram id in token",
+        ) from exc
+
+    preferred_username = claims.get("preferred_username")
+
+    async def _op(session: AsyncSession):
+        user = await ensure_oidc_user(session, tg_id, preferred_username)
+        raw_token, expires_at = await auth_service.create_session(session, user.id)
+        return user, raw_token, expires_at
+
+    user, raw_token, expires_at = await run_in_session(_op)
+
+    # Set cookie — Secure when the request came over https.
+    secure = request.url.scheme == "https" or request.headers.get(
+        "x-forwarded-proto", ""
+    ).lower() == "https"
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=raw_token,
+        expires=expires_at,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+    )
+    return {
+        "success": True,
+        "user": _user_public(user).model_dump(),
+        "entitlements": [],
     }
 
 
@@ -418,7 +531,7 @@ async def setup(
         expires=expires_at,
         path="/",
         httponly=True,
-        samesite="strict",
+        samesite="lax",
         secure=secure,
     )
     return LoginResponse(user=_user_public(user))
@@ -508,55 +621,6 @@ async def create_user(body: CreateUserRequest) -> UserPublic:
             detail=exc.detail,
         ) from exc
     return _user_public(user)
-
-
-class TelegramLoginRequest(BaseModel):
-    """Body for POST /api/auth/login_telegram."""
-
-    code: str
-
-
-@router.post("/login_telegram")
-async def login_telegram(
-    body: TelegramLoginRequest,
-    request: Request,
-    response: Response,
-) -> dict:
-    """Exchange a one-time Telegram-bot code for a session cookie.
-
-    Public (listed in ``PUBLIC_PATHS``) — the one-time code IS the
-    credential.  Unlike the dispatcher command variant, this route sets
-    the HttpOnly session cookie so the login survives page reloads.
-    """
-    from stitch_backend.domains.auth.telegram_commands import (
-        _map_activation_error,
-        exchange_telegram_code,
-    )
-
-    code = body.code.strip()
-    if not code:
-        raise HTTPException(status_code=400, detail="Code is required")
-    try:
-        user, _entitlements, raw_token, expires_at, _tg_admin = await exchange_telegram_code(code)
-    except Exception as exc:  # noqa: BLE001 — friendly 401 like /login
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=_map_activation_error(exc),
-        ) from exc
-
-    secure = request.url.scheme == "https" or request.headers.get(
-        "x-forwarded-proto", ""
-    ).lower() == "https"
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=raw_token,
-        expires=expires_at,
-        path="/",
-        httponly=True,
-        samesite="strict",
-        secure=secure,
-    )
-    return {"success": True, "user": _user_public(user).model_dump()}
 
 
 class UpdateRoleRequest(BaseModel):
