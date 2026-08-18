@@ -83,16 +83,22 @@ async def _ensure_telegram_user(db: AsyncSession) -> User:
     )
 
 
-async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any]:
+async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, bool]:
     """Activate a one-time code and create a local session.
 
-    Returns ``(user, entitlements, raw_token, expires_at)``.  Raises on
-    activation / session failure — callers map the error (command:
-    ``{success: False, error}``; auth route: 401 with a friendly detail).
+    Returns ``(user, entitlements, raw_token, expires_at, tg_admin)``.
+    ``tg_admin`` is propagated from the activate response so callers
+    (``login_telegram`` route, ``cmd_login_telegram`` command) can
+    promote the local user to ``admin`` (PROMOTE ONLY — never demotes).
+
+    Raises on activation / session failure — callers map the error
+    (command: ``{success: False, error}``; auth route: 401 with a
+    friendly detail).
     """
     hwid = derive_hwid()
     activation = ActivationService()
     state = await activation.activate(code, hwid)
+    tg_admin = state.tg_admin
 
     async def _op(db: AsyncSession) -> tuple[User, str, Any]:
         user = await _ensure_telegram_user(db)
@@ -100,7 +106,26 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any]:
         return user, raw_token, expires_at
 
     user, raw_token, expires_at = await run_in_session(_op)
-    return user, list(state.entitlements), raw_token, expires_at
+    return user, list(state.entitlements), raw_token, expires_at, tg_admin
+
+
+async def _promote_to_admin_if_needed(user: User, tg_admin: bool) -> User:
+    """Promote ``user`` to admin when ``tg_admin`` is True (PROMOTE ONLY).
+
+    Never demotes — a manual demotion via the Users page persists because
+    ``tg_admin=False`` leaves the role untouched.  Returns the (possibly
+    updated) user detached from a fresh session.
+    """
+    if not tg_admin or user.role == "admin":
+        return user
+
+    async def _promote(db: AsyncSession) -> User:
+        u = await auth_service.get_user(db, user.id)
+        if u is not None and u.role != "admin":
+            u.role = "admin"
+        return u
+
+    return await run_in_session(_promote)
 
 
 @register_command("login_telegram")
@@ -118,9 +143,11 @@ async def cmd_login_telegram(params: dict) -> dict:
         return {"success": False, "error": "Code is required"}
 
     try:
-        user, entitlements, raw_token, _expires_at = await exchange_telegram_code(code)
+        user, entitlements, raw_token, _expires_at, tg_admin = await exchange_telegram_code(code)
     except Exception as exc:  # noqa: BLE001 — surface as command error
         return {"success": False, "error": _map_activation_error(exc)}
+
+    user = await _promote_to_admin_if_needed(user, tg_admin)
 
     return {
         "success": True,

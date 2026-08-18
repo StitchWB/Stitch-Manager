@@ -329,6 +329,7 @@ async def login_telegram(
     """
     from stitch_backend.domains.auth.telegram_commands import (
         _map_activation_error,
+        _promote_to_admin_if_needed,
         exchange_telegram_code,
     )
 
@@ -337,12 +338,16 @@ async def login_telegram(
         raise HTTPException(status_code=400, detail="Code is required")
 
     try:
-        user, entitlements, raw_token, expires_at = await exchange_telegram_code(code)
+        user, entitlements, raw_token, expires_at, tg_admin = await exchange_telegram_code(code)
     except Exception as exc:  # noqa: BLE001 — friendly 401, same as /login
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_map_activation_error(exc),
         ) from exc
+
+    # Promote to admin if the TG bot flagged this code as admin-issued
+    # (PROMOTE ONLY — never demotes; manual demotion via Users page persists).
+    user = await _promote_to_admin_if_needed(user, tg_admin)
 
     # Set cookie — Secure when the request came over https.
     secure = request.url.scheme == "https" or request.headers.get(
@@ -532,7 +537,7 @@ async def login_telegram(
     if not code:
         raise HTTPException(status_code=400, detail="Code is required")
     try:
-        user, _entitlements, raw_token, expires_at = await exchange_telegram_code(code)
+        user, _entitlements, raw_token, expires_at, _tg_admin = await exchange_telegram_code(code)
     except Exception as exc:  # noqa: BLE001 — friendly 401 like /login
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
