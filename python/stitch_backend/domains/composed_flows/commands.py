@@ -6,6 +6,11 @@ from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 
 
+def _caller_uid(params: dict) -> int | None:
+    """Extract the caller's user ID (None when auth disabled / desktop)."""
+    return params.get("_caller_user_id")
+
+
 @register_command("upsert_composed_flow")
 async def cmd_upsert_composed_flow(params: dict) -> dict:
     """Create or update a composed flow."""
@@ -15,10 +20,11 @@ async def cmd_upsert_composed_flow(params: dict) -> dict:
     name = params.get("name", "")
     flow_json = params.get("flowJson", params.get("flow_json", ""))
     flow_id = params.get("id")
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ComposedFlowService(session)
-        return await svc.upsert(alias, name, flow_json, flow_id)
+        return await svc.upsert(alias, name, flow_json, flow_id, owner_id=owner_id)
 
     return await run_in_session(_op)
 
@@ -30,10 +36,11 @@ async def cmd_list_composed_flows(params: dict) -> list:
 
     alias = params.get("alias", "")
     limit = int(params.get("limit", 50))
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ComposedFlowService(session)
-        return await svc.list_by_alias(alias, limit)
+        return await svc.list_by_alias(alias, limit, owner_id=owner_id)
 
     return await run_in_read_session(_op)
 
@@ -44,10 +51,11 @@ async def cmd_delete_composed_flow(params: dict) -> dict:
     from stitch_backend.domains.composed_flows.service import ComposedFlowService
 
     flow_id = params.get("flowId", params.get("flow_id", ""))
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ComposedFlowService(session)
-        await svc.delete_by_id(flow_id)
+        await svc.delete_by_id(flow_id, owner_id=owner_id)
         return {"success": True}
 
     return await run_in_session(_op)
@@ -59,10 +67,11 @@ async def cmd_mark_composed_flow_ran(params: dict) -> dict:
     from stitch_backend.domains.composed_flows.service import ComposedFlowService
 
     flow_id = params.get("flowId", params.get("flow_id", ""))
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ComposedFlowService(session)
-        await svc.mark_ran(flow_id)
+        await svc.mark_ran(flow_id, owner_id=owner_id)
         return {"success": True}
 
     return await run_in_session(_op)

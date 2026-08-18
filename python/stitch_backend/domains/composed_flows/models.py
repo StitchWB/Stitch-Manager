@@ -16,7 +16,7 @@ Schema (migration 018_composed_flows.sql)::
 
 from __future__ import annotations
 
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
@@ -35,3 +35,11 @@ class ComposedFlow(Base):
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     last_run_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
     run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # ── Owner (per-user isolation) ───────────────────────────────────────────
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="NULL = shared pool (legacy, visible to all callers)",
+    )

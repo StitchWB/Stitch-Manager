@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from stitch_backend.core.base_repository import BaseRepository
 from stitch_backend.domains.ai_gateway.models import (
@@ -66,6 +66,7 @@ class ProviderEndpointService(BaseRepository[ProviderEndpoint]):
         default_headers: dict | None = None,
         discovery_policy: dict | None = None,
         health_policy: dict | None = None,
+        owner_id: int | None = None,
     ) -> ProviderEndpoint:
         return await self.create(
             name=name,
@@ -75,11 +76,21 @@ class ProviderEndpointService(BaseRepository[ProviderEndpoint]):
             default_headers=default_headers,
             discovery_policy=discovery_policy,
             health_policy=health_policy,
+            owner_id=owner_id,
             created_at=_utcnow(),
         )
 
-    async def list_endpoints(self) -> list[ProviderEndpoint]:
-        return list(await self.list_all(order_by=ProviderEndpoint.created_at.desc()))
+    async def list_endpoints(
+        self, owner_id: int | None = None,
+    ) -> list[ProviderEndpoint]:
+        stmt = select(ProviderEndpoint).where(
+            or_(
+                ProviderEndpoint.owner_id.is_(None),
+                ProviderEndpoint.owner_id == owner_id,
+            )
+        ).order_by(ProviderEndpoint.created_at.desc())
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -105,6 +116,7 @@ class CredentialService(BaseRepository[Credential]):
         label: str | None,
         auth_type: str,
         secret: str,
+        owner_id: int | None = None,
     ) -> Credential:
         """Create a :class:`Credential` + linked :class:`CredentialSecret`.
 
@@ -143,6 +155,7 @@ class CredentialService(BaseRepository[Credential]):
             fingerprint=fingerprint,
             enabled=True,
             runtime_status="unknown",
+            owner_id=owner_id,
             created_at=_utcnow(),
         )
         self._db.add(credential)
@@ -210,9 +223,19 @@ class CredentialService(BaseRepository[Credential]):
 
     async def list_credentials(
         self, provider_endpoint_id: str | None = None,
+        owner_id: int | None = None,
     ) -> list[Credential]:
         """Return :class:`Credential` rows only — never joins ``CredentialSecret``."""
-        return list(await self.find_by(provider_endpoint_id=provider_endpoint_id))
+        stmt = select(Credential).where(
+            or_(
+                Credential.owner_id.is_(None),
+                Credential.owner_id == owner_id,
+            )
+        )
+        if provider_endpoint_id is not None:
+            stmt = stmt.where(Credential.provider_endpoint_id == provider_endpoint_id)
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_secret_for_invocation(self, credential_id: str) -> str | None:
         """Return the RAW secret value for a credential.
@@ -398,17 +421,28 @@ class PublicModelService(BaseRepository[PublicModel]):
         display_name: str | None = None,
         enabled: bool = True,
         contract: dict | None = None,
+        owner_id: int | None = None,
     ) -> PublicModel:
         return await self.create(
             id=id_,
             display_name=display_name,
             enabled=enabled,
             contract=contract,
+            owner_id=owner_id,
             created_at=_utcnow(),
         )
 
-    async def list_public_models(self) -> list[PublicModel]:
-        return list(await self.list_all())
+    async def list_public_models(
+        self, owner_id: int | None = None,
+    ) -> list[PublicModel]:
+        stmt = select(PublicModel).where(
+            or_(
+                PublicModel.owner_id.is_(None),
+                PublicModel.owner_id == owner_id,
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
