@@ -4276,5 +4276,7 @@ addMailboxFromSheets: "Import from Google Sheets",
     versionLabel: "Version",
     installedVersionLabel: "Installed",
     desktopOnly: "Available in the desktop app",
+    authRequiredTitle: "Authorized users only",
+    authRequiredText: "Plugins are available to authorized users. Log in or use a one-time Telegram code.",
   },
 };

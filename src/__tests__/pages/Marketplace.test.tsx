@@ -13,6 +13,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Marketplace from '../../pages/Marketplace';
+import { useAuthStore } from '../../stores/auth';
 import * as marketplaceModule from '../../lib/backend/modules/marketplace';
 import type { MarketplaceItem } from '../../lib/backend/modules/marketplace';
 
@@ -34,6 +35,26 @@ jest.mock('sonner', () => ({
     error: jest.fn(),
     success: jest.fn(),
   },
+}));
+
+// Mock the invoke module so the auth store can register its 401 callback
+// without importing the real fetch wrapper.
+jest.mock('../../lib/backend/core/invoke', () => ({
+  setAuthExpiredHandler: jest.fn(),
+  safeInvoke: jest.fn(),
+  BackendError: class extends Error {},
+}));
+
+// Mock the auth backend module so importing the auth store doesn't trigger
+// real fetch calls.
+jest.mock('../../lib/backend/modules/auth', () => ({
+  getAuthStatus: jest.fn(),
+  getCurrentUser: jest.fn(),
+  loginUser: jest.fn(),
+  loginTelegram: jest.fn(),
+  logoutUser: jest.fn(),
+  setupUser: jest.fn(),
+  setLoginPolicy: jest.fn(),
 }));
 
 const mk = {
@@ -78,6 +99,10 @@ const mk = {
 describe('Marketplace page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Provide an authenticated user so existing tests render the feed.
+    useAuthStore.setState({
+      user: { id: 1, username: 'admin', role: 'admin' as const },
+    });
   });
 
   it('renders installed, available, and locked rows with correct controls', async () => {
@@ -168,5 +193,22 @@ describe('Marketplace page', () => {
 
     // The activation-required banner text should be present.
     expect(screen.getByText(/activation required/i)).toBeTruthy();
+  });
+
+  it('shows lock screen when no authenticated user and does not call getMarketplace', () => {
+    useAuthStore.setState({ user: null });
+
+    const getMarketplaceSpy = jest.spyOn(marketplaceModule, 'getMarketplace');
+
+    render(
+      <MemoryRouter>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    // Lock screen title is shown.
+    expect(screen.getByText('Authorized users only')).toBeTruthy();
+    // getMarketplace was NOT called (no fetch attempted).
+    expect(getMarketplaceSpy).not.toHaveBeenCalled();
   });
 });
