@@ -23,7 +23,7 @@ import logging
 from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
 from stitch_backend.domains.profiles.schemas import (
     DeleteProfileRequest,
@@ -44,6 +44,11 @@ logger = logging.getLogger(__name__)
 def _parse(model_cls, params: dict):
     """Instantiate a Pydantic model, tolerating camelCase *and* snake_case."""
     return model_cls.model_validate(params)
+
+
+def _caller_uid(params: dict) -> int | None:
+    """Extract the caller's user ID (None when auth disabled / desktop)."""
+    return params.get("_caller_user_id")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -81,11 +86,12 @@ async def cmd_save_profile(params: dict) -> dict:
 @register_command("delete_profile_rust")
 async def cmd_delete_profile(params: dict) -> dict:
     req = _parse(DeleteProfileRequest, params)
+    owner_id = _caller_uid(params)
     FingerprintService.delete(req.email)
-    # Also delete settings if they exist
+    # Also delete settings if they exist (owner-filtered)
     async def _op(session):
         svc = ProfileSettingsService(session)
-        await svc.delete_settings(req.email)
+        await svc.delete_settings(req.email, owner_id=owner_id)
     await run_in_session(_op)
     return {"success": True}
 
@@ -98,12 +104,13 @@ async def cmd_list_profiles(params: dict) -> list[str]:
     JSON files remain a legacy source so existing installs keep their
     profiles visible.
     """
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ProfileSettingsService(session)
-        return await svc.list_setting_aliases()
+        return await svc.list_setting_aliases(owner_id=owner_id)
 
-    db_aliases = await run_in_session(_op)
+    db_aliases = await run_in_read_session(_op)
     seen = {a.lower() for a in db_aliases}
     return list(db_aliases) + [
         a for a in FingerprintService.list_aliases() if a.lower() not in seen
@@ -118,10 +125,11 @@ async def cmd_list_profiles(params: dict) -> list[str]:
 @register_command("get_profile_settings_rust")
 async def cmd_get_profile_settings(params: dict) -> Any:
     req = _parse(GetProfileSettingsRequest, params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ProfileSettingsService(session)
-        return await svc.get_settings(req.alias)
+        return await svc.get_settings(req.alias, owner_id=owner_id)
 
     return await run_in_session(_op)
 
@@ -129,10 +137,11 @@ async def cmd_get_profile_settings(params: dict) -> Any:
 @register_command("save_profile_settings_rust")
 async def cmd_save_profile_settings(params: dict) -> dict:
     req = _parse(SaveProfileSettingsRequest, params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ProfileSettingsService(session)
-        await svc.save_settings(req.alias, req.settings)
+        await svc.save_settings(req.alias, req.settings, owner_id=owner_id)
 
     await run_in_session(_op)
     return {"success": True}

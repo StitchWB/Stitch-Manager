@@ -18,11 +18,19 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
+from sqlalchemy import and_, or_, select
+
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.ai_gateway.adapters.base import get_adapter
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
+from stitch_backend.domains.ai_gateway.models import (
+    Credential,
+    ProviderEndpoint,
+    PublicModel,
+    _utcnow,
+)
 from stitch_backend.domains.ai_gateway.schemas import (
     CredentialCreateRequest,
     CredentialIdRequest,
@@ -65,6 +73,18 @@ from stitch_backend.domains.ai_gateway.service import (
 logger = logging.getLogger(__name__)
 
 
+# ── Owner-isolation helpers (mirrors domains/accounts & email_inbox) ─────────
+
+def _caller_uid(params: dict) -> int | None:
+    """Extract the caller's user ID (None when auth disabled / desktop)."""
+    return params.get("_caller_user_id")
+
+
+def _owner_filter(model, uid: int | None):
+    """WHERE clause: owner_id IS NULL OR owner_id = uid (legacy shared pool)."""
+    return or_(model.owner_id.is_(None), model.owner_id == uid)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ProviderEndpoint
 # ═══════════════════════════════════════════════════════════════════════════
@@ -73,6 +93,7 @@ logger = logging.getLogger(__name__)
 @register_command("create_provider_endpoint")
 async def cmd_create_provider_endpoint(params: dict) -> dict:
     req = ProviderEndpointCreateRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ProviderEndpointService(session)
@@ -84,6 +105,7 @@ async def cmd_create_provider_endpoint(params: dict) -> dict:
             default_headers=req.default_headers,
             discovery_policy=req.discovery_policy,
             health_policy=req.health_policy,
+            owner_id=owner_id,
         )
         return ProviderEndpointResponse.from_orm_model(endpoint)
 
@@ -92,9 +114,11 @@ async def cmd_create_provider_endpoint(params: dict) -> dict:
 
 @register_command("list_provider_endpoints", readonly=True)
 async def cmd_list_provider_endpoints(params: dict) -> list[dict]:
+    owner_id = _caller_uid(params)
+
     async def _op(session):
         svc = ProviderEndpointService(session)
-        endpoints = await svc.list_endpoints()
+        endpoints = await svc.list_endpoints(owner_id=owner_id)
         return [ProviderEndpointResponse.from_orm_model(e) for e in endpoints]
 
     return await run_in_read_session(_op)
@@ -103,10 +127,18 @@ async def cmd_list_provider_endpoints(params: dict) -> list[dict]:
 @register_command("get_provider_endpoint", readonly=True)
 async def cmd_get_provider_endpoint(params: dict) -> dict | None:
     req = ProviderEndpointIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = ProviderEndpointService(session)
-        endpoint = await svc.get_by_pk(req.id)
+        result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == req.id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        endpoint = result.scalar_one_or_none()
         return ProviderEndpointResponse.from_orm_model(endpoint) if endpoint else None
 
     return await run_in_read_session(_op)
@@ -116,11 +148,28 @@ async def cmd_get_provider_endpoint(params: dict) -> dict | None:
 async def cmd_update_provider_endpoint(params: dict) -> dict | None:
     req = ProviderEndpointUpdateRequest.model_validate(params)
     updates = req.model_dump(exclude={"id"}, exclude_none=True)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = ProviderEndpointService(session)
-        endpoint = await svc.update_by_pk(req.id, **updates)
-        return ProviderEndpointResponse.from_orm_model(endpoint) if endpoint else None
+        result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == req.id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        endpoint = result.scalar_one_or_none()
+        if endpoint is None:
+            return None
+        for key, value in updates.items():
+            if hasattr(endpoint, key):
+                setattr(endpoint, key, value)
+        if hasattr(endpoint, "updated_at"):
+            endpoint.updated_at = _utcnow()
+        await session.flush()
+        await session.refresh(endpoint)
+        return ProviderEndpointResponse.from_orm_model(endpoint)
 
     return await run_in_session(_op)
 
@@ -128,10 +177,23 @@ async def cmd_update_provider_endpoint(params: dict) -> dict | None:
 @register_command("delete_provider_endpoint")
 async def cmd_delete_provider_endpoint(params: dict) -> dict:
     req = ProviderEndpointIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = ProviderEndpointService(session)
-        return await svc.delete_by_pk(req.id)
+        result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == req.id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        endpoint = result.scalar_one_or_none()
+        if endpoint is None:
+            return False
+        await session.delete(endpoint)
+        await session.flush()
+        return True
 
     deleted = await run_in_session(_op)
     return {"success": deleted}
@@ -145,6 +207,7 @@ async def cmd_delete_provider_endpoint(params: dict) -> dict:
 @register_command("create_credential")
 async def cmd_create_credential(params: dict) -> dict:
     req = CredentialCreateRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = CredentialService(session)
@@ -153,6 +216,7 @@ async def cmd_create_credential(params: dict) -> dict:
             label=req.label,
             auth_type=req.auth_type,
             secret=req.secret,
+            owner_id=owner_id,
         )
         return CredentialResponse.from_orm_model(credential)
 
@@ -162,10 +226,13 @@ async def cmd_create_credential(params: dict) -> dict:
 @register_command("list_credentials", readonly=True)
 async def cmd_list_credentials(params: dict) -> list[dict]:
     req = ListCredentialsRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = CredentialService(session)
-        credentials = await svc.list_credentials(req.provider_endpoint_id)
+        credentials = await svc.list_credentials(
+            req.provider_endpoint_id, owner_id=owner_id,
+        )
         return [CredentialResponse.from_orm_model(c) for c in credentials]
 
     return await run_in_read_session(_op)
@@ -174,10 +241,18 @@ async def cmd_list_credentials(params: dict) -> list[dict]:
 @register_command("get_credential", readonly=True)
 async def cmd_get_credential(params: dict) -> dict | None:
     req = CredentialIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = CredentialService(session)
-        credential = await svc.get_by_pk(req.id)
+        result = await session.execute(
+            select(Credential).where(
+                and_(
+                    Credential.id == req.id,
+                    _owner_filter(Credential, owner_id),
+                )
+            )
+        )
+        credential = result.scalar_one_or_none()
         return CredentialResponse.from_orm_model(credential) if credential else None
 
     return await run_in_read_session(_op)
@@ -191,11 +266,28 @@ async def cmd_update_credential(params: dict) -> dict | None:
     """
     req = CredentialUpdateRequest.model_validate(params)
     updates = req.model_dump(exclude={"id"}, exclude_none=True)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = CredentialService(session)
-        credential = await svc.update_by_pk(req.id, **updates)
-        return CredentialResponse.from_orm_model(credential) if credential else None
+        result = await session.execute(
+            select(Credential).where(
+                and_(
+                    Credential.id == req.id,
+                    _owner_filter(Credential, owner_id),
+                )
+            )
+        )
+        credential = result.scalar_one_or_none()
+        if credential is None:
+            return None
+        for key, value in updates.items():
+            if hasattr(credential, key):
+                setattr(credential, key, value)
+        if hasattr(credential, "updated_at"):
+            credential.updated_at = _utcnow()
+        await session.flush()
+        await session.refresh(credential)
+        return CredentialResponse.from_orm_model(credential)
 
     return await run_in_session(_op)
 
@@ -221,10 +313,23 @@ async def cmd_rotate_credential_secret(params: dict) -> dict | None:
 @register_command("delete_credential")
 async def cmd_delete_credential(params: dict) -> dict:
     req = CredentialIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = CredentialService(session)
-        return await svc.delete_by_pk(req.id)
+        result = await session.execute(
+            select(Credential).where(
+                and_(
+                    Credential.id == req.id,
+                    _owner_filter(Credential, owner_id),
+                )
+            )
+        )
+        credential = result.scalar_one_or_none()
+        if credential is None:
+            return False
+        await session.delete(credential)
+        await session.flush()
+        return True
 
     deleted = await run_in_session(_op)
     return {"success": deleted}
@@ -363,6 +468,7 @@ async def cmd_delete_credential_model_access(params: dict) -> dict:
 @register_command("create_public_model")
 async def cmd_create_public_model(params: dict) -> dict:
     req = PublicModelCreateRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = PublicModelService(session)
@@ -371,6 +477,7 @@ async def cmd_create_public_model(params: dict) -> dict:
             display_name=req.display_name,
             enabled=req.enabled,
             contract=req.contract,
+            owner_id=owner_id,
         )
         return PublicModelResponse.from_orm_model(model)
 
@@ -379,9 +486,11 @@ async def cmd_create_public_model(params: dict) -> dict:
 
 @register_command("list_public_models", readonly=True)
 async def cmd_list_public_models(params: dict) -> list[dict]:
+    owner_id = _caller_uid(params)
+
     async def _op(session):
         svc = PublicModelService(session)
-        models = await svc.list_public_models()
+        models = await svc.list_public_models(owner_id=owner_id)
         return [PublicModelResponse.from_orm_model(m) for m in models]
 
     return await run_in_read_session(_op)
@@ -390,10 +499,18 @@ async def cmd_list_public_models(params: dict) -> list[dict]:
 @register_command("get_public_model", readonly=True)
 async def cmd_get_public_model(params: dict) -> dict | None:
     req = PublicModelIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = PublicModelService(session)
-        model = await svc.get_by_pk(req.id)
+        result = await session.execute(
+            select(PublicModel).where(
+                and_(
+                    PublicModel.id == req.id,
+                    _owner_filter(PublicModel, owner_id),
+                )
+            )
+        )
+        model = result.scalar_one_or_none()
         return PublicModelResponse.from_orm_model(model) if model else None
 
     return await run_in_read_session(_op)
@@ -403,11 +520,28 @@ async def cmd_get_public_model(params: dict) -> dict | None:
 async def cmd_update_public_model(params: dict) -> dict | None:
     req = PublicModelUpdateRequest.model_validate(params)
     updates = req.model_dump(exclude={"id"}, exclude_none=True)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = PublicModelService(session)
-        model = await svc.update_by_pk(req.id, **updates)
-        return PublicModelResponse.from_orm_model(model) if model else None
+        result = await session.execute(
+            select(PublicModel).where(
+                and_(
+                    PublicModel.id == req.id,
+                    _owner_filter(PublicModel, owner_id),
+                )
+            )
+        )
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        for key, value in updates.items():
+            if hasattr(model, key):
+                setattr(model, key, value)
+        if hasattr(model, "updated_at"):
+            model.updated_at = _utcnow()
+        await session.flush()
+        await session.refresh(model)
+        return PublicModelResponse.from_orm_model(model)
 
     return await run_in_session(_op)
 
@@ -415,10 +549,23 @@ async def cmd_update_public_model(params: dict) -> dict | None:
 @register_command("delete_public_model")
 async def cmd_delete_public_model(params: dict) -> dict:
     req = PublicModelIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = PublicModelService(session)
-        return await svc.delete_by_pk(req.id)
+        result = await session.execute(
+            select(PublicModel).where(
+                and_(
+                    PublicModel.id == req.id,
+                    _owner_filter(PublicModel, owner_id),
+                )
+            )
+        )
+        model = result.scalar_one_or_none()
+        if model is None:
+            return False
+        await session.delete(model)
+        await session.flush()
+        return True
 
     deleted = await run_in_session(_op)
     return {"success": deleted}

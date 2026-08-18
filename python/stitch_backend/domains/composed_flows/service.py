@@ -10,7 +10,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from stitch_backend.domains.composed_flows.models import ComposedFlow
@@ -50,6 +50,7 @@ class ComposedFlowService:
         name: str,
         flow_json: str,
         flow_id: str | None = None,
+        owner_id: int | None = None,
     ) -> dict[str, Any]:
         """Insert or update a composed flow. Returns the saved row."""
         alias = alias.strip()
@@ -65,9 +66,12 @@ class ComposedFlowService:
         fid = (flow_id or "").strip() or f"flow_{uuid.uuid4()}"
         now = _now()
 
+        # On conflict, preserve the existing owner_id (do not let a different
+        # caller hijack a shared/legacy row by re-upserting under their id).
+        # New rows get owner_id = caller's uid (None on desktop → NULL).
         stmt = sqlite_insert(ComposedFlow).values(
             id=fid, alias=alias, name=name, flow_json=flow_json,
-            created_at=now, updated_at=now,
+            owner_id=owner_id, created_at=now, updated_at=now,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["id"],
@@ -86,6 +90,7 @@ class ComposedFlowService:
 
     async def list_by_alias(
         self, alias: str, limit: int = 50,
+        owner_id: int | None = None,
     ) -> list[dict[str, Any]]:
         """List composed flows for an alias, newest first."""
         alias = alias.strip()
@@ -95,24 +100,37 @@ class ComposedFlowService:
 
         result = await self._db.execute(
             select(ComposedFlow)
-            .where(ComposedFlow.alias == alias)
+            .where(
+                ComposedFlow.alias == alias,
+                or_(
+                    ComposedFlow.owner_id.is_(None),
+                    ComposedFlow.owner_id == owner_id,
+                ),
+            )
             .order_by(ComposedFlow.updated_at.desc())
             .limit(limit)
         )
         return [_row_to_dict(r) for r in result.scalars().all()]
 
-    async def delete_by_id(self, flow_id: str) -> None:
+    async def delete_by_id(
+        self, flow_id: str, owner_id: int | None = None,
+    ) -> None:
         """Delete a composed flow by ID."""
         flow_id = flow_id.strip()
         if not flow_id:
             raise ValueError("flowId is required")
         await self._db.execute(
-            text("DELETE FROM composed_flows WHERE id = :id"),
-            {"id": flow_id},
+            text(
+                "DELETE FROM composed_flows "
+                "WHERE id = :id AND (owner_id IS NULL OR owner_id = :uid)"
+            ),
+            {"id": flow_id, "uid": owner_id},
         )
         await self._db.flush()
 
-    async def mark_ran(self, flow_id: str) -> None:
+    async def mark_ran(
+        self, flow_id: str, owner_id: int | None = None,
+    ) -> None:
         """Mark a flow as having been run (increment run_count)."""
         import time
         flow_id = flow_id.strip()
@@ -125,8 +143,8 @@ class ComposedFlowService:
                 "SET last_run_at = :ts, "
                 "    run_count = COALESCE(run_count, 0) + 1, "
                 "    updated_at = datetime('now') "
-                "WHERE id = :id"
+                "WHERE id = :id AND (owner_id IS NULL OR owner_id = :uid)"
             ),
-            {"ts": now_ts, "id": flow_id},
+            {"ts": now_ts, "id": flow_id, "uid": owner_id},
         )
         await self._db.flush()

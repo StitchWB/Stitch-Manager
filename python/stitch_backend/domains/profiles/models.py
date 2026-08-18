@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
@@ -49,6 +49,14 @@ class ProfileSettings(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    # ── Owner (per-user isolation) ───────────────────────────────────────────
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="NULL = shared pool (legacy, visible to all callers)",
     )
 
     def __repr__(self) -> str:

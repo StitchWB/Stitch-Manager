@@ -132,6 +132,14 @@ class ProviderEndpoint(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow,
     )
+    # ── Owner (per-user isolation) ───────────────────────────────────────────
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="NULL = shared pool (legacy, visible to all callers)",
+    )
 
     def __repr__(self) -> str:
         return f"<ProviderEndpoint id={self.id!r} name={self.name!r} adapter={self.adapter_type!r}>"
@@ -190,6 +198,14 @@ class Credential(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow,
+    )
+    # ── Owner (per-user isolation) ───────────────────────────────────────────
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="NULL = shared pool (legacy, visible to all callers)",
     )
 
     def __repr__(self) -> str:
@@ -382,6 +398,14 @@ class PublicModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow,
+    )
+    # ── Owner (per-user isolation) ───────────────────────────────────────────
+    owner_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="NULL = shared pool (legacy, visible to all callers)",
     )
 
     def __repr__(self) -> str:

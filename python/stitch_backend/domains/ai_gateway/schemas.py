@@ -20,14 +20,13 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from stitch_backend.domains.ai_gateway.models import (
         Credential,
         CredentialModelAccess,

@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import text
+from sqlalchemy import or_, select, text
 
 from stitch_backend.core.base_repository import BaseRepository
 from stitch_backend.core.base_service import BaseService
@@ -49,9 +49,12 @@ class ProfileSettingsRepo(BaseRepository[ProfileSettings]):
     async def upsert(
         self, alias: str, config_json: str,
         cookies: str | None = None, notes: str | None = None,
+        owner_id: int | None = None,
     ) -> ProfileSettings:
         existing = await self.get_by_pk(alias)
         if existing:
+            # Preserve existing owner_id on update — do not let a different
+            # caller hijack a shared/legacy row by re-upserting under their id.
             existing.config_json = config_json
             existing.cookies = cookies
             existing.notes = notes
@@ -61,8 +64,49 @@ class ProfileSettingsRepo(BaseRepository[ProfileSettings]):
             return existing
         return await self.create(
             alias=alias, config_json=config_json,
-            cookies=cookies, notes=notes, updated_at=datetime.now(UTC),
+            cookies=cookies, notes=notes,
+            owner_id=owner_id,
+            updated_at=datetime.now(UTC),
         )
+
+    async def get_by_pk_for_owner(
+        self, alias: str, owner_id: int | None = None,
+    ) -> ProfileSettings | None:
+        result = await self._db.execute(
+            select(ProfileSettings).where(
+                ProfileSettings.alias == alias,
+                or_(
+                    ProfileSettings.owner_id.is_(None),
+                    ProfileSettings.owner_id == owner_id,
+                ),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def delete_by_pk_for_owner(
+        self, alias: str, owner_id: int | None = None,
+    ) -> bool:
+        row = await self.get_by_pk_for_owner(alias, owner_id)
+        if row is None:
+            return False
+        await self._db.delete(row)
+        await self._db.flush()
+        return True
+
+    async def list_all_for_owner(
+        self, owner_id: int | None = None,
+        order_by: Any | None = None,
+    ) -> list[ProfileSettings]:
+        stmt = select(ProfileSettings).where(
+            or_(
+                ProfileSettings.owner_id.is_(None),
+                ProfileSettings.owner_id == owner_id,
+            )
+        )
+        if order_by is not None:
+            stmt = stmt.order_by(order_by)
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def rename_alias(self, old_alias: str, new_alias: str) -> None:
         stmt = text(
@@ -82,7 +126,9 @@ class ProfileSettingsService(BaseService):
         super().__init__(db)
         self._repo = ProfileSettingsRepo(db)
 
-    async def get_settings(self, alias: str) -> ProfileSettingsRecord | None:
+    async def get_settings(
+        self, alias: str, owner_id: int | None = None,
+    ) -> ProfileSettingsRecord | None:
         """Load settings by alias; returns None if not found.
 
         Transparently migrates legacy inline-proxy configs to the
@@ -91,17 +137,18 @@ class ProfileSettingsService(BaseService):
         alias = alias.strip()
         if not alias:
             raise ProfileError("alias is required")
-        row = await self._repo.get_by_pk(alias)
+        row = await self._repo.get_by_pk_for_owner(alias, owner_id)
         if row is None:
             return None
         # Transparent legacy proxy migration
         migrated = await self._migrate_legacy_proxy_if_needed(row)
         if migrated:
-            row = await self._repo.get_by_pk(alias)
+            row = await self._repo.get_by_pk_for_owner(alias, owner_id)
         return self._row_to_record(cast("ProfileSettings", row))
 
     async def save_settings(
         self, alias: str, settings: ProfileSettingsV1,
+        owner_id: int | None = None,
     ) -> None:
         """Save settings; validates version and enforces proxy policy."""
         alias = alias.strip()
@@ -116,15 +163,22 @@ class ProfileSettingsService(BaseService):
         config_json = settings.model_dump_json(by_alias=True)
         cookies = settings.storage.cookies
         notes = settings.storage.notes
-        await self._repo.upsert(alias, config_json, cookies, notes)
+        await self._repo.upsert(
+            alias, config_json, cookies, notes, owner_id=owner_id,
+        )
         logger.info("[Profiles] Settings saved for alias=%s", alias)
 
-    async def delete_settings(self, alias: str) -> bool:
-        return await self._repo.delete_by_pk(alias)
+    async def delete_settings(
+        self, alias: str, owner_id: int | None = None,
+    ) -> bool:
+        return await self._repo.delete_by_pk_for_owner(alias, owner_id)
 
-    async def list_setting_aliases(self) -> list[str]:
-        rows = await self._repo.list_all(
-            order_by=ProfileSettings.updated_at.desc()
+    async def list_setting_aliases(
+        self, owner_id: int | None = None,
+    ) -> list[str]:
+        rows = await self._repo.list_all_for_owner(
+            owner_id=owner_id,
+            order_by=ProfileSettings.updated_at.desc(),
         )
         return [r.alias for r in rows]
 
