@@ -86,6 +86,7 @@ export default function Sidebar() {
     logout: authLogout,
     busy: authBusy,
     exitGuest,
+    hasPermission,
   } = useAuthStore();
   const [mounted, setMounted] = useState(false);
 
@@ -165,11 +166,13 @@ export default function Sidebar() {
           label={t('sidebar.accounts')}
           collapsed={sidebarCollapsed} />
 
-        <NavItem
-          to="/autoreg"
-          icon={<RefreshCw size={20} />}
-          label={t('sidebar.autoReg')}
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.autoreg') && (
+          <NavItem
+            to="/autoreg"
+            icon={<RefreshCw size={20} />}
+            label={t('sidebar.autoReg')}
+            collapsed={sidebarCollapsed} />
+        )}
 
         {isDesktopApp() && (
           <NavItem
@@ -179,11 +182,13 @@ export default function Sidebar() {
             collapsed={sidebarCollapsed} />
         )}
 
-        <NavItem
-          to="/ai"
-          icon={<ShieldCheck size={20} />}
-          label={t('sidebar.aiHub')}
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.ai_hub') && (
+          <NavItem
+            to="/ai"
+            icon={<ShieldCheck size={20} />}
+            label={t('sidebar.aiHub')}
+            collapsed={sidebarCollapsed} />
+        )}
 
         <NavItem
           to="/radar"
@@ -191,29 +196,37 @@ export default function Sidebar() {
           label={t('sidebar.radar')}
           collapsed={sidebarCollapsed} />
 
-        <NavItem
-          to="/automation"
-          icon={<Repeat size={20} />}
-          label={t('sidebar.automation')}
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.automation') && (
+          <NavItem
+            to="/automation"
+            icon={<Repeat size={20} />}
+            label={t('sidebar.automation')}
+            collapsed={sidebarCollapsed} />
+        )}
 
-        <NavItem
-          to="/mail"
-          icon={<Mail size={20} />}
-          label={t('sidebar.mail')}
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.mail') && (
+          <NavItem
+            to="/mail"
+            icon={<Mail size={20} />}
+            label={t('sidebar.mail')}
+            collapsed={sidebarCollapsed} />
+        )}
 
-        <NavItem
-          to="/tools"
-          icon={<Wrench size={20} />}
-          label={t('sidebar.tools')}
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.tools') && (
+          <NavItem
+            to="/tools"
+            icon={<Wrench size={20} />}
+            label={t('sidebar.tools')}
+            collapsed={sidebarCollapsed} />
+        )}
 
-        <NavItem
-          to="/totp"
-          icon={<KeyRound size={20} />}
-          label="2FA"
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.totp') && (
+          <NavItem
+            to="/totp"
+            icon={<KeyRound size={20} />}
+            label="2FA"
+            collapsed={sidebarCollapsed} />
+        )}
 
         <NavItem
           to="/friends"
@@ -235,17 +248,21 @@ export default function Sidebar() {
           }
         </div>
 
-        <NavItem
-          to="/settings"
-          icon={<Settings size={20} />}
-          label={t('sidebar.settings')}
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.settings') && (
+          <NavItem
+            to="/settings"
+            icon={<Settings size={20} />}
+            label={t('sidebar.settings')}
+            collapsed={sidebarCollapsed} />
+        )}
 
-        <NavItem
-          to="/logs"
-          icon={<FileText size={20} />}
-          label={t('sidebar.logs')}
-          collapsed={sidebarCollapsed} />
+        {hasPermission('section.logs') && (
+          <NavItem
+            to="/logs"
+            icon={<FileText size={20} />}
+            label={t('sidebar.logs')}
+            collapsed={sidebarCollapsed} />
+        )}
 
         {isAdmin && authEnabled && (
           <NavItem
@@ -268,6 +285,14 @@ export default function Sidebar() {
             to="/monitoring"
             icon={<Activity size={20} />}
             label={t('monitoring.title')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && authEnabled && (
+          <NavItem
+            to="/privileges"
+            icon={<ShieldCheck size={20} />}
+            label={t('privileges.title')}
             collapsed={sidebarCollapsed} />
         )}
       </nav>
@@ -323,9 +348,6 @@ export default function Sidebar() {
                         {showTier && (
                           <TierBadge tier={authUser.tg_tier} size="sm" className="shrink-0" />
                         )}
-                        <span className="text-[10px] text-slate-500 truncate">
-                          #{String(authUser.id)}
-                        </span>
                       </div>
                     </div>
                   </div>

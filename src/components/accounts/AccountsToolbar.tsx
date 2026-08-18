@@ -36,6 +36,7 @@ import type { AccountsEntityTab } from './AccountsEntityTabs';
 import { AccountsEntityTabs } from './AccountsEntityTabs';
 import { AccountsColumnsMenu, type AccountsVisibleColumns } from './AccountsColumnsMenu';
 import { PROVIDERS } from '@/constants/providers';
+import { useAuthStore } from '@/stores/auth';
 
 type ViewMode = 'list' | 'graph' | 'sheets';
 
@@ -149,6 +150,8 @@ export function AccountsToolbar({
   const isAccountsList = resolvedViewMode === 'list' && normalizedEntityFilter !== 'profiles';
   const isProfilesList = resolvedViewMode === 'list' && normalizedEntityFilter === 'profiles';
   const isSheetsView = resolvedViewMode !== 'list';
+  const hasPermission = useAuthStore(state => state.hasPermission);
+  const canExport = hasPermission('action.export_accounts');
 
   return (
     <StickyToolbar
@@ -216,12 +219,12 @@ export function AccountsToolbar({
                     disabled: isImporting,
                     loading: isImporting,
                   },
-                  {
+                  ...(canExport ? [{
                     icon: Download,
                     label: t('accounts.exportCsv'),
                     onClick: onExportCSV,
                     disabled: filteredAccountsCount === 0,
-                  },
+                  }] : []),
                 ]}
                 spacing="tight"
                 size="sm"

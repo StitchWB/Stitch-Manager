@@ -1810,6 +1810,29 @@ export interface Translations {
     filterMine: string;
     filterShared: string;
   };
+  privileges: {
+    title: string;
+    subtitle: string;
+    adminImmutable: string;
+    sections: string;
+    actions: string;
+    updated: string;
+    error: string;
+    key: {
+      'section.autoreg': string;
+      'section.ai_hub': string;
+      'section.automation': string;
+      'section.mail': string;
+      'section.tools': string;
+      'section.totp': string;
+      'section.scenarios': string;
+      'section.settings': string;
+      'section.logs': string;
+      'action.export_accounts': string;
+      'action.bulk_delete': string;
+      'action.claim': string;
+    };
+  };
   monitoring: {
     title: string;
     subtitle: string;

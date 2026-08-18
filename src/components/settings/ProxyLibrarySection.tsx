@@ -37,6 +37,7 @@ import {
   type ProxyLibraryType,
   type ProxyLibraryUsage } from
 '@/lib/backend/modules/proxyLibrary';
+import { useAuthStore } from '@/stores/auth';
 
 interface ForceUpdateDialogState {
   isOpen: boolean;
@@ -93,6 +94,8 @@ export function ProxyLibrarySection() {
   const [items, setItems] = useState<ProxyLibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canClaim = hasPermission('action.claim');
 
   const [createDraft, setCreateDraft] = useState<ProxyLibraryDraft>(defaultDraft);
   const [creating, setCreating] = useState(false);
@@ -720,7 +723,7 @@ export function ProxyLibrarySection() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {entry.shared && !entry.mine ? (
+                          {entry.shared && !entry.mine && canClaim ? (
                             <Tooltip content={t('ownership.claim')} side="top">
                               <Button
                                 variant="ghost"

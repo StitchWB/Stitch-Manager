@@ -27,6 +27,7 @@ import { AccountRefCell } from './AccountRefCell';
 import { AccountRowQuickActions } from './AccountRowQuickActions';
 import { TotpBadge } from '@/components/totp/TotpBadge';
 import { useTotpStore } from '@/stores/totp';
+import { useAuthStore } from '@/stores/auth';
 
 interface AccountRowProps {
   account: Account;
@@ -102,6 +103,8 @@ export function AccountRow({
   const data = useAccountRowData(account, relationHints, relationEdges);
   const { copy } = useCopyToClipboard();
   const allTotpKeys = useTotpStore((s) => s.keys);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canClaim = hasPermission('action.claim');
   const accountIdStr = String(account.id);
   const totpKeys = allTotpKeys.filter(
     (k) => k.enabled && k.accountId === accountIdStr
@@ -167,7 +170,7 @@ export function AccountRow({
           </Tooltip>
           <div className="flex items-center gap-1">
             <OwnershipBadge mine={account.mine} shared={account.shared} />
-            {account.shared && !account.mine && onClaim ? (
+            {account.shared && !account.mine && onClaim && canClaim ? (
               <Tooltip content={t('ownership.claim')} side="top">
                 <button
                   type="button"

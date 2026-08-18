@@ -27,6 +27,7 @@ import {
 } from '@/components/ui';
 import { useTotpStore } from '../stores/totp';
 import { useAppStore } from '../stores/app';
+import { useAuthStore } from '../stores/auth';
 import { t } from '../lib/i18n';
 import type { TotpKey } from '@/lib/backend/modules/totp';
 import { claimTotpKey } from '@/lib/backend/modules/totp';
@@ -515,6 +516,8 @@ function TotpKeyRow({
   onDelete,
   onClaim,
 }: TotpKeyRowProps) {
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canClaim = hasPermission('action.claim');
   return (
     <div
       className={cn(
@@ -584,7 +587,7 @@ function TotpKeyRow({
       {/* Actions */}
       {!isEditing && (
         <div className="flex items-center gap-1 shrink-0">
-          {totpKey.shared && !totpKey.mine && onClaim && (
+          {totpKey.shared && !totpKey.mine && onClaim && canClaim && (
             <IconButton
               onClick={onClaim}
               variant="ghost"

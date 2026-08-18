@@ -73,6 +73,7 @@ const NotebookLM = lazy(() => import('./pages/NotebookLM'));
 const Users = lazy(() => import('./pages/Users'));
 const Codes = lazy(() => import('./pages/Codes'));
 const Monitoring = lazy(() => import('./pages/Monitoring'));
+const Privileges = lazy(() => import('./pages/Privileges'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -233,8 +234,17 @@ function App() {
 
   useEffect(() => {
     const baseSize = 16; // Standard base size
-    const scaledSize = baseSize * uiScale;
-    document.documentElement.style.setProperty('--app-font-size', `${scaledSize}px`);
+    const apply = () => {
+      // Large-monitor comfort scaling: gently bump the rem base on >=2K /
+      // >=2.5K viewports; composes with the user's uiScale setting.
+      const w = window.innerWidth;
+      const viewportFactor = w >= 2560 ? 1.125 : w >= 2000 ? 1.0625 : 1;
+      const scaledSize = baseSize * uiScale * viewportFactor;
+      document.documentElement.style.setProperty('--app-font-size', `${scaledSize}px`);
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
   }, [uiScale]);
 
   // Apply theme on mount and when it changes
@@ -531,6 +541,7 @@ function App() {
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
             <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />
             <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
+            <Route path="/privileges" element={<AdminRoute><Privileges /></AdminRoute>} />
             <Route path="/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

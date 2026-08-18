@@ -16,6 +16,9 @@ import { useAuthStore } from '../../stores/auth';
 jest.mock('../../lib/backend/modules/auth', () => ({
   getAuthStatus: jest.fn(),
   getCurrentUser: jest.fn(),
+  getMyPermissions: jest.fn(),
+  getPermissionsMatrix: jest.fn(),
+  setPermission: jest.fn(),
   loginUser: jest.fn(),
   loginTelegram: jest.fn(),
   loginTelegramOidc: jest.fn(),
@@ -25,6 +28,20 @@ jest.mock('../../lib/backend/modules/auth', () => ({
   createUser: jest.fn(),
   deleteUser: jest.fn(),
   setLoginPolicy: jest.fn(),
+  PERMISSION_KEYS: [
+    'section.autoreg',
+    'section.ai_hub',
+    'section.automation',
+    'section.mail',
+    'section.tools',
+    'section.totp',
+    'section.scenarios',
+    'section.settings',
+    'section.logs',
+    'action.export_accounts',
+    'action.bulk_delete',
+    'action.claim',
+  ],
 }));
 
 // Mock the invoke module's setAuthExpiredHandler so the store can register
@@ -38,6 +55,7 @@ jest.mock('../../lib/backend/core/invoke', () => ({
 const authModule = jest.requireMock('../../lib/backend/modules/auth') as {
   getAuthStatus: jest.Mock;
   getCurrentUser: jest.Mock;
+  getMyPermissions: jest.Mock;
   setLoginPolicy: jest.Mock;
   loginTelegramOidc: jest.Mock;
 };
@@ -59,6 +77,8 @@ describe('auth store — enforce_login policy', () => {
       sessionExpired: false,
       guest: false,
       authView: 'welcome',
+      permissions: [],
+      permissionsLoaded: false,
     });
   });
 
@@ -70,6 +90,7 @@ describe('auth store — enforce_login policy', () => {
       enforce_login: false,
     });
     authModule.getCurrentUser.mockResolvedValue(null);
+    authModule.getMyPermissions.mockResolvedValue([]);
 
     await useAuthStore.getState().init();
 
@@ -89,6 +110,7 @@ describe('auth store — enforce_login policy', () => {
       // enforce_login omitted — older backend
     });
     authModule.getCurrentUser.mockResolvedValue(null);
+    authModule.getMyPermissions.mockResolvedValue([]);
 
     await useAuthStore.getState().init();
 
@@ -169,6 +191,8 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
       sessionExpired: false,
       guest: false,
       authView: 'welcome',
+      permissions: [],
+      permissionsLoaded: false,
     });
   });
 
@@ -181,6 +205,7 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
       tg_auth_mode: 'oidc',
     });
     authModule.getCurrentUser.mockResolvedValue(null);
+    authModule.getMyPermissions.mockResolvedValue([]);
 
     await useAuthStore.getState().init();
 
@@ -196,6 +221,7 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
       // tg_auth_mode omitted — older backend
     });
     authModule.getCurrentUser.mockResolvedValue(null);
+    authModule.getMyPermissions.mockResolvedValue([]);
 
     await useAuthStore.getState().init();
 
@@ -219,6 +245,8 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
       checked: true,
       user: null,
       authView: 'telegram',
+      permissions: [],
+      permissionsLoaded: false,
     });
 
     authModule.loginTelegramOidc.mockResolvedValue({
@@ -239,6 +267,7 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
       username: 'tg',
       role: 'admin',
     });
+    authModule.getMyPermissions.mockResolvedValue([]);
 
     const result = await useAuthStore.getState().loginTelegramOidc('id-jwt-token');
 
@@ -259,6 +288,8 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
       checked: true,
       user: null,
       authView: 'telegram',
+      permissions: [],
+      permissionsLoaded: false,
     });
 
     authModule.loginTelegramOidc.mockRejectedValue(new Error('Bad id_token'));
@@ -280,6 +311,8 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
       checked: true,
       user: null,
       authView: 'telegram',
+      permissions: [],
+      permissionsLoaded: false,
     });
 
     authModule.loginTelegramOidc.mockRejectedValue(new Error());

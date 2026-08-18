@@ -6,11 +6,11 @@
  * store action re-runs init() so the gate closes.
  *
  * When the backend reports `tg_auth_mode === 'oidc'` (via /api/auth/status),
- * the official Telegram OIDC button is rendered ABOVE the code form. The
- * button is injected by the `telegram-login.js` library — we only mount the
- * host `<button class="tg-auth-button">` and call `Telegram.Login.auth()`
- * programmatically on click (the library's auto-init reads data-client-id
- * from the SCRIPT tag, which is wrong for an SPA).
+ * the official Telegram OIDC button is rendered ABOVE the code form. We
+ * mount the host `<button class="tg-auth-button">`, load the library once
+ * and call `Telegram.Login.init({client_id, scope}, cb)`; the library's own
+ * click handler opens the popup (data-* auto-init reads the SCRIPT tag and
+ * is wrong for an SPA).
  *
  * The one-time-code form stays available in BOTH modes as an independent
  * fallback mechanism (the bot /login command always works, even on
@@ -77,24 +77,35 @@ export default function TelegramLogin() {
   // route that renders this surface. Nothing in this repo currently sets
   // COOP — keep it that way, or relax it explicitly in the nginx config
   // for /login and /telegram paths.
-  const onOidcClick = async () => {
-    if (busy) return;
-    setLocalError(null);
-    try {
-      await ensureTelegramLoginScript();
-      const api = window.Telegram?.Login;
-      if (!api) {
-        setLocalError(t('auth.tg.oidc.errorGeneric'));
-        return;
-      }
-      api.auth(
-        { client_id: TG_OIDC_CLIENT_ID, scope: ['openid', 'profile'] },
-        (result: TelegramAuthResult) => handleOidcResult(result),
-      );
-    } catch {
-      setLocalError(t('auth.tg.oidc.errorGeneric'));
-    }
-  };
+  // Load the official script once and register options + callback; the
+  // library's own click handler on .tg-auth-button opens the popup
+  // (proven pattern from the radar team — data-* auto-init reads the
+  // SCRIPT tag and is wrong for an SPA; calling auth() per click fights
+  // the library's document-level handler).
+  useEffect(() => {
+    if (tgAuthMode !== 'oidc') return;
+    let cancelled = false;
+    ensureTelegramLoginScript()
+      .then(() => {
+        if (cancelled) return;
+        const api = window.Telegram?.Login;
+        if (!api) {
+          setLocalError(t('auth.tg.oidc.errorGeneric'));
+          return;
+        }
+        api.init(
+          { client_id: TG_OIDC_CLIENT_ID, scope: ['openid', 'profile'] },
+          (result: TelegramAuthResult) => handleOidcResult(result),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setLocalError(t('auth.tg.oidc.errorGeneric'));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleOidcResult is stable per render
+  }, [tgAuthMode]);
 
   const handleOidcResult = (result: TelegramAuthResult) => {
     // User closed the popup before completing — not an error, just abort.
@@ -179,9 +190,11 @@ export default function TelegramLogin() {
                 its visual style; the wrapper only centers it. */}
             {tgAuthMode === 'oidc' && (
               <div className="flex justify-center mb-4" data-testid="tg-oidc-wrapper">
+                {/* No onClick: the library's document-level handler on
+                    .tg-auth-button calls open() with the init() options.
+                    disabled={busy} suppresses clicks while in flight. */}
                 <button
                   type="button"
-                  onClick={onOidcClick}
                   disabled={busy}
                   data-style="shine"
                   className="tg-auth-button"
