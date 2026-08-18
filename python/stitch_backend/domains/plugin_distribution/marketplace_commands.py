@@ -1,23 +1,19 @@
 """Marketplace commands — merge official + community + installed state.
 
-Three commands wired to the command registry:
-
-  - ``get_marketplace``              → merge official manifest + community catalog
-                                       + local installed state (readonly)
-  - ``install_marketplace_plugin``   → official (entitled-gated, signature-verified)
-                                       or community install
+Commands:
+  - ``get_marketplace``              → official manifest + community catalog (readonly)
+  - ``install_marketplace_plugin``   → official (entitlement-gated) or community
   - ``uninstall_marketplace_plugin`` → remove local installed copy
 
-Official items come from the stitch_server manifest using the stored
-activation.  If no activation or server is unreachable, ``activated`` is
-False and official items are empty (the command never fails).
-
-Community items come from the existing community catalog client
-(:mod:`.community`); ``entitled=True``, ``can_download=True`` always.
+Official entitlement is computed LOCALLY from ``state.entitlements``
+(``"*"`` = all; else plugin-id membership), not from the server manifest.
+If no activation or server unreachable, ``activated`` is False and
+official items are empty — community items are still returned.
 
 Installed state for official plugins is read from
 :func:`autoreg.plugin.install.list_installed_versions`; for community
-plugins from :func:`.community.list_installed_community`.
+plugins from :func:`.community.list_installed_community`.  On web builds
+where no official plugin is installed locally, ``installed=False``.
 """
 
 from __future__ import annotations
@@ -29,7 +25,7 @@ from typing import Any
 import httpx
 
 from autoreg.plugin.install import list_installed_versions
-from autoreg.plugin.layout import plugin_cache_path, plugins_cache_dir
+from autoreg.plugin.layout import plugins_cache_dir
 from autoreg.plugin.manifest import parse_semver
 from stitch_backend.core.command_registry import register_command
 
@@ -45,7 +41,20 @@ from .sync import PluginSyncService
 logger = logging.getLogger(__name__)
 
 
-# ── get_marketplace ──────────────────────────────────────────────────────────
+def _is_entitled(plugin_id: str, entitlements: list[str]) -> bool:
+    """True if ``plugin_id`` is entitled per ``state.entitlements``.
+
+    ``"*"`` in the list = all plugins; else exact plugin-id membership.
+    """
+    return "*" in entitlements or plugin_id in entitlements
+
+
+def _safe_semver(version: str) -> tuple[int, int, int]:
+    """Parse semver, returning (0,0,0) on failure (sorts oldest)."""
+    try:
+        return parse_semver(version)
+    except ValueError:
+        return (0, 0, 0)
 
 
 @register_command("get_marketplace", readonly=True)
@@ -57,7 +66,6 @@ async def cmd_get_marketplace(params: dict) -> dict:
     """
     items: list[dict[str, Any]] = []
 
-    # ── Official items from server manifest ──────────────────────────────────
     activation = ActivationService()
     state = activation.load()
     activated = state is not None
@@ -69,9 +77,9 @@ async def cmd_get_marketplace(params: dict) -> dict:
             for entry in manifest.get("plugins", []):
                 plugin_id = str(entry.get("id", ""))
                 version = str(entry.get("version", ""))
-                entitled = entry.get("entitled", True)
                 if not plugin_id or not version:
                     continue
+                entitled = _is_entitled(plugin_id, state.entitlements)
                 installed_versions = list_installed_versions(plugin_id)
                 installed = bool(installed_versions)
                 installed_version = (
@@ -79,25 +87,23 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     if installed_versions
                     else None
                 )
-                name = _read_installed_name(plugin_id, installed_version) or plugin_id
                 items.append(
                     {
                         "id": plugin_id,
-                        "name": name,
+                        "name": plugin_id,
                         "description": None,
                         "version": version,
                         "source": "official",
-                        "entitled": bool(entitled),
+                        "entitled": entitled,
                         "installed": installed,
                         "installed_version": installed_version,
-                        "can_download": bool(entitled),
+                        "can_download": entitled,
                     }
                 )
         except Exception as exc:  # noqa: BLE001 — marketplace must not crash
             logger.warning("Marketplace: official manifest fetch failed: %s", exc)
             activated = False
 
-    # ── Community items from catalog ─────────────────────────────────────────
     try:
         catalog = fetch_catalog()
         installed_community = {
@@ -111,19 +117,17 @@ async def cmd_get_marketplace(params: dict) -> dict:
             if not plugin_id or not version:
                 continue
             name = str(entry.get("name", plugin_id))
-            description = entry.get("description")
             is_installed = (plugin_id, version) in installed_community
-            installed_version = version if is_installed else None
             items.append(
                 {
                     "id": plugin_id,
                     "name": name,
-                    "description": description,
+                    "description": entry.get("description"),
                     "version": version,
                     "source": "community",
                     "entitled": True,
                     "installed": is_installed,
-                    "installed_version": installed_version,
+                    "installed_version": version if is_installed else None,
                     "can_download": True,
                 }
             )
@@ -133,16 +137,12 @@ async def cmd_get_marketplace(params: dict) -> dict:
     return {"activated": activated, "items": items}
 
 
-# ── install_marketplace_plugin ────────────────────────────────────────────────
-
-
 @register_command("install_marketplace_plugin")
 async def cmd_install_marketplace_plugin(params: dict) -> dict:
     """Install a plugin from the official or community channel.
 
-    Params: ``{id, source}`` where source is ``"official"`` or ``"community"``.
-    Official requires activation + entitled; community reuses the existing
-    community install flow.  Returns ``{"success": bool, "error": str | null}``.
+    Params: ``{id, source}``.  Official requires activation + local
+    entitlement; community reuses the existing community install flow.
     """
     plugin_id = str(params.get("id", ""))
     source = str(params.get("source", ""))
@@ -157,13 +157,15 @@ async def cmd_install_marketplace_plugin(params: dict) -> dict:
 
 
 async def _install_official(plugin_id: str) -> dict[str, Any]:
-    """Install an official plugin: require activation + entitled, then sync-install."""
+    """Install an official plugin: activation + local entitlement, then sync."""
     activation = ActivationService()
     state = activation.load()
     if state is None:
         return {"success": False, "error": "not activated"}
     if state.degraded:
         return {"success": False, "error": "activation degraded (revoked token)"}
+    if not _is_entitled(plugin_id, state.entitlements):
+        return {"success": False, "error": "not entitled to this plugin"}
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         sync = PluginSyncService(activation, client=client)
@@ -172,7 +174,6 @@ async def _install_official(plugin_id: str) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 — surface as command error
             return {"success": False, "error": f"manifest fetch failed: {exc}"}
 
-        # Find the plugin entry in the manifest.
         entry = None
         for e in manifest.get("plugins", []):
             if str(e.get("id", "")) == plugin_id:
@@ -185,12 +186,6 @@ async def _install_official(plugin_id: str) -> dict[str, Any]:
         if not version:
             return {"success": False, "error": "manifest entry missing version"}
 
-        entitled = entry.get("entitled", True)
-        if entitled is False:
-            return {"success": False, "error": "not entitled to this plugin"}
-
-        # Download + install (signature-verified atomic install).
-        # Surface 403 (server-side entitlement gate) as a command error.
         try:
             await sync._download_and_install(  # noqa: SLF001 — reuse sync internals
                 plugin_id, version, state.token, state.pubkey
@@ -220,14 +215,11 @@ async def _install_community_latest(plugin_id: str) -> dict[str, Any]:
     return await install_community(plugin_id, latest)
 
 
-# ── uninstall_marketplace_plugin ──────────────────────────────────────────────
-
-
 @register_command("uninstall_marketplace_plugin")
 async def cmd_uninstall_marketplace_plugin(params: dict) -> dict:
     """Remove a locally installed plugin (official cache or community dir).
 
-    Params: ``{id, source}``.  Returns ``{"success": bool, "error": str | null}``.
+    Params: ``{id, source}``.
     """
     plugin_id = str(params.get("id", ""))
     source = str(params.get("source", ""))
@@ -261,34 +253,3 @@ def _uninstall_community(plugin_id: str) -> dict[str, Any]:
     if root.is_dir():
         return {"success": False, "error": "failed to remove plugin directory"}
     return {"success": True, "error": None}
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-
-def _safe_semver(version: str) -> tuple[int, int, int]:
-    """Parse semver, returning (0,0,0) on failure (sorts oldest)."""
-    try:
-        return parse_semver(version)
-    except ValueError:
-        return (0, 0, 0)
-
-
-def _read_installed_name(plugin_id: str, version: str | None) -> str | None:
-    """Best-effort read of the plugin name from an installed package."""
-    if version is None:
-        return None
-    import json
-
-    manifest_path = plugin_cache_path(plugin_id, version) / "plugin.json"
-    if not manifest_path.is_file():
-        return None
-    try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if isinstance(raw, dict):
-            name = raw.get("name")
-            if isinstance(name, str) and name:
-                return name
-    except (OSError, ValueError):
-        pass
-    return None
