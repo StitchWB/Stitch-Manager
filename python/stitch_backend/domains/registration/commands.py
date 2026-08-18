@@ -90,7 +90,8 @@ async def cmd_auto_register(params: dict) -> dict:
     provider = params.get("provider", "kiro")
     if provider not in _ALLOWED_AUTOREG_PROVIDERS:
         return {"error": f"Unknown provider: {provider}"}
-    config = {"email": email, "password": password, "headless": True}
+    config = {"email": email, "password": password, "headless": True,
+              "owner_id": params.get("_caller_user_id")}
     job_id = await registration_service.submit(provider, config)
     return {"jobId": job_id, "success": True}
 
@@ -102,7 +103,8 @@ async def cmd_confirm_registration(params: dict) -> dict:
 
     email = params.get("email", "")
     code = params.get("code", "")
-    config = {"email": email, "verification_code": code, "headless": True}
+    config = {"email": email, "verification_code": code, "headless": True,
+              "owner_id": params.get("_caller_user_id")}
     job_id = await registration_service.submit("kiro", config)
     return {"jobId": job_id, "success": True}
 
@@ -114,7 +116,8 @@ async def cmd_auto_login(params: dict) -> dict:
 
     email = params.get("email", "")
     password = params.get("password", "")
-    config = {"email": email, "password": password, "headless": True, "launch_mode": "login"}
+    config = {"email": email, "password": password, "headless": True,
+              "launch_mode": "login", "owner_id": params.get("_caller_user_id")}
     job_id = await registration_service.submit("kiro", config)
     return {"jobId": job_id, "success": True}
 
@@ -169,6 +172,10 @@ async def _start_autoreg_job(provider: str, params: dict) -> dict:
     config = params.get("config", params)
     if not isinstance(config, dict):
         config = {}
+
+    # Thread caller's owner_id for per-user IMAP password resolution.
+    if "_caller_user_id" in params and "owner_id" not in config:
+        config["owner_id"] = params.get("_caller_user_id")
 
     job_id = await registration_service.submit(provider, config)
     return {"jobId": job_id}
@@ -434,6 +441,7 @@ async def cmd_authorize_kiro_account(params: dict) -> dict:
         "account_id": account_id,
         "headless": headless,
         "launch_mode": "kiro_oauth_only_existing_session",
+        "owner_id": params.get("_caller_user_id"),
     }
     job_id = await registration_service.submit("kiro_v2", config)
     return {"jobId": job_id}
@@ -447,6 +455,9 @@ async def cmd_start_registration_v2(params: dict) -> dict:
     from stitch_backend.domains.registration.service import registration_service
 
     req = params.get("params", params)
+    # Thread caller's owner_id for per-user IMAP password resolution.
+    if "_caller_user_id" in params and "owner_id" not in req:
+        req = {**req, "owner_id": params.get("_caller_user_id")}
     job_id = await registration_service.submit("kiro_v2", req)
     return {"success": True, "jobId": job_id, "email": req.get("email", "")}
 

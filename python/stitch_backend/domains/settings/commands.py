@@ -9,9 +9,11 @@ from stitch_backend.domains.settings.service import SettingsService
 
 @register_command("get_settings", readonly=True)
 async def cmd_get_settings(params: dict) -> dict:
+    owner_id = params.get("_caller_user_id")
+
     async def _op(session):
         svc = SettingsService(session)
-        return await svc.get_all()
+        return await svc.get_all(owner_id=owner_id)
 
     return await run_in_read_session(_op)
 
@@ -19,9 +21,10 @@ async def cmd_get_settings(params: dict) -> dict:
 @register_command("update_settings")
 async def cmd_update_settings(params: dict) -> dict:
     settings = params.get("settings", params)
+    owner_id = params.get("_caller_user_id")
 
     async def _op(session):
         svc = SettingsService(session)
-        return await svc.update(settings)
+        return await svc.update(settings, owner_id=owner_id)
 
     return await run_in_session(_op)

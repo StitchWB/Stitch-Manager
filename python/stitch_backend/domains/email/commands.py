@@ -148,12 +148,23 @@ async def cmd_test_imap_connection(params: dict) -> str:
     # Resolve password sentinel ("********") from settings table
     is_gmail = "gmail.com" in server or "imap.google.com" in server
     setting_key = "gmailAppPassword" if is_gmail else "imapPassword"
+    owner_id = params.get("_caller_user_id")
+    user_key = f"u{owner_id}:{setting_key}" if owner_id is not None else None
     if password in ("••••••••", "********", ""):
         from sqlalchemy import text as sql_text
 
         from stitch_backend.database import run_in_read_session
 
         async def _fetch_pwd(session):
+            # Try user-scoped key first, then global.
+            if user_key:
+                r = await session.execute(
+                    sql_text("SELECT value FROM settings WHERE key = :k"),
+                    {"k": user_key},
+                )
+                row = r.first()
+                if row and row[0]:
+                    return row[0]
             r = await session.execute(
                 sql_text("SELECT value FROM settings WHERE key = :k"),
                 {"k": setting_key},

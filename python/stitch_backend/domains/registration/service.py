@@ -34,8 +34,16 @@ logger = logging.getLogger(__name__)
 
 # ── Provider factory ────────────────────────────────────────────────────────
 
-def _resolve_imap_password_from_db(host: str) -> str:
-    """Synchronously resolve the real IMAP/Gmail password from the settings DB."""
+def _resolve_imap_password_from_db(
+    host: str, owner_id: int | None = None
+) -> str:
+    """Synchronously resolve the real IMAP/Gmail password from the settings DB.
+
+    When ``owner_id`` is given, the user-scoped key ``u<uid>:<key>`` is tried
+    first, falling back to the global key.  When ``owner_id`` is ``None``
+    (desktop), only the global key is read — byte-identical to the
+    pre-multi-user behaviour.
+    """
     import sqlite3 as _sqlite3
 
     from stitch_backend.config import PYTHON_DIR, _app_data_dir
@@ -49,8 +57,17 @@ def _resolve_imap_password_from_db(host: str) -> str:
         if not db_path.exists():
             db_path = PYTHON_DIR / "stitch.db"
     key = "gmailAppPassword" if "gmail" in host.lower() else "imapPassword"
+    user_key = f"u{owner_id}:{key}" if owner_id is not None else None
     try:
         con = _sqlite3.connect(str(db_path), timeout=5)
+        # Try user-scoped key first, then global.
+        if user_key:
+            row = con.execute(
+                "SELECT value FROM settings WHERE key = ?", (user_key,)
+            ).fetchone()
+            if row and row[0]:
+                con.close()
+                return row[0]
         row = con.execute(
             "SELECT value FROM settings WHERE key = ?", (key,)
         ).fetchone()
@@ -67,16 +84,20 @@ def _build_imap_config(config: dict) -> dict | None:
     Accepts both camelCase (from frontend JSON) and snake_case keys.
     When the password is the sentinel '********' (masked by settings API),
     resolves the real password from the settings DB synchronously.
+    Threads ``owner_id`` from config to the resolver for per-user lookup.
     """
     server = config.get("imap_server") or config.get("imapServer")
     user = config.get("imap_user") or config.get("imapUser")
     password = config.get("imap_password") or config.get("imapPassword")
+    owner_id = config.get("owner_id") or config.get("_caller_user_id")
     if server and user and password:
         port_raw = config.get("imap_port") or config.get("imapPort") or 993
         # Resolve sentinel — frontend sends '********' when the password is
         # stored in the DB (to avoid echoing it to the UI).
         if password in ("********", "••••••••", ""):
-            real_pwd = _resolve_imap_password_from_db(str(server))
+            real_pwd = _resolve_imap_password_from_db(
+                str(server), owner_id=owner_id
+            )
             if real_pwd:
                 logger.debug("_build_imap_config: resolved DB password for %s", server)
                 password = real_pwd
