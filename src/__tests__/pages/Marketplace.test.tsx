@@ -4,7 +4,7 @@
  * Verifies:
  *   - Rows render for installed, available, and locked (grayed) plugins.
  *   - Locked rows show a lock icon and a disabled install button.
- *   - Installed rows show a Remove button.
+ *   - Installed rows show an Installed button (disabled, with Check icon).
  *   - Search filters the list client-side.
  */
 
@@ -62,6 +62,7 @@ const mk = {
     id: 'plugin-installed',
     name: 'Installed Plugin',
     description: 'A plugin that is already installed.',
+    author: null,
     version: '1.0.0',
     source: 'official',
     entitled: true,
@@ -74,6 +75,7 @@ const mk = {
     id: 'plugin-available',
     name: 'Available Plugin',
     description: 'A plugin available for install.',
+    author: null,
     version: '2.0.0',
     source: 'community',
     entitled: true,
@@ -86,6 +88,7 @@ const mk = {
     id: 'plugin-locked',
     name: 'Locked Plugin',
     description: 'A plugin the current role cannot install.',
+    author: null,
     version: '3.0.0',
     source: 'official',
     entitled: false,
@@ -126,14 +129,13 @@ describe('Marketplace page', () => {
     expect(screen.getByText('Available Plugin')).toBeTruthy();
     expect(screen.getByText('Locked Plugin')).toBeTruthy();
 
-    // Installed row → Remove button.
-    const removeButtons = screen.getAllByRole('button', { name: /remove/i });
-    expect(removeButtons).toHaveLength(1);
-
-    // Available row → Install button (enabled).
-    const installButtons = screen.getAllByRole('button', { name: /install/i });
-    // Two install buttons: one for available (enabled), one for locked (disabled).
+    // Available + locked rows → Install buttons (exact match).
+    const installButtons = screen.getAllByRole('button', { name: 'Install' });
     expect(installButtons).toHaveLength(2);
+
+    // Installed row → Installed button (disabled, with Check icon).
+    const installedButton = screen.getByRole('button', { name: 'Installed' });
+    expect(installedButton.hasAttribute('disabled')).toBe(true);
 
     // Locked row: the install button should be disabled.
     const lockedInstall = installButtons.find(btn => btn.hasAttribute('disabled'));

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Store, RefreshCw, Search, Lock, Package, Download, Trash2, AlertTriangle, Send } from 'lucide-react';
+import { Store, RefreshCw, Search, Lock, Package, Download, Check, AlertTriangle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -12,7 +12,6 @@ import { TierBadge } from '@/components/ui/TierBadge';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { isDesktopApp } from '@/lib/backend/core/url';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
 import { useMarketplaceStore } from '../stores/marketplace';
@@ -47,21 +46,19 @@ function getIconColor(id: string): string {
 interface RowProps {
   item: MarketplaceItem;
   busy: boolean;
-  browseOnly: boolean;
   onInstall: (item: MarketplaceItem) => void;
-  onRemove: (item: MarketplaceItem) => void;
 }
 
-function MarketplaceRow({ item, busy, browseOnly, onInstall, onRemove }: RowProps) {
+function MarketplaceRow({ item, busy, onInstall }: RowProps) {
   const locked = !item.can_download && !item.installed;
   const unavailableMsg = t('marketplace.unavailableForRole');
-  const desktopOnlyMsg = t('marketplace.desktopOnly');
 
   const handleLockedClick = () => {
     toast.error(unavailableMsg);
   };
 
-  const versionDiff =
+  const hasUpdate =
+    item.installed &&
     item.installed_version !== null &&
     item.version !== null &&
     item.installed_version !== item.version;
@@ -76,15 +73,16 @@ function MarketplaceRow({ item, busy, browseOnly, onInstall, onRemove }: RowProp
     >
       {/* Icon block */}
       <div
-        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold text-white/90"
+        className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold text-white/90"
         style={{ backgroundColor: getIconColor(item.id) }}
         aria-hidden="true"
       >
         {getInitials(item.name)}
       </div>
 
-      {/* Name + badges + description */}
+      {/* Name + badges + description + meta */}
       <div className="flex-1 min-w-0">
+        {/* Line 1: name + badges */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-slate-100 truncate">
             {item.name}
@@ -105,59 +103,27 @@ function MarketplaceRow({ item, busy, browseOnly, onInstall, onRemove }: RowProp
           </Badge>
           {item.installed && (
             <Badge variant="success" size="sm">
-              {t('marketplace.installedVersionLabel')}
+              {t('marketplace.installed')}
             </Badge>
           )}
         </div>
-        {item.description && (
-          <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
-            {item.description}
-          </p>
-        )}
-        {/* Version line */}
-        {(item.version || item.installed_version) && (
-          <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-600 font-mono">
-            {item.version && (
-              <span>
-                {t('marketplace.versionLabel')}: {item.version}
-              </span>
-            )}
-            {versionDiff && item.installed_version && (
-              <span className="text-amber-400/70">
-                · {t('marketplace.installedVersionLabel')}: {item.installed_version}
-              </span>
-            )}
-          </div>
-        )}
+        {/* Line 2: description */}
+        <p className="text-sm text-slate-400 mt-0.5 line-clamp-2 leading-relaxed">
+          {item.description ?? t('marketplace.noDescription')}
+        </p>
+        {/* Line 3: meta — version · author · id */}
+        <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-500">
+          {item.version && <span>{item.version}</span>}
+          {item.version && item.author && <span aria-hidden="true">·</span>}
+          {item.author && <span>{item.author}</span>}
+          {(item.version || item.author) && <span aria-hidden="true">·</span>}
+          <span>{item.id}</span>
+        </div>
       </div>
 
-      {/* Action button */}
+      {/* Action button — stateful install */}
       <div className="shrink-0">
-        {browseOnly ? (
-          <Tooltip content={desktopOnlyMsg} side="left">
-            <span>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled
-                leftIcon={<Lock className="w-3.5 h-3.5" />}
-              >
-                {item.installed ? t('marketplace.remove') : t('marketplace.install')}
-              </Button>
-            </span>
-          </Tooltip>
-        ) : item.installed ? (
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={() => onRemove(item)}
-            isLoading={busy}
-            disabled={busy}
-            leftIcon={!busy ? <Trash2 className="w-3.5 h-3.5" /> : undefined}
-          >
-            {busy ? t('marketplace.removing') : t('marketplace.remove')}
-          </Button>
-        ) : locked ? (
+        {locked ? (
           <Tooltip content={unavailableMsg} side="left">
             <span>
               <Button
@@ -172,7 +138,7 @@ function MarketplaceRow({ item, busy, browseOnly, onInstall, onRemove }: RowProp
               </Button>
             </span>
           </Tooltip>
-        ) : (
+        ) : !item.installed ? (
           <Button
             size="sm"
             variant="primary"
@@ -182,6 +148,26 @@ function MarketplaceRow({ item, busy, browseOnly, onInstall, onRemove }: RowProp
             leftIcon={!busy ? <Download className="w-3.5 h-3.5" /> : undefined}
           >
             {busy ? t('marketplace.installing') : t('marketplace.install')}
+          </Button>
+        ) : hasUpdate ? (
+          <Button
+            size="sm"
+            variant="purple"
+            onClick={() => onInstall(item)}
+            isLoading={busy}
+            disabled={busy}
+            leftIcon={!busy ? <Download className="w-3.5 h-3.5" /> : undefined}
+          >
+            {busy ? t('marketplace.installing') : t('marketplace.update')}
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled
+            leftIcon={<Check className="w-3.5 h-3.5" />}
+          >
+            {t('marketplace.installed')}
           </Button>
         )}
       </div>
@@ -208,11 +194,8 @@ export default function Marketplace() {
   const actionInProgress = useMarketplaceStore(s => s.actionInProgress);
   const fetchMarketplace = useMarketplaceStore(s => s.fetchMarketplace);
   const installPlugin = useMarketplaceStore(s => s.installPlugin);
-  const uninstallPlugin = useMarketplaceStore(s => s.uninstallPlugin);
 
   const [query, setQuery] = useState('');
-
-  const browseOnly = !isDesktopApp();
 
   useEffect(() => {
     if (!user) return;
@@ -225,14 +208,6 @@ export default function Marketplace() {
 
   const handleInstall = (item: MarketplaceItem) => {
     void installPlugin(item.id, item.source).catch(err => {
-      toast.error(
-        err instanceof Error ? err.message : t('marketplace.errorToast'),
-      );
-    });
-  };
-
-  const handleRemove = (item: MarketplaceItem) => {
-    void uninstallPlugin(item.id, item.source).catch(err => {
       toast.error(
         err instanceof Error ? err.message : t('marketplace.errorToast'),
       );
@@ -421,9 +396,7 @@ export default function Marketplace() {
                     key={item.id}
                     item={item}
                     busy={actionInProgress === item.id}
-                    browseOnly={browseOnly}
                     onInstall={handleInstall}
-                    onRemove={handleRemove}
                   />
                 ))}
               </section>
@@ -440,9 +413,7 @@ export default function Marketplace() {
                     key={item.id}
                     item={item}
                     busy={actionInProgress === item.id}
-                    browseOnly={browseOnly}
                     onInstall={handleInstall}
-                    onRemove={handleRemove}
                   />
                 ))}
               </section>

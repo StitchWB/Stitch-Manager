@@ -20,6 +20,7 @@ export interface MarketplaceItem {
   id: string;
   name: string;
   description: string | null;
+  author: string | null;
   version: string | null;
   source: MarketplaceSource;
   entitled: boolean;
