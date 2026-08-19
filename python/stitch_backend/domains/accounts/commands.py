@@ -481,7 +481,45 @@ async def cmd_import_accounts_payload(params: dict) -> dict:
     return await run_in_session(_op)
 
 
+# ── Admin owner assignment ────────────────────────────────────────────────────
+
+
+@register_command("accounts_assign_owner", admin_only=True)
+async def cmd_accounts_assign_owner(params: dict) -> dict:
+    """Assign or clear the owner of an account (admin only).
+
+    ``assignToUserId`` sets ``owner_id`` to that user (explicit ownership).
+    ``null`` (or omitted) sets ``owner_id = NULL`` (instance-shared).
+    """
+    from sqlalchemy import select as sa_select
+
+    from stitch_backend.core.exceptions import StitchError
+    from stitch_backend.domains.accounts.models import Account
+
+    account_id = str(params.get("id") or params.get("accountId") or "")
+    if not account_id:
+        raise StitchError("id is required")
+    assign_to = params.get("assignToUserId")
+    if assign_to is not None:
+        assign_to = int(assign_to)
+
+    async def _op(session):
+        result = await session.execute(
+            sa_select(Account).where(Account.id == account_id)
+        )
+        account = result.scalar_one_or_none()
+        if account is None:
+            raise StitchError(f"Account not found: {account_id}")
+        account.owner_id = assign_to
+        await session.flush()
+        return True
+
+    await run_in_session(_op)
+    return {"success": True}
+
+
 # ── Kiro token management ─────────────────────────────────────────────────────
+
 
 @register_command("refresh_kiro_token")
 async def cmd_refresh_kiro_token(params: dict) -> dict:
@@ -549,6 +587,7 @@ async def cmd_claim_account(params: dict) -> Any:
 
     async def _op(session):
         from sqlalchemy import select as sa_select
+
         from stitch_backend.domains.accounts.models import Account
         result = await session.execute(
             sa_select(Account).where(Account.id == account_id)

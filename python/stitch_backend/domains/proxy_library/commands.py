@@ -3,9 +3,8 @@
 Exposes CRUD, bulk import, proxy testing, and runtime URL resolution
 to the frontend via the command registry.
 
-Per-owner semantics: reads see ``owner_id IS NULL OR owner_id = uid``;
-writes set ``owner_id = uid`` on create and filter update/delete by
-``owner_id = uid OR owner_id IS NULL`` (legacy shared pool editable by anyone).
+Per-owner + group-share semantics: reads see own OR instance-shared(NULL)
+OR shared into caller's groups; writes filter by the same visible set.
 """
 
 from __future__ import annotations
@@ -14,21 +13,31 @@ import logging
 from typing import Any
 
 import httpx
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, delete, or_, select
 
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.auth.permissions import ensure_permission
-from stitch_backend.domains.proxy_library.models import ProxyLibraryEntry
+from stitch_backend.domains.groups.models import Group
+from stitch_backend.domains.groups.service import (
+    get_group,
+    group_ids_for_user,
+    is_member,
+)
+from stitch_backend.domains.proxy_library.models import (
+    ProxyEntryGroupShare,
+    ProxyLibraryEntry,
+)
 from stitch_backend.domains.proxy_library.service import (
     ProxyLibraryDraft,
     ProxyLibraryImportResult,
+    _draft_stable_key,
     _keyring_account,
     _keyring_delete,
     _load_secret,
     _now_iso,
     _stable_key,
-    _draft_stable_key,
     _store_secret,
     apply_update,
     draft_to_proxy_url,
@@ -61,11 +70,16 @@ def _draft_from_dict(d: dict[str, Any]) -> ProxyLibraryDraft:
     )
 
 
-def _entry_to_response(entry: ProxyLibraryEntry, uid: int | None = None) -> dict[str, Any]:
+def _entry_to_response(
+    entry: ProxyLibraryEntry,
+    uid: int | None = None,
+    shared_group_names: list[str] | None = None,
+) -> dict[str, Any]:
     """Serialize an ORM entry to a camelCase dict for the frontend.
 
     When ``uid`` is given, additive ``mine`` and ``shared`` fields are
     included: ``mine`` = entry.owner_id == uid, ``shared`` = owner_id is None.
+    ``sharedGroupNames`` mirrors the gateway CredentialResponse addition.
     """
     username = _load_secret(entry.username) if entry.username else None
     password = _load_secret(entry.password) if entry.password else None
@@ -78,6 +92,7 @@ def _entry_to_response(entry: ProxyLibraryEntry, uid: int | None = None) -> dict
         "enabled": entry.enabled,
         "createdAt": entry.created_at,
         "updatedAt": entry.updated_at,
+        "ownerId": entry.owner_id,
     }
     if username is not None:
         result["username"] = username
@@ -100,6 +115,7 @@ def _entry_to_response(entry: ProxyLibraryEntry, uid: int | None = None) -> dict
     if uid is not None:
         result["mine"] = entry.owner_id == uid
         result["shared"] = entry.owner_id is None
+    result["sharedGroupNames"] = shared_group_names or []
     return result
 
 
@@ -116,9 +132,22 @@ def _import_result_to_response(r: ProxyLibraryImportResult) -> dict[str, Any]:
     }
 
 
-def _owner_filter(uid: int | None):
-    """WHERE clause: owner_id IS NULL OR owner_id = uid."""
-    return or_(ProxyLibraryEntry.owner_id.is_(None), ProxyLibraryEntry.owner_id == uid)
+def _visible_filter(uid: int | None, group_ids: list[str]):
+    """WHERE clause: own OR instance-shared(NULL) OR shared into caller's groups."""
+    if not group_ids:
+        return or_(
+            ProxyLibraryEntry.owner_id.is_(None),
+            ProxyLibraryEntry.owner_id == uid,
+        )
+    return or_(
+        ProxyLibraryEntry.owner_id.is_(None),
+        ProxyLibraryEntry.owner_id == uid,
+        ProxyLibraryEntry.id.in_(
+            select(ProxyEntryGroupShare.entry_id).where(
+                ProxyEntryGroupShare.group_id.in_(group_ids)
+            )
+        ),
+    )
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -126,12 +155,46 @@ def _owner_filter(uid: int | None):
 
 @register_command("list_proxy_library", readonly=True)
 async def cmd_list_proxy_library(params: dict) -> list[dict]:
-    """List all proxy library entries visible to the caller."""
+    """List all proxy library entries visible to the caller.
+
+    Single LEFT JOIN to ``proxy_entry_group_shares`` + ``groups``
+    populates ``sharedGroupNames`` on each item — no N+1.
+    """
     uid = _caller_uid(params)
 
     async def _op(db):
-        items = await load_proxy_library(db, uid)
-        return [_entry_to_response(e, uid=uid) for e in items]
+        group_ids = await group_ids_for_user(db, uid)
+        stmt = (
+            select(ProxyLibraryEntry, Group.name)
+            .select_from(ProxyLibraryEntry)
+            .outerjoin(
+                ProxyEntryGroupShare,
+                ProxyEntryGroupShare.entry_id == ProxyLibraryEntry.id,
+            )
+            .outerjoin(Group, Group.id == ProxyEntryGroupShare.group_id)
+            .where(_visible_filter(uid, group_ids))
+            .order_by(ProxyLibraryEntry.created_at)
+        )
+        result = await db.execute(stmt)
+
+        # Aggregate: one entry per row, group names collected.
+        entry_map: dict[str, ProxyLibraryEntry] = {}
+        group_names_map: dict[str, list[str]] = {}
+        for entry, gname in result.all():
+            if entry.id not in entry_map:
+                entry_map[entry.id] = entry
+                group_names_map[entry.id] = []
+            if gname is not None:
+                group_names_map[entry.id].append(gname)
+
+        return [
+            _entry_to_response(
+                entry_map[eid],
+                uid=uid,
+                shared_group_names=group_names_map[eid],
+            )
+            for eid in entry_map
+        ]
 
     return await run_in_read_session(_op)
 
@@ -162,7 +225,8 @@ async def cmd_create_or_get(params: dict) -> dict:
     draft = _draft_from_dict(params.get("draft", params))
 
     async def _op(db):
-        items = await load_proxy_library(db, uid)
+        group_ids = await group_ids_for_user(db, uid)
+        items = await load_proxy_library(db, uid, group_ids=group_ids)
         target_key = _draft_stable_key(draft)
         for existing in items:
             if _stable_key(existing) == target_key:
@@ -188,9 +252,10 @@ async def cmd_update_proxy_library_entry(params: dict) -> dict:
     draft = _draft_from_dict(req.get("draft", {}))
 
     async def _op(db):
+        group_ids = await group_ids_for_user(db, uid)
         result = await db.execute(
             select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _owner_filter(uid))
+                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
             )
         )
         entry = result.scalar_one_or_none()
@@ -214,9 +279,10 @@ async def cmd_delete_proxy_library_entry(params: dict) -> dict:
     entry_id = str(req.get("id", ""))
 
     async def _op(db):
+        group_ids = await group_ids_for_user(db, uid)
         result = await db.execute(
             select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _owner_filter(uid))
+                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
             )
         )
         entry = result.scalar_one_or_none()
@@ -243,7 +309,8 @@ async def cmd_import_bulk(params: dict) -> dict:
     default_enabled = bool(req.get("defaultEnabled", True))
 
     async def _op(db):
-        items = await load_proxy_library(db, uid)
+        group_ids = await group_ids_for_user(db, uid)
+        items = await load_proxy_library(db, uid, group_ids=group_ids)
         existing_count = len(items)
         result = import_lines(items, raw_text, default_type, default_enabled)
         # Encrypt + persist new entries (items[existing_count:])
@@ -268,7 +335,8 @@ async def cmd_preview_bulk(params: dict) -> dict:
     default_enabled = bool(req.get("defaultEnabled", True))
 
     async def _op(db):
-        items = await load_proxy_library(db, uid)
+        group_ids = await group_ids_for_user(db, uid)
+        items = await load_proxy_library(db, uid, group_ids=group_ids)
         copy = list(items)
         result = import_lines(copy, raw_text, default_type, default_enabled)
         return _import_result_to_response(result)
@@ -281,14 +349,18 @@ async def cmd_preview_bulk(params: dict) -> dict:
 
 @register_command("get_proxy_library_runtime_proxy_url", readonly=True)
 async def cmd_get_runtime_url(params: dict) -> str | None:
-    """Resolve a proxy library entry ID to a proxy URL."""
+    """Resolve a proxy library entry ID to a proxy URL.
+
+    Caller must be owner OR member of a sharing group OR row instance-shared.
+    """
     uid = _caller_uid(params)
     entry_id = str(params.get("id", ""))
 
     async def _op(db):
+        group_ids = await group_ids_for_user(db, uid)
         result = await db.execute(
             select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _owner_filter(uid))
+                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
             )
         )
         entry = result.scalar_one_or_none()
@@ -301,11 +373,12 @@ async def cmd_get_runtime_url(params: dict) -> str | None:
 
 @register_command("get_proxy_library_runtime_proxy_map", readonly=True)
 async def cmd_get_runtime_map(params: dict) -> dict[str, str]:
-    """Get a map of entry ID → proxy URL for all enabled entries."""
+    """Get a map of entry ID → proxy URL for all enabled visible entries."""
     uid = _caller_uid(params)
 
     async def _op(db):
-        items = await load_proxy_library(db, uid)
+        group_ids = await group_ids_for_user(db, uid)
+        items = await load_proxy_library(db, uid, group_ids=group_ids)
         return {e.id: entry_to_proxy_url(e) for e in items if e.enabled}
 
     return await run_in_read_session(_op)
@@ -386,9 +459,10 @@ async def _persist_test_result(
     """Save test results to the proxy entry."""
 
     async def _op(db):
+        group_ids = await group_ids_for_user(db, owner_id)
         result = await db.execute(
             select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _owner_filter(owner_id))
+                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(owner_id, group_ids))
             )
         )
         entry = result.scalar_one_or_none()
@@ -420,9 +494,10 @@ async def cmd_ensure_save_allowed(params: dict) -> bool:
 
     async def _op(db):
         import time as _time
+        group_ids = await group_ids_for_user(db, uid)
         result = await db.execute(
             select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _owner_filter(uid))
+                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
             )
         )
         entry = result.scalar_one_or_none()
@@ -499,3 +574,106 @@ async def cmd_claim_proxy_library_entry(params: dict) -> dict:
         return _entry_to_response(entry, uid=uid)
 
     return await run_in_session(_op)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# proxy_share_group / proxy_unshare_group
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@register_command("proxy_share_group")
+async def cmd_proxy_share_group(params: dict) -> dict:
+    """Share a proxy entry to a group (entry owner + group member; idempotent)."""
+    entry_id = params.get("entryId") or params.get("entry_id")
+    group_id = params.get("groupId") or params.get("group_id")
+    uid = _caller_uid(params)
+    if not entry_id:
+        raise StitchError("entryId is required")
+    if not group_id:
+        raise StitchError("groupId is required")
+
+    async def _op(session):
+        group = await get_group(session, group_id)
+        if group is None:
+            raise StitchError("Group not found")
+
+        result = await session.execute(
+            select(ProxyLibraryEntry).where(ProxyLibraryEntry.id == str(entry_id))
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            raise StitchError("Proxy entry not found")
+
+        if uid is not None:
+            if entry.owner_id != uid:
+                raise StitchError("Only the entry owner can share it")
+            if not await is_member(session, group_id, uid):
+                raise StitchError("Not a member of this group")
+
+        existing = await session.execute(
+            select(ProxyEntryGroupShare).where(
+                and_(
+                    ProxyEntryGroupShare.entry_id == str(entry_id),
+                    ProxyEntryGroupShare.group_id == group_id,
+                )
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            return True
+
+        share = ProxyEntryGroupShare(
+            entry_id=str(entry_id),
+            group_id=group_id,
+        )
+        session.add(share)
+        await session.flush()
+        return True
+
+    await run_in_session(_op)
+    return {"success": True}
+
+
+@register_command("proxy_unshare_group")
+async def cmd_proxy_unshare_group(params: dict) -> dict:
+    """Unshare a proxy entry (entry owner OR group owner; idempotent)."""
+    entry_id = params.get("entryId") or params.get("entry_id")
+    group_id = params.get("groupId") or params.get("group_id")
+    uid = _caller_uid(params)
+    if not entry_id:
+        raise StitchError("entryId is required")
+    if not group_id:
+        raise StitchError("groupId is required")
+
+    async def _op(session):
+        group = await get_group(session, group_id)
+        if group is None:
+            raise StitchError("Group not found")
+
+        result = await session.execute(
+            select(ProxyLibraryEntry).where(ProxyLibraryEntry.id == str(entry_id))
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            raise StitchError("Proxy entry not found")
+
+        if uid is not None:
+            is_entry_owner = entry.owner_id == uid
+            is_group_owner = group.owner_id == uid
+            if not (is_entry_owner or is_group_owner):
+                raise StitchError(
+                    "Only the entry owner or group owner can unshare"
+                )
+
+        await session.execute(
+            delete(ProxyEntryGroupShare).where(
+                and_(
+                    ProxyEntryGroupShare.entry_id == str(entry_id),
+                    ProxyEntryGroupShare.group_id == group_id,
+                )
+            )
+        )
+        await session.flush()
+        return True
+
+    await run_in_session(_op)
+    return {"success": True}
