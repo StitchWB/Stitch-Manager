@@ -82,6 +82,63 @@ def _configure_logging(level: str) -> None:
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
+async def _run_legacy_auto_migration() -> None:
+    """L2 legacy swap: auto-migrate ``ai_proxy_accounts`` → ai_gateway tables.
+
+    Runs ONLY when the legacy table has rows AND ``ai_gateway_credentials``
+    is empty (never overwrites existing gateway data). Reuses
+    ``migrate_legacy_credentials`` logic. Idempotent — safe to call on
+    every boot. On any exception → warning + continue (boot must never fail).
+    """
+    from sqlalchemy import text
+
+    from stitch_backend.database import get_session_factory
+    from stitch_backend.domains.ai_gateway.migration import migrate_legacy_credentials
+
+    factory = get_session_factory()
+    async with factory() as _db:
+        # Count legacy rows.
+        try:
+            legacy_result = await _db.execute(
+                text("SELECT COUNT(*) FROM ai_proxy_accounts")
+            )
+            legacy_count = int(legacy_result.scalar_one())
+        except Exception:
+            # Legacy table doesn't exist yet — nothing to migrate.
+            return
+
+        if legacy_count == 0:
+            return
+
+        # Count existing gateway credentials.
+        gw_result = await _db.execute(
+            text("SELECT COUNT(*) FROM ai_gateway_credentials")
+        )
+        gw_count = int(gw_result.scalar_one())
+
+        if gw_count > 0:
+            logger.info(
+                "Legacy auto-migration skipped: %d legacy rows, %d gateway "
+                "credentials (gateway not empty)",
+                legacy_count, gw_count,
+            )
+            return
+
+        logger.info(
+            "Legacy auto-migration starting: %d legacy rows, gateway empty",
+            legacy_count,
+        )
+        counts = await migrate_legacy_credentials(_db)
+        await _db.commit()
+        logger.info(
+            "Legacy auto-migration complete: endpoints=%d/%d, credentials=%d/%d",
+            counts["endpoints_created"],
+            counts["endpoints_existing"],
+            counts["credentials_created"],
+            counts["credentials_existing_deduped"],
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown hooks."""
@@ -140,6 +197,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.error("Encrypted-at-rest migration failed: %s", _exc)
 
+    # L2 legacy swap: auto-migrate ai_proxy_accounts → ai_gateway tables when
+    # legacy rows exist AND the gateway is empty. Idempotent — never overwrites
+    # existing gateway data. On any exception → warning + continue boot.
+    try:
+        await _run_legacy_auto_migration()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Legacy auto-migration skipped: %s", _exc)
+
+    # L2 legacy swap: auto-create PublicModels from legacy
+    # BackgroundManagerConfig providers when none exist. When this succeeds,
+    # the LiteLLM-config fallback in litellm_executor.models() is removed.
+    # On failure, the fallback is kept (try/except inside the function).
+    try:
+        from stitch_backend.domains.ai_proxy.litellm_executor import (
+            auto_create_public_models_from_config,
+        )
+        await auto_create_public_models_from_config()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("PublicModel auto-create skipped: %s", _exc)
+
     # Plugin distribution: activate → heartbeat → sync (never blocks startup)
     try:
         from stitch_backend.domains.plugin_distribution import run_startup_sequence
@@ -176,6 +253,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
+    import stitch_backend.domains.groups.commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
     import stitch_backend.domains.key_health.commands  # noqa: F401
     import stitch_backend.domains.keys.commands  # noqa: F401
@@ -291,6 +369,48 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.warning("AI Gateway workers init skipped: %s", _exc)
 
+    # Start UserProxyKey last_used_at batch flush (≥60 s interval).
+    # The service batches last_used_at updates in-memory; this task flushes
+    # them to the DB periodically to avoid write amplification on the
+    # single-writer SQLite connection.
+    async def _proxy_key_flush_loop():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                from stitch_backend.domains.ai_gateway.service import flush_last_used_at
+
+                factory = get_session_factory()
+                async with factory() as _db:
+                    await flush_last_used_at(_db)
+                    await _db.commit()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("ProxyKey last_used_at flush failed")
+
+    _proxy_key_flush_task = asyncio.create_task(_proxy_key_flush_loop())
+
+    # Start GroupUsage batch flush (>=60 s interval).  The usage_tracker
+    # batches per-member request/token counts in-memory; this task flushes
+    # them to the DB periodically to avoid write amplification on the
+    # single-writer SQLite connection.
+    async def _group_usage_flush_loop():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                from stitch_backend.domains.ai_gateway.usage_tracker import flush_group_usage
+
+                factory = get_session_factory()
+                async with factory() as _db:
+                    await flush_group_usage(_db)
+                    await _db.commit()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("GroupUsage flush failed")
+
+    _group_usage_flush_task = asyncio.create_task(_group_usage_flush_loop())
+
     # Start KeyHealth worker
     try:
         from stitch_backend.domains.key_health.worker import KeyHealthWorker
@@ -351,6 +471,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await DiscoveryWorker.stop()
         await ProbeWorker.stop()
     except Exception:
+        pass
+
+    # Stop UserProxyKey last_used_at flush task
+    try:
+        _proxy_key_flush_task.cancel()
+        await _proxy_key_flush_task
+    except (asyncio.CancelledError, Exception):
+        pass
+
+    # Stop GroupUsage flush task
+    try:
+        _group_usage_flush_task.cancel()
+        await _group_usage_flush_task
+    except (asyncio.CancelledError, Exception):
         pass
 
     # Stop KeyHealth worker
