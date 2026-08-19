@@ -19,11 +19,16 @@ Do not change these signatures without coordinating with that effort.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
+import secrets
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 
 from stitch_backend.core.base_repository import BaseRepository
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialModelAccess,
@@ -32,8 +37,12 @@ from stitch_backend.domains.ai_gateway.models import (
     PublicModel,
     RouteTarget,
     UpstreamModel,
+    UserProxyKey,
     _utcnow,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +98,21 @@ class ProviderEndpointService(BaseRepository[ProviderEndpoint]):
                 ProviderEndpoint.owner_id == owner_id,
             )
         ).order_by(ProviderEndpoint.created_at.desc())
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_all_endpoints(
+        self,
+    ) -> list[ProviderEndpoint]:
+        """Return ALL endpoints (instance-wide, no owner filter).
+
+        Used by background workers (DiscoveryWorker, ProbeWorker) which
+        are instance-wide by design — fixes the prior bug where
+        ``list_endpoints()`` with ``owner_id=None`` saw ONLY NULL rows.
+        """
+        stmt = select(ProviderEndpoint).order_by(
+            ProviderEndpoint.created_at.desc()
+        )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
@@ -232,6 +256,21 @@ class CredentialService(BaseRepository[Credential]):
                 Credential.owner_id == owner_id,
             )
         )
+        if provider_endpoint_id is not None:
+            stmt = stmt.where(Credential.provider_endpoint_id == provider_endpoint_id)
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_all_credentials(
+        self, provider_endpoint_id: str | None = None,
+    ) -> list[Credential]:
+        """Return ALL credentials (instance-wide, no owner filter).
+
+        Used by background workers (DiscoveryWorker, ProbeWorker) which
+        are instance-wide by design — fixes the prior bug where
+        ``list_credentials()`` with ``owner_id=None`` saw ONLY NULL rows.
+        """
+        stmt = select(Credential)
         if provider_endpoint_id is not None:
             stmt = stmt.where(Credential.provider_endpoint_id == provider_endpoint_id)
         result = await self._db.execute(stmt)
@@ -488,3 +527,200 @@ class RouteTargetService(BaseRepository[RouteTarget]):
             .order_by(RouteTarget.priority.asc(), RouteTarget.weight.desc()),
         )
         return list(result.scalars().all())
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UserProxyKey
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _hash_proxy_key(raw: str) -> str:
+    """SHA256 hex of a raw proxy key — matches ``UserProxyKey.token_hash``."""
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _mask_proxy_key(raw: str) -> str:
+    """Mask a raw proxy key: first4+****+last4. Short keys → ****."""
+    if len(raw) < 8:
+        return "****"
+    return raw[:4] + "****" + raw[-4:]
+
+
+class UserProxyKeyService(BaseRepository[UserProxyKey]):
+    """CRUD + resolution for :class:`UserProxyKey`.
+
+    Raw keys are shown ONCE at creation; only the SHA256 hash is stored.
+    ``last_used_at`` is batched via :func:`mark_used` (in-memory dict) and
+    flushed by :func:`flush_last_used_at` from a background task — never
+    written per request.
+    """
+
+    _model = UserProxyKey
+    _pk = "id"
+
+    async def create_proxy_key(
+        self,
+        user_id: int,
+        label: str | None = None,
+        *,
+        is_default: bool = False,
+    ) -> tuple[UserProxyKey, str]:
+        """Create a proxy key. Returns ``(key_row, raw_key)`` — raw shown ONCE.
+
+        ``raw = secrets.token_hex(24)`` (48 chars). The hash is stored; the
+        raw value is returned to the caller and never persisted.
+        """
+        raw = secrets.token_hex(24)
+        token_hash = _hash_proxy_key(raw)
+        record = UserProxyKey(
+            user_id=user_id,
+            label=label,
+            token_hash=token_hash,
+            enabled=True,
+            is_default=is_default,
+            created_at=_utcnow(),
+        )
+        self._db.add(record)
+        await self._db.flush()
+        logger.info(
+            "ProxyKey created: user=%s id=%s default=%s",
+            user_id, record.id, is_default,
+        )
+        return record, raw
+
+    async def list_proxy_keys(self, user_id: int) -> list[UserProxyKey]:
+        """Return all proxy keys for *user_id* (enabled + disabled)."""
+        result = await self._db.execute(
+            select(UserProxyKey)
+            .where(UserProxyKey.user_id == user_id)
+            .order_by(UserProxyKey.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def revoke_proxy_key(
+        self, key_id: str, user_id: int,
+    ) -> bool:
+        """Disable a proxy key (own only). Returns True if revoked.
+
+        The default key is revokable only if another enabled key exists.
+        """
+        result = await self._db.execute(
+            select(UserProxyKey).where(
+                and_(
+                    UserProxyKey.id == key_id,
+                    UserProxyKey.user_id == user_id,
+                )
+            )
+        )
+        key = result.scalar_one_or_none()
+        if key is None:
+            raise StitchError("Proxy key not found")
+
+        if key.is_default:
+            # Count other enabled keys for this user.
+            count_result = await self._db.execute(
+                select(UserProxyKey).where(
+                    and_(
+                        UserProxyKey.user_id == user_id,
+                        UserProxyKey.enabled.is_(True),
+                        UserProxyKey.id != key_id,
+                    )
+                )
+            )
+            other_enabled = list(count_result.scalars().all())
+            if not other_enabled:
+                raise StitchError(
+                    "Cannot revoke the default key without another enabled key"
+                )
+
+        key.enabled = False
+        await self._db.flush()
+        logger.info("ProxyKey revoked: user=%s id=%s", user_id, key_id)
+        return True
+
+    async def resolve_proxy_key(self, raw: str) -> int | None:
+        """Resolve a raw proxy key to a user_id (enabled keys only).
+
+        Uses ``hmac.compare_digest`` for timing-safe comparison.  Updates
+        the in-memory ``last_used_at`` batch via :func:`mark_used` — never
+        writes to the DB per request.
+        """
+        if not raw:
+            return None
+        # Compute the hash and look up the candidate row.
+        token_hash = _hash_proxy_key(raw)
+        result = await self._db.execute(
+            select(UserProxyKey).where(
+                and_(
+                    UserProxyKey.token_hash == token_hash,
+                    UserProxyKey.enabled.is_(True),
+                )
+            )
+        )
+        key = result.scalar_one_or_none()
+        if key is None:
+            return None
+        # Timing-safe compare against the stored hash (defends against
+        # theoretical hash-leak oracles; the SELECT already matched).
+        if not hmac.compare_digest(key.token_hash, token_hash):
+            return None
+        # Mark used in the in-memory batch (no DB write here).
+        mark_used(key.id)
+        return key.user_id
+
+    async def ensure_default_key(self, user_id: int) -> tuple[UserProxyKey, str] | None:
+        """Ensure the user has at least one enabled key; create a default if none.
+
+        Returns ``(key_row, raw_key)`` when a new default was created, or
+        ``None`` when the user already has an enabled key.
+        """
+        existing = await self.list_proxy_keys(user_id)
+        has_enabled = any(k.enabled for k in existing)
+        if has_enabled:
+            return None
+        return await self.create_proxy_key(
+            user_id, label="default", is_default=True,
+        )
+
+
+# ── Batched last_used_at (in-memory, flushed by background task) ────────────
+
+
+# Module-level dict {key_id: timestamp} — flushed by flush_last_used_at().
+# Written by mark_used() on every resolve_proxy_key(); read by the background
+# flush task. Never accessed per-request by the DB write path.
+_last_used_batch: dict[str, datetime] = {}
+
+
+def mark_used(key_id: str) -> None:
+    """Mark a proxy key as used (in-memory; flushed by background task)."""
+    _last_used_batch[key_id] = _utcnow()
+
+
+async def flush_last_used_at(session: AsyncSession) -> int:
+    """Flush the in-memory ``last_used_at`` batch to the DB.
+
+    Called by a background task (registered in ``main.py`` lifespan) every
+    ≥60 seconds.  Returns the number of keys updated.
+
+    Swaps the module-level dict atomically (so concurrent mark_used calls
+    during the flush land in the next batch, not lost).
+    """
+    global _last_used_batch
+    if not _last_used_batch:
+        return 0
+    # Swap atomically — concurrent mark_used() calls land in the new dict.
+    batch, _last_used_batch = _last_used_batch, {}
+    count = 0
+    for key_id, ts in batch.items():
+        result = await session.execute(
+            select(UserProxyKey).where(UserProxyKey.id == key_id)
+        )
+        key = result.scalar_one_or_none()
+        if key is not None:
+            key.last_used_at = ts
+            count += 1
+    if count:
+        await session.flush()
+        logger.debug("ProxyKey last_used_at flushed: %d keys", count)
+    return count

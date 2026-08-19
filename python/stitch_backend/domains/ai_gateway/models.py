@@ -138,7 +138,7 @@ class ProviderEndpoint(Base):
         ForeignKey("auth_users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="NULL = shared pool (legacy, visible to all callers)",
+        comment="NULL = instance-shared (explicit; visible to all callers)",
     )
 
     def __repr__(self) -> str:
@@ -205,7 +205,7 @@ class Credential(Base):
         ForeignKey("auth_users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="NULL = shared pool (legacy, visible to all callers)",
+        comment="NULL = instance-shared (explicit; visible to all callers)",
     )
 
     def __repr__(self) -> str:
@@ -405,7 +405,7 @@ class PublicModel(Base):
         ForeignKey("auth_users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="NULL = shared pool (legacy, visible to all callers)",
+        comment="NULL = instance-shared (explicit; visible to all callers)",
     )
 
     def __repr__(self) -> str:
@@ -463,4 +463,58 @@ class RouteTarget(Base):
         return (
             f"<RouteTarget public={self.public_model_id!r} "
             f"upstream={self.upstream_model_id!r} priority={self.priority!r}>"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UserProxyKey
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class UserProxyKey(Base):
+    """A per-user proxy key for authenticating against ``/v1/*``.
+
+    The raw key is shown to the user ONCE at creation time; only its
+    SHA256 hex digest (``token_hash``) is stored.  ``last_used_at`` is
+    updated in batches by a background flush task (not per request) to
+    avoid write amplification on the single-writer SQLite connection.
+
+    Cascade: deleting a user cascades to their proxy keys.
+    """
+
+    __tablename__ = "ai_gateway_user_proxy_keys"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Owner; CASCADE on user delete",
+    )
+    label: Mapped[str | None] = mapped_column(
+        String, comment="User-facing label, e.g. \"default\" or \"laptop\"",
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+        comment="sha256 hex of the raw proxy key (never stored raw)",
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_default: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        comment="True for the auto-created default key (one per user)",
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="Batched: updated by a background flush task, not per request",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserProxyKey id={self.id!r} user_id={self.user_id} "
+            f"label={self.label!r} enabled={self.enabled!r}>"
         )

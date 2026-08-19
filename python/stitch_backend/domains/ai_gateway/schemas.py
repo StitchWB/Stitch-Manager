@@ -369,6 +369,10 @@ class CredentialResponse(BaseModel):
 
     Never references ``CredentialSecret`` — no secret/raw-key field exists
     on this schema, by design.
+
+    Wave-2 additions: ``owner_id`` + ``shared_group_ids`` /
+    ``shared_group_names`` so the FE can render scope chips.  Existing
+    fields are unchanged.
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -388,9 +392,23 @@ class CredentialResponse(BaseModel):
     consecutive_failures: int = Field(alias="consecutiveFailures")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime | None = Field(None, alias="updatedAt")
+    # ── Wave-2 scope fields (FE renders scope chips from these) ────────────
+    owner_id: int | None = Field(None, alias="ownerId")
+    shared_group_ids: list[str] = Field(
+        default_factory=list, alias="sharedGroupIds",
+    )
+    shared_group_names: list[str] = Field(
+        default_factory=list, alias="sharedGroupNames",
+    )
 
     @classmethod
-    def from_orm_model(cls, obj: Credential) -> CredentialResponse:
+    def from_orm_model(
+        cls,
+        obj: Credential,
+        *,
+        shared_group_ids: list[str] | None = None,
+        shared_group_names: list[str] | None = None,
+    ) -> CredentialResponse:
         return cls(
             id=obj.id,
             provider_endpoint_id=obj.provider_endpoint_id,
@@ -407,6 +425,9 @@ class CredentialResponse(BaseModel):
             consecutive_failures=obj.consecutive_failures,
             created_at=obj.created_at,
             updated_at=obj.updated_at,
+            owner_id=obj.owner_id,
+            shared_group_ids=shared_group_ids or [],
+            shared_group_names=shared_group_names or [],
         )
 
 
@@ -749,3 +770,120 @@ class RouteTargetResponse(BaseModel):
             created_at=obj.created_at,
             updated_at=obj.updated_at,
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UserProxyKey
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class ProxyKeyCreateRequest(BaseModel):
+    """Request body for ``proxy_keys_create``."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    label: str | None = Field(None, max_length=200)
+
+
+class ProxyKeyRevokeRequest(BaseModel):
+    """Request body for ``proxy_keys_revoke``."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    id: str
+
+
+class ProxyKeyResponse(BaseModel):
+    """Wire DTO for a single proxy key (masked — raw never returned)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    label: str | None = None
+    masked_key: str = Field(alias="maskedKey")
+    enabled: bool
+    created_at: datetime = Field(alias="createdAt")
+    last_used_at: datetime | None = Field(None, alias="lastUsedAt")
+    is_default: bool = Field(alias="isDefault")
+
+
+class ProxyKeyCreatedResponse(BaseModel):
+    """Response for ``proxy_keys_create`` — raw key shown ONCE."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    key: str  # RAW — shown once, never persisted
+    id: str
+
+
+class ProxyKeyPoolGroupEntry(BaseModel):
+    """One group entry in the ``pool`` summary of ``proxy_keys_list``."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    keys: int
+
+
+class ProxyKeyListResponse(BaseModel):
+    """Response for ``proxy_keys_list`` — keys + pool summary + base_url."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    base_url: str = Field(alias="baseUrl")
+    keys: list[ProxyKeyResponse]
+    pool: dict[str, Any]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Legacy admin tools (gateway_claim_legacy / gateway_set_instance_shared)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class GatewayClaimLegacyRequest(BaseModel):
+    """Request body for ``gateway_claim_legacy`` (admin only).
+
+    ``kind`` selects the target table (``credential`` | ``endpoint`` |
+    ``public_model``); ``id`` is the row PK.  ``assignToUserId`` sets a
+    specific new owner; when omitted, the caller's uid is used.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    kind: str  # "credential" | "endpoint" | "public_model"
+    id: str
+    assign_to_user_id: int | None = Field(None, alias="assignToUserId")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: str) -> str:
+        allowed = {"credential", "endpoint", "public_model"}
+        if v not in allowed:
+            raise ValueError(f"kind must be one of {sorted(allowed)}")
+        return v
+
+
+class GatewaySetInstanceSharedRequest(BaseModel):
+    """Request body for ``gateway_set_instance_shared`` (admin only).
+
+    ``kind`` is ``credential`` | ``endpoint`` | ``public_model``.
+    ``shared=True`` sets ``owner_id=NULL`` (instance-shared);
+    ``shared=False`` sets ``owner_id`` to ``ownerId`` (or the caller's
+    uid when ``ownerId`` is omitted).
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    kind: str  # "credential" | "endpoint" | "public_model"
+    id: str
+    shared: bool
+    owner_id: int | None = Field(None, alias="ownerId")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: str) -> str:
+        allowed = {"credential", "endpoint", "public_model"}
+        if v not in allowed:
+            raise ValueError(f"kind must be one of {sorted(allowed)}")
+        return v
