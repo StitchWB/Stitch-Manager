@@ -12,6 +12,7 @@ import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
 import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
+import { UserProxyCard } from '../components/ai-proxy/UserProxyCard';
 import { RotationSettingsPanel } from '../components/ai-proxy/sections/RotationSettingsPanel';
 import { CompressionSection } from '../components/ai-proxy/sections/CompressionSection';
 import { HoloneSection } from '../components/ai-proxy/sections/HoloneSection';
@@ -35,18 +36,29 @@ import {
   PageHeader,
   Tooltip,
   FloatingActionBar,
+  Select,
 } from '@/components/ui';
 import { getBackgroundManagerConfig } from '../lib/backend/modules/backgroundManager';
 import { t } from '../lib/i18n';
 import { useAppStore } from '../stores/app';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
+import { useAuthStore } from '../stores/auth';
+import { useGroupsStore } from '../stores/groups';
+import { GroupsList } from '../components/ai-groups/GroupsList';
+import { GroupDetail } from '../components/ai-groups/GroupDetail';
+import { InviteBanner } from '../components/ai-groups/InviteBanner';
+import { CreateGroupModal } from '../components/ai-groups/CreateGroupModal';
+import { Modal } from '@/components/ui';
+import { HelpCircle } from 'lucide-react';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 const CLIENT_API_KEY = 'proxystitch-local';
 
-type AiSection = 'providers' | 'routing' | 'monitor';
+type AiSection = 'providers' | 'groups' | 'routing' | 'monitor';
 
 function resolveSection(param: string | undefined): AiSection {
   if (param === 'routing' || param === 'integrations') return 'routing';
+  if (param === 'groups') return 'groups';
   if (param === 'monitor' || param === 'usage' || param === 'diagnostics') return 'monitor';
   return 'providers';
 }
@@ -230,6 +242,39 @@ export default function AiProviders() {
   const aiSection = useMemo<AiSection>(() => resolveSection(sectionParam), [sectionParam]);
   const { setLastAiSection } = useUIPreferencesStore();
 
+  // ── Groups tab state ──────────────────────────────────────────────────
+  const authEnabled = useAuthStore(state => state.enabled);
+  const currentUser = useAuthStore(state => state.user);
+  const groupsStore = useGroupsStore();
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [howToGetOpen, setHowToGetOpen] = useState(false);
+
+  // Responsive breakpoints for the groups master-detail layout.
+  // <md: drill-down (list OR detail). md..lg: Select dropdown + detail. ≥lg: two-column.
+  const isMdUp = useMediaQuery('(min-width: 768px)');
+  const isLgUp = useMediaQuery('(min-width: 1024px)');
+
+  // Fetch groups list when entering the groups tab. NOTE: depend on the
+  // STABLE action selector, NOT the whole store object — the store state
+  // gets a new ref on every update (loading flags), which re-triggered this
+  // effect in an infinite fetch loop (React #185, caught by e2e).
+  const fetchGroupsList = useGroupsStore(s => s.fetchList);
+  useEffect(() => {
+    if (aiSection === 'groups' && authEnabled) {
+      void fetchGroupsList();
+    }
+  }, [aiSection, authEnabled, fetchGroupsList]);
+
+  // Auto-select the first group when the list loads and nothing is selected.
+  useEffect(() => {
+    if (aiSection !== 'groups' || !authEnabled) return;
+    if (selectedGroupId === null && groupsStore.groups.length > 0) {
+      // Deferred: repo lint rule forbids synchronous setState in effects.
+      queueMicrotask(() => setSelectedGroupId(groupsStore.groups[0].id));
+    }
+  }, [aiSection, authEnabled, selectedGroupId, groupsStore.groups]);
+
   // Remember last visited AI section for redirect on next AI Hub open
   useEffect(() => {
     if (aiSection) setLastAiSection(aiSection);
@@ -315,6 +360,24 @@ export default function AiProviders() {
 
   // === Page header config per section ===
   const headerForSection = (() => {
+    if (aiSection === 'groups') {
+      return {
+        eyebrow: t('sidebar.aiHub'),
+        title: t('ai.groups.title'),
+        description: '',
+        actions: (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setCreateGroupOpen(true)}
+            leftIcon={<Plus size={14} />}
+          >
+            {t('ai.groups.create.cta')}
+          </Button>
+        ),
+      };
+    }
+
     if (aiSection === 'routing') {
       return {
         eyebrow: t('sidebar.aiHub'),
@@ -495,6 +558,115 @@ export default function AiProviders() {
               </>
             )}
 
+            {/* === GROUPS TAB === */}
+            {aiSection === 'groups' && authEnabled && (
+              <>
+                <InviteBanner
+                  invites={groupsStore.invites}
+                  onResolved={() => {
+                    void groupsStore.fetchList();
+                  }}
+                />
+                {isLgUp ? (
+                  // ≥lg: two-column master-detail (desktop).
+                  <div className="flex flex-row gap-3 h-full min-h-0">
+                    <div className="w-[320px] shrink-0 h-full min-h-0">
+                      <GroupsList
+                        selectedId={selectedGroupId}
+                        onSelect={setSelectedGroupId}
+                        onCreate={() => setCreateGroupOpen(true)}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 min-h-0">
+                      {selectedGroupId ? (
+                        <GroupDetail
+                          groupId={selectedGroupId}
+                          currentUserId={
+                            currentUser?.id != null ? String(currentUser.id) : null
+                          }
+                          onBack={() => setSelectedGroupId(null)}
+                          onDeleted={() => {
+                            setSelectedGroupId(null);
+                            void groupsStore.fetchList();
+                          }}
+                          onLeft={() => {
+                            setSelectedGroupId(null);
+                            void groupsStore.fetchList();
+                          }}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                          {t('ai.groups.empty.title')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : isMdUp ? (
+                  // md..lg: Select-driven dropdown above the detail pane.
+                  <div className="flex flex-col gap-3 h-full min-h-0">
+                    <div className="shrink-0">
+                      <Select
+                        value={selectedGroupId ?? ''}
+                        onValueChange={(val) => setSelectedGroupId(val || null)}
+                        options={groupsStore.groups.map(g => ({ value: g.id, label: g.name }))}
+                        placeholder={t('ai.groups.selectGroup')}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 min-h-0">
+                      {selectedGroupId ? (
+                        <GroupDetail
+                          groupId={selectedGroupId}
+                          currentUserId={
+                            currentUser?.id != null ? String(currentUser.id) : null
+                          }
+                          onBack={() => setSelectedGroupId(null)}
+                          onDeleted={() => {
+                            setSelectedGroupId(null);
+                            void groupsStore.fetchList();
+                          }}
+                          onLeft={() => {
+                            setSelectedGroupId(null);
+                            void groupsStore.fetchList();
+                          }}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                          {t('ai.groups.empty.title')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  // <md: drill-down — list OR detail, with back button.
+                  <div className="h-full min-h-0">
+                    {selectedGroupId ? (
+                      <GroupDetail
+                        groupId={selectedGroupId}
+                        currentUserId={
+                          currentUser?.id != null ? String(currentUser.id) : null
+                        }
+                        onBack={() => setSelectedGroupId(null)}
+                        onDeleted={() => {
+                          setSelectedGroupId(null);
+                          void groupsStore.fetchList();
+                        }}
+                        onLeft={() => {
+                          setSelectedGroupId(null);
+                          void groupsStore.fetchList();
+                        }}
+                      />
+                    ) : (
+                      <GroupsList
+                        selectedId={selectedGroupId}
+                        onSelect={setSelectedGroupId}
+                        onCreate={() => setCreateGroupOpen(true)}
+                      />
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
             {/* === ROUTING TAB === */}
             {aiSection === 'routing' && (
               <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3">
@@ -534,6 +706,7 @@ export default function AiProviders() {
 
                 <div className="grid items-start gap-3 xl:grid-cols-2">
                   <div id="routing-proxy" className="min-w-0 scroll-mt-4">
+                    <UserProxyCard />
                     <AiProxyControlsSection
                       visible
                       proxyStatus={proxyStatus}
@@ -654,6 +827,31 @@ export default function AiProviders() {
       <IdeConfigWizard isOpen={isIdeWizardOpen} onClose={() => setIsIdeWizardOpen(false)} />
 
       <ProxyDebugDrawer isOpen={showDebugDrawer} onClose={() => setShowDebugDrawer(false)} />
+
+      {/* Groups tab modals */}
+      <CreateGroupModal
+        isOpen={createGroupOpen}
+        onClose={() => setCreateGroupOpen(false)}
+        onTierError={() => setHowToGetOpen(true)}
+      />
+      <Modal
+        isOpen={howToGetOpen}
+        onClose={() => setHowToGetOpen(false)}
+        title={t('scenarios.howToGetTier', { tier: t('auth.role.vip') })}
+        icon={<HelpCircle size={18} />}
+        size="sm"
+      >
+        <ul className="space-y-2 text-sm text-slate-300">
+          <li className="flex items-start gap-2">
+            <span className="text-slate-500 mt-0.5">•</span>
+            <span>{t('scenarios.howToGetTierSubscribe')}</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-slate-500 mt-0.5">•</span>
+            <span>{t('scenarios.howToGetTierAskAdmin')}</span>
+          </li>
+        </ul>
+      </Modal>
     </div>
   );
 }
