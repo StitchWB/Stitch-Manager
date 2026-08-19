@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthStore, effectiveRole } from '../../stores/auth';
 
 // Mock the auth backend module — these are the fetch wrappers the store calls.
 jest.mock('../../lib/backend/modules/auth', () => ({
@@ -28,6 +28,7 @@ jest.mock('../../lib/backend/modules/auth', () => ({
   createUser: jest.fn(),
   deleteUser: jest.fn(),
   setLoginPolicy: jest.fn(),
+  setPreviewRole: jest.fn(),
   PERMISSION_KEYS: [
     'section.autoreg',
     'section.ai_hub',
@@ -57,6 +58,7 @@ const authModule = jest.requireMock('../../lib/backend/modules/auth') as {
   getCurrentUser: jest.Mock;
   getMyPermissions: jest.Mock;
   setLoginPolicy: jest.Mock;
+  setPreviewRole: jest.Mock;
   loginTelegramOidc: jest.Mock;
 };
 
@@ -322,5 +324,155 @@ describe('auth store — Telegram OIDC (tg_auth_mode)', () => {
     ).rejects.toThrow();
 
     expect(useAuthStore.getState().error).toBe('auth.tg.oidc.errorGeneric');
+  });
+});
+
+// ── Role preview (effectiveRole + setPreviewRole + hasPermission) ───────────
+
+describe('auth store — role preview', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Reset the store between tests. window.location.reload() is a no-op
+    // in jsdom (logs a suppressed "Not implemented" error), so setPreviewRole
+    // can call it without reloading the test runner.
+    useAuthStore.setState({
+      enabled: false,
+      hasUsers: false,
+      required: false,
+      enforceLogin: true,
+      tgAuthMode: 'legacy',
+      checked: false,
+      user: null,
+      busy: false,
+      error: null,
+      sessionExpired: false,
+      guest: false,
+      authView: 'welcome',
+      permissions: [],
+      permissionsLoaded: false,
+    });
+  });
+
+  // ── effectiveRole helper ────────────────────────────────────────────────
+
+  it('effectiveRole returns null for a null user', () => {
+    expect(effectiveRole(null)).toBeNull();
+  });
+
+  it('effectiveRole returns the real role when preview_role is null/undefined', () => {
+    const user = { id: 1, username: 'admin', role: 'admin' as const };
+    expect(effectiveRole(user)).toBe('admin');
+    expect(effectiveRole({ ...user, preview_role: null })).toBe('admin');
+  });
+
+  it('effectiveRole returns the previewed role when preview_role is set', () => {
+    const user = {
+      id: 1,
+      username: 'admin',
+      role: 'admin' as const,
+      preview_role: 'user' as const,
+    };
+    expect(effectiveRole(user)).toBe('user');
+  });
+
+  // ── hasPermission ────────────────────────────────────────────────────────
+
+  it('hasPermission does NOT fail-open for an admin previewing a non-admin role (permissions list decides)', () => {
+    // Seed the store as enabled + admin previewing 'user', with an empty
+    // permissions list (the backend computes it for the previewed role).
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: {
+        id: 1,
+        username: 'admin',
+        role: 'admin',
+        preview_role: 'user',
+      },
+      permissions: [],
+      permissionsLoaded: true,
+    });
+
+    // Admin previewing 'user' with no permissions granted → key denied.
+    expect(useAuthStore.getState().hasPermission('section.settings')).toBe(false);
+
+    // Grant the key in the permissions list → key granted (list decides).
+    useAuthStore.setState({ permissions: ['section.settings'] });
+    expect(useAuthStore.getState().hasPermission('section.settings')).toBe(true);
+  });
+
+  it('hasPermission still fails-open for a real admin (no preview)', () => {
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: { id: 1, username: 'admin', role: 'admin' },
+      permissions: [],
+      permissionsLoaded: true,
+    });
+
+    // Real admin (no preview) → every key granted regardless of the list.
+    expect(useAuthStore.getState().hasPermission('section.settings')).toBe(true);
+  });
+
+  // ── setPreviewRole action ───────────────────────────────────────────────
+
+  it('setPreviewRole calls the API wrapper with the role', async () => {
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: { id: 1, username: 'admin', role: 'admin' },
+    });
+
+    authModule.setPreviewRole.mockResolvedValue(undefined);
+
+    // jsdom's window.location.reload() is a no-op (logs a suppressed
+    // "Not implemented" error), so this call completes without reloading.
+    await useAuthStore.getState().setPreviewRole('user');
+
+    expect(authModule.setPreviewRole).toHaveBeenCalledWith('user');
+  });
+
+  it('setPreviewRole passes null when exiting the preview', async () => {
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: { id: 1, username: 'admin', role: 'admin', preview_role: 'user' },
+    });
+
+    authModule.setPreviewRole.mockResolvedValue(undefined);
+
+    await useAuthStore.getState().setPreviewRole(null);
+
+    expect(authModule.setPreviewRole).toHaveBeenCalledWith(null);
+  });
+
+  it('setPreviewRole propagates errors (does not call reload)', async () => {
+    useAuthStore.setState({
+      enabled: true,
+      hasUsers: true,
+      required: true,
+      checked: true,
+      user: { id: 1, username: 'admin', role: 'admin' },
+    });
+
+    authModule.setPreviewRole.mockRejectedValue(
+      Object.assign(new Error('Forbidden'), { status: 403 }),
+    );
+
+    await expect(
+      useAuthStore.getState().setPreviewRole('user'),
+    ).rejects.toThrow('Forbidden');
+
+    // The API wrapper was called (and rejected); reload is never reached
+    // because the await throws first.
+    expect(authModule.setPreviewRole).toHaveBeenCalledWith('user');
   });
 });

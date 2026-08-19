@@ -12,7 +12,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useAccountsStore } from '../../stores/accounts';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthStore, effectiveRole } from '../../stores/auth';
 import { t } from '@/lib/i18n';
 
 export function CommandPalette() {
@@ -24,7 +24,9 @@ export function CommandPalette() {
 
   // When auth is disabled, show everything (desktop mode). When enabled,
   // only admins see admin-only destinations; non-admins see the user set.
-  const isAdmin = !authEnabled || authUser?.role === 'admin';
+  // Uses the EFFECTIVE role so an admin previewing a non-admin role loses
+  // admin-only destinations until they exit the preview.
+  const isAdmin = !authEnabled || effectiveRole(authUser) === 'admin';
 
   // Toggle on Cmd+K / Ctrl+K
   useEffect(() => {
