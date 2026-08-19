@@ -9,18 +9,22 @@ import {
   Orbit,
   Route,
   Server,
+  Users,
   Wrench,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { TabButton } from '@/components/ui';
+import { TabButton, Badge } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '@/stores/app';
+import { useAuthStore } from '@/stores/auth';
+import { useGroupsStore } from '@/stores/groups';
 
 type AiTabId =
   | 'overview'
   | 'providers'
   | 'gateway'
+  | 'groups'
   | 'routing'
   | 'connections'
   | 'monitor'
@@ -34,6 +38,8 @@ interface AiTab {
   label: string;
   to: string;
   icon: LucideIcon;
+  /** Only render when auth is enabled (web mode). Hidden on desktop. */
+  authOnly?: boolean;
 }
 
 const AI_TABS: AiTab[] = [
@@ -41,6 +47,7 @@ const AI_TABS: AiTab[] = [
   { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers', icon: Server },
   { id: 'gateway', label: 'Gateway', to: '/ai/gateway', icon: Network },
   { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity', icon: Orbit },
+  { id: 'groups', label: 'ai.groups.title', to: '/ai/groups', icon: Users, authOnly: true },
   { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
   { id: 'connections', label: 'Connections', to: '/ai/integrations', icon: Cable },
   { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
@@ -52,6 +59,7 @@ const AI_TABS: AiTab[] = [
 function activeTab(pathname: string): AiTabId {
   if (pathname === '/ai' || pathname === '/ai/overview') return 'overview';
   if (pathname.startsWith('/ai/gateway')) return 'gateway';
+  if (pathname.startsWith('/ai/groups')) return 'groups';
   if (pathname.startsWith('/ai/routing')) return 'routing';
   if (pathname.startsWith('/ai/integrations') || pathname.startsWith('/ai/opencode-config')) {
     return 'connections';
@@ -74,7 +82,13 @@ export function AiTopTabs() {
   const navigate = useNavigate();
   const location = useLocation();
   const language = useAppStore(state => state.language);
+  const authEnabled = useAuthStore(state => state.enabled);
+  const pendingInvites = useGroupsStore(state => state.invites);
   const current = activeTab(location.pathname);
+
+  const visibleTabs = authEnabled
+    ? AI_TABS
+    : AI_TABS.filter(tab => !tab.authOnly);
 
   return (
     <nav
@@ -82,7 +96,7 @@ export function AiTopTabs() {
       className="shrink-0 overflow-x-auto border-b border-vsc-border-light bg-vsc-panel/95 px-3 shadow-[0_1px_0_rgba(255,255,255,0.025)] md:px-5 [scrollbar-width:thin]"
     >
       <div className="flex h-12 min-w-max items-center gap-0.5 py-1.5">
-        {AI_TABS.map(tab => {
+        {visibleTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = current === tab.id;
           const label =
@@ -95,19 +109,28 @@ export function AiTopTabs() {
                   ? 'Подключения'
                   : 'Connections'
                 : getLabel(tab.label);
+          const pendingCount = tab.id === 'groups' ? pendingInvites.length : 0;
 
           return (
-            <TabButton
-              key={tab.id}
-              active={isActive}
-              appearance="workspace"
-              size="sm"
-              onClick={() => navigate(tab.to)}
-              aria-current={isActive ? 'page' : undefined}
-              title={label}
-              icon={<Icon size={14} />}
-              label={label}
-            />
+            <div key={tab.id} className="relative">
+              <TabButton
+                active={isActive}
+                appearance="workspace"
+                size="sm"
+                onClick={() => navigate(tab.to)}
+                aria-current={isActive ? 'page' : undefined}
+                title={label}
+                icon={<Icon size={14} />}
+                label={label}
+              />
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 z-10 pointer-events-none">
+                  <Badge variant="warning" size="sm" withPulse>
+                    <span className="motion-reduce:animate-none">{pendingCount}</span>
+                  </Badge>
+                </span>
+              )}
+            </div>
           );
         })}
       </div>
