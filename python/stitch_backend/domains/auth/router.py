@@ -26,6 +26,7 @@ auth endpoints are the public exceptions:
   POST /api/auth/setup           — creates first admin when zero users (403 otherwise)
   POST /api/auth/logout          — clears cookie, deletes session
   GET  /api/auth/me              — user object or 401
+  POST /api/auth/preview_role (admin) — set/clear per-session role preview
   GET  /api/auth/users (admin)   — list without hashes
   POST /api/auth/users (admin)   — create; 409 on dup
   DELETE /api/auth/users/{id} (admin) — delete (not self; not last admin)
@@ -87,6 +88,11 @@ class UserPublic(BaseModel):
     username: str
     role: str
     created_at: str
+    #: Per-session role preview (only populated by ``/me``).  ``None`` when
+    #: no preview is active or the caller is not an admin.  Backward
+    #: compatible — defaults to ``None`` so login/setup/telegram responses
+    #: keep working without setting it.
+    preview_role: str | None = None
 
 
 class StatusResponse(BaseModel):
@@ -112,6 +118,21 @@ class CreateUserRequest(BaseModel):
     role: str = Field("user", pattern="^(" + "|".join(SELECTABLE_ROLES) + ")$")
 
 
+class PreviewRoleRequest(BaseModel):
+    """Body for POST /api/auth/preview_role — set or clear the role preview.
+
+    ``role`` is optional/nullable.  ``null`` clears the preview.  ``'admin'``
+    also clears the preview (an admin cannot preview as admin — that would
+    be a no-op).  Any other value must be one of SELECTABLE_ROLES (validated
+    by the pattern).  Unknown strings → 422.
+    """
+
+    role: str | None = Field(
+        default=None,
+        pattern="^(" + "|".join(SELECTABLE_ROLES) + ")$",
+    )
+
+
 class SetupRequest(BaseModel):
     """Body for POST /api/auth/setup — creates the first admin."""
 
@@ -132,13 +153,18 @@ class PolicyResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _user_public(user: User) -> UserPublic:
-    """Build the public user object (no password hash)."""
+def _user_public(user: User, preview_role: str | None = None) -> UserPublic:
+    """Build the public user object (no password hash).
+
+    ``preview_role`` is only populated by ``/me``; login/setup/telegram
+    login responses call this without the argument (defaults to ``None``).
+    """
     return UserPublic(
         id=user.id,
         username=user.username,
         role=user.role,
         created_at=user.created_at.isoformat(),
+        preview_role=preview_role,
     )
 
 
@@ -186,26 +212,50 @@ def _resolve_raw_token(request: Request) -> str:
     return ""
 
 
-async def _current_user_optional(request: Request) -> tuple[User | None, str]:
-    """Return ``(user, raw_token)`` if a valid session is present, else ``(None, "")``.
+async def _current_user_optional(
+    request: Request,
+) -> tuple[User | None, str | None, str]:
+    """Return ``(user, preview_role, raw_token)`` if a valid session is
+    present, else ``(None, None, "")``.
 
-    Opens a short-lived DB session — used by the middleware and the
-    ``/me`` endpoint.  Returns ``raw_token`` so the caller can use it for
-    logout without re-parsing the request.
+    Opens a short-lived DB session — used by the middleware, the ``/me``
+    endpoint, ``/my_permissions``, the command dispatcher, and
+    :func:`require_role`.  Returns ``raw_token`` so the caller can use it
+    for logout / preview updates without re-parsing the request.
+
+    HARD RULE — preview sanitization lives here (single source of truth):
+    ``preview_role`` is only honored when the real ``user.role == 'admin'``.
+    When a non-admin session has a stale ``preview_role`` (e.g. the user
+    was demoted after setting a preview), it is cleared in the DB during
+    resolution and ``None`` is returned.  Every consumer thus sees
+    sanitized values without each one re-checking.
     """
     raw_token = _resolve_raw_token(request)
     if not raw_token:
-        return None, ""
+        return None, None, ""
 
     from stitch_backend.database import get_session_factory
 
     factory = get_session_factory()
     async with factory() as db:
-        user = await auth_service.resolve_session(db, raw_token)
+        user, preview_role = await auth_service.resolve_session_with_preview(
+            db, raw_token
+        )
+        # HARD RULE: preview only for real admins.  A non-admin session
+        # with a stale preview_role gets it cleared in the DB so the
+        # stale value never leaks to any consumer.
+        if (
+            user is not None
+            and preview_role is not None
+            and user.role != "admin"
+        ):
+            await auth_service.set_session_preview_role(db, raw_token, None)
+            await db.commit()
+            preview_role = None
         # Detach so the caller can read attributes after the session closes.
         if user is not None:
             db.expunge(user)
-    return user, raw_token
+    return user, preview_role, raw_token
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
@@ -214,9 +264,12 @@ async def _current_user_optional(request: Request) -> tuple[User | None, str]:
 async def get_current_user(request: Request) -> User:
     """FastAPI dependency: return the authenticated user or raise 401.
 
-    Used by endpoints that require *any* authenticated user.
+    Used by endpoints that require *any* authenticated user.  Returns the
+    REAL user (with the real role); callers that need the effective
+    (previewed) role should use :func:`_current_user_optional` directly or
+    :func:`require_role` (which compares against the effective role).
     """
-    user, _raw_token = await _current_user_optional(request)
+    user, _preview_role, _raw_token = await _current_user_optional(request)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -226,20 +279,35 @@ async def get_current_user(request: Request) -> User:
 
 
 def require_role(role: str):
-    """FastAPI dependency factory: require the authenticated user to have *role*.
+    """FastAPI dependency factory: require the authenticated user's
+    EFFECTIVE role to be *role*.
+
+    The effective role is the previewed role when an admin is previewing,
+    otherwise the real role.  So an admin previewing ``'user'`` gets 403
+    on admin-only endpoints — that is the intended honest behavior.
+
+    The new ``/preview_role`` endpoint must NOT use this (it checks the
+    REAL role directly so an admin can exit a preview).
 
     Usage::
 
         @router.post("/users", dependencies=[Depends(require_role("admin"))])
         async def create_user(...): ...
     """
-    async def _require_role(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != role:
+    async def _require_role(request: Request) -> User:
+        user, preview_role, _raw = await _current_user_optional(request)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+            )
+        effective_role = preview_role or user.role
+        if effective_role != role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Requires role: {role}",
             )
-        return current_user
+        return user
 
     return _require_role
 
@@ -547,9 +615,84 @@ async def set_policy(body: PolicyRequest) -> PolicyResponse:
 
 
 @router.get("/me", response_model=UserPublic)
-async def me(current_user: User = Depends(get_current_user)) -> UserPublic:
-    """Return the currently authenticated user, or 401."""
-    return _user_public(current_user)
+async def me(request: Request) -> UserPublic:
+    """Return the currently authenticated user, or 401.
+
+    ``role`` is always the REAL stored role.  ``preview_role`` is the
+    per-session role preview (NULL when no preview is active or the
+    caller is not an admin).  An admin previewing ``'user'`` sees
+    ``role='admin'`` and ``preview_role='user'``.
+    """
+    user, preview_role, _raw = await _current_user_optional(request)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return _user_public(user, preview_role)
+
+
+@router.post("/preview_role")
+async def set_preview_role(
+    body: PreviewRoleRequest, request: Request
+) -> dict[str, bool | str | None]:
+    """Set or clear the per-session role preview (admin only, REAL role).
+
+    An admin can preview the app as another role: the previewed role is
+    stored on the SESSION row and becomes the EFFECTIVE role for all
+    authorization decisions (permission matrix, tier gating, admin_only
+    commands, admin REST endpoints), while the real role stays unchanged.
+
+    Contract:
+
+      - Auth disabled → 400 ``{"detail": "Auth is disabled"}``.
+      - No session → 401.
+      - Real (stored) user role != 'admin' → 403
+        ``{"detail": "Requires role: admin"}``.
+      - ``role == 'admin'`` or ``role == null`` → clears the preview
+        (stores NULL).
+      - Unknown role string → 422 (pydantic pattern validation).
+      - Success → 200 ``{"success": true, "preview_role": <stored or null>}``.
+
+    This endpoint checks the REAL role directly (never via
+    :func:`require_role` / effective role) so an admin previewing ``'user'``
+    can still exit the preview.
+    """
+    settings = get_settings()
+    if not settings.auth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Auth is disabled",
+        )
+
+    user, _preview, raw_token = await _current_user_optional(request)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    # REAL role check — never the effective (previewed) role, so an
+    # admin previewing 'user' can still call this endpoint to exit.
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Requires role: admin",
+        )
+
+    # 'admin' or null → clear the preview (store NULL).  An admin cannot
+    # preview as admin — that would be a no-op.
+    stored: str | None = None if body.role is None or body.role == "admin" else body.role
+
+    updated = await run_in_session(
+        lambda db: auth_service.set_session_preview_role(db, raw_token, stored)
+    )
+    if not updated:
+        # Session vanished between resolution and write — treat as 401.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return {"success": True, "preview_role": stored}
 
 
 @router.get(
@@ -688,17 +831,18 @@ async def my_permissions(request: Request) -> dict[str, list[str]]:
     """Return the current session user's effective permission keys.
 
     - Auth disabled → ALL keys (desktop single-user mode).
-    - Authenticated → :func:`effective_permissions` for the user's role.
+    - Authenticated → :func:`effective_permissions` for the EFFECTIVE role
+      (previewed role when an admin is previewing, otherwise the real role).
     - Guest (auth on, no session) → effective for role ``'user'``.
     """
     settings = get_settings()
     if not settings.auth_enabled:
         return {"permissions": list(PERMISSION_KEYS)}
-    user, _ = await _current_user_optional(request)
+    user, preview_role, _ = await _current_user_optional(request)
     if user is None:
         perms = await effective_permissions("user")
     else:
-        perms = await effective_permissions(user)
+        perms = await effective_permissions(preview_role or user.role)
     return {"permissions": sorted(perms)}
 
 
@@ -830,7 +974,7 @@ async def auth_middleware_dispatch(request: Request, call_next):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Not authenticated"},
             )
-        user, _ = await _current_user_optional(request)
+        user, _preview, _ = await _current_user_optional(request)
         if user is None:
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -839,7 +983,7 @@ async def auth_middleware_dispatch(request: Request, call_next):
         return await call_next(request)
 
     # HTTP /api/* — check session.
-    user, _ = await _current_user_optional(request)
+    user, _preview, _ = await _current_user_optional(request)
     if user is None:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -21,6 +21,12 @@ export interface AuthUser {
   username: string;
   role: 'admin' | 'user' | 'vip' | 'premium' | 'elite';
   tg_tier?: string | null;
+  /**
+   * When an admin is previewing another role via POST /api/auth/preview_role,
+   * the backend returns the previewed role here (and enforces it for the
+   * session). Null when no preview is active. The real `role` stays 'admin'.
+   */
+  preview_role?: 'admin' | 'user' | 'vip' | 'premium' | 'elite' | null;
 }
 
 export interface TelegramLoginResult {
@@ -170,9 +176,35 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       username: data.username,
       role: data.role,
       tg_tier: data.tg_tier ?? null,
+      preview_role: data.preview_role ?? null,
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * POST /api/auth/preview_role — switch the admin's effective role for the
+ * current session (admin-only "role preview"). Pass null to exit preview.
+ * The backend enforces the previewed role for permissions/tiers/admin
+ * endpoints; a full app reload after switching makes every store/list
+ * re-fetch as that role.
+ * @throws {Error} with `status` property = 401 (no session), 403 (non-admin), 400 (auth disabled/invalid).
+ */
+export async function setPreviewRole(role: string | null): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/preview_role`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+
+  const data = (await parseJson(response)) as { success?: boolean; detail?: string } | null;
+
+  if (!response.ok) {
+    const err = new Error(data?.detail ?? 'Failed to set preview role') as Error & { status: number };
+    err.status = response.status;
+    throw err;
   }
 }
 

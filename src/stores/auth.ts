@@ -51,6 +51,7 @@ import {
   logoutUser,
   setupUser,
   setLoginPolicy as setLoginPolicyApi,
+  setPreviewRole as setPreviewRoleApi,
   PERMISSION_KEYS,
   type AuthUser,
 } from '../lib/backend/modules/auth';
@@ -58,6 +59,17 @@ import { setAuthExpiredHandler } from '../lib/backend/core/invoke';
 
 export type AuthRole = 'admin' | 'user';
 export type AuthView = 'welcome' | 'setup' | 'login' | 'telegram';
+
+/**
+ * The effective role of the current session — the previewed role when an
+ * admin is previewing, otherwise the real role. Returns null when there is
+ * no session. This is the single source of truth for all role gating in the
+ * frontend (sidebar, AdminRoute, CommandPalette, Settings, etc.).
+ */
+export function effectiveRole(user: AuthUser | null): AuthUser['role'] | null {
+  if (!user) return null;
+  return user.preview_role ?? user.role;
+}
 
 interface AuthState {
   /** Whether the backend has auth enabled. False on desktop / unconfigured. */
@@ -109,10 +121,19 @@ interface AuthState {
   /** Persist the enforce_login policy via POST /api/auth/policy (admin only). */
   setLoginPolicy: (enforceLogin: boolean) => Promise<boolean>;
   /**
+   * Switch the admin's effective role for the current session via
+   * POST /api/auth/preview_role (admin-only "role preview"). After the
+   * backend confirms, a full app reload is REQUIRED: it re-initializes
+   * every store and re-fetches every list as the previewed role. The
+   * backend session is the single source of truth — no preview state is
+   * persisted client-side.
+   */
+  setPreviewRole: (role: string | null) => Promise<void>;
+  /**
    * Returns true when the current session may use `key`. When auth is
-   * disabled, not yet loaded, or the user is an admin, every key is
-   * granted (desktop mode / fail-open). Otherwise the key must appear in
-   * the `permissions` list fetched from /my_permissions.
+   * disabled, not yet loaded, or the effective role is admin, every key
+   * is granted (desktop mode / fail-open). Otherwise the key must appear
+   * in the `permissions` list fetched from /my_permissions.
    */
   hasPermission: (key: string) => boolean;
 }
@@ -347,12 +368,25 @@ export const useAuthStore = create<AuthState>((set, get) => {
       return persisted;
     },
 
+    setPreviewRole: async (role) => {
+      // POST /api/auth/preview_role (admin-only). On success, reload the
+      // app so every store/list re-initializes as the previewed role. The
+      // backend session is the single source of truth — no client-side
+      // preview state is persisted.
+      await setPreviewRoleApi(role);
+      window.location.reload();
+    },
+
     hasPermission: (key) => {
       const { enabled, permissionsLoaded, permissions, user } = get();
       // Fail open: desktop mode (auth disabled), not-yet-loaded, or admin
-      // role → every key granted. Otherwise the key must be in the list.
+      // effective role → every key granted. Otherwise the key must be in
+      // the list. The effective role covers admin preview: an admin
+      // previewing a non-admin role no longer fails open here — the
+      // permissions list (computed by the backend for the previewed role)
+      // decides.
       if (!enabled || !permissionsLoaded) return true;
-      if (user?.role === 'admin') return true;
+      if (effectiveRole(user) === 'admin') return true;
       return permissions.includes(key);
     },
   };

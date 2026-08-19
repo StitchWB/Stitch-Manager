@@ -5,8 +5,9 @@ Two tables on the shared :class:`stitch_backend.database.Base`:
   - ``users``     — id PK, username unique indexed, password_hash, role,
     created_at.  ``role`` is ``'admin'`` or ``'user'`` (default ``'user'``).
   - ``sessions``  — id PK, token_hash unique indexed (sha256 of the raw
-    token), user_id FK users.id, created_at, expires_at.  Raw tokens are
-    never stored; only their sha256 hash.
+    token), user_id FK users.id, created_at, expires_at, preview_role.
+    Raw tokens are never stored; only their sha256 hash.  ``preview_role``
+    is a per-session admin role-preview (NULL when inactive).
 
 Cascade: deleting a user cascades to their sessions.
 """
@@ -84,7 +85,13 @@ class User(Base):
 
 
 class Session(Base):
-    """A login session — raw token is never stored, only its sha256 hash."""
+    """A login session — raw token is never stored, only its sha256 hash.
+
+    ``preview_role`` is the per-session role preview an admin sets to
+    impersonate a lower tier.  It is only honored when the real user role
+    is ``'admin'``; a non-admin session with a stale ``preview_role`` has
+    it cleared during resolution (see :func:`router._current_user_optional`).
+    """
 
     __tablename__ = "auth_sessions"
 
@@ -107,6 +114,12 @@ class Session(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, comment="Session expiry (UTC)"
+    )
+    #: Admin role-preview (per-session).  NULL when no preview is active.
+    #: Only honored when the real user role is 'admin'; sanitized by
+    #: ``_current_user_optional`` for every consumer.
+    preview_role: Mapped[str | None] = mapped_column(
+        String, nullable=True, comment="Admin role-preview (per-session)"
     )
 
     def __repr__(self) -> str:

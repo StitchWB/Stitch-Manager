@@ -179,20 +179,28 @@ async def create_session(db: AsyncSession, user_id: int) -> tuple[str, datetime]
     return raw_token, expires_at
 
 
-async def resolve_session(db: AsyncSession, raw_token: str) -> User | None:
-    """Return the :class:`User` for *raw_token* if the session is valid.
+async def resolve_session_with_preview(
+    db: AsyncSession, raw_token: str
+) -> tuple[User | None, str | None]:
+    """Return ``(user, preview_role)`` for *raw_token* if session is valid.
 
-    Returns ``None`` if the token is empty, the session does not exist, or
-    the session has expired (in which case it is deleted as a side effect).
+    Single query path for session resolution.  Returns ``(None, None)`` if
+    the token is empty, the session does not exist, or the session has
+    expired (in which case it is deleted as a side effect, same as
+    :func:`resolve_session`).
+
+    ``preview_role`` is the raw stored value — the caller (typically
+    :func:`router._current_user_optional`) is responsible for the hard
+    rule: only honor it when the real user role is ``'admin'``.
     """
     if not raw_token:
-        return None
+        return None, None
     token_hash = _hash_token(raw_token)
     stmt = select(Session).where(Session.token_hash == token_hash)
     result = await db.execute(stmt)
     session = result.scalar_one_or_none()
     if session is None:
-        return None
+        return None, None
     # SQLite strips tzinfo on storage; normalise back to UTC for comparison.
     expires_at = session.expires_at
     if expires_at.tzinfo is None:
@@ -201,10 +209,47 @@ async def resolve_session(db: AsyncSession, raw_token: str) -> User | None:
         # Expired — delete and treat as not authenticated.
         await db.delete(session)
         await db.flush()
-        return None
+        return None, None
     user_stmt = select(User).where(User.id == session.user_id)
     user_result = await db.execute(user_stmt)
-    return user_result.scalar_one_or_none()
+    user = user_result.scalar_one_or_none()
+    return user, session.preview_role
+
+
+async def resolve_session(db: AsyncSession, raw_token: str) -> User | None:
+    """Return the :class:`User` for *raw_token* if the session is valid.
+
+    Returns ``None`` if the token is empty, the session does not exist, or
+    the session has expired (in which case it is deleted as a side effect).
+
+    Delegates to :func:`resolve_session_with_preview` and discards the
+    ``preview_role`` — kept for callers that only need the user object.
+    """
+    user, _preview = await resolve_session_with_preview(db, raw_token)
+    return user
+
+
+async def set_session_preview_role(
+    db: AsyncSession, raw_token: str, role: str | None
+) -> bool:
+    """Set ``preview_role`` on the session matched by *raw_token*.
+
+    Returns ``False`` when no session row exists for *raw_token* (expired
+    sessions are already deleted by :func:`resolve_session_with_preview`,
+    so this covers the "session vanished" case).  Flushes the change; the
+    caller is responsible for committing.
+    """
+    if not raw_token:
+        return False
+    token_hash = _hash_token(raw_token)
+    stmt = select(Session).where(Session.token_hash == token_hash)
+    result = await db.execute(stmt)
+    session = result.scalar_one_or_none()
+    if session is None:
+        return False
+    session.preview_role = role
+    await db.flush()
+    return True
 
 
 async def delete_session(db: AsyncSession, raw_token: str) -> None:
