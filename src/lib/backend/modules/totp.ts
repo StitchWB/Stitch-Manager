@@ -14,6 +14,10 @@ export interface TotpKey {
   /** Per-user ownership flags (absent for guests / legacy shared rows). */
   mine?: boolean;
   shared?: boolean;
+  /** Row owner id (null = legacy / instance-shared). Matches wire ``ownerId``. */
+  ownerId?: number | null;
+  /** Group names the row is shared into. Matches wire ``sharedGroupNames``. */
+  sharedGroupNames?: string[];
 }
 
 export interface AddTotpKeyParams {
@@ -61,4 +65,18 @@ export async function linkTotpKey(params: LinkTotpKeyParams): Promise<TotpKey> {
 
 export async function claimTotpKey(id: string): Promise<{ success: boolean }> {
   return safeInvoke<{ success: boolean }>('claim_totp_key', { id });
+}
+
+export async function shareTotpKey(params: {
+  totpId: string;
+  groupId: string;
+}): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>('totp_share_group', params, { noCache: true });
+}
+
+export async function unshareTotpKey(params: {
+  totpId: string;
+  groupId: string;
+}): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>('totp_unshare_group', params, { noCache: true });
 }

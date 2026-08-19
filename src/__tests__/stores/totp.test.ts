@@ -19,6 +19,7 @@ jest.mock('../../lib/backend/core/invoke', () => ({
 import { safeInvoke } from '../../lib/backend/core/invoke';
 import { useTotpStore } from '../../stores/totp';
 import type { TotpKey } from '../../lib/backend/modules/totp';
+import { shareTotpKey, unshareTotpKey } from '../../lib/backend/modules/totp';
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -360,5 +361,51 @@ describe('TOTP full lifecycle (mocked backend)', () => {
     mockInvoke.mockResolvedValueOnce({ success: true, id: key.id });
     await useTotpStore.getState().removeKey(key.id);
     expect(useTotpStore.getState().keys).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. TOTP share/unshare to group wrappers
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('shareTotpKey / unshareTotpKey', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('calls totp_share_group with totpId + groupId and noCache', async () => {
+    mockInvoke.mockResolvedValueOnce({ success: true });
+
+    await shareTotpKey({ totpId: 'totp-1', groupId: 'grp-1' });
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'totp_share_group',
+      { totpId: 'totp-1', groupId: 'grp-1' },
+      { noCache: true },
+    );
+  });
+
+  it('calls totp_unshare_group with totpId + groupId and noCache', async () => {
+    mockInvoke.mockResolvedValueOnce({ success: true });
+
+    await unshareTotpKey({ totpId: 'totp-2', groupId: 'grp-2' });
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'totp_unshare_group',
+      { totpId: 'totp-2', groupId: 'grp-2' },
+      { noCache: true },
+    );
+  });
+
+  it('TotpKey type carries ownerId and sharedGroupNames from wire', () => {
+    const key = makeKey({
+      ownerId: 42,
+      sharedGroupNames: ['Team A', 'Team B'],
+      mine: true,
+      shared: false,
+    });
+    expect(key.ownerId).toBe(42);
+    expect(key.sharedGroupNames).toEqual(['Team A', 'Team B']);
+    expect(key.mine).toBe(true);
   });
 });

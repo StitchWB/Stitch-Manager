@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Trash2, Upload, Save, AlertCircle, CheckCircle2, Globe, Eye, EyeOff, UserPlus } from 'lucide-react';
+import { Trash2, Upload, Save, AlertCircle, CheckCircle2, Globe, Eye, EyeOff, UserPlus, Share2, User as UserIcon, Users } from 'lucide-react';
+import { toast } from 'sonner';
 
 import {
   ConfirmActionButton,
@@ -12,7 +13,8 @@ import {
   Textarea,
   Toggle,
   Tooltip,
-  OwnershipBadge,
+  Badge,
+  OverflowMenu,
   SegmentedControl,
 } from
 '@/components/ui';
@@ -29,6 +31,8 @@ import {
   parseProxyLibraryInput,
   previewProxyLibraryBulk,
   ProxyLibraryError,
+  shareProxyLibraryEntry,
+  unshareProxyLibraryEntry,
   testProxyLibraryDraft,
   updateProxyLibraryEntry,
   type ProxyLibraryDraft,
@@ -38,6 +42,8 @@ import {
   type ProxyLibraryUsage } from
 '@/lib/backend/modules/proxyLibrary';
 import { useAuthStore } from '@/stores/auth';
+import { useGroupsStore } from '@/stores/groups';
+import { ShareToGroupPicker } from '@/components/ai-groups/ShareToGroupPicker';
 
 interface ForceUpdateDialogState {
   isOpen: boolean;
@@ -122,6 +128,22 @@ export function ProxyLibrarySection() {
   const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared'>('all');
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
+  // Share-to-group picker state
+  const { groups, fetchList: fetchGroups } = useGroupsStore();
+  const [shareEntry, setShareEntry] = useState<ProxyLibraryEntry | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+
+  // Group name → id map (for resolving sharedGroupNames to alreadySharedIds)
+  const groupNameToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of groups) m.set(g.name, g.id);
+    return m;
+  }, [groups]);
+
+  useEffect(() => {
+    void fetchGroups();
+  }, [fetchGroups]);
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,6 +187,28 @@ export function ProxyLibrarySection() {
       setClaimingId(null);
     }
   }, [load]);
+
+  const handleShareApply = useCallback(async (toShare: string[], toUnshare: string[]) => {
+    if (!shareEntry) return;
+    setShareBusy(true);
+    setError(null);
+    try {
+      for (const groupId of toShare) {
+        await shareProxyLibraryEntry({ entryId: shareEntry.id, groupId });
+      }
+      for (const groupId of toUnshare) {
+        await unshareProxyLibraryEntry({ entryId: shareEntry.id, groupId });
+      }
+      toast.success(t('ai.groups.share.success', { label: shareEntry.label || shareEntry.host, group: '' }));
+      await load();
+      setShareEntry(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(t('ai.groups.share.failed', { msg }));
+    } finally {
+      setShareBusy(false);
+    }
+  }, [shareEntry, load]);
 
   const startEdit = (entry: ProxyLibraryEntry) => {
     setEditingId(entry.id);
@@ -695,9 +739,26 @@ export function ProxyLibrarySection() {
                             className="py-0 px-0" />
 
                           </div>
-                          <div className="text-sm text-slate-100 font-medium flex items-center gap-2">
+                          <div className="text-sm text-slate-100 font-medium flex items-center gap-2 flex-wrap">
                             {entry.label}
-                            <OwnershipBadge mine={entry.mine} shared={entry.shared} />
+                            {entry.mine && (
+                              <Badge variant="info" size="sm">
+                                <UserIcon size={10} className="mr-0.5" />
+                                {t('ownership.mine')}
+                              </Badge>
+                            )}
+                            {(entry.sharedGroupNames ?? []).map(gname => (
+                              <Badge key={gname} variant="indigo" size="sm">
+                                <Users size={10} className="mr-0.5" />
+                                {gname}
+                              </Badge>
+                            ))}
+                            {entry.shared && !entry.mine && (
+                              <Badge variant="slate" size="sm">
+                                <Globe size={10} className="mr-0.5" />
+                                {t('ownership.shared')}
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-xs text-slate-400 mt-1">
                             {entry.proxyType}://{entry.host}:{entry.port}
@@ -735,6 +796,19 @@ export function ProxyLibrarySection() {
                               </Button>
                             </Tooltip>
                           ) : null}
+                          <OverflowMenu
+                            triggerLabel={t('common.more')}
+                            size="sm"
+                            items={[
+                              {
+                                id: 'share',
+                                label: t('ai.groups.share.action'),
+                                icon: <Share2 size={14} />,
+                                onSelect: () => setShareEntry(entry),
+                                disabled: !entry.mine,
+                              },
+                            ]}
+                          />
                           <StatusBadge
                           status={entry.enabled ? 'active' : 'inactive'}
                           size="sm"
@@ -867,6 +941,22 @@ export function ProxyLibrarySection() {
             </div>
           </div> :
         null}
+
+        {/* Share-to-group picker */}
+        <ShareToGroupPicker
+          isOpen={shareEntry !== null}
+          onClose={() => (shareBusy ? undefined : setShareEntry(null))}
+          alreadySharedIds={
+            shareEntry
+              ? (shareEntry.sharedGroupNames ?? [])
+                  .map(n => groupNameToId.get(n))
+                  .filter((id): id is string => !!id)
+              : []
+          }
+          onApply={(toShare, toUnshare) => void handleShareApply(toShare, toUnshare)}
+          busy={shareBusy}
+          title={t('ai.groups.share.pickerTitleProxy')}
+        />
 
       </div>
     </SectionHeader>);

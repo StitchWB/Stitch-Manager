@@ -12,6 +12,8 @@ import {
   ensureProxySaveUseAllowed,
   parseProxyLibraryInput,
   testProxyLibraryDraft,
+  shareProxyLibraryEntry,
+  unshareProxyLibraryEntry,
 } from '../../../../lib/backend/modules/proxyLibrary';
 
 const originalFetch = globalThis.fetch;
@@ -254,5 +256,29 @@ describe('lib/Backend/modules/proxyLibrary', () => {
         }),
       }),
     );
+  });
+
+  describe('share / unshare to group', () => {
+    it('calls proxy_share_group with entryId + groupId', async () => {
+      mockFetchOk({ success: true });
+      await shareProxyLibraryEntry({ entryId: 'e1', groupId: 'g1' });
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/proxy_share_group',
+        expect.objectContaining({
+          body: JSON.stringify({ entryId: 'e1', groupId: 'g1' }),
+        }),
+      );
+    });
+
+    it('calls proxy_unshare_group with entryId + groupId', async () => {
+      mockFetchOk({ success: true });
+      await unshareProxyLibraryEntry({ entryId: 'e2', groupId: 'g2' });
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/proxy_unshare_group',
+        expect.objectContaining({
+          body: JSON.stringify({ entryId: 'e2', groupId: 'g2' }),
+        }),
+      );
+    });
   });
 });
