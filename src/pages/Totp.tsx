@@ -12,6 +12,10 @@ import {
   ChevronRight,
   FolderTree,
   UserPlus,
+  Share2,
+  User as UserIcon,
+  Users,
+  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
@@ -23,15 +27,18 @@ import {
   Tooltip,
   ToolbarSearchField,
   SegmentedControl,
-  OwnershipBadge,
+  Badge,
+  OverflowMenu,
 } from '@/components/ui';
 import { useTotpStore } from '../stores/totp';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
+import { useGroupsStore } from '@/stores/groups';
 import { t } from '../lib/i18n';
 import type { TotpKey } from '@/lib/backend/modules/totp';
-import { claimTotpKey } from '@/lib/backend/modules/totp';
+import { claimTotpKey, shareTotpKey, unshareTotpKey } from '@/lib/backend/modules/totp';
 import { TotpBadge } from '../components/totp/TotpBadge';
+import { ShareToGroupPicker } from '@/components/ai-groups/ShareToGroupPicker';
 import { isOtpauthUri, parseOtpauthUri } from '@/lib/otpauth';
 import { cn } from '../lib/utils';
 import { ButtonBase } from '@/components/ui/ButtonBase';
@@ -88,6 +95,8 @@ export default function Totp() {
   const { language } = useAppStore();
   void language;
 
+  const { groups: myGroups, fetchList: fetchGroups } = useGroupsStore();
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
@@ -105,9 +114,21 @@ export default function Totp() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared'>('all');
 
+  // Share-to-group picker state
+  const [shareKey, setShareKey] = useState<TotpKey | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+
+  // Group name → id map (for resolving sharedGroupNames to alreadySharedIds)
+  const groupNameToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of myGroups) m.set(g.name, g.id);
+    return m;
+  }, [myGroups]);
+
   useEffect(() => {
     void fetchKeys();
-  }, [fetchKeys]);
+    void fetchGroups();
+  }, [fetchKeys, fetchGroups]);
 
   /* ── "/" focuses search from anywhere ── */
   useEffect(() => {
@@ -253,6 +274,27 @@ export default function Totp() {
     }
   }, [fetchKeys]);
 
+  /* ── Share / unshare key to groups ── */
+  const handleShareApply = useCallback(async (toShare: string[], toUnshare: string[]) => {
+    if (!shareKey) return;
+    setShareBusy(true);
+    try {
+      for (const groupId of toShare) {
+        await shareTotpKey({ totpId: shareKey.id, groupId });
+      }
+      for (const groupId of toUnshare) {
+        await unshareTotpKey({ totpId: shareKey.id, groupId });
+      }
+      toast.success(t('ai.groups.share.success', { label: shareKey.label, group: '' }));
+      await fetchKeys();
+      setShareKey(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('ai.groups.share.failed', { msg: '' }));
+    } finally {
+      setShareBusy(false);
+    }
+  }, [shareKey, fetchKeys]);
+
   /* ── Issuer autocomplete: user's own issuers first, then presets ── */
   const issuerSuggestions = useMemo(() => {
     const existing = keys.map((k) => k.issuer).filter((i): i is string => !!i);
@@ -293,6 +335,7 @@ export default function Totp() {
       isDeleteArmed={armedDeleteId === key.id}
       onDelete={() => void handleDeleteClick(key)}
       onClaim={() => void handleClaim(key)}
+      onShare={() => setShareKey(key)}
     />
   );
 
@@ -475,6 +518,22 @@ export default function Totp() {
         )}
       </div>
 
+      {/* Share-to-group picker */}
+      <ShareToGroupPicker
+        isOpen={shareKey !== null}
+        onClose={() => (shareBusy ? undefined : setShareKey(null))}
+        alreadySharedIds={
+          shareKey
+            ? (shareKey.sharedGroupNames ?? [])
+                .map(n => groupNameToId.get(n))
+                .filter((id): id is string => !!id)
+            : []
+        }
+        onApply={(toShare, toUnshare) => void handleShareApply(toShare, toUnshare)}
+        busy={shareBusy}
+        title={t('ai.groups.share.pickerTitle')}
+      />
+
     </div>
   );
 }
@@ -498,6 +557,7 @@ interface TotpKeyRowProps {
   isDeleteArmed: boolean;
   onDelete: () => void;
   onClaim?: () => void;
+  onShare?: () => void;
 }
 
 function TotpKeyRow({
@@ -515,6 +575,7 @@ function TotpKeyRow({
   isDeleteArmed,
   onDelete,
   onClaim,
+  onShare,
 }: TotpKeyRowProps) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canClaim = hasPermission('action.claim');
@@ -566,7 +627,7 @@ function TotpKeyRow({
             </IconButton>
           </div>
         ) : (
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <span className="text-sm font-semibold text-white truncate">{totpKey.label}</span>
             {showIssuer && totpKey.issuer && (
               <span className="text-xs text-slate-500 truncate">{totpKey.issuer}</span>
@@ -576,7 +637,25 @@ function TotpKeyRow({
                 <Link2 size={12} className="text-indigo-400 shrink-0" />
               </Tooltip>
             )}
-            <OwnershipBadge mine={totpKey.mine} shared={totpKey.shared} />
+            {/* Scope chips cluster */}
+            {totpKey.mine && (
+              <Badge variant="info" size="sm">
+                <UserIcon size={10} className="mr-0.5" />
+                {t('ownership.mine')}
+              </Badge>
+            )}
+            {(totpKey.sharedGroupNames ?? []).map(gname => (
+              <Badge key={gname} variant="indigo" size="sm">
+                <Users size={10} className="mr-0.5" />
+                {gname}
+              </Badge>
+            ))}
+            {totpKey.shared && !totpKey.mine && (
+              <Badge variant="slate" size="sm">
+                <Globe size={10} className="mr-0.5" />
+                {t('ownership.shared')}
+              </Badge>
+            )}
           </div>
         )}
       </div>
@@ -598,6 +677,19 @@ function TotpKeyRow({
               <UserPlus size={14} />
             </IconButton>
           )}
+          <OverflowMenu
+            triggerLabel={t('common.more')}
+            size="sm"
+            items={[
+              {
+                id: 'share',
+                label: t('ai.groups.share.action'),
+                icon: <Share2 size={14} />,
+                onSelect: () => onShare?.(),
+                disabled: !totpKey.mine,
+              },
+            ]}
+          />
           <IconButton
             onClick={onStartEdit}
             variant="ghost"

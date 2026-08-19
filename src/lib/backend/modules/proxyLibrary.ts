@@ -23,6 +23,10 @@ export interface ProxyLibraryEntry {
   /** Per-user ownership flags (absent for guests / legacy shared rows). */
   mine?: boolean;
   shared?: boolean;
+  /** Row owner id (null = legacy / instance-shared). Matches wire ``ownerId``. */
+  ownerId?: number | null;
+  /** Group names the row is shared into. Matches wire ``sharedGroupNames``. */
+  sharedGroupNames?: string[];
 }
 
 export interface ProxyLibraryDraft {
@@ -294,6 +298,28 @@ export async function getProxyLibraryRuntimeProxyCatalog(): Promise<
 export async function claimProxyLibraryEntry(id: string): Promise<{ success: boolean }> {
   try {
     return await safeInvoke<{ success: boolean }>('claim_proxy_library_entry', { id });
+  } catch (error) {
+    normalizeError(error);
+  }
+}
+
+export async function shareProxyLibraryEntry(params: {
+  entryId: string;
+  groupId: string;
+}): Promise<{ success: boolean }> {
+  try {
+    return await safeInvoke<{ success: boolean }>('proxy_share_group', params, { noCache: true });
+  } catch (error) {
+    normalizeError(error);
+  }
+}
+
+export async function unshareProxyLibraryEntry(params: {
+  entryId: string;
+  groupId: string;
+}): Promise<{ success: boolean }> {
+  try {
+    return await safeInvoke<{ success: boolean }>('proxy_unshare_group', params, { noCache: true });
   } catch (error) {
     normalizeError(error);
   }
