@@ -51,6 +51,9 @@ jest.mock('../../../stores/auth', () => ({
     const state = { user: { role: 'admin', id: 1, username: 'admin' } };
     return selector ? selector(state) : state;
   },
+  // Mirror of the real helper: preview_role ?? role (null without a user).
+  effectiveRole: (user: { preview_role?: string | null; role: string } | null) =>
+    user ? (user.preview_role ?? user.role) : null,
 }));
 
 // Mock the UI preferences store.

@@ -11,7 +11,7 @@ import {
   type FoundKey,
 } from '@/lib/backend/modules/foundKeys';
 import { useAppStore } from '../../stores/app';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthStore, effectiveRole } from '../../stores/auth';
 
 // Mirror of python/stitch_backend/domains/auth/roles.py ladder.
 const ROLE_LEVEL: Record<string, number> = {
@@ -31,9 +31,11 @@ export function FoundKeysSection() {
 
   const authEnabled = useAuthStore(s => s.enabled);
   const authUser = useAuthStore(s => s.user);
+  // Use the EFFECTIVE role so an admin previewing a below-VIP role loses
+  // access to found keys until they exit the preview.
   const locked =
     authEnabled &&
-    (!authUser || (ROLE_LEVEL[authUser.role] ?? 0) < ROLE_LEVEL.vip);
+    (!authUser || (ROLE_LEVEL[effectiveRole(authUser) ?? 'user'] ?? 0) < ROLE_LEVEL.vip);
   if (locked) return null;
 
   const [open, setOpen] = useState(false);

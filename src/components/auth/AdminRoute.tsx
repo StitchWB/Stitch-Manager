@@ -9,7 +9,7 @@
 
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthStore, effectiveRole } from '../../stores/auth';
 
 interface AdminRouteProps {
   children: ReactNode;
@@ -24,7 +24,10 @@ export function AdminRoute({ children }: AdminRouteProps) {
     return <Navigate to="/" replace />;
   }
 
-  if (user.role !== 'admin') {
+  // Use the EFFECTIVE role so an admin previewing a non-admin role is
+  // redirected away from admin-only pages (the backend enforces the same
+  // on the API side; this is the UX mirror).
+  if (effectiveRole(user) !== 'admin') {
     return <Navigate to="/" replace />;
   }
 

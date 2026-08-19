@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '../stores/app';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore, effectiveRole } from '../stores/auth';
 import { useLogsStore } from '../stores/logs';
 import { useRegistrationStore } from '../stores/registration';
 import { useUIState } from '../hooks/useUIState';
@@ -902,10 +902,11 @@ export default function Settings() {
               </Link>
             </div>
             {/* Login enforcement toggle — admin-only, visible only when auth
-                is enabled and the current user is an admin. Bound to
-                status.enforce_login; on change calls POST /api/auth/policy
-                then refreshes the auth status store. */}
-            {authEnabled && authUser?.role === 'admin' && (
+                is enabled and the current user's EFFECTIVE role is admin.
+                Bound to status.enforce_login; on change calls POST /api/auth/policy
+                then refreshes the auth status store. An admin previewing a
+                non-admin role loses this toggle until they exit the preview. */}
+            {authEnabled && effectiveRole(authUser) === 'admin' && (
               <div
                 className="rounded-lg border border-white/10 bg-white/[0.02] p-4 flex items-center justify-between gap-3"
                 data-testid="auth-policy-toggle-row"

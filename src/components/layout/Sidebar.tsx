@@ -27,7 +27,7 @@ import {
 } from
   'lucide-react';
 import { useAppStore } from '../../stores/app';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthStore, effectiveRole } from '../../stores/auth';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
 import { version as appVersion } from '../../../package.json';
@@ -36,9 +36,11 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { OverflowMenu } from '@/components/ui/OverflowMenu';
 import { openUrlInBrowser } from '@/lib/backend/modules/aiProxy';
 import { isDesktopApp } from '@/lib/backend/core/url';
 import { MAIN_TELEGRAM_URL } from '@/lib/links';
+import { Eye } from 'lucide-react';
 
 interface NavItemProps {
   to: string;
@@ -87,6 +89,7 @@ export default function Sidebar() {
     busy: authBusy,
     exitGuest,
     hasPermission,
+    setPreviewRole,
   } = useAuthStore();
   const [mounted, setMounted] = useState(false);
 
@@ -115,8 +118,9 @@ export default function Sidebar() {
   // Role-based visibility: the whole product surface is open to any
   // authenticated user; only the admin zone (users / codes / monitoring)
   // requires the admin role. When auth is disabled, show everything
-  // (desktop mode).
-  const isAdmin = !authEnabled || authUser?.role === 'admin';
+  // (desktop mode). Uses the EFFECTIVE role so an admin previewing a
+  // non-admin role loses admin-only nav until they exit the preview.
+  const isAdmin = !authEnabled || effectiveRole(authUser) === 'admin';
 
   return (
     <aside
@@ -307,12 +311,13 @@ export default function Sidebar() {
           )}>
             {(() => {
               const showTier = authUser.tg_tier && authUser.tg_tier !== 'user';
+              const effRole = effectiveRole(authUser);
               const tierLine = showTier
                 ? ` · ${t(`auth.role.${authUser.tg_tier}`)} · ID ${String(authUser.id)}`
                 : ` · ID ${String(authUser.id)}`;
               const tooltipContent = (
                 <>
-                  <div>{authUser.username} · {t(`auth.role.${authUser.role}`)}{tierLine}</div>
+                  <div>{authUser.username} · {t(`auth.role.${effRole ?? authUser.role}`)}{tierLine}</div>
                   {showTier && (
                     <div className="text-slate-400 text-[11px] mt-0.5">{t('footer.tierHint')}</div>
                   )}
@@ -327,31 +332,74 @@ export default function Sidebar() {
                   </Tooltip>
                 );
               }
+              // Real admins get a static badge with the EFFECTIVE role plus
+              // a compact eye menu (right side, next to logout) as the
+              // preview entry point. Non-admins keep the plain static Badge.
+              const isRealAdmin = authUser.role === 'admin';
+              const previewRoles = ['user', 'vip', 'premium', 'elite', 'admin'] as const;
               return (
-                <Tooltip content={tooltipContent} side="top">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
-                      <UserCircle className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                      <span className="text-xs font-medium text-slate-200 truncate">
-                        {authUser.username}
-                      </span>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Badge
-                          variant={authUser.role === 'admin' ? 'info' : 'default'}
-                          size="sm"
-                          className="shrink-0"
-                        >
-                          {t(`auth.role.${authUser.role}`)}
-                        </Badge>
-                        {showTier && (
-                          <TierBadge tier={authUser.tg_tier} size="sm" className="shrink-0" />
-                        )}
+                <>
+                  <Tooltip content={tooltipContent} side="top">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                        <UserCircle className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <span className="text-xs font-medium text-slate-200 truncate">
+                          {authUser.username}
+                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Badge
+                            variant={
+                              !isRealAdmin
+                                ? 'default'
+                                : effRole === 'admin'
+                                  ? 'info'
+                                  : 'warning'
+                            }
+                            size="sm"
+                            className="shrink-0 max-w-full overflow-hidden"
+                          >
+                            {t(`auth.role.${effRole ?? authUser.role}`)}
+                          </Badge>
+                          {showTier && (
+                            <TierBadge tier={authUser.tg_tier} size="sm" className="shrink-0" />
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Tooltip>
+                  </Tooltip>
+                  {isRealAdmin && (
+                    <Tooltip content={t('auth.preview.title')} side="top">
+                      <OverflowMenu
+                        size="sm"
+                        triggerIcon={<Eye className="w-3.5 h-3.5" />}
+                        triggerLabel={t('auth.preview.title')}
+                        triggerClassName={
+                          effRole !== 'admin'
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : undefined
+                        }
+                        items={[
+                          ...previewRoles
+                            .filter(r => r !== 'admin')
+                            .map(r => ({
+                              id: `preview-${r}`,
+                              label: t(`auth.role.${r}`),
+                              disabled: effRole === r,
+                              onSelect: () => void setPreviewRole(r),
+                            })),
+                          {
+                            id: 'preview-exit',
+                            label: t('auth.preview.myRole'),
+                            disabled: effRole === 'admin',
+                            onSelect: () => void setPreviewRole(null),
+                          },
+                        ]}
+                      />
+                    </Tooltip>
+                  )}
+                </>
               );
             })()}
             <div className="shrink-0">

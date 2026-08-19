@@ -56,7 +56,7 @@ import { t } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
 import { useUIPreferencesStore } from '@/stores/uiPreferences';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, effectiveRole } from '@/stores/auth';
 
 type ProfileScenariosPanelProps = {
   alias: string | null;
@@ -88,7 +88,11 @@ export function ProfileScenariosPanel({
   const viewMode = useUIPreferencesStore((state) => state.scenariosPage.viewMode);
   const setScenariosViewMode = useUIPreferencesStore((state) => state.setScenariosViewMode);
   const currentUser = useAuthStore((state) => state.user);
-  const isAdmin = currentUser?.role === 'admin';
+  // Use the EFFECTIVE role so an admin previewing a non-admin role loses
+  // the admin-only edit controls (editTier / min_role). The item-level
+  // editTier/min_role semantics below are left as-is; only the isAdmin
+  // flag flips with the previewed role.
+  const isAdmin = effectiveRole(currentUser) === 'admin';
 
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);

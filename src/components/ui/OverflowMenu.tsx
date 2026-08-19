@@ -30,6 +30,9 @@ export interface OverflowMenuProps {
   size?: 'sm' | 'md';
   /** Visual variant of the trigger. */
   triggerVariant?: 'default' | 'ghost';
+  /** Extra classes for the trigger IconButton (e.g. an accent color when
+   *  the action is active — merged after the variant classes via cn). */
+  triggerClassName?: string;
   className?: string;
 }
 
@@ -44,6 +47,7 @@ export function OverflowMenu({
   triggerIcon,
   size = 'md',
   triggerVariant = 'ghost',
+  triggerClassName,
   className,
 }: OverflowMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -138,6 +142,7 @@ export function OverflowMenu({
         aria-label={triggerLabel ?? 'More'}
         aria-haspopup="menu"
         aria-expanded={isOpen}
+        className={triggerClassName}
       >
         {triggerIcon ?? <MoreHorizontal size={16} />}
       </IconButton>

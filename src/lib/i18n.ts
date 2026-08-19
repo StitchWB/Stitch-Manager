@@ -1893,6 +1893,7 @@ export interface Translations {
   common: {
     actions: string;
     all: string;
+    back: string;
     bullet: string;
     cancel: string;
     check: string;
@@ -4234,7 +4235,9 @@ columnHeader: string;
     secret: string;
     secretNew: string;
     testFailed: string;
+    test: string;
     update: string;
+    deleteConfirm: string;
   };
   form: {
     capabilities: string;
@@ -4360,6 +4363,166 @@ uiTexts: {
   users: {
     tier: string;
     tierSourceBot: string;
+  };
+  ai: {
+    groups: {
+      title: string;
+      search: {
+        placeholder: string;
+      };
+      empty: {
+        title: string;
+        desc: string;
+      };
+      create: {
+        title: string;
+        nameLabel: string;
+        namePh: string;
+        cta: string;
+        success: string;
+        failed: string;
+      };
+      actions: {
+        rename: string;
+        leave: string;
+        delete: string;
+      };
+      role: {
+        owner: string;
+        member: string;
+      };
+      meta: string;
+      invite: {
+        placeholder: string;
+        send: string;
+        sent: string;
+        duplicate: string;
+        accepted: string;
+        declined: string;
+        revoked: string;
+        banner: {
+          title: string;
+          from: string;
+          accept: string;
+          decline: string;
+        };
+        pending: string;
+        revoke: string;
+      };
+      members: {
+        title: string;
+        remove: string;
+        leaveConfirm: {
+          title: string;
+          body: string;
+          confirm: string;
+          soleOwner: string;
+        };
+        removeConfirm: {
+          title: string;
+          body: string;
+          confirm: string;
+        };
+        transfer: {
+          action: string;
+          confirmTitle: string;
+          confirmBody: string;
+          success: string;
+        };
+      };
+      usage: {
+        title: string;
+        today: string;
+        week: string;
+        requests: string;
+        tokens: string;
+        empty: string;
+        quotaLabel: string;
+        quotaHint: string;
+        unlimited: string;
+        saved: string;
+      };
+      pool: {
+        title: string;
+        empty: string;
+        addedBy: string;
+        unshareFromGroup: string;
+        addKey: string;
+        added: string;
+        enable: string;
+        disable: string;
+        toggled: string;
+        unshared: string;
+        selectEndpoint: string;
+        noEndpoints: string;
+      };
+      settings: {
+        nameLabel: string;
+        save: string;
+        saved: string;
+        deleteConfirm: {
+          title: string;
+          body: string;
+          confirm: string;
+        };
+      };
+      share: {
+        action: string;
+        pickerTitle: string;
+        pickerTitleProxy: string;
+        hint: string;
+        apply: string;
+        consent: {
+          title: string;
+          body: string;
+          canUse: string;
+          cannotSee: string;
+          cannotEdit: string;
+          acknowledge: string;
+          confirm: string;
+        };
+        success: string;
+        failed: string;
+      };
+      unshare: {
+        confirm: {
+          title: string;
+          body: string;
+          confirm: string;
+        };
+        success: string;
+      };
+      notMember: string;
+      loadFailed: string;
+      detailLoadFailed: string;
+      selectGroup: string;
+    };
+    proxy: {
+      title: string;
+      baseUrl: string;
+      defaultKey: string;
+      poolLabel: string;
+      pool: {
+        personal: string;
+        legacy: string;
+      };
+      createKey: string;
+      regenerate: string;
+      revoke: string;
+      rawKeyHint: string;
+      regenerateConfirm: {
+        title: string;
+        body: string;
+        confirm: string;
+      };
+      revokeConfirm: {
+        title: string;
+        body: string;
+        confirm: string;
+      };
+      created: string;
+      empty: string;
+    };
   };
 }
 
