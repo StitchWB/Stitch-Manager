@@ -22,6 +22,37 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class TotpGroupShare(Base):
+    """M:N join between a TotpKey and a Group (the shared pool).
+
+    Both FKs CASCADE: deleting a group drops its shares (keys survive);
+    deleting a key drops its shares (group pool shrinks).
+    """
+
+    __tablename__ = "totp_group_shares"
+
+    totp_key_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("totp_keys.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    group_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("groups.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TotpGroupShare totp_key_id={self.totp_key_id!r} "
+            f"group_id={self.group_id!r}>"
+        )
+
+
 class TotpKey(Base):
     """Single TOTP secret key entry."""
 

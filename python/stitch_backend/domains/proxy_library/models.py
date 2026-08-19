@@ -11,10 +11,47 @@ encryption scheme is unchanged from the legacy JSON-blob era (see
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+class ProxyEntryGroupShare(Base):
+    """M:N join between a ProxyLibraryEntry and a Group (the shared pool).
+
+    Both FKs CASCADE: deleting a group drops its shares (entries survive);
+    deleting an entry drops its shares (group pool shrinks).
+    """
+
+    __tablename__ = "proxy_entry_group_shares"
+
+    entry_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("proxy_library_entries.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    group_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("groups.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ProxyEntryGroupShare entry_id={self.entry_id!r} "
+            f"group_id={self.group_id!r}>"
+        )
 
 
 class ProxyLibraryEntry(Base):

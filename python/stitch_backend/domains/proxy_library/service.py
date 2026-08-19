@@ -22,7 +22,10 @@ from urllib.parse import urlparse
 
 from sqlalchemy import func, or_, select, text
 
-from stitch_backend.domains.proxy_library.models import ProxyLibraryEntry
+from stitch_backend.domains.proxy_library.models import (
+    ProxyEntryGroupShare,
+    ProxyLibraryEntry,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -207,9 +210,15 @@ def _keyring_delete(account: str) -> None:
 
 
 async def load_proxy_library(
-    db: AsyncSession, owner_id: int | None = None
+    db: AsyncSession,
+    owner_id: int | None = None,
+    group_ids: list[str] | None = None,
 ) -> list[ProxyLibraryEntry]:
-    """Load proxy entries visible to *owner_id* (NULL shared pool + own rows).
+    """Load proxy entries visible to *owner_id*.
+
+    Visibility: own rows OR instance-shared (owner_id NULL) OR entries
+    shared into one of *group_ids*.  When *group_ids* is empty/None,
+    only own + instance-shared rows are returned.
 
     On first call when the table is completely empty, imports the legacy
     ``proxy_library_v1`` JSON blob as rows with ``owner_id = NULL``.
@@ -222,13 +231,22 @@ async def load_proxy_library(
     if count == 0:
         await _migrate_legacy_blob(db)
 
-    result = await db.execute(
-        select(ProxyLibraryEntry).where(
-            or_(
-                ProxyLibraryEntry.owner_id.is_(None),
-                ProxyLibraryEntry.owner_id == owner_id,
-            )
+    visible = or_(
+        ProxyLibraryEntry.owner_id.is_(None),
+        ProxyLibraryEntry.owner_id == owner_id,
+    )
+    if group_ids:
+        visible = or_(
+            visible,
+            ProxyLibraryEntry.id.in_(
+                select(ProxyEntryGroupShare.entry_id).where(
+                    ProxyEntryGroupShare.group_id.in_(group_ids)
+                )
+            ),
         )
+
+    result = await db.execute(
+        select(ProxyLibraryEntry).where(visible)
     )
     return list(result.scalars().all())
 

@@ -220,6 +220,7 @@ async def cmd_claim_email_inbox_profile(params: dict) -> dict:
     """
     await ensure_permission(params, "action.claim")
     from sqlalchemy import select as sa_select
+
     from stitch_backend.domains.email_inbox.models import EmailInboxProfile
 
     uid = params.get("_caller_user_id")
@@ -244,3 +245,40 @@ async def cmd_claim_email_inbox_profile(params: dict) -> dict:
         return service._profile_to_dict(profile, uid=uid)
 
     return await run_in_session(_op)
+
+
+# ── Admin owner assignment ────────────────────────────────────────────────────
+
+
+@register_command("mail_assign_owner", admin_only=True)
+async def cmd_mail_assign_owner(params: dict) -> dict:
+    """Assign or clear the owner of an inbox profile (admin only).
+
+    ``assignToUserId`` sets ``owner_id`` to that user (explicit ownership).
+    ``null`` (or omitted) sets ``owner_id = NULL`` (instance-shared).
+    """
+    from sqlalchemy import select as sa_select
+
+    from stitch_backend.core.exceptions import StitchError
+    from stitch_backend.domains.email_inbox.models import EmailInboxProfile
+
+    profile_id = params.get("profileId") or params.get("profile_id") or ""
+    if not profile_id:
+        raise StitchError("profileId is required")
+    assign_to = params.get("assignToUserId")
+    if assign_to is not None:
+        assign_to = int(assign_to)
+
+    async def _op(db):
+        result = await db.execute(
+            sa_select(EmailInboxProfile).where(EmailInboxProfile.id == str(profile_id))
+        )
+        profile = result.scalar_one_or_none()
+        if profile is None:
+            raise StitchError(f"Inbox profile not found: {profile_id}")
+        profile.owner_id = assign_to
+        await db.flush()
+        return True
+
+    await run_in_session(_op)
+    return {"success": True}
