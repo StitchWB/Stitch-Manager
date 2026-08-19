@@ -83,79 +83,94 @@ _OPENAI_QUOTAS_CACHE = _TtlSingleFlight("OpenAI Quota")
 _KIRO_QUOTAS_CACHE = _TtlSingleFlight("Kiro Quota")
 
 
-# ── Account CRUD ────────────────────────────────────────────────────────────
+# ── Account CRUD (aliases over ai_gateway tables — L2 legacy swap) ────────────
+#
+# These commands previously read/wrote ``ai_proxy_accounts`` directly. As of
+# the L2 legacy cleanup they are thin aliases over the unified
+# ``ai_gateway_credentials`` / ``CredentialSecret`` / ``ProviderEndpoint``
+# tables via ``legacy_alias``. The response shape is unchanged so the
+# frontend (``aiProxy.ts``) and mcp_server keep working.
+
+def _alias_owner_id(params: dict) -> int | None:
+    """Extract caller uid for owner-scoping (None = desktop / instance-shared)."""
+    return params.get("_caller_user_id")
+
 
 @register_command("get_ai_proxy_accounts", readonly=True)
 async def cmd_get_ai_proxy_accounts(params: dict) -> list:
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.legacy_alias import list_accounts
+
+    owner_id = _alias_owner_id(params)
 
     async def _op(session):
-        return await AiProxyAccountStore.get_accounts(session)
+        return await list_accounts(session, owner_id=owner_id)
 
     return await run_in_session(_op)
 
 
 @register_command("create_ai_proxy_account")
 async def cmd_create_ai_proxy_account(params: dict) -> int:
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.legacy_alias import create_account
 
     account = params.get("account", params)
+    owner_id = _alias_owner_id(params)
 
     async def _op(session):
-        return await AiProxyAccountStore.create_account(session, account)
+        return await create_account(session, account, owner_id=owner_id)
 
     return await run_in_session(_op)
 
 
 @register_command("update_ai_proxy_account")
 async def cmd_update_ai_proxy_account(params: dict) -> None:
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.legacy_alias import update_account
 
     account = params.get("account", params)
+    owner_id = _alias_owner_id(params)
 
     async def _op(session):
-        await AiProxyAccountStore.update_account(session, account)
+        await update_account(session, account, owner_id=owner_id)
 
     await run_in_session(_op)
 
 
 @register_command("delete_ai_proxy_account")
 async def cmd_delete_ai_proxy_account(params: dict) -> None:
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.legacy_alias import delete_account
 
     account_id = params.get("id", params.get("accountId", 0))
 
     async def _op(session):
-        await AiProxyAccountStore.delete_account(session, int(account_id))
+        await delete_account(session, int(account_id))
 
     await run_in_session(_op)
 
 
-# ── Export / Import ─────────────────────────────────────────────────────────
+# ── Export / Import (delegated to gateway alias — same payload schema) ──────
 
 @register_command("export_ai_proxy_accounts_payload")
 async def cmd_export_ai_proxy_accounts_payload(params: dict) -> str:
-    from stitch_backend.domains.ai_proxy.service import export_accounts_payload
+    from stitch_backend.domains.ai_proxy.legacy_alias import export_payload
 
     fmt = params.get("format", "json")
     include_secrets = params.get("includeSecrets", params.get("include_secrets", False))
 
     async def _op(session):
-        return await export_accounts_payload(session, fmt=fmt, include_secrets=include_secrets)
+        return await export_payload(session, fmt=fmt, include_secrets=include_secrets)
 
     return await run_in_session(_op)
 
 
 @register_command("import_ai_proxy_accounts_payload")
 async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
-    from stitch_backend.domains.ai_proxy.service import import_accounts_payload
+    from stitch_backend.domains.ai_proxy.legacy_alias import import_payload
 
     payload_str = params.get("payload", params.get("payloadStr", "{}"))
     if isinstance(payload_str, dict):
         payload_str = json.dumps(payload_str)
 
     async def _op(session):
-        return await import_accounts_payload(session, payload_str)
+        return await import_payload(session, payload_str)
 
     imported = await run_in_session(_op)
     return cast("int", imported)  # int
@@ -521,7 +536,7 @@ async def cmd_get_available_models(params: dict) -> list:
     import time
 
     from stitch_backend.database import run_in_session
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.legacy_alias import list_accounts
     from stitch_backend.domains.api_keys.service import ApiKeysService
 
     # Check cache
@@ -531,7 +546,7 @@ async def cmd_get_available_models(params: dict) -> list:
 
     # ── Phase 1: short DB session — preload accounts + API keys, then close.
     async def _preload(session):
-        accounts = await AiProxyAccountStore.get_accounts(session)
+        accounts = await list_accounts(session)
         enabled_providers = {
             (a.get("provider") or "").lower()
             for a in accounts if a.get("enabled")
@@ -736,12 +751,13 @@ async def cmd_set_provider_model_mappings(params: dict) -> None:
 
 @register_command("get_provider_capabilities")
 async def cmd_get_provider_capabilities(params: dict) -> list:
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.legacy_alias import list_accounts
 
     providers = ("openai", "gemini", "anthropic", "antigravity", "fireworks", "zai")
+    owner_id = _alias_owner_id(params)
 
     async def _op(session):
-        accounts = await AiProxyAccountStore.get_accounts(session)
+        accounts = await list_accounts(session, owner_id=owner_id)
         result = []
         for provider in providers:
             total = [a for a in accounts if a["provider"].lower() == provider]
@@ -1028,8 +1044,8 @@ async def _fetch_kiro_account_quotas_impl() -> list:
     import time
 
     async def _get_kiro_accounts(session):
-        from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
-        all_accounts = await AiProxyAccountStore.get_accounts(session)
+        from stitch_backend.domains.ai_proxy.legacy_alias import list_accounts
+        all_accounts = await list_accounts(session)
         return [a for a in all_accounts if (a.get("provider") or "").lower() == "kiro"]
 
     try:
@@ -1134,23 +1150,29 @@ async def cmd_scan_auth_files(params: dict) -> list:
 @register_command("auto_import_ai_proxy_auth_files")
 async def cmd_auto_import_ai_proxy_auth_files(params: dict) -> dict:
     """Scan and auto-import discovered auth files into accounts."""
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore, AuthFileScanner
+    from stitch_backend.domains.ai_proxy.legacy_alias import (
+        create_account,
+        get_account_by_name,
+    )
+    from stitch_backend.domains.ai_proxy.service import AuthFileScanner
 
     files = AuthFileScanner.scan_all()
+    owner_id = _alias_owner_id(params)
 
     async def _op(session):
         imported = 0
         for f in files:
-            existing = await AiProxyAccountStore.get_account_by_name(session, f.provider, f.path.split("/")[-1].replace(".json", ""))
+            name = f.path.split("/")[-1].replace(".json", "")
+            existing = await get_account_by_name(session, f.provider, name)
             if existing:
                 continue
             account = {
                 "provider": f.provider,
-                "name": f.path.split("/")[-1].replace(".json", ""),
+                "name": name,
                 "apiKey": f.token,
                 "enabled": True,
             }
-            await AiProxyAccountStore.create_account(session, account)
+            await create_account(session, account, owner_id=owner_id)
             imported += 1
         return imported
 
@@ -1211,10 +1233,20 @@ async def cmd_provider_auth_flow_cancel(params: dict) -> bool:
 
 @register_command("get_ai_proxy_account_daily_usage", readonly=True)
 async def cmd_get_ai_proxy_account_daily_usage(params: dict) -> list:
-    from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
+    from stitch_backend.domains.ai_proxy.legacy_alias import list_accounts
+
+    owner_id = _alias_owner_id(params)
 
     async def _op(session):
-        return await AiProxyAnalytics.get_daily_usage_by_account(session)
+        # L2 alias: legacy ``ai_proxy_request_logs`` table is no longer the
+        # source of truth. Zero-fill per-account (matches the legacy shape)
+        # — runtime counters now live on Credential.runtime_status.
+        accounts = await list_accounts(session, owner_id=owner_id)
+        return [
+            {"provider": a["provider"], "name": a["name"], "requests": 0, "tokens": 0}
+            for a in accounts
+            if a.get("enabled")
+        ]
 
     return await run_in_read_session(_op)
 
