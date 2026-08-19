@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date, datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -103,8 +104,12 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     if get_settings().auth_enabled:
         from stitch_backend.domains.auth.router import _current_user_optional
 
-        user, _raw = await _current_user_optional(request)
-        caller_role = user.role if user is not None else None
+        user, preview_role, _raw = await _current_user_optional(request)
+        # Effective role = preview_role (when admin is previewing) or real
+        # role.  This single value drives meta.admin_only enforcement,
+        # ensure_permission (reads params["_caller_role"]), and scenario
+        # tier gating (role_at_least).  Identity/scope stays the real user.
+        caller_role = (preview_role or user.role) if user is not None else None
         caller_user_id = user.id if user is not None else None
         caller_username = user.username if user is not None else None
         caller_telegram_id = user.telegram_id if user is not None else None
@@ -180,6 +185,24 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce plain dicts/lists into JSON-safe data.
+
+    Handlers that build raw dicts (groups et al.) may embed ``datetime``
+    values; ``JSONResponse`` renders with plain ``json.dumps`` and would
+    raise ``TypeError`` on them, so sanitise here.
+    """
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def _serialise(value: Any) -> Any:
     """Coerce the handler's return value into JSON-safe data.
 
@@ -195,4 +218,5 @@ def _serialise(value: Any) -> Any:
     # Lists of Pydantic models
     if isinstance(value, list) and value and hasattr(value[0], "model_dump"):
         return [v.model_dump(mode="json", by_alias=True) for v in value]
-    return value
+    # Plain dicts/lists: recursively sanitise datetimes et al.
+    return _json_safe(value)
