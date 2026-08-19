@@ -1632,6 +1632,14 @@ export const en: Translations = {
       premium: "Premium",
       elite: "Elite"
     },
+    preview: {
+      title: "Role preview",
+      banner: "Your current role: {role}",
+      myRole: "Admin (my role)",
+      exit: "Exit role preview",
+      hint: "The interface and permissions are shown as the selected role",
+      error: "Failed to switch role"
+    },
     guest: {
       title: "Welcome",
       subtitle: "Choose how to continue",
@@ -4330,6 +4338,17 @@ addMailboxFromSheets: "Import from Google Sheets",
     noDescription: "No description",
     installed: "Installed",
     update: "Update",
+    tabMarketplace: "Marketplace",
+    tabInstalled: "Installed",
+    selectPluginTitle: "Select a plugin",
+    selectPluginText: "Choose a plugin on the left to see its details",
+    overviewTab: "Overview",
+    infoTab: "Additional Info",
+    idLabel: "ID",
+    sourceLabel: "Source",
+    authorLabel: "Author",
+    accessLabel: "Access",
+    accessGranted: "Granted",
   },
   footer: {
     tierHint: "Tier is raised by subscribing to channels or by an admin",

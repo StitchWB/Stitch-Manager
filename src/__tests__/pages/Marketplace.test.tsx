@@ -6,10 +6,21 @@
  *   - Locked rows show a lock icon and a disabled install button.
  *   - Installed rows show an Installed button (disabled, with Check icon).
  *   - Search filters the list client-side.
+ *   - Activation-required banner renders when not activated.
+ *   - Lock screen renders when no authenticated user (getMarketplace not called).
+ *   - TierBadge renders for locked items with required_tier.
+ *
+ * NOTE: The page uses an IDEA-style master-detail layout. The left pane
+ * (data-testid="plugin-list") holds compact rows; the right pane
+ * (data-testid="plugin-detail") shows the selected item's details. With
+ * auto-select, the first item is always selected, so item names and action
+ * buttons appear in BOTH panes — list-scoped queries use within() on the
+ * list pane, while "Installed" buttons are queried across the whole screen
+ * (they exist in both the list row and the detail action row).
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Marketplace from '../../pages/Marketplace';
@@ -122,23 +133,36 @@ describe('Marketplace page', () => {
       </MemoryRouter>
     );
 
+    const listPane = screen.getByTestId('plugin-list');
+
     // Wait for items to load and render.
     await waitFor(() => {
-      expect(screen.getByText('Installed Plugin')).toBeTruthy();
+      expect(within(listPane).getByText('Installed Plugin')).toBeTruthy();
     });
-    expect(screen.getByText('Available Plugin')).toBeTruthy();
-    expect(screen.getByText('Locked Plugin')).toBeTruthy();
+    expect(within(listPane).getByText('Available Plugin')).toBeTruthy();
+    expect(within(listPane).getByText('Locked Plugin')).toBeTruthy();
 
-    // Available + locked rows → Install buttons (exact match).
-    const installButtons = screen.getAllByRole('button', { name: 'Install' });
+    // Available + locked rows → Install buttons (exact match, scoped to list).
+    const installButtons = within(listPane).getAllByRole('button', {
+      name: 'Install',
+    });
     expect(installButtons).toHaveLength(2);
 
-    // Installed row → Installed button (disabled, with Check icon).
-    const installedButton = screen.getByRole('button', { name: 'Installed' });
-    expect(installedButton.hasAttribute('disabled')).toBe(true);
+    // Installed buttons appear in both the list row and the detail pane
+    // (auto-select picks the first item = "Installed Plugin"). All must be
+    // disabled.
+    const installedButtons = screen.getAllByRole('button', {
+      name: 'Installed',
+    });
+    expect(installedButtons.length).toBeGreaterThanOrEqual(1);
+    expect(
+      installedButtons.every(btn => btn.hasAttribute('disabled')),
+    ).toBe(true);
 
     // Locked row: the install button should be disabled.
-    const lockedInstall = installButtons.find(btn => btn.hasAttribute('disabled'));
+    const lockedInstall = installButtons.find(btn =>
+      btn.hasAttribute('disabled'),
+    );
     expect(lockedInstall).toBeTruthy();
 
     // Locked row: lock icon is rendered (aria-label on the Lock svg).
@@ -161,18 +185,20 @@ describe('Marketplace page', () => {
       </MemoryRouter>
     );
 
+    const listPane = screen.getByTestId('plugin-list');
+
     await waitFor(() => {
-      expect(screen.getByText('Installed Plugin')).toBeTruthy();
+      expect(within(listPane).getByText('Installed Plugin')).toBeTruthy();
     });
 
     // Type a query that only matches the available plugin.
     const searchInput = screen.getByPlaceholderText(/search plugins/i);
     await user.type(searchInput, 'available');
 
-    // Only "Available Plugin" should be visible now.
-    expect(screen.getByText('Available Plugin')).toBeTruthy();
-    expect(screen.queryByText('Installed Plugin')).toBeNull();
-    expect(screen.queryByText('Locked Plugin')).toBeNull();
+    // Only "Available Plugin" should be visible in the list now.
+    expect(within(listPane).getByText('Available Plugin')).toBeTruthy();
+    expect(within(listPane).queryByText('Installed Plugin')).toBeNull();
+    expect(within(listPane).queryByText('Locked Plugin')).toBeNull();
   });
 
   it('shows activation-required banner when activated is false', async () => {
@@ -189,8 +215,10 @@ describe('Marketplace page', () => {
       </MemoryRouter>
     );
 
+    const listPane = screen.getByTestId('plugin-list');
+
     await waitFor(() => {
-      expect(screen.getByText('Available Plugin')).toBeTruthy();
+      expect(within(listPane).getByText('Available Plugin')).toBeTruthy();
     });
 
     // The activation-required banner text should be present.
@@ -228,11 +256,14 @@ describe('Marketplace page', () => {
       </MemoryRouter>
     );
 
+    const listPane = screen.getByTestId('plugin-list');
+
     await waitFor(() => {
-      expect(screen.getByText('Locked Plugin')).toBeTruthy();
+      expect(within(listPane).getByText('Locked Plugin')).toBeTruthy();
     });
 
     // TierBadge renders the tier name via i18n (auth.role.premium = "Premium").
-    expect(screen.getByText('Premium')).toBeTruthy();
+    // It appears in both the list row and the detail pane.
+    expect(screen.getAllByText('Premium').length).toBeGreaterThanOrEqual(1);
   });
 });
