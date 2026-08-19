@@ -1,4 +1,4 @@
-import { t } from "@/lib/i18n";import { useState, useEffect } from 'react';
+import { t } from "@/lib/i18n";import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 
 import { createAiProxyAccount, updateAiProxyAccount } from '../../lib/backend/modules/aiProxy';
@@ -54,6 +54,9 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
   });
   const [saving, setSaving] = useState(false);
   const [showOAuthModal, setShowOAuthModal] = useState(false);
+  // Stable ref: an inline onClose would recreate OAuthModal's initOAuth
+  // callback on every render and re-trigger its effect (React #185 loop).
+  const closeOAuthModal = useCallback(() => setShowOAuthModal(false), []);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -372,7 +375,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         providerName={
         PROVIDERS.find((p) => p.value === formData.provider)?.label || formData.provider
         }
-        onClose={() => setShowOAuthModal(false)}
+        onClose={closeOAuthModal}
         onSuccess={handleOAuthSuccess} />
 
     </>);
