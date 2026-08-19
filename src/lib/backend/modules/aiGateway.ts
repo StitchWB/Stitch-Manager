@@ -45,6 +45,13 @@ export interface Credential {
   consecutiveFailures: number;
   createdAt: string;
   updatedAt?: string | null;
+  // ── Wave-2 scope fields (FE renders scope chips from these) ──────────────
+  /** Owner user id. null = instance-shared (legacy) row. */
+  ownerId?: number | null;
+  /** Group ids the credential is shared to (camelCase wire alias). */
+  sharedGroupIds?: string[];
+  /** Group names matching `sharedGroupIds`, for chip labels. */
+  sharedGroupNames?: string[];
 }
 
 export interface UpstreamModel {
@@ -346,4 +353,63 @@ export async function testCredentialConnection(
   id: string
 ): Promise<CredentialProbeResult> {
   return safeInvoke('test_credential_connection', { id });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// User proxy keys (per-user auth tokens for /v1/*)
+//
+// Wire shapes (camelCase aliases, verified against
+// ``ProxyKeyResponse`` / ``ProxyKeyListResponse`` / ``ProxyKeyCreatedResponse``
+// in ``domains/ai_gateway/schemas.py``):
+//   proxy_keys_list   → { baseUrl, keys: ProxyKey[], pool: ProxyKeyPool }
+//   proxy_keys_create → { key: string (RAW, shown once), id: string }
+//   proxy_keys_revoke → { success: true }
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ProxyKey {
+  id: string;
+  label: string | null;
+  maskedKey: string;
+  enabled: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+  isDefault: boolean;
+}
+
+export interface ProxyKeyPoolGroup {
+  id: string;
+  name: string;
+  keys: number;
+}
+
+export interface ProxyKeyPool {
+  personal: number;
+  legacy: number;
+  groups: ProxyKeyPoolGroup[];
+}
+
+export interface ProxyKeyListResponse {
+  baseUrl: string;
+  keys: ProxyKey[];
+  pool: ProxyKeyPool;
+}
+
+export interface ProxyKeyCreatedResponse {
+  /** Raw key — shown ONCE at creation, never persisted or returned again. */
+  key: string;
+  id: string;
+}
+
+export async function proxyKeysList(): Promise<ProxyKeyListResponse> {
+  return safeInvoke('proxy_keys_list', {}, { noCache: true });
+}
+
+export async function proxyKeysCreate(params: {
+  label?: string | null;
+}): Promise<ProxyKeyCreatedResponse> {
+  return safeInvoke('proxy_keys_create', params, { noCache: true });
+}
+
+export async function proxyKeysRevoke(id: string): Promise<{ success: boolean }> {
+  return safeInvoke('proxy_keys_revoke', { id }, { noCache: true });
 }
