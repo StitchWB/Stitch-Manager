@@ -31,3 +31,46 @@ async def cmd_migrate_ai_gateway_legacy_data(params: dict) -> dict:
         return await migrate_legacy_credentials(session)
 
     return await run_in_session(_op)
+
+
+# ── Gateway export / import (same payload schema as legacy ai_proxy export) ──
+
+
+@register_command("gateway_export_payload", admin_only=True)
+async def cmd_gateway_export_payload(params: dict) -> str:
+    """Export ai_gateway credentials using the legacy ai_proxy payload schema.
+
+    Produces the same JSON/CSV shape as ``export_ai_proxy_accounts_payload``
+    so old frontend export files can be round-tripped through the gateway.
+    """
+    from stitch_backend.domains.ai_proxy.legacy_alias import export_payload
+
+    fmt = params.get("format", "json")
+    include_secrets = params.get("includeSecrets", params.get("include_secrets", False))
+
+    async def _op(session):
+        return await export_payload(session, fmt=fmt, include_secrets=include_secrets)
+
+    return await run_in_session(_op)
+
+
+@register_command("gateway_import_payload", admin_only=True)
+async def cmd_gateway_import_payload(params: dict) -> int:
+    """Import a legacy ai_proxy payload into ai_gateway tables.
+
+    Consumes the same JSON payload schema as
+    ``import_ai_proxy_accounts_payload`` so old FE export files import
+    directly into the gateway.
+    """
+    import json
+
+    from stitch_backend.domains.ai_proxy.legacy_alias import import_payload
+
+    payload_str = params.get("payload", params.get("payloadStr", "{}"))
+    if isinstance(payload_str, dict):
+        payload_str = json.dumps(payload_str)
+
+    async def _op(session):
+        return await import_payload(session, payload_str)
+
+    return await run_in_session(_op)
