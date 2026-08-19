@@ -1632,6 +1632,14 @@ tabs: {
       premium: "Премиум",
       elite: "Элита"
     },
+    preview: {
+      title: "Предпросмотр роли",
+      banner: "Сейчас у вас роль: {role}",
+      myRole: "Админ (моя роль)",
+      exit: "Выйти из предпросмотра",
+      hint: "Интерфейс и права отображаются как у выбранной роли",
+      error: "Не удалось переключить роль"
+    },
     guest: {
       title: "Добро пожаловать",
       subtitle: "Выберите, как продолжить",
@@ -4326,6 +4334,17 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     noDescription: "Без описания",
     installed: "Установлено",
     update: "Обновить",
+    tabMarketplace: "Маркетплейс",
+    tabInstalled: "Установленные",
+    selectPluginTitle: "Выберите плагин",
+    selectPluginText: "Выберите плагин слева, чтобы увидеть подробности",
+    overviewTab: "Обзор",
+    infoTab: "Дополнительно",
+    idLabel: "ID",
+    sourceLabel: "Источник",
+    authorLabel: "Автор",
+    accessLabel: "Доступ",
+    accessGranted: "Разрешён",
   },
   footer: {
     tierHint: "Тир повышает подписка на каналы или админ",

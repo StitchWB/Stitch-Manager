@@ -1638,6 +1638,14 @@ export interface Translations {
       premium: string;
       elite: string;
     };
+    preview: {
+      title: string;
+      banner: string;
+      myRole: string;
+      exit: string;
+      hint: string;
+      error: string;
+    };
     guest: {
       title: string;
       subtitle: string;
@@ -3786,6 +3794,17 @@ export interface Translations {
     noDescription: string;
     installed: string;
     update: string;
+    tabMarketplace: string;
+    tabInstalled: string;
+    selectPluginTitle: string;
+    selectPluginText: string;
+    overviewTab: string;
+    infoTab: string;
+    idLabel: string;
+    sourceLabel: string;
+    authorLabel: string;
+    accessLabel: string;
+    accessGranted: string;
   }
   sidebar: {
     accounts: string;
