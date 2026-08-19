@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from stitch_backend.api.middleware import install_middleware
@@ -433,11 +433,24 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     if dist_index.exists():
-        logger.info("Static files found at %s — mounting SPA at /", dist_dir)
-        # Mount AFTER /health so the health probe is not shadowed.
-        # StaticFiles(html=True) serves index.html for any unmatched path,
-        # enabling client-side SPA routing.
-        app.mount("/", StaticFiles(directory=str(dist_dir), html=True), name="static")
+        logger.info("Static files found at %s — serving SPA with client-route fallback", dist_dir)
+        # Hashed bundles under /assets/ get proper static serving; everything
+        # else falls through to the SPA fallback below so client-side routes
+        # (e.g. /marketplace) survive a hard refresh. StaticFiles(html=True)
+        # alone would 404 unknown paths like /marketplace.
+        if (dist_dir / "assets").is_dir():
+            app.mount(
+                "/assets", StaticFiles(directory=str(dist_dir / "assets")), name="assets"
+            )
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(full_path: str) -> FileResponse:
+            """Serve real dist files; unknown paths get index.html (SPA routing)."""
+            if full_path:
+                candidate = (dist_dir / full_path).resolve()
+                if candidate.is_file() and dist_dir in candidate.parents:
+                    return FileResponse(candidate)
+            return FileResponse(dist_index)
     else:
         logger.info("No dist/index.html — running in API-only mode")
 
