@@ -18,9 +18,10 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.ai_gateway.adapters.base import get_adapter
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
@@ -39,6 +40,8 @@ from stitch_backend.domains.ai_gateway.schemas import (
     CredentialModelAccessUpsertRequest,
     CredentialResponse,
     CredentialUpdateRequest,
+    GatewayClaimLegacyRequest,
+    GatewaySetInstanceSharedRequest,
     ListCredentialModelAccessRequest,
     ListCredentialsRequest,
     ListRouteTargetsForPublicModelRequest,
@@ -47,6 +50,12 @@ from stitch_backend.domains.ai_gateway.schemas import (
     ProviderEndpointIdRequest,
     ProviderEndpointResponse,
     ProviderEndpointUpdateRequest,
+    ProxyKeyCreatedResponse,
+    ProxyKeyCreateRequest,
+    ProxyKeyListResponse,
+    ProxyKeyPoolGroupEntry,
+    ProxyKeyResponse,
+    ProxyKeyRevokeRequest,
     PublicModelCreateRequest,
     PublicModelIdRequest,
     PublicModelResponse,
@@ -68,7 +77,9 @@ from stitch_backend.domains.ai_gateway.service import (
     PublicModelService,
     RouteTargetService,
     UpstreamModelService,
+    UserProxyKeyService,
 )
+from stitch_backend.domains.groups.models import CredentialGroupShare, Group, GroupMember
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +94,26 @@ def _caller_uid(params: dict) -> int | None:
 def _owner_filter(model, uid: int | None):
     """WHERE clause: owner_id IS NULL OR owner_id = uid (legacy shared pool)."""
     return or_(model.owner_id.is_(None), model.owner_id == uid)
+
+
+def _mask_proxy_key_hash(token_hash: str) -> str:
+    """Mask a proxy key hash for display: first4+****+last4.
+
+    The raw key is never stored (only its SHA256), so the hash is used as
+    a fingerprint for identification — the raw key itself is shown ONCE at
+    creation time and never again.
+    """
+    if len(token_hash) < 8:
+        return "****"
+    return token_hash[:4] + "****" + token_hash[-4:]
+
+
+def _gateway_base_url() -> str:
+    """The gateway base URL the app advertises to clients."""
+    from stitch_backend.config import get_settings
+
+    settings = get_settings()
+    return f"http://127.0.0.1:{settings.port}{settings.litellm_gateway_model_prefix}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -225,15 +256,54 @@ async def cmd_create_credential(params: dict) -> dict:
 
 @register_command("list_credentials", readonly=True)
 async def cmd_list_credentials(params: dict) -> list[dict]:
+    """List credentials visible to the caller with shared-group scope info.
+
+    Single LEFT JOIN aggregate to ``credential_group_shares`` + ``groups``
+    populates ``owner_id`` / ``shared_group_ids`` / ``shared_group_names``
+    on each item — no N+1.
+    """
     req = ListCredentialsRequest.model_validate(params)
     owner_id = _caller_uid(params)
 
     async def _op(session):
-        svc = CredentialService(session)
-        credentials = await svc.list_credentials(
-            req.provider_endpoint_id, owner_id=owner_id,
+        stmt = (
+            select(Credential, Group.id, Group.name)
+            .select_from(Credential)
+            .outerjoin(
+                CredentialGroupShare,
+                CredentialGroupShare.credential_id == Credential.id,
+            )
+            .outerjoin(Group, Group.id == CredentialGroupShare.group_id)
+            .where(_owner_filter(Credential, owner_id))
+            .order_by(Credential.created_at.desc())
         )
-        return [CredentialResponse.from_orm_model(c) for c in credentials]
+        if req.provider_endpoint_id is not None:
+            stmt = stmt.where(
+                Credential.provider_endpoint_id == req.provider_endpoint_id
+            )
+        result = await session.execute(stmt)
+
+        # Aggregate: one entry per credential, group ids/names collected.
+        cred_map: dict[str, Credential] = {}
+        group_ids_map: dict[str, list[str]] = {}
+        group_names_map: dict[str, list[str]] = {}
+        for cred, gid, gname in result.all():
+            if cred.id not in cred_map:
+                cred_map[cred.id] = cred
+                group_ids_map[cred.id] = []
+                group_names_map[cred.id] = []
+            if gid is not None:
+                group_ids_map[cred.id].append(gid)
+                group_names_map[cred.id].append(gname)
+
+        return [
+            CredentialResponse.from_orm_model(
+                cred_map[cid],
+                shared_group_ids=group_ids_map[cid],
+                shared_group_names=group_names_map[cid],
+            )
+            for cid in cred_map
+        ]
 
     return await run_in_read_session(_op)
 
@@ -706,3 +776,206 @@ async def cmd_test_credential_connection(params: dict) -> dict:
         }
 
     return await run_in_session(_op)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# User proxy keys (per-user auth tokens for /v1/*)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@register_command("proxy_keys_list")
+async def cmd_proxy_keys_list(params: dict) -> dict:
+    """List the caller's proxy keys + pool summary + gateway base URL.
+
+    When the caller is authenticated (uid is not None) and has no enabled
+    keys, a default key is auto-created (and committed).  When uid is
+    None (auth disabled / desktop), returns ``keys: []`` with only the
+    base URL.  Not marked ``readonly`` because of the auto-create side
+    effect.
+    """
+    uid = _caller_uid(params)
+    base_url = _gateway_base_url()
+
+    if uid is None:
+        return ProxyKeyListResponse(
+            base_url=base_url,
+            keys=[],
+            pool={"personal": 0, "legacy": 0, "groups": []},
+        ).model_dump(mode="json", by_alias=True)
+
+    async def _op(session):
+        svc = UserProxyKeyService(session)
+        keys = await svc.list_proxy_keys(uid)
+
+        # Auto-create a default key when the user has no enabled keys.
+        if not any(k.enabled for k in keys):
+            new_key, _raw = await svc.create_proxy_key(
+                uid, label="default", is_default=True,
+            )
+            keys = [*keys, new_key]
+
+        # Pool summary: personal credentials, legacy (instance-shared), groups.
+        personal_result = await session.execute(
+            select(func.count()).select_from(Credential).where(
+                Credential.owner_id == uid
+            )
+        )
+        personal = int(personal_result.scalar_one())
+
+        legacy_result = await session.execute(
+            select(func.count()).select_from(Credential).where(
+                Credential.owner_id.is_(None)
+            )
+        )
+        legacy = int(legacy_result.scalar_one())
+
+        groups_stmt = (
+            select(
+                Group.id,
+                Group.name,
+                func.count(CredentialGroupShare.credential_id).label("keys"),
+            )
+            .select_from(Group)
+            .join(GroupMember, GroupMember.group_id == Group.id)
+            .outerjoin(
+                CredentialGroupShare,
+                CredentialGroupShare.group_id == Group.id,
+            )
+            .where(GroupMember.user_id == uid)
+            .group_by(Group.id, Group.name)
+            .order_by(Group.created_at.desc())
+        )
+        groups_result = await session.execute(groups_stmt)
+        groups = [
+            ProxyKeyPoolGroupEntry(
+                id=row.id, name=row.name, keys=row.keys,
+            )
+            for row in groups_result.all()
+        ]
+
+        key_responses = [
+            ProxyKeyResponse(
+                id=k.id,
+                label=k.label,
+                masked_key=_mask_proxy_key_hash(k.token_hash),
+                enabled=k.enabled,
+                created_at=k.created_at,
+                last_used_at=k.last_used_at,
+                is_default=k.is_default,
+            )
+            for k in keys
+        ]
+
+        return ProxyKeyListResponse(
+            base_url=base_url,
+            keys=key_responses,
+            pool={
+                "personal": personal,
+                "legacy": legacy,
+                "groups": [g.model_dump(mode="json", by_alias=True) for g in groups],
+            },
+        )
+
+    result = await run_in_session(_op)
+    return result.model_dump(mode="json", by_alias=True)
+
+
+@register_command("proxy_keys_create")
+async def cmd_proxy_keys_create(params: dict) -> dict:
+    """Create a new proxy key for the caller. Raw key is shown ONCE."""
+    req = ProxyKeyCreateRequest.model_validate(params)
+    uid = _caller_uid(params)
+
+    async def _op(session):
+        svc = UserProxyKeyService(session)
+        record, raw = await svc.create_proxy_key(uid, label=req.label)
+        return ProxyKeyCreatedResponse(key=raw, id=record.id)
+
+    result = await run_in_session(_op)
+    return result.model_dump(mode="json", by_alias=True)
+
+
+@register_command("proxy_keys_revoke")
+async def cmd_proxy_keys_revoke(params: dict) -> dict:
+    """Revoke a proxy key (own only; default guarded)."""
+    req = ProxyKeyRevokeRequest.model_validate(params)
+    uid = _caller_uid(params)
+
+    async def _op(session):
+        svc = UserProxyKeyService(session)
+        return await svc.revoke_proxy_key(req.id, uid)
+
+    await run_in_session(_op)
+    return {"success": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Legacy admin tools (gateway_claim_legacy / gateway_set_instance_shared)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+_GATEWAY_KIND_MODELS: dict[str, type] = {
+    "credential": Credential,
+    "endpoint": ProviderEndpoint,
+    "public_model": PublicModel,
+}
+
+
+@register_command("gateway_claim_legacy", admin_only=True)
+async def cmd_gateway_claim_legacy(params: dict) -> dict:
+    """Claim a legacy (instance-shared) row for a user (admin only).
+
+    Sets ``owner_id`` to ``assignToUserId`` (or the caller's uid when
+    omitted).  Validates the row exists; raises ``StitchError`` otherwise.
+    """
+    req = GatewayClaimLegacyRequest.model_validate(params)
+    uid = _caller_uid(params)
+    target_uid = req.assign_to_user_id if req.assign_to_user_id is not None else uid
+    model_cls = _GATEWAY_KIND_MODELS[req.kind]
+
+    async def _op(session):
+        result = await session.execute(
+            select(model_cls).where(model_cls.id == req.id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise StitchError(f"{req.kind} not found: {req.id}")
+        row.owner_id = target_uid
+        if hasattr(row, "updated_at"):
+            row.updated_at = _utcnow()
+        await session.flush()
+        return True
+
+    await run_in_session(_op)
+    return {"success": True}
+
+
+@register_command("gateway_set_instance_shared", admin_only=True)
+async def cmd_gateway_set_instance_shared(params: dict) -> dict:
+    """Toggle instance-shared status for a gateway row (admin only).
+
+    ``shared=True`` sets ``owner_id=NULL`` (instance-shared);
+    ``shared=False`` sets ``owner_id`` to ``ownerId`` (or the caller's uid).
+    """
+    req = GatewaySetInstanceSharedRequest.model_validate(params)
+    uid = _caller_uid(params)
+    target_uid = None if req.shared else (
+        req.owner_id if req.owner_id is not None else uid
+    )
+    model_cls = _GATEWAY_KIND_MODELS[req.kind]
+
+    async def _op(session):
+        result = await session.execute(
+            select(model_cls).where(model_cls.id == req.id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise StitchError(f"{req.kind} not found: {req.id}")
+        row.owner_id = target_uid
+        if hasattr(row, "updated_at"):
+            row.updated_at = _utcnow()
+        await session.flush()
+        return True
+
+    await run_in_session(_op)
+    return {"success": True}

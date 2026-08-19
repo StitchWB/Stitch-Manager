@@ -18,7 +18,8 @@ from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway import circuit_breaker
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.routing_engine import GatewayRequest as AIGatewayRequest
-from stitch_backend.domains.ai_gateway.routing_engine import RoutingEngine, RoutingError
+from stitch_backend.domains.ai_gateway.routing_engine import PoolScope, RoutingEngine, RoutingError
+from stitch_backend.domains.ai_gateway.usage_tracker import record_usage as _record_group_usage
 from stitch_backend.domains.ai_proxy.compression.service import get_compression_service
 from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
@@ -94,7 +95,7 @@ class LiteLLMExecutor:
         self._routing_engine = RoutingEngine()
 
     async def _try_ai_gateway_route(
-        self, payload: GatewayRequest,
+        self, payload: GatewayRequest, pool: PoolScope | None = None,
     ) -> list[Any] | None:
         """Attempt routing via AI Gateway engine. Returns list of routing candidates or None."""
         try:
@@ -107,16 +108,24 @@ class LiteLLMExecutor:
             )
 
             async def _route(session):
-                return await self._routing_engine.route(session, gw_request)
+                return await self._routing_engine.route(session, gw_request, pool=pool)
 
             routing_results = await run_in_session(_route)
+            first = routing_results[0]
+            logger.info(
+                "gateway route caller=%s credential=%s owner=%s group_hit=%s",
+                pool.owner_user_id if pool else None,
+                first.credential.id[:8],
+                first.credential.owner_id,
+                first.group_id_hit,
+            )
             logger.info(
                 "AI Gateway route: %s → %d candidate(s), first: %s/%s (credential=%s)",
                 payload.model,
                 len(routing_results),
-                routing_results[0].endpoint.name,
-                routing_results[0].upstream_model.upstream_model_id,
-                routing_results[0].credential.id[:8],
+                first.endpoint.name,
+                first.upstream_model.upstream_model_id,
+                first.credential.id[:8],
             )
             return cast("list[Any] | None", routing_results)
         except RoutingError as e:
@@ -160,11 +169,11 @@ class LiteLLMExecutor:
 
         return holone_service, compression_service
 
-    async def chat(self, payload: GatewayRequest) -> JsonObject | Response:
+    async def chat(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
 
         # Try AI Gateway routing first
-        routing_results = await self._try_ai_gateway_route(payload)
+        routing_results = await self._try_ai_gateway_route(payload, pool=pool)
         if routing_results is not None:
             for routing_result in routing_results:
                 if not await self._is_endpoint_available(routing_result.endpoint.id):
@@ -174,12 +183,18 @@ class LiteLLMExecutor:
                     )
                     continue
                 try:
-                    return await self._invoke_via_gateway(payload, routing_result, config)
+                    result = await self._invoke_via_gateway(payload, routing_result, config)
                 except Exception as e:
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
+                    continue
+                _record_group_usage(
+                    pool.owner_user_id if pool is not None else None,
+                    routing_result.group_id_hit,
+                )
+                return result
 
         # Fall back to LiteLLM Router
         routed_model = _routed_model(payload, config)
@@ -401,11 +416,11 @@ class LiteLLMExecutor:
                 logger.warning("Failed to record gateway failure to routing engine", exc_info=True)
             raise
 
-    async def messages(self, payload: GatewayRequest) -> JsonObject | Response:
+    async def messages(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
 
         # Try AI Gateway routing first
-        routing_results = await self._try_ai_gateway_route(payload)
+        routing_results = await self._try_ai_gateway_route(payload, pool=pool)
         if routing_results is not None:
             for routing_result in routing_results:
                 if not await self._is_endpoint_available(routing_result.endpoint.id):
@@ -415,12 +430,18 @@ class LiteLLMExecutor:
                     )
                     continue
                 try:
-                    return await self._invoke_via_gateway_messages(payload, routing_result, config)
+                    result = await self._invoke_via_gateway_messages(payload, routing_result, config)
                 except Exception as e:
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
+                    continue
+                _record_group_usage(
+                    pool.owner_user_id if pool is not None else None,
+                    routing_result.group_id_hit,
+                )
+                return result
 
         # Fall back to LiteLLM Router
         routed_model = _routed_model(payload, config)
@@ -648,11 +669,11 @@ class LiteLLMExecutor:
                 logger.warning("Failed to record gateway failure to routing engine", exc_info=True)
             raise
 
-    async def responses(self, payload: GatewayRequest) -> JsonObject | Response:
+    async def responses(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
 
         # Try AI Gateway routing first
-        routing_results = await self._try_ai_gateway_route(payload)
+        routing_results = await self._try_ai_gateway_route(payload, pool=pool)
         if routing_results is not None:
             for routing_result in routing_results:
                 if not await self._is_endpoint_available(routing_result.endpoint.id):
@@ -662,12 +683,18 @@ class LiteLLMExecutor:
                     )
                     continue
                 try:
-                    return await self._invoke_via_gateway_responses(payload, routing_result, config)
+                    result = await self._invoke_via_gateway_responses(payload, routing_result, config)
                 except Exception as e:
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
+                    continue
+                _record_group_usage(
+                    pool.owner_user_id if pool is not None else None,
+                    routing_result.group_id_hit,
+                )
+                return result
 
         # Fall back to LiteLLM Router
         routed_model = _routed_model(payload, config)
@@ -900,12 +927,12 @@ class LiteLLMExecutor:
                 logger.warning("Failed to record gateway failure to routing engine", exc_info=True)
             raise
 
-    async def models(self) -> JsonObject:
+    async def models(self, pool: PoolScope | None = None) -> JsonObject:
         """Return available models — PublicModel from AI Gateway, fallback to LiteLLM providers."""
         # Try AI Gateway first
         try:
             async def _get_models(session):
-                return await self._routing_engine.get_available_public_models(session)
+                return await self._routing_engine.get_available_public_models(session, pool=pool)
 
             public_models = await run_in_session(_get_models)
             if public_models:
@@ -924,6 +951,13 @@ class LiteLLMExecutor:
                 }
         except Exception as e:
             logger.debug("AI Gateway models unavailable: %s", e)
+
+        # L2 gate: if the startup PublicModel auto-create succeeded, the
+        # LiteLLM fallback is removed — return empty rather than falling
+        # through to the legacy router. If auto-create was NOT attempted
+        # or failed, keep the fallback (try/except).
+        if _public_models_auto_created():
+            return {"object": "list", "data": []}
 
         # Fall back to LiteLLM providers
         config = await self._load_config()
@@ -1132,3 +1166,131 @@ def _json_object(response: JsonObject | BaseModel) -> JsonObject:
     if isinstance(response, BaseModel):
         return response.model_dump(mode="json")
     return response
+
+
+# ── L2: PublicModel auto-create from legacy BackgroundManagerConfig ──────────
+#
+# Startup step that auto-creates PublicModel rows from the legacy
+# BackgroundManagerConfig providers when none exist (idempotent, owner_id
+# NULL). When this succeeds, the LiteLLM-config fallback in ``models()``
+# is removed (returns empty instead). When it fails, the fallback is kept.
+
+_public_models_auto_created_flag: bool = False
+
+
+def _public_models_auto_created() -> bool:
+    """True if the startup auto-create step succeeded (fallback removed)."""
+    return _public_models_auto_created_flag
+
+
+async def auto_create_public_models_from_config(
+    load_config: ConfigLoader | None = None,
+) -> bool:
+    """Auto-create PublicModels from legacy BackgroundManagerConfig providers.
+
+    Runs at startup. Creates one PublicModel per provider in
+    ``BackgroundManagerConfig.provider_priority`` (or derived from loaded
+    keys) when no PublicModels exist. Idempotent — safe to call on every
+    boot. owner_id = NULL (instance-shared).
+
+    Returns True if the step succeeded (flag set), False on any exception
+    (caller keeps the LiteLLM fallback).
+    """
+    global _public_models_auto_created_flag
+
+    try:
+        from sqlalchemy import func, select
+
+        from stitch_backend.database import run_in_read_session, run_in_session
+        from stitch_backend.domains.ai_gateway.models import PublicModel
+        from stitch_backend.domains.ai_gateway.service import PublicModelService
+
+        # Check if any PublicModels exist.
+        async def _count(session):
+            result = await session.execute(select(func.count()).select_from(PublicModel))
+            return int(result.scalar_one())
+
+        existing = await run_in_read_session(_count)
+        if existing > 0:
+            # PublicModels already exist — no auto-create needed, but the
+            # gate is "succeeded" (existing rows serve the same purpose).
+            _public_models_auto_created_flag = True
+            return True
+
+        # Load config + keys to discover providers.
+        config = await (load_config or _default_config)()
+        provider_keys = await _load_keys_for_auto_create()
+
+        # Derive provider list from config.provider_priority + loaded keys.
+        providers: set[str] = set()
+        providers.update(config.provider_priority)
+        providers.update(provider_keys.keys())
+        # Filter out sentinel/internal keys.
+        providers.discard("__custom_providers__")
+
+        if not providers:
+            # No providers configured — nothing to create, but the step
+            # "succeeded" (there's just nothing to do).
+            _public_models_auto_created_flag = True
+            return True
+
+        async def _create(session):
+            svc = PublicModelService(session)
+            for provider in sorted(providers):
+                model_id = f"{provider}/*"
+                # Idempotent: check before create.
+                result = await session.execute(
+                    select(PublicModel).where(PublicModel.id == model_id)
+                )
+                if result.scalar_one_or_none() is not None:
+                    continue
+                await svc.create_public_model(
+                    model_id,
+                    display_name=provider,
+                    enabled=True,
+                    owner_id=None,
+                )
+            await session.commit()
+
+        await run_in_session(_create)
+        _public_models_auto_created_flag = True
+        logger.info(
+            "PublicModel auto-create succeeded: %d providers", len(providers),
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "PublicModel auto-create failed — keeping LiteLLM fallback: %s", exc,
+        )
+        _public_models_auto_created_flag = False
+        return False
+
+
+async def _load_keys_for_auto_create() -> dict[str, list[dict]]:
+    """Load provider keys for the auto-create step.
+
+    Mirrors the executor's key loader but with a safe fallback when the
+    real loader is unavailable (e.g. during tests).
+    """
+    try:
+        from stitch_backend.database import run_in_read_session
+        from stitch_backend.domains.api_keys.service import ApiKeysService
+
+        async def _load(session):
+            svc = ApiKeysService(session)
+            result: dict[str, list[dict]] = {}
+            for provider in (
+                "openai", "anthropic", "gemini", "antigravity",
+                "fireworks", "zai", "dashscope",
+            ):
+                try:
+                    keys = await svc.get_keys(provider)
+                    if keys:
+                        result[provider] = keys
+                except Exception:
+                    pass
+            return result
+
+        return await run_in_read_session(_load)
+    except Exception:
+        return {}

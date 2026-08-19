@@ -5,12 +5,14 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from stitch_backend.domains.ai_gateway.routing_engine import PoolScope
+
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from starlette.responses import Response
 
@@ -36,13 +38,13 @@ class GatewayRequest(BaseModel):
 
 
 class NativeGatewayExecutor(Protocol):
-    async def chat(self, payload: GatewayRequest) -> JsonObject | Response: ...
+    async def chat(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response: ...
 
-    async def messages(self, payload: GatewayRequest) -> JsonObject | Response: ...
+    async def messages(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response: ...
 
-    async def responses(self, payload: GatewayRequest) -> JsonObject | Response: ...
+    async def responses(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response: ...
 
-    async def models(self) -> JsonObject: ...
+    async def models(self, pool: PoolScope | None = None) -> JsonObject: ...
 
 
 class GatewaySettings(Protocol):
@@ -146,6 +148,7 @@ def create_native_gateway_router(
     local_api_key: str | None = None,
     *,
     auth_resolver: Callable[[], str | None] | None = None,
+    pool_resolver: Callable[[Request, str | None], Awaitable[PoolScope]] | None = None,
 ) -> APIRouter:
     """Build Stitch's in-process OpenAI/Anthropic-compatible gateway routes.
 
@@ -153,48 +156,78 @@ def create_native_gateway_router(
     the kiro gateway and tests) or a request-time ``auth_resolver`` callable
     (used by the litellm gateway to read the per-install token on each request,
     avoiding capturing it at construction time before the lifespan loads it).
+
+    When ``pool_resolver`` is provided, it replaces ``_require_auth`` and
+    resolves both authentication AND the caller's :class:`PoolScope` (proxy
+    key → web session → local install token).  When ``None``, the legacy
+    ``_require_auth`` path is used and the pool defaults to desktop.
     """
     router = APIRouter(prefix="/v1", tags=["Native AI Gateway"])
 
     @router.post("/chat/completions", response_model=None)
     async def chat_completions(
         payload: GatewayRequest,
+        request: Request,
         authorization: str | None = Header(default=None),
     ) -> JsonObject | Response:
-        _require_auth(authorization, local_api_key, auth_resolver)
+        pool = await _resolve_pool(request, authorization, pool_resolver, local_api_key, auth_resolver)
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        return await executor_factory().chat(payload)
+        return await executor_factory().chat(payload, pool=pool)
 
     @router.post("/messages", response_model=None)
     async def messages(
         payload: GatewayRequest,
+        request: Request,
         authorization: str | None = Header(default=None),
     ) -> JsonObject | Response:
-        _require_auth(authorization, local_api_key, auth_resolver)
+        pool = await _resolve_pool(request, authorization, pool_resolver, local_api_key, auth_resolver)
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        return await executor_factory().messages(payload)
+        return await executor_factory().messages(payload, pool=pool)
 
     @router.post("/responses", response_model=None)
     async def responses(
         payload: GatewayRequest,
+        request: Request,
         authorization: str | None = Header(default=None),
     ) -> JsonObject | Response:
-        _require_auth(authorization, local_api_key, auth_resolver)
+        pool = await _resolve_pool(request, authorization, pool_resolver, local_api_key, auth_resolver)
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        return await executor_factory().responses(payload)
+        return await executor_factory().responses(payload, pool=pool)
 
     @router.get("/models")
-    async def models(authorization: str | None = Header(default=None)) -> JsonObject:
-        _require_auth(authorization, local_api_key, auth_resolver)
-        return await executor_factory().models()
+    async def models(
+        request: Request,
+        authorization: str | None = Header(default=None),
+    ) -> JsonObject:
+        pool = await _resolve_pool(request, authorization, pool_resolver, local_api_key, auth_resolver)
+        return await executor_factory().models(pool=pool)
 
     return router
+
+
+async def _resolve_pool(
+    request: Request,
+    authorization: str | None,
+    pool_resolver: Callable[[Request, str | None], Awaitable[PoolScope]] | None,
+    local_api_key: str | None,
+    auth_resolver: Callable[[], str | None] | None,
+) -> PoolScope:
+    """Resolve the caller's PoolScope.
+
+    When ``pool_resolver`` is set, it handles both auth and pool resolution
+    (proxy key → web session → local install token).  Otherwise, the legacy
+    ``_require_auth`` validates the token and the pool defaults to desktop.
+    """
+    if pool_resolver is not None:
+        return await pool_resolver(request, authorization)
+    _require_auth(authorization, local_api_key, auth_resolver)
+    return PoolScope(None)
 
 
 def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None:
@@ -303,9 +336,50 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         load_config=load_config,
     )
 
+    async def _resolve_caller_pool(request: Request, authorization: str | None) -> PoolScope:
+        """Resolve the caller's PoolScope per request.
+
+        Order: (a) Authorization Bearer matching a user proxy key →
+        PoolScope(uid, group_ids); (b) web session cookie →
+        PoolScope(user.id, group_ids); (c) local install token / auth
+        disabled → PoolScope(None, (), True).  Raises 401 when no auth
+        path matches.
+        """
+        from stitch_backend.domains.ai_gateway.service import UserProxyKeyService
+        from stitch_backend.domains.groups.service import group_ids_for_user
+
+        # (a) Authorization Bearer matching a user proxy key
+        raw_bearer = _extract_bearer(authorization)
+        if raw_bearer:
+            async with get_db() as session:
+                key_svc = UserProxyKeyService(session)
+                uid = await key_svc.resolve_proxy_key(raw_bearer)
+                if uid is not None:
+                    group_ids = await group_ids_for_user(session, uid)
+                    return PoolScope(uid, tuple(group_ids))
+            # (c) Local install token
+            expected_token = get_cached_local_chat_token()
+            if expected_token and hmac.compare_digest(
+                authorization or "", f"Bearer {expected_token}",
+            ):
+                return PoolScope(None, (), True)
+
+        # (b) Web session cookie
+        from stitch_backend.domains.auth.router import _current_user_optional
+
+        user, _preview, _raw = await _current_user_optional(request)
+        if user is not None:
+            async with get_db() as session:
+                group_ids = await group_ids_for_user(session, user.id)
+                return PoolScope(user.id, tuple(group_ids))
+
+        # No auth path matched
+        raise HTTPException(status_code=401, detail={"error": {"message": "Unauthorized"}})
+
     return create_native_gateway_router(
         lambda: executor,
         auth_resolver=get_cached_local_chat_token,
+        pool_resolver=_resolve_caller_pool,
     )
 
 
@@ -323,6 +397,15 @@ def _require_auth(
         if hmac.compare_digest(authorization or "", expected):
             return
     raise HTTPException(status_code=401, detail={"error": {"message": "Unauthorized"}})
+
+
+def _extract_bearer(authorization: str | None) -> str | None:
+    """Extract the raw token from an ``Authorization: Bearer <token>`` header."""
+    if not authorization:
+        return None
+    if not authorization.lower().startswith("bearer "):
+        return None
+    return authorization[7:].strip()
 
 
 def _unsupported_adapter_response(payload: GatewayRequest) -> JSONResponse | None:

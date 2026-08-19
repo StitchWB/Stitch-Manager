@@ -147,7 +147,7 @@ class DiscoveryWorker:
         """
         async def _op(session: AsyncSession) -> list[dict[str, Any]]:
             ep_svc = ProviderEndpointService(session)
-            endpoints = await ep_svc.list_endpoints()
+            endpoints = await ep_svc.list_all_endpoints()
             enabled = [e for e in endpoints if e.enabled]
             if not enabled:
                 return []
@@ -155,7 +155,7 @@ class DiscoveryWorker:
             cred_svc = CredentialService(session)
             probes: list[dict[str, Any]] = []
             for endpoint in enabled:
-                credentials = await cred_svc.list_credentials(
+                credentials = await cred_svc.list_all_credentials(
                     provider_endpoint_id=endpoint.id,
                 )
                 if not credentials:
