@@ -474,9 +474,23 @@ export default function AutoRegNext() {
           title={t('autoReg.empty.title')}
           description={t('autoReg.empty.description')}
           action={
-            <Button onClick={() => navigate('/marketplace')}>
-              {t('autoReg.empty.action')}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  getProviders()
+                    .then(result => setProviders(result))
+                    .catch(error => {
+                      log.error('Failed to load providers', { error });
+                    });
+                }}
+              >
+                {t('autoReg.empty.retry')}
+              </Button>
+              <Button onClick={() => navigate('/marketplace')}>
+                {t('autoReg.empty.action')}
+              </Button>
+            </div>
           }
         />
       </div>
@@ -697,7 +711,7 @@ export default function AutoRegNext() {
       <div
         role="separator"
         aria-orientation="vertical"
-        title="Потяните, чтобы изменить ширину панели"
+        title={t('autoReg.dragToResize')}
         onMouseDown={startResize}
         className="w-1 shrink-0 cursor-col-resize bg-white/[0.06] hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors"
       />

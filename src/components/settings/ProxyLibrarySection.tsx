@@ -140,6 +140,17 @@ export function ProxyLibrarySection() {
     return m;
   }, [groups]);
 
+  // Memoize the already-shared ids for the picker so a parent re-render
+  // doesn't pass a new array reference with the same ids and wipe the user's
+  // in-flight checkbox changes. Keyed on the shareEntry's sharedGroupNames
+  // identity (the source of truth from the store).
+  const shareAlreadySharedIds = useMemo(() => {
+    if (!shareEntry) return [];
+    return (shareEntry.sharedGroupNames ?? [])
+      .map(n => groupNameToId.get(n))
+      .filter((id): id is string => !!id);
+  }, [shareEntry, groupNameToId]);
+
   useEffect(() => {
     void fetchGroups();
   }, [fetchGroups]);
@@ -946,13 +957,7 @@ export function ProxyLibrarySection() {
         <ShareToGroupPicker
           isOpen={shareEntry !== null}
           onClose={() => (shareBusy ? undefined : setShareEntry(null))}
-          alreadySharedIds={
-            shareEntry
-              ? (shareEntry.sharedGroupNames ?? [])
-                  .map(n => groupNameToId.get(n))
-                  .filter((id): id is string => !!id)
-              : []
-          }
+          alreadySharedIds={shareAlreadySharedIds}
           onApply={(toShare, toUnshare) => void handleShareApply(toShare, toUnshare)}
           busy={shareBusy}
           title={t('ai.groups.share.pickerTitleProxy')}

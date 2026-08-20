@@ -13,8 +13,6 @@ import { CredentialForm } from '@/components/ai-gateway/CredentialForm';
 
 interface GroupPoolTabProps {
   groupId: string;
-  /** Lifted to the parent (GroupDetail) so the header can show the real key count. */
-  onPoolCountChange?: (count: number) => void;
 }
 
 function statusBadgeVariant(status: string): 'success' | 'warning' | 'danger' | 'default' | 'outline' {
@@ -54,9 +52,16 @@ function statusLabel(status: string): string {
  * OverflowMenu actions (enable/disable, unshare). "Добавить ключ" opens a
  * CredentialForm modal pre-seeded with the current group for sharing.
  */
-export function GroupPoolTab({ groupId, onPoolCountChange }: GroupPoolTabProps) {
-  const { pool, loading, errors, fetchPool } = useGroupsStore();
-  const { endpoints, fetchEndpoints, updateCredential } = useAiGatewayStore();
+export function GroupPoolTab({ groupId }: GroupPoolTabProps) {
+  const pool = useGroupsStore(s => s.pool);
+  const loading = useGroupsStore(s => s.loading);
+  const errors = useGroupsStore(s => s.errors);
+  const fetchPool = useGroupsStore(s => s.fetchPool);
+  const groupName = useGroupsStore(s => s.detail?.group.name ?? '');
+  const endpoints = useAiGatewayStore(s => s.endpoints);
+  const fetchEndpoints = useAiGatewayStore(s => s.fetchEndpoints);
+  const updateCredential = useAiGatewayStore(s => s.updateCredential);
+  const endpointsLoading = useAiGatewayStore(s => s.loading.endpoints);
 
   // ── Add-key modal state ──────────────────────────────────────────────────
   const [addKeyOpen, setAddKeyOpen] = useState(false);
@@ -65,11 +70,6 @@ export function GroupPoolTab({ groupId, onPoolCountChange }: GroupPoolTabProps) 
   useEffect(() => {
     fetchPool(groupId);
   }, [groupId, fetchPool]);
-
-  // Lift the pool count so GroupDetail's header shows the real number.
-  useEffect(() => {
-    onPoolCountChange?.(pool.length);
-  }, [pool.length, onPoolCountChange]);
 
   // ── OverflowMenu: toggle enabled ─────────────────────────────────────────
   const handleToggleEnabled = useCallback(async (item: PoolItem) => {
@@ -86,7 +86,7 @@ export function GroupPoolTab({ groupId, onPoolCountChange }: GroupPoolTabProps) 
   const handleUnshare = useCallback(async (item: PoolItem) => {
     const ok = await askConfirm({
       title: t('ai.groups.unshare.confirm.title'),
-      message: t('ai.groups.unshare.confirm.body', { group: '' }),
+      message: t('ai.groups.unshare.confirm.body', { group: groupName }),
       confirmText: t('ai.groups.unshare.confirm.confirm'),
       cancelText: t('common.cancel'),
       variant: 'warning',
@@ -99,15 +99,17 @@ export function GroupPoolTab({ groupId, onPoolCountChange }: GroupPoolTabProps) 
     } catch (e) {
       appToast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'), 'ai-groups');
     }
-  }, [fetchPool, groupId]);
+  }, [fetchPool, groupId, groupName]);
 
   // ── Add-key flow ─────────────────────────────────────────────────────────
   const openAddKey = useCallback(() => {
+    setPickedEndpoint(null);
+    setAddKeyOpen(true);
+    // Await fetch when empty so the picker shows real options instead of the
+    // "no endpoints" dead-end while the request is in flight.
     if (endpoints.length === 0) {
       void fetchEndpoints();
     }
-    setPickedEndpoint(null);
-    setAddKeyOpen(true);
   }, [endpoints.length, fetchEndpoints]);
 
   const closeAddKey = useCallback(() => {
@@ -225,14 +227,19 @@ export function GroupPoolTab({ groupId, onPoolCountChange }: GroupPoolTabProps) 
           </div>
         }
       >
-        {endpoints.length === 0 ? (
+        {endpointsLoading ? (
+          <div className="space-y-2 py-2">
+            <SkeletonLoader variant="rectangle" height="h-10" count={3} />
+          </div>
+        ) : endpoints.length === 0 ? (
           <p className="text-sm text-slate-400 py-4 text-center">
             {t('ai.groups.pool.noEndpoints')}
           </p>
         ) : (
           <div>
-            <label className="text-sm font-medium">{t('ai.groups.pool.selectEndpoint')}</label>
+            <label htmlFor="group-pool-select-endpoint" className="text-sm font-medium">{t('ai.groups.pool.selectEndpoint')}</label>
             <Select
+              id="group-pool-select-endpoint"
               value={pickedEndpoint?.id ?? ''}
               onValueChange={(val) => {
                 const ep = endpoints.find(e => e.id === val) ?? null;

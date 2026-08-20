@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -91,11 +91,8 @@ export default function Sidebar() {
     hasPermission,
     setPreviewRole,
   } = useAuthStore();
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    queueMicrotask(() => setMounted(true));
-
     // Auto-collapse sidebar on small screens (< 1200px)
     const handleResize = () => {
       const shouldCollapse = window.innerWidth < 1200;
@@ -112,8 +109,6 @@ export default function Sidebar() {
   }, []);
 
   void language;
-
-  if (!mounted) return null;
 
   // Role-based visibility: the whole product surface is open to any
   // authenticated user; only the admin zone (users / codes / monitoring)
@@ -317,7 +312,7 @@ export default function Sidebar() {
                 : ` · ID ${String(authUser.id)}`;
               const tooltipContent = (
                 <>
-                  <div>{authUser.username} · {t(`auth.role.${effRole ?? authUser.role}`)}{tierLine}</div>
+                  <div>{authUser.username} · {t(`auth.role.${effRole}`)}{tierLine}</div>
                   {showTier && (
                     <div className="text-slate-400 text-[11px] mt-0.5">{t('footer.tierHint')}</div>
                   )}
@@ -394,7 +389,7 @@ export default function Sidebar() {
                             size="sm"
                             className="shrink-0 max-w-full overflow-hidden"
                           >
-                            {t(`auth.role.${effRole ?? authUser.role}`)}
+                            {t(`auth.role.${effRole}`)}
                           </Badge>
                           {showTier && (
                             <TierBadge tier={authUser.tg_tier} size="sm" className="shrink-0" />

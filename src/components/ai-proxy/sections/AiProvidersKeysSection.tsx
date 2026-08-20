@@ -93,7 +93,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
       setKeys(migrateKeys(rawKeys));
     } catch (error) {
       console.error('Failed to load keys:', error);
-      toast.error('Failed to load API keys');
+      toast.error(t('aiHub.apiKeys.errors.loadFailed', { msg: error instanceof Error ? error.message : String(error) }));
     } finally {
       setIsLoading(false);
     }
@@ -182,12 +182,12 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   const handleDeleteKey = useCallback(async (entry: ApiKeyEntry) => {
     const updated = keys.filter(k => k.key !== entry.key);
     await persistKeys(updated);
-    toast.success('Key deleted');
-  }, [keys, persistKeys]);
+    toast.success(t('aiHub.apiKeys.toasts.keyDeleted', { provider: providerLabel[providerFilter] || providerFilter }));
+  }, [keys, persistKeys, providerFilter]);
 
   const handleCopyKey = useCallback((entry: ApiKeyEntry) => {
     navigator.clipboard.writeText(entry.key);
-    toast.success('Key copied to clipboard');
+    toast.success(t('aiHub.apiKeys.toasts.keyCopied'));
   }, []);
 
   const handleBulkTest = useCallback(async (baseUrl: string, testKeys: string[]): Promise<BulkTestKeyResult[]> => {
@@ -212,8 +212,8 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   const handleAddKeyFromBulk = useCallback((entry: ApiKeyEntry) => {
     const updated = [...keys, entry];
     persistKeys(updated);
-    toast.success('Key added');
-  }, [keys, persistKeys]);
+    toast.success(t('aiHub.apiKeys.toasts.keyAdded', { provider: providerLabel[providerFilter] || providerFilter }));
+  }, [keys, persistKeys, providerFilter]);
 
   const handleAddAllValid = useCallback((entries: ApiKeyEntry[]) => {
     const updated = [...keys, ...entries];
@@ -224,7 +224,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   const handleAddKey = async () => {
     const trimmedApiKey = newApiKey.trim();
     if (!trimmedApiKey) {
-      toast.error('API key is required');
+      toast.error(t('aiHub.apiKeys.errors.apiKeyRequired'));
       return;
     }
 
@@ -240,14 +240,14 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
     setIsSaving(true);
     try {
       await persistKeys(updatedKeys);
-      toast.success('Key added');
+      toast.success(t('aiHub.apiKeys.toasts.keyAdded', { provider: providerLabel[providerFilter] || providerFilter }));
       setIsAddModalOpen(false);
       setNewApiKey('');
       setNewBaseUrl('');
       setNewPrefix('');
     } catch (error) {
       console.error('Failed to add key:', error);
-      toast.error('Failed to add key');
+      toast.error(t('aiHub.apiKeys.errors.addFailed', { msg: error instanceof Error ? error.message : String(error) }));
     } finally {
       setIsSaving(false);
     }
@@ -399,7 +399,7 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
       >
         <div className="space-y-4">
           <Input
-            label="API Key"
+            label={t('aiHub.apiKeys.modals.fields.apiKeyLabel')}
             type="password"
             placeholder="sk-..."
             value={newApiKey}
@@ -408,14 +408,14 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
           />
 
           <Input
-            label="Base URL (optional)"
+            label={t('aiHub.apiKeys.modals.fields.baseUrlLabel')}
             placeholder="https://api.openai.com"
             value={newBaseUrl}
             onChange={event => setNewBaseUrl(event.target.value)}
           />
 
           <Input
-            label="Model Prefix (optional)"
+            label={t('aiHub.apiKeys.modals.fields.modelPrefixLabel')}
             placeholder="gpt-4"
             value={newPrefix}
             onChange={event => setNewPrefix(event.target.value)}

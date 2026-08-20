@@ -14,7 +14,7 @@ import {
 } from '@/components/ui';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
-import { t } from '@/lib/i18n';
+import { t, getLocale } from '@/lib/i18n';
 import { useGroupsStore } from '@/stores/groups';
 import { listUsers, type AuthUser } from '@/lib/backend/modules/auth';
 import type { GroupMember, GroupInviteDetail } from '@/lib/backend/modules/groups';
@@ -24,10 +24,22 @@ interface GroupMembersTabProps {
   groupId: string;
   isOwner: boolean;
   currentUserId: string | null;
+  /** Called after the current user leaves the group (mirrors GroupSettingsTab). */
+  onLeft?: () => void;
 }
 
 function avatarLetter(name: string): string {
   return (name.trim()[0] ?? '?').toUpperCase();
+}
+
+/** Format an ISO date string using the current locale's date format. */
+function formatDate(iso: string | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(getLocale(), {
+    dateStyle: 'medium',
+  }).format(d);
 }
 
 function roleBadge(role: GroupMember['role']) {
@@ -52,9 +64,14 @@ function roleBadge(role: GroupMember['role']) {
  * remove OverflowMenu on non-self rows. Members see a Leave button on
  * their own row (disabled + Tooltip when sole owner).
  */
-export function GroupMembersTab({ groupId, isOwner, currentUserId }: GroupMembersTabProps) {
-  const { detail, loading, inviteMember, revokeInvite, removeMember, leaveGroup, fetchDetail } =
-    useGroupsStore();
+export function GroupMembersTab({ groupId, isOwner, currentUserId, onLeft }: GroupMembersTabProps) {
+  const detail = useGroupsStore(s => s.detail);
+  const loading = useGroupsStore(s => s.loading);
+  const inviteMember = useGroupsStore(s => s.inviteMember);
+  const revokeInvite = useGroupsStore(s => s.revokeInvite);
+  const removeMember = useGroupsStore(s => s.removeMember);
+  const leaveGroup = useGroupsStore(s => s.leaveGroup);
+  const fetchDetail = useGroupsStore(s => s.fetchDetail);
   const [inviteInput, setInviteInput] = useState('');
   const [userResults, setUserResults] = useState<AuthUser[]>([]);
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
@@ -185,6 +202,7 @@ export function GroupMembersTab({ groupId, isOwner, currentUserId }: GroupMember
     if (!ok) return;
     try {
       await leaveGroup(groupId);
+      onLeft?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'));
     }
@@ -354,7 +372,7 @@ export function GroupMembersTab({ groupId, isOwner, currentUserId }: GroupMember
                 <div className="min-w-0 flex-1 flex flex-col gap-0.5">
                   <span className="text-sm text-slate-100 truncate">@{member.username}</span>
                   <span className="text-[11px] text-slate-500 truncate">
-                    {member.joined_at}
+                    {formatDate(member.joined_at)}
                   </span>
                 </div>
                 {roleBadge(member.role)}

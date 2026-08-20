@@ -377,6 +377,13 @@ export function useAiProvidersController() {
     async (account: AiProxyAccount) => {
       try {
         const updated = { ...account, enabled: !account.enabled };
+        // Never write back masked secrets — backend masks
+        // instance-shared/foreign values as first4+"****"+last4; sending
+        // the mask would corrupt the stored secret.
+        if (updated.apiKey && updated.apiKey.includes('****')) updated.apiKey = null;
+        if (updated.oauthToken && updated.oauthToken.includes('****')) updated.oauthToken = null;
+        if (updated.sessionToken && updated.sessionToken.includes('****')) updated.sessionToken = null;
+        if (updated.oauthRefreshToken && updated.oauthRefreshToken.includes('****')) updated.oauthRefreshToken = null;
         await updateAiProxyAccount(updated);
         appToast.success(
           updated.enabled

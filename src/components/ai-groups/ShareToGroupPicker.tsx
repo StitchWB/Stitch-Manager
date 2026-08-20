@@ -18,6 +18,17 @@ export interface ShareToGroupPickerProps {
 }
 
 /**
+ * Stable signature for an already-shared ids list. Two lists with the same
+ * sorted contents produce the same string, so the reset effect can compare by
+ * value instead of by reference — preventing the picker from wiping the
+ * user's in-flight checkbox changes when the parent re-renders and passes a
+ * new array instance with the same ids.
+ */
+function signatureOf(ids: string[]): string {
+  return [...ids].sort().join(',');
+}
+
+/**
  * Modal picker for sharing a TOTP key or proxy entry into one or more of the
  * caller's groups. Renders a checkbox list of groups from the groups store;
  * pre-checks the ones in ``alreadySharedIds`` and computes the share/unshare
@@ -32,10 +43,18 @@ export function ShareToGroupPicker({
   busy = false,
   title,
 }: ShareToGroupPickerProps) {
-  const { groups, loading, fetchList } = useGroupsStore();
+  const groups = useGroupsStore(s => s.groups);
+  const loading = useGroupsStore(s => s.loading);
+  const fetchList = useGroupsStore(s => s.fetchList);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Reset selection to the already-shared set whenever the picker opens.
+  // Memoize the value signature so the reset effect only fires when the
+  // already-shared set actually changes (not on every parent re-render that
+  // passes a new array reference with the same ids).
+  const sharedSig = useMemo(() => signatureOf(alreadySharedIds), [alreadySharedIds]);
+
+  // Reset selection to the already-shared set whenever the picker opens or
+  // the already-shared set changes by value.
   useEffect(() => {
     if (isOpen) {
       // Deferred: setSelected synchronously in the effect body triggers
@@ -47,7 +66,8 @@ export function ShareToGroupPicker({
       // Ensure the group list is fresh.
       void fetchList();
     }
-  }, [isOpen, alreadySharedIds, fetchList]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, sharedSig, fetchList]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {

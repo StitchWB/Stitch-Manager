@@ -518,18 +518,45 @@ export interface Translations {
     account_modal: {
       account_name: string;
       account_type: string;
+      accountType: {
+        enterprise: string;
+        free: string;
+        pro: string;
+        team: string;
+      }
       account_will_be_available_for_routing: string;
+      add_title: string;
       api_key: string;
+      authMethod: {
+        api_key: string;
+        oauth: string;
+        session: string;
+      }
       authenticate_via_browser_recommended: string;
       authentication_method: string;
       cancel: string;
+      create: string;
+      created_success: string;
+      credential_required: string;
+      edit_title: string;
       enable_account: string;
       login_with_oauth: string;
+      name_placeholder: string;
+      name_required: string;
+      oauth_completed: string;
       oauth_token: string;
+      oauth_token_placeholder: string;
+      optional_placeholder: string;
+      positive_integer_error: string;
       provider: string;
+      save_failed: string;
+      saving: string;
       session_token: string;
+      session_token_placeholder: string;
       soft_daily_request_quota: string;
       soft_daily_token_quota: string;
+      update: string;
+      updated_success: string;
       use_oauth_login: string;
     }
     actions: {
@@ -832,6 +859,7 @@ export interface Translations {
         accountCreated: string;
         cannotDeleteLinkedAccount: string;
         keyAdded: string;
+        keyCopied: string;
         keyDeleted: string;
       }
     }
@@ -1325,11 +1353,32 @@ export interface Translations {
   }
   aiProxy: {
     oAuthModal: {
+      authCodeWaitingHint: string;
+      authMismatchError: string;
+      authorizationUrlLabel: string;
+      browserOpenedSuccess: string;
+      codeCopiedSuccess: string;
+      completedSuccess: string;
+      copyCodeFailedError: string;
+      copyCodeTitle: string;
+      copyUrlFailedError: string;
+      copyUrlTitle: string;
+      deviceCodeWaitingHint: string;
+      failedError: string;
       loading: string;
       openAuthorizationPage: string;
+      openBrowserFailedError: string;
       openVerificationPage: string;
+      startFailedError: string;
+      timeoutError: string;
+      title: string;
+      unknownError: string;
+      urlCopiedSuccess: string;
+      verificationPageOpenedSuccess: string;
+      verificationUrlLabel: string;
       waitingForAuthorization: string;
     }
+    secretMaskedHint: string;
   }
   autoReg: {
     addyio: {
@@ -1364,6 +1413,7 @@ export interface Translations {
     consoleOutput: string;
     customDomain: string;
     disabled: string;
+    dragToResize: string;
     emailAliases: string;
     emailGeneration: string;
     emailGenerationDomain: string;
@@ -1372,6 +1422,7 @@ export interface Translations {
       title: string;
       description: string;
       action: string;
+      retry: string;
     };
     cockpit: {
       identity: string;
@@ -1866,6 +1917,9 @@ export interface Translations {
       services: string;
       bot: string;
       proxies: string;
+      server: string;
+      web: string;
+      external: string;
     };
     statuses: {
       up: string;
@@ -1911,6 +1965,7 @@ export interface Translations {
     copy: string;
     copyToClipboard: string;
     creatingTask: string;
+    created: string;
     cross: string;
     cvv: string;
     delete: string;
@@ -1922,6 +1977,7 @@ export interface Translations {
     error: string;
     export: string;
     history: string;
+    id: string;
     info: string;
     install: string;
     installRuntime: string;
@@ -3344,9 +3400,12 @@ export interface Translations {
       bandwidth: string;
       default_recipient: string;
       description: string;
+      descriptionTemplate: string;
       domain: string;
+      emailTemplate: string;
       enable_mailtm_temporary_email: string;
       format: string;
+      fromName: string;
       mailtm_provides_free_temporary_email_addresses_no_: string;
       mb: string;
       n_random_chars: string;
@@ -3360,6 +3419,7 @@ export interface Translations {
       testing: string;
       token_is_sensitive_and_is_not_saved_until_you_clic: string;
       use_account_default: string;
+      username: string;
     }
     icloud: {
       title: string;
@@ -3892,6 +3952,7 @@ export interface Translations {
   }
   totp: {
     title: string;
+    pageTitle: string;
     subtitle: string;
     addKey: string;
     adding: string;
@@ -4392,6 +4453,7 @@ uiTexts: {
         rename: string;
         leave: string;
         delete: string;
+        deleteViaSettings: string;
       };
       role: {
         owner: string;
@@ -4445,8 +4507,12 @@ uiTexts: {
         empty: string;
         quotaLabel: string;
         quotaHint: string;
+        quotaFractional: string;
         unlimited: string;
         saved: string;
+        limit: string;
+        perDay: string;
+        history30: string;
       };
       pool: {
         title: string;

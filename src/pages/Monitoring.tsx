@@ -205,18 +205,18 @@ function ServiceCards({ snapshot }: { snapshot: MonitoringSnapshot }) {
   const s = snapshot.server, w = snapshot.web, e = snapshot.external;
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <CardShell icon={<Server className="w-4 h-4" />} title="Server"
+      <CardShell icon={<Server className="w-4 h-4" />} title={t('monitoring.sections.server')}
         badge={<Badge variant={serviceBadgeVariant(s.status)} size="sm">{t(`monitoring.statuses.${s.status}`)}</Badge>}>
         <Field label={t('monitoring.fields.uptime')} value={formatDuration(s.uptime_s)} />
         <Field label={t('monitoring.fields.dbOk')} value={s.db_ok ? '✓' : '✗'} />
       </CardShell>
-      <CardShell icon={<Globe className="w-4 h-4" />} title="Web"
+      <CardShell icon={<Globe className="w-4 h-4" />} title={t('monitoring.sections.web')}
         badge={<Badge variant={serviceBadgeVariant(w.status)} size="sm">{t(`monitoring.statuses.${w.status}`)}</Badge>}>
         <Field label={t('monitoring.fields.latency')} value={formatLatency(w.latency_ms)} />
         <Field label={t('monitoring.fields.lastCheck')} value={formatDate(w.last_check)} />
         {w.detail && <Field label={t('monitoring.fields.detail')} value={w.detail} />}
       </CardShell>
-      <CardShell icon={<Network className="w-4 h-4" />} title="External"
+      <CardShell icon={<Network className="w-4 h-4" />} title={t('monitoring.sections.external')}
         badge={<Badge variant={serviceBadgeVariant(e.status)} size="sm">{t(`monitoring.statuses.${e.status}`)}</Badge>}>
         <Field label={t('monitoring.fields.url')} value={e.url} />
         <Field label={t('monitoring.fields.latency')} value={formatLatency(e.latency_ms)} />

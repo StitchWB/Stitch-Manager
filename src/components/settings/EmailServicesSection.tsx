@@ -123,7 +123,7 @@ export function EmailServicesSection({
           <div className="space-y-4 pl-7 animate-in fade-in zoom-in-95 duration-200">
               <Input
               type={showPassword ? 'text' : 'password'}
-              label="API Token"
+              label={t('autoReg.addyio.apiToken')}
               value={addyioApiToken}
               onChange={(e) => onAddyioApiTokenChange(e.target.value)}
               placeholder="addy_..."
@@ -291,14 +291,14 @@ export function EmailServicesSection({
               <div className="grid grid-cols-2 gap-4">
                 <Input
                 type="text"
-                label="Description Template"
+                label={t('settings.email_services_section.descriptionTemplate')}
                 value={addyioDescriptionTemplate}
                 onChange={(e) => onAddyioDescriptionTemplateChange(e.target.value)}
                 placeholder="{provider} - {date}" />
               
                 <Input
                 type="text"
-                label="From Name"
+                label={t('settings.email_services_section.fromName')}
                 value={addyioFromName}
                 onChange={(e) => onAddyioFromNameChange(e.target.value)}
                 placeholder="My Alias" />
@@ -338,14 +338,14 @@ export function EmailServicesSection({
               <div className="grid grid-cols-2 gap-4">
                 <Input
                 type="text"
-                label="Username"
+                label={t('settings.email_services_section.username')}
                 value={thirtyThreeMailUsername}
                 onChange={(e) => onThirtyThreeMailUsernameChange(e.target.value)}
                 placeholder="user" />
               
                 <Input
                 type="text"
-                label="Domain"
+                label={t('settings.email_services_section.domain')}
                 value={thirtyThreeMailDomain}
                 onChange={(e) => onThirtyThreeMailDomainChange(e.target.value)}
                 placeholder="33mail.com" />
@@ -353,7 +353,7 @@ export function EmailServicesSection({
               </div>
               <Input
               type="text"
-              label="Email Template"
+              label={t('settings.email_services_section.emailTemplate')}
               value={thirtyThreeMailTemplate}
               onChange={(e) => onThirtyThreeMailTemplateChange(e.target.value)}
               placeholder="{rnd12}" />

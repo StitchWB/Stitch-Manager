@@ -24,20 +24,25 @@ const PROVIDERS = [
 
 
 const AUTH_METHODS = [
-{ value: 'oauth', label: 'OAuth Token' },
-{ value: 'api_key', label: 'API Key' },
-{ value: 'session', label: 'Session Token' }];
+{ value: 'oauth', labelKey: 'aiHub.account_modal.authMethod.oauth' },
+{ value: 'api_key', labelKey: 'aiHub.account_modal.authMethod.api_key' },
+{ value: 'session', labelKey: 'aiHub.account_modal.authMethod.session' }];
 
 
 const ACCOUNT_TYPES = [
-{ value: 'free', label: 'Free' },
-{ value: 'pro', label: 'Pro' },
-{ value: 'team', label: 'Team' },
-{ value: 'enterprise', label: 'Enterprise' }];
+{ value: 'free', labelKey: 'aiHub.account_modal.accountType.free' },
+{ value: 'pro', labelKey: 'aiHub.account_modal.accountType.pro' },
+{ value: 'team', labelKey: 'aiHub.account_modal.accountType.team' },
+{ value: 'enterprise', labelKey: 'aiHub.account_modal.accountType.enterprise' }];
 
 
 // Providers that support OAuth
 const OAUTH_PROVIDERS = ['openai', 'claude', 'anthropic', 'gemini', 'kiro', 'antigravity', 'fireworks'];
+
+// Backend masks instance-shared/foreign secrets as first4+"****"+last4.
+// A value containing "****" is a masked placeholder — never submit it back.
+const isMaskedSecret = (value: string | null | undefined): boolean =>
+  typeof value === 'string' && value.includes('****');
 
 export default function AccountModal({ isOpen, account, onClose, onSubmit }: AccountModalProps) {
   const [formData, setFormData] = useState({
@@ -106,7 +111,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
     const parsed = Number(value);
 
     if (!Number.isInteger(parsed) || parsed <= 0) {
-      toast.error(`${label} must be a positive integer`);
+      toast.error(t('aiHub.account_modal.positive_integer_error', { label }));
       return undefined;
     }
 
@@ -117,7 +122,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
     e.preventDefault();
 
     if (!formData.name.trim()) {
-      toast.error('Account name is required');
+      toast.error(t('aiHub.account_modal.name_required'));
       return;
     }
 
@@ -129,19 +134,19 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
     formData.sessionToken;
 
     if (!authValue.trim()) {
-      toast.error('Authentication credential is required');
+      toast.error(t('aiHub.account_modal.credential_required'));
       return;
     }
 
     const softQuotaTokensDaily = parseOptionalPositiveInt(
       formData.softQuotaTokensDaily,
-      'Soft daily token quota'
+      t('aiHub.account_modal.soft_daily_token_quota')
     );
     if (softQuotaTokensDaily === undefined) return;
 
     const softQuotaRequestsDaily = parseOptionalPositiveInt(
       formData.softQuotaRequestsDaily,
-      'Soft daily request quota'
+      t('aiHub.account_modal.soft_daily_request_quota')
     );
     if (softQuotaRequestsDaily === undefined) return;
 
@@ -154,9 +159,9 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
         id: account?.id || null,
         provider: formData.provider,
         name: formData.name,
-        oauthToken: formData.authMethod === 'oauth' ? formData.oauthToken : null,
-        apiKey: formData.authMethod === 'api_key' ? formData.apiKey : null,
-        sessionToken: formData.authMethod === 'session' ? formData.sessionToken : null,
+        oauthToken: formData.authMethod === 'oauth' && !isMaskedSecret(formData.oauthToken) ? formData.oauthToken : null,
+        apiKey: formData.authMethod === 'api_key' && !isMaskedSecret(formData.apiKey) ? formData.apiKey : null,
+        sessionToken: formData.authMethod === 'session' && !isMaskedSecret(formData.sessionToken) ? formData.sessionToken : null,
         enabled: formData.enabled,
         accountType: formData.accountType,
         softQuotaTokensDaily,
@@ -171,16 +176,16 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
 
       if (account) {
         await updateAiProxyAccount(accountData);
-        toast.success('Account updated successfully');
+        toast.success(t('aiHub.account_modal.updated_success'));
       } else {
         await createAiProxyAccount(accountData);
-        toast.success('Account created successfully');
+        toast.success(t('aiHub.account_modal.created_success'));
       }
 
       onSubmit();
     } catch (e) {
       console.error('[AccountModal] Error saving account:', e);
-      toast.error(`Failed to save account: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('aiHub.account_modal.save_failed', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setSaving(false);
     }
@@ -188,19 +193,26 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
 
   const handleOAuthSuccess = () => {
     setShowOAuthModal(false);
-    toast.success('OAuth completed! Token will be automatically saved.');
+    toast.success(t('aiHub.account_modal.oauth_completed'));
     // Refresh accounts list
     onSubmit();
   };
 
   const supportsOAuth = OAUTH_PROVIDERS.includes(formData.provider);
 
+  // When editing, a secret field whose value contains "****" is a masked
+  // placeholder from the backend — render it read-only so the user cannot
+  // accidentally submit the mask back as the real secret.
+  const apiKeyMasked = !!account && isMaskedSecret(formData.apiKey);
+  const oauthTokenMasked = !!account && isMaskedSecret(formData.oauthToken);
+  const sessionTokenMasked = !!account && isMaskedSecret(formData.sessionToken);
+
   return (
     <>
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={account ? 'Edit Account' : 'Add Account'}
+        title={account ? t('aiHub.account_modal.edit_title') : t('aiHub.account_modal.add_title')}
         size="md">
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -243,7 +255,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
             <Input
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="My OpenAI Account"
+              placeholder={t('aiHub.account_modal.name_placeholder')}
               required />
 
           </div>
@@ -256,7 +268,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
             <Select
               value={formData.authMethod}
               onChange={(e) => setFormData({ ...formData, authMethod: e.target.value })}
-              options={AUTH_METHODS} />
+              options={AUTH_METHODS.map(opt => ({ value: opt.value, label: t(opt.labelKey) }))} />
 
           </div>
 
@@ -268,9 +280,11 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
               type="password"
               value={formData.oauthToken}
               onChange={(e) => setFormData({ ...formData, oauthToken: e.target.value })}
-              placeholder="Enter OAuth token"
-              required />
+              placeholder={t('aiHub.account_modal.oauth_token_placeholder')}
+              required={!oauthTokenMasked}
+              disabled={oauthTokenMasked} />
 
+              {oauthTokenMasked && <p className="text-xs text-amber-400 mt-1">{t("aiProxy.secretMaskedHint")}</p>}
             </div>
           }
 
@@ -282,8 +296,10 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
               value={formData.apiKey}
               onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
               placeholder="sk-..."
-              required />
+              required={!apiKeyMasked}
+              disabled={apiKeyMasked} />
 
+              {apiKeyMasked && <p className="text-xs text-amber-400 mt-1">{t("aiProxy.secretMaskedHint")}</p>}
             </div>
           }
 
@@ -294,9 +310,11 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
               type="password"
               value={formData.sessionToken}
               onChange={(e) => setFormData({ ...formData, sessionToken: e.target.value })}
-              placeholder="Enter session token"
-              required />
+              placeholder={t('aiHub.account_modal.session_token_placeholder')}
+              required={!sessionTokenMasked}
+              disabled={sessionTokenMasked} />
 
+              {sessionTokenMasked && <p className="text-xs text-amber-400 mt-1">{t("aiProxy.secretMaskedHint")}</p>}
             </div>
           }
 
@@ -306,7 +324,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
             <Select
               value={formData.accountType}
               onChange={(e) => setFormData({ ...formData, accountType: e.target.value })}
-              options={ACCOUNT_TYPES} />
+              options={ACCOUNT_TYPES.map(opt => ({ value: opt.value, label: t(opt.labelKey) }))} />
 
           </div>
 
@@ -322,7 +340,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
               inputMode="numeric"
               value={formData.softQuotaTokensDaily}
               onChange={(e) => setFormData({ ...formData, softQuotaTokensDaily: e.target.value })}
-              placeholder="Optional" />
+              placeholder={t('aiHub.account_modal.optional_placeholder')} />
 
           </div>
 
@@ -337,7 +355,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
               inputMode="numeric"
               value={formData.softQuotaRequestsDaily}
               onChange={(e) => setFormData({ ...formData, softQuotaRequestsDaily: e.target.value })}
-              placeholder="Optional" />
+              placeholder={t('aiHub.account_modal.optional_placeholder')} />
 
           </div>
 
@@ -362,7 +380,7 @@ export default function AccountModal({ isOpen, account, onClose, onSubmit }: Acc
 
             </Button>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving...' : account ? 'Update' : 'Create'}
+              {saving ? t('aiHub.account_modal.saving') : account ? t('aiHub.account_modal.update') : t('aiHub.account_modal.create')}
             </Button>
           </div>
         </form>
