@@ -1362,6 +1362,11 @@ tabs: {
     emailGeneration: "Генерация email и аутентификация",
     emailGenerationDomain: "ДОМЕН ГЕНЕРАЦИИ EMAIL",
     emailPattern: "Шаблон Email",
+    empty: {
+      title: "Нет провайдеров",
+      description: "Каждый провайдер — отдельный плагин. Установите плагины в Маркетплейсе, чтобы добавить регистрации.",
+      action: "Открыть Маркетплейс",
+    },
     cockpit: {
       identity: "Идентификация",
       browser: "Браузер",
@@ -1450,6 +1455,7 @@ tabs: {
     proxy: "Прокси",
     ready: "Готово",
     readyToStart: "Готов к запуску",
+    requiresMachineId: "Machine ID",
     resume: "ПРОДОЛЖИТЬ",
     saveError: "Ошибка сохранения",
     saved: "сохранён",

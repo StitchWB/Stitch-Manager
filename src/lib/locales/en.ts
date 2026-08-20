@@ -1362,6 +1362,11 @@ export const en: Translations = {
     emailGeneration: "Email generation",
     emailGenerationDomain: "EMAIL GENERATION DOMAIN",
     emailPattern: "Email Pattern",
+    empty: {
+      title: "No providers",
+      description: "Each provider is a separate plugin. Install plugins from the Marketplace to add registrations.",
+      action: "Open Marketplace",
+    },
     cockpit: {
       identity: "Identity",
       browser: "Browser",
@@ -1450,6 +1455,7 @@ export const en: Translations = {
     proxy: "Proxy",
     ready: "Ready",
     readyToStart: "Ready",
+    requiresMachineId: "Machine ID",
     resume: "RESUME",
     saveError: "Save Error",
     saved: "saved",

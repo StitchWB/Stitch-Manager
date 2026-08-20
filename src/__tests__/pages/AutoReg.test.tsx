@@ -1,20 +1,20 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AutoReg from '../../pages/AutoReg';
 
 // Mock all heavy subcomponents/hooks to keep this a behavior/contract test.
 jest.mock('../../pages/AutoReg/components', () => ({
   CommandCenter: ({
-    allowedProviders,
+    providers,
     showDebugLogsInConsole,
   }: {
-    allowedProviders?: string[];
+    providers?: Array<{ id: string; displayName: string; requiresMachineId: boolean }>;
     showDebugLogsInConsole?: boolean;
   }) => (
     <div
       data-testid="command-center"
-      data-allowed={JSON.stringify(allowedProviders || [])}
+      data-providers={JSON.stringify(providers || [])}
       data-show-debug={String(!!showDebugLogsInConsole)}
     />
   ),
@@ -57,8 +57,11 @@ jest.mock('../../stores/uiPreferences', () => ({
   }),
 }));
 
+// Mock the backend module so we can control getProviders results.
+// checkPythonAutoreg is also exported from the same module.
 jest.mock('../../lib/backend', () => ({
   checkPythonAutoreg: jest.fn(async () => true),
+  getProviders: jest.fn(async () => []),
 }));
 
 // Registration store is a facade; we mock it to return new function refs on each call
@@ -139,12 +142,25 @@ jest.mock('../../stores/registration', () => {
   return { useRegistrationStore, __spies: { loadSettingsSpy, saveImmediatelySpy } };
 });
 
+// Helper to build provider plugin descriptors matching the backend response.
+const mkProvider = (
+  id: string,
+  displayName: string,
+  requiresMachineId = false,
+) => ({ id, displayName, requiresMachineId });
+
 describe('AutoReg page', () => {
   // Retrieve spies that were declared inside the jest.mock() factory.
   const { __spies } = jest.requireMock('../../stores/registration') as {
     __spies: { loadSettingsSpy: jest.Mock; saveImmediatelySpy: jest.Mock };
   };
   const { loadSettingsSpy, saveImmediatelySpy } = __spies;
+
+  // Retrieve the mocked getProviders so individual tests can override its
+  // return value.
+  const { getProviders } = jest.requireMock('../../lib/backend') as {
+    getProviders: jest.Mock;
+  };
 
   const renderAutoReg = () =>
     render(
@@ -156,6 +172,9 @@ describe('AutoReg page', () => {
   beforeEach(() => {
     loadSettingsSpy.mockClear();
     saveImmediatelySpy.mockClear();
+    getProviders.mockReset();
+    // Default: no provider plugins installed (empty by default).
+    getProviders.mockResolvedValue([]);
   });
 
   it('calls loadSettings only once on mount (does not re-run init effect on rerender)', () => {
@@ -171,27 +190,54 @@ describe('AutoReg page', () => {
     expect(loadSettingsSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('passes only supported providers to CommandCenter selector', () => {
-    const { getByTestId } = renderAutoReg();
-    const cc = getByTestId('command-center');
-    const allowed = JSON.parse(cc.getAttribute('data-allowed') || '[]');
+  it('renders empty state with marketplace CTA when no providers installed', async () => {
+    getProviders.mockResolvedValue([]);
 
-    expect(allowed).toEqual(['kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'qoder', 'bitbucket', 'v0_app']);
-    expect(allowed).toContain('openai');
-    // Legacy kiro v1 was removed from the backend — must not be offered.
-    expect(allowed).not.toContain('kiro');
+    renderAutoReg();
+
+    // Empty state title and CTA should appear once the fetch resolves.
+    await waitFor(() => {
+      expect(screen.getByText('No providers')).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        /Each provider is a separate plugin. Install plugins from the Marketplace/i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open Marketplace' })).toBeTruthy();
+    // CommandCenter must NOT render when providers list is empty.
+    expect(screen.queryByTestId('command-center')).toBeNull();
   });
 
-  it('includes openai in supported providers allowlist', () => {
-    const { getByTestId } = renderAutoReg();
-    const cc = getByTestId('command-center');
-    const allowed = JSON.parse(cc.getAttribute('data-allowed') || '[]');
+  it('renders provider rows via CommandCenter when providers are installed', async () => {
+    const providers = [
+      mkProvider('kiro_v2', 'Kiro v2', true),
+      mkProvider('aws', 'AWS'),
+      mkProvider('openai', 'OpenAI'),
+    ];
+    getProviders.mockResolvedValue(providers);
 
-    expect(allowed).toContain('openai');
+    renderAutoReg();
+
+    // CommandCenter should render and receive the providers list.
+    await waitFor(() => {
+      const cc = screen.getByTestId('command-center');
+      const passed = JSON.parse(cc.getAttribute('data-providers') || '[]');
+      expect(passed).toEqual(providers);
+    });
+    // Empty state must NOT render when providers exist.
+    expect(screen.queryByText('No providers')).toBeNull();
   });
 
-  it('keeps debug visibility toggle synced between CommandCenter and ConsolePanel', () => {
+  it('keeps debug visibility toggle synced between CommandCenter and ConsolePanel', async () => {
+    getProviders.mockResolvedValue([mkProvider('kiro_v2', 'Kiro v2')]);
+
     const { getByTestId } = renderAutoReg();
+
+    await waitFor(() => {
+      expect(getByTestId('command-center')).toBeTruthy();
+    });
+
     const cc = getByTestId('command-center');
     const consolePanel = getByTestId('console-panel');
 
@@ -199,8 +245,15 @@ describe('AutoReg page', () => {
     expect(consolePanel.getAttribute('data-show-debug')).toBe('false');
   });
 
-  it('passes debug toggle props to CommandCenter and ConsolePanel', () => {
+  it('passes debug toggle props to CommandCenter and ConsolePanel', async () => {
+    getProviders.mockResolvedValue([mkProvider('kiro_v2', 'Kiro v2')]);
+
     const { getByTestId } = renderAutoReg();
+
+    await waitFor(() => {
+      expect(getByTestId('command-center')).toBeTruthy();
+    });
+
     expect(getByTestId('command-center').getAttribute('data-show-debug')).toBe('false');
     expect(getByTestId('console-panel').getAttribute('data-show-debug')).toBe('false');
   });

@@ -89,6 +89,34 @@ export async function testInboxConnection(params: InboxPreflightParams): Promise
 }
 
 // ============================================
+// Provider Plugins
+// ============================================
+
+/**
+ * Provider plugin descriptor returned by the backend `get_providers` command.
+ *
+ * After the backend inversion, `get_providers` returns ONLY installed-plugin
+ * providers — empty by default. Each provider is a separate plugin that must
+ * be installed from the Marketplace before it appears here.
+ */
+export interface ProviderInfo {
+  id: string;
+  displayName: string;
+  requiresMachineId: boolean;
+}
+
+/**
+ * List all registered provider plugins.
+ *
+ * Returns only installed-plugin providers (empty by default). Each provider is
+ * a separate plugin — install plugins from the Marketplace to add registrations.
+ */
+export async function getProviders(): Promise<ProviderInfo[]> {
+  const result = await safeInvoke<{ providers: ProviderInfo[] }>('get_providers', {});
+  return result.providers;
+}
+
+// ============================================
 // Python Browser Automation
 // ============================================
 

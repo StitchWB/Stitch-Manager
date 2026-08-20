@@ -120,6 +120,7 @@ export {
 
 export {
   checkPythonAutoreg,
+  getProviders,
   startWindsurfAutoregJob,
   startTraeAutoregJob,
   startGithubAutoregJob,
@@ -129,6 +130,7 @@ export {
   startV0AppAutoregJob,
   getReferralDonors,
   type ReferralDonor,
+  type ProviderInfo,
   startBitbucketAutoregJob,
   startKiroV2AutoregJob,
   authorizeKiroAccount,

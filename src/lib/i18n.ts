@@ -1368,6 +1368,11 @@ export interface Translations {
     emailGeneration: string;
     emailGenerationDomain: string;
     emailPattern: string;
+    empty: {
+      title: string;
+      description: string;
+      action: string;
+    };
     cockpit: {
       identity: string;
       browser: string;
@@ -1456,6 +1461,7 @@ export interface Translations {
     proxy: string;
     ready: string;
     readyToStart: string;
+    requiresMachineId: string;
     resume: string;
     saveError: string;
     saved: string;
