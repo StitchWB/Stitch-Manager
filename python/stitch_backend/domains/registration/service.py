@@ -176,41 +176,28 @@ def _build_provider_kwargs(config: dict) -> dict[str, Any]:
     return kwargs
 
 
-def _autoreg_providers_available() -> bool:
-    """Whether ``autoreg.providers`` (Zone 2) is importable in this build.
-
-    Uses ``importlib.util.find_spec`` — no import side effects and no
-    ``import autoreg.providers`` statement, so the zone-boundary leak-guard
-    does not flag it.  The open-core build ships without ``autoreg/providers/``;
-    this lets registration degrade gracefully instead of crashing with
-    ImportError.
-    """
-    import importlib.util
-
-    try:
-        return importlib.util.find_spec("autoreg.providers") is not None
-    except (ImportError, ValueError):
-        return False
-
-
 def _build_provider(provider_name: str, config: dict):
-    """Instantiate the correct autoreg provider from config dict.
+    """Instantiate a provider from config dict.
 
-    autoreg modules are imported lazily but cached in sys.modules after first
-    use.  We purge the kiro_v2 subpackage cache before each instantiation so
-    that uvicorn's file watcher triggers a real reload — otherwise code changes
-    to browser.py / provider.py are invisible until the whole process restarts.
+    Core is a pure plugin HOST — every provider exists ONLY as a plugin.
+    Two plugin sources are checked in order:
+
+    1. **DATA plugin** (``kind=data``): resolved via :class:`PluginLoader` →
+       :class:`PluginScenarioProvider` runs the package's data-only scenario.
+    2. **PROVIDER plugin** (``kind=provider``): resolved via
+       :data:`PLUGIN_PROVIDERS` (populated by
+       :func:`autoreg.providers.registry.load_plugin_providers`) → the
+       provider class is instantiated with ``base_kwargs``.
+
+    If neither source has the provider, a clear ``RuntimeError`` is raised
+    ("provider not installed — install plugin").
     """
     base_kwargs = _build_provider_kwargs(config)
 
-    # ── Plugin package resolution (plan §3.3 decision 9) ──────────────
-    # Try to resolve a plugin package for this service.  If found, run
-    # registration through the plugin's data-only scenario.  If not found
-    # or any error occurs, fall back to the built-in provider chain below.
-    # A FRESH PluginLoader is created per call — this is the pinning
-    # contract (plan §3.2 item 5): a package installed/removed mid-run
-    # does not change the resolved version; the next run picks up the
-    # change.
+    # ── 1. DATA plugin resolution (plan §3.3 decision 9) ───────────────
+    # A FRESH PluginLoader is created per call — this is the pinning contract
+    # (plan §3.2 item 5): a package installed/removed mid-run does not change
+    # the resolved version; the next run picks up the change.
     try:
         from autoreg.plugin.loader import PluginLoader
         from autoreg.plugin.provider_adapter import PluginScenarioProvider
@@ -222,10 +209,6 @@ def _build_provider(provider_name: str, config: dict):
                 "Registration: using plugin package for %s from %s",
                 provider_name, pkg_dir,
             )
-            # v1.1: pass card/billing config fields so the plugin adapter
-            # can seed config.* into the store for ${config.*} templating
-            # (stripe.fill_checkout capability).  All optional — tolerate
-            # absence (empty string when not configured).
             return PluginScenarioProvider(
                 pkg_dir,
                 loader=loader,
@@ -246,147 +229,37 @@ def _build_provider(provider_name: str, config: dict):
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "Plugin resolution for %s failed, falling back to built-in: %s",
+            "Plugin scenario resolution for %s failed: %s",
             provider_name, exc,
         )
 
-    # No plugin package resolved — built-in providers are required from here.
-    # In the open-core build (no autoreg/providers/), raise a clear runtime
-    # error instead of letting the lazy imports below crash with ImportError.
-    if not _autoreg_providers_available():
-        raise RuntimeError(
-            f"provider '{provider_name}' not available in this build "
-            "(autoreg providers are not installed)."
+    # ── 2. PROVIDER plugin (kind=provider class override) ──────────────
+    # PLUGIN_PROVIDERS is populated by load_plugin_providers() scanning
+    # installed kind=provider plugin packages.  Re-scan here so a fresh
+    # STITCH_PLUGINS_DIR (e.g. tests redirecting to tmp_path) is respected —
+    # consistent with the "fresh loader per call" pinning contract above.
+    # The provider class is instantiated with base_kwargs (same shape as
+    # built-in providers).
+    try:
+        from autoreg.providers.registry import get_plugin_provider, load_plugin_providers
+
+        load_plugin_providers()
+        provider_cls = get_plugin_provider(provider_name)
+        if provider_cls is not None:
+            logger.info(
+                "Registration: using provider plugin for %s (%s)",
+                provider_name, provider_cls.__name__,
+            )
+            return provider_cls(**base_kwargs)
+    except Exception as exc:  # noqa: BLE001 — autoreg.providers may be absent
+        logger.debug(
+            "Provider plugin lookup for %s failed: %s", provider_name, exc
         )
 
-    # Purge built-in provider subpackage cache so uvicorn's file watcher
-    # triggers a real reload.  Only reached when built-in providers are
-    # available — skipped in the open-core build to avoid side-effecting
-    # sys.modules when providers are absent.
-    import sys as _sys
-
-    _RELOAD_PREFIXES = (  # noqa: N806 — constant tuple
-        "autoreg.providers.kiro_v2",
-        "autoreg.providers.fireworks",
-        "autoreg.providers.qoder",
-        "autoreg.providers.windsurf",
-        "autoreg.providers.trae",
-        "autoreg.providers.openai",
-        "autoreg.providers.github",
-        "autoreg.providers.bitbucket",
-        "autoreg.providers.v0_app",
+    # ── 3. No plugin found — clear error ───────────────────────────────
+    raise RuntimeError(
+        f"provider '{provider_name}' not installed — install plugin"
     )
-    for _key in list(_sys.modules):
-        if any(_key == p or _key.startswith(p + ".") for p in _RELOAD_PREFIXES):
-            del _sys.modules[_key]
-
-    if provider_name == "fireworks":
-        from autoreg.providers.fireworks import FireworksProvider
-        return FireworksProvider(
-            **base_kwargs,
-            proxy_enabled=bool(config.get("proxy_url")),
-            proxy_url=config.get("proxy_url"),
-            proxy_type=config.get("proxy_type", "http"),
-            proxy_username=config.get("proxy_username"),
-            proxy_password=config.get("proxy_password"),
-        )
-
-    if provider_name == "qoder":
-        from autoreg.providers.qoder.provider import QoderProvider
-        return QoderProvider(
-            **base_kwargs,
-            proxy_enabled=bool(config.get("proxy_url")),
-            proxy_url=config.get("proxy_url"),
-            proxy_type=config.get("proxy_type", "http"),
-            proxy_username=config.get("proxy_username"),
-            proxy_password=config.get("proxy_password"),
-        )
-
-    if provider_name in ("kiro", "kiro_v2"):
-        from autoreg.providers.kiro_v2 import KiroV2Provider
-        from autoreg.shared.logging_system import LogLevel, StructuredLogger
-        debug = bool(config.get("debug") or config.get("debugMode"))
-        level = LogLevel.DEBUG if debug else LogLevel.NORMAL
-        struct_logger = StructuredLogger(account_id="kiro_v2", log_level=level)
-
-        # Resolve card — explicit config fields take priority, then card pool
-        card_number = config.get("card_number") or config.get("cardNumber")
-        card_expiry = config.get("card_expiry") or config.get("cardExpiry")
-        card_cvc = config.get("card_cvc") or config.get("cardCvc")
-        cardholder_name = config.get("cardholder_name") or config.get("cardholderName")
-        if not card_number:
-            try:
-                from autoreg.core.card_pool import get_card_pool
-                card = get_card_pool().get_card(provider_name)
-                if card:
-                    card_number = card.number
-                    card_cvc = card.cvv
-                    # Normalise expiry → MM/YY
-                    yr = card.exp_year[-2:] if len(card.exp_year) == 4 else card.exp_year
-                    card_expiry = f"{card.exp_month}/{yr}"
-                    logger.info("kiro_v2: using card from pool ****%s", card_number[-4:])
-            except Exception as _card_exc:
-                logger.debug("kiro_v2: card pool lookup failed: %s", _card_exc)
-
-        return KiroV2Provider(
-            **base_kwargs,
-            logger_instance=struct_logger,
-            speed_multiplier=float(config.get("speed_multiplier") or config.get("speedMultiplier") or 1.0),
-            card_number=card_number,
-            card_expiry=card_expiry,
-            card_cvc=card_cvc,
-            cardholder_name=cardholder_name,
-            billing_country=config.get("billing_country") or config.get("billingCountry"),
-            billing_address=config.get("billing_address") or config.get("billingAddress"),
-            billing_city=config.get("billing_city") or config.get("billingCity"),
-            billing_state=config.get("billing_state") or config.get("billingState"),
-            billing_zip=config.get("billing_zip") or config.get("billingZip"),
-            kiro_plan=config.get("kiro_plan") or config.get("kiroPlan") or "free",
-            browser_engine=config.get("browser_engine")
-            or config.get("browserEngine")
-            or "cloakbrowser",
-        )
-
-    if provider_name == "windsurf":
-        from autoreg.providers.windsurf import WindsurfProvider
-        return WindsurfProvider(**base_kwargs)
-
-    if provider_name == "trae":
-        from autoreg.providers.trae import TraeProvider
-        return TraeProvider(**base_kwargs)
-
-    if provider_name == "openai":
-        from autoreg.providers.openai import OpenAIProvider
-        return OpenAIProvider(
-            **base_kwargs,
-            proxy_enabled=bool(config.get("proxy_url")),
-            proxy_url=config.get("proxy_url"),
-            proxy_type=config.get("proxy_type", "http"),
-            proxy_username=config.get("proxy_username"),
-            proxy_password=config.get("proxy_password"),
-        )
-
-    if provider_name == "github":
-        from autoreg.providers.github import GithubProvider
-        return GithubProvider(**base_kwargs)
-
-    if provider_name == "bitbucket":
-        from autoreg.providers.bitbucket import BitbucketProvider
-        return BitbucketProvider(**base_kwargs)
-
-    if provider_name == "v0_app":
-        from autoreg.providers.v0_app.provider import V0AppProvider
-        return V0AppProvider(
-            **base_kwargs,
-            proxy_enabled=bool(config.get("proxy_url")),
-            proxy_url=config.get("proxy_url"),
-            proxy_type=config.get("proxy_type", "http"),
-            proxy_username=config.get("proxy_username"),
-            proxy_password=config.get("proxy_password"),
-            signup_url=config.get("signup_url"),
-        )
-
-    raise ValueError(f"Unknown provider: {provider_name}")
 
 
 # ── Logging bridge ─────────────────────────────────────────────────────────
