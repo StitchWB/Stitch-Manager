@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { type ConfigTab } from '../components/registration';
 import { type ProviderName } from '../types/ui';
@@ -8,7 +8,7 @@ import { t } from '../lib/i18n';
 
 import { useRegistrationStore } from '../stores/registration';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
-import { checkPythonAutoreg } from '../lib/backend';
+import { checkPythonAutoreg, getProviders, type ProviderInfo } from '../lib/backend';
 
 import { useRegistrationFlow } from './AutoReg/hooks/useRegistrationFlow';
 import { useEventListeners } from './AutoReg/hooks/useEventListeners';
@@ -26,11 +26,13 @@ import { useAccountsStore } from '../stores/accounts';
 import { useUIState } from '../hooks/useUIState';
 import {
   Button,
+  EmptyState,
   GlassCard,
   Select,
   type IdentityConfig,
   type NetworkConfig,
 } from '@/components/ui';
+import { Package } from 'lucide-react';
 import { createLogger } from '../lib/observability/logger';
 const log = createLogger('AutoReg');
 
@@ -46,10 +48,27 @@ export function computeEmailDomain(imap: {
 
 export default function AutoRegNext() {
   const location = useLocation();
-  const autoRegSupportedProviders = useMemo<ProviderName[]>(
-    () => ['kiro_v2', 'aws', 'windsurf', 'trae', 'github', 'openai', 'fireworks', 'qoder', 'bitbucket', 'v0_app'],
-    []
-  );
+  const navigate = useNavigate();
+
+  // Provider plugins from the backend `get_providers` command.
+  // Empty by default — each provider is a separate plugin installed from
+  // the Marketplace. No hardcoded provider assumptions or fallbacks.
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+
+  // Fetch installed-plugin providers on mount.
+  useEffect(() => {
+    let cancelled = false;
+    getProviders()
+      .then(result => {
+        if (!cancelled) setProviders(result);
+      })
+      .catch(error => {
+        log.error('Failed to load providers', { error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     config,
@@ -81,15 +100,6 @@ export default function AutoRegNext() {
   );
   const stableSetCount = useMemo(() => useRegistrationStore.getState().setCount, []);
   const stableSetLogVerbosity = useMemo(() => useRegistrationStore.getState().setLogVerbosity, []);
-
-  // Normalize unsupported providers so AutoReg always points to an
-  // implemented backend flow. Legacy kiro v1 ('kiro') was removed from the
-  // backend — migrate any persisted 'kiro' value to 'kiro_v2'.
-  useEffect(() => {
-    if (!autoRegSupportedProviders.includes(config.provider as ProviderName)) {
-      stableSetProvider('kiro_v2');
-    }
-  }, [config.provider, autoRegSupportedProviders, stableSetProvider]);
 
   // Use UI preferences for persistent state
   const { autoRegPage, setAutoRegTab, setAutoRegV2 } = useUIPreferencesStore();
@@ -454,6 +464,25 @@ export default function AutoRegNext() {
     rotationEnabled: config.proxy.rotationEnabled,
   };
 
+  // Empty state: no provider plugins installed. Each provider is a separate
+  // plugin — install plugins from the Marketplace to add registrations.
+  if (providers.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center bg-vsc-bg p-6">
+        <EmptyState
+          icon={Package}
+          title={t('autoReg.empty.title')}
+          description={t('autoReg.empty.description')}
+          action={
+            <Button onClick={() => navigate('/marketplace')}>
+              {t('autoReg.empty.action')}
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col md:flex-row bg-vsc-bg">
       {launchContext?.source === 'profile' && (
@@ -569,7 +598,7 @@ export default function AutoRegNext() {
       <CommandCenter
         activeProvider={config.provider as ProviderName}
         onProviderChange={stableSetProvider}
-        allowedProviders={autoRegSupportedProviders}
+        providers={providers}
         activeTab={activeTab}
         onTabChange={handleSetActiveTab}
         width={leftWidth}

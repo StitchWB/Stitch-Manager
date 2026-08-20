@@ -14,6 +14,7 @@ import {
 } from '../../../components/registration';
 import type { PipelineStepOverride } from '../../../components/registration/PipelineStepConfigPanel';
 import { type ProviderName } from '../../../types/ui';
+import { type ProviderInfo } from '../../../lib/backend';
 import { type LogVerbosity } from '../../../constants/logging';
 import { type SaveStatus } from '../../../stores/registration/types';
 import { CheckCircle2, ChevronDown, ChevronUp, Loader2, XCircle } from 'lucide-react';
@@ -31,7 +32,7 @@ interface CommandCenterProps {
   // Provider
   activeProvider: ProviderName;
   onProviderChange: (provider: ProviderName) => void;
-  allowedProviders?: ProviderName[];
+  providers: ProviderInfo[];
 
   // Tabs + panel width (drag-resizable divider in AutoReg)
   activeTab: ConfigTab;
@@ -224,7 +225,7 @@ function CockpitSection({
 export const CommandCenter = ({
   activeProvider,
   onProviderChange,
-  allowedProviders,
+  providers,
   activeTab,
   onTabChange,
   width,
@@ -349,7 +350,7 @@ export const CommandCenter = ({
         <ProviderSelector
           activeProvider={activeProvider}
           onProviderChange={onProviderChange}
-          allowedProviders={allowedProviders}
+          providers={providers}
           disabled={disabled}
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-1 z-10 flex justify-end px-4">

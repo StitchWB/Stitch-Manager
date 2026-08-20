@@ -1,5 +1,9 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { startOpenAIAutoregJob } from '../../../../lib/backend/modules/registration';
+import {
+  startOpenAIAutoregJob,
+  getProviders,
+  type ProviderInfo,
+} from '../../../../lib/backend/modules/registration';
 
 const originalFetch = globalThis.fetch;
 
@@ -54,5 +58,38 @@ describe('lib/Backend/modules/registration OpenAI contract', () => {
         body: JSON.stringify({ config }),
       }),
     );
+  });
+});
+
+describe('lib/Backend/modules/registration getProviders contract', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('getProviders invokes get_providers with no args and returns the providers array', async () => {
+    const providers: ProviderInfo[] = [
+      { id: 'kiro_v2', displayName: 'Kiro v2', requiresMachineId: true },
+      { id: 'aws', displayName: 'AWS', requiresMachineId: false },
+    ];
+    mockFetchOk({ providers });
+
+    await expect(getProviders()).resolves.toEqual(providers);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/get_providers',
+      expect.objectContaining({ body: JSON.stringify({}) }),
+    );
+  });
+
+  it('getProviders returns empty array when no provider plugins installed', async () => {
+    // safeInvoke caches responses for 50ms; wait for the cache to expire
+    // before re-mocking fetch so this test gets its own response.
+    await new Promise(resolve => setTimeout(resolve, 60));
+    mockFetchOk({ providers: [] });
+
+    await expect(getProviders()).resolves.toEqual([]);
   });
 });
