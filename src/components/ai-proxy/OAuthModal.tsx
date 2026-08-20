@@ -51,11 +51,9 @@ export default function OAuthModal({
       console.error('[OAuthModal] Failed to start OAuth:', e);
       const message = e instanceof Error ? e.message : String(e);
       if (/401\s*Unauthorized/i.test(message)) {
-        toast.error(
-          'AI Proxy auth mismatch detected. Restart AI Proxy from Settings and retry OAuth.'
-        );
+        toast.error(t('aiProxy.oAuthModal.authMismatchError'));
       }
-      toast.error(`Failed to start OAuth: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('aiProxy.oAuthModal.startFailedError', { error: message }));
       onClose();
     } finally {
       setLoading(false);
@@ -84,14 +82,14 @@ export default function OAuthModal({
       setLoading(true);
       await openUrlInBrowser(oauthUrl);
       if (flowType === 'device_code') {
-        toast.success('Verification page opened. Enter the code above to authorize.');
+        toast.success(t('aiProxy.oAuthModal.verificationPageOpenedSuccess'));
       } else {
-        toast.success('Browser opened. Please complete authorization.');
+        toast.success(t('aiProxy.oAuthModal.browserOpenedSuccess'));
       }
       startPolling();
     } catch (e) {
       console.error('[OAuthModal] Failed to open browser:', e);
-      toast.error(`Failed to open browser: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('aiProxy.oAuthModal.openBrowserFailedError', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setLoading(false);
     }
@@ -114,7 +112,7 @@ export default function OAuthModal({
       if (attempts > MAX_POLL_ATTEMPTS) {
         clearInterval(interval);
         setPolling(false);
-        toast.error('OAuth timeout. Please try again.');
+        toast.error(t('aiProxy.oAuthModal.timeoutError'));
         return;
       }
 
@@ -124,7 +122,7 @@ export default function OAuthModal({
         if (status.phase === 'token_ready') {
           clearInterval(interval);
           setPolling(false);
-          toast.success('OAuth completed successfully!');
+          toast.success(t('aiProxy.oAuthModal.completedSuccess'));
           onSuccess();
         } else if (
         status.phase === 'failed' ||
@@ -133,7 +131,7 @@ export default function OAuthModal({
         {
           clearInterval(interval);
           setPolling(false);
-          toast.error(`OAuth failed: ${status.error || 'Unknown error'}`);
+          toast.error(t('aiProxy.oAuthModal.failedError', { error: status.error || t('aiProxy.oAuthModal.unknownError') }));
         }
       } catch (e) {
         console.error('[OAuthModal] Poll error:', e);
@@ -145,10 +143,10 @@ export default function OAuthModal({
     try {
       await navigator.clipboard.writeText(oauthUrl);
       setCopied(true);
-      toast.success('URL copied to clipboard');
+      toast.success(t('aiProxy.oAuthModal.urlCopiedSuccess'));
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('Failed to copy URL');
+      toast.error(t('aiProxy.oAuthModal.copyUrlFailedError'));
     }
   };
 
@@ -157,10 +155,10 @@ export default function OAuthModal({
     try {
       await navigator.clipboard.writeText(userCode);
       setCopiedCode(true);
-      toast.success('Code copied to clipboard');
+      toast.success(t('aiProxy.oAuthModal.codeCopiedSuccess'));
       setTimeout(() => setCopiedCode(false), 2000);
     } catch {
-      toast.error('Failed to copy code');
+      toast.error(t('aiProxy.oAuthModal.copyCodeFailedError'));
     }
   };
 
@@ -173,7 +171,7 @@ export default function OAuthModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Connect ${providerName}`}
+      title={t('aiProxy.oAuthModal.title', { provider: providerName })}
       size="sm"
       closeOnBackdrop={!polling}
       closeOnEscape={!polling}>
@@ -211,7 +209,7 @@ export default function OAuthModal({
               variant="ghost"
               size="sm"
               onClick={handleCopyCode}
-              title="Copy Code"
+              title={t('aiProxy.oAuthModal.copyCodeTitle')}
               className="flex-shrink-0">
               
                 {copiedCode ?
@@ -243,7 +241,7 @@ export default function OAuthModal({
           polling ?
           <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              {t("aiProxy.oAuthModal.waitingForAuthorization", { pollAttempts, maxPollAttempts: MAX_POLL_ATTEMPTS })}<br/>({pollAttempts}/{MAX_POLL_ATTEMPTS})
+              {t("aiProxy.oAuthModal.waitingForAuthorization", { pollAttempts, maxPollAttempts: MAX_POLL_ATTEMPTS })}
             </> :
 
           <>
@@ -257,7 +255,7 @@ export default function OAuthModal({
         {oauthUrl &&
         <div className="space-y-2">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-              {flowType === 'device_code' ? 'Verification URL' : 'Authorization URL'}
+              {flowType === 'device_code' ? t('aiProxy.oAuthModal.verificationUrlLabel') : t('aiProxy.oAuthModal.authorizationUrlLabel')}
             </div>
             <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2.5 border border-white/10">
               <span className="flex-1 text-xs text-slate-300 font-mono truncate">
@@ -267,7 +265,7 @@ export default function OAuthModal({
               variant="ghost"
               size="sm"
               onClick={handleCopy}
-              title="Copy URL"
+              title={t('aiProxy.oAuthModal.copyUrlTitle')}
               className="flex-shrink-0">
               
                 {copied ?
@@ -289,8 +287,8 @@ export default function OAuthModal({
                 <p className="text-sm font-medium text-white">{t("aiHub.o_auth_modal.waiting_for_authorization")}</p>
                 <p className="text-xs text-slate-400 mt-1">
                   {flowType === 'device_code' ?
-                'Enter the code on the verification page and sign in' :
-                'Complete the OAuth flow in your browser'}
+                t('aiProxy.oAuthModal.deviceCodeWaitingHint') :
+                t('aiProxy.oAuthModal.authCodeWaitingHint')}
                 </p>
               </div>
             </div>
@@ -300,7 +298,7 @@ export default function OAuthModal({
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
           <Button onClick={onClose} variant="secondary" disabled={polling}>
-            {polling ? 'Cancel' : 'Close'}
+            {polling ? t('common.cancel') : t('common.close')}
           </Button>
         </div>
       </div>

@@ -125,6 +125,17 @@ export default function Totp() {
     return m;
   }, [myGroups]);
 
+  // Memoize the already-shared ids for the picker so a parent re-render
+  // doesn't pass a new array reference with the same ids and wipe the user's
+  // in-flight checkbox changes. Keyed on the shareEntry's sharedGroupNames
+  // identity (the source of truth from the store).
+  const shareAlreadySharedIds = useMemo(() => {
+    if (!shareKey) return [];
+    return (shareKey.sharedGroupNames ?? [])
+      .map(n => groupNameToId.get(n))
+      .filter((id): id is string => !!id);
+  }, [shareKey, groupNameToId]);
+
   useEffect(() => {
     void fetchKeys();
     void fetchGroups();
@@ -341,7 +352,7 @@ export default function Totp() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title="2FA / Authenticator" icon={<ShieldCheck size={18} />} />
+      <Header title={t('totp.pageTitle')} icon={<ShieldCheck size={18} />} />
 
       {/* Page header + add button */}
       <div className="shrink-0 px-6 pt-6 pb-3 flex items-start justify-between gap-4">
@@ -522,13 +533,7 @@ export default function Totp() {
       <ShareToGroupPicker
         isOpen={shareKey !== null}
         onClose={() => (shareBusy ? undefined : setShareKey(null))}
-        alreadySharedIds={
-          shareKey
-            ? (shareKey.sharedGroupNames ?? [])
-                .map(n => groupNameToId.get(n))
-                .filter((id): id is string => !!id)
-            : []
-        }
+        alreadySharedIds={shareAlreadySharedIds}
         onApply={(toShare, toUnshare) => void handleShareApply(toShare, toUnshare)}
         busy={shareBusy}
         title={t('ai.groups.share.pickerTitle')}

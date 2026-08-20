@@ -35,9 +35,14 @@ type DetailTab = 'pool' | 'members' | 'usage' | 'settings';
  * guard) and section tabs (Pool / Members / Settings).
  */
 export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft }: GroupDetailProps) {
-  const { detail, loading, errors, fetchDetail, leaveGroup } = useGroupsStore();
+  const detail = useGroupsStore(s => s.detail);
+  const loading = useGroupsStore(s => s.loading);
+  const errors = useGroupsStore(s => s.errors);
+  const fetchDetail = useGroupsStore(s => s.fetchDetail);
+  const leaveGroup = useGroupsStore(s => s.leaveGroup);
+  const deleteGroup = useGroupsStore(s => s.deleteGroup);
+  const poolCount = useGroupsStore(s => s.pool.length);
   const [tab, setTab] = useState<DetailTab>('pool');
-  const [poolCount, setPoolCount] = useState(0);
 
   useEffect(() => {
     fetchDetail(groupId);
@@ -66,12 +71,32 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
     }
   };
 
+  const handleDelete = async () => {
+    const ok = await askConfirm({
+      title: t('ai.groups.settings.deleteConfirm.title'),
+      message: t('ai.groups.settings.deleteConfirm.body', { group: group?.name ?? '' }),
+      confirmText: t('ai.groups.settings.deleteConfirm.confirm'),
+      cancelText: t('common.cancel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteGroup(groupId);
+      onDeleted();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'));
+    }
+  };
+
   const overflowItems: OverflowMenuItem[] = [
     {
       id: 'rename',
       label: t('ai.groups.actions.rename'),
       icon: <Pencil size={14} />,
-      onSelect: () => setTab('settings'),
+      onSelect: () => {
+        toast.info(t('ai.groups.actions.deleteViaSettings'));
+        setTab('settings');
+      },
       disabled: !isOwner,
     },
     {
@@ -85,7 +110,7 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
       id: 'delete',
       label: t('ai.groups.actions.delete'),
       icon: <Trash2 size={14} />,
-      onSelect: () => setTab('settings'),
+      onSelect: handleDelete,
       tone: 'danger',
       disabled: !isOwner,
     },
@@ -145,7 +170,7 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
         title={group?.name ?? t('ai.groups.title')}
         description={t('ai.groups.meta', {
           members: members.length,
-          keys: poolCount,
+          keys: loading.detail && !detail ? '—' : poolCount,
         })}
         actions={
           <>
@@ -204,12 +229,13 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-3 md:p-4">
-        {tab === 'pool' && <GroupPoolTab groupId={groupId} onPoolCountChange={setPoolCount} />}
+        {tab === 'pool' && <GroupPoolTab groupId={groupId} />}
         {tab === 'members' && (
           <GroupMembersTab
             groupId={groupId}
             isOwner={isOwner}
             currentUserId={currentUserId}
+            onLeft={onLeft}
           />
         )}
         {tab === 'usage' && (

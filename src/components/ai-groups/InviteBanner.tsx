@@ -41,11 +41,11 @@ export function InviteBanner({ invites, onResolved }: InviteBannerProps) {
 
   return (
     <GlassCard className="m-3 border-amber-500/20 p-3" >
-      <div className="space-y-2">
+      <div className="space-y-2" role="list" aria-live="polite">
         {invites.map(invite => (
           <div
             key={invite.id}
-            role="region"
+            role="listitem"
             aria-label={t('ai.groups.invite.banner.title', { group: invite.group_name })}
             className="flex items-center gap-3 motion-reduce:transition-none"
           >

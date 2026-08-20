@@ -9,6 +9,7 @@ import {
   KeyValueList,
   EmptyState,
   SkeletonLoader,
+  ProgressBar,
 } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { useGroupsStore } from '@/stores/groups';
@@ -41,7 +42,7 @@ function utcToday(): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Aggregate raw rows by user_id into per-member today + 7d totals. */
+/** Aggregate raw rows by user_id into per-member today + 30d totals. */
 function aggregateByMember(rows: GroupUsageRow[]): MemberAggregate[] {
   const today = utcToday();
   const map = new Map<number, MemberAggregate>();
@@ -69,15 +70,26 @@ function aggregateByMember(rows: GroupUsageRow[]): MemberAggregate[] {
   return Array.from(map.values()).sort((a, b) => b.weekRequests - a.weekRequests);
 }
 
+/** Pick ProgressBar variant: ok<70%, warn<100%, danger>=100%. */
+function progressVariant(pct: number): 'success' | 'warning' | 'danger' {
+  if (pct >= 100) return 'danger';
+  if (pct >= 70) return 'warning';
+  return 'success';
+}
+
 /**
  * Usage tab. Fetches groups_usage_list on mount. Owners see per-member
- * aggregation cards (today + 7d requests/tokens) plus a quota block
- * (Input bound to group.max_requests_per_member_daily, empty=unlimited).
- * Members see their own rows by day.
+ * aggregation (today + 30d requests/tokens) with a today/limit ProgressBar
+ * per member, plus a quota block (Input bound to
+ * group.max_requests_per_member_daily, empty=unlimited). Members see a
+ * summary card with the group limit, their own today/limit ProgressBar,
+ * and a 30-day history list (day, requests, tokens).
  */
 export function GroupUsageTab({ groupId, isOwner }: GroupUsageTabProps) {
-  const { detail, fetchDetail } = useGroupsStore();
+  const detail = useGroupsStore(s => s.detail);
+  const fetchDetail = useGroupsStore(s => s.fetchDetail);
   const [rows, setRows] = useState<GroupUsageRow[]>([]);
+  const [cap, setCap] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [quotaDraft, setQuotaDraft] = useState('');
@@ -88,7 +100,11 @@ export function GroupUsageTab({ groupId, isOwner }: GroupUsageTabProps) {
   const currentQuota = group?.max_requests_per_member_daily;
 
   // Sync quotaDraft when the store's quota value changes (initial load).
-  if (currentQuota !== prevQuota) {
+  // Drive the draft from the refetched currentQuota only — never set
+  // prevQuota optimistically after a save, otherwise the next render would
+  // see a stale currentQuota (the backend response may not include the
+  // quota field in older _group_to_dict serialisation) and wipe the draft.
+  if (currentQuota !== prevQuota && prevQuota === undefined) {
     setPrevQuota(currentQuota);
     setQuotaDraft(currentQuota != null ? String(currentQuota) : '');
   }
@@ -99,6 +115,7 @@ export function GroupUsageTab({ groupId, isOwner }: GroupUsageTabProps) {
       .then(res => {
         if (!cancelled) {
           setRows(res.rows ?? []);
+          setCap(res.max_per_member_daily ?? null);
           setError(null);
         }
       })
@@ -115,19 +132,29 @@ export function GroupUsageTab({ groupId, isOwner }: GroupUsageTabProps) {
 
   const handleSaveQuota = async () => {
     const trimmed = quotaDraft.trim();
-    const parsed = trimmed === '' ? null : Math.max(0, Math.floor(Number(trimmed)));
-    if (trimmed !== '' && (Number.isNaN(parsed) || (parsed as number) < 1)) {
-      toast.error(t('ai.groups.usage.quotaHint'));
-      return;
+    if (trimmed !== '') {
+      const num = Number(trimmed);
+      if (Number.isNaN(num) || !Number.isInteger(num) || num < 1) {
+        toast.error(t('ai.groups.usage.quotaFractional'));
+        return;
+      }
     }
+    const parsed = trimmed === '' ? null : Math.max(0, Math.floor(Number(trimmed)));
     setSaving(true);
     try {
       await groupsSetQuota({ groupId, maxPerMemberDaily: parsed });
-      // Optimistically update local draft since the backend response may
-      // not include the quota field in older _group_to_dict serialisation.
-      setPrevQuota(parsed);
-      setQuotaDraft(parsed != null ? String(parsed) : '');
+      // Do NOT set prevQuota optimistically — the refetched currentQuota
+      // drives the draft. Fallback to parsed only when currentQuota is
+      // undefined (older serialisation that omits the field).
+      setCap(parsed);
       await fetchDetail(groupId);
+      // After refetch, if currentQuota is still undefined (older
+      // serialisation), fall back to the parsed value so the draft
+      // doesn't get wiped.
+      if (currentQuota === undefined) {
+        setPrevQuota(parsed);
+        setQuotaDraft(parsed != null ? String(parsed) : '');
+      }
       toast.success(t('ai.groups.usage.saved'));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'));
@@ -174,6 +201,10 @@ export function GroupUsageTab({ groupId, isOwner }: GroupUsageTabProps) {
 
   const aggregates = isOwner ? aggregateByMember(rows) : [];
   const ownRows = isOwner ? [] : rows;
+  const today = utcToday();
+  const ownTodayRequests = isOwner
+    ? 0
+    : rows.filter(r => r.day === today).reduce((s, r) => s + r.requests, 0);
 
   return (
     <GlassCard className="p-3 md:p-4">
@@ -224,6 +255,44 @@ export function GroupUsageTab({ groupId, isOwner }: GroupUsageTabProps) {
         </div>
       )}
 
+      {/* Member summary card — limit + today progress */}
+      {!isOwner && (
+        <div className="mb-4 border-b border-white/[0.06] pb-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-400">
+                {t('ai.groups.usage.limit')}
+              </span>
+              <span className="text-sm font-medium text-slate-200">
+                {cap != null
+                  ? `${cap} ${t('ai.groups.usage.perDay')}`
+                  : t('ai.groups.usage.unlimited')}
+              </span>
+            </div>
+            {cap != null && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-slate-400">
+                    {t('ai.groups.usage.today')}
+                  </span>
+                  <span className="text-xs font-medium text-slate-300">
+                    {ownTodayRequests}/{cap}
+                  </span>
+                </div>
+                <ProgressBar
+                  value={ownTodayRequests}
+                  max={cap}
+                  variant={progressVariant(
+                    cap > 0 ? (ownTodayRequests / cap) * 100 : 0,
+                  )}
+                  size="sm"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Body */}
       {rows.length === 0 ? (
         <EmptyState
@@ -233,67 +302,96 @@ export function GroupUsageTab({ groupId, isOwner }: GroupUsageTabProps) {
         />
       ) : isOwner ? (
         <div className="divide-y divide-white/[0.06]">
-          {aggregates.map(agg => (
-            <div key={agg.user_id} className="px-1 py-2.5">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-slate-100 truncate">
-                  @{agg.username}
-                </span>
+          {aggregates.map(agg => {
+            const pct =
+              cap != null && cap > 0 ? (agg.todayRequests / cap) * 100 : 0;
+            return (
+              <div key={agg.user_id} className="px-1 py-2.5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm text-slate-100 truncate">
+                    @{agg.username}
+                  </span>
+                </div>
+                {cap != null && (
+                  <div className="flex flex-col gap-1.5 mb-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-400">
+                        {t('ai.groups.usage.today')}
+                      </span>
+                      <span className="text-xs font-medium text-slate-300">
+                        {agg.todayRequests}/{cap}
+                      </span>
+                    </div>
+                    <ProgressBar
+                      value={agg.todayRequests}
+                      max={cap}
+                      variant={progressVariant(pct)}
+                      size="sm"
+                    />
+                  </div>
+                )}
+                <KeyValueList
+                  density="compact"
+                  rows={[
+                    {
+                      id: `${agg.user_id}-today-req`,
+                      label: `${t('ai.groups.usage.today')} · ${t('ai.groups.usage.requests')}`,
+                      value: agg.todayRequests,
+                    },
+                    {
+                      id: `${agg.user_id}-today-tok`,
+                      label: `${t('ai.groups.usage.today')} · ${t('ai.groups.usage.tokens')}`,
+                      value: agg.todayTokens,
+                    },
+                    {
+                      id: `${agg.user_id}-week-req`,
+                      label: `${t('ai.groups.usage.week')} · ${t('ai.groups.usage.requests')}`,
+                      value: agg.weekRequests,
+                    },
+                    {
+                      id: `${agg.user_id}-week-tok`,
+                      label: `${t('ai.groups.usage.week')} · ${t('ai.groups.usage.tokens')}`,
+                      value: agg.weekTokens,
+                    },
+                  ]}
+                />
               </div>
-              <KeyValueList
-                density="compact"
-                rows={[
-                  {
-                    id: `${agg.user_id}-today-req`,
-                    label: `${t('ai.groups.usage.today')} · ${t('ai.groups.usage.requests')}`,
-                    value: agg.todayRequests,
-                  },
-                  {
-                    id: `${agg.user_id}-today-tok`,
-                    label: `${t('ai.groups.usage.today')} · ${t('ai.groups.usage.tokens')}`,
-                    value: agg.todayTokens,
-                  },
-                  {
-                    id: `${agg.user_id}-week-req`,
-                    label: `${t('ai.groups.usage.week')} · ${t('ai.groups.usage.requests')}`,
-                    value: agg.weekRequests,
-                  },
-                  {
-                    id: `${agg.user_id}-week-tok`,
-                    label: `${t('ai.groups.usage.week')} · ${t('ai.groups.usage.tokens')}`,
-                    value: agg.weekTokens,
-                  },
-                ]}
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
-        <div className="divide-y divide-white/[0.06]">
-          {ownRows.map((row, idx) => (
-            <div key={`${row.user_id}-${row.day}-${idx}`} className="px-1 py-2.5">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-slate-100 truncate">
-                  {row.day}
-                </span>
+        <div>
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <span className="text-xs font-medium text-slate-400">
+              {t('ai.groups.usage.history30')}
+            </span>
+          </div>
+          <div className="divide-y divide-white/[0.06]">
+            {ownRows.map((row, idx) => (
+              <div key={`${row.user_id}-${row.day}-${idx}`} className="px-1 py-2.5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm text-slate-100 truncate">
+                    {row.day}
+                  </span>
+                </div>
+                <KeyValueList
+                  density="compact"
+                  rows={[
+                    {
+                      id: `${row.day}-req`,
+                      label: t('ai.groups.usage.requests'),
+                      value: row.requests,
+                    },
+                    {
+                      id: `${row.day}-tok`,
+                      label: t('ai.groups.usage.tokens'),
+                      value: row.tokens,
+                    },
+                  ]}
+                />
               </div>
-              <KeyValueList
-                density="compact"
-                rows={[
-                  {
-                    id: `${row.day}-req`,
-                    label: t('ai.groups.usage.requests'),
-                    value: row.requests,
-                  },
-                  {
-                    id: `${row.day}-tok`,
-                    label: t('ai.groups.usage.tokens'),
-                    value: row.tokens,
-                  },
-                ]}
-              />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </GlassCard>

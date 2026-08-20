@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   GlassCard,
@@ -7,7 +7,7 @@ import {
   KeyValueList,
 } from '@/components/ui';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
-import { t } from '@/lib/i18n';
+import { t, getLocale } from '@/lib/i18n';
 import { useGroupsStore } from '@/stores/groups';
 
 interface GroupSettingsTabProps {
@@ -17,6 +17,17 @@ interface GroupSettingsTabProps {
   onLeft?: () => void;
 }
 
+/** Format an ISO date string using the current locale's date format. */
+function formatDate(iso: string | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(getLocale(), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(d);
+}
+
 /**
  * Settings tab. Owner sees the rename form (dirty indicator + Save) and
  * the danger zone (delete ConfirmDialog). Members see a read-only
@@ -24,7 +35,10 @@ interface GroupSettingsTabProps {
  * the Members tab; this is the secondary surface).
  */
 export function GroupSettingsTab({ groupId, isOwner, onDeleted, onLeft }: GroupSettingsTabProps) {
-  const { detail, updateGroup, deleteGroup, leaveGroup, fetchDetail } = useGroupsStore();
+  const detail = useGroupsStore(s => s.detail);
+  const updateGroup = useGroupsStore(s => s.updateGroup);
+  const deleteGroup = useGroupsStore(s => s.deleteGroup);
+  const leaveGroup = useGroupsStore(s => s.leaveGroup);
   const [nameDraft, setNameDraft] = useState('');
   const [prevGroupName, setPrevGroupName] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
@@ -36,13 +50,6 @@ export function GroupSettingsTab({ groupId, isOwner, onDeleted, onLeft }: GroupS
     setPrevGroupName(group?.name);
     setNameDraft(group?.name ?? '');
   }
-
-  // Fetch detail if missing (store action — no local setState in effect body).
-  useEffect(() => {
-    if (!detail && groupId) {
-      void fetchDetail(groupId);
-    }
-  }, [detail, groupId, fetchDetail]);
 
   const dirty = nameDraft.trim() !== (group?.name ?? '') && nameDraft.trim().length > 0;
 
@@ -95,9 +102,9 @@ export function GroupSettingsTab({ groupId, isOwner, onDeleted, onLeft }: GroupS
 
   const metaRows = detail
     ? [
-        { id: 'created', label: t('common.history'), value: group?.created_at ?? '—' },
+        { id: 'created', label: t('common.created'), value: formatDate(group?.created_at) },
         { id: 'members', label: t('ai.groups.members.title'), value: detail.members.length },
-        { id: 'gid', label: 'ID', value: group?.id ?? '—' },
+        { id: 'gid', label: t('common.id'), value: group?.id ?? '—' },
       ]
     : [];
 

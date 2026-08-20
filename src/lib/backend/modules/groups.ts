@@ -101,6 +101,8 @@ export interface GroupUsageRow {
 
 export interface GroupsUsageListResponse {
   rows: GroupUsageRow[];
+  /** Group-wide per-member daily cap (null=unlimited). */
+  max_per_member_daily: number | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -187,8 +189,9 @@ export async function groupsUnshareCredential(params: {
 // ═══════════════════════════════════════════════════════════════════════════
 // Usage accounting + quota + ownership transfer
 //
-// ``groups_usage_list`` returns per-member daily rows for the last 7 days
-// (members see only their own rows; owners see all members' rows).
+// ``groups_usage_list`` returns per-member daily rows for the last 30 days
+// (members see only their own rows; owners see all members' rows) plus
+// the group-wide ``max_per_member_daily`` cap (null=unlimited).
 // ``groups_set_quota`` sets the per-member daily request cap (owner only;
 // null=unlimited) and returns the updated Group.
 // ``groups_transfer_ownership`` transfers ownership to an existing member
