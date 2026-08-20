@@ -205,6 +205,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Legacy auto-migration skipped: %s", _exc)
 
+    # P0.2: convert old JSON-in-label rows to the new split (label=name,
+    # legacy_metadata=extras).  Idempotent — rows already in the new format
+    # are skipped.  Runs after the legacy auto-migration so newly migrated
+    # rows (which use the old JSON-in-label format) are converted too.
+    try:
+        from stitch_backend.database import get_session_factory
+        from stitch_backend.domains.ai_proxy.legacy_alias import convert_legacy_labels
+
+        factory = get_session_factory()
+        async with factory() as _db:
+            converted = await convert_legacy_labels(_db)
+            if converted:
+                await _db.commit()
+                logger.info("Legacy label conversion: %d rows migrated", converted)
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Legacy label conversion skipped: %s", _exc)
+
     # L2 legacy swap: auto-create PublicModels from legacy
     # BackgroundManagerConfig providers when none exist. When this succeeds,
     # the LiteLLM-config fallback in litellm_executor.models() is removed.

@@ -41,6 +41,7 @@ from stitch_backend.domains.ai_gateway.adapters.base import (
 )
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
+    CredentialGroupShare,
     CredentialModelAccess,
     ProviderEndpoint,
     PublicModel,
@@ -54,7 +55,12 @@ from stitch_backend.domains.ai_gateway.service import (
     RouteTargetService,
     UpstreamModelService,
 )
-from stitch_backend.domains.groups.models import CredentialGroupShare, Group, GroupUsage
+
+# NOTE: ``Group`` and ``GroupUsage`` are NOT imported at top level — that
+# would re-create the ``ai_gateway → groups`` import edge we just cut.
+# They are lazy-imported inside ``_over_quota_group_ids`` (the only
+# function that reads quota) so the only remaining dependency edge is
+# ``groups → ai_gateway`` (one-way).
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -409,6 +415,9 @@ async def _over_quota_group_ids(
     uid = pool.owner_user_id
     if uid is None or not pool.group_ids:
         return set()
+    # Lazy import — avoids a top-level ``ai_gateway → groups`` edge.
+    from stitch_backend.domains.groups.models import Group, GroupUsage
+
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     stmt = (
         select(

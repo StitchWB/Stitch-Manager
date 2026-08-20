@@ -12,9 +12,14 @@ Four tables on the shared :class:`stitch_backend.database.Base`:
     'pending'|'accepted'|'declined'|'revoked', created_at, resolved_at.
     Uniqueness of a pending invite per (group, invitee) is enforced in
     service logic (anti-enumeration + SQLite-friendly).
-  - ``credential_group_shares``    — (credential_id, group_id) composite
-    PK.  Both FKs CASCADE; credentials survive group deletion because
-    only the share row cascades, not the credential itself.
+  - ``group_usage``               — (group_id, user_id, day) composite
+    PK.  Both FKs CASCADE.
+
+``credential_group_shares`` has moved to
+:mod:`stitch_backend.domains.ai_gateway.models` (``CredentialGroupShare``)
+to break the ``ai_gateway ↔ groups`` import cycle — the routing engine
+needs the share table but the groups domain must not be imported by
+``ai_gateway`` at module load time.
 """
 
 from __future__ import annotations
@@ -155,42 +160,6 @@ class GroupInvite(Base):
         return (
             f"<GroupInvite id={self.id!r} group_id={self.group_id!r} "
             f"invitee={self.invitee_username!r} status={self.status!r}>"
-        )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CredentialGroupShare
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-class CredentialGroupShare(Base):
-    """M:N join between a Credential and a Group (the shared pool).
-
-    Both FKs CASCADE: deleting a group drops its shares (credentials
-    survive); deleting a credential drops its shares (group pool shrinks).
-    """
-
-    __tablename__ = "credential_group_shares"
-
-    credential_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("ai_gateway_credentials.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    group_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("groups.id", ondelete="CASCADE"),
-        primary_key=True,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, nullable=False,
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<CredentialGroupShare credential_id={self.credential_id!r} "
-            f"group_id={self.group_id!r}>"
         )
 
 

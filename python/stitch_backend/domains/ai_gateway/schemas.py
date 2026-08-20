@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 — pydantic resolves annotations at runtime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 

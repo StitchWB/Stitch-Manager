@@ -28,6 +28,7 @@ from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
+    CredentialGroupShare,
     ProviderEndpoint,
     PublicModel,
     _utcnow,
@@ -79,7 +80,10 @@ from stitch_backend.domains.ai_gateway.service import (
     UpstreamModelService,
     UserProxyKeyService,
 )
-from stitch_backend.domains.groups.models import CredentialGroupShare, Group, GroupMember
+
+# NOTE: ``Group`` and ``GroupMember`` are NOT imported at top level — that
+# would re-create the ``ai_gateway → groups`` import edge.  They are
+# lazy-imported inside the few command handlers that need them.
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +270,9 @@ async def cmd_list_credentials(params: dict) -> list[dict]:
     owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Lazy import — avoids a top-level ``ai_gateway → groups`` edge.
+        from stitch_backend.domains.groups.models import Group
+
         stmt = (
             select(Credential, Group.id, Group.name)
             .select_from(Credential)
@@ -828,6 +835,9 @@ async def cmd_proxy_keys_list(params: dict) -> dict:
             )
         )
         legacy = int(legacy_result.scalar_one())
+
+        # Lazy import — avoids a top-level ``ai_gateway → groups`` edge.
+        from stitch_backend.domains.groups.models import Group, GroupMember
 
         groups_stmt = (
             select(
