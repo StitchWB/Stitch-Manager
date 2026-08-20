@@ -9,6 +9,7 @@ See ``models.py`` module docstring for the full entity design.
 
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
+    CredentialGroupShare,
     CredentialModelAccess,
     CredentialSecret,
     ProviderEndpoint,
@@ -19,6 +20,7 @@ from stitch_backend.domains.ai_gateway.models import (
 
 __all__ = [
     "Credential",
+    "CredentialGroupShare",
     "CredentialModelAccess",
     "CredentialSecret",
     "ProviderEndpoint",

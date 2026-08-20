@@ -168,6 +168,18 @@ class Credential(Base):
     label: Mapped[str | None] = mapped_column(
         String, comment="User-facing label, e.g. \"team key #3\"",
     )
+    legacy_metadata: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment=(
+            "Lossless bag for legacy ai_proxy_account fields with no 1:1 "
+            "gateway column (accountType, softQuota*, oauthScopes, "
+            "oauthTokenType, refCode, refUrl, refUsedCount, refMaxCount, "
+            "referredById).  The human-readable name lives in ``label``; "
+            "this column holds everything else so export/import round-trips "
+            "are lossless.  See domains/ai_proxy/legacy_alias.py."
+        ),
+    )
     auth_type: Mapped[str] = mapped_column(
         String, nullable=False, default="api_key",
         comment="api_key | oauth | session",
@@ -517,4 +529,45 @@ class UserProxyKey(Base):
         return (
             f"<UserProxyKey id={self.id!r} user_id={self.user_id} "
             f"label={self.label!r} enabled={self.enabled!r}>"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CredentialGroupShare
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class CredentialGroupShare(Base):
+    """M:N join between a Credential and a Group (the shared pool).
+
+    Both FKs CASCADE: deleting a group drops its shares (credentials
+    survive); deleting a credential drops its shares (group pool shrinks).
+
+    Lives in the ``ai_gateway`` domain (not ``groups``) so the routing
+    engine can import it without creating an ``ai_gateway → groups`` import
+    edge — only the reverse ``groups → ai_gateway`` edge remains, breaking
+    the prior import cycle.
+    """
+
+    __tablename__ = "credential_group_shares"
+
+    credential_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("ai_gateway_credentials.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    group_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("groups.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<CredentialGroupShare credential_id={self.credential_id!r} "
+            f"group_id={self.group_id!r}>"
         )

@@ -22,7 +22,6 @@ import hashlib
 import hmac
 import logging
 import secrets
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, or_, select
@@ -42,6 +41,8 @@ from stitch_backend.domains.ai_gateway.models import (
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -664,8 +665,10 @@ class UserProxyKeyService(BaseRepository[UserProxyKey]):
         # theoretical hash-leak oracles; the SELECT already matched).
         if not hmac.compare_digest(key.token_hash, token_hash):
             return None
-        # Mark used in the in-memory batch (no DB write here).
-        mark_used(key.id)
+        # Mark used — DB-first throttle (direct UPDATE at most once per 60s
+        # per key, otherwise accumulate into the in-memory batch drained by
+        # the background flush task).
+        await mark_used(key.id)
         return key.user_id
 
     async def ensure_default_key(self, user_id: int) -> tuple[UserProxyKey, str] | None:
@@ -683,22 +686,69 @@ class UserProxyKeyService(BaseRepository[UserProxyKey]):
         )
 
 
-# ── Batched last_used_at (in-memory, flushed by background task) ────────────
+# ── Throttled last_used_at (DB-first, batch fallback) ───────────────────────
 
 
-# Module-level dict {key_id: timestamp} — flushed by flush_last_used_at().
-# Written by mark_used() on every resolve_proxy_key(); read by the background
-# flush task. Never accessed per-request by the DB write path.
+# Per-key throttle dict {key_id: last_write_ts}.  Checked by mark_used() to
+# decide whether to do a direct DB write or accumulate into _last_used_batch.
+_last_used_throttle: dict[str, float] = {}
+
+# Fallback accumulator for writes within the throttle window.
+# {key_id: timestamp} — flushed by flush_last_used_at() from the background task.
 _last_used_batch: dict[str, datetime] = {}
 
+# Throttle window: direct DB write at most once per this many seconds per key.
+_LAST_USED_THROTTLE_SECONDS: float = 60.0
 
-def mark_used(key_id: str) -> None:
-    """Mark a proxy key as used (in-memory; flushed by background task)."""
-    _last_used_batch[key_id] = _utcnow()
+
+async def mark_used(key_id: str) -> None:
+    """Mark a proxy key as used — DB-first with per-key throttle.
+
+    When >60 s have elapsed since the last direct write for this key,
+    writes directly to ``UserProxyKey.last_used_at`` via
+    ``run_in_session`` (survives restart).  Otherwise accumulates into
+    ``_last_used_batch`` (drained by the 60 s background flush task).
+
+    The direct write is best-effort: if ``run_in_session`` fails (DB
+    unavailable, no global factory configured, etc.), the data falls back
+    to ``_last_used_batch`` so the request is never blocked.
+    """
+    import time as _time
+
+    now_ts = _time.monotonic()
+    last_write = _last_used_throttle.get(key_id)
+    if last_write is not None and (now_ts - last_write) < _LAST_USED_THROTTLE_SECONDS:
+        # Within throttle window — accumulate into batch.
+        _last_used_batch[key_id] = _utcnow()
+        return
+
+    # Throttle window expired (or first write for this key) — direct write.
+    try:
+        from sqlalchemy import text as _text
+
+        from stitch_backend.database import run_in_session
+
+        ts = _utcnow()
+
+        async def _direct_update(session: AsyncSession) -> None:
+            await session.execute(
+                _text(
+                    "UPDATE ai_gateway_user_proxy_keys SET last_used_at = :ts "
+                    "WHERE id = :key_id"
+                ),
+                {"ts": ts, "key_id": key_id},
+            )
+
+        await run_in_session(_direct_update)
+        _last_used_throttle[key_id] = now_ts
+    except Exception:
+        # DB unavailable — fall back to batch so the request is not blocked.
+        _last_used_batch[key_id] = _utcnow()
+        logger.debug("Direct last_used_at write failed, accumulated to batch", exc_info=True)
 
 
 async def flush_last_used_at(session: AsyncSession) -> int:
-    """Flush the in-memory ``last_used_at`` batch to the DB.
+    """Flush the ``_last_used_batch`` fallback to the DB.
 
     Called by a background task (registered in ``main.py`` lifespan) every
     ≥60 seconds.  Returns the number of keys updated.

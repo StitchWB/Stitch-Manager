@@ -21,11 +21,14 @@ from sqlalchemy import and_, delete, func, select
 from sqlalchemy.orm import aliased
 
 from stitch_backend.core.exceptions import StitchError
-from stitch_backend.domains.ai_gateway.models import Credential, ProviderEndpoint
+from stitch_backend.domains.ai_gateway.models import (
+    Credential,
+    CredentialGroupShare,
+    ProviderEndpoint,
+)
 from stitch_backend.domains.ai_gateway.service import CredentialService
 from stitch_backend.domains.auth.models import User
 from stitch_backend.domains.groups.models import (
-    CredentialGroupShare,
     Group,
     GroupInvite,
     GroupMember,

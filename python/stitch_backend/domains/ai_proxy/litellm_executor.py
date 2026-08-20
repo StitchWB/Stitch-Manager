@@ -190,7 +190,7 @@ class LiteLLMExecutor:
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                _record_group_usage(
+                await _record_group_usage(
                     pool.owner_user_id if pool is not None else None,
                     routing_result.group_id_hit,
                 )
@@ -200,7 +200,7 @@ class LiteLLMExecutor:
         routed_model = _routed_model(payload, config)
         router = await self._current_router(config)
 
-        # Extract provider from model name (e.g., "openai/gpt-4" -> "openai")
+        # Extract provider from model name
         provider = routed_model.split("/", 1)[0] if "/" in routed_model else "unknown"
 
         # Track metrics
@@ -437,7 +437,7 @@ class LiteLLMExecutor:
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                _record_group_usage(
+                await _record_group_usage(
                     pool.owner_user_id if pool is not None else None,
                     routing_result.group_id_hit,
                 )
@@ -690,7 +690,7 @@ class LiteLLMExecutor:
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                _record_group_usage(
+                await _record_group_usage(
                     pool.owner_user_id if pool is not None else None,
                     routing_result.group_id_hit,
                 )
