@@ -6,9 +6,14 @@ Two registries live here:
    functions.  The ``POST /api/cmd/{name}`` dispatcher looks handlers up here.
 
 2. **Provider registry** — maps provider IDs (e.g. ``"kiro"``, ``"windsurf"``)
-   to provider plugin classes.  Provider classes self-register via the
-   ``@register_provider`` decorator and are auto-discovered by scanning the
-   ``providers/`` package.
+   to provider plugin classes.  Core is a pure plugin HOST: by default the
+   registry is EMPTY — every provider exists only as a plugin.  Provider
+   classes self-register via the ``@register_provider`` decorator;
+   :func:`scan_providers` merges plugin-registered providers from
+   ``autoreg.providers.registry.PLUGIN_PROVIDERS`` (populated by
+   ``load_plugin_providers()`` scanning installed ``kind=provider`` plugin
+   packages) into ``_PROVIDER_REGISTRY`` so the UI and orchestrator can
+   discover them.
 
 Usage
 -----
@@ -37,11 +42,8 @@ Usage
 
 from __future__ import annotations
 
-import importlib
 import logging
-import pkgutil
 from collections.abc import Callable, Coroutine
-from pathlib import Path
 from typing import Any, NamedTuple
 
 logger = logging.getLogger(__name__)
@@ -176,27 +178,27 @@ def list_providers() -> dict[str, type]:
 
 
 def scan_providers() -> dict[str, type]:
-    """Import every non-private module inside ``domains/registration/providers/``
-    so that ``@register_provider`` decorators fire.  Idempotent.
+    """Merge plugin-registered providers into ``_PROVIDER_REGISTRY``.
 
-    Returns the populated registry.
+    Core is a pure plugin HOST: by default the registry is empty.  This
+    function merges ``PLUGIN_PROVIDERS`` (populated by
+    :func:`autoreg.providers.registry.load_plugin_providers` scanning
+    installed ``kind=provider`` plugin packages) into ``_PROVIDER_REGISTRY``
+    so :func:`list_providers` and :func:`get_provider` can discover them.
+
+    Idempotent — safe to call multiple times.  Returns the populated registry.
     """
-    providers_path = (
-        Path(__file__).resolve().parent.parent / "domains" / "registration" / "providers"
-    )
-    if not providers_path.is_dir():
-        logger.debug("providers/ directory not found at %s — skipping scan", providers_path)
+    try:
+        from autoreg.providers.registry import PLUGIN_PROVIDERS
+    except Exception:  # noqa: BLE001 — autoreg.providers may be absent (open-core)
+        logger.debug("autoreg.providers.registry not importable — no plugin providers to merge")
         return _PROVIDER_REGISTRY
 
-    for module_info in pkgutil.iter_modules([str(providers_path)]):
-        if module_info.name.startswith("_"):
+    for provider_id, provider_cls in PLUGIN_PROVIDERS.items():
+        if provider_id in _PROVIDER_REGISTRY and _PROVIDER_REGISTRY[provider_id] is provider_cls:
             continue
-        fqn = f"stitch_backend.domains.registration.providers.{module_info.name}"
-        try:
-            importlib.import_module(fqn)
-            logger.debug("Loaded provider module: %s", fqn)
-        except Exception:
-            logger.exception("Failed to import provider module: %s", fqn)
+        _PROVIDER_REGISTRY[provider_id] = provider_cls
+        logger.debug("Registered plugin provider: %s (%s)", provider_id, provider_cls.__name__)
 
     return _PROVIDER_REGISTRY
 
