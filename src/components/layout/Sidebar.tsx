@@ -324,12 +324,46 @@ export default function Sidebar() {
                 </>
               );
               if (sidebarCollapsed) {
+                const isRealAdmin = authUser.role === 'admin';
+                const previewRoles = ['user', 'vip', 'premium', 'elite', 'admin'] as const;
                 return (
-                  <Tooltip content={tooltipContent} side="right">
-                    <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
-                      <UserCircle className="w-4 h-4" />
-                    </div>
-                  </Tooltip>
+                  <>
+                    <Tooltip content={tooltipContent} side="right">
+                      <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                        <UserCircle className="w-4 h-4" />
+                      </div>
+                    </Tooltip>
+                    {isRealAdmin && (
+                      <Tooltip content={t('auth.preview.title')} side="right">
+                        <OverflowMenu
+                          size="sm"
+                          triggerIcon={<Eye size={14} />}
+                          triggerLabel={t('auth.preview.title')}
+                          triggerClassName={
+                            effRole !== 'admin'
+                              ? 'text-amber-300 hover:text-amber-200'
+                              : undefined
+                          }
+                          items={[
+                            ...previewRoles
+                              .filter(r => r !== 'admin')
+                              .map(r => ({
+                                id: `preview-${r}`,
+                                label: t(`auth.role.${r}`),
+                                disabled: effRole === r,
+                                onSelect: () => void setPreviewRole(r),
+                              })),
+                            {
+                              id: 'preview-exit',
+                              label: t('auth.preview.myRole'),
+                              disabled: effRole === 'admin',
+                              onSelect: () => void setPreviewRole(null),
+                            },
+                          ]}
+                        />
+                      </Tooltip>
+                    )}
+                  </>
                 );
               }
               // Real admins get a static badge with the EFFECTIVE role plus
