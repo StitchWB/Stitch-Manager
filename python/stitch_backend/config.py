@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = ""  # computed dynamically if empty
     db_echo: bool = False            # SQLAlchemy statement logging
+    # Write-engine pool size (SQLite single-writer serializes writes; >1 only
+    # helps when multiple worker processes share the DB).  When >1, busy_timeout
+    # is scaled accordingly to handle the increased contention.
+    db_write_pool_size: int = Field(
+        1,
+        validation_alias=AliasChoices("db_write_pool_size", "STITCH_DB_WRITE_POOL_SIZE"),
+    )
 
     @model_validator(mode="after")
     def _compute_db_url(self) -> Settings:

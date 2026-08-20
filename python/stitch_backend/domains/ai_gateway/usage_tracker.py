@@ -1,24 +1,28 @@
-"""Per-member group usage accounting — DB-first throttled writes + batched flush.
+"""Per-member group usage accounting — in-memory accumulate, batched flush.
 
-P0.3 replaces the pure in-memory batch with a DB-first throttle:
+The request path (``record_usage``) ONLY accumulates into the in-memory
+``_remainder`` dict — it NEVER calls ``run_in_session``.  This is critical:
+``record_usage`` is called from the LiteLLM executor inside a ``get_db()``
+write session (pool_size=1, max_overflow=0).  Opening a second write
+session via ``run_in_session`` would try to check out a second connection
+from the same pool → 30 s pool-timeout deadlock.
 
-  - ``record_usage`` is **async**.  For each ``(group_id, user_id, day)`` key
-    it checks a per-key throttle dict.  When >60 s have elapsed since the
-    last direct write for that key, it writes directly to the
-    ``group_usage`` table via ``run_in_session`` (``INSERT … ON CONFLICT
-    DO UPDATE``) and updates the throttle timestamp.  Otherwise it
-    accumulates into a small ``_remainder`` dict that is drained by the
-    existing 60 s background flush task.
+The 10 s background flush task (``flush_group_usage``, registered in
+``main.py`` lifespan) performs the DB upserts outside any request session.
+After each key's upsert it re-reads the post-increment ``requests`` count
+and the group's ``max_requests_per_member_daily`` cap within the same
+transaction; when ``requests >= cap`` it sets the module-level
+``_over_keys`` flag for the ``(group_id, user_id, day)`` key.
 
-  - The background flush task (``flush_group_usage``, registered in
-    ``main.py``) is kept — it drains ``_remainder`` so writes that were
-    throttled (within 60 s of the last direct write) still land in the DB.
+In-process quota race (P2):
+  - ``routing_engine._over_quota_group_ids`` consults ``_over_keys`` in
+    addition to the DB pre-check, giving immediate in-process visibility
+    after the flush commits.  This closes the in-process TOCTOU race to
+    zero (the DB pre-check alone has a read→write gap).  Cross-process
+    (multi-worker) stays bounded by the DB pre-check (documented).
 
-Behavior contract preserved:
-  - Quota reads unchanged (``group_usage`` table).
-  - Restart loss window ~0 for throttled writes (direct writes survive
-    restart; only the small ``_remainder`` since the last throttle window
-    is at risk, which is ≤60 s of traffic for one key).
+Restart loss window: ≤10 s of usage data (the flush interval).  Usage
+accounting is best-effort telemetry; losing ≤10 s on restart is acceptable.
 
 This module deliberately does NOT import from ``stitch_backend.domains.groups``
 — the ``group_usage`` table is written via raw SQL ``text()`` so the
@@ -28,7 +32,6 @@ This module deliberately does NOT import from ``stitch_backend.domains.groups``
 from __future__ import annotations
 
 import logging
-import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -39,22 +42,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Throttle window: direct DB write at most once per this many seconds per key.
-_THROTTLE_SECONDS: float = 60.0
-
-# Per-key throttle dict {key: last_write_ts}.  Checked by record_usage() to
-# decide whether to do a direct DB write or accumulate into _remainder.
-_throttle: dict[tuple[str, int, str], float] = {}
-
-# Fallback accumulator for writes within the throttle window.
+# In-memory accumulator for usage writes.  The request path ONLY
+# accumulates here — NEVER calls run_in_session (which would deadlock on
+# the pool_size=1 write pool when called from within a get_db() session).
 # {(group_id, user_id, day): [requests, tokens]}.
-# Drained by flush_group_usage() from the background task.
+# Drained by flush_group_usage() from the 10 s background flush task.
 _remainder: dict[tuple[str, int, str], list[int]] = {}
 
-# Kept for backward compatibility with tests that inspect _usage_batch.
-# Aliased to _remainder so test fixtures that clear _usage_batch also clear
-# _remainder.
-_usage_batch = _remainder
+# In-process over-quota flag: set by flush_group_usage after each key's
+# upsert when the post-increment requests count reaches the group's
+# per-member daily cap.  Consulted by routing_engine._over_quota_group_ids
+# for immediate visibility within the same process — closes the in-process
+# TOCTOU race to zero.  Cross-process (multi-worker) stays bounded by the
+# DB pre-check (documented).  Keyed by (group_id, user_id, day); cleared
+# daily by key rotation (the day component changes).
+_over_keys: dict[tuple[str, int, str], bool] = {}
 
 
 async def record_usage(
@@ -62,87 +64,45 @@ async def record_usage(
     group_id_hit: str | None,
     tokens: int | None = None,
 ) -> None:
-    """Record a group-routed request, DB-first with per-key throttle.
+    """Record a group-routed request — in-memory accumulate only.
 
     No-op when ``uid`` is ``None`` (desktop / auth-disabled) or
     ``group_id_hit`` is ``None`` (credential visible via owner or
     instance-shared, not via a group share).
 
-    When >60 s have elapsed since the last direct write for this key,
-    writes directly to ``group_usage`` via ``run_in_session`` (survives
-    restart).  Otherwise accumulates into ``_remainder`` (drained by the
-    60 s background flush task).
-
-    The direct write is best-effort: if ``run_in_session`` fails (DB
-    unavailable, no global factory configured, etc.), the data falls back
-    to ``_remainder`` so the request is never blocked by a usage-accounting
-    failure.
+    Accumulates into ``_remainder`` (drained by the 10 s background flush
+    task).  NEVER calls ``run_in_session`` — the caller (LiteLLM executor)
+    is already inside a ``get_db()`` write session on the pool_size=1
+    pool, and opening a second write session would deadlock.
     """
     if uid is None or group_id_hit is None:
         return
     day = _today()
     key = (group_id_hit, uid, day)
-    req_delta = 1
-    tok_delta = tokens or 0
-
-    now = time.monotonic()
-    last_write = _throttle.get(key)
-    if last_write is not None and (now - last_write) < _THROTTLE_SECONDS:
-        # Within throttle window — accumulate into _remainder.
-        entry = _remainder.get(key)
-        if entry is None:
-            entry = [0, 0]
-            _remainder[key] = entry
-        entry[0] += req_delta
-        entry[1] += tok_delta
-        return
-
-    # Throttle window expired (or first write for this key) — direct write.
-    try:
-        from stitch_backend.database import run_in_session
-
-        async def _direct_write(session: AsyncSession) -> None:
-            await session.execute(
-                text(
-                    "INSERT INTO group_usage (group_id, user_id, day, requests, tokens) "
-                    "VALUES (:gid, :uid, :day, :req, :tok) "
-                    "ON CONFLICT(group_id, user_id, day) DO UPDATE SET "
-                    "requests = group_usage.requests + :req, "
-                    "tokens = group_usage.tokens + :tok"
-                ),
-                {
-                    "gid": group_id_hit,
-                    "uid": uid,
-                    "day": day,
-                    "req": req_delta,
-                    "tok": tok_delta,
-                },
-            )
-
-        await run_in_session(_direct_write)
-        _throttle[key] = now
-    except Exception:
-        # DB unavailable — fall back to _remainder so the request is not
-        # blocked by a usage-accounting failure.
-        entry = _remainder.get(key)
-        if entry is None:
-            entry = [0, 0]
-            _remainder[key] = entry
-        entry[0] += req_delta
-        entry[1] += tok_delta
-        logger.debug("Direct usage write failed, accumulated to _remainder", exc_info=True)
+    entry = _remainder.get(key)
+    if entry is None:
+        entry = [0, 0]
+        _remainder[key] = entry
+    entry[0] += 1
+    entry[1] += tokens or 0
 
 
 async def flush_group_usage(session: AsyncSession) -> int:
     """Flush the ``_remainder`` batch to the ``group_usage`` table.
 
     Called by a background task (registered in ``main.py`` lifespan) every
-    >=60 seconds.  Returns the number of rows upserted.
+    10 seconds.  Returns the number of rows upserted.
 
     Uses SQLite ``INSERT ... ON CONFLICT(group_id, user_id, day) DO UPDATE``
     so concurrent flushes (or a crash mid-flush) converge to the correct
     total.  Swaps the module-level dict atomically so concurrent
     ``record_usage`` calls during the flush land in the next batch.
+
+    After each key's upsert, re-reads the post-increment ``requests`` count
+    and the group's ``max_requests_per_member_daily`` cap within the same
+    transaction.  When ``requests >= cap``, sets the module-level
+    ``_over_keys`` flag so ``routing_engine._over_quota_group_ids`` sees
+    over-quota immediately (in-process visibility, no DB query needed).
     """
     global _remainder
     if not _remainder:
@@ -167,6 +127,25 @@ async def flush_group_usage(session: AsyncSession) -> int:
                 "tok": tokens,
             },
         )
+        # Re-read post-increment requests and the group's cap within the
+        # same transaction so the in-process _over_keys flag is accurate.
+        req_row = await session.execute(
+            text(
+                "SELECT requests FROM group_usage "
+                "WHERE group_id = :gid AND user_id = :uid AND day = :day"
+            ),
+            {"gid": group_id, "uid": user_id, "day": day},
+        )
+        post_requests = req_row.scalar_one()
+        cap_row = await session.execute(
+            text(
+                "SELECT max_requests_per_member_daily FROM groups WHERE id = :gid"
+            ),
+            {"gid": group_id},
+        )
+        cap = cap_row.scalar_one_or_none()
+        if cap is not None and post_requests >= int(cap):
+            _over_keys[(group_id, user_id, day)] = True
         count += 1
     if count:
         await session.flush()
