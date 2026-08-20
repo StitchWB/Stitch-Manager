@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import asyncio
-import hashlib
 import json
 import logging
-import math
 import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -24,23 +21,29 @@ from stitch_backend.domains.ai_proxy.compression.service import get_compression_
 from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
 from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
-from stitch_backend.domains.ai_proxy.litellm_gateway import (
-    GatewayRequest,
-    JsonObject,
-    JsonValue,
-    LiteLLMDeployment,
-    _deployment_configs,
-)
-from stitch_backend.domains.ai_proxy.rate_limiter import get_rate_limiter
 from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
 
 if TYPE_CHECKING:
     from starlette.responses import Response
 
+    from stitch_backend.domains.ai_proxy.litellm_gateway import (
+        GatewayRequest,
+        JsonObject,
+        JsonValue,
+    )
+
 logger = logging.getLogger(__name__)
 
 
 class CompletionRouter(Protocol):
+    """Structural protocol for a LiteLLM-compatible completion router.
+
+    Kept as a documentation anchor for the adapter seam (see
+    ``ai_gateway/adapters/base.py``). The executor no longer instantiates
+    a LiteLLM Router — all routing goes through the AI Gateway
+    :class:`RoutingEngine`.
+    """
+
     async def acompletion(
         self,
         model: str,
@@ -66,32 +69,26 @@ class CompletionRouter(Protocol):
     ) -> JsonObject | BaseModel: ...
 
 
-KeyLoader = Callable[[], Awaitable[dict[str, list[dict[str, JsonValue]]]]]
 ConfigLoader = Callable[[], Awaitable[BackgroundManagerConfig]]
-RouterFactory = Callable[[list[LiteLLMDeployment]], CompletionRouter]
 
 
 class LiteLLMExecutor:
-    """Owns the in-process LiteLLM Router.
+    """AI Gateway routing executor.
 
-    Router handles per-deployment routing, cooldown, and fallback automatically.
-    When AI Gateway routing engine is available (public models configured),
-    uses it for capability-aware routing with fallback to LiteLLM Router.
+    All request routing goes through the AI Gateway :class:`RoutingEngine`.
+    The LiteLLM Router config path (``_current_router``, ``_providers``,
+    ``build_router``) was removed in the L2 final wave — the executor no
+    longer instantiates or falls back to a LiteLLM Router.
+
+    Keeps: cost tracker, holone, compression, adapters, circuit breaker,
+    and the startup PublicModel auto-create from BackgroundManagerConfig.
     """
 
     def __init__(
         self,
-        load_keys: KeyLoader,
-        build_router: RouterFactory,
         load_config: ConfigLoader | None = None,
     ) -> None:
-        self._load_keys = load_keys
-        self._build_router = build_router
         self._load_config = load_config or _default_config
-        self._router: CompletionRouter | None = None
-        self._configuration_id: str | None = None
-        self._providers: tuple[str, ...] = ()
-        self._router_lock = asyncio.Lock()
         self._routing_engine = RoutingEngine()
 
     async def _try_ai_gateway_route(
@@ -196,107 +193,11 @@ class LiteLLMExecutor:
                 )
                 return result
 
-        # Fall back to LiteLLM Router
-        routed_model = _routed_model(payload, config)
-        router = await self._current_router(config)
-
-        # Extract provider from model name
-        provider = routed_model.split("/", 1)[0] if "/" in routed_model else "unknown"
-
-        # Track metrics
-        metrics_tracker = get_metrics_tracker()
-        rate_limiter = get_rate_limiter()
-        cost_tracker = get_cost_tracker()
-
-        holone_service, compression_service = self._sync_pipeline_config(config)
-
-        # Check rate limit
-        # NOTE: using provider as key_id — interim simplification pending per-credential routing
-        if not await rate_limiter.can_use(provider, provider):
-            logger.warning("Rate limit exceeded for provider %s", provider)
-            raise HTTPException(status_code=429, detail="Rate limit exceeded")
-
-        # HoloNe request inspection
-        if holone_service.config.enabled:
-            request_findings = holone_service.inspect_request(_required_messages(payload))
-            if request_findings and holone_service.config.mode == "block":
-                logger.warning("HoloNe blocked request: %s", [f.rule_id for f in request_findings])
-                raise HTTPException(status_code=403, detail="Blocked by HoloNe")
-
-        # Compression: compress input messages
-        messages = _required_messages(payload)
-        if compression_service.config.enabled:
-            messages = compression_service.compress_input(messages)
-
-        client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
-        start_time = time.time()
-        try:
-            response = await router.acompletion(
-                model=routed_model,
-                messages=messages,
-                stream=payload.stream,
-            )
-
-            latency = time.time() - start_time
-
-            # Record rate limit usage
-            await rate_limiter.record(provider)
-
-            # Extract tokens from response (if available)
-            input_tokens = 0
-            output_tokens = 0
-            if not payload.stream and hasattr(response, "usage"):
-                usage = response.usage
-                input_tokens = getattr(usage, "prompt_tokens", 0)
-                output_tokens = getattr(usage, "completion_tokens", 0)
-
-            # Record success metrics
-            # NOTE: using provider as key_id — interim simplification pending per-credential routing
-            await metrics_tracker.record_success(
-                key_id=provider,
-                provider=provider,
-                latency=latency,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            # Record cost
-            await cost_tracker.record_usage(
-                key_id=provider,
-                model=routed_model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            logger.info(
-                "✅ %s | latency=%.2fs | tokens=%d/%d",
-                routed_model, latency, input_tokens, output_tokens
-            )
-
-            if payload.stream:
-                result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
-            else:
-                result = cast("Any", _json_object(response))
-                if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_openai(
-                        result, client_has_tools=client_has_tools
-                    )
-                    if findings:
-                        logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-            return result
-
-        except Exception as e:
-            latency = time.time() - start_time
-
-            # NOTE: using provider as key_id — interim simplification pending per-credential routing
-            sanitized = _sanitize_error(e, secret="")
-            await metrics_tracker.record_error(
-                key_id=provider,
-                provider=provider,
-                error=sanitized,
-            )
-            logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, sanitized)
-            raise HTTPException(status_code=500, detail=sanitized) from None
+        # No route available — LiteLLM Router fallback removed (L2 final wave).
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"message": f"No route available for model: {payload.model}"}},
+        )
 
     async def _invoke_via_gateway(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
@@ -443,111 +344,11 @@ class LiteLLMExecutor:
                 )
                 return result
 
-        # Fall back to LiteLLM Router
-        routed_model = _routed_model(payload, config)
-        router = await self._current_router(config)
-        model = routed_model.split("/", 1)[1] if "/" in routed_model else routed_model
-
-        # Extract provider from model name
-        provider = routed_model.split("/", 1)[0] if "/" in routed_model else "unknown"
-
-        # Track metrics
-        metrics_tracker = get_metrics_tracker()
-        rate_limiter = get_rate_limiter()
-        cost_tracker = get_cost_tracker()
-
-        holone_service, compression_service = self._sync_pipeline_config(config)
-
-        # Check rate limit
-        # NOTE: using provider as key_id — interim simplification pending per-credential routing
-        if not await rate_limiter.can_use(provider, provider):
-            logger.warning("Rate limit exceeded for provider %s", provider)
-            raise HTTPException(status_code=429, detail="Rate limit exceeded")
-
-        # HoloNe request inspection
-        if holone_service.config.enabled:
-            request_findings = holone_service.inspect_request(_required_messages(payload))
-            if request_findings and holone_service.config.mode == "block":
-                logger.warning("HoloNe blocked request: %s", [f.rule_id for f in request_findings])
-                raise HTTPException(status_code=403, detail="Blocked by HoloNe")
-
-        # Compression: compress input messages
-        messages = _required_messages(payload)
-        if compression_service.config.enabled:
-            messages = compression_service.compress_input(messages)
-
-        client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
-        start_time = time.time()
-        try:
-            response = await router.aanthropic_messages(
-                model=model,
-                messages=messages,
-                stream=payload.stream,
-            )
-
-            latency = time.time() - start_time
-
-            # Record rate limit usage
-            await rate_limiter.record(provider)
-
-            # Extract tokens from response (if available)
-            input_tokens = 0
-            output_tokens = 0
-            if not payload.stream and hasattr(response, "usage"):
-                usage = response.usage
-                input_tokens = getattr(usage, "input_tokens", 0)
-                output_tokens = getattr(usage, "output_tokens", 0)
-
-            # Record success metrics
-            # NOTE: using provider as key_id — interim simplification pending per-credential routing
-            await metrics_tracker.record_success(
-                key_id=provider,
-                provider=provider,
-                latency=latency,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            # Record cost
-            await cost_tracker.record_usage(
-                key_id=provider,
-                model=routed_model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            logger.info(
-                "✅ %s | latency=%.2fs | tokens=%d/%d",
-                routed_model, latency, input_tokens, output_tokens
-            )
-
-            if payload.stream:
-                result, _ = await self._stream_anthropic_response(response, client_has_tools=client_has_tools)
-            else:
-                result = cast("Any", _json_object(response))
-                # Compression: compress output response
-                if compression_service.config.enabled:
-                    result = compression_service.compress_output(result)
-                if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_openai(
-                        result, client_has_tools=client_has_tools
-                    )
-                    if findings:
-                        logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-            return result
-
-        except Exception as e:
-            latency = time.time() - start_time
-
-            # NOTE: using provider as key_id — interim simplification pending per-credential routing
-            sanitized = _sanitize_error(e, secret="")
-            await metrics_tracker.record_error(
-                key_id=provider,
-                provider=provider,
-                error=sanitized,
-            )
-            logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, sanitized)
-            raise HTTPException(status_code=500, detail=sanitized) from None
+        # No route available — LiteLLM Router fallback removed (L2 final wave).
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"message": f"No route available for model: {payload.model}"}},
+        )
 
     async def _invoke_via_gateway_messages(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
@@ -696,113 +497,11 @@ class LiteLLMExecutor:
                 )
                 return result
 
-        # Fall back to LiteLLM Router
-        routed_model = _routed_model(payload, config)
-        router = await self._current_router(config)
-
-        # Extract provider from model name
-        provider = routed_model.split("/", 1)[0] if "/" in routed_model else "unknown"
-
-        # Track metrics
-        metrics_tracker = get_metrics_tracker()
-        rate_limiter = get_rate_limiter()
-        cost_tracker = get_cost_tracker()
-
-        holone_service, compression_service = self._sync_pipeline_config(config)
-
-        # Check rate limit
-        # NOTE: using provider as key_id — interim simplification pending per-credential routing
-        if not await rate_limiter.can_use(provider, provider):
-            logger.warning("Rate limit exceeded for provider %s", provider)
-            raise HTTPException(status_code=429, detail="Rate limit exceeded")
-
-        # HoloNe request inspection (responses API uses input field)
-        if holone_service.config.enabled and payload.input:
-            text = json.dumps(payload.input) if isinstance(payload.input, (dict, list)) else str(payload.input)
-            from stitch_backend.domains.ai_proxy.holone_inspector import default_engine as _de
-            request_findings = _de().inspect(text, source="request")
-            if request_findings and holone_service.config.mode == "block":
-                logger.warning("HoloNe blocked request: %s", [f.rule_id for f in request_findings])
-                raise HTTPException(status_code=403, detail="Blocked by HoloNe")
-
-        # Compression: compress input (responses API uses input field)
-        input_data = payload.input
-        if compression_service.config.enabled and isinstance(input_data, str):
-            from stitch_backend.domains.ai_proxy.compression.caveman import compress_text
-            input_data = compress_text(input_data, level=compression_service.config.level)
-
-        client_has_tools = False  # Responses API doesn't use client tool advertisement
-        start_time = time.time()
-        try:
-            response = await router.aresponses(
-                model=routed_model,
-                input=input_data,
-                stream=payload.stream,
-            )
-
-            latency = time.time() - start_time
-
-            # Record rate limit usage
-            await rate_limiter.record(provider)
-
-            # Extract tokens from response (if available)
-            input_tokens = 0
-            output_tokens = 0
-            if not payload.stream and hasattr(response, "usage"):
-                usage = response.usage
-                input_tokens = getattr(usage, "prompt_tokens", 0)
-                output_tokens = getattr(usage, "completion_tokens", 0)
-
-            # Record success metrics
-            # NOTE: using provider as key_id — interim simplification pending per-credential routing
-            await metrics_tracker.record_success(
-                key_id=provider,
-                provider=provider,
-                latency=latency,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            # Record cost
-            await cost_tracker.record_usage(
-                key_id=provider,
-                model=routed_model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            logger.info(
-                "✅ %s | latency=%.2fs | tokens=%d/%d",
-                routed_model, latency, input_tokens, output_tokens
-            )
-
-            if payload.stream:
-                result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
-            else:
-                result = cast("Any", _json_object(response))
-                # Compression: compress output response
-                if compression_service.config.enabled:
-                    result = compression_service.compress_output(result)
-                if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_openai(
-                        result, client_has_tools=client_has_tools
-                    )
-                    if findings:
-                        logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-            return result
-
-        except Exception as e:
-            latency = time.time() - start_time
-
-            # NOTE: using provider as key_id — interim simplification pending per-credential routing
-            sanitized = _sanitize_error(e, secret="")
-            await metrics_tracker.record_error(
-                key_id=provider,
-                provider=provider,
-                error=sanitized,
-            )
-            logger.error("❌ %s | latency=%.2fs | error=%s", routed_model, latency, sanitized)
-            raise HTTPException(status_code=500, detail=sanitized) from None
+        # No route available — LiteLLM Router fallback removed (L2 final wave).
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"message": f"No route available for model: {payload.model}"}},
+        )
 
     async def _invoke_via_gateway_responses(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
@@ -928,8 +627,13 @@ class LiteLLMExecutor:
             raise
 
     async def models(self, pool: PoolScope | None = None) -> JsonObject:
-        """Return available models — PublicModel from AI Gateway, fallback to LiteLLM providers."""
-        # Try AI Gateway first
+        """Return available models from the AI Gateway PublicModel catalog.
+
+        LiteLLM Router fallback removed (L2 final wave) — the gateway
+        PublicModel table is the sole source of model listings. The startup
+        :func:`auto_create_public_models_from_config` step ensures the
+        catalog is populated from BackgroundManagerConfig providers.
+        """
         try:
             async def _get_models(session):
                 return await self._routing_engine.get_available_public_models(session, pool=pool)
@@ -952,48 +656,7 @@ class LiteLLMExecutor:
         except Exception as e:
             logger.debug("AI Gateway models unavailable: %s", e)
 
-        # L2 gate: if the startup PublicModel auto-create succeeded, the
-        # LiteLLM fallback is removed — return empty rather than falling
-        # through to the legacy router. If auto-create was NOT attempted
-        # or failed, keep the fallback (try/except).
-        if _public_models_auto_created():
-            return {"object": "list", "data": []}
-
-        # Fall back to LiteLLM providers
-        config = await self._load_config()
-        await self._current_router(config)
-        return {
-            "object": "list",
-            "data": [
-                {"id": f"{provider}/*", "object": "model", "owned_by": provider}
-                for provider in self._providers
-            ],
-        }
-
-    async def _current_router(
-        self, config: BackgroundManagerConfig
-    ) -> CompletionRouter:
-        provider_keys = await self._load_keys()
-        configuration_id = _safe_configuration_id(provider_keys, config)
-        async with self._router_lock:
-            if self._router is None or configuration_id != self._configuration_id:
-                deployment_source = {
-                    provider: list(keys) for provider, keys in provider_keys.items()
-                }
-                deployments = _deployment_configs(deployment_source)
-                if not deployments:
-                    raise LookupError("No provider keys configured")
-                self._router = self._build_router(deployments)
-                self._configuration_id = configuration_id
-                self._providers = tuple(
-                    sorted(
-                        {
-                            deployment["model_name"].split("/", 1)[0]
-                            for deployment in deployments
-                        }
-                    )
-                )
-        return self._router
+        return {"object": "list", "data": []}
 
     async def _stream_response(
         self, response: Any, *, client_has_tools: bool = False
@@ -1070,64 +733,6 @@ def _is_safe_transport_failure(exc: BaseException) -> bool:
 
 async def _default_config() -> BackgroundManagerConfig:
     return BackgroundManagerConfig.model_validate({})
-
-
-def _safe_configuration_id(
-    provider_keys: dict[str, list[dict[str, JsonValue]]],
-    config: BackgroundManagerConfig | None = None,
-) -> str:
-    safe: list[dict[str, object]] = [
-        {
-            "provider": provider,
-            "key_id": hashlib.sha256(str(key.get("apiKey", "")).encode()).hexdigest(),
-            "base_url": key.get("baseUrl"),
-            "custom_provider": key if provider == "__custom_providers__" else None,
-        }
-        for provider, keys in sorted(provider_keys.items())
-        for key in keys
-    ]
-    if config is not None:
-        safe.append(
-            {
-                "auto_switch_enabled": config.auto_switch_enabled,
-                "rotation_strategy": config.rotation_strategy,
-                "provider_priority": config.provider_priority,
-            }
-        )
-    return hashlib.sha256(json.dumps(safe, sort_keys=True).encode()).hexdigest()
-
-
-def _routed_model(
-    payload: GatewayRequest, config: BackgroundManagerConfig | None = None
-) -> str:
-    if not payload.model:
-        raise HTTPException(
-            status_code=422, detail={"error": {"message": "model is required"}}
-        )
-    if "/" in payload.model:
-        return payload.model
-    provider = payload.provider
-    if (
-        provider is None
-        and config is not None
-        and config.auto_switch_enabled
-        and config.rotation_strategy == "priority"
-        and config.provider_priority
-    ):
-        provider = config.provider_priority[0]
-    return f"{(provider or 'openai').lower()}/{payload.model}"
-
-
-def _estimate_request_tokens(payload: GatewayRequest) -> int:
-    data = payload.sdk_payload()
-    serialized = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    input_tokens = max(1, math.ceil(len(serialized.encode("utf-8")) / 3))
-    output_tokens = 0
-    for key in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
-        value = data.get(key)
-        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-            output_tokens = max(output_tokens, value)
-    return input_tokens + (output_tokens or 1_024)
 
 
 def _usage_tokens(response: JsonObject) -> int | None:
@@ -1269,11 +874,18 @@ async def auto_create_public_models_from_config(
 async def _load_keys_for_auto_create() -> dict[str, list[dict]]:
     """Load provider keys for the auto-create step.
 
-    Mirrors the executor's key loader but with a safe fallback when the
-    real loader is unavailable (e.g. during tests).
+    Mirrors the executor's former key loader (which fed ``_providers``)
+    so the PublicModel auto-create covers every provider the LiteLLM
+    Router would have served — including custom providers, which the
+    original built-in-only list missed (L2 gap fix). Safe fallback when
+    the real loader is unavailable (e.g. during tests).
     """
     try:
         from stitch_backend.database import run_in_read_session
+        from stitch_backend.domains.api_keys.custom_providers import (
+            custom_provider_db_key,
+            get_custom_providers,
+        )
         from stitch_backend.domains.api_keys.service import ApiKeysService
 
         async def _load(session):
@@ -1289,6 +901,19 @@ async def _load_keys_for_auto_create() -> dict[str, list[dict]]:
                         result[provider] = keys
                 except Exception:
                     pass
+
+            # Custom providers — gap fix: the former ``_providers`` field
+            # was populated from ``_deployment_configs`` which included
+            # custom providers. The auto-create must cover them too.
+            try:
+                custom_providers = await get_custom_providers(session)
+                for cp in custom_providers:
+                    cp_keys = await svc.get_keys_by_db_key(custom_provider_db_key(cp.id))
+                    if cp_keys:
+                        result[f"custom_{cp.id}"] = cp_keys
+            except Exception:
+                pass
+
             return result
 
         return await run_in_read_session(_load)

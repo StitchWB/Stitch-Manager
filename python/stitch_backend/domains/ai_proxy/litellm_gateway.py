@@ -3,7 +3,7 @@ from __future__ import annotations
 import hmac
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -247,12 +247,8 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
     from sqlalchemy import text
 
     from stitch_backend.database import get_db
-    from stitch_backend.domains.ai_proxy.litellm_executor import (
-        CompletionRouter,
-        LiteLLMExecutor,
-    )
+    from stitch_backend.domains.ai_proxy.litellm_executor import LiteLLMExecutor
     from stitch_backend.domains.ai_proxy.local_auth import get_cached_local_chat_token
-    from stitch_backend.domains.api_keys.service import ApiKeysService
     from stitch_backend.domains.background_manager.schemas import (
         BackgroundManagerConfig,
         normalise_background_manager_config,
@@ -261,24 +257,6 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
     runtime_config = BackgroundManagerConfig.model_validate({})
     runtime_config_expires_at = 0.0
     runtime_config_lock = asyncio.Lock()
-
-    async def load_keys() -> dict[str, list[dict[str, JsonValue]]]:
-        async with get_db() as session:
-            service = ApiKeysService(session)
-            providers = await service.list_providers()
-            keys = {provider: await service.get_keys(provider) for provider in providers}
-
-            from stitch_backend.domains.api_keys.custom_providers import (
-                custom_provider_db_key,
-                get_custom_providers,
-            )
-            custom_providers = await get_custom_providers(session)
-            keys["__custom_providers__"] = [cp.to_dict() for cp in custom_providers]
-            for cp in custom_providers:
-                cp_keys = await service.get_keys_by_db_key(custom_provider_db_key(cp.id))
-                keys[f"custom_{cp.id}"] = cp_keys
-
-            return keys
 
     async def load_config() -> BackgroundManagerConfig:
         nonlocal runtime_config, runtime_config_expires_at
@@ -306,33 +284,10 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
             runtime_config_expires_at = time.monotonic() + 1.0
             return runtime_config
 
-    def build_router(deployments: list[LiteLLMDeployment]) -> CompletionRouter:
-        from litellm import Router
-
-        selected_strategy = (
-            runtime_config.rotation_strategy
-            if runtime_config.auto_switch_enabled
-            else "random"
-        )
-        routing_strategy: Any = {
-            "round-robin": "usage-based-routing",
-            "random": "simple-shuffle",
-            "least-used": "usage-based-routing-v2",
-            "priority": "simple-shuffle",
-        }[selected_strategy]
-        router = Router(
-            model_list=cast("list[dict[str, Any]]", deployments),
-            num_retries=2,
-            max_fallbacks=max(1, len(deployments) - 1),
-            cooldown_time=30,
-            allowed_fails=2,
-            routing_strategy=routing_strategy,
-        )
-        return cast("CompletionRouter", router)
-
+    # L2 final wave: LiteLLM Router config path removed — the executor
+    # routes ONLY via the AI Gateway RoutingEngine. ``load_config`` stays
+    # for pipeline config sync (holone/compression).
     executor = LiteLLMExecutor(
-        load_keys,
-        build_router,
         load_config=load_config,
     )
 

@@ -499,9 +499,9 @@ async def _build_gateway(session: AsyncSession) -> ZaiChatCompletionGateway:
 
 
 async def _build_qoder_adapter(session: AsyncSession) -> QoderAdapter:
-    from stitch_backend.domains.ai_proxy.service import AiProxyAccountStore
+    from stitch_backend.domains.ai_proxy.legacy_accounts_api import list_accounts
 
-    accounts = await AiProxyAccountStore.get_accounts(session)
+    accounts = await list_accounts(session)
     qoder_accounts = [account for account in accounts if str(account.get("provider", "")).lower() == "qoder"]
     account = select_available_account(qoder_accounts, provider="qoder")
     if account is not None:
