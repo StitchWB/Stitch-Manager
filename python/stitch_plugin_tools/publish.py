@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -324,4 +325,188 @@ def pack_engine(
             ),
         )
 
+    return out_dir
+
+
+# ── Provider plugin assembly ────────────────────────────────────────────
+
+
+def _rewrite_provider_imports(source: str, provider_id: str) -> str:
+    """Rewrite imports in a bundled provider module to package-relative.
+
+    Transforms (applied to every ``.py`` file in the assembled package):
+
+      ``from ..base import``        → ``from .base import``      (bundled)
+      ``from ..common import``      → ``from .common import``    (bundled)
+      ``from ..<other>.X import``    → ``from autoreg.providers.<other>.X import``
+      ``from ..<other> import``     → ``from autoreg.providers.<other> import``
+      ``from ...X import``          → ``from autoreg.X import``  (host-resolved)
+      ``from autoreg.providers.<id>.X import`` → ``from .X import``
+      ``from autoreg.providers.<id> import``    → ``from . import``
+      ``from autoreg.providers.base import``    → ``from .base import``
+      ``from autoreg.providers.common import`` → ``from .common import``
+
+    One-dot relative imports (``from .browser import``) are left untouched —
+    they already resolve within the bundled package.
+    """
+    pid = re.escape(provider_id)
+
+    # Absolute imports referencing the provider's own package → package-relative
+    source = re.sub(
+        rf"from autoreg\.providers\.{pid}\.([\w.]+) import",
+        r"from .\1 import",
+        source,
+    )
+    source = re.sub(
+        rf"from autoreg\.providers\.{pid} import",
+        "from . import",
+        source,
+    )
+    # Absolute imports to base/common → package-relative (bundled copies)
+    source = re.sub(
+        r"from autoreg\.providers\.base import",
+        "from .base import",
+        source,
+    )
+    source = re.sub(
+        r"from autoreg\.providers\.common import",
+        "from .common import",
+        source,
+    )
+
+    # Two-dot relative: ..base / ..common → .base / .common (bundled)
+    source = re.sub(r"from \.\.base import", "from .base import", source)
+    source = re.sub(r"from \.\.common import", "from .common import", source)
+    # Two-dot relative: ..<other>.X → autoreg.providers.<other>.X (cross-provider)
+    source = re.sub(
+        r"from \.\.([a-zA-Z_]\w*)\.([\w.]+) import",
+        r"from autoreg.providers.\1.\2 import",
+        source,
+    )
+    source = re.sub(
+        r"from \.\.([a-zA-Z_]\w*) import",
+        r"from autoreg.providers.\1 import",
+        source,
+    )
+    # Three-dot relative: ...X → autoreg.X (host-resolved absolute)
+    source = re.sub(
+        r"from \.\.\.([\w.]+) import",
+        r"from autoreg.\1 import",
+        source,
+    )
+    # Four-dot relative: ....X → autoreg.X (unlikely, but handle for safety)
+    source = re.sub(
+        r"from \.\.\.\.([\w.]+) import",
+        r"from autoreg.\1 import",
+        source,
+    )
+    return source
+
+
+def pack_provider(
+    provider_id: str,
+    out_dir: Path,
+    *,
+    version: str = "0.1.0",
+) -> Path:
+    """Assemble a self-contained CODE plugin package from ``autoreg/providers/<id>/``.
+
+    Mirrors :func:`pack_engine`: copies the provider implementation into the
+    package dir, bundles ``base.py`` + ``common.py`` if any bundled module
+    imports them, rewrites all imports to package-relative or host-resolved
+    absolute form, emits ``plugin.json`` (``kind=provider``, entry
+    ``provider.py`` / class ``Provider``), and appends a ``Provider = <ClassName>``
+    alias to ``provider.py`` so the manifest entry class resolves.
+
+    The package is unsigned — sign with :func:`autoreg.plugin.crypto.sign_package`
+    + :func:`autoreg.plugin.crypto.write_signature`, then publish with
+    :func:`publish_package` (same pipeline as engine-pack).
+    """
+    import json
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Locate source via the plugin package path (zone-boundary clean):
+    # crypto.__file__ → autoreg/plugin/crypto.py → autoreg/plugin/ → autoreg/
+    plugin_dir = Path(crypto.__file__).parent           # autoreg/plugin/
+    autoreg_root = plugin_dir.parent                     # autoreg/
+    providers_src = autoreg_root / "providers"           # autoreg/providers/
+    provider_src = providers_src / provider_id
+
+    if not provider_src.is_dir():
+        raise FileNotFoundError(f"provider source not found: {provider_src}")
+
+    # ── 1. Copy provider implementation ────────────────────────────────
+    shutil.copytree(
+        provider_src, out_dir, dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+
+    # ── 2. Bundle base.py + common.py if any bundled file imports them ──
+    needs_base = False
+    needs_common = False
+    for py_file in out_dir.rglob("*.py"):
+        text = py_file.read_text(encoding="utf-8")
+        if "from ..base import" in text or "from autoreg.providers.base import" in text:
+            needs_base = True
+        if "from ..common import" in text or "from autoreg.providers.common import" in text:
+            needs_common = True
+    if needs_base:
+        base_src = providers_src / "base.py"
+        if base_src.is_file():
+            shutil.copy2(base_src, out_dir / "base.py")
+    if needs_common:
+        common_src = providers_src / "common.py"
+        if common_src.is_file():
+            shutil.copy2(common_src, out_dir / "common.py")
+
+    # ── 3. Rewrite imports in all .py files ─────────────────────────────
+    for py_file in out_dir.rglob("*.py"):
+        text = py_file.read_text(encoding="utf-8")
+        rewritten = _rewrite_provider_imports(text, provider_id)
+        if rewritten != text:
+            py_file.write_text(rewritten, encoding="utf-8")
+
+    # ── 4. Append Provider alias to provider.py ────────────────────────
+    provider_py = out_dir / "provider.py"
+    if not provider_py.is_file():
+        raise FileNotFoundError(
+            f"provider.py not found in {provider_src} — cannot emit entry point"
+        )
+    source = provider_py.read_text(encoding="utf-8")
+    match = re.search(r"^class (\w+Provider)\b", source, re.MULTILINE)
+    if not match:
+        raise ValueError(
+            f"could not detect provider class in {provider_py} "
+            f"(expected a class matching \\w+Provider)"
+        )
+    class_name = match.group(1)
+    if f"Provider = {class_name}" not in source:
+        provider_py.write_text(
+            source.rstrip()
+            + f"\n\n# Plugin entry alias (generated by pack_provider)\n"
+            f"Provider = {class_name}\n",
+            encoding="utf-8",
+        )
+
+    # ── 5. Emit plugin.json ───────────────────────────────────────────
+    manifest = {
+        "schema": SCHEMA_ID,
+        "id": f"{provider_id}-provider",
+        "name": f"{provider_id} provider",
+        "description": f"Code plugin for {provider_id} registration provider.",
+        "author": "WhiteBite",
+        "version": version,
+        "service": provider_id,
+        "kind": "provider",
+        "engine": {"min": "0.3.0", "api": 2},
+        "depends": [],
+        "entry": {"module": "provider.py", "class": "Provider"},
+        "capabilities": [f"autoreg.{provider_id}"],
+        "outputs": [],
+        "signature": "",
+    }
+    (out_dir / MANIFEST_FILENAME).write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
     return out_dir
