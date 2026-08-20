@@ -177,7 +177,7 @@ class Credential(Base):
             "oauthTokenType, refCode, refUrl, refUsedCount, refMaxCount, "
             "referredById).  The human-readable name lives in ``label``; "
             "this column holds everything else so export/import round-trips "
-            "are lossless.  See domains/ai_proxy/legacy_alias.py."
+            "are lossless.  See domains/ai_proxy/legacy_accounts_api.py."
         ),
     )
     auth_type: Mapped[str] = mapped_column(

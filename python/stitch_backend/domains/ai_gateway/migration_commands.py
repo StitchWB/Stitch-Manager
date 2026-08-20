@@ -43,7 +43,7 @@ async def cmd_gateway_export_payload(params: dict) -> str:
     Produces the same JSON/CSV shape as ``export_ai_proxy_accounts_payload``
     so old frontend export files can be round-tripped through the gateway.
     """
-    from stitch_backend.domains.ai_proxy.legacy_alias import export_payload
+    from stitch_backend.domains.ai_proxy.legacy_accounts_api import export_payload
 
     fmt = params.get("format", "json")
     include_secrets = params.get("includeSecrets", params.get("include_secrets", False))
@@ -64,7 +64,7 @@ async def cmd_gateway_import_payload(params: dict) -> int:
     """
     import json
 
-    from stitch_backend.domains.ai_proxy.legacy_alias import import_payload
+    from stitch_backend.domains.ai_proxy.legacy_accounts_api import import_payload
 
     payload_str = params.get("payload", params.get("payloadStr", "{}"))
     if isinstance(payload_str, dict):

@@ -83,60 +83,27 @@ def _configure_logging(level: str) -> None:
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 async def _run_legacy_auto_migration() -> None:
-    """L2 legacy swap: auto-migrate ``ai_proxy_accounts`` → ai_gateway tables.
+    """L2 final wave: drain ``ai_proxy_accounts`` → ai_gateway credentials.
 
-    Runs ONLY when the legacy table has rows AND ``ai_gateway_credentials``
-    is empty (never overwrites existing gateway data). Reuses
-    ``migrate_legacy_credentials`` logic. Idempotent — safe to call on
-    every boot. On any exception → warning + continue (boot must never fail).
+    Delegates to :func:`legacy_accounts_api.run_final_conversion` which:
+    - Checks if the legacy table exists (PRAGMA) and has rows.
+    - Converts each row via ``create_account`` (dedupes by fingerprint).
+    - On success: DELETE the rows (table stays empty/inert, never dropped).
+    - On failure: warn + keep rows + set ``conversion_failed`` flag.
+
+    Idempotent — safe to call on every boot. On any exception → warning +
+    continue (boot must never fail).
     """
-    from sqlalchemy import text
-
     from stitch_backend.database import get_session_factory
-    from stitch_backend.domains.ai_gateway.migration import migrate_legacy_credentials
+    from stitch_backend.domains.ai_proxy.legacy_accounts_api import (
+        run_final_conversion,
+    )
 
     factory = get_session_factory()
     async with factory() as _db:
-        # Count legacy rows.
-        try:
-            legacy_result = await _db.execute(
-                text("SELECT COUNT(*) FROM ai_proxy_accounts")
-            )
-            legacy_count = int(legacy_result.scalar_one())
-        except Exception:
-            # Legacy table doesn't exist yet — nothing to migrate.
-            return
-
-        if legacy_count == 0:
-            return
-
-        # Count existing gateway credentials.
-        gw_result = await _db.execute(
-            text("SELECT COUNT(*) FROM ai_gateway_credentials")
-        )
-        gw_count = int(gw_result.scalar_one())
-
-        if gw_count > 0:
-            logger.info(
-                "Legacy auto-migration skipped: %d legacy rows, %d gateway "
-                "credentials (gateway not empty)",
-                legacy_count, gw_count,
-            )
-            return
-
-        logger.info(
-            "Legacy auto-migration starting: %d legacy rows, gateway empty",
-            legacy_count,
-        )
-        counts = await migrate_legacy_credentials(_db)
-        await _db.commit()
-        logger.info(
-            "Legacy auto-migration complete: endpoints=%d/%d, credentials=%d/%d",
-            counts["endpoints_created"],
-            counts["endpoints_existing"],
-            counts["credentials_created"],
-            counts["credentials_existing_deduped"],
-        )
+        counts = await run_final_conversion(_db)
+        if counts["legacy_rows"] > 0:
+            await _db.commit()
 
 
 @asynccontextmanager
@@ -197,9 +164,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.error("Encrypted-at-rest migration failed: %s", _exc)
 
-    # L2 legacy swap: auto-migrate ai_proxy_accounts → ai_gateway tables when
-    # legacy rows exist AND the gateway is empty. Idempotent — never overwrites
-    # existing gateway data. On any exception → warning + continue boot.
+    # L2 final wave: drain ai_proxy_accounts → ai_gateway credentials.
+    # Idempotent — converts any remaining legacy rows via create_account
+    # (dedupes by fingerprint) and DELETEs them. Table stays inert, never
+    # dropped. On failure → warn + keep rows + conversion_failed flag.
     try:
         await _run_legacy_auto_migration()
     except Exception as _exc:  # noqa: BLE001
@@ -211,7 +179,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # rows (which use the old JSON-in-label format) are converted too.
     try:
         from stitch_backend.database import get_session_factory
-        from stitch_backend.domains.ai_proxy.legacy_alias import convert_legacy_labels
+        from stitch_backend.domains.ai_proxy.legacy_accounts_api import convert_legacy_labels
 
         factory = get_session_factory()
         async with factory() as _db:
@@ -386,13 +354,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.warning("AI Gateway workers init skipped: %s", _exc)
 
-    # Start UserProxyKey last_used_at batch flush (≥60 s interval).
+    # Start UserProxyKey last_used_at batch flush (10 s interval).
     # The service batches last_used_at updates in-memory; this task flushes
     # them to the DB periodically to avoid write amplification on the
-    # single-writer SQLite connection.
+    # single-writer SQLite connection.  The request path NEVER opens a DB
+    # session (avoids write-pool deadlock on pool_size=1); only this
+    # background task does the UPDATE.
     async def _proxy_key_flush_loop():
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(10)
             try:
                 from stitch_backend.domains.ai_gateway.service import flush_last_used_at
 
@@ -407,13 +377,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     _proxy_key_flush_task = asyncio.create_task(_proxy_key_flush_loop())
 
-    # Start GroupUsage batch flush (>=60 s interval).  The usage_tracker
+    # Start GroupUsage batch flush (10 s interval).  The usage_tracker
     # batches per-member request/token counts in-memory; this task flushes
     # them to the DB periodically to avoid write amplification on the
-    # single-writer SQLite connection.
+    # single-writer SQLite connection.  The request path NEVER opens a DB
+    # session (avoids write-pool deadlock on pool_size=1); only this
+    # background task does the upserts AND sets the _over_keys flag.
     async def _group_usage_flush_loop():
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(10)
             try:
                 from stitch_backend.domains.ai_gateway.usage_tracker import flush_group_usage
 
