@@ -2,37 +2,53 @@
 
 Mirrors the pattern in ``domains/ai_gateway/commands.py``: each handler
 validates params, delegates to the service layer via
-``run_in_session`` / ``run_in_read_session``, and returns a plain dict.
+``run_in_session`` / ``run_in_read_session``, and returns a Pydantic
+response model from :mod:`stitch_backend.domains.groups.schemas`.
 
-The dispatcher (``cmd_dispatcher._serialise``) handles JSON conversion
-of datetime objects in plain dicts automatically.
+The dispatcher (``cmd_dispatcher._serialise``) calls
+``model_dump(mode="json", by_alias=True)`` on the way out; since groups
+schemas use snake_case field names with no aliases, ``by_alias=True``
+returns the field names verbatim — the wire format is unchanged.
 
 Response shapes (snake_case — the frontend agent codes against these):
-  - groups_create          → {"group": {id, name, owner_id, created_at}}
-  - groups_list            → {"groups": [...], "invites": [...]}
-  - groups_get             → {"group": {...}, "members": [...], "invites": [...], "is_owner": bool}
-  - groups_invite          → {"invite": {id, group_id, invitee_username, invited_by_username, status, created_at}}
-  - groups_invite_resolve  → {"success": true}
-  - groups_invite_revoke   → {"success": true}
-  - groups_remove_member   → {"success": true}
-  - groups_leave           → {"success": true}
-  - groups_update          → {id, name, owner_id, created_at}
-  - groups_delete          → {"success": true}
-  - groups_share_credential    → {"success": true}
-  - groups_unshare_credential  → {"success": true}
-  - groups_pool_list       → {"items": [{credential_id, label, ...}]}
+  - groups_create          → GroupCreateResponse{group: GroupResponse}
+  - groups_list            → GroupListResponse{groups, invites}
+  - groups_get             → GroupDetailResponse{group, members, invites, is_owner}
+  - groups_invite          → InviteCreateResponse{invite: InviteResponse}
+  - groups_invite_resolve  → SuccessResponse
+  - groups_invite_revoke   → SuccessResponse
+  - groups_remove_member   → SuccessResponse
+  - groups_leave           → SuccessResponse
+  - groups_update          → GroupResponse
+  - groups_delete          → SuccessResponse
+  - groups_share_credential    → SuccessResponse
+  - groups_unshare_credential  → SuccessResponse
+  - groups_pool_list       → PoolListResponse{items}
+  - groups_usage_list      → UsageListResponse{rows}
+  - groups_set_quota       → GroupResponse
+  - groups_transfer_ownership  → GroupResponse
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.auth.roles import role_at_least
+from stitch_backend.domains.groups.schemas import (
+    GroupCreateResponse,
+    GroupDetailResponse,
+    GroupListResponse,
+    GroupResponse,
+    InviteCreateResponse,
+    InviteResponse,
+    PoolListResponse,
+    SuccessResponse,
+    UsageListResponse,
+)
 from stitch_backend.domains.groups.service import (
     create_group,
     delete_group,
@@ -52,44 +68,12 @@ from stitch_backend.domains.groups.service import (
     update_group,
 )
 
-if TYPE_CHECKING:
-    from stitch_backend.domains.groups.models import Group, GroupInvite
-
 logger = logging.getLogger(__name__)
 
 
 def _caller_uid(params: dict) -> int | None:
     """Extract the caller's user ID (None when auth disabled / desktop)."""
     return params.get("_caller_user_id")
-
-
-def _group_to_dict(group: Group) -> dict:
-    """Serialize a Group ORM object to a dict."""
-    return {
-        "id": group.id,
-        "name": group.name,
-        "owner_id": group.owner_id,
-        "max_requests_per_member_daily": group.max_requests_per_member_daily,
-        "created_at": group.created_at,
-    }
-
-
-def _invite_to_dict(
-    invite: GroupInvite, inviter_username: str | None = None
-) -> dict:
-    """Serialize a GroupInvite ORM object to a dict.
-
-    ``invited_by_username`` is the inviter's username (FE GroupInvite type).
-    ``status`` is kept for backward compat with existing callers/tests.
-    """
-    return {
-        "id": invite.id,
-        "group_id": invite.group_id,
-        "invitee_username": invite.invitee_username,
-        "invited_by_username": inviter_username,
-        "status": invite.status,
-        "created_at": invite.created_at,
-    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -111,7 +95,7 @@ async def cmd_groups_create(params: dict) -> dict:
         return await create_group(session, name=name, owner_id=uid)
 
     group = await run_in_session(_op)
-    return {"group": _group_to_dict(group)}
+    return GroupCreateResponse(group=GroupResponse.model_validate(group))
 
 
 @register_command("groups_list", readonly=True)
@@ -123,7 +107,8 @@ async def cmd_groups_list(params: dict) -> dict:
     async def _op(session):
         return await list_groups_for_user(session, uid, username)
 
-    return await run_in_read_session(_op)
+    result = await run_in_read_session(_op)
+    return GroupListResponse(**result)
 
 
 @register_command("groups_get", readonly=True)
@@ -135,7 +120,8 @@ async def cmd_groups_get(params: dict) -> dict:
     async def _op(session):
         return await get_group_detail(session, group_id, uid)
 
-    return await run_in_read_session(_op)
+    result = await run_in_read_session(_op)
+    return GroupDetailResponse(**result)
 
 
 @register_command("groups_update")
@@ -151,7 +137,7 @@ async def cmd_groups_update(params: dict) -> dict:
         return await update_group(session, group_id, name, uid)
 
     group = await run_in_session(_op)
-    return _group_to_dict(group)
+    return GroupResponse.model_validate(group)
 
 
 @register_command("groups_delete")
@@ -164,7 +150,7 @@ async def cmd_groups_delete(params: dict) -> dict:
         return await delete_group(session, group_id, uid)
 
     await run_in_session(_op)
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -212,7 +198,7 @@ async def cmd_groups_invite(params: dict) -> dict:
 
         asyncio.create_task(
             notify_group_invite(
-                invitee_username=invite["invitee_username"],
+                invitee_username=invite.invitee_username,
                 group_name=group_name,
                 inviter_username=inviter_username or "",
             )
@@ -220,7 +206,16 @@ async def cmd_groups_invite(params: dict) -> dict:
     except Exception:
         logger.debug("Failed to schedule invite DM", exc_info=True)
 
-    return {"invite": _invite_to_dict(invite, inviter_username)}
+    return InviteCreateResponse(
+        invite=InviteResponse(
+            id=invite.id,
+            group_id=invite.group_id,
+            invitee_username=invite.invitee_username,
+            invited_by_username=inviter_username,
+            status=invite.status,
+            created_at=invite.created_at,
+        )
+    )
 
 
 @register_command("groups_invite_resolve")
@@ -236,7 +231,7 @@ async def cmd_groups_invite_resolve(params: dict) -> dict:
         )
 
     await run_in_session(_op)
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
 @register_command("groups_invite_revoke")
@@ -249,7 +244,7 @@ async def cmd_groups_invite_revoke(params: dict) -> dict:
         return await revoke_invite(session, invite_id, uid)
 
     await run_in_session(_op)
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -270,7 +265,7 @@ async def cmd_groups_remove_member(params: dict) -> dict:
         )
 
     await run_in_session(_op)
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
 @register_command("groups_leave")
@@ -283,7 +278,7 @@ async def cmd_groups_leave(params: dict) -> dict:
         return await leave_group(session, group_id, uid)
 
     await run_in_session(_op)
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -304,7 +299,7 @@ async def cmd_groups_share_credential(params: dict) -> dict:
         )
 
     await run_in_session(_op)
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
 @register_command("groups_unshare_credential")
@@ -320,7 +315,7 @@ async def cmd_groups_unshare_credential(params: dict) -> dict:
         )
 
     await run_in_session(_op)
-    return {"success": True}
+    return SuccessResponse(success=True)
 
 
 @register_command("groups_pool_list", readonly=True)
@@ -333,7 +328,7 @@ async def cmd_groups_pool_list(params: dict) -> dict:
         return await list_pool(session, group_id, uid)
 
     items = await run_in_read_session(_op)
-    return {"items": items}
+    return PoolListResponse(items=items)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -351,7 +346,7 @@ async def cmd_groups_usage_list(params: dict) -> dict:
         return await list_group_usage(session, group_id, uid)
 
     rows = await run_in_read_session(_op)
-    return {"rows": rows}
+    return UsageListResponse(rows=rows)
 
 
 @register_command("groups_set_quota")
@@ -366,7 +361,7 @@ async def cmd_groups_set_quota(params: dict) -> dict:
         return await set_group_quota(session, group_id, max_per_member, uid)
 
     group = await run_in_session(_op)
-    return _group_to_dict(group)
+    return GroupResponse.model_validate(group)
 
 
 @register_command("groups_transfer_ownership")
@@ -380,4 +375,4 @@ async def cmd_groups_transfer_ownership(params: dict) -> dict:
         return await transfer_ownership(session, group_id, target_user_id, uid)
 
     group = await run_in_session(_op)
-    return _group_to_dict(group)
+    return GroupResponse.model_validate(group)
