@@ -186,16 +186,36 @@ def _decode_old_label(label: str | None) -> dict[str, Any]:
 # ── Secret selection (same priority as migration._pick_account_secret) ──────
 
 
+def _is_masked_secret(value: str | None) -> bool:
+    """True when *value* looks like a masked secret (first4+****+last4).
+
+    The mask format produced by :func:`_mask_secret` always contains
+    ``"****"``.  Real API keys / OAuth tokens never contain literal
+    asterisks, so this is a safe heuristic for detecting write-back
+    of a masked value (which would corrupt the stored secret).
+    """
+    if not value:
+        return False
+    return "****" in value
+
+
 def _pick_secret(account: dict[str, Any]) -> tuple[str | None, str]:
-    """Return (secret, auth_type) — first non-empty of apiKey/oauth/session."""
+    """Return (secret, auth_type) — first non-empty of apiKey/oauth/session.
+
+    Masked values (containing ``"****"``) are skipped to prevent
+    write-back corruption — a masked secret is never a real secret,
+    so it is treated as absent.  In ``update_account`` this means the
+    existing secret is kept (no rotation); in ``create_account`` the
+    empty-placeholder path runs (same as when no secret is provided).
+    """
     api_key = account.get("apiKey") or account.get("api_key")
-    if api_key:
+    if api_key and not _is_masked_secret(api_key):
         return api_key, "api_key"
     oauth = account.get("oauthToken") or account.get("oauth_token")
-    if oauth:
+    if oauth and not _is_masked_secret(oauth):
         return oauth, "oauth"
     session_tok = account.get("sessionToken") or account.get("session_token")
-    if session_tok:
+    if session_tok and not _is_masked_secret(session_tok):
         return session_tok, "session"
     return None, ""
 
@@ -258,13 +278,81 @@ async def _get_or_create_endpoint(
 # ── Row → legacy account dict ────────────────────────────────────────────────
 
 
+def _mask_secret(value: str | None) -> str | None:
+    """Mask a secret for non-owner callers: first4+****+last4.
+
+    Short secrets → ``****``.  ``None`` stays ``None``.
+    """
+    if value is None:
+        return None
+    if len(value) < 8:
+        return "****"
+    return value[:4] + "****" + value[-4:]
+
+
+def _should_mask_secret(credential: Credential, caller_uid: int | None, caller_role: str | None) -> bool:
+    """True when the caller must NOT see the raw secret.
+
+    Raw secret visible when:
+    - caller is admin, OR
+    - credential.owner_id is None AND caller is admin (instance-shared → admin only raw), OR
+    - credential.owner_id == caller_uid (own credential).
+
+    Masked when:
+    - credential.owner_id is None (instance-shared) and caller is non-admin, OR
+    - credential.owner_id is not None and differs from caller_uid.
+    """
+    if caller_role == "admin":
+        return False
+    if credential.owner_id is None:
+        # Instance-shared: mask for non-admin callers.
+        return True
+    return credential.owner_id != caller_uid
+
+
+def _caller_can_modify_credential(
+    credential: Credential, caller_uid: int | None, caller_role: str | None,
+) -> bool:
+    """True when the caller may update/delete *credential*.
+
+    Same authz model as :func:`_should_mask_secret` but for write
+    operations:
+
+    - admin → always allowed (also covers desktop where the dispatcher
+      sets ``caller_role="admin"``), OR
+    - credential.owner_id is None (instance-shared) → admin only
+      (non-admin cannot modify shared rows), OR
+    - credential.owner_id == caller_uid (own credential).
+
+    Unauthenticated callers (``caller_uid is None``, non-admin role)
+    are denied — the command handler guards desktop mode via
+    ``auth_enabled`` before calling this helper.
+    """
+    if caller_role == "admin":
+        return True
+    if caller_uid is None:
+        return False  # auth on but not authenticated → deny
+    if credential.owner_id is None:
+        return False  # instance-shared → admin only
+    return credential.owner_id == caller_uid
+
+
 async def _credential_to_account(
     session: Any,
     credential: Credential,
     endpoint: ProviderEndpoint | None = None,
     secret_row: CredentialSecret | None = None,
+    *,
+    caller_uid: int | None = None,
+    caller_role: str | None = None,
 ) -> dict[str, Any]:
-    """Map a Credential row back to the legacy AiProxyAccount dict shape."""
+    """Map a Credential row back to the legacy AiProxyAccount dict shape.
+
+    When ``caller_uid`` / ``caller_role`` are provided, secrets are
+    masked for non-owner, non-admin callers (instance-shared rows are
+    masked for non-admin; own rows are raw).  When both are ``None``
+    (desktop / auth-disabled), secrets are raw (legacy behaviour).
+    """
     if endpoint is None:
         result = await session.execute(
             select(ProviderEndpoint).where(
@@ -308,6 +396,18 @@ async def _credential_to_account(
         elif credential.auth_type == "session":
             session_token = secret_row.secret_value
 
+    # Mask secrets for non-owner, non-admin callers.
+    # FE-impacting contract NOTE: shared rows (instance-shared or owned
+    # by another user) will have masked secrets for non-admin callers.
+    # FE copy flows that display the secret will see the mask — this is
+    # acceptable (the raw secret is never needed for copy; the gateway
+    # uses it internally for upstream calls).
+    if caller_uid is not None or caller_role is not None:
+        if _should_mask_secret(credential, caller_uid, caller_role):
+            api_key = _mask_secret(api_key)
+            oauth_token = _mask_secret(oauth_token)
+            session_token = _mask_secret(session_token)
+
     now_ts = int(time.time())
 
     return {
@@ -344,8 +444,19 @@ async def _credential_to_account(
 # ── Public CRUD API ──────────────────────────────────────────────────────────
 
 
-async def list_accounts(session: Any, owner_id: int | None = None) -> list[dict[str, Any]]:
-    """Return all credentials visible to *owner_id* as legacy account dicts."""
+async def list_accounts(
+    session: Any,
+    owner_id: int | None = None,
+    *,
+    caller_uid: int | None = None,
+    caller_role: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return all credentials visible to *owner_id* as legacy account dicts.
+
+    When ``caller_uid`` / ``caller_role`` are provided, secrets are
+    masked for non-owner, non-admin callers (see
+    :func:`_should_mask_secret`).
+    """
     stmt = select(Credential).where(
         or_(
             Credential.owner_id.is_(None),
@@ -357,7 +468,11 @@ async def list_accounts(session: Any, owner_id: int | None = None) -> list[dict[
 
     accounts: list[dict[str, Any]] = []
     for cred in credentials:
-        acct = await _credential_to_account(session, cred)
+        acct = await _credential_to_account(
+            session, cred,
+            caller_uid=caller_uid,
+            caller_role=caller_role,
+        )
         accounts.append(acct)
     return accounts
 
@@ -579,9 +694,15 @@ async def import_payload(session: Any, payload_str: str) -> int:
 
     Lossless: every field in the payload rows is preserved via
     ``legacy_metadata``.
+
+    P1.10: honours the envelope ``includeSecrets`` flag — when False,
+    secret fields (``apiKey``, ``oauthToken``, ``sessionToken``,
+    ``oauthRefreshToken``, ``oauthExpiresAt``) are skipped during
+    import, matching the export side's ``include_secrets`` gate.
     """
     data = json.loads(payload_str)
     accounts = data.get("accounts", [])
+    envelope_include_secrets = bool(data.get("includeSecrets", True))
     existing = await list_accounts(session)
     existing_keys = {
         f"{a['provider'].lower()}::{a['name'].lower()}" for a in existing
@@ -608,12 +729,13 @@ async def import_payload(session: Any, payload_str: str) -> int:
             "refUsedCount": row.get("refUsedCount"),
             "refMaxCount": row.get("refMaxCount"),
             "referredById": row.get("referredById"),
-            "oauthToken": row.get("oauthToken"),
-            "apiKey": row.get("apiKey"),
-            "sessionToken": row.get("sessionToken"),
-            "oauthRefreshToken": row.get("oauthRefreshToken"),
-            "oauthExpiresAt": row.get("oauthExpiresAt"),
         }
+        if envelope_include_secrets:
+            account["oauthToken"] = row.get("oauthToken")
+            account["apiKey"] = row.get("apiKey")
+            account["sessionToken"] = row.get("sessionToken")
+            account["oauthRefreshToken"] = row.get("oauthRefreshToken")
+            account["oauthExpiresAt"] = row.get("oauthExpiresAt")
         await create_account(session, account)
         existing_keys.add(dedupe_key)
         imported += 1
@@ -717,9 +839,27 @@ async def run_final_conversion(session: Any) -> dict[str, int]:
     # Convert each row via create_account (this module's create path).
     try:
         converted = 0
+        converted_ids: list[int] = []
         for account in accounts:
-            await create_account(session, account)
-            converted += 1
+            try:
+                legacy_id = account.get("id")
+                await create_account(session, account)
+                converted += 1
+                if legacy_id is not None:
+                    converted_ids.append(int(legacy_id))
+            except Exception as row_exc:
+                # Per-row failure — log and continue (retry semantics
+                # preserved: remaining rows are kept for next boot).
+                logger.warning(
+                    "Final legacy conversion: row id=%s failed: %s "
+                    "(remaining unconverted: %d)",
+                    legacy_id, row_exc, len(accounts) - converted - 1,
+                )
+        if converted_ids:
+            logger.info(
+                "Final legacy conversion: converted row ids: %s",
+                converted_ids,
+            )
 
         # Delete the rows on success — table stays empty/inert, never dropped.
         await session.execute(_text("DELETE FROM ai_proxy_accounts"))
@@ -736,9 +876,11 @@ async def run_final_conversion(session: Any) -> dict[str, int]:
         }
     except Exception as exc:
         _conversion_failed = True
+        remaining = legacy_count - converted
         logger.warning(
-            "Final legacy conversion FAILED (%d rows kept, aliases still "
-            "work over gateway tables): %s", legacy_count, exc,
+            "Final legacy conversion FAILED (%d rows kept, %d remaining "
+            "unconverted, aliases still work over gateway tables): %s",
+            legacy_count, remaining, exc,
         )
         return {
             "legacy_rows": legacy_count,

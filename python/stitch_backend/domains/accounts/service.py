@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from fastapi import HTTPException, status
 from sqlalchemy import delete, or_, select
 
 from stitch_backend.core.exceptions import AccountNotFoundError
@@ -101,6 +102,36 @@ class AccountService:
         if account is None:
             raise AccountNotFoundError(account_id)
         return account
+
+    @staticmethod
+    def _check_ownership(account: Account, caller_uid: int | None, account_id: str) -> None:
+        """Reject non-owner callers (IDOR guard).
+
+        When ``caller_uid`` is None (desktop / auth disabled) the check is
+        skipped — legacy permissive behaviour.  When set, the caller may
+        mutate the account only if it is instance-shared (``owner_id`` is
+        NULL) or owned by ``caller_uid``; otherwise a 404 is raised (404,
+        not 403, to avoid existence leakage — IDOR best practice).
+
+        ── Divergence from ``ai_gateway._owner_filter`` (intentional) ──
+
+        The accounts domain is *desktop-permissive*: ``caller_uid`` None
+        means "no auth, allow everything" (single-trusted-user desktop
+        model).  The ai_gateway domain's ``_owner_filter`` takes the
+        opposite stance: ``uid`` None matches *shared rows only*
+        (``owner_id IS NULL``), hiding user-owned rows from unauthenticated
+        callers.  Both postures are intentional legacy-compat decisions:
+        accounts pre-dates the per-user isolation rollout and must stay
+        permissive when auth is off; ai_gateway was born multi-user and
+        treats NULL uid as "anonymous, shared pool only".  Do NOT "align"
+        the two without a migration plan — desktop deployments rely on the
+        accounts domain's permissive NULL-uid behaviour.
+        """
+        if caller_uid is not None and account.owner_id is not None and account.owner_id != caller_uid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Account not found: {account_id}",
+            )
 
     async def get_account_response(self, account_id: str) -> AccountResponse:
         return _to_response(await self.get_account(account_id))
@@ -292,8 +323,11 @@ class AccountService:
         account_id: str,
         token: str,
         refresh_token: str | None = None,
+        *,
+        caller_uid: int | None = None,
     ) -> AccountResponse:
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
         account.token = token
         if refresh_token is not None:
             account.refresh_token = refresh_token
@@ -304,8 +338,11 @@ class AccountService:
 
     async def update_notes_tags(
         self, account_id: str, notes: str | None = None, tags: str | None = None,
+        *,
+        caller_uid: int | None = None,
     ) -> AccountResponse:
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
         if notes is not None:
             account.notes = notes
         if tags is not None:
@@ -318,8 +355,13 @@ class AccountService:
         await self._db.refresh(account)
         return _to_response(account)
 
-    async def update_metadata(self, account_id: str, metadata: str | None) -> AccountResponse:
+    async def update_metadata(
+        self, account_id: str, metadata: str | None,
+        *,
+        caller_uid: int | None = None,
+    ) -> AccountResponse:
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
         # Store metadata in notes for now (schema compat)
         account.notes = metadata
         account.updated_at = _utcnow()
@@ -327,16 +369,25 @@ class AccountService:
         await self._db.refresh(account)
         return _to_response(account)
 
-    async def set_proxy(self, account_id: str, proxy_id: str | None) -> AccountResponse:
+    async def set_proxy(
+        self, account_id: str, proxy_id: str | None,
+        *,
+        caller_uid: int | None = None,
+    ) -> AccountResponse:
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
         account.proxy_id = proxy_id
         account.updated_at = _utcnow()
         await self._db.flush()
         await self._db.refresh(account)
         return _to_response(account)
 
-    async def archive(self, account_id: str, archived: bool = True) -> AccountResponse:
+    async def archive(
+        self, account_id: str, archived: bool = True, *,
+        caller_uid: int | None = None,
+    ) -> AccountResponse:
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
         account.status = "archived" if archived else "active"
         account.updated_at = _utcnow()
         await self._db.flush()
@@ -345,15 +396,25 @@ class AccountService:
 
     # ── Delete ────────────────────────────────────────────────────────────────
 
-    async def delete_account(self, account_id: str) -> None:
+    async def delete_account(
+        self, account_id: str, *, caller_uid: int | None = None,
+    ) -> None:
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
         await self._db.delete(account)
         await self._db.flush()
         logger.info("Account deleted: %s", account.email)
 
-    async def bulk_delete(self, ids: list[str | int]) -> int:
+    async def bulk_delete(
+        self, ids: list[str | int], *, caller_uid: int | None = None,
+    ) -> int:
         str_ids = [str(i) for i in ids]
         stmt = delete(Account).where(Account.id.in_(str_ids))
+        if caller_uid is not None:
+            # Per-user isolation: only delete shared (NULL) or own rows.
+            stmt = stmt.where(
+                or_(Account.owner_id.is_(None), Account.owner_id == caller_uid)
+            )
         result = await self._db.execute(stmt)
         await self._db.flush()
         count = int(result.rowcount)  # type: ignore[attr-defined]
@@ -397,6 +458,7 @@ class AccountService:
         *,
         proxy: str | None = None,
         force: bool = False,
+        caller_uid: int | None = None,
     ) -> dict:
         """Refresh the Kiro access token for *account_id*.
 
@@ -423,6 +485,7 @@ class AccountService:
         )
 
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
 
         if not account.refresh_token:
             return {"success": False, "error": "no refresh_token stored for this account"}
@@ -490,6 +553,7 @@ class AccountService:
         *,
         proxy: str | None = None,
         auto_refresh: bool = True,
+        caller_uid: int | None = None,
     ) -> dict:
         """Verify the Kiro account is alive and fetch credit usage.
 
@@ -504,6 +568,7 @@ class AccountService:
         from autoreg.providers.kiro_v2.verify_alive import verify_alive
 
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
 
         if not account.token:
             return {"alive": False, "error": "no access_token stored"}
@@ -530,7 +595,9 @@ class AccountService:
         # Token expired — try refresh once
         if not health.alive and "401" in health.error and auto_refresh and account.refresh_token:
             logger.info("check_kiro_account: token expired, attempting refresh for %s", account_id)
-            refresh_result = await self.refresh_kiro_token(account_id, proxy=proxy, force=True)
+            refresh_result = await self.refresh_kiro_token(
+                account_id, proxy=proxy, force=True, caller_uid=caller_uid,
+            )
             if refresh_result.get("success") and refresh_result.get("refreshed"):
                 # Re-read the updated account and retry health check
                 account = await self.get_account(account_id)
@@ -613,7 +680,9 @@ class AccountService:
 
     # ── Refresh account (status + quota check) ────────────────────────────────
 
-    async def refresh_account(self, account_id: str) -> AccountResponse:
+    async def refresh_account(
+        self, account_id: str, *, caller_uid: int | None = None,
+    ) -> AccountResponse:
         """Run a provider status/quota check and return the updated account.
 
         Delegates to ``account_status.service.check_account_status`` for
@@ -623,6 +692,7 @@ class AccountService:
         from stitch_backend.domains.account_status import service as status_service
 
         account = await self.get_account(account_id)
+        self._check_ownership(account, caller_uid, account_id)
 
         # check_account_status expects an int account_id; coerce from str
         try:

@@ -29,8 +29,10 @@ from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialGroupShare,
+    CredentialModelAccess,
     ProviderEndpoint,
     PublicModel,
+    UpstreamModel,
     _utcnow,
 )
 from stitch_backend.domains.ai_gateway.schemas import (
@@ -96,7 +98,32 @@ def _caller_uid(params: dict) -> int | None:
 
 
 def _owner_filter(model, uid: int | None):
-    """WHERE clause: owner_id IS NULL OR owner_id = uid (legacy shared pool)."""
+    """WHERE clause: owner_id IS NULL OR owner_id = uid (legacy shared pool).
+
+    P2.15 — divergence from ``PoolScope``: ``_owner_filter`` and
+    ``PoolScope`` both express "caller sees own + instance-shared rows"
+    but at different layers.  ``_owner_filter`` is a SQL WHERE clause
+    applied to a single table in command handlers (CRUD scope).
+    ``PoolScope`` is a runtime object passed to the routing engine
+    (request-time routing scope).  They diverge in edge cases:
+    ``PoolScope.include_instance_shared`` can be False (desktop →
+    False would hide shared rows from routing), while
+    ``_owner_filter`` always includes NULL-owner rows (CRUD always
+    shows shared rows).  This is intentional: CRUD visibility ≠
+    routing eligibility.
+
+    ── Divergence from ``accounts.AccountService._check_ownership``
+    (intentional) ──
+
+    The accounts domain's ``_check_ownership`` is *desktop-permissive*:
+    ``caller_uid`` None means "no auth, allow everything" (single-trusted-
+    user desktop model).  This ``_owner_filter`` takes the opposite
+    stance: ``uid`` None matches *shared rows only* (``owner_id IS
+    NULL``), hiding user-owned rows from unauthenticated callers.  Both
+    postures are intentional legacy-compat decisions — do NOT "align"
+    them without a migration plan (see the counterpart docstring on
+    ``AccountService._check_ownership``).
+    """
     return or_(model.owner_id.is_(None), model.owner_id == uid)
 
 
@@ -245,6 +272,20 @@ async def cmd_create_credential(params: dict) -> dict:
     owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Verify the referenced endpoint is visible to the caller (owner
+        # filter) before creating a credential against it — IDOR guard.
+        ep_result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == req.provider_endpoint_id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        if ep_result.scalar_one_or_none() is None:
+            raise StitchError(
+                f"Provider endpoint not found: {req.provider_endpoint_id}"
+            )
         svc = CredentialService(session)
         credential = await svc.create_credential(
             provider_endpoint_id=req.provider_endpoint_id,
@@ -378,8 +419,22 @@ async def cmd_rotate_credential_secret(params: dict) -> dict | None:
     secret is never returned in the response.
     """
     req = RotateCredentialSecretRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check at the command layer (matches
+        # cmd_update_credential / cmd_delete_credential) — the credential
+        # must pass _owner_filter before rotate_secret is called.
+        result = await session.execute(
+            select(Credential).where(
+                and_(
+                    Credential.id == req.id,
+                    _owner_filter(Credential, owner_id),
+                )
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            return None
         svc = CredentialService(session)
         credential = await svc.rotate_secret(req.id, req.new_secret)
         return CredentialResponse.from_orm_model(credential) if credential else None
@@ -426,8 +481,23 @@ async def cmd_create_upstream_model(params: dict) -> dict:
     updates the existing row rather than creating a duplicate.
     """
     req = UpstreamModelCreateRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Verify the referenced endpoint is visible to the caller (owner
+        # filter) before upserting a model against it — IDOR guard.
+        ep_result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == req.provider_endpoint_id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        if ep_result.scalar_one_or_none() is None:
+            raise StitchError(
+                f"Provider endpoint not found: {req.provider_endpoint_id}"
+            )
         svc = UpstreamModelService(session)
         model = await svc.upsert_model(
             req.provider_endpoint_id,
@@ -470,11 +540,27 @@ async def cmd_get_upstream_model(params: dict) -> dict | None:
 async def cmd_update_upstream_model(params: dict) -> dict | None:
     req = UpstreamModelUpdateRequest.model_validate(params)
     updates = req.model_dump(exclude={"id"}, exclude_none=True)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check — the upstream model's parent endpoint must pass
+        # _owner_filter before mutation (IDOR guard).
+        model = await UpstreamModelService(session).get_by_pk(req.id)
+        if model is None:
+            return None
+        ep_result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == model.provider_endpoint_id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        if ep_result.scalar_one_or_none() is None:
+            return None
         svc = UpstreamModelService(session)
-        model = await svc.update_by_pk(req.id, **updates)
-        return UpstreamModelResponse.from_orm_model(model) if model else None
+        updated = await svc.update_by_pk(req.id, **updates)
+        return UpstreamModelResponse.from_orm_model(updated) if updated else None
 
     return await run_in_session(_op)
 
@@ -482,8 +568,24 @@ async def cmd_update_upstream_model(params: dict) -> dict | None:
 @register_command("delete_upstream_model")
 async def cmd_delete_upstream_model(params: dict) -> dict:
     req = UpstreamModelIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check — the upstream model's parent endpoint must pass
+        # _owner_filter before deletion (IDOR guard).
+        model = await UpstreamModelService(session).get_by_pk(req.id)
+        if model is None:
+            return False
+        ep_result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == model.provider_endpoint_id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        if ep_result.scalar_one_or_none() is None:
+            return False
         svc = UpstreamModelService(session)
         return await svc.delete_by_pk(req.id)
 
@@ -499,8 +601,21 @@ async def cmd_delete_upstream_model(params: dict) -> dict:
 @register_command("upsert_credential_model_access")
 async def cmd_upsert_credential_model_access(params: dict) -> dict:
     req = CredentialModelAccessUpsertRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check — the referenced credential must pass
+        # _owner_filter before mutating access rows (IDOR guard).
+        result = await session.execute(
+            select(Credential).where(
+                and_(
+                    Credential.id == req.credential_id,
+                    _owner_filter(Credential, owner_id),
+                )
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            return None
         svc = CredentialModelAccessService(session)
         access = await svc.upsert_access(
             req.credential_id,
@@ -528,8 +643,29 @@ async def cmd_list_credential_model_access(params: dict) -> list[dict]:
 @register_command("delete_credential_model_access")
 async def cmd_delete_credential_model_access(params: dict) -> dict:
     req = CredentialModelAccessIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check — the credential referenced by the access row
+        # must pass _owner_filter before deletion (IDOR guard).
+        cred_result = await session.execute(
+            select(CredentialModelAccess).where(
+                CredentialModelAccess.id == req.id
+            )
+        )
+        access = cred_result.scalar_one_or_none()
+        if access is None:
+            return False
+        owner_result = await session.execute(
+            select(Credential).where(
+                and_(
+                    Credential.id == access.credential_id,
+                    _owner_filter(Credential, owner_id),
+                )
+            )
+        )
+        if owner_result.scalar_one_or_none() is None:
+            return False
         svc = CredentialModelAccessService(session)
         return await svc.delete_by_pk(req.id)
 
@@ -656,8 +792,47 @@ async def cmd_delete_public_model(params: dict) -> dict:
 @register_command("create_route_target")
 async def cmd_create_route_target(params: dict) -> dict:
     req = RouteTargetCreateRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check — the referenced public model must pass
+        # _owner_filter before a route target is created against it.
+        pm_result = await session.execute(
+            select(PublicModel).where(
+                and_(
+                    PublicModel.id == req.public_model_id,
+                    _owner_filter(PublicModel, owner_id),
+                )
+            )
+        )
+        if pm_result.scalar_one_or_none() is None:
+            raise StitchError(
+                f"Public model not found: {req.public_model_id}"
+            )
+        # Ownership check — the upstream model's parent endpoint must pass
+        # _owner_filter before a route target can reference it.
+        um_result = await session.execute(
+            select(UpstreamModel).where(
+                UpstreamModel.id == req.upstream_model_id
+            )
+        )
+        upstream_model = um_result.scalar_one_or_none()
+        if upstream_model is None:
+            raise StitchError(
+                f"Upstream model not found: {req.upstream_model_id}"
+            )
+        ep_result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == upstream_model.provider_endpoint_id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        if ep_result.scalar_one_or_none() is None:
+            raise StitchError(
+                f"Provider endpoint not found: {upstream_model.provider_endpoint_id}"
+            )
         svc = RouteTargetService(session)
         target = await svc.create_target(
             req.public_model_id,
@@ -700,11 +875,27 @@ async def cmd_get_route_target(params: dict) -> dict | None:
 async def cmd_update_route_target(params: dict) -> dict | None:
     req = RouteTargetUpdateRequest.model_validate(params)
     updates = req.model_dump(exclude={"id"}, exclude_none=True)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check — the route target's parent public model must
+        # pass _owner_filter before mutation (IDOR guard).
+        target = await RouteTargetService(session).get_by_pk(req.id)
+        if target is None:
+            return None
+        pm_result = await session.execute(
+            select(PublicModel).where(
+                and_(
+                    PublicModel.id == target.public_model_id,
+                    _owner_filter(PublicModel, owner_id),
+                )
+            )
+        )
+        if pm_result.scalar_one_or_none() is None:
+            return None
         svc = RouteTargetService(session)
-        target = await svc.update_by_pk(req.id, **updates)
-        return RouteTargetResponse.from_orm_model(target) if target else None
+        updated = await svc.update_by_pk(req.id, **updates)
+        return RouteTargetResponse.from_orm_model(updated) if updated else None
 
     return await run_in_session(_op)
 
@@ -712,8 +903,24 @@ async def cmd_update_route_target(params: dict) -> dict | None:
 @register_command("delete_route_target")
 async def cmd_delete_route_target(params: dict) -> dict:
     req = RouteTargetIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
+        # Ownership check — the route target's parent public model must
+        # pass _owner_filter before deletion (IDOR guard).
+        target = await RouteTargetService(session).get_by_pk(req.id)
+        if target is None:
+            return False
+        pm_result = await session.execute(
+            select(PublicModel).where(
+                and_(
+                    PublicModel.id == target.public_model_id,
+                    _owner_filter(PublicModel, owner_id),
+                )
+            )
+        )
+        if pm_result.scalar_one_or_none() is None:
+            return False
         svc = RouteTargetService(session)
         return await svc.delete_by_pk(req.id)
 
@@ -734,10 +941,20 @@ async def cmd_discover_models_for_endpoint(params: dict) -> dict:
     then returns the total upstream model count for the endpoint.
     """
     req = ProviderEndpointIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        ep_svc = ProviderEndpointService(session)
-        endpoint = await ep_svc.get_by_pk(req.id)
+        # Ownership check — the endpoint must pass _owner_filter before
+        # discovery is triggered (IDOR guard).
+        result = await session.execute(
+            select(ProviderEndpoint).where(
+                and_(
+                    ProviderEndpoint.id == req.id,
+                    _owner_filter(ProviderEndpoint, owner_id),
+                )
+            )
+        )
+        endpoint = result.scalar_one_or_none()
         if endpoint is None:
             return {"models_count": 0}
         await cast("Any", DiscoveryWorker)._discover_endpoint(session, endpoint)
@@ -756,16 +973,27 @@ async def cmd_test_credential_connection(params: dict) -> dict:
     ``adapter.probe_credential(...)``, and returns the raw probe result.
     """
     req = CredentialIdRequest.model_validate(params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
-        cred_svc = CredentialService(session)
-        credential = await cred_svc.get_by_pk(req.id)
+        # Ownership check — the credential must pass _owner_filter before
+        # get_secret_for_invocation is called (IDOR guard).
+        result = await session.execute(
+            select(Credential).where(
+                and_(
+                    Credential.id == req.id,
+                    _owner_filter(Credential, owner_id),
+                )
+            )
+        )
+        credential = result.scalar_one_or_none()
         if credential is None:
             return {"success": False, "error": "Credential not found"}
         ep_svc = ProviderEndpointService(session)
         endpoint = await ep_svc.get_by_pk(credential.provider_endpoint_id)
         if endpoint is None:
             return {"success": False, "error": "Endpoint not found"}
+        cred_svc = CredentialService(session)
         secret = await cred_svc.get_secret_for_invocation(req.id)
         if not secret:
             return {"success": False, "error": "No secret available"}

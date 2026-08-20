@@ -155,10 +155,13 @@ async def cmd_save_profile_settings(params: dict) -> dict:
 @register_command("rename_profile_alias_rust")
 async def cmd_rename_profile_alias(params: dict) -> dict:
     req = _parse(RenameProfileRequest, params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ProfileSettingsService(session)
-        await svc.rename_alias(req.current_alias, req.next_alias)
+        await svc.rename_alias(
+            req.current_alias, req.next_alias, owner_id=owner_id,
+        )
 
     await run_in_session(_op)
     return {"success": True}
@@ -180,11 +183,13 @@ async def cmd_export_profile_bundle(params: dict) -> dict:
 async def cmd_import_profile_bundle(params: dict) -> str:
     """Import profile bundle and return alias as str."""
     req = _parse(ImportBundleRequest, params)
+    owner_id = _caller_uid(params)
 
     async def _op(session):
         svc = ProfileSettingsService(session)
         alias = await svc.import_bundle(
             req.source_path, req.target_alias, req.overwrite,
+            owner_id=owner_id,
         )
         return cast("str", alias)
 

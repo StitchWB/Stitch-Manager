@@ -24,7 +24,7 @@ Response shapes (snake_case — the frontend agent codes against these):
   - groups_share_credential    → SuccessResponse
   - groups_unshare_credential  → SuccessResponse
   - groups_pool_list       → PoolListResponse{items}
-  - groups_usage_list      → UsageListResponse{rows}
+  - groups_usage_list      → UsageListResponse{rows, max_per_member_daily}
   - groups_set_quota       → GroupResponse
   - groups_transfer_ownership  → GroupResponse
 """
@@ -338,15 +338,19 @@ async def cmd_groups_pool_list(params: dict) -> dict:
 
 @register_command("groups_usage_list", readonly=True)
 async def cmd_groups_usage_list(params: dict) -> dict:
-    """List per-member usage for the last 7 days (members: own; owner: all)."""
+    """List per-member usage for the last 30 days (members: own; owner: all).
+
+    Returns rows + ``max_per_member_daily`` (the group-wide cap) so members
+    can see the fair-use limit context.
+    """
     group_id = params["groupId"]
     uid = _caller_uid(params)
 
     async def _op(session):
         return await list_group_usage(session, group_id, uid)
 
-    rows = await run_in_read_session(_op)
-    return UsageListResponse(rows=rows)
+    result = await run_in_read_session(_op)
+    return UsageListResponse(**result)
 
 
 @register_command("groups_set_quota")

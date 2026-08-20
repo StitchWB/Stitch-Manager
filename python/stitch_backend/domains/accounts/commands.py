@@ -96,10 +96,11 @@ async def cmd_add_account(params: dict) -> Any:
 @register_command("delete_account")
 async def cmd_delete_account(params: dict) -> dict:
     req = _parse(DeleteAccountRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        await svc.delete_account(str(req.id))
+        await svc.delete_account(str(req.id), caller_uid=caller_uid)
 
     await run_in_session(_op)
     return {"success": True}
@@ -108,10 +109,13 @@ async def cmd_delete_account(params: dict) -> dict:
 @register_command("update_account_token")
 async def cmd_update_account_token(params: dict) -> Any:
     req = _parse(UpdateAccountTokenRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.update_token(str(req.id), req.token, req.refresh_token)
+        return await svc.update_token(
+            str(req.id), req.token, req.refresh_token, caller_uid=caller_uid,
+        )
 
     return await run_in_session(_op)
 
@@ -119,10 +123,13 @@ async def cmd_update_account_token(params: dict) -> Any:
 @register_command("update_account_notes_tags")
 async def cmd_update_account_notes_tags(params: dict) -> Any:
     req = _parse(UpdateAccountNotesTagsRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.update_notes_tags(str(req.id), req.notes, req.tags)
+        return await svc.update_notes_tags(
+            str(req.id), req.notes, req.tags, caller_uid=caller_uid,
+        )
 
     return await run_in_session(_op)
 
@@ -130,10 +137,13 @@ async def cmd_update_account_notes_tags(params: dict) -> Any:
 @register_command("update_account_metadata")
 async def cmd_update_account_metadata(params: dict) -> Any:
     req = _parse(UpdateAccountMetadataRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.update_metadata(str(req.account_id), req.metadata)
+        return await svc.update_metadata(
+            str(req.account_id), req.metadata, caller_uid=caller_uid,
+        )
 
     return await run_in_session(_op)
 
@@ -141,10 +151,13 @@ async def cmd_update_account_metadata(params: dict) -> Any:
 @register_command("set_account_proxy")
 async def cmd_set_account_proxy(params: dict) -> Any:
     req = _parse(SetAccountProxyRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.set_proxy(str(req.account_id), req.proxy_id)
+        return await svc.set_proxy(
+            str(req.account_id), req.proxy_id, caller_uid=caller_uid,
+        )
 
     return await run_in_session(_op)
 
@@ -152,10 +165,13 @@ async def cmd_set_account_proxy(params: dict) -> Any:
 @register_command("get_account_proxy", readonly=True)
 async def cmd_get_account_proxy(params: dict) -> dict:
     account_id = str(params.get("accountId") or params.get("id", ""))
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.get_account(account_id)
+        account = await svc.get_account(account_id)
+        svc._check_ownership(account, caller_uid, account_id)
+        return account
 
     account = await run_in_read_session(_op)
     return {"accountId": account_id, "proxyId": account.proxy_id, "proxyConfig": account.proxy_config}
@@ -172,10 +188,11 @@ async def cmd_refresh_account(params: dict) -> Any:
     frontend store can replace the row.
     """
     req = _parse(RefreshAccountRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.refresh_account(str(req.account_id))
+        return await svc.refresh_account(str(req.account_id), caller_uid=caller_uid)
 
     return await run_in_session(_op)
 
@@ -200,6 +217,7 @@ async def cmd_refresh_accounts(params: dict) -> dict:
     req = _parse(RefreshAccountsRequest, params)
     account_ids = [str(aid) for aid in req.account_ids]
     total = len(account_ids)
+    caller_uid = params.get("_caller_user_id")
 
     sem = asyncio.Semaphore(4)
     updated = 0
@@ -212,7 +230,9 @@ async def cmd_refresh_accounts(params: dict) -> dict:
             try:
                 async def _op(session):
                     svc = AccountService(session)
-                    return await svc.refresh_account(account_id)
+                    return await svc.refresh_account(
+                        account_id, caller_uid=caller_uid,
+                    )
 
                 account = await run_in_session(_op)
                 serialized = account.model_dump(mode="json", by_alias=True)
@@ -274,10 +294,12 @@ async def cmd_get_account_quota(params: dict) -> dict:
     accounts table.  Use ``refresh_account`` to trigger a live fetch.
     """
     req = _parse(GetAccountQuotaRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
         account = await svc.get_account(str(req.account_id))
+        svc._check_ownership(account, caller_uid, str(req.account_id))
         used = account.quota_used or 0
         limit = account.quota_limit or 0
         checked_at = (
@@ -299,10 +321,11 @@ async def cmd_get_account_quota(params: dict) -> dict:
 @register_command("archive_account")
 async def cmd_archive_account(params: dict) -> Any:
     req = _parse(ArchiveAccountRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.archive(str(req.id), req.archived)
+        return await svc.archive(str(req.id), req.archived, caller_uid=caller_uid)
 
     return await run_in_session(_op)
 
@@ -311,10 +334,13 @@ async def cmd_archive_account(params: dict) -> Any:
 async def cmd_validate_account(params: dict) -> bool:
     """Validate account exists and is active (returns bool)."""
     account_id = str(params.get("accountId") or params.get("id", ""))
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.get_account(account_id)
+        account = await svc.get_account(account_id)
+        svc._check_ownership(account, caller_uid, account_id)
+        return account
 
     account = await run_in_read_session(_op)
     return cast("bool", account.status == "active")
@@ -326,10 +352,11 @@ async def cmd_validate_account(params: dict) -> bool:
 async def cmd_bulk_delete_accounts(params: dict) -> dict:
     await ensure_permission(params, "action.bulk_delete")
     req = _parse(BulkDeleteRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
-        return await svc.bulk_delete(req.ids)
+        return await svc.bulk_delete(req.ids, caller_uid=caller_uid)
 
     count = await run_in_session(_op)
     return {"deleted": count}
@@ -357,11 +384,14 @@ async def cmd_bulk_refresh_quota(params: dict) -> dict:
     an asyncio.Semaphore(5) to bound concurrency, and returns the count of
     successfully refreshed accounts.
     """
-    from sqlalchemy import select
+    await ensure_permission(params, "action.export_accounts")
+
+    from sqlalchemy import or_, select
 
     from stitch_backend.database import get_session_factory
     from stitch_backend.domains.accounts.models import Account
 
+    caller_uid = params.get("_caller_user_id")
     factory = get_session_factory()
     async with factory() as session:
         stmt = (
@@ -370,6 +400,11 @@ async def cmd_bulk_refresh_quota(params: dict) -> dict:
             .where(Account.token != "")
             .where(Account.status != "archived")
         )
+        if caller_uid is not None:
+            # Per-user isolation: shared (NULL) or own rows only.
+            stmt = stmt.where(
+                or_(Account.owner_id.is_(None), Account.owner_id == caller_uid)
+            )
         result = await session.execute(stmt)
         account_ids = [str(row[0]) for row in result.fetchall()]
 
@@ -384,7 +419,7 @@ async def cmd_bulk_refresh_quota(params: dict) -> dict:
         async with sem:
             async def _op(session):
                 svc = AccountService(session)
-                await svc.refresh_account(account_id)
+                await svc.refresh_account(account_id, caller_uid=caller_uid)
                 return True
 
             try:
@@ -419,6 +454,8 @@ async def cmd_get_windsurf_token(params: dict) -> dict:
 @register_command("import_accounts_payload")
 async def cmd_import_accounts_payload(params: dict) -> dict:
     """Import accounts from JSON payload with dedup."""
+    await ensure_permission(params, "action.export_accounts")
+
     import json as _json
 
     from sqlalchemy import text as sql_text
@@ -438,6 +475,7 @@ async def cmd_import_accounts_payload(params: dict) -> dict:
     async def _op(session):
         imported = 0
         skipped = 0
+        errors: list[str] = []
         for acc in accounts:
             provider = acc.get("provider", "")
             email = acc.get("email", acc.get("name", ""))
@@ -474,9 +512,18 @@ async def cmd_import_accounts_payload(params: dict) -> dict:
                     "created_at": _now_iso_str(),
                 })
                 imported += 1
-            except Exception:
+            except Exception as exc:
                 skipped += 1
-        return {"imported": imported, "skipped": skipped}
+                # Diagnostic per failed row — never include token/secret
+                # values in the error string (only provider + email).
+                # Truncate to first line: SQLAlchemy/SQLite errors include
+                # the full SQL parameters (which may contain the token) on
+                # subsequent lines — the first line is the safe summary.
+                exc_short = str(exc).split("\n")[0][:200]
+                diag = f"{provider}/{email}: {exc_short}"
+                errors.append(diag)
+                logger.warning("import_accounts_payload row failed: %s", diag)
+        return {"imported": imported, "skipped": skipped, "errors": errors}
 
     return await run_in_session(_op)
 
@@ -533,6 +580,7 @@ async def cmd_refresh_kiro_token(params: dict) -> dict:
     Response: ``{ success, refreshed, expires_at, account?, error? }``
     """
     req = _parse(RefreshKiroTokenRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
@@ -540,6 +588,7 @@ async def cmd_refresh_kiro_token(params: dict) -> dict:
             str(req.account_id),
             proxy=req.proxy,
             force=req.force,
+            caller_uid=caller_uid,
         )
 
     return await run_in_session(_op)
@@ -557,6 +606,7 @@ async def cmd_check_kiro_account(params: dict) -> dict:
                   credit_limit, credit_remaining, region, error, checked_at, account }``
     """
     req = _parse(CheckKiroAccountRequest, params)
+    caller_uid = params.get("_caller_user_id")
 
     async def _op(session):
         svc = AccountService(session)
@@ -564,6 +614,7 @@ async def cmd_check_kiro_account(params: dict) -> dict:
             str(req.account_id),
             proxy=req.proxy,
             auto_refresh=req.auto_refresh,
+            caller_uid=caller_uid,
         )
 
     return await run_in_session(_op)

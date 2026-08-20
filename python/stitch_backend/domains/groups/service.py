@@ -754,11 +754,13 @@ async def list_pool(
 
 async def list_group_usage(
     db: AsyncSession, group_id: str, uid: int | None
-) -> list[dict]:
-    """Return per-member usage rows for the last 7 days.
+) -> dict:
+    """Return per-member usage rows for the last 30 days + the group cap.
 
     Members see only their own rows; owners see all members' rows.
     Single query joins ``group_usage`` with ``auth_users`` for usernames.
+    The response includes ``max_per_member_daily`` (the group-wide cap,
+    nullable = unlimited) so members can see the fair-use limit context.
     """
     group = await get_group(db, group_id)
     if group is None:
@@ -768,7 +770,7 @@ async def list_group_usage(
 
     is_owner = uid is not None and group.owner_id == uid
     # SQLite string comparison on 'YYYY-MM-DD' works for date ordering.
-    cutoff_day = (datetime.now(UTC) - timedelta(days=7)).strftime("%Y-%m-%d")
+    cutoff_day = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
 
     stmt = (
         select(
@@ -789,7 +791,7 @@ async def list_group_usage(
         stmt = stmt.where(GroupUsage.user_id == uid)
 
     result = await db.execute(stmt)
-    return [
+    rows = [
         {
             "user_id": row.user_id,
             "username": row.username,
@@ -799,6 +801,10 @@ async def list_group_usage(
         }
         for row in result.all()
     ]
+    return {
+        "rows": rows,
+        "max_per_member_daily": group.max_requests_per_member_daily,
+    }
 
 
 async def set_group_quota(

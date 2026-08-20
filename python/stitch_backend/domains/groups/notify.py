@@ -11,6 +11,16 @@ The bot instance is created on-demand from ``stitch_bot.config.Settings``
 and closed immediately after the send.  The stitch_bot process (if
 running) is not touched — this is a separate ephemeral Bot instance
 sharing the same token.
+
+P2.15 rationale — separate-session: ``notify_group_invite`` opens its
+own short-lived DB session via ``get_session_factory()`` rather than
+accepting a session parameter.  This is deliberate: the caller (group
+invite command) is already inside a ``run_in_session`` write session
+(pool_size=1, max_overflow=0).  Passing that session in would either
+hold it open for the entire Telegram HTTP call (blocking all writes for
+~2 s) or require the caller to commit before the notification (breaking
+transactional atomicity of the invite).  A separate session lets the
+notification fail independently without affecting the invite's commit.
 """
 
 from __future__ import annotations

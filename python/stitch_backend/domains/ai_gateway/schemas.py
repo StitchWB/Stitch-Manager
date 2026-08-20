@@ -808,12 +808,31 @@ class ProxyKeyResponse(BaseModel):
 
 
 class ProxyKeyCreatedResponse(BaseModel):
-    """Response for ``proxy_keys_create`` — raw key shown ONCE."""
+    """Response for ``proxy_keys_create`` — raw key shown ONCE.
+
+    P2.16: ``key`` is a plain ``str`` (NOT ``SecretStr``) because the
+    wire payload must contain the raw key exactly once for the client
+    to display/copy.  ``SecretStr`` would serialize as ``**********``
+    and break the wire contract.  Instead, ``__repr__`` is overridden
+    to mask the key so it never leaks in logs or debugger traces.
+    """
 
     model_config = ConfigDict(populate_by_name=True)
 
     key: str  # RAW — shown once, never persisted
     id: str
+
+    def __repr__(self) -> str:
+        """Mask the raw key in repr to prevent log/debugger leakage."""
+        masked = _mask_for_repr(self.key) if self.key else "None"
+        return f"ProxyKeyCreatedResponse(key={masked!r}, id={self.id!r})"
+
+
+def _mask_for_repr(raw: str) -> str:
+    """Mask a raw key for repr: first4+****+last4."""
+    if len(raw) < 8:
+        return "****"
+    return raw[:4] + "****" + raw[-4:]
 
 
 class ProxyKeyPoolGroupEntry(BaseModel):

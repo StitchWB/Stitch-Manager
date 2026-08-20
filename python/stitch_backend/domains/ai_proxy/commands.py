@@ -101,9 +101,14 @@ async def cmd_get_ai_proxy_accounts(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.legacy_accounts_api import list_accounts
 
     owner_id = _alias_owner_id(params)
+    caller_uid = params.get("_caller_user_id")
+    caller_role = params.get("_caller_role")
 
     async def _op(session):
-        return await list_accounts(session, owner_id=owner_id)
+        return await list_accounts(
+            session, owner_id=owner_id,
+            caller_uid=caller_uid, caller_role=caller_role,
+        )
 
     return await run_in_session(_op)
 
@@ -123,12 +128,33 @@ async def cmd_create_ai_proxy_account(params: dict) -> int:
 
 @register_command("update_ai_proxy_account")
 async def cmd_update_ai_proxy_account(params: dict) -> None:
-    from stitch_backend.domains.ai_proxy.legacy_accounts_api import update_account
+    from fastapi import HTTPException, status
+
+    from stitch_backend.config import get_settings
+    from stitch_backend.domains.ai_proxy.legacy_accounts_api import (
+        _caller_can_modify_credential,
+        _find_credential_by_legacy_id,
+        update_account,
+    )
 
     account = params.get("account", params)
     owner_id = _alias_owner_id(params)
+    caller_uid = params.get("_caller_user_id")
+    caller_role = params.get("_caller_role")
 
     async def _op(session):
+        # Authz: owner or admin only; instance-shared → admin only.
+        # Desktop (auth-disabled) is allowed unconditionally.
+        legacy_id = account.get("id")
+        if legacy_id is not None and get_settings().auth_enabled:
+            credential = await _find_credential_by_legacy_id(session, int(legacy_id))
+            if credential is not None and not _caller_can_modify_credential(
+                credential, caller_uid, caller_role,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only the credential owner or an admin may modify this account",
+                )
         await update_account(session, account, owner_id=owner_id)
 
     await run_in_session(_op)
@@ -136,11 +162,31 @@ async def cmd_update_ai_proxy_account(params: dict) -> None:
 
 @register_command("delete_ai_proxy_account")
 async def cmd_delete_ai_proxy_account(params: dict) -> None:
-    from stitch_backend.domains.ai_proxy.legacy_accounts_api import delete_account
+    from fastapi import HTTPException, status
+
+    from stitch_backend.config import get_settings
+    from stitch_backend.domains.ai_proxy.legacy_accounts_api import (
+        _caller_can_modify_credential,
+        _find_credential_by_legacy_id,
+        delete_account,
+    )
 
     account_id = params.get("id", params.get("accountId", 0))
+    caller_uid = params.get("_caller_user_id")
+    caller_role = params.get("_caller_role")
 
     async def _op(session):
+        # Authz: owner or admin only; instance-shared → admin only.
+        # Desktop (auth-disabled) is allowed unconditionally.
+        if get_settings().auth_enabled:
+            credential = await _find_credential_by_legacy_id(session, int(account_id))
+            if credential is not None and not _caller_can_modify_credential(
+                credential, caller_uid, caller_role,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only the credential owner or an admin may delete this account",
+                )
         await delete_account(session, int(account_id))
 
     await run_in_session(_op)
@@ -151,6 +197,9 @@ async def cmd_delete_ai_proxy_account(params: dict) -> None:
 @register_command("export_ai_proxy_accounts_payload")
 async def cmd_export_ai_proxy_accounts_payload(params: dict) -> str:
     from stitch_backend.domains.ai_proxy.legacy_accounts_api import export_payload
+    from stitch_backend.domains.auth.permissions import ensure_permission
+
+    await ensure_permission(params, "action.export_accounts")
 
     fmt = params.get("format", "json")
     include_secrets = params.get("includeSecrets", params.get("include_secrets", False))
@@ -164,6 +213,9 @@ async def cmd_export_ai_proxy_accounts_payload(params: dict) -> str:
 @register_command("import_ai_proxy_accounts_payload")
 async def cmd_import_ai_proxy_accounts_payload(params: dict) -> int:
     from stitch_backend.domains.ai_proxy.legacy_accounts_api import import_payload
+    from stitch_backend.domains.auth.permissions import ensure_permission
+
+    await ensure_permission(params, "action.export_accounts")
 
     payload_str = params.get("payload", params.get("payloadStr", "{}"))
     if isinstance(payload_str, dict):
@@ -1140,6 +1192,10 @@ async def cmd_fetch_kiro_account_quotas(params: dict) -> list:
 @register_command("scan_auth_files")
 async def cmd_scan_auth_files(params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AuthFileScanner
+    from stitch_backend.domains.auth.permissions import ensure_permission
+
+    await ensure_permission(params, "action.export_accounts")
+
     files = AuthFileScanner.scan_all()
     return [
         {"provider": f.provider, "path": f.path, "token": f.token[:8] + "...", "expiresAt": f.expires_at}
@@ -1155,6 +1211,9 @@ async def cmd_auto_import_ai_proxy_auth_files(params: dict) -> dict:
         get_account_by_name,
     )
     from stitch_backend.domains.ai_proxy.service import AuthFileScanner
+    from stitch_backend.domains.auth.permissions import ensure_permission
+
+    await ensure_permission(params, "action.export_accounts")
 
     files = AuthFileScanner.scan_all()
     owner_id = _alias_owner_id(params)
@@ -1300,7 +1359,7 @@ async def cmd_open_url_in_browser(params: dict) -> None:
         webbrowser.open(url)
 
 
-@register_command("debug_run_ai_proxy_migration")
+@register_command("debug_run_ai_proxy_migration", admin_only=True)
 async def cmd_debug_run_ai_proxy_migration(params: dict) -> str:
     """Run a raw SQL migration for debugging (requires STITCH_DEBUG_ALLOW_SQL=1)."""
     import os

@@ -290,9 +290,12 @@ async def cmd_set_favorite(params: dict) -> dict:
             try:
                 data = json.loads(sf.read_text(encoding="utf-8"))
                 if data.get("runId") == scenario_id or dirpath.name == scenario_id:
+                    _enforce_tier(data, params.get("_caller_role"))
                     data["favorite"] = favorite
                     sf.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
                     return {"scenarioId": scenario_id, "favorite": favorite}
+            except HTTPException:
+                raise
             except Exception:
                 continue
 
@@ -313,10 +316,13 @@ async def cmd_mark_played(params: dict) -> dict:
             try:
                 data = json.loads(sf.read_text(encoding="utf-8"))
                 if data.get("runId") == scenario_id or dirpath.name == scenario_id:
+                    _enforce_tier(data, params.get("_caller_role"))
                     data["lastPlayedAt"] = _now_iso()
                     data["playCount"] = data.get("playCount", 0) + 1
                     sf.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
                     return {"scenarioId": scenario_id}
+            except HTTPException:
+                raise
             except Exception:
                 continue
 

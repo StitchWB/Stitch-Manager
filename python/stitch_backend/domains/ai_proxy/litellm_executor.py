@@ -19,6 +19,9 @@ from stitch_backend.domains.ai_gateway.routing_engine import PoolScope, RoutingE
 from stitch_backend.domains.ai_gateway.usage_tracker import record_usage as _record_group_usage
 from stitch_backend.domains.ai_proxy.compression.service import get_compression_service
 from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
+from stitch_backend.domains.ai_proxy.holone_inspector import (
+    default_engine as _holone_default_engine,
+)
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
 from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
 from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
@@ -108,6 +111,9 @@ class LiteLLMExecutor:
                 return await self._routing_engine.route(session, gw_request, pool=pool)
 
             routing_results = await run_in_session(_route)
+            if not routing_results:
+                logger.debug("AI Gateway route returned empty list for %s", payload.model)
+                return None
             first = routing_results[0]
             logger.info(
                 "gateway route caller=%s credential=%s owner=%s group_hit=%s",
@@ -187,10 +193,11 @@ class LiteLLMExecutor:
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                await _record_group_usage(
-                    pool.owner_user_id if pool is not None else None,
-                    routing_result.group_id_hit,
-                )
+                if pool is not None and pool.owner_user_id is not None:
+                    await _record_group_usage(
+                        pool.owner_user_id,
+                        routing_result.group_id_hit,
+                    )
                 return result
 
         # No route available — LiteLLM Router fallback removed (L2 final wave).
@@ -338,10 +345,11 @@ class LiteLLMExecutor:
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                await _record_group_usage(
-                    pool.owner_user_id if pool is not None else None,
-                    routing_result.group_id_hit,
-                )
+                if pool is not None and pool.owner_user_id is not None:
+                    await _record_group_usage(
+                        pool.owner_user_id,
+                        routing_result.group_id_hit,
+                    )
                 return result
 
         # No route available — LiteLLM Router fallback removed (L2 final wave).
@@ -491,10 +499,11 @@ class LiteLLMExecutor:
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                await _record_group_usage(
-                    pool.owner_user_id if pool is not None else None,
-                    routing_result.group_id_hit,
-                )
+                if pool is not None and pool.owner_user_id is not None:
+                    await _record_group_usage(
+                        pool.owner_user_id,
+                        routing_result.group_id_hit,
+                    )
                 return result
 
         # No route available — LiteLLM Router fallback removed (L2 final wave).
@@ -515,15 +524,24 @@ class LiteLLMExecutor:
         # HoloNe request inspection (responses API uses input field)
         if holone_service.config.enabled and payload.input:
             text = json.dumps(payload.input) if isinstance(payload.input, (dict, list)) else str(payload.input)
-            from stitch_backend.domains.ai_proxy.holone_inspector import default_engine as _de
-            request_findings = _de().inspect(text, source="request")
+            request_findings = _holone_default_engine().inspect(text, source="request")
             if request_findings and holone_service.config.mode == "block":
                 logger.warning("HoloNe blocked request: %s", [f.rule_id for f in request_findings])
                 raise HTTPException(status_code=403, detail="Blocked by HoloNe")
 
-        # Compression: compress input (responses API uses input field)
+        # Compression: compress input (responses API uses input field).
+        # Mirror the messages path (compress_input) flags: only compress
+        # when config.enabled AND config.caveman_enabled AND
+        # config.input_compression_enabled.  config.level is the
+        # @property returning CompressionLevel enum (derived from
+        # config.caveman_level string) — compress_text expects the enum.
         input_data = payload.input
-        if compression_service.config.enabled and isinstance(input_data, str):
+        if (
+            compression_service.config.enabled
+            and compression_service.config.caveman_enabled
+            and compression_service.config.input_compression_enabled
+            and isinstance(input_data, str)
+        ):
             from stitch_backend.domains.ai_proxy.compression.caveman import compress_text
             input_data = compress_text(input_data, level=compression_service.config.level)
 
@@ -779,6 +797,13 @@ def _json_object(response: JsonObject | BaseModel) -> JsonObject:
 # BackgroundManagerConfig providers when none exist (idempotent, owner_id
 # NULL). When this succeeds, the LiteLLM-config fallback in ``models()``
 # is removed (returns empty instead). When it fails, the fallback is kept.
+#
+# P2.15 — ``_public_models_auto_created_flag=True`` with 0 providers is
+# intentional: an empty catalog is the product default when no providers
+# are configured.  The flag means "the auto-create step ran successfully"
+# (not "rows were created").  Returning True with 0 providers prevents
+# the LiteLLM fallback from kicking in (there is no LiteLLM Router
+# anymore — the fallback would just return an empty list anyway).
 
 _public_models_auto_created_flag: bool = False
 
@@ -855,7 +880,9 @@ async def auto_create_public_models_from_config(
                     enabled=True,
                     owner_id=None,
                 )
-            await session.commit()
+            # P2.12: flush, not commit — run_in_session commits the
+            # outer transaction after the callback returns.
+            await session.flush()
 
         await run_in_session(_create)
         _public_models_auto_created_flag = True

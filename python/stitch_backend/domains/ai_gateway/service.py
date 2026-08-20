@@ -24,7 +24,7 @@ import logging
 import secrets
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from stitch_backend.core.base_repository import BaseRepository
 from stitch_backend.core.exceptions import StitchError
@@ -46,6 +46,18 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+#: Maximum number of enabled proxy keys a single user may have.  Each
+#: enabled key is fetched and looped in :meth:`resolve_proxy_key`, so
+#: unbounded creation is a DoS vector.  The cap is generous (10) for
+#: normal multi-device use while keeping the resolve loop cheap.
+_MAX_ENABLED_KEYS_PER_USER: int = 10
+
+#: Hard LIMIT on the resolve_proxy_key fetch-all query.  Belt-and-suspenders
+#: alongside the per-user cap — if the table somehow grows past this (e.g.
+#: the cap was added after keys already existed), the resolve loop stays
+#: bounded instead of scanning the entire table.
+_RESOLVE_PROXY_KEY_LIMIT: int = 1000
 
 
 def compute_fingerprint(provider_endpoint_id: str, secret: str) -> str:
@@ -570,7 +582,28 @@ class UserProxyKeyService(BaseRepository[UserProxyKey]):
 
         ``raw = secrets.token_hex(24)`` (48 chars). The hash is stored; the
         raw value is returned to the caller and never persisted.
+
+        Raises :class:`StitchError` when the user already has
+        ``_MAX_ENABLED_KEYS_PER_USER`` enabled keys — unbounded creation
+        is a DoS vector (each enabled key is looped in
+        :meth:`resolve_proxy_key`).
         """
+        # Cap enabled keys per user to prevent DoS via unbounded key
+        # creation (each enabled key is fetched in resolve_proxy_key).
+        count_result = await self._db.execute(
+            select(func.count()).select_from(UserProxyKey).where(
+                UserProxyKey.user_id == user_id,
+                UserProxyKey.enabled.is_(True),
+            )
+        )
+        enabled_count = int(count_result.scalar_one())
+        if enabled_count >= _MAX_ENABLED_KEYS_PER_USER:
+            raise StitchError(
+                f"Cannot create more than {_MAX_ENABLED_KEYS_PER_USER} "
+                f"enabled proxy keys (user has {enabled_count}). "
+                f"Revoke an existing key first."
+            )
+
         raw = secrets.token_hex(24)
         token_hash = _hash_proxy_key(raw)
         record = UserProxyKey(
@@ -642,33 +675,43 @@ class UserProxyKeyService(BaseRepository[UserProxyKey]):
     async def resolve_proxy_key(self, raw: str) -> int | None:
         """Resolve a raw proxy key to a user_id (enabled keys only).
 
-        Uses ``hmac.compare_digest`` for timing-safe comparison.  Updates
-        the in-memory ``last_used_at`` batch via :func:`mark_used` — never
-        writes to the DB per request.
+        P1.9: fetches all enabled keys and loops with
+        ``hmac.compare_digest`` in Python instead of a SQL equality
+        match on the hash.  Keys per user are few (typically 1–3),
+        so the loop is cheap and removes the timing side-channel of
+        a SQL ``=`` short-circuit (which reveals whether a candidate
+        hash exists in the table).
+
+        The join on ``auth_users`` ensures the owning user still
+        exists — a deleted user's keys are CASCADE-deleted
+        (``ForeignKey(..., ondelete="CASCADE")`` on
+        ``UserProxyKey.user_id``), so the join is belt-and-suspenders.
+
+        Updates the in-memory ``last_used_at`` batch via
+        :func:`mark_used` — never writes to the DB per request.
         """
         if not raw:
             return None
-        # Compute the hash and look up the candidate row.
         token_hash = _hash_proxy_key(raw)
+        # Fetch all enabled keys (small N per install).  The join on
+        # auth_users is belt-and-suspenders — CASCADE on user delete
+        # already removes orphaned keys.  LIMIT is a hard cap so the
+        # loop stays bounded even if the table grows unexpectedly.
+        from stitch_backend.domains.auth.models import User
+
         result = await self._db.execute(
-            select(UserProxyKey).where(
-                and_(
-                    UserProxyKey.token_hash == token_hash,
-                    UserProxyKey.enabled.is_(True),
-                )
-            )
+            select(UserProxyKey).join(
+                User, UserProxyKey.user_id == User.id
+            ).where(
+                UserProxyKey.enabled.is_(True)
+            ).limit(_RESOLVE_PROXY_KEY_LIMIT)
         )
-        key = result.scalar_one_or_none()
-        if key is None:
-            return None
-        # Timing-safe compare against the stored hash (defends against
-        # theoretical hash-leak oracles; the SELECT already matched).
-        if not hmac.compare_digest(key.token_hash, token_hash):
-            return None
-        # Mark used — in-memory accumulate only (the 10 s background flush
-        # task performs the DB UPDATE outside any request session).
-        await mark_used(key.id)
-        return key.user_id
+        keys = result.scalars().all()
+        for key in keys:
+            if hmac.compare_digest(key.token_hash, token_hash):
+                await mark_used(key.id)
+                return key.user_id
+        return None
 
     async def ensure_default_key(self, user_id: int) -> tuple[UserProxyKey, str] | None:
         """Ensure the user has at least one enabled key; create a default if none.
