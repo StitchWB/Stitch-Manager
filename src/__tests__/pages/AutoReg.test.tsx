@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AutoReg from '../../pages/AutoReg';
 
@@ -205,8 +205,34 @@ describe('AutoReg page', () => {
       ),
     ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open Marketplace' })).toBeTruthy();
+    // Retry button is also present.
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     // CommandCenter must NOT render when providers list is empty.
     expect(screen.queryByTestId('command-center')).toBeNull();
+  });
+
+  it('refetches providers when Retry button is clicked in empty state', async () => {
+    // First call returns empty (empty state shows).
+    getProviders.mockResolvedValueOnce([]);
+    // Second call (Retry) returns providers.
+    getProviders.mockResolvedValueOnce([
+      mkProvider('kiro_v2', 'Kiro v2'),
+    ]);
+
+    renderAutoReg();
+
+    // Wait for empty state.
+    await waitFor(() => {
+      expect(screen.getByText('No providers')).toBeTruthy();
+    });
+
+    // Click Retry.
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    // After retry, providers load and CommandCenter renders.
+    await waitFor(() => {
+      expect(screen.getByTestId('command-center')).toBeTruthy();
+    });
   });
 
   it('renders provider rows via CommandCenter when providers are installed', async () => {

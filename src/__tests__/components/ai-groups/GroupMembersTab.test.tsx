@@ -28,6 +28,7 @@ jest.mock('@/lib/i18n', () => ({
       key,
     );
   },
+  getLocale: () => 'en',
 }));
 
 // ── Mock sonner toast ───────────────────────────────────────────────────────
@@ -247,5 +248,36 @@ describe('GroupMembersTab — transfer ownership', () => {
 
     // Non-owner: no OverflowMenu on other members → no transfer item.
     expect(screen.queryByText('ai.groups.members.transfer.action')).toBeNull();
+  });
+
+  it('calls onLeft after leaveGroup when Leave is clicked', async () => {
+    storeState.detail = makeDetail({
+      is_owner: true,
+      members: [
+        { user_id: 1, username: 'owner', role: 'owner' as const, joined_at: '2024-01-01' },
+        { user_id: 2, username: 'alice', role: 'member' as const, joined_at: '2024-01-02' },
+      ],
+    });
+
+    const onLeft = jest.fn();
+    render(
+      <GroupMembersTab groupId="g-1" isOwner={true} currentUserId="1" onLeft={onLeft} />,
+    );
+
+    // Click the Leave button on the self row (owner, user_id=1).
+    fireEvent.click(screen.getByText('ai.groups.actions.leave'));
+
+    // askConfirm was called.
+    await waitFor(() => {
+      expect(askConfirm).toHaveBeenCalled();
+    });
+
+    // leaveGroup called with the group id.
+    await waitFor(() => {
+      expect(storeState.leaveGroup).toHaveBeenCalledWith('g-1');
+    });
+
+    // onLeft called after leaveGroup.
+    expect(onLeft).toHaveBeenCalled();
   });
 });

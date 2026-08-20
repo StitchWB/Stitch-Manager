@@ -27,6 +27,7 @@ jest.mock('@/lib/i18n', () => ({
       key,
     );
   },
+  getLocale: () => 'en',
 }));
 
 // ── Mock sonner toast ───────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ jest.mock('@/components/ui/ConfirmDialogHost', () => ({
 }));
 
 // ── Mock backend groups module (usage + quota spies) ───────────────────────
-const groupsUsageList = jest.fn(async () => ({ rows: [] }));
+const groupsUsageList = jest.fn(async () => ({ rows: [], max_per_member_daily: null }));
 const groupsSetQuota = jest.fn(async () => ({ id: 'g-1', name: 'Test', owner_id: 1, created_at: '' }));
 jest.mock('@/lib/backend/modules/groups', () => ({
   groupsUsageList: (...args: unknown[]) => groupsUsageList(...args),
@@ -82,6 +83,15 @@ jest.mock('@/components/ui', () => ({
     <div {...rest}><span>{title}</span></div>
   ),
   SkeletonLoader: () => <div data-testid="skeleton" />,
+  ProgressBar: ({ value, max, variant, ...rest }: any) => (
+    <div
+      data-testid="progress-bar"
+      data-value={String(value)}
+      data-max={String(max)}
+      data-variant={variant ?? ''}
+      {...rest}
+    />
+  ),
 }));
 
 // ── Mutable store state mock ───────────────────────────────────────────────
@@ -139,7 +149,7 @@ describe('GroupUsageTab', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     storeState.detail = null;
-    groupsUsageList.mockResolvedValue({ rows: [] });
+    groupsUsageList.mockResolvedValue({ rows: [], max_per_member_daily: null });
     groupsSetQuota.mockResolvedValue({ id: 'g-1', name: 'Test', owner_id: 1, created_at: '' });
   });
 
@@ -160,7 +170,7 @@ describe('GroupUsageTab', () => {
     });
   });
 
-  it('renders owner aggregate per member with today + 7d totals', async () => {
+  it('renders owner aggregate per member with today + 30d totals', async () => {
     const today = utcToday();
     const yesterday = '2024-01-01';
     groupsUsageList.mockResolvedValue({
@@ -169,6 +179,7 @@ describe('GroupUsageTab', () => {
         makeRow({ user_id: 1, username: 'alice', day: yesterday, requests: 10, tokens: 200 }),
         makeRow({ user_id: 2, username: 'bob', day: today, requests: 3, tokens: 50 }),
       ],
+      max_per_member_daily: null,
     });
 
     render(<GroupUsageTab groupId="g-1" isOwner={true} />);
@@ -204,6 +215,7 @@ describe('GroupUsageTab', () => {
         makeRow({ user_id: 1, username: 'alice', day: '2024-01-01', requests: 5, tokens: 100 }),
         makeRow({ user_id: 1, username: 'alice', day: '2024-01-02', requests: 8, tokens: 200 }),
       ],
+      max_per_member_daily: null,
     });
 
     render(<GroupUsageTab groupId="g-1" isOwner={false} />);
@@ -287,6 +299,36 @@ describe('GroupUsageTab', () => {
     });
   });
 
+  it('rejects fractional quota input with quotaFractional error', async () => {
+    storeState.detail = makeDetail({
+      group: {
+        id: 'g-1',
+        name: 'Test',
+        owner_id: 1,
+        max_requests_per_member_daily: 50,
+        created_at: '',
+      },
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={true} />);
+
+    const quotaInput = await waitFor(() =>
+      screen.getByDisplayValue('50') as HTMLInputElement,
+    );
+    // Enter a fractional value.
+    fireEvent.change(quotaInput, { target: { value: '10.5' } });
+
+    fireEvent.click(screen.getByText('common.save'));
+
+    // Error toast with the fractional key.
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('ai.groups.usage.quotaFractional');
+    });
+
+    // groupsSetQuota was NOT called.
+    expect(groupsSetQuota).not.toHaveBeenCalled();
+  });
+
   it('does not render quota block for members', async () => {
     render(<GroupUsageTab groupId="g-1" isOwner={false} />);
 
@@ -296,5 +338,150 @@ describe('GroupUsageTab', () => {
 
     // No quota label visible.
     expect(screen.queryByText('ai.groups.usage.quotaLabel')).toBeNull();
+  });
+
+  // ── Member summary card: limit + today progress ──────────────────────────
+
+  it('renders member summary card with group limit and progress bar', async () => {
+    const today = utcToday();
+    groupsUsageList.mockResolvedValue({
+      rows: [
+        makeRow({ user_id: 1, username: 'alice', day: today, requests: 30, tokens: 300 }),
+      ],
+      max_per_member_daily: 50,
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={false} />);
+
+    await waitFor(() => {
+      // Limit label + value
+      expect(screen.getByText('ai.groups.usage.limit')).toBeTruthy();
+      expect(screen.getByText('50 ai.groups.usage.perDay')).toBeTruthy();
+      // Today label + X/N
+      expect(screen.getByText('ai.groups.usage.today')).toBeTruthy();
+      expect(screen.getByText('30/50')).toBeTruthy();
+    });
+
+    // Progress bar rendered with correct value/max/variant.
+    const bar = screen.getByTestId('progress-bar');
+    expect(bar.getAttribute('data-value')).toBe('30');
+    expect(bar.getAttribute('data-max')).toBe('50');
+    // 30/50 = 60% → success (ok < 70%)
+    expect(bar.getAttribute('data-variant')).toBe('success');
+  });
+
+  it('renders member summary with unlimited when cap is null', async () => {
+    groupsUsageList.mockResolvedValue({
+      rows: [],
+      max_per_member_daily: null,
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('ai.groups.usage.limit')).toBeTruthy();
+      expect(screen.getByText('ai.groups.usage.unlimited')).toBeTruthy();
+    });
+
+    // No progress bar when cap is null (unlimited).
+    expect(screen.queryByTestId('progress-bar')).toBeNull();
+  });
+
+  it('colors progress bar as warning when usage >= 70% and < 100%', async () => {
+    const today = utcToday();
+    groupsUsageList.mockResolvedValue({
+      rows: [
+        makeRow({ user_id: 1, username: 'alice', day: today, requests: 35, tokens: 100 }),
+      ],
+      max_per_member_daily: 50,
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={false} />);
+
+    await waitFor(() => {
+      const bar = screen.getByTestId('progress-bar');
+      // 35/50 = 70% → warning
+      expect(bar.getAttribute('data-variant')).toBe('warning');
+    });
+  });
+
+  it('colors progress bar as danger when usage >= 100%', async () => {
+    const today = utcToday();
+    groupsUsageList.mockResolvedValue({
+      rows: [
+        makeRow({ user_id: 1, username: 'alice', day: today, requests: 55, tokens: 100 }),
+      ],
+      max_per_member_daily: 50,
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={false} />);
+
+    await waitFor(() => {
+      const bar = screen.getByTestId('progress-bar');
+      // 55/50 = 110% → danger
+      expect(bar.getAttribute('data-variant')).toBe('danger');
+    });
+  });
+
+  it('renders member 30d history list with header', async () => {
+    groupsUsageList.mockResolvedValue({
+      rows: [
+        makeRow({ user_id: 1, username: 'alice', day: '2024-01-01', requests: 5, tokens: 100 }),
+        makeRow({ user_id: 1, username: 'alice', day: '2024-01-02', requests: 8, tokens: 200 }),
+      ],
+      max_per_member_daily: null,
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('ai.groups.usage.history30')).toBeTruthy();
+      expect(screen.getByText('2024-01-01')).toBeTruthy();
+      expect(screen.getByText('2024-01-02')).toBeTruthy();
+    });
+  });
+
+  // ── Owner per-member progress bar ────────────────────────────────────────
+
+  it('renders owner per-member progress bar when cap is set', async () => {
+    const today = utcToday();
+    groupsUsageList.mockResolvedValue({
+      rows: [
+        makeRow({ user_id: 1, username: 'alice', day: today, requests: 20, tokens: 100 }),
+      ],
+      max_per_member_daily: 50,
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('@alice')).toBeTruthy();
+    });
+
+    // Owner sees a progress bar for alice (20/50 = 40% → success).
+    const bars = screen.getAllByTestId('progress-bar');
+    expect(bars).toHaveLength(1);
+    expect(bars[0].getAttribute('data-value')).toBe('20');
+    expect(bars[0].getAttribute('data-max')).toBe('50');
+    expect(bars[0].getAttribute('data-variant')).toBe('success');
+  });
+
+  it('does not render owner progress bar when cap is null', async () => {
+    const today = utcToday();
+    groupsUsageList.mockResolvedValue({
+      rows: [
+        makeRow({ user_id: 1, username: 'alice', day: today, requests: 20, tokens: 100 }),
+      ],
+      max_per_member_daily: null,
+    });
+
+    render(<GroupUsageTab groupId="g-1" isOwner={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('@alice')).toBeTruthy();
+    });
+
+    // No progress bars when cap is null.
+    expect(screen.queryByTestId('progress-bar')).toBeNull();
   });
 });

@@ -160,4 +160,47 @@ describe('ShareToGroupPicker', () => {
     const applyBtn = screen.getByText('ai.groups.share.apply') as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(true);
   });
+
+  it('keeps user checkbox changes when parent re-renders with same alreadySharedIds (new ref)', async () => {
+    groupsState.groups = [
+      { id: 'g1', name: 'Team A', member_count: 3, key_count: 2, role: 'owner', created_at: '' },
+      { id: 'g2', name: 'Team B', member_count: 1, key_count: 0, role: 'member', created_at: '' },
+    ];
+
+    // Parent passes a NEW array reference each render with the same ids.
+    // Without the value-based guard, the picker would reset selection on
+    // every parent re-render, wiping the user's checkbox changes.
+    const { rerender } = render(
+      <ShareToGroupPicker
+        isOpen
+        onClose={() => {}}
+        alreadySharedIds={['g1']}
+        onApply={() => {}}
+        title="test"
+      />,
+    );
+
+    // Wait for the deferred setSelected to flush.
+    await waitFor(() => {
+      expect((screen.getByTestId('cb-Team-A') as HTMLInputElement).checked).toBe(true);
+    });
+
+    // User checks Team B (was not shared → now share).
+    fireEvent.click(screen.getByTestId('cb-Team-B'));
+    expect((screen.getByTestId('cb-Team-B') as HTMLInputElement).checked).toBe(true);
+
+    // Parent re-renders with a NEW array reference but the same ids.
+    rerender(
+      <ShareToGroupPicker
+        isOpen
+        onClose={() => {}}
+        alreadySharedIds={['g1']}
+        onApply={() => {}}
+        title="test"
+      />,
+    );
+
+    // The user's checkbox change must survive the re-render.
+    expect((screen.getByTestId('cb-Team-B') as HTMLInputElement).checked).toBe(true);
+  });
 });
