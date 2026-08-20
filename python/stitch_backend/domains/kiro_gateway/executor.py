@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from stitch_backend.domains.ai_gateway.routing_engine import PoolScope
     from stitch_backend.domains.ai_proxy.litellm_gateway import GatewayRequest, JsonObject
     from stitch_backend.domains.kiro_gateway.service import KiroGatewayService
     from stitch_backend.domains.kiro_gateway.stats import ProxyStats
@@ -128,20 +129,20 @@ class KiroExecutor:
 
     # ── Protocol methods ────────────────────────────────────────────────────
 
-    async def chat(self, payload: GatewayRequest) -> JsonObject | Response:
+    async def chat(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         return await self._execute(payload.sdk_payload(), "chat", payload.stream)
 
-    async def messages(self, payload: GatewayRequest) -> JsonObject | Response:
+    async def messages(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         return await self._execute(payload.sdk_payload(), "messages", payload.stream)
 
-    async def responses(self, payload: GatewayRequest) -> JsonObject:
+    async def responses(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject:
         body = payload.sdk_payload()
         result = await self._execute(body, "responses", payload.stream)
         if isinstance(result, Response):
             raise HTTPException(status_code=502, detail=_INVALID_RESP)
         return result
 
-    async def models(self) -> JsonObject:
+    async def models(self, pool: PoolScope | None = None) -> JsonObject:
         return {
             "object": "list",
             "data": [
