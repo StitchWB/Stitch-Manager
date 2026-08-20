@@ -50,22 +50,27 @@ def _get_write_engine() -> AsyncEngine:
     global _write_engine  # noqa: PLW0603
     if _write_engine is None:
         settings = get_settings()
+        pool_size = settings.db_write_pool_size
         _write_engine = create_async_engine(
             settings.database_url,
             echo=settings.db_echo,
-            pool_size=1,  # Single write connection — no contention by design
+            pool_size=pool_size,  # Single write connection by default — no contention
             max_overflow=0,
             pool_pre_ping=True,
             connect_args={"check_same_thread": False},
         )
 
-        # Enable WAL journal mode and optimize for writes
+        # Enable WAL journal mode and optimize for writes.
+        # busy_timeout scales with pool_size to handle the increased contention
+        # when multiple writers share the DB (multi-worker deployments).
+        busy_timeout = 5000 * max(1, pool_size)
+
         @event.listens_for(_write_engine.sync_engine, "connect")
         def _set_write_pragma(dbapi_conn, _connection_record):
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=NORMAL")  # Faster than FULL, safe with WAL
-            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute(f"PRAGMA busy_timeout={busy_timeout}")
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 
@@ -137,6 +142,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 import time as _time
 
+# Throttle for slow-write warning log — emit at most once per 60s.
+_last_slow_write_log: float = 0.0
+_SLOW_WRITE_LOG_INTERVAL: float = 60.0
+
 
 async def run_in_session(
     fn: Callable[[AsyncSession], Coroutine[Any, Any, T]],
@@ -162,10 +171,14 @@ async def run_in_session(
                 result = await fn(session)
                 await session.commit()
 
-                # Monitoring: log slow operations
+                # Monitoring: log slow operations (throttled to once per 60s)
                 elapsed = _time.monotonic() - start
                 if elapsed > 1.0:
-                    logger.warning("Slow DB write: %.2fs", elapsed)
+                    global _last_slow_write_log
+                    now_mono = _time.monotonic()
+                    if now_mono - _last_slow_write_log >= _SLOW_WRITE_LOG_INTERVAL:
+                        logger.warning("Slow DB write: %.2fs", elapsed)
+                        _last_slow_write_log = now_mono
                 if attempt > 0:
                     logger.info("DB write succeeded after %d retries (%.2fs)", attempt, elapsed)
 

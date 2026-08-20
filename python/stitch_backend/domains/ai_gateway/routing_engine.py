@@ -411,6 +411,12 @@ async def _over_quota_group_ids(
     ``group_usage`` row for the caller; a group is over-quota when
     ``max_requests_per_member_daily`` is not NULL and today's usage is
     already >= the cap.
+
+    Also consults the in-process ``usage_tracker._over_keys`` flag set by
+    the direct write path — gives immediate visibility after a write commits,
+    closing the in-process TOCTOU race to zero (the DB pre-check alone has a
+    read→write gap).  Cross-process (multi-worker) stays bounded by the DB
+    pre-check (documented).
     """
     uid = pool.owner_user_id
     if uid is None or not pool.group_ids:
@@ -444,6 +450,14 @@ async def _over_quota_group_ids(
         cap = row.max_requests_per_member_daily
         if cap is not None and int(row.requests) >= int(cap):
             over.add(row.id)
+    # In-process immediate visibility: consult the _over_keys flag set by
+    # the direct write path (usage_tracker.record_usage).  This catches
+    # over-quota state that was just written but might not yet be visible
+    # to the DB read query (read→write race window).
+    from stitch_backend.domains.ai_gateway.usage_tracker import _over_keys
+    for gid in pool.group_ids:
+        if (gid, uid, today) in _over_keys:
+            over.add(gid)
     return over
 
 
