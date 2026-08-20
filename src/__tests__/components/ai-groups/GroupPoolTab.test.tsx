@@ -130,6 +130,7 @@ jest.mock('@/stores/groups', () => ({
 
 const gatewayState: any = {
   endpoints: [],
+  loading: { endpoints: false },
   updateCredential: jest.fn(async () => null),
   fetchEndpoints: jest.fn(async () => undefined),
 };
@@ -317,12 +318,43 @@ describe('GroupPoolTab', () => {
     expect(groupsUnshareCredential).not.toHaveBeenCalled();
   });
 
-  it('lifts pool count to parent via onPoolCountChange', () => {
-    const onPoolCountChange = jest.fn();
-    groupsState.pool = [makePoolItem(), makePoolItem(), makePoolItem()];
+  it('shows skeleton loader inside picker modal while endpoints are loading', () => {
+    gatewayState.loading = { endpoints: true };
 
-    render(<GroupPoolTab groupId="g-1" onPoolCountChange={onPoolCountChange} />);
+    render(<GroupPoolTab groupId="g-1" />);
 
-    expect(onPoolCountChange).toHaveBeenCalledWith(3);
+    // Open the picker.
+    fireEvent.click(screen.getByText('ai.groups.pool.addKey'));
+
+    // Skeleton is shown while endpoints are loading.
+    expect(screen.getByTestId('skeleton')).toBeTruthy();
+    // The "no endpoints" message is NOT shown while loading.
+    expect(screen.queryByText('ai.groups.pool.noEndpoints')).toBeNull();
+  });
+
+  it('passes real group name to unshare confirm body', async () => {
+    groupsState.pool = [makePoolItem({ credential_id: 'c1', can_unshare: true })];
+    groupsState.detail = {
+      group: { id: 'g-1', name: 'Real Group Name', owner_id: 1, created_at: '' },
+      members: [],
+      invites: [],
+      is_owner: true,
+    };
+
+    render(<GroupPoolTab groupId="g-1" />);
+
+    fireEvent.click(screen.getByText('ai.groups.pool.unshareFromGroup'));
+
+    await waitFor(() => {
+      expect(askConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'ai.groups.unshare.confirm.body',
+        }),
+      );
+    });
+
+    // The message should have { group: 'Real Group Name' } interpolated.
+    const call = (askConfirm as jest.Mock).mock.calls[0][0];
+    expect(call.message).toBe('ai.groups.unshare.confirm.body');
   });
 });

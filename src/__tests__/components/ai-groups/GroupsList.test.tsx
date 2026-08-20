@@ -26,6 +26,7 @@ jest.mock('@/lib/i18n', () => ({
       key,
     );
   },
+  getLocale: () => 'en',
 }));
 
 // ── Mock sonner toast ───────────────────────────────────────────────────────
@@ -153,6 +154,8 @@ jest.mock('@/stores/groups', () => ({
 import { GroupsList } from '@/components/ai-groups/GroupsList';
 import { InviteBanner } from '@/components/ai-groups/InviteBanner';
 import { GroupDetail } from '@/components/ai-groups/GroupDetail';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
+import { toast } from 'sonner';
 import type {
   GroupSummary,
   GroupInviteSummary,
@@ -435,5 +438,80 @@ describe('GroupDetail — sole-owner Leave disabled', () => {
       el => (el as HTMLButtonElement).disabled === false,
     );
     expect(enabledLeave).toBeTruthy();
+  });
+
+  it('opens ConfirmDialog directly when Delete overflow item is clicked', async () => {
+    storeState.detail = makeDetail({
+      is_owner: true,
+      members: [
+        { user_id: 1, username: 'owner', role: 'owner' as const, joined_at: '2024-01-01' },
+        { user_id: 2, username: 'member2', role: 'member' as const, joined_at: '2024-01-02' },
+      ],
+    });
+
+    const onDeleted = jest.fn();
+    render(
+      <GroupDetail
+        groupId="g-1"
+        currentUserId="1"
+        onBack={jest.fn()}
+        onDeleted={onDeleted}
+        onLeft={jest.fn()}
+      />,
+    );
+
+    // Click the Delete overflow item.
+    fireEvent.click(screen.getByText('ai.groups.actions.delete'));
+
+    // askConfirm was called (delete opens ConfirmDialog directly).
+    await waitFor(() => {
+      expect(askConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'ai.groups.settings.deleteConfirm.title',
+          variant: 'danger',
+        }),
+      );
+    });
+
+    // deleteGroup called with the group id.
+    await waitFor(() => {
+      expect(storeState.deleteGroup).toHaveBeenCalledWith('g-1');
+    });
+
+    // onDeleted called after deleteGroup.
+    await waitFor(() => {
+      expect(onDeleted).toHaveBeenCalled();
+    });
+  });
+
+  it('shows toast and redirects to settings when Rename overflow item is clicked', async () => {
+    storeState.detail = makeDetail({
+      is_owner: true,
+      members: [
+        { user_id: 1, username: 'owner', role: 'owner' as const, joined_at: '2024-01-01' },
+        { user_id: 2, username: 'member2', role: 'member' as const, joined_at: '2024-01-02' },
+      ],
+    });
+
+    render(
+      <GroupDetail
+        groupId="g-1"
+        currentUserId="1"
+        onBack={jest.fn()}
+        onDeleted={jest.fn()}
+        onLeft={jest.fn()}
+      />,
+    );
+
+    // Click the Rename overflow item.
+    fireEvent.click(screen.getByText('ai.groups.actions.rename'));
+
+    // Toast info was shown explaining the redirect.
+    expect(toast.info).toHaveBeenCalledWith('ai.groups.actions.deleteViaSettings');
+
+    // Settings tab is now active (settings-tab mock renders).
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-tab')).toBeTruthy();
+    });
   });
 });
