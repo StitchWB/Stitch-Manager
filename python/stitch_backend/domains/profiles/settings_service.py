@@ -51,17 +51,34 @@ class ProfileSettingsRepo(BaseRepository[ProfileSettings]):
         cookies: str | None = None, notes: str | None = None,
         owner_id: int | None = None,
     ) -> ProfileSettings:
-        existing = await self.get_by_pk(alias)
-        if existing:
-            # Preserve existing owner_id on update — do not let a different
-            # caller hijack a shared/legacy row by re-upserting under their id.
-            existing.config_json = config_json
-            existing.cookies = cookies
-            existing.notes = notes
-            existing.updated_at = datetime.now(UTC)
-            await self._db.flush()
-            await self._db.refresh(existing)
-            return existing
+        if owner_id is not None:
+            # Multi-user: scope to own + shared rows
+            existing = await self.get_by_pk_for_owner(alias, owner_id)
+            if existing is None:
+                # No own/shared row — check if a foreign-owned row exists
+                foreign = await self.get_by_pk(alias)
+                if foreign is not None and foreign.owner_id is not None:
+                    raise ProfileAliasExistsError(alias)
+            if existing:
+                # Preserve existing owner_id on update — do not let a
+                # different caller hijack a shared/legacy row.
+                existing.config_json = config_json
+                existing.cookies = cookies
+                existing.notes = notes
+                existing.updated_at = datetime.now(UTC)
+                await self._db.flush()
+                await self._db.refresh(existing)
+                return existing
+        else:
+            existing = await self.get_by_pk(alias)
+            if existing:
+                existing.config_json = config_json
+                existing.cookies = cookies
+                existing.notes = notes
+                existing.updated_at = datetime.now(UTC)
+                await self._db.flush()
+                await self._db.refresh(existing)
+                return existing
         return await self.create(
             alias=alias, config_json=config_json,
             cookies=cookies, notes=notes,
@@ -108,12 +125,29 @@ class ProfileSettingsRepo(BaseRepository[ProfileSettings]):
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
-    async def rename_alias(self, old_alias: str, new_alias: str) -> None:
-        stmt = text(
-            "UPDATE profile_settings SET alias = :new, updated_at = datetime('now') "
-            "WHERE alias = :old"
-        )
-        await self._db.execute(stmt, {"new": new_alias, "old": old_alias})
+    async def rename_alias(
+        self, old_alias: str, new_alias: str,
+        owner_id: int | None = None,
+    ) -> None:
+        # When owner_id is set (multi-user), scope the rename to rows
+        # the caller owns or that are shared (owner_id NULL).
+        if owner_id is not None:
+            stmt = text(
+                "UPDATE profile_settings SET alias = :new, "
+                "updated_at = datetime('now') "
+                "WHERE alias = :old "
+                "AND (owner_id IS NULL OR owner_id = :uid)"
+            )
+            await self._db.execute(
+                stmt, {"new": new_alias, "old": old_alias, "uid": owner_id},
+            )
+        else:
+            stmt = text(
+                "UPDATE profile_settings SET alias = :new, "
+                "updated_at = datetime('now') "
+                "WHERE alias = :old"
+            )
+            await self._db.execute(stmt, {"new": new_alias, "old": old_alias})
         await self._db.flush()
 
 
@@ -184,6 +218,7 @@ class ProfileSettingsService(BaseService):
 
     async def rename_alias(
         self, old_alias: str, new_alias: str,
+        owner_id: int | None = None,
     ) -> None:
         """Rename a profile alias with cascade to related tables."""
         old_alias = old_alias.strip()
@@ -194,9 +229,11 @@ class ProfileSettingsService(BaseService):
             return
 
         # Check new alias doesn't collide with an existing profile
-        # (fingerprint files or settings rows)
+        # (fingerprint files or settings rows visible to this caller)
         existing = {a.lower() for a in FingerprintService.list_aliases()}
-        existing |= {a.lower() for a in await self.list_setting_aliases()}
+        existing |= {
+            a.lower() for a in await self.list_setting_aliases(owner_id=owner_id)
+        }
         if new_alias.lower() in existing:
             raise ProfileAliasExistsError(new_alias)
 
@@ -206,35 +243,62 @@ class ProfileSettingsService(BaseService):
             FingerprintService.save(new_alias, old_profile)
             FingerprintService.delete(old_alias)
 
-        # Rename in profile_settings
-        await self._repo.rename_alias(old_alias, new_alias)
+        # Rename in profile_settings (owner-scoped when owner_id is set)
+        await self._repo.rename_alias(old_alias, new_alias, owner_id=owner_id)
 
-        # Cascade to tables WITH updated_at column (best-effort)
-        for table in ("scenarios", "composed_flows"):
+        # Cascade to related tables.
+        # composed_flows HAS an owner_id column → scope by owner when set.
+        # scenarios and scenario_runs do NOT have owner_id columns (verified
+        # by reading the ORM models and raw-SQL INSERT statements — these
+        # tables are shared/legacy with no per-user tracking).  When
+        # owner_id is set, skip the cascade to these tables to avoid
+        # mutating another user's rows that happen to share the same alias.
+        # When owner_id is None (desktop), cascade as before (best-effort).
+        if owner_id is not None:
+            # composed_flows: scope to own + shared rows
             try:
                 await self._db.execute(
                     text(
-                        f"UPDATE {table} SET alias = :new, "
-                        f"updated_at = datetime('now') WHERE alias = :old"
+                        "UPDATE composed_flows SET alias = :new, "
+                        "updated_at = datetime('now') "
+                        "WHERE alias = :old "
+                        "AND (owner_id IS NULL OR owner_id = :uid)"
                     ),
+                    {"new": new_alias, "old": old_alias, "uid": owner_id},
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Profiles] Cascade rename %s→%s in composed_flows "
+                    "skipped: %s", old_alias, new_alias, exc,
+                )
+            # scenarios / scenario_runs: NO owner_id column — skip in
+            # multi-user mode to prevent cross-user mutation.
+        else:
+            for table in ("scenarios", "composed_flows"):
+                try:
+                    await self._db.execute(
+                        text(
+                            f"UPDATE {table} SET alias = :new, "
+                            f"updated_at = datetime('now') WHERE alias = :old"
+                        ),
+                        {"new": new_alias, "old": old_alias},
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[Profiles] Cascade rename %s→%s in %s skipped: %s",
+                        old_alias, new_alias, table, exc,
+                    )
+            # scenario_runs has NO updated_at column
+            try:
+                await self._db.execute(
+                    text("UPDATE scenario_runs SET alias = :new WHERE alias = :old"),
                     {"new": new_alias, "old": old_alias},
                 )
             except Exception as exc:
                 logger.warning(
-                    "[Profiles] Cascade rename %s→%s in %s skipped: %s",
-                    old_alias, new_alias, table, exc,
+                    "[Profiles] Cascade rename %s→%s in scenario_runs skipped: %s",
+                    old_alias, new_alias, exc,
                 )
-        # scenario_runs has NO updated_at column
-        try:
-            await self._db.execute(
-                text("UPDATE scenario_runs SET alias = :new WHERE alias = :old"),
-                {"new": new_alias, "old": old_alias},
-            )
-        except Exception as exc:
-            logger.warning(
-                "[Profiles] Cascade rename %s→%s in scenario_runs skipped: %s",
-                old_alias, new_alias, exc,
-            )
         await self._db.flush()
         logger.info("[Profiles] Alias renamed: %s → %s", old_alias, new_alias)
 
@@ -276,7 +340,7 @@ class ProfileSettingsService(BaseService):
 
     async def import_bundle(
         self, source_path: str, target_alias: str | None = None,
-        overwrite: bool = False,
+        overwrite: bool = False, owner_id: int | None = None,
     ) -> str:
         """Import a profile bundle from a JSON file."""
         if not source_path.strip():
@@ -291,9 +355,11 @@ class ProfileSettingsService(BaseService):
             raise ProfileError("bundle alias is required")
         alias = (target_alias or source_alias).strip()
 
-        # Check conflict
+        # Check conflict (scoped to caller-visible aliases)
         existing = {a.lower() for a in FingerprintService.list_aliases()}
-        existing |= {a.lower() for a in await self.list_setting_aliases()}
+        existing |= {
+            a.lower() for a in await self.list_setting_aliases(owner_id=owner_id)
+        }
         if alias.lower() in existing and not overwrite:
             raise ProfileAliasExistsError(alias)
 
@@ -313,7 +379,9 @@ class ProfileSettingsService(BaseService):
             cookies = settings_obj.get("cookies") or s.storage.cookies
             notes = settings_obj.get("notes") or s.storage.notes
             config_json = s.model_dump_json(by_alias=True)
-            await self._repo.upsert(alias, config_json, cookies, notes)
+            await self._repo.upsert(
+                alias, config_json, cookies, notes, owner_id=owner_id,
+            )
 
         # Import scenarios and flows (best-effort)
         await self._import_related("scenarios", alias, raw.get("scenarios", []))

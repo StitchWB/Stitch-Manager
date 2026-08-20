@@ -299,6 +299,20 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         PoolScope(user.id, group_ids); (c) local install token / auth
         disabled → PoolScope(None, (), True).  Raises 401 when no auth
         path matches.
+
+        Security: when a Bearer token is present but does NOT match any
+        proxy key or the local install token, we raise 401 immediately
+        — we do NOT fall through to the web-session cookie path.  This
+        prevents an invalid bearer from silently authenticating as the
+        cookie's user.
+
+        P1.6: the proxy-key resolve and the web-session groups read are in
+        separate branches (only one executes per request).  The original
+        code had a fragile fall-through from the bearer path to the
+        web-session path — P0.3 closed it by raising 401 on invalid
+        bearer.  The two ``get_db()`` calls cannot share a single session
+        because ``_current_user_optional`` opens its own write session
+        (pool_size=1 → would deadlock if nested).
         """
         from stitch_backend.domains.ai_gateway.service import UserProxyKeyService
         from stitch_backend.domains.groups.service import group_ids_for_user
@@ -306,6 +320,7 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         # (a) Authorization Bearer matching a user proxy key
         raw_bearer = _extract_bearer(authorization)
         if raw_bearer:
+            # Single session for proxy-key resolve + groups read.
             async with get_db() as session:
                 key_svc = UserProxyKeyService(session)
                 uid = await key_svc.resolve_proxy_key(raw_bearer)
@@ -318,6 +333,13 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
                 authorization or "", f"Bearer {expected_token}",
             ):
                 return PoolScope(None, (), True)
+            # Bearer was present but matched no proxy key and no local
+            # token — reject rather than falling through to the cookie
+            # path (prevents invalid-bearer → cookie-user impersonation).
+            raise HTTPException(
+                status_code=401,
+                detail={"error": {"message": "Invalid bearer token"}},
+            )
 
         # (b) Web session cookie
         from stitch_backend.domains.auth.router import _current_user_optional

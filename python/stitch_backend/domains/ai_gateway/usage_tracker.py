@@ -105,6 +105,18 @@ async def flush_group_usage(session: AsyncSession) -> int:
     over-quota immediately (in-process visibility, no DB query needed).
     """
     global _remainder
+    # Prune stale _over_keys entries (day < today).  Runs even when the
+    # batch is empty so the dict is cleaned on every flush tick.
+    # Safe (no concurrent-modification error) because all access to
+    # _over_keys is single-threaded async — record_usage only appends,
+    # and there is no await between the list comprehension (iterate) and
+    # the del loop (delete), so no coroutine can interleave and mutate
+    # the dict mid-prune.
+    today = _today()
+    stale = [k for k in _over_keys if k[2] < today]
+    for k in stale:
+        del _over_keys[k]
+
     if not _remainder:
         return 0
     # Swap atomically — concurrent record_usage() calls land in the new dict.

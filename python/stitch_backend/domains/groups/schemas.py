@@ -35,7 +35,7 @@ class GroupResponse(BaseModel):
     ``groups_get``.
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
     name: str
@@ -58,7 +58,7 @@ class GroupCreateResponse(BaseModel):
 class GroupSummaryResponse(BaseModel):
     """A group summary row (FE: ``GroupSummary``). Used in ``groups_list``."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
     name: str
@@ -74,7 +74,7 @@ class InviteSummaryResponse(BaseModel):
     Used in ``groups_list`` -- only pending invites for the caller.
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
     group_id: str
@@ -98,7 +98,7 @@ class GroupListResponse(BaseModel):
 class MemberResponse(BaseModel):
     """A group member row (FE: ``GroupMember``). Used in ``groups_get``."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     user_id: int
     username: str
@@ -113,7 +113,7 @@ class InviteDetailResponse(BaseModel):
     and from ``InviteResponse`` (no ``group_id``/``status``).
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
     invitee_username: str
@@ -169,7 +169,7 @@ class PoolItemResponse(BaseModel):
     server-side; the raw secret never appears in the response.
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     credential_id: str
     label: str | None
@@ -201,7 +201,7 @@ class UsageRowResponse(BaseModel):
     Used in ``groups_usage_list``.  ``day`` is ``'YYYY-MM-DD'`` (UTC).
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     user_id: int
     username: str
@@ -211,9 +211,15 @@ class UsageRowResponse(BaseModel):
 
 
 class UsageListResponse(BaseModel):
-    """Response for ``groups_usage_list`` (FE: ``GroupsUsageListResponse``)."""
+    """Response for ``groups_usage_list`` (FE: ``GroupsUsageListResponse``).
+
+    ``max_per_member_daily`` is the group-wide per-member daily cap
+    (nullable = unlimited).  Included so members can see the fair-use
+    limit context alongside their own usage.
+    """
 
     rows: list[UsageRowResponse]
+    max_per_member_daily: int | None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
