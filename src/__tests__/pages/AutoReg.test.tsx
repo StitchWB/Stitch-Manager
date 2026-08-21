@@ -201,10 +201,10 @@ describe('AutoReg page', () => {
     });
     expect(
       screen.getByText(
-        /Each provider is a separate plugin. Install plugins from the Marketplace/i,
+        /Each provider is a separate plugin. Install plugins from the Plugins page/i,
       ),
     ).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open Marketplace' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open Plugins' })).toBeTruthy();
     // Retry button is also present.
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     // CommandCenter must NOT render when providers list is empty.
