@@ -36,6 +36,11 @@ from .community import (
     install_community,
     list_installed_community,
 )
+from .entitlements import (
+    get_effective_entitlements,
+    get_required_tiers,
+    is_entitled_to,
+)
 from .sync import PluginSyncService
 
 logger = logging.getLogger(__name__)
@@ -47,6 +52,19 @@ def _is_entitled(plugin_id: str, entitlements: list[str]) -> bool:
     ``"*"`` in the list = all plugins; else exact plugin-id membership.
     """
     return "*" in entitlements or plugin_id in entitlements
+
+
+def _caller_uses_grants(params: dict) -> bool:
+    """True when the grants path should be used for entitlement resolution.
+
+    FIX 4 (P1): the grants path must be used whenever auth is enabled,
+    regardless of caller context.  When auth is disabled (desktop), the
+    legacy ``.activation`` path is used.  This prevents a guest (auth
+    enabled, no caller context) from falling through to the legacy path
+    which may contain a wildcard from an old activation.
+    """
+    from stitch_backend.config import get_settings
+    return get_settings().auth_enabled
 
 
 def _safe_semver(version: str) -> tuple[int, int, int]:
@@ -63,23 +81,49 @@ async def cmd_get_marketplace(params: dict) -> dict:
 
     Returns ``{"activated": bool, "items": [...]}``.
     Never raises — server/catalog failures degrade to empty lists.
+
+    Entitlement dual-path:
+      - Auth enabled (caller context) → ``get_effective_entitlements``.
+      - Desktop / no-auth → legacy ``state.entitlements`` from ``.activation``.
+    Community items are always entitled (unchanged).
     """
     items: list[dict[str, Any]] = []
 
     activation = ActivationService()
     state = activation.load()
     activated = state is not None
+
+    # Dual-path entitlement resolution.
+    use_grants = _caller_uses_grants(params)
+    if use_grants:
+        caller_user_id = params.get("_caller_user_id")
+        caller_role = params.get("_caller_role")
+        grant_entitlements = await get_effective_entitlements(
+            caller_user_id, caller_role
+        )
+
     if state is not None and not state.degraded:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 sync = PluginSyncService(activation, client=client)
                 manifest = await sync.fetch_manifest(state.token)
+            # FIX 5 (P1): bulk-fetch required tiers in a single DB query
+            # instead of N+1 per-plugin get_required_tier calls.
+            manifest_plugin_ids = [
+                str(e.get("id", ""))
+                for e in manifest.get("plugins", [])
+                if isinstance(e, dict) and e.get("id") and e.get("version")
+            ]
+            required_tiers = await get_required_tiers(manifest_plugin_ids)
             for entry in manifest.get("plugins", []):
                 plugin_id = str(entry.get("id", ""))
                 version = str(entry.get("version", ""))
                 if not plugin_id or not version:
                     continue
-                entitled = _is_entitled(plugin_id, state.entitlements)
+                if use_grants:
+                    entitled = is_entitled_to(plugin_id, grant_entitlements)
+                else:
+                    entitled = _is_entitled(plugin_id, state.entitlements)
                 installed_versions = list_installed_versions(plugin_id)
                 installed = bool(installed_versions)
                 installed_version = (
@@ -99,6 +143,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "installed": installed,
                         "installed_version": installed_version,
                         "can_download": entitled,
+                        "required_tier": required_tiers.get(plugin_id),
                     }
                 )
         except Exception as exc:  # noqa: BLE001 — marketplace must not crash
@@ -152,22 +197,40 @@ async def cmd_install_marketplace_plugin(params: dict) -> dict:
         return {"success": False, "error": "id and source required"}
 
     if source == "official":
-        return await _install_official(plugin_id)
+        return await _install_official(plugin_id, params)
     if source == "community":
         return await _install_community_latest(plugin_id)
     return {"success": False, "error": f"unknown source: {source}"}
 
 
-async def _install_official(plugin_id: str) -> dict[str, Any]:
-    """Install an official plugin: activation + local entitlement, then sync."""
+async def _install_official(plugin_id: str, params: dict | None = None) -> dict[str, Any]:
+    """Install an official plugin: activation + local entitlement, then sync.
+
+    Entitlement dual-path mirrors :func:`cmd_get_marketplace`:
+      - Auth enabled (caller context in ``params``) → grant service.
+      - Desktop / no-auth → legacy ``state.entitlements``.
+    """
     activation = ActivationService()
     state = activation.load()
     if state is None:
         return {"success": False, "error": "not activated"}
     if state.degraded:
         return {"success": False, "error": "activation degraded (revoked token)"}
-    if not _is_entitled(plugin_id, state.entitlements):
-        return {"success": False, "error": "not entitled to this plugin"}
+
+    # Dual-path entitlement check.
+    params = params or {}
+    use_grants = _caller_uses_grants(params)
+    if use_grants:
+        caller_user_id = params.get("_caller_user_id")
+        caller_role = params.get("_caller_role")
+        grant_entitlements = await get_effective_entitlements(
+            caller_user_id, caller_role
+        )
+        if not is_entitled_to(plugin_id, grant_entitlements):
+            return {"success": False, "error": "not entitled to this plugin"}
+    else:
+        if not _is_entitled(plugin_id, state.entitlements):
+            return {"success": False, "error": "not entitled to this plugin"}
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         sync = PluginSyncService(activation, client=client)
