@@ -294,12 +294,6 @@ describe('Codes page', () => {
       fireEvent.change(labelInput, { target: { value: 'batch-42' } });
     });
 
-    // The entitlements input.
-    const entInput = screen.getByPlaceholderText(/comma-separated/);
-    await act(async () => {
-      fireEvent.change(entInput, { target: { value: 'kiro, windsurf' } });
-    });
-
     // Submit the form.
     const submitButton = screen.getByText('Issue');
     await act(async () => {
@@ -313,7 +307,9 @@ describe('Codes page', () => {
       const body = JSON.parse(issueCall!.body!);
       expect(body.count).toBe(5);
       expect(body.label).toBe('batch-42');
-      expect(body.entitlements).toEqual(['kiro', 'windsurf']);
+      // Entitlements are no longer sent from the issue form (managed via
+      // role grants on the Plugins page). The property should be absent.
+      expect(body.entitlements).toBeUndefined();
       // ttl_minutes should be present (default 60).
       expect(body.ttl_minutes).toBe(60);
     });
@@ -357,5 +353,61 @@ describe('Codes page', () => {
       expect(screen.getByText('Distribution server disabled')).toBeTruthy();
     });
     expect(screen.getByText('Retry')).toBeTruthy();
+  });
+
+  it('does not render the entitlements input in the issue form', async () => {
+    const { handler } = makeFetchHandler();
+    (globalThis as { fetch: jest.Mock }).fetch = jest.fn(handler);
+
+    render(
+      <MemoryRouter>
+        <Codes />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('abc12345')).toBeTruthy();
+    });
+
+    // Open the issue form.
+    const issueHeader = screen.getByText('Issue new codes');
+    await act(async () => {
+      fireEvent.click(issueHeader);
+    });
+
+    // The entitlements input should NOT be present.
+    expect(screen.queryByPlaceholderText(/comma-separated/)).toBeNull();
+    // The entitlements label should NOT be present in the form.
+    const formLabels = screen.queryAllByText('Entitlements');
+    // The table column header still says "Entitlements" for legacy display,
+    // but the issue form should not have the input.
+    // Verify the note about role grants is shown.
+    expect(screen.getByText(/managed via role grants/i)).toBeTruthy();
+  });
+
+  it('shows the entitlements note in the issue form', async () => {
+    const { handler } = makeFetchHandler();
+    (globalThis as { fetch: jest.Mock }).fetch = jest.fn(handler);
+
+    render(
+      <MemoryRouter>
+        <Codes />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('abc12345')).toBeTruthy();
+    });
+
+    // Open the issue form.
+    const issueHeader = screen.getByText('Issue new codes');
+    await act(async () => {
+      fireEvent.click(issueHeader);
+    });
+
+    // The note about entitlements being managed via role grants should be visible.
+    expect(
+      screen.getByText(/Entitlements are now managed via role grants/i)
+    ).toBeTruthy();
   });
 });

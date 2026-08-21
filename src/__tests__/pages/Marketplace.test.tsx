@@ -266,4 +266,31 @@ describe('Marketplace page', () => {
     // It appears in both the list row and the detail pane.
     expect(screen.getAllByText('Premium').length).toBeGreaterThanOrEqual(1);
   });
+
+  it('shows required tier note for locked items with required_tier', async () => {
+    jest
+      .spyOn(marketplaceModule, 'getMarketplace')
+      .mockResolvedValue({
+        activated: true,
+        items: [mk.locked({ required_tier: 'vip' })],
+      });
+
+    render(
+      <MemoryRouter>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    const listPane = screen.getByTestId('plugin-list');
+
+    await waitFor(() => {
+      expect(within(listPane).getByText('Locked Plugin')).toBeTruthy();
+    });
+
+    // The required tier note should be visible in the detail pane.
+    // "Requires {tier} role or admin grant" with tier = "Vip"
+    expect(
+      screen.getByText(/Requires Vip role or admin grant/i)
+    ).toBeTruthy();
+  });
 });
