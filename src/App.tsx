@@ -71,6 +71,7 @@ const Friends = lazy(() => import('./pages/Friends'));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
 const NotebookLM = lazy(() => import('./pages/NotebookLM'));
 const Users = lazy(() => import('./pages/Users'));
+const UserProfile = lazy(() => import('./pages/UserProfile'));
 const Codes = lazy(() => import('./pages/Codes'));
 const Monitoring = lazy(() => import('./pages/Monitoring'));
 const Privileges = lazy(() => import('./pages/Privileges'));
@@ -540,6 +541,7 @@ function App() {
             <Route path="/notebooklm" element={<Navigate to="/ai/notebooklm" replace />} />
             {/* Admin zone — guarded by AdminRoute */}
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
+            <Route path="/users/:userId" element={<AdminRoute><UserProfile /></AdminRoute>} />
             <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />
             <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
             <Route path="/privileges" element={<AdminRoute><Privileges /></AdminRoute>} />

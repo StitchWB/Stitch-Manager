@@ -3921,6 +3921,38 @@ export interface Translations {
       pluginsAction: string;
       pluginsActionTooltip: string;
     };
+    userProfile: {
+      title: string;
+      subtitle: string;
+      backToUsers: string;
+      loading: string;
+      loadFailed: string;
+      retry: string;
+      header: string;
+      username: string;
+      role: string;
+      telegramId: string;
+      createdAt: string;
+      notSet: string;
+      permissions: string;
+      permissionsEmpty: string;
+      groups: string;
+      groupsEmpty: string;
+      groupOwner: string;
+      plugins: string;
+      pluginsEffective: string;
+      pluginsOverrides: string;
+      pluginsEmpty: string;
+      keys: string;
+      keysAiGateway: string;
+      keysProxy: string;
+      keysProviderAccounts: string;
+      keysTotp: string;
+      usage: string;
+      usageRequestsToday: string;
+      usageTokensToday: string;
+      usageEmpty: string;
+    };
   };
   sidebar: {
     accounts: string;
