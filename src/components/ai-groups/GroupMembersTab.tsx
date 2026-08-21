@@ -19,6 +19,7 @@ import { useGroupsStore } from '@/stores/groups';
 import { listUsers, type AuthUser } from '@/lib/backend/modules/auth';
 import type { GroupMember, GroupInviteDetail } from '@/lib/backend/modules/groups';
 import { groupsTransferOwnership } from '@/lib/backend/modules/groups';
+import { inviteErrorMessage } from './inviteErrors';
 
 interface GroupMembersTabProps {
   groupId: string;
@@ -131,7 +132,7 @@ export function GroupMembersTab({ groupId, isOwner, currentUserId, onLeft }: Gro
       if (err?.status === 409) {
         toast.error(t('ai.groups.invite.duplicate'));
       } else {
-        toast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'));
+        toast.error(inviteErrorMessage(e));
       }
     } finally {
       setSending(false);
@@ -143,7 +144,7 @@ export function GroupMembersTab({ groupId, isOwner, currentUserId, onLeft }: Gro
       await revokeInvite(inviteId);
       toast.success(t('ai.groups.invite.revoked'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'));
+      toast.error(inviteErrorMessage(e));
     }
   };
 

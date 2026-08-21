@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { t } from '../lib/i18n';
 import type { ContentBlock } from '../types/generated';
 
 export type ChatMessageContent = string | ContentBlock[];
@@ -135,7 +136,7 @@ function makeDefaultSession(): ChatSession {
   const id = generateId('ses');
   return {
     id,
-    title: 'New Chat',
+    title: t('chat.newChatDefault'),
     messages: [],
     model: 'auto',
     systemPrompt: '',
