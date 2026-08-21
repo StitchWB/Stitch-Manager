@@ -76,6 +76,8 @@ class ServicePluginHost:
         migrations: bool = False,
         default_timeout: float = 30.0,
         env: dict[str, str] | None = None,
+        source: str = "local",
+        memory_limit_mb: int | None = None,
     ) -> None:
         if command is None:
             if entry_module is None:
@@ -93,7 +95,14 @@ class ServicePluginHost:
         self.db_path = self.data_dir / "plugin.db"
         self.engine_config = engine_config or {}
         self.migrations = migrations
+        # Sandbox caps for community-origin plugins: stricter 5s call timeout
+        # (community plugins are unsigned subprocesses).  The cap is a
+        # maximum — an explicit smaller timeout is respected.
+        self.source = source
+        if source == "community":
+            default_timeout = min(default_timeout, 5.0)
         self.default_timeout = default_timeout
+        self.memory_limit_mb = memory_limit_mb
 
         self.supervisor = get_supervisor()
         self.rpc = RpcPluginClient(default_timeout=default_timeout)
@@ -199,6 +208,7 @@ class ServicePluginHost:
             "plugin_id": self.plugin_id,
             "restarts": self._restart_count,
             "stopping": self._stopping,
+            "source": self.source,
         }
 
     def get_logs(self, lines: int = 100) -> list[str]:
@@ -240,6 +250,115 @@ class ServicePluginHost:
             on_stop=on_stop,
         )
 
+    def _apply_memory_caps_best_effort(
+        self, proc: subprocess.Popen[bytes]
+    ) -> None:
+        """Apply best-effort memory cap to the child process.
+
+        - Windows: assign the process to a Job Object with
+          ``JOB_OBJECT_LIMIT_PROCESS_MEMORY`` via ctypes.
+        - POSIX (Linux): ``resource.prlimit`` RLIMIT_AS on the child pid.
+        - Other platforms / failures: log a warning and continue.
+
+        Called from ``_attach_rpc`` after the supervisor spawns the child.
+        Best-effort — never raises.
+        """
+        if self.memory_limit_mb is None:
+            return
+        limit_bytes = self.memory_limit_mb * 1024 * 1024
+        try:
+            if sys.platform == "win32":
+                self._apply_windows_job_memory_cap(proc, limit_bytes)
+            elif sys.platform == "linux":
+                import resource
+                resource.prlimit(  # type: ignore[attr-defined]
+                    proc.pid,
+                    resource.RLIMIT_AS,
+                    (limit_bytes, limit_bytes),
+                )
+                logger.info(
+                    "[Plugin:%s] memory cap %dMB applied via prlimit",
+                    self.plugin_id, self.memory_limit_mb,
+                )
+            else:
+                logger.warning(
+                    "[Plugin:%s] memory cap not supported on %s",
+                    self.plugin_id, sys.platform,
+                )
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            logger.warning(
+                "[Plugin:%s] memory cap %dMB failed: %s",
+                self.plugin_id, self.memory_limit_mb, exc,
+            )
+
+    def _apply_windows_job_memory_cap(
+        self, proc: subprocess.Popen[bytes], limit_bytes: int
+    ) -> None:
+        """Assign the child process to a Job Object with a memory limit."""
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+        # JobObjectExtendedLimitInformation = 9
+        JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100
+
+        class _IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_uint64),
+                ("WriteOperationCount", ctypes.c_uint64),
+                ("OtherOperationCount", ctypes.c_uint64),
+                ("ReadTransferCount", ctypes.c_uint64),
+                ("WriteTransferCount", ctypes.c_uint64),
+                ("OtherTransferCount", ctypes.c_uint64),
+            ]
+
+        class _JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_void_p),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                ("IoInfo", _IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        h_job = kernel32.CreateJobObjectW(None, None)
+        if not h_job:
+            raise ctypes.WinError()  # type: ignore[attr-defined]
+
+        info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY
+        info.ProcessMemoryLimit = limit_bytes
+
+        ok = kernel32.SetInformationJobObject(
+            h_job, 9, ctypes.byref(info), ctypes.sizeof(info)
+        )
+        if not ok:
+            raise ctypes.WinError()  # type: ignore[attr-defined]
+
+        ok = kernel32.AssignProcessToJobObject(h_job, int(proc.pid))
+        if not ok:
+            raise ctypes.WinError()  # type: ignore[attr-defined]
+
+        logger.info(
+            "[Plugin:%s] memory cap %dMB applied via Job Object",
+            self.plugin_id, self.memory_limit_mb,
+        )
+
     def _attach_rpc(
         self, proc: subprocess.Popen[bytes], timeout: float = 10.0
     ) -> Any:
@@ -251,6 +370,8 @@ class ServicePluginHost:
         skip, and call/ping/shutdown methods without duplicating them.
         """
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        # Apply best-effort memory cap before the child does meaningful work.
+        self._apply_memory_caps_best_effort(proc)
         init_params = {
             "engine_api": 2,
             "plugin_id": self.plugin_id,

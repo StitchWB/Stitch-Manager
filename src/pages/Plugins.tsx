@@ -473,6 +473,7 @@ function ServicePluginCard({
   plugin, restarting, logsOpen, logsLines, logsLoading, onRestart, onToggleLogs,
 }: ServicePluginCardProps) {
   const badge = statusBadge(plugin.status);
+  const isCommunity = plugin.source === 'community';
   return (
     <div className="px-5 py-4 flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
@@ -481,7 +482,14 @@ function ServicePluginCard({
             <Puzzle className="w-3.5 h-3.5" />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-slate-200 font-medium truncate">{plugin.id}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-200 font-medium truncate">{plugin.id}</span>
+              {isCommunity && (
+                <Tooltip content={t('admin.plugins.servicePluginCommunityTooltip')} side="top">
+                  <Badge variant="warning" size="sm">{t('admin.plugins.servicePluginCommunity')}</Badge>
+                </Tooltip>
+              )}
+            </div>
             <span className="text-[10px] text-slate-500 font-mono">v{plugin.version}</span>
           </div>
         </div>

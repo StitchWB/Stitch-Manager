@@ -32,6 +32,7 @@ from autoreg.plugin.layout import _base_dir, plugins_cache_dir, plugins_local_di
 from autoreg.plugin.manifest import (
     ManifestValidationError,
     PluginManifest,
+    parse_semver,
     validate_manifest,
 )
 
@@ -44,6 +45,9 @@ from stitch_backend.domains.plugin_runtime.host import ServicePluginHost
 logger = logging.getLogger(__name__)
 
 _DEV_MODE_ENV = "STITCH_DEV_MODE"
+_COMMUNITY_SERVICES_ENV = "STITCH_COMMUNITY_SERVICES"
+#: Best-effort memory cap (MB) for community-origin service plugins.
+_COMMUNITY_MEMORY_LIMIT_MB = 256
 
 
 async def start_service_plugins() -> None:
@@ -61,9 +65,12 @@ async def start_service_plugins() -> None:
         return
 
     started = 0
-    for manifest, package_dir in discovered:
+    for manifest, package_dir, source in discovered:
         try:
-            ok = await _start_one(manifest, package_dir)
+            memory_mb = _COMMUNITY_MEMORY_LIMIT_MB if source == "community" else None
+            ok = await _start_one(
+                manifest, package_dir, source=source, memory_limit_mb=memory_mb
+            )
             if ok:
                 started += 1
         except Exception as exc:  # noqa: BLE001 — never crash startup
@@ -75,7 +82,11 @@ async def start_service_plugins() -> None:
 
 
 async def _start_one(
-    manifest: PluginManifest, package_dir: Path
+    manifest: PluginManifest,
+    package_dir: Path,
+    *,
+    source: str = "local",
+    memory_limit_mb: int | None = None,
 ) -> bool:
     """Register + start a single service plugin host.  Returns True on success."""
     entry_module = manifest.entry.get("module")
@@ -96,6 +107,8 @@ async def _start_one(
         package_dir=package_dir,
         data_dir=_base_dir() / "data" / "plugins" / manifest.id,
         migrations=migrations,
+        source=source,
+        memory_limit_mb=memory_limit_mb,
     )
     register_manifest(manifest.id, manifest)
     result = await host.start()
@@ -106,7 +119,7 @@ async def _start_one(
         )
         return False
     register_host(host)
-    logger.info("Service plugin %s started (pid=%s)", manifest.id, result.get("pid"))
+    logger.info("Service plugin %s started (pid=%s, source=%s)", manifest.id, result.get("pid"), source)
     return True
 
 
@@ -115,14 +128,19 @@ async def _start_one(
 
 def _discover_service_plugins(
     dev_mode: bool, pubkey: str | None
-) -> list[tuple[PluginManifest, Path]]:
+) -> list[tuple[PluginManifest, Path, str]]:
     """Scan plugin sources for kind=service manifests.
 
-    Returns ``[(manifest, package_dir), ...]``.  Deduplicates by plugin id
-    (plugins-local takes precedence over cache).
+    Returns ``[(manifest, package_dir, source), ...]`` where source is
+    ``"local"``, ``"cache"``, or ``"community"``.  Deduplicates by plugin id
+    (plugins-local takes precedence over cache, cache over community).
+
+    Community source is gated by ``STITCH_COMMUNITY_SERVICES`` (additive
+    on top of ``STITCH_COMMUNITY_ENABLED``).  When the flag is off,
+    community service packages are skipped.
     """
     seen_ids: set[str] = set()
-    result: list[tuple[PluginManifest, Path]] = []
+    result: list[tuple[PluginManifest, Path, str]] = []
 
     # 1. plugins-local (dev source — unsigned allowed in dev_mode)
     local_root = plugins_local_dir()
@@ -141,7 +159,7 @@ def _discover_service_plugins(
                 )
                 continue
             seen_ids.add(manifest.id)
-            result.append((manifest, entry))
+            result.append((manifest, entry, "local"))
 
     # 2. plugins cache (signed — always requires valid signature)
     cache_root = plugins_cache_dir()
@@ -159,7 +177,6 @@ def _discover_service_plugins(
                     continue
                 if manifest.id in seen_ids:
                     continue
-                from autoreg.plugin.manifest import parse_semver
                 try:
                     ver_tuple = parse_semver(manifest.version)
                 except ValueError:
@@ -175,7 +192,36 @@ def _discover_service_plugins(
                 )
                 continue
             seen_ids.add(manifest.id)
-            result.append((manifest, path))
+            result.append((manifest, path, "cache"))
+
+    # 3. community (unsigned, gated by STITCH_COMMUNITY_SERVICES)
+    if _community_services_enabled():
+        community_root = _base_dir() / "community"
+        if community_root.is_dir():
+            for plugin_id_entry in sorted(community_root.iterdir()):
+                if not plugin_id_entry.is_dir():
+                    continue
+                # Pick newest version for this plugin id.
+                newest_comm: tuple[tuple[int, int, int], Path, PluginManifest] | None = None
+                for version_entry in sorted(plugin_id_entry.iterdir()):
+                    if not version_entry.is_dir() or version_entry.name.startswith("."):
+                        continue
+                    manifest = _try_read_manifest(version_entry)
+                    if manifest is None or manifest.kind != "service":
+                        continue
+                    if manifest.id in seen_ids:
+                        continue
+                    try:
+                        ver_tuple = parse_semver(manifest.version)
+                    except ValueError:
+                        continue
+                    if newest_comm is None or ver_tuple > newest_comm[0]:
+                        newest_comm = (ver_tuple, version_entry, manifest)
+                if newest_comm is None:
+                    continue
+                _ver, path, manifest = newest_comm
+                seen_ids.add(manifest.id)
+                result.append((manifest, path, "community"))
 
     return result
 
@@ -209,6 +255,16 @@ def _verify_signed(
 def _resolve_dev_mode() -> bool:
     """Read STITCH_DEV_MODE env var (default False)."""
     raw = os.environ.get(_DEV_MODE_ENV, "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _community_services_enabled() -> bool:
+    """Read STITCH_COMMUNITY_SERVICES env var (default False).
+
+    Additive gate on top of STITCH_COMMUNITY_ENABLED: only kind=service
+    community packages require this flag.  Mirrors the loader's helper.
+    """
+    raw = os.environ.get(_COMMUNITY_SERVICES_ENV, "").strip().lower()
     return raw in ("1", "true", "yes", "on")
 
 

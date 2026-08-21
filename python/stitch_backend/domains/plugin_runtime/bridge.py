@@ -146,6 +146,7 @@ async def _list_service_plugins(params: dict[str, Any]) -> list[dict[str, Any]]:
             "ui": contributions.get("ui", {}),
             "i18n": contributions.get("i18n", {}),
             "commands": contributions.get("commands", []),
+            "source": host.source,
         })
     return result
 

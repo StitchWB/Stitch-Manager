@@ -3945,6 +3945,9 @@ export interface Translations {
       servicePluginRestartFailed: string;
       servicePluginNoPlugins: string;
       servicePluginNoPluginsDesc: string;
+      servicePluginCommunity: string;
+      servicePluginCommunityTooltip: string;
+      servicePluginCommunityTabTooltip: string;
     };
     userProfile: {
       title: string;

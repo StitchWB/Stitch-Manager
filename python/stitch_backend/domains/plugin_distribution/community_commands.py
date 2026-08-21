@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -134,11 +136,24 @@ async def cmd_submit_for_review(params: dict) -> dict:
     branch = f"submit/{manifest.id}-{manifest.version}"
     rel_path = f"plugins/{manifest.id}/{manifest.version}"
     files = []
-    for fname in _PACKAGE_FILES:
-        fpath = pkg_dir / fname
-        if not fpath.is_file():
-            continue
-        files.append((f"{rel_path}/{fname}", fpath.read_bytes()))
+    if manifest.kind == "service":
+        # Service plugins ship code (.py, manifest, i18n bundles, etc.) —
+        # include the whole package dir.  Skip __pycache__ and hidden files.
+        for root, dirnames, filenames in os.walk(pkg_dir):
+            dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+            for fname in filenames:
+                if fname.startswith("."):
+                    continue
+                fpath = Path(root) / fname
+                rel = fpath.relative_to(pkg_dir)
+                files.append((f"{rel_path}/{rel.as_posix()}", fpath.read_bytes()))
+    else:
+        # Data plugins: fixed 4-file list (scenario/selectors/profile/manifest).
+        for fname in _PACKAGE_FILES:
+            fpath = pkg_dir / fname
+            if not fpath.is_file():
+                continue
+            files.append((f"{rel_path}/{fname}", fpath.read_bytes()))
 
     pr_body = f"Submitting plugin `{manifest.id}` v{manifest.version} for review."
 

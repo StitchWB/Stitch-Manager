@@ -211,10 +211,16 @@ class PluginLoader:
 
         Newest version wins.  Packages are unsigned (no signature check);
         the manifest must still parse a valid ``plugin.json``.
+
+        ``kind=service`` packages are only yielded when
+        ``STITCH_COMMUNITY_SERVICES`` is enabled (additive gate on top of
+        ``STITCH_COMMUNITY_ENABLED``).  Data plugins (``kind=data``) are
+        unaffected by the service gate.
         """
         community_root = _community_dir()
         if not community_root.is_dir():
             return None
+        services_enabled = _community_services_enabled()
         candidates: list[tuple[tuple[int, int, int], str, Path]] = []
         for plugin_id_entry in sorted(community_root.iterdir()):
             if not plugin_id_entry.is_dir():
@@ -224,6 +230,13 @@ class PluginLoader:
                     continue
                 manifest = _try_read_manifest(version_entry)
                 if manifest is None or service_id not in manifest.service_ids():
+                    continue
+                if manifest.kind == "service" and not services_enabled:
+                    logger.debug(
+                        "skipping community service package %s: "
+                        "STITCH_COMMUNITY_SERVICES not enabled",
+                        version_entry,
+                    )
                     continue
                 api = manifest.engine.get("api")
                 if isinstance(api, int) and api > ENGINE_API:
@@ -262,6 +275,18 @@ def _community_enabled() -> bool:
     if not raw:
         return True
     return raw not in ("false", "0", "no", "off")
+
+
+def _community_services_enabled() -> bool:
+    """Read the ``STITCH_COMMUNITY_SERVICES`` env var (default False).
+
+    Additive gate on top of ``STITCH_COMMUNITY_ENABLED``: only
+    ``kind=service`` community packages require this flag.  Data plugins
+    are unaffected.  Default ``False`` — community service plugins are
+    unsigned subprocesses and require an explicit opt-in.
+    """
+    raw = os.environ.get("STITCH_COMMUNITY_SERVICES", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
 
 
 def _resolve_dev_mode(flag: bool | None) -> bool:
