@@ -225,6 +225,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.ai_proxy.commands  # noqa: F401
     import stitch_backend.domains.ai_proxy.zai_token_commands  # noqa: F401
     import stitch_backend.domains.api_keys.commands  # noqa: F401
+    import stitch_backend.domains.auth.commands  # noqa: F401
     import stitch_backend.domains.auth.telegram_commands  # noqa: F401
     import stitch_backend.domains.aws_accounts.commands  # noqa: F401
     import stitch_backend.domains.background_manager.commands  # noqa: F401
