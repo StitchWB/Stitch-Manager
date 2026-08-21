@@ -30,10 +30,22 @@ export interface ServicePluginTab {
   page?: unknown;
 }
 
+/** Status dict returned by ``host.status()`` via ``list_service_plugins``. */
+export interface ServicePluginStatus {
+  status: string;
+  port: number | null;
+  pid: number | null;
+  uptimeSeconds: number | null;
+  error: string | null;
+  plugin_id: string;
+  restarts: number;
+  stopping: boolean;
+}
+
 export interface ServicePluginInfo {
   id: string;
   version: string;
-  status: string;
+  status: ServicePluginStatus;
   ui?: {
     kind: 'declarative' | 'core_page';
     page?: unknown;

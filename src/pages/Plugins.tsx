@@ -1,19 +1,21 @@
 /**
  * Plugins page — admin-only plugin entitlement management.
  *
- * Two sections:
+ * Three sections:
  * 1. "Access by role": matrix table — rows = plugins, columns = roles
  *    (user/vip/premium/elite). Admin column is locked/read-only. Cell =
  *    checkbox → plugin_grants_role_set (optimistic + rollback + toast).
  *    Column-header "grant all" toggle per role. Special first row "*"
  *    (all plugins) toggle per role.
  * 2. "Per-user grants": user picker → UserPluginGrants component.
+ * 3. "Service plugins": cards for installed service-plugin hosts with
+ *    status badge, restart/uptime counters, Restart + Logs buttons.
  *
  * Follows the same layout/card conventions as Users.tsx/Privileges.tsx.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
@@ -30,6 +32,15 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Select } from '../components/ui/Select';
 import { UserPluginGrants } from '../components/admin/UserPluginGrants';
+import { safeInvoke } from '@/lib/backend/core';
+import {
+  fetchServicePlugins,
+  getServicePlugins,
+  subscribeServicePlugins,
+  invalidate as invalidateServicePlugins,
+  type ServicePluginInfo,
+  type ServicePluginStatus,
+} from '@/lib/backend/modules/servicePlugins';
 
 const ALL_PLUGINS_ID = '*';
 
@@ -51,6 +62,19 @@ export default function Plugins() {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  // Service plugins section state
+  const servicePlugins = useSyncExternalStore(
+    subscribeServicePlugins,
+    getServicePlugins,
+    getServicePlugins,
+  );
+  const [restartingId, setRestartingId] = useState<string | null>(null);
+  const [logsOpenId, setLogsOpenId] = useState<string | null>(null);
+  const [logsCache, setLogsCache] = useState<Record<string, string[]>>({});
+  const [logsLoadingId, setLogsLoadingId] = useState<string | null>(null);
+
+  useEffect(() => { void fetchServicePlugins(); }, []);
 
   // Re-fetch only the role matrix (used after successful role mutations
   // to reconcile with server truth — e.g. backend normalizes "*" by
@@ -82,6 +106,40 @@ export default function Plugins() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  const onRestartServicePlugin = useCallback(async (pluginId: string) => {
+    setRestartingId(pluginId);
+    try {
+      await safeInvoke('restart_service_plugin', { plugin_id: pluginId });
+      invalidateServicePlugins();
+      toast.success(t('admin.plugins.servicePluginRestarted'));
+    } catch {
+      toast.error(t('admin.plugins.servicePluginRestartFailed'));
+    } finally {
+      setRestartingId(null);
+    }
+  }, []);
+
+  const onToggleLogs = useCallback(async (pluginId: string) => {
+    if (logsOpenId === pluginId) {
+      setLogsOpenId(null);
+      return;
+    }
+    setLogsOpenId(pluginId);
+    if (logsCache[pluginId] !== undefined) return;
+    setLogsLoadingId(pluginId);
+    try {
+      const lines = await safeInvoke<string[]>('get_service_plugin_logs', {
+        plugin_id: pluginId,
+        lines: 100,
+      });
+      setLogsCache(prev => ({ ...prev, [pluginId]: Array.isArray(lines) ? lines : [] }));
+    } catch {
+      setLogsCache(prev => ({ ...prev, [pluginId]: [] }));
+    } finally {
+      setLogsLoadingId(null);
+    }
+  }, [logsOpenId, logsCache]);
 
   const roles = useMemo(() => ROLE_LADDER, []);
 
@@ -344,8 +402,126 @@ export default function Plugins() {
               ) : null}
             </div>
           </div>
+
+          {/* Service plugins */}
+          <div className="rounded-xl border border-white/[0.06] bg-black/40 backdrop-blur-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-2">
+              <Server className="w-4 h-4 text-indigo-400" />
+              <h2 className="text-sm font-semibold text-white">{t('admin.plugins.servicePlugins')}</h2>
+              <span className="text-xs text-slate-500">{t('admin.plugins.servicePluginsDesc')}</span>
+            </div>
+            {servicePlugins.length === 0 ? (
+              <div className="p-10 text-center">
+                <Server className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                <p className="text-sm text-slate-500">{t('admin.plugins.servicePluginNoPlugins')}</p>
+                <p className="text-xs text-slate-600 mt-1">{t('admin.plugins.servicePluginNoPluginsDesc')}</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/[0.04]">
+                {servicePlugins.map(plugin => (
+                  <ServicePluginCard
+                    key={plugin.id}
+                    plugin={plugin}
+                    restarting={restartingId === plugin.id}
+                    logsOpen={logsOpenId === plugin.id}
+                    logsLines={logsCache[plugin.id]}
+                    logsLoading={logsLoadingId === plugin.id}
+                    onRestart={() => void onRestartServicePlugin(plugin.id)}
+                    onToggleLogs={() => void onToggleLogs(plugin.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// ── Service plugin card ──────────────────────────────────────────────────────
+
+function statusBadge(s: ServicePluginStatus): { variant: 'success' | 'danger' | 'warning'; label: string } {
+  if (s.stopping) return { variant: 'warning', label: t('admin.plugins.servicePluginRestarting') };
+  switch (s.status) {
+    case 'running': return { variant: 'success', label: t('admin.plugins.servicePluginRunning') };
+    case 'stopped':
+    case 'error': return { variant: 'danger', label: t('admin.plugins.servicePluginDead') };
+    default: return { variant: 'warning', label: t('admin.plugins.servicePluginRestarting') };
+  }
+}
+
+function formatUptime(seconds: number | null): string {
+  if (seconds === null || seconds < 0) return '—';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+interface ServicePluginCardProps {
+  plugin: ServicePluginInfo;
+  restarting: boolean;
+  logsOpen: boolean;
+  logsLines: string[] | undefined;
+  logsLoading: boolean;
+  onRestart: () => void;
+  onToggleLogs: () => void;
+}
+
+function ServicePluginCard({
+  plugin, restarting, logsOpen, logsLines, logsLoading, onRestart, onToggleLogs,
+}: ServicePluginCardProps) {
+  const badge = statusBadge(plugin.status);
+  return (
+    <div className="px-5 py-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-white/5 text-slate-400">
+            <Puzzle className="w-3.5 h-3.5" />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-slate-200 font-medium truncate">{plugin.id}</span>
+            <span className="text-[10px] text-slate-500 font-mono">v{plugin.version}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant={badge.variant} size="sm">{badge.label}</Badge>
+          <Button variant="ghost" size="xs" onClick={onToggleLogs} leftIcon={<FileText size={12} />}>
+            {t('admin.plugins.servicePluginLogs')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={onRestart}
+            disabled={restarting}
+            leftIcon={<RotateCcw size={12} className={restarting ? 'animate-spin' : ''} />}
+          >
+            {t('admin.plugins.servicePluginRestart')}
+          </Button>
+        </div>
+      </div>
+      <div className="flex items-center gap-4 text-xs text-slate-500">
+        <span>{t('admin.plugins.servicePluginRestarts')}: {plugin.status.restarts}</span>
+        <span>{t('admin.plugins.servicePluginUptime')}: {formatUptime(plugin.status.uptimeSeconds)}</span>
+        {plugin.status.error && (
+          <span className="text-red-400 truncate">{plugin.status.error}</span>
+        )}
+      </div>
+      {logsOpen && (
+        <div className="mt-1 rounded-lg border border-white/[0.06] bg-black/60 p-3 max-h-48 overflow-y-auto">
+          {logsLoading ? (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {t('common.loading')}
+            </div>
+          ) : logsLines && logsLines.length > 0 ? (
+            <pre className="text-[11px] text-slate-400 font-mono whitespace-pre-wrap break-all">{logsLines.join('\n')}</pre>
+          ) : (
+            <p className="text-xs text-slate-600">{t('admin.plugins.servicePluginLogsUnavailable')}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

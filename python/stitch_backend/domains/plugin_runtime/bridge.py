@@ -148,3 +148,47 @@ async def _list_service_plugins(params: dict[str, Any]) -> list[dict[str, Any]]:
             "commands": contributions.get("commands", []),
         })
     return result
+
+
+@register_command("restart_service_plugin", admin_only=True)
+async def _restart_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
+    """Restart a service-plugin host (admin-only).
+
+    Stops the host (graceful RPC shutdown + kill-tree) then starts it
+    again.  Returns the new status dict from ``host.start()``.
+    """
+    plugin_id = params.get("plugin_id")
+    if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
+        raise HTTPException(
+            status_code=400, detail="plugin_id is required and must be valid"
+        )
+    host = get_host(plugin_id)
+    if host is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown plugin: {plugin_id}"
+        )
+    return await host.restart()
+
+
+@register_command("get_service_plugin_logs", readonly=True, admin_only=True)
+async def _get_service_plugin_logs(params: dict[str, Any]) -> list[str]:
+    """Return the last N lines from a plugin host's stderr ring buffer.
+
+    Admin-only, readonly.  Returns ``[]`` when the host has not captured
+    any stderr output (not started, child wrote nothing, or ring buffer
+    empty).
+    """
+    plugin_id = params.get("plugin_id")
+    if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
+        raise HTTPException(
+            status_code=400, detail="plugin_id is required and must be valid"
+        )
+    host = get_host(plugin_id)
+    if host is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown plugin: {plugin_id}"
+        )
+    lines = params.get("lines", 100)
+    if not isinstance(lines, int) or lines < 0:
+        lines = 100
+    return host.get_logs(lines)
