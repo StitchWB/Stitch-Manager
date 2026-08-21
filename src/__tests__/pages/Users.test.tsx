@@ -11,7 +11,7 @@
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Users from '../../pages/Users';
 import * as pluginGrantsModule from '../../lib/backend/modules/pluginGrants';
 
@@ -143,6 +143,47 @@ describe('Users page — plugins modal', () => {
     await waitFor(() => {
       // The modal title "Per-user grants" should be visible.
       expect(screen.getByText('Per-user grants')).toBeTruthy();
+    });
+  });
+
+  it('renders a View profile button per user row that navigates to /users/:id', async () => {
+    (globalThis as { fetch: jest.Mock }).fetch = jest.fn(async (url: string) => {
+      if (url.endsWith('/api/auth/users')) {
+        return makeJsonResponse(200, mockUsers);
+      }
+      return makeJsonResponse(404, { detail: 'not found' });
+    });
+
+    // Render with a catch-all route so navigation is observable.
+    render(
+      <MemoryRouter initialEntries={['/users']}>
+        <Routes>
+          <Route path="/users" element={<Users />} />
+          <Route
+            path="/users/:userId"
+            element={<div data-testid="profile-route">profile</div>}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // Wait for users to load.
+    await waitFor(() => {
+      expect(screen.getByText('alice')).toBeTruthy();
+    });
+
+    // Each row should have a "User profile" aria-label button (the eye icon).
+    const viewButtons = screen.getAllByLabelText(/user profile/i);
+    expect(viewButtons.length).toBeGreaterThanOrEqual(1);
+
+    // Click the first View profile button (alice → /users/1).
+    await act(async () => {
+      fireEvent.click(viewButtons[0]);
+    });
+
+    // The profile route should render, confirming navigation.
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-route')).toBeTruthy();
     });
   });
 });

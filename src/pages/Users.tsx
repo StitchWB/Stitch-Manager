@@ -7,7 +7,8 @@
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Users as UsersIcon, Trash2, Plus, Loader2, AlertCircle, ShieldCheck, User as UserIcon, Puzzle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Users as UsersIcon, Trash2, Plus, Loader2, AlertCircle, ShieldCheck, User as UserIcon, Puzzle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAuthStore } from '../stores/auth';
@@ -38,6 +39,7 @@ export default function Users() {
   const currentUser = useAuthStore(state => state.user);
   const language = useAppStore(state => state.language);
   void language; // re-render on language change
+  const navigate = useNavigate();
 
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -305,6 +307,16 @@ export default function Users() {
                           </td>
                           <td className="px-5 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <Tooltip content={t('admin.userProfile.title')} side="top">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => navigate(`/users/${String(u.id)}`)}
+                                  leftIcon={<Eye className="w-3.5 h-3.5" />}
+                                  className="text-slate-500 hover:text-indigo-400"
+                                  aria-label={t('admin.userProfile.title')}
+                                />
+                              </Tooltip>
                               <Tooltip content={t('admin.plugins.pluginsActionTooltip')} side="top">
                                 <Button
                                   variant="ghost"
