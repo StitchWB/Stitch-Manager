@@ -1,0 +1,96 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
+<div>
+  <div
+    class="space-y-4 p-4"
+  >
+    <h1
+      class="text-xl font-semibold text-slate-100"
+    >
+      plugin.test.pageTitle
+    </h1>
+    <div
+      class="text-2xl font-semibold text-slate-100"
+    >
+      Overview
+    </div>
+    <div
+      class="space-y-3"
+    >
+      <div
+        class="text-sm font-medium text-slate-300"
+      >
+        Settings
+      </div>
+      <div
+        data-testid="ui-input"
+      >
+        <label>
+          Name
+        </label>
+        <input
+          value="Alice"
+        />
+      </div>
+      <div
+        data-testid="ui-select"
+      >
+        <label>
+          Role
+        </label>
+        <select>
+          <option
+            value="admin"
+          >
+            Admin
+          </option>
+          <option
+            value="user"
+          >
+            User
+          </option>
+        </select>
+      </div>
+      <label
+        data-testid="ui-toggle"
+      >
+        <input
+          checked=""
+          type="checkbox"
+        />
+        Active
+      </label>
+    </div>
+    <table
+      data-testid="ui-table"
+    >
+      <thead>
+        <tr>
+          <th>
+            Name
+          </th>
+          <th>
+            Email
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            Alice
+          </td>
+          <td>
+            a@b.c
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <button
+      data-testid="ui-button"
+    >
+      Ping
+    </button>
+  </div>
+</div>
+`;

@@ -1665,6 +1665,12 @@ export const en: Translations = {
     untitledChat: "New Chat",
     yesterday: "Yesterday"
   },
+  pluginUi: {
+    actionFailed: "Action failed",
+    pluginNotInstalled: "Plugin not installed",
+    pluginNotInstalledDescription: "The plugin is not installed or is unavailable.",
+    loading: "Loading..."
+  },
   commandPalette: {
     actions: "Actions",
     apiKeys: "Api Keys",
