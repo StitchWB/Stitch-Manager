@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Users as UsersIcon, Trash2, Plus, Loader2, AlertCircle, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { Users as UsersIcon, Trash2, Plus, Loader2, AlertCircle, ShieldCheck, User as UserIcon, Puzzle } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAuthStore } from '../stores/auth';
@@ -21,6 +21,8 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { Modal } from '@/components/ui/Modal';
+import { UserPluginGrants } from '@/components/admin/UserPluginGrants';
 
 type NewUserRole = AuthUser['role'];
 
@@ -48,6 +50,7 @@ export default function Users() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [roleUpdatingId, setRoleUpdatingId] = useState<string | number | null>(null);
+  const [pluginsUser, setPluginsUser] = useState<AuthUser | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -246,7 +249,7 @@ export default function Users() {
                       <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
                         {t('users.tier')}
                       </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24 text-right">
+                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-40 text-right">
                         {t('auth.users.colActions')}
                       </th>
                     </tr>
@@ -301,16 +304,28 @@ export default function Users() {
                             )}
                           </td>
                           <td className="px-5 py-3 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void onDelete(u)}
-                              leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                              className="text-slate-500 hover:text-red-400"
-                              aria-label={t('auth.users.delete')}
-                            >
-                              {t('auth.users.delete')}
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              <Tooltip content={t('admin.plugins.pluginsActionTooltip')} side="top">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setPluginsUser(u)}
+                                  leftIcon={<Puzzle className="w-3.5 h-3.5" />}
+                                  className="text-slate-500 hover:text-indigo-400"
+                                  aria-label={t('admin.plugins.pluginsAction')}
+                                />
+                              </Tooltip>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void onDelete(u)}
+                                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                                className="text-slate-500 hover:text-red-400"
+                                aria-label={t('auth.users.delete')}
+                              >
+                                {t('auth.users.delete')}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -322,6 +337,23 @@ export default function Users() {
           </div>
         </div>
       </div>
+
+      {/* Per-user plugin grants modal */}
+      {pluginsUser && (
+        <Modal
+          isOpen
+          onClose={() => setPluginsUser(null)}
+          title={t('admin.plugins.perUser')}
+          icon={<Puzzle size={18} />}
+          size="lg"
+        >
+          <UserPluginGrants
+            userId={Number(pluginsUser.id)}
+            username={pluginsUser.username}
+            role={pluginsUser.role}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

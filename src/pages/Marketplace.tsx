@@ -136,7 +136,7 @@ function MarketplaceListRow({ item, selected, busy, onSelect, onInstall }: ListR
       {/* Action button — stopPropagation so clicking it doesn't select the row */}
       <div className="shrink-0" onClick={e => e.stopPropagation()}>
         {locked ? (
-          <Tooltip content={unavailableMsg} side="left">
+          <Tooltip content={item.required_tier ? t('marketplace.requiresTierNote', { tier: t(`auth.role.${item.required_tier}`) }) : unavailableMsg} side="left">
             <span>
               <Button
                 size="sm"
@@ -310,6 +310,15 @@ function PluginDetail({ item, busy, onInstall, onUninstall }: DetailProps) {
             ) : null}
           </div>
         </div>
+
+        {locked && item.required_tier && (
+          <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/15 text-amber-300/80 text-xs">
+            <Lock className="w-3.5 h-3.5 shrink-0" />
+            <span className="leading-relaxed">
+              {t('marketplace.requiresTierNote', { tier: t(`auth.role.${item.required_tier}`) })}
+            </span>
+          </div>
+        )}
 
         {/* Underline tabs */}
         <div className="flex items-center gap-1 border-b border-white/[0.06] mb-4">

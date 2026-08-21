@@ -641,3 +641,32 @@ export {
 } from './modules/radar';
 
 export * as radar from './modules/radar';
+
+// ============================================
+// Plugin Grants (role-based plugin entitlements)
+// ============================================
+
+export {
+  pluginGrantsRoleList,
+  pluginGrantsRoleSet,
+  pluginGrantsUserGet,
+  pluginGrantsUserSet,
+  pluginGrantsUserDelete,
+  pluginGrantsAuditList,
+  GRANTABLE_ROLES,
+  ROLE_LADDER,
+  type PluginSummary,
+  type PluginGrantsRoleListResponse,
+  type PluginGrantsRoleSetParams,
+  type PluginGrantsRoleSetResult,
+  type UserPluginGrant,
+  type PluginGrantsUserGetResponse,
+  type PluginGrantsUserSetParams,
+  type PluginGrantsUserSetResult,
+  type PluginGrantsUserDeleteParams,
+  type PluginGrantsUserDeleteResult,
+  type PluginGrantAuditEntry,
+  type PluginGrantsAuditListResponse,
+} from './modules/pluginGrants';
+
+export * as pluginGrants from './modules/pluginGrants';

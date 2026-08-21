@@ -24,6 +24,7 @@ import {
   ShieldOff,
   Ticket,
   Activity,
+  Puzzle,
 } from
   'lucide-react';
 import { useAppStore } from '../../stores/app';
@@ -292,6 +293,13 @@ export default function Sidebar() {
             to="/privileges"
             icon={<ShieldCheck size={20} />}
             label={t('privileges.title')}
+            collapsed={sidebarCollapsed} />
+        )}
+        {isAdmin && authEnabled && (
+          <NavItem
+            to="/plugins"
+            icon={<Puzzle size={20} />}
+            label={t('sidebar.plugins')}
             collapsed={sidebarCollapsed} />
         )}
       </nav>
