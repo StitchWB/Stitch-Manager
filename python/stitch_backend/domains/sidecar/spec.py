@@ -32,6 +32,10 @@ class LaunchPlan:
     readiness_timeout: float = 15.0
     # Extra values surfaced via status()/get_endpoint() (e.g. api_key presence).
     config: dict[str, Any] = field(default_factory=dict)
+    # stdio mode: "devnull" (default, current behavior — stdout/stderr to
+    # DEVNULL) or "pipes" (stdin/stdout/stderr as PIPE handles for RPC plugins;
+    # the caller retrieves them via ``SidecarSupervisor.get_process``).
+    stdio: str = "devnull"
 
 
 @dataclass(frozen=True)

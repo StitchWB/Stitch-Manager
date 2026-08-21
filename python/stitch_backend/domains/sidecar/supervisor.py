@@ -38,7 +38,9 @@ class _State:
     __slots__ = ("process", "port", "config", "start_time", "error", "lock")
 
     def __init__(self) -> None:
-        self.process: asyncio.subprocess.Process | None = None
+        # asyncio.subprocess.Process (stdio=devnull) or subprocess.Popen
+        # (stdio=pipes — RPC plugins need sync stdin/stdout handles).
+        self.process: asyncio.subprocess.Process | subprocess.Popen[bytes] | None = None
         self.port: int | None = None
         self.config: dict[str, Any] = {}
         self.start_time: float | None = None
@@ -73,7 +75,13 @@ class SidecarSupervisor:
 
     def is_running(self, name: str) -> bool:
         st = self._states.get(name)
-        return bool(st and st.process is not None and st.process.returncode is None)
+        if not st or st.process is None:
+            return False
+        proc = st.process
+        if isinstance(proc, subprocess.Popen):
+            # Popen.returncode is stale until poll() is called.
+            return proc.poll() is None
+        return proc.returncode is None
 
     async def start(
         self, name: str, settings: dict | None = None, *, force: bool = False
@@ -101,29 +109,55 @@ class SidecarSupervisor:
                 return self.status(name)
 
             try:
-                st.process = await asyncio.create_subprocess_exec(
-                    *plan.command,
-                    cwd=plan.cwd,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                    env={**os.environ, **plan.env},
-                    **_subprocess_isolation_kwargs(),
-                )
-                st.port = plan.port
-                st.config = dict(plan.config)
-                st.start_time = time.time()
-                st.error = None
-                logger.info(
-                    "[Sidecar:%s] started pid=%s port=%s", name, st.process.pid, plan.port
-                )
-                ready = await self._wait_for_ready(st, plan)
-                if not ready:
-                    logger.warning(
-                        "[Sidecar:%s] started but not ready within %.0fs — stopping it",
-                        name, plan.readiness_timeout,
+                if plan.stdio == "pipes":
+                    # RPC plugins need sync stdin/stdout PIPE handles for
+                    # line-delimited JSON-RPC.  Spawn via subprocess.Popen
+                    # (sync) so the caller can attach an RpcPluginClient reader
+                    # thread to proc.stdout.  Process-group isolation is still
+                    # applied so _terminate_tree can kill the whole tree.
+                    proc = subprocess.Popen(
+                        plan.command,
+                        cwd=plan.cwd,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        env={**os.environ, **plan.env},
+                        **_subprocess_isolation_kwargs(),
                     )
-                    # Do not leave an unhealthy process running.
-                    await self._stop_locked(name)
+                    st.process = proc
+                    st.port = plan.port
+                    st.config = dict(plan.config)
+                    st.start_time = time.time()
+                    st.error = None
+                    logger.info(
+                        "[Sidecar:%s] started pid=%s (stdio=pipes)", name, proc.pid
+                    )
+                    # No HTTP readiness gate for stdio plugins — the caller
+                    # performs the RPC handshake and owns readiness.
+                else:
+                    st.process = await asyncio.create_subprocess_exec(
+                        *plan.command,
+                        cwd=plan.cwd,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                        env={**os.environ, **plan.env},
+                        **_subprocess_isolation_kwargs(),
+                    )
+                    st.port = plan.port
+                    st.config = dict(plan.config)
+                    st.start_time = time.time()
+                    st.error = None
+                    logger.info(
+                        "[Sidecar:%s] started pid=%s port=%s", name, st.process.pid, plan.port
+                    )
+                    ready = await self._wait_for_ready(st, plan)
+                    if not ready:
+                        logger.warning(
+                            "[Sidecar:%s] started but not ready within %.0fs — stopping it",
+                            name, plan.readiness_timeout,
+                        )
+                        # Do not leave an unhealthy process running.
+                        await self._stop_locked(name)
             except Exception as exc:  # noqa: BLE001
                 st.error = str(exc)
                 logger.error("[Sidecar:%s] failed to start: %s", name, exc, exc_info=True)
@@ -173,7 +207,7 @@ class SidecarSupervisor:
         return self.status(name)
 
     async def _terminate_tree(
-        self, proc: asyncio.subprocess.Process, name: str
+        self, proc: asyncio.subprocess.Process | subprocess.Popen[bytes], name: str
     ) -> None:
         """Terminate a sidecar and its children (whole process group/tree).
 
@@ -181,6 +215,10 @@ class SidecarSupervisor:
         only the direct child would orphan it. On POSIX the child runs in its
         own session (``start_new_session``), so we signal the whole group. On
         Windows we use ``taskkill /T`` to kill the process tree.
+
+        Handles both ``asyncio.subprocess.Process`` (stdio=devnull) and
+        ``subprocess.Popen`` (stdio=pipes).  Popen's ``wait()`` is sync, so
+        it is wrapped via ``asyncio.to_thread``.
         """
         pid = proc.pid
         if os.name == "posix":
@@ -196,7 +234,7 @@ class SidecarSupervisor:
             except (ProcessLookupError, PermissionError):
                 return
             try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
+                await self._wait_proc_exit(proc, 5)
                 return
             except TimeoutError:
                 pass
@@ -208,7 +246,7 @@ class SidecarSupervisor:
             except (ProcessLookupError, PermissionError):
                 return
             try:
-                await asyncio.wait_for(proc.wait(), timeout=3)
+                await self._wait_proc_exit(proc, 3)
             except TimeoutError:
                 logger.error("[Sidecar:%s] SIGKILL did not terminate pid=%s", name, pid)
         else:  # Windows: kill the whole process tree.
@@ -225,9 +263,19 @@ class SidecarSupervisor:
                 except ProcessLookupError:
                     return
             try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
+                await self._wait_proc_exit(proc, 5)
             except TimeoutError:
                 logger.error("[Sidecar:%s] taskkill did not terminate pid=%s", name, pid)
+
+    @staticmethod
+    async def _wait_proc_exit(
+        proc: asyncio.subprocess.Process | subprocess.Popen[bytes], timeout: float
+    ) -> None:
+        """Wait for a process to exit, handling both async and sync types."""
+        if isinstance(proc, subprocess.Popen):
+            await asyncio.wait_for(asyncio.to_thread(proc.wait), timeout=timeout)
+        else:
+            await asyncio.wait_for(proc.wait(), timeout=timeout)
 
     async def stop_all(self) -> None:
         for name in list(self._specs.keys()):
@@ -255,8 +303,14 @@ class SidecarSupervisor:
                 "status": "stopped", "port": st.port, "pid": None,
                 "uptimeSeconds": None, "error": None,
             }
-        if st.process.returncode is not None:
-            rc = st.process.returncode
+        proc = st.process
+        # For Popen, poll() refreshes returncode; for asyncio Process it is
+        # already up-to-date.
+        if isinstance(proc, subprocess.Popen):
+            rc = proc.poll()
+        else:
+            rc = proc.returncode
+        if rc is not None:
             if rc != 0 and rc != -15:
                 return {
                     "status": "error", "port": None, "pid": None,
@@ -268,7 +322,7 @@ class SidecarSupervisor:
             }
         uptime = int(time.time() - st.start_time) if st.start_time else 0
         return {
-            "status": "running", "port": st.port, "pid": st.process.pid,
+            "status": "running", "port": st.port, "pid": proc.pid,
             "uptimeSeconds": uptime, "error": st.error,
         }
 
@@ -287,6 +341,19 @@ class SidecarSupervisor:
         """Return the last launch config recorded for a sidecar (may be empty)."""
         st = self._states.get(name)
         return dict(st.config) if st else {}
+
+    def get_process(
+        self, name: str
+    ) -> asyncio.subprocess.Process | subprocess.Popen[bytes] | None:
+        """Return the raw process handle for a sidecar (or None).
+
+        For stdio=``pipes`` sidecars this is a ``subprocess.Popen`` whose
+        ``stdin`` / ``stdout`` / ``stderr`` pipes the caller can attach an
+        RPC client to.  For stdio=``devnull`` sidecars it is an
+        ``asyncio.subprocess.Process``.
+        """
+        st = self._states.get(name)
+        return st.process if st else None
 
 
 def _subprocess_isolation_kwargs() -> dict[str, Any]:
