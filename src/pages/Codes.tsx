@@ -126,7 +126,6 @@ export default function Codes() {
   const [issueCount, setIssueCount] = useState('1');
   const [issueTtl, setIssueTtl] = useState<TtlValue>('60');
   const [issueLabel, setIssueLabel] = useState('');
-  const [issueEntitlements, setIssueEntitlements] = useState('');
   const [issuing, setIssuing] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
 
@@ -182,9 +181,6 @@ export default function Codes() {
     }
 
     const ttlValue = issueTtl === '0' ? null : parseInt(issueTtl, 10);
-    const entitlements = issueEntitlements.trim()
-      ? issueEntitlements.split(',').map(s => s.trim()).filter(Boolean)
-      : undefined;
 
     setIssuing(true);
     try {
@@ -192,7 +188,6 @@ export default function Codes() {
         count,
         ttl_minutes: ttlValue,
         label: issueLabel.trim() || null,
-        entitlements,
       });
       setIssuedBatch({ codes: result.codes, entitlements: result.entitlements });
       setCopied(false);
@@ -201,7 +196,6 @@ export default function Codes() {
       setIssueCount('1');
       setIssueTtl('60');
       setIssueLabel('');
-      setIssueEntitlements('');
       setShowIssueForm(false);
       await refresh();
     } catch (err) {
@@ -326,7 +320,7 @@ export default function Codes() {
             </button>
             {showIssueForm && (
               <form onSubmit={onIssue} className="p-5 flex flex-col gap-4" noValidate>
-                <div className="grid grid-cols-1 md:grid-cols-[120px_180px_1fr_1fr_auto] gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-[120px_180px_1fr_auto] gap-3 items-end">
                   <Input
                     label={t('codes.issue.count')}
                     type="number"
@@ -357,13 +351,6 @@ export default function Codes() {
                     value={issueLabel}
                     onChange={e => setIssueLabel(e.target.value)}
                   />
-                  <Input
-                    label={t('codes.issue.entitlements')}
-                    placeholder={t('codes.issue.entitlementsPlaceholder')}
-                    value={issueEntitlements}
-                    onChange={e => setIssueEntitlements(e.target.value)}
-                    hint={t('codes.issue.entitlementsHint')}
-                  />
                   <Button
                     type="submit"
                     variant="primary"
@@ -383,6 +370,10 @@ export default function Codes() {
                     <span className="leading-relaxed">{t(issueError)}</span>
                   </div>
                 )}
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-500/5 border border-indigo-500/15 text-indigo-300/80 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{t('codes.entitlementsNote')}</span>
+                </div>
               </form>
             )}
           </div>

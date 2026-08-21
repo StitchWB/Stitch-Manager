@@ -1865,6 +1865,7 @@ export interface Translations {
     empty: string;
     loading: string;
     retry: string;
+    entitlementsNote: string;
   };
   ownership: {
     mine: string;
@@ -3872,7 +3873,55 @@ export interface Translations {
     authorLabel: string;
     accessLabel: string;
     accessGranted: string;
+    requiresTierNote: string;
   }
+  admin: {
+    plugins: {
+      title: string;
+      subtitle: string;
+      accessByRole: string;
+      perUser: string;
+      plugin: string;
+      grantAll: string;
+      allPlugins: string;
+      role: string;
+      adminLocked: string;
+      adminLockedHint: string;
+      grant: string;
+      revoke: string;
+      grantAll2: string;
+      revokeAll: string;
+      revokeAllTitle: string;
+      revokeAllMessage: string;
+      revokeAllConfirm: string;
+      granted: string;
+      available: string;
+      sourceRole: string;
+      sourceOverride: string;
+      sourceOverrideRevoke: string;
+      summaryRoleGrants: string;
+      summaryOverrides: string;
+      summaryOverridesAdd: string;
+      summaryOverridesSub: string;
+      noPlugins: string;
+      noPluginsDesc: string;
+      selectUser: string;
+      selectUserPlaceholder: string;
+      updated: string;
+      grantUpdated: string;
+      grantFailed: string;
+      loadFailed: string;
+      usersLoadFailed: string;
+      usersRetry: string;
+      loading: string;
+      noGrants: string;
+      effective: string;
+      pickUser: string;
+      pickUserDesc: string;
+      pluginsAction: string;
+      pluginsActionTooltip: string;
+    };
+  };
   sidebar: {
     accounts: string;
     aiHub: string;
@@ -3887,6 +3936,7 @@ export interface Translations {
     mail: string;
     marketplace: string;
     notebooklm: string;
+    plugins: string;
     radar: string;
     scenarios: string;
     scheduler: string;

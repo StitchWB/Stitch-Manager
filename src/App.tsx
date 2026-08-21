@@ -74,6 +74,7 @@ const Users = lazy(() => import('./pages/Users'));
 const Codes = lazy(() => import('./pages/Codes'));
 const Monitoring = lazy(() => import('./pages/Monitoring'));
 const Privileges = lazy(() => import('./pages/Privileges'));
+const Plugins = lazy(() => import('./pages/Plugins'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -542,6 +543,7 @@ function App() {
             <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />
             <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
             <Route path="/privileges" element={<AdminRoute><Privileges /></AdminRoute>} />
+            <Route path="/plugins" element={<AdminRoute><Plugins /></AdminRoute>} />
             <Route path="/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
