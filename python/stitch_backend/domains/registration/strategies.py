@@ -77,17 +77,14 @@ class ImapVerificationStrategy:
         self._timeout = timeout
 
     async def wait_for_code(self, email: str, timeout: float | None = None) -> str:
-        from stitch_backend.domains.email.service import EmailService
-        svc = EmailService()
-        try:
-            return await svc.wait_for_verification_code(
-                email=email,
-                subject_filter=self._subject_filter,
-                code_pattern=self._code_pattern,
-                timeout=timeout or self._timeout,
-            )
-        finally:
-            await svc.close()
+        from stitch_backend.core.spi import SPI_EMAIL_VERIFICATION, resolve
+        impl = resolve(SPI_EMAIL_VERIFICATION)
+        return await impl.wait_otp(
+            email=email,
+            subject_filter=self._subject_filter,
+            code_pattern=self._code_pattern,
+            timeout=timeout or self._timeout,
+        )
 
 
 # ── Token extractors ────────────────────────────────────────────────────────
@@ -177,3 +174,55 @@ class DrissionPageBrowser:
 
     async def close(self, session: Any) -> None:
         logger.info("DrissionPageBrowser: close (stub)")
+
+
+# ── Built-in EmailVerificationProvider ─────────────────────────────────────────
+#
+# Registered at import time so that ``resolve(SPI_EMAIL_VERIFICATION)`` always
+# returns a working impl when no service-plugin override is registered.  The
+# wrapper delegates to ``EmailService`` — byte-identical behaviour to the
+# previous lazy import that was inline in ``ImapVerificationStrategy``.
+
+
+class _BuiltinEmailVerification:
+    """Built-in EmailVerificationProvider — delegates to EmailService.
+
+    A fresh ``EmailService`` is created per call (matching the previous
+    inline behaviour) and closed in ``finally`` so IMAP connections don't
+    leak.
+    """
+
+    async def wait_otp(
+        self,
+        email: str,
+        subject_filter: str = "",
+        code_pattern: str | None = None,
+        timeout: float = 120.0,
+    ) -> str:
+        from stitch_backend.domains.email.service import EmailService
+        svc = EmailService()
+        try:
+            return await svc.wait_for_verification_code(
+                email=email,
+                subject_filter=subject_filter,
+                code_pattern=code_pattern,
+                timeout=timeout,
+            )
+        finally:
+            await svc.close()
+
+    async def close(self) -> None:
+        pass  # EmailService is created per-call; nothing to close here.
+
+
+def _register_builtin_email_verification() -> None:
+    """Register the built-in EmailVerificationProvider in the SPI registry."""
+    from stitch_backend.core.spi import SPI_EMAIL_VERIFICATION, register_impl
+    register_impl(
+        SPI_EMAIL_VERIFICATION,
+        _BuiltinEmailVerification(),
+        source="builtin",
+    )
+
+
+_register_builtin_email_verification()
