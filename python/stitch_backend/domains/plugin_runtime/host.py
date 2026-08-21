@@ -17,6 +17,7 @@ the server process.
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 import subprocess
 import sys
@@ -100,6 +101,10 @@ class ServicePluginHost:
         self._stopping = False
         self._monitor_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
+        # Ring buffer for child stderr lines — used by get_service_plugin_logs.
+        # maxlen bounds memory; old lines are evicted automatically.
+        self._log_buffer: collections.deque[str] = collections.deque(maxlen=1000)
+        self._stderr_thread: threading.Thread | None = None
 
     # ── public API ─────────────────────────────────────────────────────
 
@@ -152,6 +157,17 @@ class ServicePluginHost:
             logger.info("[Plugin:%s] stopped", self.plugin_id)
             return result
 
+    async def restart(self) -> dict[str, Any]:
+        """Stop the host then start it again (admin restart command).
+
+        ``stop()`` sets ``_stopping = True`` so the crash monitor does not
+        race the shutdown.  ``start()`` checks that flag and returns early
+        if set — so restart must clear it before re-starting.
+        """
+        await self.stop()
+        self._stopping = False
+        return await self.start()
+
     async def call(
         self, cmd_name: str, params: dict | None = None, timeout: float | None = None
     ) -> Any:
@@ -184,6 +200,17 @@ class ServicePluginHost:
             "restarts": self._restart_count,
             "stopping": self._stopping,
         }
+
+    def get_logs(self, lines: int = 100) -> list[str]:
+        """Return the last *lines* entries from the stderr ring buffer.
+
+        Returns an empty list when no logs have been captured (host not
+        started, child wrote nothing to stderr, or ring buffer empty).
+        """
+        snapshot = list(self._log_buffer)
+        if lines <= 0:
+            return snapshot
+        return snapshot[-lines:] if lines < len(snapshot) else snapshot
 
     # ── internal ───────────────────────────────────────────────────────
 
@@ -251,7 +278,31 @@ class ServicePluginHost:
                 {"from_version": 0, "to_version": 1},
                 timeout=timeout,
             )
+        # Start a daemon thread that reads child stderr into the ring
+        # buffer for get_service_plugin_logs.  The thread exits when the
+        # child's stderr pipe closes (process death / stop).
+        if proc.stderr is not None:
+            self._stderr_thread = threading.Thread(
+                target=self._stderr_reader,
+                name=f"plugin-stderr:{self.plugin_id}",
+                daemon=True,
+            )
+            self._stderr_thread.start()
         return self.rpc._init_result
+
+    def _stderr_reader(self) -> None:
+        """Read child stderr line-by-line into the ring buffer."""
+        proc = self.rpc._proc
+        if proc is None or getattr(proc, "stderr", None) is None:
+            return
+        stream = proc.stderr
+        try:
+            for raw in iter(stream.readline, b""):
+                self._log_buffer.append(
+                    raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                )
+        except Exception:  # noqa: BLE001 — pipe closed / process dead
+            pass
 
     async def _monitor(self) -> None:
         """Background task: detect crash, restart once, then mark dead."""

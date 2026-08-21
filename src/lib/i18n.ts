@@ -3931,6 +3931,20 @@ export interface Translations {
       pickUserDesc: string;
       pluginsAction: string;
       pluginsActionTooltip: string;
+      servicePlugins: string;
+      servicePluginsDesc: string;
+      servicePluginRunning: string;
+      servicePluginDead: string;
+      servicePluginRestarting: string;
+      servicePluginRestarts: string;
+      servicePluginUptime: string;
+      servicePluginRestart: string;
+      servicePluginLogs: string;
+      servicePluginLogsUnavailable: string;
+      servicePluginRestarted: string;
+      servicePluginRestartFailed: string;
+      servicePluginNoPlugins: string;
+      servicePluginNoPluginsDesc: string;
     };
     userProfile: {
       title: string;

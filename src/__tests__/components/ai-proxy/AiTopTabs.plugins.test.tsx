@@ -84,7 +84,16 @@ const pluginFixture: ServicePluginInfo[] = [
   {
     id: 'echo',
     version: '1.0.0',
-    status: 'running',
+    status: {
+      status: 'running',
+      port: null,
+      pid: 123,
+      uptimeSeconds: 5,
+      error: null,
+      plugin_id: 'echo',
+      restarts: 0,
+      stopping: false,
+    },
     ui: {
       kind: 'declarative',
       tabs: [{ id: 'main', label: 'Echo', icon: 'Puzzle' }],
