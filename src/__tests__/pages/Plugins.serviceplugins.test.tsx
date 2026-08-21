@@ -94,6 +94,23 @@ const deadPlugin: ServicePluginInfo = {
   },
 };
 
+const communityPlugin: ServicePluginInfo = {
+  id: 'comm-echo',
+  version: '1.0.0',
+  status: {
+    status: 'running',
+    port: null,
+    pid: 99,
+    uptimeSeconds: 10,
+    error: null,
+    plugin_id: 'comm-echo',
+    restarts: 0,
+    stopping: false,
+  },
+  ui: { kind: 'declarative', tabs: [] },
+  source: 'community',
+};
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('Plugins page — service plugins section', () => {
@@ -276,5 +293,24 @@ describe('Plugins page — service plugins section', () => {
     );
 
     expect(await screen.findByText('admin.plugins.servicePluginNoPlugins')).toBeTruthy();
+  });
+
+  it('(e) community plugin shows community badge', async () => {
+    (safeInvoke as jest.Mock).mockImplementation((cmd: string) => {
+      if (cmd === 'list_service_plugins') return Promise.resolve([communityPlugin]);
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins />
+      </MemoryRouter>,
+    );
+
+    // Card id appears.
+    expect(await screen.findByText('comm-echo')).toBeTruthy();
+
+    // Community badge label appears (t = identity → key is the text).
+    expect(screen.getByText('admin.plugins.servicePluginCommunity')).toBeTruthy();
   });
 });

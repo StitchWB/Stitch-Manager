@@ -55,6 +55,8 @@ export interface ServicePluginInfo {
     ru?: Record<string, unknown>;
     en?: Record<string, unknown>;
   };
+  /** Origin of the plugin package: "local" (dev), "cache" (signed), "community" (unsigned). */
+  source?: 'community' | 'local' | 'cache';
 }
 
 // ============================================

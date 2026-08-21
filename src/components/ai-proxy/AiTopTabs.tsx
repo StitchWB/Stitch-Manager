@@ -49,6 +49,8 @@ interface AiTab {
   authOnly?: boolean;
   /** Present when this tab is contributed by a service plugin. */
   pluginId?: string;
+  /** Origin of the plugin: "community" tabs get a warning badge. */
+  source?: string;
 }
 
 const AI_TABS: AiTab[] = [
@@ -163,6 +165,7 @@ export function AiTopTabs() {
         label: tab.label,
         to: `/ai/plugin/${plugin.id}`,
         icon: getPluginIcon(tab.icon),
+        source: plugin.source,
       });
     }
   }
@@ -196,6 +199,10 @@ export function AiTopTabs() {
                   ? getPluginTabLabel(tab.pluginId, tab.label)
                   : getLabel(tab.label);
           const pendingCount = tab.id === 'groups' ? pendingInvites.length : 0;
+          const isCommunity = tab.source === 'community';
+          const tabTitle = isCommunity
+            ? `${label} — ${t('admin.plugins.servicePluginCommunityTabTooltip')}`
+            : label;
 
           return (
             <div key={tab.id} className="relative">
@@ -205,7 +212,7 @@ export function AiTopTabs() {
                 size="sm"
                 onClick={() => navigate(tab.to)}
                 aria-current={isActive ? 'page' : undefined}
-                title={label}
+                title={tabTitle}
                 icon={<Icon size={14} />}
                 label={label}
               />
@@ -213,6 +220,13 @@ export function AiTopTabs() {
                 <span className="absolute -top-1 -right-1 z-10 pointer-events-none">
                   <Badge variant="warning" size="sm" withPulse>
                     <span className="motion-reduce:animate-none">{pendingCount}</span>
+                  </Badge>
+                </span>
+              )}
+              {isCommunity && (
+                <span className="absolute -top-1 -right-1 z-10 pointer-events-none">
+                  <Badge variant="warning" size="sm">
+                    {t('admin.plugins.servicePluginCommunity')}
                   </Badge>
                 </span>
               )}

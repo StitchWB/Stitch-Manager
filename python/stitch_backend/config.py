@@ -227,6 +227,20 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── Community service plugins flag ────────────────────────────────────────
+    # When ``True``, the community plugin source may yield ``kind=service``
+    # packages (out-of-process plugins).  Default ``False`` — community
+    # service plugins are unsigned and run as subprocesses, so they require
+    # an explicit opt-in with sandbox caps (5s call timeout, best-effort
+    # memory limit).  Data plugins (``kind=data``) are unaffected and stay
+    # gated by ``STITCH_COMMUNITY_ENABLED``.
+    community_services: bool = Field(
+        False,
+        validation_alias=AliasChoices(
+            "community_services", "STITCH_COMMUNITY_SERVICES"
+        ),
+    )
+
     # ── Paths ─────────────────────────────────────────────────────────────────
     profiles_dir: str = str(REPO_ROOT / "profiles")
     cloakbrowser_dir: str = str(REPO_ROOT / "resources" / "cloakbrowser")
