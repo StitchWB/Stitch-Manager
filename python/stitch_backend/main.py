@@ -292,6 +292,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Sidecar registration skipped: %s", _exc)
 
+    # Discover and start service plugins (kind=service, subprocess JSON-RPC).
+    # Scans plugins-local/ (dev, unsigned in dev_mode) and plugins/ cache
+    # (signed).  Unhealthy plugins are skipped — never blocks startup.
+    try:
+        from stitch_backend.domains.plugin_runtime.discovery import (
+            start_service_plugins,
+        )
+
+        await start_service_plugins()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Service plugin discovery skipped: %s", _exc)
+
     # Load-or-create the per-install local chat token so the chat endpoint can
     # authenticate with it (replaces the shared static bearer).
     try:
@@ -441,6 +453,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Stop all sidecar subprocesses (turnstile solver, freemodel bridge, ...).
     # stop_all() also fixes the prior bug where the FreeModel bridge was never
     # stopped on shutdown (orphaned subprocess on app exit).
+    # Service-plugin hosts are stopped FIRST (pre-sets _stopping so the crash
+    # monitor does not race the supervisor's kill-tree), then the supervisor
+    # kills every sidecar process (including plugin children).
+    try:
+        from stitch_backend.domains.plugin_runtime import stop_all as _stop_plugins
+
+        await _stop_plugins()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Service plugin shutdown skipped: %s", _exc)
     try:
         from stitch_backend.domains.sidecar import get_supervisor as _get_sidecar_sup
 
