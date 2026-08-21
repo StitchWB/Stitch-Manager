@@ -50,6 +50,12 @@ _SALT_BYTES = 16
 #: Session lifetime — 7 days.
 SESSION_TTL = timedelta(days=7)
 
+#: Sliding-window refresh threshold.  A *valid* session with less than this
+#: much time remaining is extended back to a full :data:`SESSION_TTL` on use,
+#: so actively-used sessions are not dropped by the absolute TTL.  Sessions
+#: idle beyond ``SESSION_TTL`` still expire normally.
+SESSION_REFRESH_THRESHOLD = timedelta(days=1)
+
 #: A pre-computed dummy hash used to keep login timing roughly constant when
 #: the requested user does not exist.  Format: ``scrypt$<salt>$<hash>``.
 _DUMMY_HASH = "scrypt$" + ("00" * _SALT_BYTES) + "$" + ("00" * _SCRYPT_DKLEN)
@@ -210,6 +216,15 @@ async def resolve_session_with_preview(
         await db.delete(session)
         await db.flush()
         return None, None
+    # Sliding window: extend a valid session that is near expiry so active
+    # users keep their session instead of hitting the absolute TTL mid-use.
+    # A failed refresh must NOT invalidate an otherwise-valid session.
+    if expires_at - datetime.now(UTC) < SESSION_REFRESH_THRESHOLD:
+        try:
+            session.expires_at = datetime.now(UTC) + SESSION_TTL
+            await db.commit()
+        except Exception:  # noqa: BLE001 — never break a valid session
+            await db.rollback()
     user_stmt = select(User).where(User.id == session.user_id)
     user_result = await db.execute(user_stmt)
     user = user_result.scalar_one_or_none()
