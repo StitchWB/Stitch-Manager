@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import threading
 import time
 from typing import Any
@@ -372,3 +373,106 @@ class RpcPluginClient:
                     stream.close()
                 except OSError:
                     pass
+
+
+# ── Server side (plugin entry-point helper) ───────────────────────────────
+
+
+class RpcPluginServer:
+    """Stdio JSON-RPC 2.0 server for service-plugin entry points.
+
+    Plugin authors call ``serve(init_handler=..., handlers={...})`` from
+    their ``__main__``.  The server reads JSON-RPC requests from stdin,
+    dispatches ``plugin.init`` / ``plugin.call`` / ``plugin.ping`` /
+    ``plugin.shutdown``, and writes responses to stdout — one JSON object
+    per line.
+
+    Protocol methods handled automatically:
+      - ``plugin.init``   → calls ``init_handler(params)`` (if set),
+                             returns its result.
+      - ``plugin.ping``    → returns ``"pong"``.
+      - ``plugin.shutdown``→ returns ``None`` and exits.
+
+    ``plugin.call`` dispatches to ``handlers[name](params)``.  Unknown
+    names return a JSON-RPC error (code -32601, method not found).
+    Handler exceptions are caught and returned as JSON-RPC error
+    responses (code -32603, internal error) — the server never crashes.
+
+    Zone-1: plain stdlib only (no stitch_backend imports, no third-party).
+    """
+
+    def __init__(self) -> None:
+        self._handlers: dict[str, Any] = {}
+        self._init_handler: Any = None
+
+    def register(self, name: str, handler: Any) -> None:
+        """Register a command handler callable ``handler(params) -> result``."""
+        self._handlers[name] = handler
+
+    def set_init_handler(self, handler: Any) -> None:
+        """Set the ``plugin.init`` handler ``handler(params) -> result``."""
+        self._init_handler = handler
+
+    def serve(self) -> None:
+        """Main read-dispatch-write loop.  Exits on ``plugin.shutdown``."""
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                req = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if not isinstance(req, dict):
+                continue
+            rid = req.get("id")
+            method = req.get("method", "")
+            params = req.get("params", {})
+            if not isinstance(params, dict):
+                params = {}
+            result = self._dispatch(method, params)
+            self._send_response(rid, result)
+            if method == "plugin.shutdown":
+                break
+
+    def _dispatch(self, method: str, params: dict[str, Any]) -> Any:
+        """Dispatch one request, returning a result or error dict."""
+        try:
+            if method == "plugin.init":
+                if self._init_handler is not None:
+                    return self._init_handler(params)
+                return params
+            if method == "plugin.ping":
+                return "pong"
+            if method == "plugin.shutdown":
+                return None
+            if method == "plugin.call":
+                name = params.get("name", "")
+                args = params.get("params", {})
+                if not isinstance(args, dict):
+                    args = {}
+                handler = self._handlers.get(name)
+                if handler is None:
+                    return _error(-32601, f"method not found: {name}")
+                return handler(args)
+            return _error(-32601, f"unknown method: {method}")
+        except Exception as exc:  # noqa: BLE001 — server never crashes
+            return _error(_ERR_INTERNAL, str(exc))
+
+    @staticmethod
+    def _send_response(rid: Any, result: Any) -> None:
+        """Write one JSON-RPC response line to stdout."""
+        if isinstance(result, dict) and "error" in result:
+            obj: dict[str, Any] = {"jsonrpc": _JSONRPC, "id": rid, "error": result["error"]}
+        else:
+            obj = {"jsonrpc": _JSONRPC, "id": rid, "result": result}
+        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+
+def _error(code: int, message: str, data: Any = None) -> dict[str, Any]:
+    """Build a JSON-RPC error result for ``_dispatch``."""
+    err: dict[str, Any] = {"code": code, "message": message}
+    if data is not None:
+        err["data"] = data
+    return {"error": err}
