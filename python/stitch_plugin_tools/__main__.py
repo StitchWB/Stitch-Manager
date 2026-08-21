@@ -1,12 +1,13 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Nine subcommands:
+Ten subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package
     publish <package_dir> [--server-url …]      sign + zip + POST /admin/publish
     dev-install <package_dir>                   copy package to plugins-local
     pack-engine <out_dir> [--version …]         assemble engine-pack from autoreg/captcha
+    new <out_dir> --id <plugin_id> […]          scaffold a kind=service plugin package
     drift […]                                   fetch drift report + propose selector weight rerank
     publish-selectors […]                       publish a selector overlay pack (hot update)
     codes {issue|list}                          issue and list activation codes (admin)
@@ -215,6 +216,39 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
     print(f"  version: {args.version}")
     print(f"  solvers: {', '.join(('turnstile', 'turnstile_api', 'aliyun_slider'))}")
     print("  bundled: vendor/turnstile-solver service + checkbox_template.png")
+    print(
+        f"  sign with: python -m stitch_plugin_tools sign {result} "
+        f"--key <private.key>"
+    )
+    return 0
+
+
+# ── new ───────────────────────────────────────────────────────────────────
+
+
+def _cmd_new(args: argparse.Namespace) -> int:
+    """Scaffold a new kind=service plugin package.
+
+    See :func:`stitch_plugin_tools.scaffold.scaffold_service_plugin` for
+    the generated layout.  The package is unsigned — run ``sign`` after.
+    """
+    from stitch_plugin_tools.scaffold import scaffold_service_plugin
+
+    out_dir = Path(args.out)
+    try:
+        result = scaffold_service_plugin(
+            out_dir,
+            plugin_id=args.id,
+            name=args.name,
+            author=args.author,
+            version=args.version,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"scaffolded service plugin at {result}")
+    print(f"  id:      {args.id}")
+    print(f"  version: {args.version}")
     print(
         f"  sign with: python -m stitch_plugin_tools sign {result} "
         f"--key <private.key>"
@@ -440,6 +474,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "--service", default="engine", help="service identifier (default: engine)"
     )
     p_pack.set_defaults(func=_cmd_pack_engine)
+
+    p_new = sub.add_parser(
+        "new",
+        help="scaffold a kind=service plugin package (manifest + RPC entry + storage)",
+    )
+    p_new.add_argument("out", help="output directory for the package")
+    p_new.add_argument(
+        "--id", required=True, help="plugin id ([A-Za-z0-9_-], no dots)"
+    )
+    p_new.add_argument(
+        "--name", default="", help="human-readable name (default: same as --id)"
+    )
+    p_new.add_argument(
+        "--author", default="", help="author name (written to manifest extras)"
+    )
+    p_new.add_argument(
+        "--version", default="0.1.0", help="semver version (default: 0.1.0)"
+    )
+    p_new.set_defaults(func=_cmd_new)
 
     p_drift = sub.add_parser(
         "drift",
