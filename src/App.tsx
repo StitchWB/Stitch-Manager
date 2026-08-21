@@ -76,6 +76,7 @@ const Codes = lazy(() => import('./pages/Codes'));
 const Monitoring = lazy(() => import('./pages/Monitoring'));
 const Privileges = lazy(() => import('./pages/Privileges'));
 const Plugins = lazy(() => import('./pages/Plugins'));
+const PluginPageHost = lazy(() => import('./components/plugin-ui/DeclarativePage').then(m => ({ default: m.PluginPageHost })));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Route prefetchers (idle/low-priority)
@@ -523,6 +524,7 @@ function App() {
             <Route path="/ai/chat" element={<Chat />} />
             <Route path="/ai/analytics" element={<AiAnalytics />} />
             <Route path="/ai/gateway" element={<AiGateway />} />
+            <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
             <Route path="/ai/:section" element={<AiProviders />} />
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />

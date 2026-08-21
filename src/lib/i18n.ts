@@ -1671,6 +1671,12 @@ export interface Translations {
     collapse: string;
     expand: string;
   }
+  pluginUi: {
+    actionFailed: string;
+    pluginNotInstalled: string;
+    pluginNotInstalledDescription: string;
+    loading: string;
+  }
   commandPalette: {
     actions: string;
     apiKeys: string;

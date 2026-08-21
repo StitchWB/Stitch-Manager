@@ -1665,6 +1665,12 @@ tabs: {
     collapse: "Свернуть",
     expand: "Развернуть"
   },
+  pluginUi: {
+    actionFailed: "Действие не удалось",
+    pluginNotInstalled: "Плагин не установлен",
+    pluginNotInstalledDescription: "Плагин не установлен или недоступен.",
+    loading: "Загрузка..."
+  },
   commandPalette: {
     actions: "Действия",
     apiKeys: "API-ключи",
