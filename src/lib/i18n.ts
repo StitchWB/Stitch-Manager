@@ -4695,6 +4695,7 @@ uiTexts: {
 
 import { ru } from './locales/ru';
 import { en } from './locales/en';
+import { lookupPluginBundle } from './i18nPluginBundles';
 
 export const translations: Record<string, Translations> = {
   en,
@@ -4750,6 +4751,17 @@ export function t(key: string, params?: Record<string, string | number>): string
     if (value && typeof value === 'object' && k in value) {
       value = (value as Record<string, unknown>)[k];
     } else {
+      // Plugin i18n bundle fallback: keys shaped plugin.{id}.{key} resolve
+      // from bundles registered at runtime (see i18nPluginBundles.ts).
+      // Consulted only AFTER core locale lookup fails and BEFORE returning
+      // the raw key, so existing core keys are unaffected.
+      if (key.startsWith('plugin.')) {
+        const pluginValue = lookupPluginBundle(key, currentLocale);
+        if (typeof pluginValue === 'string') {
+          value = pluginValue;
+          break;
+        }
+      }
       console.warn(`Translation key "${key}" not found for locale "${currentLocale}"`);
       return key;
     }
