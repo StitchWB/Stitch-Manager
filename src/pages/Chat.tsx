@@ -665,8 +665,10 @@ export default function Chat() {
             <div className="flex-1 flex items-center justify-center">
               <EmptyState
                 icon={MessageSquare}
-                title={`Send a message to test the AI Proxy connection`}
-                description={selectedModel ? `Using ${selectedModel.name}` : undefined}
+                title={t('chat.emptyStateTitle')}
+                description={
+                  selectedModel ? t('chat.emptyStateModel', { model: selectedModel.name }) : undefined
+                }
               />
             </div>
           ) : (
@@ -832,7 +834,7 @@ export default function Chat() {
                   withPulse={proxyRunning}
                   size="sm"
                 >
-                  {proxyRunning ? 'connected' : 'disconnected'}
+                  {proxyRunning ? t('chat.statusConnected') : t('chat.statusDisconnected')}
                 </StatusBadge>
                 <span className="text-xs text-vsc-text-muted">{t('chat.model') || 'Model'}:</span>
                 <div className="relative">
@@ -853,7 +855,7 @@ export default function Chat() {
                       ) : selectedModel ? (
                         `${selectedModel.name}${selectedModel.source === 'aiProxy' ? ' • AI Proxy' : ''}`
                       ) : (
-                        'Select model...'
+                        t('chat.selectModelPlaceholder')
                       )}
                     </span>
                     <ChevronDown

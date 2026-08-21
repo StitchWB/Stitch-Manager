@@ -295,7 +295,7 @@ export function HoloneSection() {
                     {t('aiHub.holone.monitorMode')}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 leading-tight">
+                <p className="text-[10px] text-slate-400 leading-tight whitespace-normal">
                   {t('aiHub.holone.monitorModeDescription')}
                 </p>
               </Button>
@@ -315,7 +315,7 @@ export function HoloneSection() {
                     {t('aiHub.holone.blockMode')}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 leading-tight">
+                <p className="text-[10px] text-slate-400 leading-tight whitespace-normal">
                   {t('aiHub.holone.blockModeDescription')}
                 </p>
               </Button>
@@ -453,9 +453,6 @@ export function HoloneSection() {
                   ) : (
                     <VolumeX size={14} className="text-slate-500" />
                   )}
-                  <span className="text-xs text-slate-300">
-                    {t('aiHub.holone.soundEnabled')}
-                  </span>
                 </div>
                 <Toggle
                   checked={soundEnabled}

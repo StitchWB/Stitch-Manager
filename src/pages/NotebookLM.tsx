@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, MessageSquare, Mic, Plus, RefreshCw } from 'lucide-react';
+import { BookOpen, MessageSquare, Mic, Plus, RefreshCw, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import Header from '../components/layout/Header';
+import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import { t } from '@/lib/i18n';
 import {
   notebooklmListNotebooks,
@@ -86,108 +88,125 @@ export default function NotebookLM() {
     }
   };
 
+  const errorMessage = error
+    ? error.includes('No web-notebooklm account configured')
+      ? t('notebooklm.noAccount')
+      : error
+    : null;
+
   return (
-    <div className="p-6 space-y-4 max-w-5xl">
-      <SectionHeader
-        title={t('notebooklm.title')}
-        icon={<BookOpen size={18} className="text-teal-400" />}
-      >
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            {t('common.refresh')}
-          </Button>
-        </div>
-      </SectionHeader>
-
-      {error && (
-        <GlassCard className="p-4 border-red-500/20">
-          <p className="text-sm text-red-400">{error}</p>
-          <p className="text-xs text-slate-500 mt-1">{t('notebooklm.setupHint')}</p>
-        </GlassCard>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Notebooks list + create */}
-        <GlassCard className="p-4 space-y-3">
-          <h3 className="text-xs uppercase tracking-wider text-slate-500">
-            {t('notebooklm.notebooks')}
-          </h3>
-          {loading ? (
-            <div className="flex justify-center py-6">
-              <LoadingSpinner size="md" />
+    <div className="flex flex-col h-full overflow-hidden bg-void-base">
+      <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
+      <AiTopTabs />
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6 space-y-4 max-w-5xl">
+          <SectionHeader
+            title={t('notebooklm.title')}
+            icon={<BookOpen size={18} className="text-teal-400" />}
+          >
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => void load()} disabled={loading}>
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                {t('common.refresh')}
+              </Button>
             </div>
-          ) : (
-            <ul className="space-y-1 max-h-64 overflow-y-auto">
-              {notebooks.map(nb => (
-                <li key={nb.id}>
-                  <button
-                    onClick={() => setSelectedId(nb.id)}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${
-                      selectedId === nb.id
-                        ? 'border-teal-500/30 bg-teal-500/10 text-teal-200'
-                        : 'border-white/5 text-slate-300 hover:bg-white/5'
-                    }`}
-                  >
-                    {nb.title || nb.id}
-                  </button>
-                </li>
-              ))}
-              {notebooks.length === 0 && (
-                <li className="text-sm text-slate-500 py-2">{t('notebooklm.empty')}</li>
+          </SectionHeader>
+
+          {errorMessage && (
+            <GlassCard className="p-4 border-red-500/20">
+              <p className="text-sm text-red-400">{errorMessage}</p>
+              <p className="text-xs text-slate-500 mt-1">{t('notebooklm.setupHint')}</p>
+            </GlassCard>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Notebooks list + create */}
+            <GlassCard className="p-4 space-y-3">
+              <h3 className="text-xs uppercase tracking-wider text-slate-500">
+                {t('notebooklm.notebooks')}
+              </h3>
+              {loading ? (
+                <div className="flex justify-center py-6">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : (
+                <ul className="space-y-1 max-h-64 overflow-y-auto">
+                  {notebooks.map(nb => (
+                    <li key={nb.id}>
+                      <button
+                        onClick={() => setSelectedId(nb.id)}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${
+                          selectedId === nb.id
+                            ? 'border-teal-500/30 bg-teal-500/10 text-teal-200'
+                            : 'border-white/5 text-slate-300 hover:bg-white/5'
+                        }`}
+                      >
+                        {nb.title || nb.id}
+                      </button>
+                    </li>
+                  ))}
+                  {notebooks.length === 0 && (
+                    <li className="text-sm text-slate-500 py-2">{t('notebooklm.empty')}</li>
+                  )}
+                </ul>
               )}
-            </ul>
-          )}
-          <div className="flex gap-2">
-            <Input
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              placeholder={t('notebooklm.newTitle')}
-            />
-            <Button variant="primary" size="md" onClick={() => void handleCreate()} disabled={busy}>
-              <Plus size={14} />
-              {t('notebooklm.create')}
-            </Button>
-          </div>
-        </GlassCard>
+              <div className="flex gap-2">
+                <Input
+                  value={newTitle}
+                  onChange={e => setNewTitle(e.target.value)}
+                  placeholder={t('notebooklm.newTitle')}
+                />
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => void handleCreate()}
+                  disabled={busy}
+                >
+                  <Plus size={14} />
+                  {t('notebooklm.create')}
+                </Button>
+              </div>
+            </GlassCard>
 
-        {/* Ask + audio */}
-        <GlassCard className="p-4 space-y-3">
-          <h3 className="text-xs uppercase tracking-wider text-slate-500">
-            {t('notebooklm.interact')}
-          </h3>
-          <Textarea
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            placeholder={t('notebooklm.questionPlaceholder')}
-            rows={3}
-          />
-          <div className="flex gap-2">
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => void handleAsk()}
-              disabled={busy || !selectedId}
-            >
-              <MessageSquare size={14} />
-              {t('notebooklm.ask')}
-            </Button>
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => void handleAudio()}
-              disabled={busy || !selectedId}
-            >
-              <Mic size={14} />
-              {t('notebooklm.audio')}
-            </Button>
+            {/* Ask + audio */}
+            <GlassCard className="p-4 space-y-3">
+              <h3 className="text-xs uppercase tracking-wider text-slate-500">
+                {t('notebooklm.interact')}
+              </h3>
+              <Textarea
+                value={question}
+                onChange={e => setQuestion(e.target.value)}
+                placeholder={t('notebooklm.questionPlaceholder')}
+                rows={3}
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => void handleAsk()}
+                  disabled={busy || !selectedId}
+                >
+                  <MessageSquare size={14} />
+                  {t('notebooklm.ask')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => void handleAudio()}
+                  disabled={busy || !selectedId}
+                >
+                  <Mic size={14} />
+                  {t('notebooklm.audio')}
+                </Button>
+              </div>
+              {answer && (
+                <div className="rounded-md border border-white/10 bg-white/[0.02] p-3">
+                  <p className="text-sm text-slate-200 whitespace-pre-wrap">{answer}</p>
+                </div>
+              )}
+            </GlassCard>
           </div>
-          {answer && (
-            <div className="rounded-md border border-white/10 bg-white/[0.02] p-3">
-              <p className="text-sm text-slate-200 whitespace-pre-wrap">{answer}</p>
-            </div>
-          )}
-        </GlassCard>
+        </div>
       </div>
     </div>
   );

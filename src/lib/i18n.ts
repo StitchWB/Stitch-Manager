@@ -1610,6 +1610,8 @@ export interface Translations {
     deleteSession: string;
     editMessage: string;
     emptyDescription: string;
+    emptyStateModel: string;
+    emptyStateTitle: string;
     emptyTitle: string;
     error: string;
     forceRouting: string;
@@ -1636,6 +1638,7 @@ export interface Translations {
     retry: string;
     routed: string;
     routedWithModel: string;
+    selectModelPlaceholder: string;
     sessions: string;
     sendMessage: string;
     settings: string;
@@ -1646,6 +1649,8 @@ export interface Translations {
     setupProxyMode: string;
     setupRequestsToday: string;
     startProxy: string;
+    statusConnected: string;
+    statusDisconnected: string;
     stopGeneration: string;
     subtitle: string;
     suggestionExplainCode: string;
@@ -3990,6 +3995,7 @@ export interface Translations {
     audioStarted: string;
     created: string;
     setupHint: string;
+    noAccount: string;
   }
   status: {
     active: string;
@@ -4550,6 +4556,9 @@ uiTexts: {
         accepted: string;
         declined: string;
         revoked: string;
+        notFound: string;
+        notPending: string;
+        revokeForbidden: string;
         banner: {
           title: string;
           from: string;

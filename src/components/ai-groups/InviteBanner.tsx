@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { GlassCard, Button } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { useGroupsStore } from '@/stores/groups';
+import { inviteErrorMessage } from './inviteErrors';
 import type { GroupInviteSummary } from '@/lib/backend/modules/groups';
 
 interface InviteBannerProps {
@@ -33,7 +34,7 @@ export function InviteBanner({ invites, onResolved }: InviteBannerProps) {
       }
       onResolved?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'));
+      toast.error(inviteErrorMessage(e));
     } finally {
       setResolving(prev => ({ ...prev, [inviteId]: false }));
     }
