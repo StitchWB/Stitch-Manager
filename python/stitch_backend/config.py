@@ -211,6 +211,22 @@ class Settings(BaseSettings):
             )
         return self
 
+    # ── Built-in domain deprecation flags ───────────────────────────────────────
+    # When ``True``, the built-in ``notebooklm_*`` command handlers are
+    # bypassed: ``dual_format.try_dual_format_route`` treats flag-on as
+    # "no built-in fallback" (the plugin must serve, or a clear 400
+    # "plugin not installed: stitch-notebooklm" is returned), and the
+    # built-in handlers in ``domains/notebooklm/commands.py`` raise
+    # ``StitchError`` (defense in depth).  The built-in code is NOT
+    # deleted — removal is plan todo 24.  Default ``False`` so existing
+    # deployments keep the built-in domain until the operator opts in.
+    disable_builtin_notebooklm: bool = Field(
+        False,
+        validation_alias=AliasChoices(
+            "disable_builtin_notebooklm", "STITCH_DISABLE_BUILTIN_NOTEBOOKLM"
+        ),
+    )
+
     # ── Paths ─────────────────────────────────────────────────────────────────
     profiles_dir: str = str(REPO_ROOT / "profiles")
     cloakbrowser_dir: str = str(REPO_ROOT / "resources" / "cloakbrowser")
