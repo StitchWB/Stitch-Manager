@@ -11,12 +11,24 @@ Required fields are enforced; missing or invalid values raise
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
 SCHEMA_ID = "stitch.plugin/v1"
+SCHEMA_ID_V2 = "stitch.plugin/v2"
+SCHEMA_IDS = (SCHEMA_ID, SCHEMA_ID_V2)
 MANIFEST_FILENAME = "plugin.json"
+
+# Valid plugin kinds across v1 + v2 schemas.
+# "data" — v1 registration scenario plugin (trust tier: data-only).
+# "engine-pack" — trusted engine module (captcha solvers).
+# "provider" — code plugin shipping a provider class.
+# "service" — v2 out-of-process plugin (subprocess JSON-RPC, plan v2).
+VALID_KINDS = ("data", "engine-pack", "provider", "service")
+
+_logger = logging.getLogger(__name__)
 
 # Semver 2.0.0 — MAJOR.MINOR.PATCH with optional prerelease and build metadata.
 _SEMVER_RE = re.compile(
@@ -77,6 +89,17 @@ class PluginManifest:
     # NOT used by the engine in v1 (tolerant reader ignores them at parse time).
     extras: dict[str, Any] = field(default_factory=dict)
 
+    # v2 contributions (plan plugin-platform-v2 todo 1).
+    # kind=service plugins declare SPI registrations, namespaced commands,
+    # declarative UI tabs, i18n bundles, and storage declarations here.
+    # Defaults to empty so v1 manifests parse identically.
+    contributions: dict[str, Any] = field(default_factory=dict)
+
+    # v2 config.needs — whitelist of core settings the plugin requests
+    # (e.g. ["imap.host", "imap.port"]).  The host reads these from
+    # core settings and passes them in the RPC handshake.
+    config: dict[str, Any] = field(default_factory=dict)
+
     def service_ids(self) -> list[str]:
         """Return all service ids this package serves.
 
@@ -130,9 +153,9 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         return val
 
     schema = _require_str("schema")
-    if schema != SCHEMA_ID:
+    if schema not in SCHEMA_IDS:
         raise ManifestValidationError(
-            "schema", f'must be "{SCHEMA_ID}", got "{schema}"'
+            "schema", f'must be one of {SCHEMA_IDS}, got "{schema}"'
         )
 
     plugin_id = _require_str("id")
@@ -158,9 +181,17 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     # "provider" is a code plugin that ships a provider class (subclass of
     # BaseProvider) overriding/extending a built-in reger — the entry points
     # at a Python module + class name instead of a scenario file.
-    if kind not in ("data", "engine-pack", "provider"):
-        raise ManifestValidationError(
-            "kind", f'must be "data", "engine-pack" or "provider", got "{kind}"'
+    # "service" is a v2 out-of-process plugin (subprocess JSON-RPC).
+    if kind not in VALID_KINDS:
+        # Tolerant reader (plan §3.1 item 1): unknown kind → soft-skip.
+        # The manifest is returned with the unknown kind; the loader decides
+        # whether to load it.  Forward-compatible — newer manifests with kind
+        # values the engine doesn't know yet don't break the parser.
+        _logger.warning(
+            "Unknown plugin kind %r in manifest %r — soft-skipping "
+            "(manifest parsed, loader will skip)",
+            kind,
+            plugin_id,
         )
 
     engine_raw = raw.get("engine")
@@ -193,7 +224,16 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
                     f"entry.{key}", "required string missing"
                 )
         entry = dict(entry_raw)
-    else:
+    elif kind == "service":
+        # v2 service plugin: entry points at a Python module spawned as a
+        # subprocess (sys.executable -m <entry.module>).  The host communicates
+        # via stdio JSON-RPC (plan plugin-platform-v2 todo 2-3).
+        if not isinstance(entry_raw, dict):
+            raise ManifestValidationError("entry", "required field missing or not an object")
+        if "module" not in entry_raw or not isinstance(entry_raw["module"], str):
+            raise ManifestValidationError("entry.module", "required string missing")
+        entry = dict(entry_raw)
+    elif kind == "data":
         if not isinstance(entry_raw, dict):
             raise ManifestValidationError("entry", "required field missing or not an object")
         for key in ("scenario", "selectors", "profile"):
@@ -202,6 +242,9 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
                     f"entry.{key}", "required string missing"
                 )
         entry = dict(entry_raw)
+    else:
+        # Unknown kind — lenient entry validation (soft-skip, tolerant reader).
+        entry = dict(entry_raw) if isinstance(entry_raw, dict) else {}
 
     capabilities_raw = raw.get("capabilities", [])
     if not isinstance(capabilities_raw, list) or not all(
@@ -228,10 +271,24 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     if not isinstance(signature, str):
         raise ManifestValidationError("signature", "must be a string")
 
+    # v2 contributions (plan plugin-platform-v2 todo 1).
+    # Parsed as a plain dict — deep validation of spi/commands/ui/i18n/storage
+    # is the host's responsibility (tolerant reader: unknown keys tolerated).
+    contributions_raw = raw.get("contributions", {})
+    if not isinstance(contributions_raw, dict):
+        raise ManifestValidationError("contributions", "must be an object")
+    contributions = dict(contributions_raw)
+
+    # v2 config (config.needs whitelist of core settings the plugin requests).
+    config_raw = raw.get("config", {})
+    if not isinstance(config_raw, dict):
+        raise ManifestValidationError("config", "must be an object")
+    config = dict(config_raw)
+
     known = {
         "schema", "id", "name", "version", "service", "kind",
         "engine", "depends", "entry", "capabilities", "outputs", "signature",
-        "services",
+        "services", "contributions", "config",
     }
     extras = {k: v for k, v in raw.items() if k not in known}
 
@@ -250,6 +307,8 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         signature=signature,
         services=services,
         extras=extras,
+        contributions=contributions,
+        config=config,
     )
 
 
