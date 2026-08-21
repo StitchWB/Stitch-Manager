@@ -16,8 +16,17 @@ async def cmd_start_registration(params: dict) -> dict:
     """Start one or more registration jobs for a provider."""
     from stitch_backend.domains.registration.job_manager import job_manager
     from stitch_backend.domains.registration.schemas import StartRegistrationRequest
+    from stitch_backend.domains.registration.service import _check_entitlement
 
     req = StartRegistrationRequest.model_validate(params)
+    # FIX 2 (P0): gate cmd_start_registration → JobManager →
+    # RegistrationOrchestrator path.  Thread caller context and run the
+    # same entitlement check as submit() BEFORE job_manager.submit_batch.
+    config = {
+        "owner_id": params.get("_caller_user_id"),
+        "_caller_role": params.get("_caller_role"),
+    }
+    await _check_entitlement(req.provider_id, config)
     jobs = await job_manager.submit_batch(
         provider_id=req.provider_id,
         count=req.count,
@@ -91,7 +100,8 @@ async def cmd_auto_register(params: dict) -> dict:
     if provider not in _ALLOWED_AUTOREG_PROVIDERS:
         return {"error": f"Unknown provider: {provider}"}
     config = {"email": email, "password": password, "headless": True,
-              "owner_id": params.get("_caller_user_id")}
+              "owner_id": params.get("_caller_user_id"),
+              "_caller_role": params.get("_caller_role")}
     job_id = await registration_service.submit(provider, config)
     return {"jobId": job_id, "success": True}
 
@@ -104,7 +114,8 @@ async def cmd_confirm_registration(params: dict) -> dict:
     email = params.get("email", "")
     code = params.get("code", "")
     config = {"email": email, "verification_code": code, "headless": True,
-              "owner_id": params.get("_caller_user_id")}
+              "owner_id": params.get("_caller_user_id"),
+              "_caller_role": params.get("_caller_role")}
     job_id = await registration_service.submit("kiro", config)
     return {"jobId": job_id, "success": True}
 
@@ -117,7 +128,8 @@ async def cmd_auto_login(params: dict) -> dict:
     email = params.get("email", "")
     password = params.get("password", "")
     config = {"email": email, "password": password, "headless": True,
-              "launch_mode": "login", "owner_id": params.get("_caller_user_id")}
+              "launch_mode": "login", "owner_id": params.get("_caller_user_id"),
+              "_caller_role": params.get("_caller_role")}
     job_id = await registration_service.submit("kiro", config)
     return {"jobId": job_id, "success": True}
 
@@ -173,9 +185,12 @@ async def _start_autoreg_job(provider: str, params: dict) -> dict:
     if not isinstance(config, dict):
         config = {}
 
-    # Thread caller's owner_id for per-user IMAP password resolution.
-    if "_caller_user_id" in params and "owner_id" not in config:
-        config["owner_id"] = params.get("_caller_user_id")
+    # UNCONDITIONALLY overwrite caller identity from the dispatcher-injected
+    # top-level params.  Never trust caller-supplied config/params sub-dicts
+    # for _caller_role / owner_id — an attacker can spoof these to bypass the
+    # entitlement gate (FIX 1 P0).
+    config["owner_id"] = params.get("_caller_user_id")
+    config["_caller_role"] = params.get("_caller_role")
 
     job_id = await registration_service.submit(provider, config)
     return {"jobId": job_id}
@@ -442,6 +457,7 @@ async def cmd_authorize_kiro_account(params: dict) -> dict:
         "headless": headless,
         "launch_mode": "kiro_oauth_only_existing_session",
         "owner_id": params.get("_caller_user_id"),
+        "_caller_role": params.get("_caller_role"),
     }
     job_id = await registration_service.submit("kiro_v2", config)
     return {"jobId": job_id}
@@ -455,9 +471,12 @@ async def cmd_start_registration_v2(params: dict) -> dict:
     from stitch_backend.domains.registration.service import registration_service
 
     req = params.get("params", params)
-    # Thread caller's owner_id for per-user IMAP password resolution.
-    if "_caller_user_id" in params and "owner_id" not in req:
-        req = {**req, "owner_id": params.get("_caller_user_id")}
+    # UNCONDITIONALLY overwrite caller identity from the dispatcher-injected
+    # top-level params.  Never trust caller-supplied params sub-dict for
+    # _caller_role / owner_id — an attacker can spoof these to bypass the
+    # entitlement gate (FIX 1 P0).
+    req = {**req, "owner_id": params.get("_caller_user_id")}
+    req = {**req, "_caller_role": params.get("_caller_role")}
     job_id = await registration_service.submit("kiro_v2", req)
     return {"success": True, "jobId": job_id, "email": req.get("email", "")}
 

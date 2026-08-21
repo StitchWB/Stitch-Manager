@@ -455,6 +455,60 @@ def _build_log_callback(job_id: str, provider_name: str):
     return log_callback
 
 
+async def _check_entitlement(provider_name: str, config: dict) -> None:
+    """Run-gate: reject the submission when the caller's role is not
+    entitled to the plugin that backs *provider_name*.
+
+    The canonical entitlement key is the plugin package id (manifest
+    ``id``, e.g. "kiro-autoreg").  ``provider_name`` is the service id
+    (e.g. "kiro") and is resolved to the package id via
+    :func:`resolve_provider_plugin_id`.  When the plugin is not
+    installed (``None``) the gate is skipped — the existing
+    "provider not installed" error path in :func:`_build_provider`
+    handles it.
+
+    Caller context is read from *config*:
+      - ``owner_id`` (threaded from ``_caller_user_id``) → caller_user_id
+      - ``_caller_role`` → caller_role
+
+    Desktop / no-auth (both ``None``) →
+    :func:`get_effective_entitlements` returns ``{"*"}`` → passes.
+
+    Raises ``ValueError`` with a clear message when the caller is not
+    entitled.  The command dispatcher maps ``ValueError`` to HTTP 400
+    with ``str(exc)`` as the detail — matching the codebase error style
+    for expected rejections.
+    """
+    # Lazy import — sibling module in plugin_distribution domain.
+    from stitch_backend.domains.plugin_distribution.entitlements import (
+        get_effective_entitlements,
+        is_entitled_to,
+        resolve_provider_plugin_id,
+    )
+
+    plugin_id = await resolve_provider_plugin_id(provider_name)
+    if plugin_id is None:
+        # Plugin not installed → let _build_provider's "provider not
+        # installed" error path handle it (unchanged behaviour).
+        return
+
+    # Defense in depth (FIX 1 P0): caller identity must come from the
+    # dispatcher-injected top-level params (threaded as owner_id /
+    # _caller_role by the command handlers).  We prefer owner_id (the
+    # canonical key threaded from _caller_user_id) and fall back to
+    # _caller_user_id.  _caller_role is read directly.  Entry points
+    # now unconditionally overwrite these keys, but this guard ensures
+    # that even a direct caller of submit()/run() with a spoofed config
+    # cannot inject an arbitrary role.
+    caller_user_id = config.get("owner_id") or config.get("_caller_user_id")
+    caller_role = config.get("_caller_role")
+    entitlements = await get_effective_entitlements(caller_user_id, caller_role)
+    if not is_entitled_to(plugin_id, entitlements):
+        raise ValueError(
+            f"plugin '{plugin_id}' is not entitled for your role — contact admin"
+        )
+
+
 # ── Service ────────────�����������────────────────────────────────────────────────────
 
 class RegistrationService:
@@ -469,7 +523,29 @@ class RegistrationService:
         The registration runs in a background ``asyncio.Task``.
         Progress is streamed via EventBus; final result is emitted as
         ``registration.completed`` or ``registration.failed``.
+
+        ── Entitlement run-gate (plan §distribution) ──────────────────────
+        Before creating the job, the caller's effective entitlements are
+        checked against the canonical plugin id resolved from
+        ``provider_name`` (service id, e.g. "kiro") via
+        :func:`resolve_provider_plugin_id`.  When the plugin is not
+        installed (``plugin_id is None``) the gate is skipped and the
+        existing "provider not installed" error path in
+        :func:`_build_provider` handles it — unchanged.
+
+        Caller context (``_caller_user_id`` threaded as ``owner_id`` and
+        ``_caller_role``) is read from ``config``.  Desktop / no-auth
+        (both ``None``) → :func:`get_effective_entitlements` returns
+        ``{"*"}`` → gate passes.  Role changes apply at next submission;
+        in-flight jobs keep their submission-time entitlement snapshot
+        (the gate runs once here, not per-step).
+
+        A non-entitled caller is rejected with ``ValueError`` so the
+        command dispatcher maps it to a 400 with the clear message
+        ``"plugin '<id>' is not entitled for your role — contact admin"``.
         """
+        await _check_entitlement(provider_name, config)
+
         job_id = uuid.uuid4().hex[:12]
         now = datetime.now(UTC).isoformat()
         task = asyncio.create_task(self._run(job_id, provider_name, config))
@@ -516,6 +592,8 @@ class RegistrationService:
 
         Useful for simple callers that want to wait for the result.
         """
+        # FIX 2 (P0): run() must gate on entitlements matching submit().
+        await _check_entitlement(provider_name, config)
         job_id = uuid.uuid4().hex[:12]
         now = datetime.now(UTC).isoformat()
         task = asyncio.create_task(self._run(job_id, provider_name, config))
