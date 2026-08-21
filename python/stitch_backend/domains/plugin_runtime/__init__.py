@@ -17,11 +17,19 @@ from typing import TYPE_CHECKING
 from stitch_backend.domains.sidecar import get_supervisor
 
 if TYPE_CHECKING:
+    from autoreg.plugin.manifest import PluginManifest
+
     from .host import ServicePluginHost
 
 logger = logging.getLogger(__name__)
 
 _hosts: dict[str, ServicePluginHost] = {}
+
+#: Manifest metadata for each registered plugin id.  The host itself
+#: owns the process lifecycle; the manifest is stored alongside so
+#: ``list_service_plugins`` can surface contributions (ui/i18n/commands)
+#: without re-reading the package directory on every call.
+_manifests: dict[str, PluginManifest] = {}
 
 
 def register_host(host: "ServicePluginHost") -> None:
@@ -39,6 +47,19 @@ def all_hosts() -> list["ServicePluginHost"]:
 
 def status_all() -> list[dict]:
     return [h.status() for h in _hosts.values()]
+
+
+def register_manifest(plugin_id: str, manifest: "PluginManifest") -> None:
+    """Store manifest metadata for a plugin id (idempotent)."""
+    _manifests[plugin_id] = manifest
+
+
+def get_manifest(plugin_id: str) -> "PluginManifest | None":
+    return _manifests.get(plugin_id)
+
+
+def all_manifests() -> list["PluginManifest"]:
+    return list(_manifests.values())
 
 
 async def stop_all() -> None:
@@ -59,5 +80,8 @@ __all__ = [
     "get_host",
     "all_hosts",
     "status_all",
+    "register_manifest",
+    "get_manifest",
+    "all_manifests",
     "stop_all",
 ]

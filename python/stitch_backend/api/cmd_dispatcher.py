@@ -31,6 +31,11 @@ from stitch_backend.core.command_registry import (
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 
+# Import so the @register_command decorator in bridge.py fires at startup
+# (registers ``list_service_plugins``).  The dispatcher also routes
+# ``plugin.{id}.{cmd}`` names through this module before the registry lookup.
+import stitch_backend.domains.plugin_runtime.bridge  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 cmd_router = APIRouter(tags=["Commands"])
@@ -76,6 +81,42 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
 
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail="Request body must be a JSON object")
+
+    # ── Plugin command routing ──────────────────────────────────────────────
+    # Namespaced commands ``plugin.{id}.{cmd}`` are routed to the plugin
+    # runtime BEFORE the command-registry lookup.  This avoids dynamic
+    # re-registration of plugin command names (which would spam the
+    # overwrite-warning log in command_registry.register_command).
+    # Caller identity is resolved here so the entitlement check in the
+    # bridge has ``_caller_role`` / ``_caller_user_id``.
+    if name.startswith("plugin."):
+        caller_role_plugin: str | None = "admin"
+        caller_user_id_plugin: int | None = None
+        caller_username_plugin: str | None = None
+        caller_telegram_id_plugin: int | None = None
+        from stitch_backend.config import get_settings as _get_settings_plugin
+
+        if _get_settings_plugin().auth_enabled:
+            from stitch_backend.domains.auth.router import _current_user_optional
+
+            _user, _preview_role, _raw = await _current_user_optional(request)
+            caller_role_plugin = (
+                (_preview_role or _user.role) if _user is not None else None
+            )
+            caller_user_id_plugin = _user.id if _user is not None else None
+            caller_username_plugin = _user.username if _user is not None else None
+            caller_telegram_id_plugin = (
+                _user.telegram_id if _user is not None else None
+            )
+        body["_caller_role"] = caller_role_plugin
+        body["_caller_user_id"] = caller_user_id_plugin
+        body["_caller_username"] = caller_username_plugin
+        body["_caller_telegram_id"] = caller_telegram_id_plugin
+
+        from stitch_backend.domains.plugin_runtime.bridge import call_plugin_command
+
+        _plugin_result = await call_plugin_command(name, body)
+        return JSONResponse(content=_serialise(_plugin_result))
 
     # Look up handler
     try:
