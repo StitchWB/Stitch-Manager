@@ -217,7 +217,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
             user,
             permissions,
             permissionsLoaded,
-            sessionExpired: false,
+            // Only clear the "session expired" banner once a session is
+            // actually established. A re-init while logged out (StrictMode,
+            // re-render) must NOT wipe the banner set by the 401 handler.
+            sessionExpired: user ? false : get().sessionExpired,
             // If already authenticated, guest mode is irrelevant. Otherwise
             // default to the welcome surface when not required.
             guest: false,

@@ -151,7 +151,7 @@ function extractInvokeErrorMessage(error: unknown): string {
 export async function safeInvoke<T>(
   command: string,
   args?: Record<string, unknown>,
-  opts?: { noCache?: boolean },
+  opts?: { noCache?: boolean; _suppressAuthExpired?: boolean },
 ): Promise<T> {
   const key = getRequestKey(command, args);
 
@@ -183,11 +183,23 @@ export async function safeInvoke<T>(
         body: JSON.stringify(args || {}),
       });
 
-      const data = await response.json();
+      // Guard the JSON parse — a 401 from a non-FastAPI source (dev proxy,
+      // gateway, cold-start error page) may carry a non-JSON body that would
+      // throw on .json() and mask the real status.
+      const data = await response.json().catch(() => ({} as Record<string, unknown>));
 
       // Session expired on a regular API call → drop the user back to login.
-      // The handler is a no-op when auth is disabled (desktop mode).
-      if (response.status === 401 && _onAuthExpired) {
+      // Fire ONLY on a genuine session-expiry 401 from the FastAPI auth
+      // middleware (JSON body {"detail": "Not authenticated"}). Other 401s
+      // (permission errors, transient proxy 401s) must NOT force a logout —
+      // this was the root cause of spurious session drops.
+      const contentType = response.headers?.get('content-type') ?? '';
+      const detail = (data as { detail?: unknown })?.detail;
+      const isSessionExpired401 =
+        response.status === 401 &&
+        contentType.includes('application/json') &&
+        detail === 'Not authenticated';
+      if (isSessionExpired401 && _onAuthExpired && !opts?._suppressAuthExpired) {
         _onAuthExpired();
       }
 
@@ -248,7 +260,13 @@ export async function safeInvokeWithRetry<T>(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await safeInvoke<T>(command, args);
+      // Suppress the session-expiry side-effect on non-final attempts so a
+      // transient 401 mid-retry doesn't log the user out; only the final
+      // attempt may fire the handler (and only for a genuine expiry, per
+      // safeInvoke's discrimination above).
+      return await safeInvoke<T>(command, args, {
+        _suppressAuthExpired: attempt < maxRetries,
+      });
     } catch (error) {
       lastError =
         error instanceof BackendError
