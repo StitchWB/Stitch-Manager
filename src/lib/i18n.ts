@@ -2570,6 +2570,8 @@ export interface Translations {
     sourceImap: string;
     sourceLabel: string;
     sourceMailTm: string;
+    sourceBuiltin: string;
+    sourcePlugin: string;
     subjectLabel: string;
     subtitle: string;
     syncCollapse: string;

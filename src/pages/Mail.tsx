@@ -100,6 +100,11 @@ export default function Mail() {
     [servicePluginsSnapshot],
   );
 
+  const mailSourceIsPlugin = useMemo(
+    () => servicePluginsSnapshot.some(p => p.id === 'stitch-mail'),
+    [servicePluginsSnapshot],
+  );
+
   useEffect(() => {
     void fetchServicePlugins();
   }, []);
@@ -453,7 +458,22 @@ export default function Mail() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-vsc-bg">
-      <Header title={t('mail.title')} subtitle={headerSubtitle} icon={<MailIcon size={18} />} />
+      <Header
+        title={t('mail.title')}
+        subtitle={headerSubtitle}
+        icon={<MailIcon size={18} />}
+        actions={
+          <span
+            className={`text-2xs font-medium px-1.5 py-0.5 rounded-md border ${
+              mailSourceIsPlugin
+                ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200'
+                : 'border-white/[0.06] bg-white/[0.04] text-slate-400'
+            }`}
+          >
+            {mailSourceIsPlugin ? t('mail.sourcePlugin') : t('mail.sourceBuiltin')}
+          </span>
+        }
+      />
 
       <div className="flex-1 min-h-0 overflow-hidden px-4 pb-4 md:px-6 md:pb-6">
         <div className="max-w-[1720px] mx-auto h-full pt-4 flex flex-col gap-3">
