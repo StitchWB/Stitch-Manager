@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText } from 'lucide-react';
+import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
@@ -31,6 +31,9 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Select } from '../components/ui/Select';
+import { Modal } from '../components/ui/Modal';
+import { Input } from '../components/ui/Input';
+import { Toggle } from '../components/ui/Toggle';
 import { UserPluginGrants } from '../components/admin/UserPluginGrants';
 import { safeInvoke } from '@/lib/backend/core';
 import {
@@ -73,6 +76,7 @@ export default function Plugins() {
   const [logsOpenId, setLogsOpenId] = useState<string | null>(null);
   const [logsCache, setLogsCache] = useState<Record<string, string[]>>({});
   const [logsLoadingId, setLogsLoadingId] = useState<string | null>(null);
+  const [installModalOpen, setInstallModalOpen] = useState(false);
 
   useEffect(() => { void fetchServicePlugins(); }, []);
 
@@ -254,9 +258,14 @@ export default function Plugins() {
         subtitle={t('admin.plugins.subtitle')}
         icon={<Puzzle size={18} />}
         actions={
-          <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={loading} leftIcon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />}>
-            {t('common.refresh')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setInstallModalOpen(true)} leftIcon={<Download size={14} />}>
+              {t('admin.plugins.installFromSource.title')}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={loading} leftIcon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />}>
+              {t('common.refresh')}
+            </Button>
+          </div>
         }
       />
       <div className="flex-1 overflow-y-auto p-6">
@@ -435,6 +444,10 @@ export default function Plugins() {
           </div>
         </div>
       </div>
+      <InstallFromSourceModal
+        isOpen={installModalOpen}
+        onClose={() => setInstallModalOpen(false)}
+      />
     </div>
   );
 }
@@ -531,5 +544,153 @@ function ServicePluginCard({
         </div>
       )}
     </div>
+  );
+}
+
+
+// ── Install from source modal ────────────────────────────────────────────────
+
+type InstallMode = 'repo' | 'release';
+
+interface InstallFromSourceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function InstallFromSourceModal({ isOpen, onClose }: InstallFromSourceModalProps) {
+  const [mode, setMode] = useState<InstallMode>('repo');
+  const [url, setUrl] = useState('');
+  const [ref, setRef] = useState('');
+  const [releaseTag, setReleaseTag] = useState('');
+  const [sha256, setSha256] = useState('');
+  const [trust, setTrust] = useState(false);
+  const [installing, setInstalling] = useState(false);
+
+  const reset = useCallback(() => {
+    setMode('repo');
+    setUrl('');
+    setRef('');
+    setReleaseTag('');
+    setSha256('');
+    setTrust(false);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    if (installing) return;
+    reset();
+    onClose();
+  }, [installing, reset, onClose]);
+
+  const canSubmit = !!url.trim() && !installing && (
+    mode === 'repo' ? !!ref.trim() : !!releaseTag.trim()
+  );
+
+  const handleSubmit = useCallback(async () => {
+    const trimmedUrl = url.trim();
+    const payload: Record<string, unknown> = { url: trimmedUrl };
+    if (mode === 'repo') {
+      payload.ref = ref.trim();
+      payload.trust = trust;
+    } else {
+      payload.release = releaseTag.trim();
+      const hash = sha256.trim();
+      if (hash) payload.expected_sha256 = hash;
+    }
+    setInstalling(true);
+    try {
+      const result = await safeInvoke<{ id: string; version: string }>(
+        'install_plugin_from_source', payload,
+      );
+      invalidateServicePlugins();
+      toast.success(t('admin.plugins.installFromSource.success', {
+        id: result.id, version: result.version,
+      }));
+      reset();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`${t('admin.plugins.installFromSource.failed')}: ${msg}`);
+    } finally {
+      setInstalling(false);
+    }
+  }, [url, mode, ref, trust, releaseTag, sha256, reset, onClose]);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={t('admin.plugins.installFromSource.title')}
+      icon={<Download size={18} />}
+      size="md"
+      isLoading={installing}
+      footer={
+        <div className="flex items-center justify-end gap-3">
+          <Button variant="ghost" size="sm" onClick={handleClose} disabled={installing}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => void handleSubmit()}
+            disabled={!canSubmit}
+          >
+            {t('admin.plugins.installFromSource.submit')}
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <Input
+          label={t('admin.plugins.installFromSource.url')}
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="https://github.com/user/plugin"
+          disabled={installing}
+        />
+        <Select
+          label={t('admin.plugins.installFromSource.mode')}
+          value={mode}
+          onValueChange={v => setMode(v as InstallMode)}
+          options={[
+            { value: 'repo', label: 'repo@ref' },
+            { value: 'release', label: 'release' },
+          ]}
+        />
+        {mode === 'repo' ? (
+          <>
+            <Input
+              label={t('admin.plugins.installFromSource.repoRef')}
+              value={ref}
+              onChange={e => setRef(e.target.value)}
+              placeholder="main"
+              disabled={installing}
+            />
+            <Toggle
+              label={t('admin.plugins.installFromSource.trust')}
+              checked={trust}
+              onChange={setTrust}
+              disabled={installing}
+            />
+          </>
+        ) : (
+          <>
+            <Input
+              label={t('admin.plugins.installFromSource.releaseTag')}
+              value={releaseTag}
+              onChange={e => setReleaseTag(e.target.value)}
+              placeholder="v1.0.0"
+              disabled={installing}
+            />
+            <Input
+              label={t('admin.plugins.installFromSource.sha256')}
+              value={sha256}
+              onChange={e => setSha256(e.target.value)}
+              placeholder="e3b0c44298fc1c14..."
+              disabled={installing}
+            />
+          </>
+        )}
+      </div>
+    </Modal>
   );
 }
