@@ -3960,6 +3960,18 @@ export interface Translations {
       servicePluginCommunity: string;
       servicePluginCommunityTooltip: string;
       servicePluginCommunityTabTooltip: string;
+      installFromSource: {
+        title: string;
+        url: string;
+        mode: string;
+        repoRef: string;
+        releaseTag: string;
+        sha256: string;
+        trust: string;
+        submit: string;
+        success: string;
+        failed: string;
+      };
     };
     userProfile: {
       title: string;
