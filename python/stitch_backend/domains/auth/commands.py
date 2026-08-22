@@ -240,16 +240,12 @@ async def _get_keys_counts(db: AsyncSession, user_id: int) -> dict:
     except ImportError:
         pass
 
-    # TOTP keys (owner_id column)
+    # TOTP keys (owner_id column) — resolved via SPI so a healthy
+    # stitch-totp plugin store is counted instead of the core table.
     try:
-        from stitch_backend.domains.totp.models import TotpKey
+        from stitch_backend.core.spi import SPI_TOTP, resolve
 
-        result = await db.execute(
-            select(func.count())
-            .select_from(TotpKey)
-            .where(TotpKey.owner_id == user_id)
-        )
-        counts["totp"] = int(result.scalar_one())
+        counts["totp"] = await resolve(SPI_TOTP).count_owned_keys(user_id)
     except ImportError:
         pass
 

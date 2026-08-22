@@ -351,7 +351,6 @@ async def cmd_initialize_app(params: dict) -> dict:
     from stitch_backend.domains.scheduler.service import get_tasks, task_to_dict
     from stitch_backend.domains.scheduler.worker import get_worker as get_scheduler_worker
     from stitch_backend.domains.settings.service import SettingsService
-    from stitch_backend.domains.totp.models import TotpKey
 
     async def _op(session):
         # Get settings
@@ -369,13 +368,11 @@ async def cmd_initialize_app(params: dict) -> dict:
         total_accounts = total.scalar() or 0
         active_accounts_count = active.scalar() or 0
 
-        # Get TOTP keys
-        totp_result = await session.execute(
-            select(TotpKey).order_by(TotpKey.created_at)
-        )
-        totp_keys_list = totp_result.scalars().all()
-        from stitch_backend.domains.totp.commands import _key_to_dict
-        totp_keys = [_key_to_dict(k, include_secret=True) for k in totp_keys_list]
+        # Get TOTP keys — resolved via SPI so a healthy stitch-totp plugin
+        # store is served instead of the core table.
+        from stitch_backend.core.spi import SPI_TOTP, resolve
+
+        totp_keys = await resolve(SPI_TOTP).list_keys()
 
         # Get scheduled tasks
         tasks_list = await get_tasks(session)

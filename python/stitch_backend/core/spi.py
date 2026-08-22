@@ -49,10 +49,12 @@ class SpiNotRegistered(KeyError):
 # registered by the owning domain at import time; service-plugins override
 # them by registering with source="plugin".
 #
-# Only EmailVerificationProvider has a built-in impl registered today (in
-# registration/strategies.py).  TotpProvider, MailInboxSPI, and OAuthProvider
-# are declared here as forward-looking contracts — their built-in impls and
-# plugin overrides arrive in later todos (14, 15, 20).
+# EmailVerificationProvider has its built-in impl in
+# registration/strategies.py; TotpProvider's built-in impl
+# (_BuiltinTotp) lives in this module and is registered below.
+# MailInboxSPI and OAuthProvider are declared here as forward-looking
+# contracts — their built-in impls and plugin overrides arrive in later
+# todos (14, 15).
 
 
 @runtime_checkable
@@ -80,9 +82,13 @@ class EmailVerificationProvider(Protocol):
 
 @runtime_checkable
 class TotpProvider(Protocol):
-    """TOTP code generation/verification — used by registration MFA steps.
+    """TOTP secret store + code generation/verification.
 
-    Built-in impl and plugin override arrive in todo 20.
+    Code methods serve registration MFA steps (kiro_v2); key-store
+    methods serve the core consumers (auth user-data counts,
+    ``initialize_app`` key export).  The built-in impl wraps
+    ``domains/totp``; a healthy ``stitch-totp`` service plugin can
+    override it by registering with ``source="plugin"``.
     """
 
     async def generate_secret(self) -> str:
@@ -95,6 +101,14 @@ class TotpProvider(Protocol):
 
     async def verify_code(self, secret: str, code: str) -> bool:
         """Verify a TOTP code against *secret* (±1 time step)."""
+        ...
+
+    async def count_owned_keys(self, owner_id: int | None) -> int:
+        """Count TOTP keys owned by *owner_id* (NULL = shared rows)."""
+        ...
+
+    async def list_keys(self) -> list[dict[str, Any]]:
+        """Return every stored TOTP key as a dict (secrets included)."""
         ...
 
 
@@ -305,6 +319,89 @@ class _SpiRegistry:
 
 # Singleton registry
 spi_registry = _SpiRegistry()
+
+
+# ── Built-in TotpProvider ─────────────────────────────────────────────────────
+#
+# Wraps domains/totp (models + serialization) and pyotp.  All domain imports
+# are lazy (inside methods) so this module keeps no import-time dependency on
+# domains/ — and so open-core builds without the totp domain surface an
+# ImportError at call time (caught by the tolerant consumers) instead of at
+# SPI import time.
+
+
+class _BuiltinTotp:
+    """Built-in TotpProvider — delegates to ``domains/totp``.
+
+    Key-store methods wrap the core ``totp_keys`` table (the same queries
+    the pre-SPI consumers ran inline); code methods use ``pyotp``.
+    Registered at SPI import time so ``resolve(SPI_TOTP)`` never raises
+    on a stock install.
+    """
+
+    async def generate_secret(self) -> str:
+        import pyotp  # type: ignore[import-untyped]
+
+        return str(pyotp.random_base32())
+
+    async def get_code(self, secret: str, timestamp: int | None = None) -> str:
+        import pyotp  # type: ignore[import-untyped]
+
+        totp = pyotp.TOTP(secret)
+        if timestamp is not None:
+            return str(totp.at(timestamp))
+        return str(totp.now())
+
+    async def verify_code(self, secret: str, code: str) -> bool:
+        import pyotp  # type: ignore[import-untyped]
+
+        return bool(pyotp.TOTP(secret).verify(code, valid_window=1))
+
+    async def count_owned_keys(self, owner_id: int | None) -> int:
+        from sqlalchemy import func, select
+
+        from stitch_backend.database import run_in_read_session
+        from stitch_backend.domains.totp.models import TotpKey
+
+        async def _op(session):
+            result = await session.execute(
+                select(func.count())
+                .select_from(TotpKey)
+                .where(TotpKey.owner_id == owner_id)
+            )
+            return int(result.scalar_one())
+
+        return await run_in_read_session(_op)
+
+    async def list_keys(self) -> list[dict[str, Any]]:
+        from sqlalchemy import select
+
+        from stitch_backend.database import run_in_read_session
+        from stitch_backend.domains.totp.commands import _key_to_dict
+        from stitch_backend.domains.totp.models import TotpKey
+
+        async def _op(session):
+            result = await session.execute(
+                select(TotpKey).order_by(TotpKey.created_at)
+            )
+            return [
+                _key_to_dict(key, include_secret=True)
+                for key in result.scalars().all()
+            ]
+
+        return await run_in_read_session(_op)
+
+
+def _register_builtin_totp() -> None:
+    """Register the built-in TotpProvider in the SPI registry.
+
+    Called at import time below.  Uses the singleton directly (the
+    module-level ``register_impl`` shortcut is defined further down).
+    """
+    spi_registry.register_impl(SPI_TOTP, _BuiltinTotp(), source="builtin")
+
+
+_register_builtin_totp()
 
 
 # ── Module-level convenience functions ────────────────────────────────────────
