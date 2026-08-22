@@ -11,6 +11,7 @@ Ten subcommands:
     drift […]                                   fetch drift report + propose selector weight rerank
     publish-selectors […]                       publish a selector overlay pack (hot update)
     codes {issue|list}                          issue and list activation codes (admin)
+    install-from <url> [--ref|--release] [--sha256] [--trust]  fetch+install from git/release
 
 The signing key is OFFLINE — the developer stores it on media not reachable
 from the build / runtime.  ``keygen`` writes the private key with
@@ -593,7 +594,62 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_codes_list.set_defaults(func=_cmd_codes_list)
 
+    # ── install-from ─────────────────────────────────────────────────────
+    p_install_from = sub.add_parser(
+        "install-from",
+        help="fetch + install a plugin from a git repo or release tarball",
+    )
+    p_install_from.add_argument("url", help="git URL or release tarball URL")
+    p_install_from.add_argument(
+        "--ref", default=None, help="branch/tag/SHA (git mode, default: main)",
+    )
+    p_install_from.add_argument(
+        "--release", default=None, help="release tag (switches to release mode)",
+    )
+    p_install_from.add_argument(
+        "--sha256", default=None, help="expected sha256 of the release tarball",
+    )
+    p_install_from.add_argument(
+        "--trust", action="store_true",
+        help="admin override for the dev-tier gate (git mode)",
+    )
+    p_install_from.set_defaults(func=_cmd_install_from)
+
     return parser
+
+
+def _cmd_install_from(args: argparse.Namespace) -> int:
+    import asyncio
+
+    from stitch_backend.domains.plugin_distribution.sources import (
+        PluginSourceSpec,
+        install_from_source,
+    )
+
+    if args.release is not None or (args.ref is None and args.sha256 is not None):
+        spec = PluginSourceSpec(
+            type="release",
+            url=args.url,
+            release=args.release,
+            expected_sha256=args.sha256,
+        )
+    else:
+        spec = PluginSourceSpec(
+            type="git",
+            url=args.url,
+            ref=args.ref,
+            expected_sha256=args.sha256,
+        )
+
+    result = asyncio.run(install_from_source(spec, trust=args.trust))
+    if not result.get("success"):
+        print(f"error: {result.get('error')}", file=sys.stderr)
+        return 1
+    print(
+        f"installed {result.get('plugin_id')}@{result.get('version')}"
+        + (f" (pinned {result['pinned_sha'][:12]})" if result.get("pinned_sha") else "")
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
