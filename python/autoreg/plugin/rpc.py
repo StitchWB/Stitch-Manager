@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,17 @@ class RpcPluginClient:
         self._init_result: Any = None
         # Reverse RPC: handlers for plugin→host requests (engine.oauth.* etc.)
         self._request_handlers: dict[str, Any] = {}
+        # N1: bounded thread pool for reverse-RPC handler execution.  The
+        # reader thread dispatches each plugin→host request here instead of
+        # spawning an unbounded daemon thread per request (which could
+        # exhaust OS threads under load).  4 workers is enough for the
+        # current reverse-RPC surface (engine.oauth.* — sequential flows);
+        # a backlog is bounded by the executor's queue-less submit semantics
+        # (a 5th request blocks the reader until a worker frees, which
+        # correctly applies backpressure to the plugin).
+        self._reverse_pool = ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="rpc-reverse"
+        )
 
     @property
     def init_result(self) -> Any:
@@ -380,9 +392,12 @@ class RpcPluginClient:
     ) -> None:
         """Dispatch a plugin→host request to a registered handler.
 
-        Runs in the reader thread; the handler itself is executed in a
-        worker thread so the reader is not blocked (a slow handler would
-        stall responses to other pending calls).
+        Runs in the reader thread; the handler itself is executed in the
+        bounded reverse-RPC thread pool (``_reverse_pool``) so the reader
+        is not blocked (a slow handler would stall responses to other
+        pending calls).  The pool bounds concurrency to 4 workers; a 5th
+        in-flight request applies backpressure by blocking the reader
+        until a worker frees.
         """
         handler = self._request_handlers.get(method)
         if handler is None:
@@ -391,13 +406,14 @@ class RpcPluginClient:
                  "error": {"code": -32601, "message": f"method not found: {method}"}}
             )
             return
-        t = threading.Thread(
-            target=self._run_plugin_request,
-            args=(rid, handler, params),
-            name="rpc-reverse",
-            daemon=True,
-        )
-        t.start()
+        try:
+            self._reverse_pool.submit(
+                self._run_plugin_request, rid, handler, params
+            )
+        except RuntimeError:
+            # Pool was shut down (client finalizing) — drop the request
+            # silently; the plugin is going down anyway.
+            pass
 
     def _run_plugin_request(
         self, rid: int, handler: Any, params: dict[str, Any]
@@ -415,16 +431,32 @@ class RpcPluginClient:
             )
 
     def _write_line(self, obj: dict[str, Any]) -> None:
-        """Write one JSON-RPC line to child stdin (used for reverse-RPC responses)."""
+        """Write one JSON-RPC line to child stdin (used for reverse-RPC responses).
+
+        Non-raising: a broken pipe here means the child has exited or closed
+        its stdin.  The reader loop will fail in-flight calls separately via
+        ``_fail_all_pending``.  We log a warning (with the response id and
+        error) so silent data loss is debuggable, but we do not raise — the
+        caller (reverse-RPC worker) has no way to recover the request.
+        """
         data = (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+        rid = obj.get("id")
         with self._write_lock:
             if self._proc is None or self._proc.stdin is None:
+                logger.warning(
+                    "rpc: _write_line dropped (no stdin) for response id=%r", rid
+                )
                 return
             try:
                 self._proc.stdin.write(data)
                 self._proc.stdin.flush()
-            except (BrokenPipeError, OSError, ValueError):
-                pass
+            except (BrokenPipeError, OSError, ValueError) as exc:
+                # N2: log with context so silent drops are debuggable.  The
+                # child is gone or its stdin is closed; the reader loop
+                # surfaces the failure to pending calls separately.
+                logger.warning(
+                    "rpc: _write_line pipe error for response id=%r: %s", rid, exc
+                )
 
     def _fail_all_pending(self, error: BaseException) -> None:
         """Fail all in-flight pending calls with the given error."""
@@ -436,9 +468,17 @@ class RpcPluginClient:
             pending.event.set()
 
     def _finalize(self) -> None:
-        """Join reader thread and close pipes."""
+        """Join reader thread, shut down reverse-RPC pool, close pipes."""
         if self._reader is not None and self._reader.is_alive():
             self._reader.join(timeout=2.0)
+        # N1: shut down the bounded reverse-RPC pool so worker threads do
+        # not outlive the client.  wait=False avoids blocking the caller
+        # on a hung handler; the workers are daemon-thread backed so they
+        # will not prevent process exit either way.
+        try:
+            self._reverse_pool.shutdown(wait=False)
+        except Exception:  # noqa: BLE001 — best-effort during teardown
+            pass
         self._fail_all_pending(RpcProtocolError("client finalized"))
         self._close_pipes()
 
@@ -494,6 +534,14 @@ class RpcPluginServer:
         # Reverse RPC state.
         self._request_handlers: dict[str, Any] = {}
         self._next_request_id = 1
+        # N6: guard the id counter with a lock.  The serve loop is
+        # single-threaded (only one ``call_host`` can be in flight at a
+        # time because it blocks the serve loop reading stdin), so in
+        # practice the counter is never contended.  The lock makes that
+        # invariant explicit and protects against future re-entrancy
+        # (e.g. a signal handler or a nested event loop) corrupting the
+        # counter via a torn read-modify-write.
+        self._request_id_lock = threading.Lock()
         self._queued_lines: list[str] = []
 
     def register(self, name: str, handler: Any) -> None:
@@ -513,6 +561,20 @@ class RpcPluginServer:
         """
         self._request_handlers[name] = handler
 
+    def _next_request_id_locked(self) -> int:
+        """Atomically allocate the next reverse-RPC request id.
+
+        The serve loop is single-threaded (see ``serve``), so in practice
+        this lock is never contended — it exists to make the
+        read-modify-write on ``_next_request_id`` atomic and to document
+        the single-threaded assumption.  A future caller that invokes
+        ``call_host`` from outside the serve loop would be a bug.
+        """
+        with self._request_id_lock:
+            rid = self._next_request_id
+            self._next_request_id += 1
+            return rid
+
     def call_host(
         self,
         method: str,
@@ -531,8 +593,7 @@ class RpcPluginServer:
         within *timeout* seconds, or ``RpcProtocolError`` if stdin
         closes.
         """
-        rid = self._next_request_id
-        self._next_request_id += 1
+        rid = self._next_request_id_locked()
         req = {"jsonrpc": _JSONRPC, "id": rid, "method": method,
                "params": params or {}}
         sys.stdout.write(json.dumps(req, ensure_ascii=False) + "\n")
