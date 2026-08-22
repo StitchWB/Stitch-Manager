@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 #: Plugin id that serves totp commands when installed.
 TOTP_PLUGIN_ID = "stitch-totp"
 
+#: Module-level sentinel returned by :func:`try_totp_route` to signal the
+#: wrapped built-in handler should run unchanged.  Using a unique sentinel
+#: (not ``None``) lets a plugin legitimately return ``None`` as a command
+#: result without being mistaken for fallthrough.
+_FALLTHROUGH: Any = object()
+
 #: Built-in command names that have a dual-format plugin counterpart.
 #: Maps the built-in name to the plugin command name (no totp prefix).
 TOTP_DUAL: dict[str, str] = {
@@ -58,17 +64,20 @@ def _plugin_healthy(host: Any) -> bool:
     return not host._stopping and host.rpc.is_alive
 
 
-async def try_totp_route(name: str, body: dict[str, Any]) -> Any | None:
+async def try_totp_route(name: str, body: dict[str, Any]) -> Any:
     """Route a totp command to the plugin if healthy.
 
-    Returns the plugin result if routed, or ``None`` to signal the
-    built-in handler should run unchanged.
+    Returns the plugin result if routed (including ``None``), or
+    :data:`_FALLTHROUGH` to signal the built-in handler should run
+    unchanged.
 
-    Fall-through conditions (all return ``None``):
+    Fall-through conditions (all return :data:`_FALLTHROUGH`):
       - ``name`` is not in :data:`TOTP_DUAL`
       - no ``stitch-totp`` host in the registry
       - host is stopping or child process is dead
       - host died during the call (``PluginNotRunning``)
+      - plugin call timed out (``PluginCallTimeout``)
+      - plugin returned a JSON-RPC error (``RpcCallError``)
 
     Caller identity is forwarded under unprefixed names
     (``caller_user_id`` / ``caller_role``) so the plugin can scope rows
@@ -76,14 +85,18 @@ async def try_totp_route(name: str, body: dict[str, Any]) -> Any | None:
     """
     plugin_cmd = TOTP_DUAL.get(name)
     if plugin_cmd is None:
-        return None
+        return _FALLTHROUGH
 
+    from autoreg.plugin.rpc import RpcCallError
     from stitch_backend.domains.plugin_runtime import get_host
-    from stitch_backend.domains.plugin_runtime.host import PluginNotRunning
+    from stitch_backend.domains.plugin_runtime.host import (
+        PluginCallTimeout,
+        PluginNotRunning,
+    )
 
     host = get_host(TOTP_PLUGIN_ID)
     if host is None or not _plugin_healthy(host):
-        return None
+        return _FALLTHROUGH
 
     # Strip internal dispatcher keys, then forward caller identity.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
@@ -92,14 +105,16 @@ async def try_totp_route(name: str, body: dict[str, Any]) -> Any | None:
 
     try:
         return await host.call(plugin_cmd, params)
-    except PluginNotRunning:
-        # Host died between the health check and the call.
+    except (PluginNotRunning, PluginCallTimeout, RpcCallError):
+        # Host died, timed out, or returned a JSON-RPC error — fall back
+        # to the built-in handler instead of surfacing as HTTP 400.
         logger.warning(
-            "totp dual-format: plugin died during '%s', "
+            "totp dual-format: plugin error during '%s', "
             "falling back to built-in",
             name,
+            exc_info=True,
         )
-        return None
+        return _FALLTHROUGH
 
 
 def install_totp_dual_routing() -> None:
@@ -108,9 +123,10 @@ def install_totp_dual_routing() -> None:
     Idempotent.  Handlers are swapped in place in the registry (no
     ``register_command`` call — no overwrite-warning spam; command
     metadata is untouched).  Missing commands (open-core build without
-    the totp domain) are skipped.  Must run after the built-in totp
-    commands are registered (main.py imports this module right after
-    ``domains.totp.commands``).
+    the totp domain) are skipped.  Must be called explicitly from
+    :func:`stitch_backend.main.lifespan` AFTER the built-in totp
+    commands are registered (the lifespan imports
+    ``domains.totp.commands`` then this module then calls this function).
     """
     from stitch_backend.core.command_registry import _COMMAND_REGISTRY
 
@@ -124,7 +140,7 @@ def install_totp_dual_routing() -> None:
 
         async def _routed(params: dict, *, _orig=original, _name=name):
             result = await try_totp_route(_name, params)
-            if result is not None:
+            if result is not _FALLTHROUGH:
                 return result
             return await _orig(params)
 
@@ -193,8 +209,3 @@ async def cmd_migrate_totp_to_plugin(params: dict[str, Any]) -> dict[str, Any]:
     rows = await _read_core_totp_rows()
     result = await host.call("import_secrets", {"rows": rows})
     return {"rows": len(rows), "plugin": result}
-
-
-# Self-install when imported after the built-in totp commands are
-# registered (main.py's command-import block guarantees the order).
-install_totp_dual_routing()

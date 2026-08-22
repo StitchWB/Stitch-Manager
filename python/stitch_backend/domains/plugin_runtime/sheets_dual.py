@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 #: Plugin id that serves sheets commands when installed.
 SHEETS_PLUGIN_ID = "stitch-sheets"
 
+#: Module-level sentinel returned by :func:`try_sheets_dual_route` to signal
+#: the dispatcher to fall through to the built-in handler.  Using a unique
+#: sentinel (not ``None``) lets a plugin legitimately return ``None`` as a
+#: command result without being mistaken for fallthrough.
+_FALLTHROUGH: Any = object()
+
 #: Built-in command names that have a dual-format plugin counterpart.
 #: Maps the built-in name (with ``google_sheets_`` prefix) to the plugin
 #: command name (without the prefix).
@@ -49,41 +55,54 @@ def _plugin_healthy(host: Any) -> bool:
 
 async def try_sheets_dual_route(
     name: str, body: dict[str, Any]
-) -> Any | None:
+) -> Any:
     """Route a ``google_sheets_*`` command to the plugin if healthy.
 
-    Returns the plugin result if routed, or ``None`` to signal the
-    dispatcher to fall through to the built-in handler unchanged.
+    Returns the plugin result if routed (including ``None``), or
+    :data:`_FALLTHROUGH` to signal the dispatcher to fall through to the
+    built-in handler unchanged.
 
-    Fall-through conditions (all return ``None``):
+    Fall-through conditions (all return :data:`_FALLTHROUGH`):
       - ``name`` is not in :data:`SHEETS_DUAL`
       - no ``stitch-sheets`` host in the registry
       - host is stopping or child process is dead
       - host died during the call (``PluginNotRunning``)
+      - plugin call timed out (``PluginCallTimeout``)
+      - plugin returned a JSON-RPC error (``RpcCallError``)
     """
     plugin_cmd = SHEETS_DUAL.get(name)
     if plugin_cmd is None:
-        return None
+        return _FALLTHROUGH
 
+    from autoreg.plugin.rpc import RpcCallError
     from stitch_backend.domains.plugin_runtime import get_host
-    from stitch_backend.domains.plugin_runtime.host import PluginNotRunning
+    from stitch_backend.domains.plugin_runtime.host import (
+        PluginCallTimeout,
+        PluginNotRunning,
+    )
 
     host = get_host(SHEETS_PLUGIN_ID)
     if host is None or not _plugin_healthy(host):
-        return None
+        return _FALLTHROUGH
 
     # Strip internal dispatcher keys before forwarding to the plugin.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
 
     try:
         return await host.call(plugin_cmd, params)
-    except PluginNotRunning:
+    except (PluginNotRunning, PluginCallTimeout, RpcCallError):
         logger.warning(
-            "sheets dual-format: plugin died during '%s', "
+            "sheets dual-format: plugin error during '%s', "
             "falling back to built-in",
             name,
+            exc_info=True,
         )
-        return None
+        return _FALLTHROUGH
 
 
-__all__ = ["try_sheets_dual_route", "SHEETS_DUAL", "SHEETS_PLUGIN_ID"]
+__all__ = [
+    "try_sheets_dual_route",
+    "SHEETS_DUAL",
+    "SHEETS_PLUGIN_ID",
+    "_FALLTHROUGH",
+]
