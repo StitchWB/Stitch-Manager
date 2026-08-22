@@ -460,3 +460,30 @@ The `zip_package` function in `stitch_plugin_tools.publish` walks the
 whole package dir with `os.walk`, so any file layout works — the
 manifest lands at the zip root (no wrapping directory), which is what
 the client's `extractall` + `install_package` expects.
+
+---
+
+## 12. Sync drivers
+
+In v2, the **frontend** owns the mail sync loop. The `stores/mail.ts`
+polling driver (`pollIntervalMs`) calls `email_inbox_*` commands on
+each tick. When the `stitch-mail` service plugin is installed and
+healthy, the dual-format proxy (§2, `mail_dual.py`) routes those
+commands to the plugin subprocess; when the plugin is absent or dead,
+the same commands fall through to the built-in handler unchanged.
+
+There is **no internal plugin sync loop** in v2 — the plugin process
+serves sync ticks only when the frontend polls. This avoids
+double-sync (FE polling + internal loop both writing sync state) and
+keeps the plugin stateless between ticks.
+
+The host watchdog (todo 3) restarts the plugin once on crash; the
+next FE poll tick is served by the restarted plugin. If the plugin
+exhausts its restart-once quota, subsequent ticks fall back to the
+built-in handler — the frontend never crashes and never sees a
+double-write (the dual-format route is either/or by design).
+
+A plugin-internal sync loop (plugin polls its own IMAP on a timer,
+independent of the frontend) is **v3 backlog**. When implemented, the
+frontend polling would be disabled for that plugin to avoid
+double-sync.
