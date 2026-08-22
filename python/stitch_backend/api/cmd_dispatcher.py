@@ -145,6 +145,20 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     if _sheets_result is not None:
         return JSONResponse(content=_serialise(_sheets_result))
 
+    # ── Dual-format routing for email_* / email_inbox_* commands ─────────
+    # Same pattern as notebooklm_* / google_sheets_* above: when a healthy
+    # ``stitch-mail`` plugin host is registered, email_* / email_inbox_*
+    # commands are routed to the plugin (stripping the prefix) BEFORE
+    # falling through to the built-in handler.  Owner identity is
+    # forwarded as ``owner_id`` when ``_caller_user_id`` is present.
+    from stitch_backend.domains.plugin_runtime.mail_dual import (
+        try_mail_dual_route,
+    )
+
+    _mail_result = await try_mail_dual_route(name, body)
+    if _mail_result is not None:
+        return JSONResponse(content=_serialise(_mail_result))
+
     # Look up handler
     try:
         handler = get_command_handler(name)
