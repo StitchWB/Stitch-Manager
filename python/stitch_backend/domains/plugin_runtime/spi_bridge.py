@@ -20,6 +20,7 @@ core SPI string constants — the manifest declares the public contract
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from stitch_backend.core.spi import register_impl, unregister_plugin
@@ -41,6 +42,14 @@ _SPI_NAME_MAP: dict[str, str] = {
     "OAuthProvider": "oauth",
 }
 
+#: TTL for a positive (healthy) health-check cache entry, in seconds.
+#: Within this window, repeated ``spi.resolve()`` calls skip the RPC ping.
+_HEALTH_TTL_OK: float = 5.0
+
+#: TTL for a negative (unhealthy) health-check cache entry, in seconds.
+#: Shorter than the positive TTL so a recovered plugin is re-probed quickly.
+_HEALTH_TTL_FAIL: float = 1.0
+
 
 class _PluginSpiProxy:
     """RPC-backed SPI proxy.
@@ -58,12 +67,47 @@ class _PluginSpiProxy:
 
     def __init__(self, host: "ServicePluginHost") -> None:
         self._host = host
+        #: Cached health result: ``(monotonic_timestamp, ok)``.
+        #: ``None`` = no cache yet.  TTL is 5s when healthy, 1s when
+        #: unhealthy (fast recovery).  The cache is consulted only when
+        #: the host is alive; the ``is_alive`` / ``_stopping`` check is
+        #: always immediate.
+        self._health_cache: tuple[float, bool] | None = None
 
     def health_check(self) -> None:
-        """Raise if the plugin is not reachable (sync, called by _is_healthy)."""
+        """Raise if the plugin is not reachable (sync, called by _is_healthy).
+
+        Caches the last ping result per-proxy with a short TTL (5s healthy,
+        1s unhealthy) so concurrent ``spi.resolve()`` calls under the
+        registry lock do not each pay the 2s sync RPC ping.  The
+        ``is_alive`` / ``_stopping`` check is always immediate (no ping,
+        no cache); the RPC ping only fires when the cache has expired.
+        """
+        # Immediate unhealthy — host stopping or RPC client detached.
+        # Skip ping and cache entirely.
         if self._host._stopping or not self._host.rpc.is_alive:
             raise RuntimeError(f"plugin {self._host.plugin_id} not running")
-        self._host.rpc.ping(2.0)
+
+        now = time.monotonic()
+        cache = self._health_cache
+        if cache is not None:
+            ts, ok = cache
+            ttl = _HEALTH_TTL_OK if ok else _HEALTH_TTL_FAIL
+            if now - ts < ttl:
+                # Cache valid — return cached result without pinging.
+                if ok:
+                    return
+                raise RuntimeError(
+                    f"plugin {self._host.plugin_id} not healthy (cached)"
+                )
+
+        # Cache expired or absent — live ping.
+        try:
+            self._host.rpc.ping(2.0)
+        except Exception:
+            self._health_cache = (now, False)
+            raise
+        self._health_cache = (now, True)
 
     async def list_profiles(
         self, owner_id: int | None = None,
