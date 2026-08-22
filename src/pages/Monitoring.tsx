@@ -7,7 +7,7 @@
  * glassmorphism, Header with icon, Badge/Button, toast on load error.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Activity, RefreshCw, AlertCircle, Server, Globe, Network, Bot, BellOff, BellRing } from 'lucide-react';
+import { Activity, RefreshCw, AlertCircle, Server, Globe, Network, Bot, BellOff, BellRing, Plug } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
@@ -21,8 +21,28 @@ import {
   type MonitoringAlert,
   type MonitoringAlertKind,
 } from '../lib/backend/modules/monitoring';
+import { safeInvoke } from '../lib/backend/core/invoke';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+
+// ── Service-plugin host health (todo 25) ────────────────────────────────────
+// Fetched via the admin command `get_service_plugin_health` on the same 30s
+// refresh as the snapshot. `null` = command unavailable (hide the section).
+
+type PluginHostStatus = 'running' | 'stopped' | 'error';
+
+interface PluginHostHealth {
+  plugin_id: string;
+  status: PluginHostStatus;
+  pid: number | null;
+  uptimeSeconds: number | null;
+  restarts: number;
+  stopping: boolean;
+  source: string;
+  version: string | null;
+  last_error: string | null;
+  stderr_tail: string[];
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,6 +56,19 @@ function botBadgeVariant(status: BotStatus): 'success' | 'warning' | 'default' {
   if (status === 'up') return 'success';
   if (status === 'stale') return 'warning';
   return 'default';
+}
+
+function pluginBadgeVariant(host: PluginHostHealth): 'success' | 'danger' | 'default' {
+  // Danger when the host errored OR restarted at all (crash signal).
+  if (host.status === 'error' || host.restarts > 0) return 'danger';
+  if (host.status === 'running') return 'success';
+  return 'default';
+}
+
+function pluginStatusLabel(host: PluginHostHealth): string {
+  if (host.status === 'running') return t('monitoring.servicePlugins.statusRunning');
+  if (host.status === 'error') return t('monitoring.servicePlugins.statusError');
+  return t('monitoring.servicePlugins.statusStopped');
 }
 
 function formatDuration(seconds: number | null): string {
@@ -90,6 +123,7 @@ export default function Monitoring() {
   const language = useAppStore(state => state.language);
   void language;
   const [snapshot, setSnapshot] = useState<MonitoringSnapshot | null>(null);
+  const [pluginHosts, setPluginHosts] = useState<PluginHostHealth[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -100,7 +134,16 @@ export default function Monitoring() {
     setLoading(true);
     setLoadError(null);
     try {
-      setSnapshot(await getMonitoring());
+      // Plugin host health is fetched alongside the snapshot but must never
+      // break the page: a failure (403/404/older backend) hides the section.
+      const [snap, hosts] = await Promise.all([
+        getMonitoring(),
+        safeInvoke<PluginHostHealth[]>('get_service_plugin_health').catch(
+          () => null as PluginHostHealth[] | null,
+        ),
+      ]);
+      setSnapshot(snap);
+      setPluginHosts(hosts);
     } catch (err) {
       const key = mapErrorToToastKey(err);
       setLoadError(t(key));
@@ -154,6 +197,7 @@ export default function Monitoring() {
               <ServiceCards snapshot={snapshot} />
               <BotCard snapshot={snapshot} />
               <ProxiesTable snapshot={snapshot} />
+              <ServicePluginsSection hosts={pluginHosts} />
               <AlertsCard snapshot={snapshot} onSilence={handleSilence} loading={loading} />
             </>
           ) : null}
@@ -273,6 +317,61 @@ function ProxiesTable({ snapshot }: { snapshot: MonitoringSnapshot }) {
                   <td className="px-5 py-3"><Badge variant={serviceBadgeVariant(p.status)} size="sm">{t(`monitoring.statuses.${p.status}`)}</Badge></td>
                   <td className="px-5 py-3 text-slate-400 text-xs font-mono">{formatLatency(p.latency_ms)}</td>
                   <td className="px-5 py-3 text-slate-400 text-xs">{formatDate(p.last_check)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Service plugins (todo 25) ───────────────────────────────────────────────
+
+function ServicePluginsSection({ hosts }: { hosts: PluginHostHealth[] | null }) {
+  // null = command unavailable (guest / older backend) → hide the section.
+  if (hosts === null) return null;
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-black/40 backdrop-blur-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-white/[0.06]">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <span className="text-indigo-400"><Plug className="w-4 h-4" /></span>
+          {t('monitoring.servicePlugins.title')}
+        </h2>
+      </div>
+      {hosts.length === 0 ? (
+        <div className="p-6 text-center">
+          <Plug className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+          <p className="text-sm text-slate-500">{t('monitoring.servicePlugins.empty')}</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/[0.06] text-left">
+                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('monitoring.servicePlugins.plugin')}</th>
+                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.status')}</th>
+                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.uptime')}</th>
+                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">{t('monitoring.servicePlugins.restarts')}</th>
+                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">{t('monitoring.servicePlugins.version')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hosts.map(h => (
+                <tr key={h.plugin_id} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
+                  <td className="px-5 py-3 text-slate-200 font-mono text-xs">
+                    {h.plugin_id}
+                    {h.last_error && (
+                      <p className="text-red-400/80 text-xs mt-0.5 font-sans truncate max-w-[400px]" title={h.last_error}>{h.last_error}</p>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge variant={pluginBadgeVariant(h)} size="sm">{pluginStatusLabel(h)}</Badge>
+                  </td>
+                  <td className="px-5 py-3 text-slate-400 text-xs font-mono">{formatDuration(h.uptimeSeconds)}</td>
+                  <td className="px-5 py-3 text-slate-400 text-xs font-mono">{h.restarts}</td>
+                  <td className="px-5 py-3 text-slate-400 text-xs font-mono">{h.version ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
