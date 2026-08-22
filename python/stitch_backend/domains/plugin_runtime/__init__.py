@@ -69,9 +69,21 @@ async def stop_all() -> None:
     attempt a restart while the supervisor is killing processes, then
     delegates to ``supervisor.stop_all()`` which kills the trees and
     invokes each host's ``on_stop`` hook (RPC pipe cleanup).
+
+    Also unregisters all plugin-backed SPI proxies so the registry is
+    clean for the next startup (tests, CLI re-run).
     """
     for host in list(_hosts.values()):
         host._stopping = True
+    # Unregister plugin-backed SPI impls so spi.resolve() falls back to
+    # built-in immediately (before the supervisor kills the processes).
+    try:
+        from stitch_backend.domains.plugin_runtime.spi_bridge import (
+            unregister_all_plugin_spi,
+        )
+        unregister_all_plugin_spi()
+    except Exception:  # noqa: BLE001 — best-effort cleanup
+        pass
     await get_supervisor().stop_all()
 
 
