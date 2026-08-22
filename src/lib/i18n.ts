@@ -4031,6 +4031,8 @@ export interface Translations {
     created: string;
     setupHint: string;
     noAccount: string;
+    pluginNotInstalled: string;
+    pluginNotInstalledHint: string;
   }
   status: {
     active: string;

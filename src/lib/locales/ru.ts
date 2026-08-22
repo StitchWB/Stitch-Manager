@@ -3824,6 +3824,8 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     setupHint:
       "Добавьте аккаунт web-notebooklm и захватите его Google-cookies (Аккаунты → NotebookLM → Войти в браузере / Захватить cookies).",
     noAccount: "Аккаунт web-notebooklm не настроен. Добавьте аккаунт и захватите его Google-cookies.",
+    pluginNotInstalled: "Плагин NotebookLM не установлен",
+    pluginNotInstalledHint: "Установите плагин stitch-notebooklm, чтобы использовать NotebookLM.",
   },
   status: {
     active: "Активен",

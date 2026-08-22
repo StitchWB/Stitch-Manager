@@ -1,18 +1,22 @@
 /**
- * NotebookLM dual-format UI tests.
+ * NotebookLM plugin-only UI tests (plan todo 24).
+ *
+ * The built-in NotebookLM domain was removed; the page is now served
+ * exclusively by the `stitch-notebooklm` service plugin.
  *
  * Verifies:
  *   (a) safeInvoke list returns plugin with declarative ui -> DeclarativePage
  *       rendered (DeclarativePage module mocked to a stub div to assert
  *       selection).
- *   (b) list rejects -> built-in content rendered (notebooklm.title key).
- *   (c) uninstall (invalidate + refetch without plugin) -> built-in again
+ *   (b) list rejects / no plugin -> EmptyState rendered with
+ *       `notebooklm.pluginNotInstalled` title (plugin not installed).
+ *   (c) uninstall (invalidate + refetch without plugin) -> EmptyState again
  *       without reload (assert via rerender).
  *
  * Mocks: invoke (safeInvoke), i18n (t = identity), DeclarativePage (stub),
- * Header, AiTopTabs, sonner, @/lib/backend (notebooklm stubs). The real
- * servicePlugins module runs — only safeInvoke is mocked, so the cache +
- * useSyncExternalStore + invalidate path is exercised end-to-end.
+ * Header, AiTopTabs, sonner. The real servicePlugins module runs — only
+ * safeInvoke is mocked, so the cache + useSyncExternalStore + invalidate
+ * path is exercised end-to-end.
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
@@ -63,13 +67,6 @@ jest.mock('sonner', () => ({
   },
 }));
 
-jest.mock('@/lib/backend', () => ({
-  notebooklmListNotebooks: jest.fn(async () => []),
-  notebooklmCreateNotebook: jest.fn(async () => ({ id: 'nb-1', title: 'Test' })),
-  notebooklmAsk: jest.fn(async () => ({ answer: 'answer' })),
-  notebooklmGenerateAudio: jest.fn(async () => ({ task_id: 'task-1' })),
-}));
-
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const notebooklmPluginFixture: ServicePluginInfo = {
@@ -96,11 +93,11 @@ const notebooklmPluginFixture: ServicePluginInfo = {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('NotebookLM dual-format UI', () => {
+describe('NotebookLM plugin-only UI', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    // Default: list_service_plugins returns empty (built-in mode).
+    // Default: list_service_plugins returns empty (no plugin installed).
     (safeInvoke as jest.Mock).mockImplementation((cmd: string) => {
       if (cmd === 'list_service_plugins') return Promise.resolve([]);
       return Promise.resolve([]);
@@ -120,11 +117,11 @@ describe('NotebookLM dual-format UI', () => {
     const stub = await screen.findByTestId('declarative-page-stub');
     expect(stub.getAttribute('data-plugin-id')).toBe('stitch-notebooklm');
 
-    // Built-in content is NOT rendered.
-    expect(screen.queryByText('notebooklm.title')).toBeNull();
+    // EmptyState is NOT rendered.
+    expect(screen.queryByText('notebooklm.pluginNotInstalled')).toBeNull();
   });
 
-  it('(b) list rejects -> built-in content rendered', async () => {
+  it('(b) no plugin -> EmptyState with pluginNotInstalled message', async () => {
     (safeInvoke as jest.Mock).mockRejectedValue(new Error('backend down'));
 
     render(
@@ -138,14 +135,14 @@ describe('NotebookLM dual-format UI', () => {
       expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
     });
 
-    // Built-in content is rendered (t = identity, so key is the text).
-    expect(screen.getByText('notebooklm.title')).toBeTruthy();
+    // EmptyState is rendered with the plugin-not-installed title.
+    expect(screen.getByText('notebooklm.pluginNotInstalled')).toBeTruthy();
 
     // DeclarativePage stub is NOT rendered.
     expect(screen.queryByTestId('declarative-page-stub')).toBeNull();
   });
 
-  it('(c) uninstall (invalidate + refetch without plugin) -> built-in again', async () => {
+  it('(c) uninstall (invalidate + refetch without plugin) -> EmptyState again', async () => {
     // First: plugin present -> DeclarativePage rendered.
     (safeInvoke as jest.Mock).mockResolvedValue([notebooklmPluginFixture]);
 
@@ -157,7 +154,7 @@ describe('NotebookLM dual-format UI', () => {
 
     // Wait for DeclarativePage stub to appear.
     await screen.findByTestId('declarative-page-stub');
-    expect(screen.queryByText('notebooklm.title')).toBeNull();
+    expect(screen.queryByText('notebooklm.pluginNotInstalled')).toBeNull();
 
     // Uninstall: next list_service_plugins call returns [] (no plugin).
     (safeInvoke as jest.Mock).mockResolvedValue([]);
@@ -180,9 +177,9 @@ describe('NotebookLM dual-format UI', () => {
       </MemoryRouter>,
     );
 
-    // Built-in content is now rendered.
+    // EmptyState is now rendered.
     await waitFor(() => {
-      expect(screen.getByText('notebooklm.title')).toBeTruthy();
+      expect(screen.getByText('notebooklm.pluginNotInstalled')).toBeTruthy();
     });
     expect(screen.queryByTestId('declarative-page-stub')).toBeNull();
   });
