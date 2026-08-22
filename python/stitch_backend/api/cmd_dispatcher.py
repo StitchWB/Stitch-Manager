@@ -151,6 +151,22 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     if _mail_result is not _MAIL_FALLTHROUGH:
         return JSONResponse(content=_serialise(_mail_result))
 
+    # ── Dual-format routing for opencode_config commands ─────────────────
+    # Same pattern as google_sheets_* / email_* above: when a healthy
+    # ``stitch-opencode`` plugin host is registered, opencode_config commands
+    # are routed to the plugin (identity mapping — no prefix to strip) BEFORE
+    # falling through to the built-in handler.
+    from stitch_backend.domains.plugin_runtime.opencode_dual import (
+        _FALLTHROUGH as _OPENCODE_FALLTHROUGH,
+    )
+    from stitch_backend.domains.plugin_runtime.opencode_dual import (
+        try_opencode_dual_route,
+    )
+
+    _opencode_result = await try_opencode_dual_route(name, body)
+    if _opencode_result is not _OPENCODE_FALLTHROUGH:
+        return JSONResponse(content=_serialise(_opencode_result))
+
     # Look up handler
     try:
         handler = get_command_handler(name)
