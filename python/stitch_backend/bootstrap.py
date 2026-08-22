@@ -57,6 +57,11 @@ async def bootstrap() -> None:
     async with factory() as _db:
         await _sched_tables(_db)
 
+    # ── SPI built-ins ────────────────────────────────────────────────────────
+    # Register built-in EmailVerificationProvider + MailInboxSPI before any
+    # command module that might resolve them.
+    import stitch_backend.core.spi_builtin_email  # noqa: F401
+
     # ── Command modules ──────────────────────────────────────────────────────
     # Import so @register_command decorators fire
     import stitch_backend.domains.account_status.commands  # noqa: F401
