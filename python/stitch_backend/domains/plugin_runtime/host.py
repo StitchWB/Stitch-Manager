@@ -22,6 +22,7 @@ import logging
 import subprocess
 import sys
 import threading
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,13 @@ class ServicePluginHost:
         self.rpc = RpcPluginClient(default_timeout=default_timeout)
         self._restart_count = 0
         self._stopping = False
+        #: Set True when the host dies after its restart-once (crash loop).
+        #: Surfaced via status() as an error + restarts (degraded state).
+        self._crash_loop = False
+        #: Invoked (as an awaitable) once when the host crash-loops.  Wired
+        #: by discovery to telemetry + LKG rollback (todo 23).  Runs in its
+        #: own task — never awaited while the host lock is held.
+        self.crash_hook: Callable[["ServicePluginHost"], Awaitable[None]] | None = None
         self._monitor_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         # Ring buffer for child stderr lines — used by get_service_plugin_logs.
@@ -126,8 +134,10 @@ class ServicePluginHost:
             # Already running with an attached RPC client — no-op.
             if self.rpc.is_alive:
                 return self.status()
-            if not self.supervisor.is_registered(self.sidecar_name):
-                self.supervisor.register(self._make_spec())
+            # Always (re-)register this host's spec: an LKG rollback starts
+            # a NEW host instance under the same sidecar name, and the old
+            # instance's spec (old package dir) must be replaced.
+            self.supervisor.register(self._make_spec())
             result = await self.supervisor.start(self.sidecar_name)
             if result["status"] != "running":
                 return result
@@ -146,6 +156,7 @@ class ServicePluginHost:
             # request OAuth operations from the host via call_host.
             register_engine_handlers(self.rpc)
             self._restart_count = 0
+            self._crash_loop = False
             self._stopping = False
             self._monitor_task = asyncio.create_task(
                 self._monitor(), name=f"plugin-monitor:{self.plugin_id}"
@@ -207,6 +218,17 @@ class ServicePluginHost:
 
     def status(self) -> dict[str, Any]:
         sup = self.supervisor.status(self.sidecar_name)
+        # Degraded state (todo 23): a host that died after its restart-once
+        # is reported as an explicit crash-loop error (with restarts) even
+        # if the supervisor still holds the dead process handle.
+        if self._crash_loop and sup.get("status") != "running":
+            sup = {
+                **sup,
+                "status": "error",
+                "error": (
+                    f"crash loop: host dead after {self._restart_count} restart(s)"
+                ),
+            }
         return {
             **sup,
             "plugin_id": self.plugin_id,
@@ -430,53 +452,98 @@ class ServicePluginHost:
             pass
 
     async def _monitor(self) -> None:
-        """Background task: detect crash, restart once, then mark dead."""
-        try:
-            proc = self.supervisor.get_process(self.sidecar_name)
-            if proc is None:
+        """Background task: detect crashes, restart once, then mark dead.
+
+        Loops so the RESTARTED child is monitored too: the first crash
+        triggers the restart-once, the second consecutive crash marks the
+        host dead and fires the crash hook (telemetry + LKG rollback).
+        """
+        # Track consecutive crashes per plugin id (todo 23 LKG bookkeeping).
+        from stitch_backend.domains.plugin_runtime.lkg import record_crash
+
+        while True:
+            try:
+                proc = self.supervisor.get_process(self.sidecar_name)
+                if proc is None:
+                    return
+                if isinstance(proc, subprocess.Popen):
+                    await asyncio.to_thread(proc.wait)
+                else:
+                    await proc.wait()
+            except asyncio.CancelledError:
                 return
-            if isinstance(proc, subprocess.Popen):
-                await asyncio.to_thread(proc.wait)
-            else:
-                await proc.wait()
-        except asyncio.CancelledError:
-            return
-        except Exception:  # noqa: BLE001
-            return
+            except Exception:  # noqa: BLE001
+                return
 
-        if self._stopping:
-            return
-
-        async with self._lock:
             if self._stopping:
                 return
-            if self._restart_count >= 1:
-                logger.warning(
-                    "[Plugin:%s] crashed again after restart — marking dead",
-                    self.plugin_id,
+
+            record_crash(self.plugin_id)
+
+            crash_loop = False
+            async with self._lock:
+                if self._stopping:
+                    return
+                if self._restart_count >= 1:
+                    logger.warning(
+                        "[Plugin:%s] crashed again after restart — marking dead",
+                        self.plugin_id,
+                    )
+                    self._crash_loop = True
+                    crash_loop = True
+                else:
+                    await self._restart_once()
+
+            # Fire the crash hook (telemetry + LKG rollback) as its own task:
+            # it may stop THIS host, which cancels the monitor task — that
+            # must not interrupt the hook mid-flight, and the host lock is
+            # already released.
+            if crash_loop:
+                asyncio.create_task(
+                    self._run_crash_hook(),
+                    name=f"plugin-crash-hook:{self.plugin_id}",
                 )
                 return
-            self._restart_count += 1
-            logger.info("[Plugin:%s] crashed — restarting once", self.plugin_id)
-            # Clean up old RPC client pipes.
-            try:
-                self.rpc._finalize()
-            except Exception:  # noqa: BLE001
-                pass
-            # Restart via supervisor (process is already dead, so
-            # _stop_locked is not called — no on_stop triggered).
-            result = await self.supervisor.start(self.sidecar_name, force=True)
-            if result["status"] != "running":
-                logger.error("[Plugin:%s] restart failed: %s", self.plugin_id, result)
-                return
-            new_proc = self.supervisor.get_process(self.sidecar_name)
-            if new_proc is None or not isinstance(new_proc, subprocess.Popen):
-                return
-            try:
-                self._attach_rpc(new_proc)
-            except (RpcTimeoutError, RpcProtocolError) as exc:
-                logger.error("[Plugin:%s] restart handshake failed: %s",
-                             self.plugin_id, exc)
+            # Otherwise keep watching the restarted child.
+
+    async def _restart_once(self) -> None:
+        """Restart the child via the supervisor after a crash (restart-once).
+
+        Called with ``self._lock`` held.
+        """
+        self._restart_count += 1
+        logger.info("[Plugin:%s] crashed — restarting once", self.plugin_id)
+        # Clean up old RPC client pipes.
+        try:
+            self.rpc._finalize()
+        except Exception:  # noqa: BLE001
+            pass
+        # Restart via supervisor (process is already dead, so
+        # _stop_locked is not called — no on_stop triggered).
+        result = await self.supervisor.start(self.sidecar_name, force=True)
+        if result["status"] != "running":
+            logger.error("[Plugin:%s] restart failed: %s", self.plugin_id, result)
+            return
+        new_proc = self.supervisor.get_process(self.sidecar_name)
+        if new_proc is None or not isinstance(new_proc, subprocess.Popen):
+            return
+        try:
+            self._attach_rpc(new_proc)
+        except (RpcTimeoutError, RpcProtocolError) as exc:
+            logger.error("[Plugin:%s] restart handshake failed: %s",
+                         self.plugin_id, exc)
+
+    async def _run_crash_hook(self) -> None:
+        """Invoke the crash hook (telemetry + LKG rollback) without leaking errors."""
+        hook = self.crash_hook
+        if hook is None:
+            return
+        try:
+            await hook(self)
+        except Exception as exc:  # noqa: BLE001 — hook must not kill the runtime
+            logger.warning(
+                "[Plugin:%s] crash hook failed: %s", self.plugin_id, exc
+            )
 
 
 __all__ = [
