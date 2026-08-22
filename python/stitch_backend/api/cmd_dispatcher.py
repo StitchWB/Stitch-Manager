@@ -124,11 +124,14 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     # plugin (stripping the ``google_sheets_`` prefix) BEFORE falling through
     # to the built-in handler.
     from stitch_backend.domains.plugin_runtime.sheets_dual import (
+        _FALLTHROUGH as _SHEETS_FALLTHROUGH,
+    )
+    from stitch_backend.domains.plugin_runtime.sheets_dual import (
         try_sheets_dual_route,
     )
 
     _sheets_result = await try_sheets_dual_route(name, body)
-    if _sheets_result is not None:
+    if _sheets_result is not _SHEETS_FALLTHROUGH:
         return JSONResponse(content=_serialise(_sheets_result))
 
     # ── Dual-format routing for email_* / email_inbox_* commands ─────────
@@ -138,11 +141,14 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     # falling through to the built-in handler.  Owner identity is
     # forwarded as ``owner_id`` when ``_caller_user_id`` is present.
     from stitch_backend.domains.plugin_runtime.mail_dual import (
+        _FALLTHROUGH as _MAIL_FALLTHROUGH,
+    )
+    from stitch_backend.domains.plugin_runtime.mail_dual import (
         try_mail_dual_route,
     )
 
     _mail_result = await try_mail_dual_route(name, body)
-    if _mail_result is not None:
+    if _mail_result is not _MAIL_FALLTHROUGH:
         return JSONResponse(content=_serialise(_mail_result))
 
     # Look up handler

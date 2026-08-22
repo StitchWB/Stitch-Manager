@@ -268,8 +268,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.totp.commands  # noqa: F401
     # Dual-format routing + migrate_totp_to_plugin for the stitch-totp
     # service plugin.  Imported AFTER totp.commands so the handler
-    # wrapping finds the registered built-in commands.
+    # wrapping finds the registered built-in commands.  The install call
+    # is explicit (not at module import) so the ordering is visible and
+    # testable — importing totp_dual alone does NOT wrap the handlers.
     import stitch_backend.domains.plugin_runtime.totp_dual  # noqa: F401
+    from stitch_backend.domains.plugin_runtime.totp_dual import (
+        install_totp_dual_routing,
+    )
+
+    install_totp_dual_routing()
     import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
     import stitch_backend.domains.utility.commands  # noqa: F401
     import stitch_backend.domains.utility.file_dialogs  # noqa: F401

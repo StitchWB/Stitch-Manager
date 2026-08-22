@@ -33,6 +33,14 @@ logger = logging.getLogger(__name__)
 #: Plugin id that serves mail commands when installed.
 MAIL_PLUGIN_ID = "stitch-mail"
 
+#: Module-level sentinel returned by :func:`try_mail_dual_route` to signal
+#: the dispatcher to fall through to the built-in handler.  Using a unique
+#: sentinel (not ``None``) lets a plugin legitimately return ``None`` as a
+#: command result without being mistaken for fallthrough — the dispatcher
+#: checks ``is not _FALLTHROUGH`` so a plugin-served ``None`` is serialised
+#: and returned to the caller (built-in never runs).
+_FALLTHROUGH: Any = object()
+
 #: Built-in command names that have a dual-format plugin counterpart.
 #: Maps the built-in name (with ``email_`` / ``email_inbox_`` prefix) to
 #: the plugin command name (without the prefix).  Mirrors the manifest
@@ -72,34 +80,41 @@ def _plugin_healthy(host: Any) -> bool:
 
 async def try_mail_dual_route(
     name: str, body: dict[str, Any]
-) -> Any | None:
+) -> Any:
     """Route an ``email_*`` / ``email_inbox_*`` command to the plugin if healthy.
 
-    Returns the plugin result if routed, or ``None`` to signal the
-    dispatcher to fall through to the built-in handler unchanged.
+    Returns the plugin result if routed (including ``None`` — a legitimate
+    plugin result that the dispatcher serialises and returns), or
+    :data:`_FALLTHROUGH` to signal the dispatcher to fall through to the
+    built-in handler unchanged.
 
-    Fall-through conditions (all return ``None``):
+    Fall-through conditions (all return :data:`_FALLTHROUGH`):
       - ``name`` is not in :data:`MAIL_DUAL`
       - no ``stitch-mail`` host in the registry
       - host is stopping or child process is dead
       - host died during the call (``PluginNotRunning``)
+      - plugin call timed out (``PluginCallTimeout``)
+      - plugin returned a JSON-RPC error (``RpcCallError``)
 
     Owner identity is forwarded under ``owner_id`` (from
     ``_caller_user_id`` when present) so the plugin can scope rows by
     owner.  Internal ``_``-prefixed dispatcher keys are stripped before
-    forwarding.  Other ``Rpc`` errors propagate (they surface as 400 in
-    the dispatcher's generic exception handler).
+    forwarding.
     """
     plugin_cmd = MAIL_DUAL.get(name)
     if plugin_cmd is None:
-        return None
+        return _FALLTHROUGH
 
+    from autoreg.plugin.rpc import RpcCallError
     from stitch_backend.domains.plugin_runtime import get_host
-    from stitch_backend.domains.plugin_runtime.host import PluginNotRunning
+    from stitch_backend.domains.plugin_runtime.host import (
+        PluginCallTimeout,
+        PluginNotRunning,
+    )
 
     host = get_host(MAIL_PLUGIN_ID)
     if host is None or not _plugin_healthy(host):
-        return None
+        return _FALLTHROUGH
 
     # Strip internal dispatcher keys before forwarding to the plugin.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
@@ -112,13 +127,19 @@ async def try_mail_dual_route(
 
     try:
         return await host.call(plugin_cmd, params)
-    except PluginNotRunning:
+    except (PluginNotRunning, PluginCallTimeout, RpcCallError):
         logger.warning(
-            "mail dual-format: plugin died during '%s', "
+            "mail dual-format: plugin error during '%s', "
             "falling back to built-in",
             name,
+            exc_info=True,
         )
-        return None
+        return _FALLTHROUGH
 
 
-__all__ = ["try_mail_dual_route", "MAIL_DUAL", "MAIL_PLUGIN_ID"]
+__all__ = [
+    "try_mail_dual_route",
+    "MAIL_DUAL",
+    "MAIL_PLUGIN_ID",
+    "_FALLTHROUGH",
+]
