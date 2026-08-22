@@ -167,6 +167,23 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     if _opencode_result is not _OPENCODE_FALLTHROUGH:
         return JSONResponse(content=_serialise(_opencode_result))
 
+    # ── Dual-format routing for radar commands ─────────────────────────────
+    # Same pattern as opencode_config above: when a healthy
+    # ``stitch-radar`` plugin host is registered, get_radar_offers /
+    # get_radar_stats commands are routed to the plugin (identity mapping
+    # — no prefix to strip) BEFORE falling through to the built-in handler.
+    # Friends (get_friends) is NOT part of this route — it stays core-only.
+    from stitch_backend.domains.plugin_runtime.radar_dual import (
+        _FALLTHROUGH as _RADAR_FALLTHROUGH,
+    )
+    from stitch_backend.domains.plugin_runtime.radar_dual import (
+        try_radar_dual_route,
+    )
+
+    _radar_result = await try_radar_dual_route(name, body)
+    if _radar_result is not _RADAR_FALLTHROUGH:
+        return JSONResponse(content=_serialise(_radar_result))
+
     # Look up handler
     try:
         handler = get_command_handler(name)
