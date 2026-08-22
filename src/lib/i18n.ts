@@ -1961,6 +1961,16 @@ export interface Translations {
       noAccess: string;
       disabled: string;
     };
+    servicePlugins: {
+      title: string;
+      empty: string;
+      plugin: string;
+      version: string;
+      restarts: string;
+      statusRunning: string;
+      statusStopped: string;
+      statusError: string;
+    };
   };
   common: {
     actions: string;

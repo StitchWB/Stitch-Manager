@@ -1954,6 +1954,16 @@ export const en: Translations = {
       rejected: "Monitoring server rejected the request",
       noAccess: "You don't have access to monitoring",
       disabled: "Monitoring is disabled or not configured"
+    },
+    servicePlugins: {
+      title: "Service plugins",
+      empty: "No service plugins installed",
+      plugin: "Plugin",
+      version: "Version",
+      restarts: "Restarts",
+      statusRunning: "Running",
+      statusStopped: "Stopped",
+      statusError: "Error"
     }
   },
   common: {

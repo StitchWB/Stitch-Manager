@@ -1954,6 +1954,16 @@ tabs: {
       rejected: "Сервер мониторинга отклонил запрос",
       noAccess: "У вас нет доступа к мониторингу",
       disabled: "Мониторинг отключён или не настроен"
+    },
+    servicePlugins: {
+      title: "Сервисные плагины",
+      empty: "Сервисные плагины не установлены",
+      plugin: "Плагин",
+      version: "Версия",
+      restarts: "Рестарты",
+      statusRunning: "Работает",
+      statusStopped: "Остановлен",
+      statusError: "Ошибка"
     }
   },
   common: {

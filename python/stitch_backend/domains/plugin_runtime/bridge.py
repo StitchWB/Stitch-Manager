@@ -21,6 +21,9 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
+# Imported for its side effect: registers ``get_service_plugin_health``
+# (todo 25) when the dispatcher imports this bridge at startup.
+import stitch_backend.domains.plugin_runtime.monitoring  # noqa: F401,E402
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.domains.plugin_runtime import (
     all_hosts,
