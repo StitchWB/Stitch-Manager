@@ -33,7 +33,7 @@ from autoreg.plugin.rpc import (
 )
 from stitch_backend.core.spi_builtin_oauth import register_engine_handlers
 from stitch_backend.domains.sidecar import LaunchPlan, SidecarSpec, get_supervisor
-from stitch_backend.domains.sidecar.supervisor import _subprocess_isolation_kwargs
+from stitch_backend.domains.sidecar.supervisor import subprocess_isolation_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -530,8 +530,22 @@ class ServicePluginHost:
         try:
             self._attach_rpc(new_proc)
         except (RpcTimeoutError, RpcProtocolError) as exc:
-            logger.error("[Plugin:%s] restart handshake failed: %s",
-                         self.plugin_id, exc)
+            # M5: the supervisor just spawned a fresh process, but the RPC
+            # handshake failed.  Without cleanup the new child would keep
+            # running with a detached RPC client (zombie state).  Kill the
+            # new process tree via the supervisor and mark the host as
+            # crash-looped so status() surfaces a clean error instead of a
+            # phantom "running" process with no attached RPC.
+            logger.error(
+                "[Plugin:%s] restart handshake failed: %s — killing new process",
+                self.plugin_id, exc,
+            )
+            try:
+                self.rpc._finalize()
+            except Exception:  # noqa: BLE001
+                pass
+            await self.supervisor.stop(self.sidecar_name)
+            self._crash_loop = True
 
     async def _run_crash_hook(self) -> None:
         """Invoke the crash hook (telemetry + LKG rollback) without leaking errors."""

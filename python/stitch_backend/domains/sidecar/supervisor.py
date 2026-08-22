@@ -356,14 +356,22 @@ class SidecarSupervisor:
         return st.process if st else None
 
 
-def _subprocess_isolation_kwargs() -> dict[str, Any]:
+def subprocess_isolation_kwargs() -> dict[str, Any]:
     """kwargs to run a sidecar in its own process group / session.
 
     Lets ``_terminate_tree`` kill the whole tree (sidecar + browser child).
+    Public API: callers that spawn sidecar-like subprocesses outside the
+    supervisor (e.g. ``ServicePluginHost`` for memory-capped children)
+    should use this so the kill-tree contract is consistent.
     """
     if os.name == "nt":
         return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
+
+
+# Private alias retained for backward compatibility with callers that
+# imported the underscore-prefixed name before it was promoted to public.
+_subprocess_isolation_kwargs = subprocess_isolation_kwargs
 
 
 # Eager singleton: created once at module import (atomic under the import
