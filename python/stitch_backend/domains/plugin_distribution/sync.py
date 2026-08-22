@@ -143,7 +143,7 @@ class PluginSyncService:
                     continue
 
                 installed = list_installed_versions(plugin_id)
-                _handle_deprecation(plugin_id, installed, deprecated, report)
+                await _handle_deprecation(plugin_id, installed, deprecated, report)
 
                 if _matches_any_spec(version, deprecated):
                     report.skipped.append(f"{plugin_id}@{version} (deprecated)")
@@ -361,7 +361,7 @@ def _is_older(version: str, installed: list[str]) -> bool:
         return True
 
 
-def _handle_deprecation(
+async def _handle_deprecation(
     plugin_id: str,
     installed: list[str],
     deprecated_specs: list[str],
@@ -371,18 +371,74 @@ def _handle_deprecation(
 
     If an installed version matches a deprecation spec, delete it from the
     cache so the loader falls back to the next-newest non-deprecated version
-    (last-known-good).
+    (last-known-good).  For kind=service plugins a running host whose
+    version is deprecated is stopped + unregistered FIRST (todo 23
+    kill-switch) — the host process runs from the version dir, and a live
+    process would keep files locked on Windows.
     """
     if not deprecated_specs or not installed:
         return
 
-    for ver in list(installed):
-        if _matches_any_spec(ver, deprecated_specs):
-            ver_dir = plugin_cache_path(plugin_id, ver)
-            if ver_dir.is_dir():
-                shutil.rmtree(ver_dir, ignore_errors=True)
-                report.rolled_back.append(f"{plugin_id}@{ver}")
-                logger.info("Rolled back deprecated %s@%s", plugin_id, ver)
+    deprecated = [
+        ver for ver in installed if _matches_any_spec(ver, deprecated_specs)
+    ]
+    if not deprecated:
+        return
+
+    await _stop_deprecated_service_host(plugin_id, deprecated)
+
+    for ver in deprecated:
+        ver_dir = plugin_cache_path(plugin_id, ver)
+        if ver_dir.is_dir():
+            shutil.rmtree(ver_dir, ignore_errors=True)
+            report.rolled_back.append(f"{plugin_id}@{ver}")
+            logger.info("Rolled back deprecated %s@%s", plugin_id, ver)
+
+
+async def _stop_deprecated_service_host(
+    plugin_id: str, deprecated_versions: list[str],
+) -> None:
+    """Kill-switch for kind=service (todo 23).
+
+    Stops + unregisters the running service host of ``plugin_id`` when its
+    version matches a deprecated version.  Lazy import keeps
+    plugin_distribution importable without the plugin_runtime domain and
+    avoids an import cycle.  Never raises — sync must not break on this.
+    """
+    try:
+        from stitch_backend.domains.plugin_runtime import (
+            _hosts,
+            _manifests,
+            get_host,
+            get_manifest,
+        )
+    except Exception:  # noqa: BLE001 — runtime domain unavailable
+        return
+
+    host = get_host(plugin_id)
+    manifest = get_manifest(plugin_id)
+    if host is None or manifest is None:
+        return
+    if not _matches_any_spec(manifest.version, deprecated_versions):
+        return
+
+    try:
+        await host.stop()
+    except Exception as exc:  # noqa: BLE001 — kill-switch must not break sync
+        logger.warning("kill-switch: stopping %s failed: %s", plugin_id, exc)
+    _hosts.pop(plugin_id, None)
+    _manifests.pop(plugin_id, None)
+    try:
+        from stitch_backend.domains.plugin_runtime.spi_bridge import (
+            unregister_plugin_spi,
+        )
+        unregister_plugin_spi(host)
+    except Exception:  # noqa: BLE001 — best-effort cleanup
+        pass
+    logger.info(
+        "Kill-switch: stopped deprecated service host %s@%s",
+        plugin_id, manifest.version,
+    )
 
 
 def _matches_any_spec(version: str, specs: list[str]) -> bool:
