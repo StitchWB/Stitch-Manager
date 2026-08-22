@@ -132,6 +132,19 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     if _dual_result is not None:
         return JSONResponse(content=_serialise(_dual_result))
 
+    # ── Dual-format routing for google_sheets_* commands ───────────────────
+    # Same pattern as notebooklm_* above: when a healthy ``stitch-sheets``
+    # plugin host is registered, google_sheets_* commands are routed to the
+    # plugin (stripping the ``google_sheets_`` prefix) BEFORE falling through
+    # to the built-in handler.
+    from stitch_backend.domains.plugin_runtime.sheets_dual import (
+        try_sheets_dual_route,
+    )
+
+    _sheets_result = await try_sheets_dual_route(name, body)
+    if _sheets_result is not None:
+        return JSONResponse(content=_serialise(_sheets_result))
+
     # Look up handler
     try:
         handler = get_command_handler(name)

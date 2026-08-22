@@ -92,6 +92,8 @@ class RpcPluginClient:
         self._write_lock = threading.Lock()
         self._closed = False
         self._init_result: Any = None
+        # Reverse RPC: handlers for plugin→host requests (engine.oauth.* etc.)
+        self._request_handlers: dict[str, Any] = {}
 
     @property
     def init_result(self) -> Any:
@@ -177,6 +179,16 @@ class RpcPluginClient:
         to = timeout if timeout is not None else self._default_timeout
         self._call_internal("plugin.ping", {}, timeout=to)
         return True
+
+    def set_request_handler(self, name: str, handler: Any) -> None:
+        """Register a sync handler for a plugin→host request (reverse RPC).
+
+        ``handler(params: dict) -> result`` is called in a worker thread
+        when the plugin sends a JSON-RPC request with ``method=name``.
+        The response is written back to the child stdin.  Unknown methods
+        return a JSON-RPC error (-32601) to the plugin.
+        """
+        self._request_handlers[name] = handler
 
     def shutdown(self, *, drain_timeout: float = 5.0) -> None:
         """Graceful shutdown: drain in-flight, send ``plugin.shutdown``, wait."""
@@ -293,7 +305,14 @@ class RpcPluginClient:
             )
 
     def _handle_line(self, line: str) -> None:
-        """Parse one line from child stdout and route it."""
+        """Parse one line from child stdout and route it.
+
+        A line is either:
+          - a **response** (has ``id`` + ``result`` or ``error``, no
+            ``method``) → routed to the pending call by id;
+          - a **request** (has ``method`` + ``id``, no ``result``/``error``)
+            → reverse-RPC: dispatched to a registered request handler.
+        """
         try:
             obj = json.loads(line)
         except (json.JSONDecodeError, ValueError):
@@ -317,6 +336,16 @@ class RpcPluginClient:
 
         has_result = "result" in obj
         has_error = "error" in obj and obj["error"] is not None
+        method = obj.get("method")
+
+        # Reverse RPC: plugin→host request (has method, no result/error).
+        if method is not None and not has_result and not has_error:
+            params = obj.get("params", {})
+            if not isinstance(params, dict):
+                params = {}
+            self._handle_plugin_request(rid_int, method, params)
+            return
+
         if not has_result and not has_error:
             logger.warning(
                 "rpc: skipping malformed response (no result/error): %r", line
@@ -345,6 +374,57 @@ class RpcPluginClient:
             pending.result = obj["result"]
 
         pending.event.set()
+
+    def _handle_plugin_request(
+        self, rid: int, method: str, params: dict[str, Any]
+    ) -> None:
+        """Dispatch a plugin→host request to a registered handler.
+
+        Runs in the reader thread; the handler itself is executed in a
+        worker thread so the reader is not blocked (a slow handler would
+        stall responses to other pending calls).
+        """
+        handler = self._request_handlers.get(method)
+        if handler is None:
+            self._write_line(
+                {"jsonrpc": _JSONRPC, "id": rid,
+                 "error": {"code": -32601, "message": f"method not found: {method}"}}
+            )
+            return
+        t = threading.Thread(
+            target=self._run_plugin_request,
+            args=(rid, handler, params),
+            name="rpc-reverse",
+            daemon=True,
+        )
+        t.start()
+
+    def _run_plugin_request(
+        self, rid: int, handler: Any, params: dict[str, Any]
+    ) -> None:
+        """Execute a reverse-RPC handler and write the response back."""
+        try:
+            result = handler(params)
+            self._write_line(
+                {"jsonrpc": _JSONRPC, "id": rid, "result": result}
+            )
+        except Exception as exc:  # noqa: BLE001 — handler errors are returned, not raised
+            self._write_line(
+                {"jsonrpc": _JSONRPC, "id": rid,
+                 "error": {"code": _ERR_INTERNAL, "message": str(exc)}}
+            )
+
+    def _write_line(self, obj: dict[str, Any]) -> None:
+        """Write one JSON-RPC line to child stdin (used for reverse-RPC responses)."""
+        data = (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+        with self._write_lock:
+            if self._proc is None or self._proc.stdin is None:
+                return
+            try:
+                self._proc.stdin.write(data)
+                self._proc.stdin.flush()
+            except (BrokenPipeError, OSError, ValueError):
+                pass
 
     def _fail_all_pending(self, error: BaseException) -> None:
         """Fail all in-flight pending calls with the given error."""
@@ -398,12 +478,23 @@ class RpcPluginServer:
     Handler exceptions are caught and returned as JSON-RPC error
     responses (code -32603, internal error) — the server never crashes.
 
+    Reverse RPC: plugin→host requests are sent via ``call_host(method,
+    params)`` from inside a handler.  The server writes a JSON-RPC
+    request to stdout and reads the response from stdin.  Any
+    host→plugin requests that arrive while waiting for a response are
+    queued and processed by the serve loop after the current handler
+    returns (single-threaded serve loop).
+
     Zone-1: plain stdlib only (no stitch_backend imports, no third-party).
     """
 
     def __init__(self) -> None:
         self._handlers: dict[str, Any] = {}
         self._init_handler: Any = None
+        # Reverse RPC state.
+        self._request_handlers: dict[str, Any] = {}
+        self._next_request_id = 1
+        self._queued_lines: list[str] = []
 
     def register(self, name: str, handler: Any) -> None:
         """Register a command handler callable ``handler(params) -> result``."""
@@ -413,27 +504,121 @@ class RpcPluginServer:
         """Set the ``plugin.init`` handler ``handler(params) -> result``."""
         self._init_handler = handler
 
-    def serve(self) -> None:
-        """Main read-dispatch-write loop.  Exits on ``plugin.shutdown``."""
-        for line in sys.stdin:
-            line = line.strip()
+    def set_request_handler(self, name: str, handler: Any) -> None:
+        """Register a handler for a host→plugin request (reverse RPC).
+
+        Not used directly by the plugin; the host-side
+        ``RpcPluginClient.set_request_handler`` registers handlers that
+        the plugin can call via ``call_host``.
+        """
+        self._request_handlers[name] = handler
+
+    def call_host(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        timeout: float = 30.0,
+    ) -> Any:
+        """Send a JSON-RPC request to the host and wait for the response.
+
+        Called from inside a command handler (single-threaded serve
+        loop).  Writes the request to stdout, then reads lines from
+        stdin until the matching response arrives.  Host→plugin requests
+        that arrive while waiting are queued for the serve loop to
+        process after the current handler returns.
+
+        Raises ``RpcTimeoutError`` if the response does not arrive
+        within *timeout* seconds, or ``RpcProtocolError`` if stdin
+        closes.
+        """
+        rid = self._next_request_id
+        self._next_request_id += 1
+        req = {"jsonrpc": _JSONRPC, "id": rid, "method": method,
+               "params": params or {}}
+        sys.stdout.write(json.dumps(req, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            raw = sys.stdin.readline()
+            if not raw:
+                raise RpcProtocolError(
+                    "stdin closed while waiting for host response"
+                )
+            line = raw.strip()
             if not line:
                 continue
             try:
-                req = json.loads(line)
+                obj = json.loads(line)
             except (json.JSONDecodeError, ValueError):
                 continue
-            if not isinstance(req, dict):
+            if not isinstance(obj, dict):
                 continue
-            rid = req.get("id")
-            method = req.get("method", "")
-            params = req.get("params", {})
-            if not isinstance(params, dict):
-                params = {}
-            result = self._dispatch(method, params)
-            self._send_response(rid, result)
-            if method == "plugin.shutdown":
+            obj_id = obj.get("id")
+            has_result = "result" in obj
+            has_error = "error" in obj and obj["error"] is not None
+            obj_method = obj.get("method")
+
+            # Response to our request?
+            if obj_id == rid and has_result and obj_method is None:
+                return obj["result"]
+            if obj_id == rid and has_error and obj_method is None:
+                err = obj["error"]
+                if isinstance(err, dict):
+                    raise RpcCallError(
+                        err.get("code", _ERR_INTERNAL),
+                        err.get("message", "unknown error"),
+                        err.get("data"),
+                    )
+                raise RpcCallError(_ERR_INTERNAL, str(err))
+
+            # Host→plugin request or unrelated line — queue for serve loop.
+            self._queued_lines.append(line)
+
+        raise RpcTimeoutError(
+            f"call_host {method} (id={rid}) timed out after {timeout}s"
+        )
+
+    def serve(self) -> None:
+        """Main read-dispatch-write loop.  Exits on ``plugin.shutdown``.
+
+        Uses ``sys.stdin.readline()`` (not ``for line in sys.stdin``) so
+        that ``call_host`` can also read from stdin without the iterator's
+        internal buffering swallowing lines.  Before reading the next
+        line, any lines queued by ``call_host`` (host→plugin requests
+        that arrived while waiting for a host response) are processed.
+        """
+        while True:
+            # Process lines queued by call_host before reading new ones.
+            while self._queued_lines:
+                queued = self._queued_lines.pop(0)
+                if self._process_line(queued):
+                    return  # plugin.shutdown received
+            raw = sys.stdin.readline()
+            if not raw:
                 break
+            line = raw.strip()
+            if not line:
+                continue
+            if self._process_line(line):
+                return  # plugin.shutdown received
+
+    def _process_line(self, line: str) -> bool:
+        """Process one line.  Returns True if ``plugin.shutdown`` was received."""
+        try:
+            req = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            return False
+        if not isinstance(req, dict):
+            return False
+        rid = req.get("id")
+        method = req.get("method", "")
+        params = req.get("params", {})
+        if not isinstance(params, dict):
+            params = {}
+        result = self._dispatch(method, params)
+        self._send_response(rid, result)
+        return method == "plugin.shutdown"
 
     def _dispatch(self, method: str, params: dict[str, Any]) -> Any:
         """Dispatch one request, returning a result or error dict."""

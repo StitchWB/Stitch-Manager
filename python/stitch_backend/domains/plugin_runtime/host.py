@@ -30,6 +30,7 @@ from autoreg.plugin.rpc import (
     RpcProtocolError,
     RpcTimeoutError,
 )
+from stitch_backend.core.spi_builtin_oauth import register_engine_handlers
 from stitch_backend.domains.sidecar import LaunchPlan, SidecarSpec, get_supervisor
 from stitch_backend.domains.sidecar.supervisor import _subprocess_isolation_kwargs
 
@@ -141,6 +142,9 @@ class ServicePluginHost:
                 await self.supervisor.stop(self.sidecar_name)
                 return {"status": "error", "error": str(exc),
                         "port": None, "pid": None, "uptimeSeconds": None}
+            # Wire engine.oauth.* reverse-RPC handlers so the plugin can
+            # request OAuth operations from the host via call_host.
+            register_engine_handlers(self.rpc)
             self._restart_count = 0
             self._stopping = False
             self._monitor_task = asyncio.create_task(
