@@ -36,6 +36,14 @@ from autoreg.plugin.manifest import (
     validate_manifest,
 )
 
+# Import spi_builtin_oauth so the built-in OAuthProvider SPI is registered
+# at startup (before any service-plugin that may call engine.oauth.* starts).
+# Import spi_builtin_email so the built-in MailInboxSPI and
+# EmailVerificationProvider are registered before the stitch-mail plugin
+# starts — the plugin overrides them, and when it dies the SPI registry
+# must fall back to the built-in impls.
+import stitch_backend.core.spi_builtin_email  # noqa: F401
+import stitch_backend.core.spi_builtin_oauth  # noqa: F401
 from stitch_backend.domains.plugin_runtime import (
     register_host,
     register_manifest,
@@ -119,6 +127,18 @@ async def _start_one(
         )
         return False
     register_host(host)
+    # Register plugin-backed SPI proxies (MailInboxSPI, EmailVerificationProvider,
+    # etc.) so spi.resolve() returns the plugin impl when healthy, falling back
+    # to built-in when the plugin is dead (health_check = rpc ping).
+    try:
+        from stitch_backend.domains.plugin_runtime.spi_bridge import (
+            register_plugin_spi,
+        )
+        register_plugin_spi(host, manifest)
+    except Exception as exc:  # noqa: BLE001 — never crash startup
+        logger.warning(
+            "Service plugin %s: SPI registration failed: %s", manifest.id, exc
+        )
     logger.info("Service plugin %s started (pid=%s, source=%s)", manifest.id, result.get("pid"), source)
     return True
 
