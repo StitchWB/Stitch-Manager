@@ -263,6 +263,35 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const ERROR_DEDUPE_MS = 30_000;
+let lastErrorMessage: string | null = null;
+let lastErrorAt = 0;
+
+/**
+ * Set an error message, suppressing identical messages that repeat within
+ * ERROR_DEDUPE_MS. Prevents banner spam when a service-plugin falls back
+ * mid-session and the polling loop re-hits the same transient error on the
+ * first fallback tick.
+ */
+function setDedupedError(
+  set: (partial: Partial<MailState>) => void,
+  message: string,
+): void {
+  const now = Date.now();
+  if (lastErrorMessage === message && now - lastErrorAt < ERROR_DEDUPE_MS) {
+    return;
+  }
+  lastErrorMessage = message;
+  lastErrorAt = now;
+  set({ error: message });
+}
+
+/** Test-only: reset the error dedupe tracker. */
+export function _resetErrorDedupeForTests(): void {
+  lastErrorMessage = null;
+  lastErrorAt = 0;
+}
+
 /** Backend keeps sessions in memory — a restart invalidates every session id. */
 function isSessionLostError(error: unknown): boolean {
   return toErrorMessage(error).includes('Session not found');
@@ -465,7 +494,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         recoverFromLostSession();
         return;
       }
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     }
   },
   selectFolder: async folder => {
@@ -602,7 +631,7 @@ export const useMailStore = create<MailState>((set, get) => ({
 
       return profile;
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
       return null;
     } finally {
       set({ isProfileSaving: false });
@@ -673,7 +702,7 @@ export const useMailStore = create<MailState>((set, get) => ({
 
       void get().loadFolders();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isProfilesLoading: false });
     }
@@ -683,7 +712,7 @@ export const useMailStore = create<MailState>((set, get) => ({
       const providerCatalog = await emailInboxGetProviderCatalog();
       set({ providerCatalog });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     }
   },
   upsertProfileFromDraft: async draft => {
@@ -714,7 +743,7 @@ export const useMailStore = create<MailState>((set, get) => ({
 
       await get().loadProfileSyncState(profile.id);
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isProfileSaving: false });
     }
@@ -771,7 +800,7 @@ export const useMailStore = create<MailState>((set, get) => ({
 
       await get().loadProfileSyncState(profile.id);
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isProfileSaving: false });
     }
@@ -798,7 +827,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         };
       });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     }
   },
   renameProfile: async (profileId, nextLabel) => {
@@ -821,7 +850,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         profiles: state.profiles.map(item => (item.id === updated.id ? updated : item)),
       }));
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isProfileMutating: false });
     }
@@ -866,7 +895,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         };
       });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isProfileMutating: false });
     }
@@ -967,7 +996,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         }
       }
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
       // ponytail: one delayed retry for backend cold-start races — the frontend
       // is interactive seconds before uvicorn accepts connections, and the
       // auto-connect memo in Mail.tsx would otherwise block any retry.
@@ -1023,7 +1052,7 @@ export const useMailStore = create<MailState>((set, get) => ({
           : state.messagesByProfile,
       }));
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isConnecting: false });
     }
@@ -1088,7 +1117,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         return;
       }
 
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
 
       if (activeProfileId) {
         try {
@@ -1180,7 +1209,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         return;
       }
 
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
 
       if (activeProfileId) {
         try {
@@ -1260,7 +1289,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         recoverFromLostSession();
         return;
       }
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isMutating: false });
     }
@@ -1285,7 +1314,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         recoverFromLostSession();
         return;
       }
-      set({ error: toErrorMessage(error) });
+      setDedupedError(set, toErrorMessage(error));
     } finally {
       set({ isMutating: false });
     }

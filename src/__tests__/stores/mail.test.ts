@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { useMailStore } from '../../stores/mail';
+import { useMailStore, _resetErrorDedupeForTests } from '../../stores/mail';
 
 const originalFetch = globalThis.fetch;
 
@@ -309,6 +309,57 @@ describe('mail store', () => {
       expect(useMailStore.getState().session).toEqual(session);
 
       consoleWarnSpy.mockRestore();
+    });
+  });
+
+  describe('error dedupe', () => {
+    beforeEach(() => {
+      _resetErrorDedupeForTests();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('suppresses identical error messages within 30s and re-surfaces after', async () => {
+      jest.useFakeTimers({ now: 1_000_000 });
+
+      const store = useMailStore.getState();
+
+      globalThis.fetch = jest.fn<any>().mockImplementation((url: string) => {
+        const cmd = url.replace('/api/', '');
+        if (cmd === 'email_inbox_get_provider_catalog') {
+          return Promise.resolve({
+            ok: false,
+            status: 500,
+            json: () => Promise.resolve({ message: 'Plugin unavailable' }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(null),
+        });
+      }) as unknown as typeof fetch;
+
+      // First call: error is set.
+      await store.loadProviderCatalog();
+      expect(useMailStore.getState().error).toBe('Plugin unavailable');
+
+      // Clear error (simulates the start of a new operation clearing the banner).
+      store.clearError();
+      expect(useMailStore.getState().error).toBeNull();
+
+      // Second call within 30s: same error is deduped — banner stays cleared.
+      await store.loadProviderCatalog();
+      expect(useMailStore.getState().error).toBeNull();
+
+      // Advance time past the 30s dedupe window.
+      jest.setSystemTime(1_000_000 + 31_000);
+
+      // Third call: window expired — error is set again.
+      await store.loadProviderCatalog();
+      expect(useMailStore.getState().error).toBe('Plugin unavailable');
     });
   });
 });
