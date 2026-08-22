@@ -118,20 +118,6 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         _plugin_result = await call_plugin_command(name, body)
         return JSONResponse(content=_serialise(_plugin_result))
 
-    # ── Dual-format routing for notebooklm_* commands ─────────────────────
-    # When a healthy ``stitch-notebooklm`` plugin host is registered,
-    # notebooklm_* commands are routed to the plugin (stripping the
-    # ``notebooklm_`` prefix) BEFORE falling through to the built-in
-    # handler.  No names are re-registered in command_registry — the
-    # indirection lives here, same pattern as the plugin.* branch above.
-    from stitch_backend.domains.plugin_runtime.dual_format import (
-        try_dual_format_route,
-    )
-
-    _dual_result = await try_dual_format_route(name, body)
-    if _dual_result is not None:
-        return JSONResponse(content=_serialise(_dual_result))
-
     # ── Dual-format routing for google_sheets_* commands ───────────────────
     # Same pattern as notebooklm_* above: when a healthy ``stitch-sheets``
     # plugin host is registered, google_sheets_* commands are routed to the

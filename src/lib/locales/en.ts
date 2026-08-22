@@ -3828,6 +3828,8 @@ addMailboxFromSheets: "Import from Google Sheets",
     setupHint:
       "Add a web-notebooklm account and capture its Google cookies first (Accounts → NotebookLM → Login in browser / Capture cookies).",
     noAccount: "No web-notebooklm account configured. Add one and capture its Google cookies first.",
+    pluginNotInstalled: "NotebookLM plugin not installed",
+    pluginNotInstalledHint: "Install the stitch-notebooklm plugin to use NotebookLM.",
   },
   status: {
     active: "Active",

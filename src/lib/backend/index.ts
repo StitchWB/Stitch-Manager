@@ -80,18 +80,6 @@ export {
 } from './modules/accounts';
 
 // ============================================
-// NotebookLM (own surface)
-// ============================================
-
-export {
-  notebooklmListNotebooks,
-  notebooklmCreateNotebook,
-  notebooklmAsk,
-  notebooklmGenerateAudio,
-  type NotebookLMNotebook,
-} from './modules/notebooklm';
-
-// ============================================
 // Fingerprint Profiles
 // ============================================
 
