@@ -178,51 +178,11 @@ class DrissionPageBrowser:
 
 # ── Built-in EmailVerificationProvider ─────────────────────────────────────────
 #
-# Registered at import time so that ``resolve(SPI_EMAIL_VERIFICATION)`` always
-# returns a working impl when no service-plugin override is registered.  The
-# wrapper delegates to ``EmailService`` — byte-identical behaviour to the
-# previous lazy import that was inline in ``ImapVerificationStrategy``.
+# The built-in impl and registration now live in ``core/spi_builtin_email.py``
+# — the single entry point for ``domains.email`` imports.  Re-exported here
+# for backward compatibility with tests that import ``_BuiltinEmailVerification``
+# from this module.
 
-
-class _BuiltinEmailVerification:
-    """Built-in EmailVerificationProvider — delegates to EmailService.
-
-    A fresh ``EmailService`` is created per call (matching the previous
-    inline behaviour) and closed in ``finally`` so IMAP connections don't
-    leak.
-    """
-
-    async def wait_otp(
-        self,
-        email: str,
-        subject_filter: str = "",
-        code_pattern: str | None = None,
-        timeout: float = 120.0,
-    ) -> str:
-        from stitch_backend.domains.email.service import EmailService
-        svc = EmailService()
-        try:
-            return await svc.wait_for_verification_code(
-                email=email,
-                subject_filter=subject_filter,
-                code_pattern=code_pattern,
-                timeout=timeout,
-            )
-        finally:
-            await svc.close()
-
-    async def close(self) -> None:
-        pass  # EmailService is created per-call; nothing to close here.
-
-
-def _register_builtin_email_verification() -> None:
-    """Register the built-in EmailVerificationProvider in the SPI registry."""
-    from stitch_backend.core.spi import SPI_EMAIL_VERIFICATION, register_impl
-    register_impl(
-        SPI_EMAIL_VERIFICATION,
-        _BuiltinEmailVerification(),
-        source="builtin",
-    )
-
-
-_register_builtin_email_verification()
+from stitch_backend.core.spi_builtin_email import (  # noqa: F401
+    _BuiltinEmailVerification,
+)

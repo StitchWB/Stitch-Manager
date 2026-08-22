@@ -7,7 +7,8 @@ only collects outputs from the store for the caller to persist.
 
 from __future__ import annotations
 
-import email as email_mod
+import asyncio
+import inspect
 import logging
 import re
 import time
@@ -17,6 +18,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from ..scenario.schema import ScenarioStep, SelectorCandidate
+
+# Ensure built-in EmailVerificationProvider is registered at import time.
+# This is the entry point that makes resolve(SPI_EMAIL_VERIFICATION) work
+# even when no other module (bootstrap, strategies) has been imported yet.
+import stitch_backend.core.spi_builtin_email  # noqa: F401, PLC0415
 
 logger = logging.getLogger(__name__)
 
@@ -241,113 +247,18 @@ def branch_capability(
 # ── imap.otp ───────────────────────────────────────────────────────────
 
 
-def _default_imap_factory(imap_config: dict[str, Any]) -> Any:
-    """Create a real ``imaplib.IMAP4_SSL`` connection from config."""
-    import imaplib
-    return imaplib.IMAP4_SSL(imap_config.get("host", ""), int(imap_config.get("port", 993)))
-
-
-def _extract_body(msg: Any) -> str:
-    """Extract text body from an ``email.message.Message``."""
-    body = ""
-    if msg.is_multipart():
-        for part in msg.walk():
-            ct = part.get_content_type()
-            if ct == "text/plain":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    return payload.decode("utf-8", errors="replace")
-            elif ct == "text/html" and not body:
-                payload = part.get_payload(decode=True)
-                if payload:
-                    body = re.sub(r"<[^>]*>", " ", payload.decode("utf-8", errors="replace"))
-    else:
-        payload = msg.get_payload(decode=True)
-        if payload:
-            body = payload.decode("utf-8", errors="replace")
-    return body
-
-
-def _poll_imap_once(
-    conn_factory: Callable[[dict[str, Any]], Any],
-    imap_config: dict[str, Any],
-    subject_patterns: list[str],
-    body_regex: str,
-    recency_s: int,
-    code_source: str = "body",
-    subject_code_regex: str = "",
-) -> str | None:
-    """Poll IMAP once for a verification code. Returns code or ``None``.
-
-    ``subject_patterns`` are tried IN ORDER (primary first, fallback after)
-    so a broad fallback never shadows a precise primary match on the same
-    poll iteration.  An empty list disables subject filtering.
-
-    ``code_source`` selects where the code lives:
-      * ``"body"`` (default) — match ``body_regex`` against the email body.
-      * ``"subject"`` — match ``subject_code_regex`` against the Subject
-        header (windsurf: "229743 - Verify your Email with Windsurf").
-    """
-    from email.utils import parsedate_to_datetime
-
-    conn = conn_factory(imap_config)
-    try:
-        conn.login(imap_config.get("user", ""), imap_config.get("password", ""))
-        conn.select("INBOX")
-        status, data = conn.search(None, "ALL")
-        if status != "OK" or not data[0]:
-            return None
-        msg_ids = data[0].split()
-        subject_res = [re.compile(p) for p in subject_patterns if p]
-        # Cache fetched (subject, body, age-ok) per message so the fallback
-        # pass does not re-fetch over the network.
-        fetched: list[tuple[str, str]] = []
-        for msg_id in reversed(msg_ids[-10:]):
-            _, msg_data = conn.fetch(msg_id, "(RFC822)")
-            if not msg_data or not msg_data[0]:
-                continue
-            msg = email_mod.message_from_bytes(msg_data[0][1])
-            try:
-                msg_date = parsedate_to_datetime(msg["Date"])
-                if time.time() - msg_date.timestamp() > recency_s:
-                    continue
-            except Exception:  # noqa: BLE001
-                pass
-            fetched.append((msg.get("Subject", ""), _extract_body(msg)))
-
-        if code_source == "subject":
-            subject_code_re = re.compile(
-                subject_code_regex or r"(\d{6})"
-            )
-            for subject, _body in fetched:
-                m = subject_code_re.search(subject)
-                if m:
-                    return m.group(1) if m.groups() else m.group(0)
-            return None
-
-        patterns: list[re.Pattern[str] | None] = subject_res or [None]
-        for subject_re in patterns:
-            for subject, body in fetched:
-                if subject_re is not None and not subject_re.search(subject):
-                    continue
-                match = re.search(body_regex, body)
-                if match:
-                    return match.group(1) if match.groups() else match.group(0)
-        return None
-    finally:
-        try:
-            conn.logout()
-        except Exception:  # noqa: BLE001
-            pass
-
-
 def imap_otp_capability(
     step: ScenarioStep,
     imap_config: dict[str, Any] | None,
     imap_factory: Callable[[dict[str, Any]], Any] | None,
     store: dict[str, Any],
 ) -> StepResult:
-    """Poll IMAP for a verification code (plan §4.3 imap.otp)."""
+    """Poll IMAP for a verification code via SPI (plan §4.3 imap.otp).
+
+    Routes through the ``EmailVerificationProvider`` SPI — the built-in
+    impl uses raw-IMAP polling (moved to ``core/spi_builtin_email.py``);
+    a plugin impl overrides with its own ``wait_otp``.
+    """
     meta = step.meta or {}
     to_key = meta.get("to", "otp.code")
     subject_patterns = [
@@ -369,20 +280,51 @@ def imap_otp_capability(
         return StepResult(
             step.id, step.kind, False, error="imap.otp: no imap_config provided"
         )
-    factory = imap_factory or _default_imap_factory
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        try:
-            code = _poll_imap_once(
-                factory, imap_config, subject_patterns, body_regex, recency_s,
-                code_source=code_source, subject_code_regex=subject_code_regex,
-            )
-            if code:
-                store[to_key] = code
-                return StepResult(step.id, step.kind, True, meta={"to": to_key})
-        except Exception as e:  # noqa: BLE001
-            logger.debug("imap.otp poll error: %s", e)
-        time.sleep(poll_interval_s)
+
+    from stitch_backend.core.spi import SPI_EMAIL_VERIFICATION, resolve  # noqa: PLC0415
+
+    impl = resolve(SPI_EMAIL_VERIFICATION)
+
+    email_addr = imap_config.get("user", "")
+    subject_filter = subject_patterns[0] if subject_patterns else ""
+
+    extra_kwargs: dict[str, Any] = {
+        "imap_config": imap_config,
+        "imap_factory": imap_factory,
+        "subject_patterns": subject_patterns,
+        "body_regex": body_regex,
+        "recency_s": recency_s,
+        "poll_interval_s": poll_interval_s,
+        "code_source": code_source,
+        "subject_code_regex": subject_code_regex,
+    }
+
+    # Check if impl.wait_otp accepts **kwargs (built-in does; plugin may not)
+    try:
+        sig = inspect.signature(impl.wait_otp)
+        accepts_kwargs = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values()
+        )
+    except (ValueError, TypeError):
+        accepts_kwargs = False
+
+    call_kwargs = extra_kwargs if accepts_kwargs else {}
+
+    try:
+        code = asyncio.run(impl.wait_otp(
+            email=email_addr,
+            subject_filter=subject_filter,
+            code_pattern=body_regex,
+            timeout=timeout_s,
+            **call_kwargs,
+        ))
+        if code:
+            store[to_key] = code
+            return StepResult(step.id, step.kind, True, meta={"to": to_key})
+    except Exception as e:  # noqa: BLE001
+        logger.debug("imap.otp SPI error: %s", e)
+
     return StepResult(
         step.id, step.kind, False,
         error="imap.otp: no verification code received within timeout",
