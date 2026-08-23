@@ -68,6 +68,12 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
       - 403: caller not entitled to the plugin
       - 504: RPC timeout
       - 400: RPC call error or plugin not running
+
+    Sandbox shadowing: when the caller is an authenticated user who owns a
+    sandbox host for ``plugin_id``, the call routes to the sandbox host
+    INSTEAD of the global host.  The owner bypasses the entitlement gate
+    (their dev artifact).  Non-owners never see someone else's sandbox —
+    the sandbox lookup is keyed by ``caller_user_id``.
     """
     from autoreg.plugin.rpc import RpcCallError
 
@@ -83,28 +89,43 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
         )
     plugin_id, cmd = parsed
 
-    host = get_host(plugin_id)
-    if host is None:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown plugin: {plugin_id}"
-        )
-
-    # Entitlement check — uses _caller_user_id / _caller_role injected
-    # by the dispatcher's auth block.  Lazy import so test patches on
-    # the entitlements module take effect at call time.
-    from stitch_backend.domains.plugin_distribution.entitlements import (
-        get_effective_entitlements,
-        is_entitled_to,
-    )
-
     caller_user_id = body.get("_caller_user_id")
     caller_role = body.get("_caller_role")
-    entitlements = await get_effective_entitlements(caller_user_id, caller_role)
-    if not is_entitled_to(plugin_id, entitlements):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Not entitled to plugin: {plugin_id}",
+
+    # ── Sandbox shadowing (owner-only) ───────────────────────────────────
+    # When the caller owns a sandbox host for this plugin id, route there
+    # INSTEAD of the global host.  The owner bypasses the entitlement gate
+    # (it's their dev artifact).  Non-owners fall through to the global
+    # path and never see the sandbox host.
+    host = None
+    if caller_user_id is not None:
+        from stitch_backend.domains.plugin_runtime.sandbox import (
+            ensure_sandbox_host,
         )
+        host = await ensure_sandbox_host(caller_user_id, plugin_id)
+
+    if host is None:
+        # ── Global path (unchanged) ───────────────────────────────────────
+        host = get_host(plugin_id)
+        if host is None:
+            raise HTTPException(
+                status_code=404, detail=f"Unknown plugin: {plugin_id}"
+            )
+
+        # Entitlement check — uses _caller_user_id / _caller_role injected
+        # by the dispatcher's auth block.  Lazy import so test patches on
+        # the entitlements module take effect at call time.
+        from stitch_backend.domains.plugin_distribution.entitlements import (
+            get_effective_entitlements,
+            is_entitled_to,
+        )
+
+        entitlements = await get_effective_entitlements(caller_user_id, caller_role)
+        if not is_entitled_to(plugin_id, entitlements):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Not entitled to plugin: {plugin_id}",
+            )
 
     # Strip internal dispatcher keys, then forward caller identity so
     # plugins can scope rows by owner (parallel to totp_dual / mail_dual).
@@ -116,6 +137,8 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
     # child process is not touched (the host tracks counters around
     # call()).  Entitlement still applies — only entitled callers see
     # plugin metrics.  The shape is fixed by the runtime contract.
+    # For sandbox hosts, the owner already bypassed the entitlement gate
+    # above, so metrics are served directly.
     if cmd == "metrics":
         return host.get_metrics()
 
