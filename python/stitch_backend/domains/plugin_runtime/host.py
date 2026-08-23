@@ -74,7 +74,6 @@ class ServicePluginHost:
         package_dir: Path | None = None,
         command: list[str] | None = None,
         data_dir: Path | None = None,
-        engine_config: dict[str, Any] | None = None,
         migrations: bool = False,
         default_timeout: float = 30.0,
         env: dict[str, str] | None = None,
@@ -95,7 +94,6 @@ class ServicePluginHost:
             / "data" / "plugins" / plugin_id
         )
         self.db_path = self.data_dir / "plugin.db"
-        self.engine_config = engine_config or {}
         self.migrations = migrations
         # Sandbox caps for community-origin plugins: stricter 5s call timeout
         # (community plugins are unsigned subprocesses).  The cap is a
@@ -403,7 +401,6 @@ class ServicePluginHost:
             "plugin_id": self.plugin_id,
             "data_dir": str(self.data_dir),
             "db_path": str(self.db_path),
-            "engine_config": self.engine_config,
         }
         self.rpc = RpcPluginClient(default_timeout=self.default_timeout)
         self.rpc._proc = proc
