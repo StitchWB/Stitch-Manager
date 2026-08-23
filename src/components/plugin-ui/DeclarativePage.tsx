@@ -41,6 +41,17 @@ const headingSizes = [
   'text-xs',
 ];
 
+/**
+ * Resolve a manifest label to display text. Labels that look like i18n keys
+ * (contain a dot) are resolved via `t('plugin.{id}.{key}')` against the
+ * plugin's registered bundle (see i18nPluginBundles.ts) — the same
+ * convention AiTopTabs uses for plugin tab labels. Plain strings (e.g.
+ * "ID", "Email") render as-is.
+ */
+function resolveLabel(pluginId: string, text: string): string {
+  return text.includes('.') ? t(`plugin.${pluginId}.${text}`) : text;
+}
+
 function renderNode(pluginId: string, node: UiNode, index: number) {
   switch (node.kind) {
     case 'heading': {
@@ -50,7 +61,7 @@ function renderNode(pluginId: string, node: UiNode, index: number) {
           key={index}
           className={`${headingSizes[level - 1]} font-semibold text-slate-100`}
         >
-          {node.text}
+          {resolveLabel(pluginId, node.text)}
         </div>
       );
     }
@@ -58,17 +69,20 @@ function renderNode(pluginId: string, node: UiNode, index: number) {
       return (
         <div key={index} className="space-y-3">
           {node.title && (
-            <div className="text-sm font-medium text-slate-300">{node.title}</div>
+            <div className="text-sm font-medium text-slate-300">
+              {resolveLabel(pluginId, node.title)}
+            </div>
           )}
-          {node.nodes.map((child, i) => renderNode(pluginId, child, i))}
+          {(node.nodes ?? []).map((child, i) => renderNode(pluginId, child, i))}
         </div>
       );
     case 'field': {
+      const label = resolveLabel(pluginId, node.label);
       if (node.field === 'text') {
         return (
           <Input
             key={index}
-            label={node.label}
+            label={label}
             value={(node.value as string) ?? ''}
             readOnly={node.readonly}
           />
@@ -78,9 +92,12 @@ function renderNode(pluginId: string, node: UiNode, index: number) {
         return (
           <Select
             key={index}
-            label={node.label}
+            label={label}
             value={(node.value as string) ?? ''}
-            options={node.options ?? []}
+            options={(node.options ?? []).map(opt => ({
+              ...opt,
+              label: resolveLabel(pluginId, opt.label),
+            }))}
             disabled={node.readonly}
           />
         );
@@ -89,7 +106,7 @@ function renderNode(pluginId: string, node: UiNode, index: number) {
       return (
         <Toggle
           key={index}
-          label={node.label}
+          label={label}
           checked={Boolean(node.value)}
           onChange={() => {}}
           disabled={node.readonly}
@@ -126,11 +143,20 @@ function TableNode({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    invokeAction<Record<string, unknown>>(pluginId, node.source.command, node.source.params)
+    invokeAction<Record<string, unknown> | Record<string, unknown>[]>(
+      pluginId,
+      node.source.command,
+      node.source.params,
+    )
       .then(resp => {
         if (cancelled) return;
-        const key = node.rowsKey ?? 'rows';
-        const data = (resp as Record<string, unknown> | null | undefined)?.[key];
+        // Readonly commands may return either a bare array of rows or an
+        // object wrapping the rows under `rowsKey` (default "rows").
+        const data = Array.isArray(resp)
+          ? resp
+          : (resp as Record<string, unknown> | null | undefined)?.[
+              node.rowsKey ?? 'rows'
+            ];
         setRows(Array.isArray(data) ? (data as Record<string, unknown>[]) : []);
         setLoading(false);
       })
@@ -153,7 +179,7 @@ function TableNode({
       <TableHeader>
         <TableRow>
           {node.columns.map(col => (
-            <TableHead key={col.key}>{col.label}</TableHead>
+            <TableHead key={col.key}>{resolveLabel(pluginId, col.label)}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
@@ -198,7 +224,7 @@ function ButtonNode({
       isLoading={busy}
       onClick={handleClick}
     >
-      {node.label}
+      {resolveLabel(pluginId, node.label)}
     </Button>
   );
 }
@@ -209,14 +235,17 @@ interface DeclarativePageProps {
 }
 
 function DeclarativePage({ pluginId, schema }: DeclarativePageProps) {
+  // Tolerant of malformed manifests: a missing/non-array `nodes` renders an
+  // empty page instead of crashing the whole host route.
+  const nodes = Array.isArray(schema?.nodes) ? schema.nodes : [];
   return (
     <div className="space-y-4 p-4">
-      {schema.title && (
+      {schema?.title && (
         <h1 className="text-xl font-semibold text-slate-100">
-          {t(schema.title)}
+          {resolveLabel(pluginId, schema.title)}
         </h1>
       )}
-      {schema.nodes.map((node, i) => renderNode(pluginId, node, i))}
+      {nodes.map((node, i) => renderNode(pluginId, node, i))}
     </div>
   );
 }

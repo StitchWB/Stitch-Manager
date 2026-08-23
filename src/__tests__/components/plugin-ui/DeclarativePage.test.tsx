@@ -6,6 +6,8 @@
  *   (b) Clicking a button node calls safeInvoke('plugin.test.ping').
  *   (c) Unknown node kind renders without crash (tolerant reader).
  *   (d) safeInvoke rejection triggers appToast.error('pluginUi.actionFailed').
+ *   (e) Missing/non-array schema.nodes renders without crash (hardened guard).
+ *   (f) Table node accepts a bare-array command response (unwrapped rows).
  *
  * Mocks: invoke module (safeInvoke), i18n (t = identity), toast, and
  * @/components/ui primitives (stubbed to simple HTML like Plugins.test.tsx
@@ -93,7 +95,8 @@ jest.mock('@/components/ui', () => ({
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const fixtureSchema: PluginPageSchema = {
-  title: 'plugin.test.pageTitle',
+  // Relative i18n key — resolved by the renderer as `plugin.test.page.title`.
+  title: 'page.title',
   nodes: [
     { kind: 'heading', text: 'Overview', level: 1 },
     {
@@ -201,5 +204,42 @@ describe('DeclarativePage', () => {
     await waitFor(() => {
       expect(appToast.error).toHaveBeenCalledWith('pluginUi.actionFailed');
     });
+  });
+
+  it('(e) missing schema.nodes renders without crash', () => {
+    // Cast: simulates a malformed manifest missing the nodes array entirely.
+    const { container } = render(
+      <DeclarativePage pluginId="test" schema={{ title: 'only.title' } as PluginPageSchema} />,
+    );
+    // Title still renders; no nodes, no throw.
+    expect(screen.getByText('plugin.test.only.title')).toBeTruthy();
+    expect(container.querySelectorAll('[data-testid="ui-button"]')).toHaveLength(0);
+  });
+
+  it('(f) table node accepts a bare-array command response', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([
+      { name: 'Bob', email: 'bob@b.c' },
+    ]);
+
+    const bareArrayTableSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'users',
+          columns: [
+            { key: 'name', label: 'Name' },
+            { key: 'email', label: 'Email' },
+          ],
+          source: { command: 'list_users' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={bareArrayTableSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Bob')).toBeTruthy();
+    });
+    expect(screen.getByText('bob@b.c')).toBeTruthy();
   });
 });
