@@ -91,3 +91,33 @@ def plugin_cache_path(plugin_id: str, version: str) -> Path:
 def plugin_local_path(plugin_id: str) -> Path:
     """Canonical local-dev path for a plugin id."""
     return plugins_local_dir() / plugin_id
+
+
+# ── Sandbox (per-user) layout ───────────────────────────────────────────────
+#
+# Sandbox plugins live under ``<base>/sandbox/<user_id>/<plugin_id>/`` and are
+# visible only to their owner.  The data dir is kept beside the package dir
+# with a ``-data`` suffix so uninstalling the package never nukes the data
+# dir in one rmtree (the lifecycle code removes them independently).
+
+_SANDBOX_SUBDIR = "sandbox"
+
+
+def sandbox_dir() -> Path:
+    """Root dir for all per-user sandbox plugins: ``<base>/sandbox``."""
+    return _base_dir() / _SANDBOX_SUBDIR
+
+
+def sandbox_user_dir(user_id: int) -> Path:
+    """Per-user sandbox root: ``<base>/sandbox/<user_id>``."""
+    return sandbox_dir() / str(user_id)
+
+
+def sandbox_plugin_dir(user_id: int, plugin_id: str) -> Path:
+    """Package dir for a user's sandbox plugin: ``<base>/sandbox/<uid>/<pid>``."""
+    return sandbox_user_dir(user_id) / plugin_id
+
+
+def sandbox_plugin_data_dir(user_id: int, plugin_id: str) -> Path:
+    """Data dir for a user's sandbox plugin: ``<base>/sandbox/<uid>/<pid>-data``."""
+    return sandbox_user_dir(user_id) / f"{plugin_id}-data"

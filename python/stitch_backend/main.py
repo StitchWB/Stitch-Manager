@@ -256,6 +256,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.plugin_distribution.marketplace_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.source_commands  # noqa: F401
+    import stitch_backend.domains.plugin_runtime.sandbox_commands  # noqa: F401
     import stitch_backend.domains.profiles.commands  # noqa: F401
     import stitch_backend.domains.prompts.commands  # noqa: F401
     import stitch_backend.domains.proxy_library.commands  # noqa: F401
@@ -425,6 +426,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     _group_usage_flush_task = asyncio.create_task(_group_usage_flush_loop())
 
+    # Start the sandbox idle-stop loop (60 s tick).  Stops sandbox plugin
+    # hosts idle > 15 minutes (keeps them registered for cheap restart).
+    # Sandbox hosts are started on-demand by routing — never at boot.
+    async def _sandbox_idle_stop_loop():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                from stitch_backend.domains.plugin_runtime.sandbox import (
+                    stop_idle_hosts,
+                )
+
+                await stop_idle_hosts()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Sandbox idle-stop loop failed")
+
+    _sandbox_idle_task = asyncio.create_task(_sandbox_idle_stop_loop())
+
     # Start KeyHealth worker
     try:
         from stitch_backend.domains.key_health.worker import KeyHealthWorker
@@ -467,6 +487,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Service-plugin hosts are stopped FIRST (pre-sets _stopping so the crash
     # monitor does not race the supervisor's kill-tree), then the supervisor
     # kills every sidecar process (including plugin children).
+    # Sandbox hosts are stopped FIRST (pre-set _stopping on every sandbox
+    # host so their crash monitors don't race the supervisor kill-tree).
+    try:
+        from stitch_backend.domains.plugin_runtime.sandbox import (
+            stop_all_sandbox as _stop_sandbox,
+        )
+
+        await _stop_sandbox()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Sandbox plugin shutdown skipped: %s", _exc)
     try:
         from stitch_backend.domains.plugin_runtime import stop_all as _stop_plugins
 
@@ -507,6 +537,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         _group_usage_flush_task.cancel()
         await _group_usage_flush_task
+    except (asyncio.CancelledError, Exception):
+        pass
+
+    # Stop sandbox idle-stop task
+    try:
+        _sandbox_idle_task.cancel()
+        await _sandbox_idle_task
     except (asyncio.CancelledError, Exception):
         pass
 

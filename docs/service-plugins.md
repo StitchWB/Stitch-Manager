@@ -507,7 +507,129 @@ have the same plugin id.
 The readonly command `list_service_plugins` returns all discovered
 service plugins with their status, version, commands, UI metadata,
 and i18n bundles — everything the frontend needs to render dynamic
-tabs and pages.
+tabs and pages.  Sandbox plugins are **never** surfaced here (they
+are per-user, not global).
+
+---
+
+## 8.1. Developer Sandbox (server)
+
+The **developer sandbox** lets an authenticated plugin author install a
+plugin from their own git source into a **per-user sandbox scope** on
+the server.  The sandboxed plugin runs on the server inside the user's
+private scope, is visible and callable **only by its owner**, and
+**shadows** any global plugin with the same id for that owner.
+
+### Storage layout
+
+```
+<base>/sandbox/<user_id>/<plugin_id>/          # package dir
+<base>/sandbox/<user_id>/<plugin_id>-data/     # data dir (plugin.db)
+```
+
+`<base>` is the same root as `plugins-local/` (honors
+`STITCH_PLUGINS_DIR`).  The data dir is kept beside the package dir
+with a `-data` suffix so uninstalling the package never nukes the data
+dir in one `rmtree` (the lifecycle code removes them independently).
+
+### Gates
+
+Sandbox installs are **dev-tier** — they require `STITCH_DEV_MODE=1`
+OR the caller's role to be `admin` (OR `trust=True` passed explicitly).
+This mirrors `sources._gate_dev` semantics so production servers can
+lock the feature down by leaving the flag off and not granting admin.
+
+Community sandbox caps **always** apply to sandbox hosts regardless of
+env: 5s call timeout + 256MB memory limit (same as community-origin
+hosts — unsigned subprocesses running on the server).
+
+### Install flow (`sandbox_install`)
+
+```json
+{
+  "url": "https://github.com/author/my-plugin",
+  "ref": "main",
+  "sha256": null,
+  "trust": false,
+  "force": false
+}
+```
+
+1. Require an authenticated caller (`_caller_user_id` present; guests
+   → 403).
+2. Dev-tier gate (`STITCH_DEV_MODE` OR admin role OR `trust=True`).
+3. Fetch via `sources.fetch` (git clone or release download + sha256
+   verify — reuses the existing fetch machinery, no duplication).
+4. Validate manifest; refuse `engine.min` newer than
+   `SERVICE_ENGINE_VERSION`.
+5. Apply TOFU pin per `(user_id, plugin_id)` — scoped pins live in a
+   separate file (`sandbox_plugin_pins.json`); global pins are
+   untouched.  Pin mismatch without `force=True` → refuse.
+6. Copy package to `<base>/sandbox/<user_id>/<plugin_id>/`.
+7. Register manifest in the sandbox manifest registry.
+8. Start or refresh the sandbox host (on-demand — see lifecycle).
+
+Returns `{success, plugin_id, version, pinned_sha}`.
+
+### Lifecycle
+
+Sandbox hosts are **never** started at app boot.  They are started
+**on demand** when the owner routes a `plugin.{id}.{cmd}` call to
+their sandbox (lazy start via `ensure_sandbox_host`).
+
+A lightweight periodic task (60s tick, started in the app lifespan)
+stops hosts idle > 15 minutes (`host.stop()`).  Stopped hosts stay
+registered for cheap restart — the next call from the owner
+re-starts them via `ensure_sandbox_host`.
+
+`stop_all_sandbox()` is called on app shutdown (pre-sets `_stopping`
+on every sandbox host so the crash monitor doesn't race the
+supervisor's kill-tree).
+
+### Routing (shadowing)
+
+When a caller routes `plugin.{id}.{cmd}`:
+
+| Caller | Sandbox host exists for `(caller, id)`? | Route |
+|--------|------------------------------------------|-------|
+| Authenticated owner | Yes | **Sandbox host** (bypasses entitlement gate — it's the owner's dev artifact) |
+| Authenticated non-owner | No (lookup is keyed by `caller_user_id`) | Global host (normal entitlement gate) |
+| Guest (no session) | No (`caller_user_id` is None) | Global host (normal entitlement gate) |
+| Any | No sandbox + no global host | 404 |
+
+The `metrics` host-served special-case works for sandbox hosts too
+(served from host counters, no RPC roundtrip).
+
+### Owner commands
+
+| Command | Params | readonly | Description |
+|---------|--------|----------|-------------|
+| `sandbox_install` | `{url, ref?, sha256?, trust?, force?}` | No | Install from git/release source into the caller's sandbox. |
+| `sandbox_list` | `{}` | Yes | List the caller's sandbox plugins: `{id, version, status, pinned_source}`. |
+| `sandbox_logs` | `{plugin_id, lines?}` | Yes | Last N lines from the sandbox host's stderr ring buffer. |
+| `sandbox_restart` | `{plugin_id}` | No | Stop+start the sandbox host. |
+| `sandbox_uninstall` | `{plugin_id}` | No | Stop host + remove package/data dirs + drop registry + remove scoped pin. |
+
+All commands are scoped strictly to `_caller_user_id` — guests get
+403, and a user never sees another user's sandbox (404 for unknown /
+not-owned ids).
+
+### Security checklist
+
+- **Path safety**: `plugin_id` is validated by the manifest id regex
+  (`[A-Za-z0-9][A-Za-z0-9_-]*`) before any path join — no traversal.
+- **Data dir isolation**: a sandbox host's `data_dir` is under the
+  user's sandbox dir (`<base>/sandbox/<user_id>/<plugin_id>-data`),
+  overriding the host's default data dir.
+- **No global exposure**: sandbox hosts are never surfaced via
+  `list_service_plugins` (global discovery list stays unchanged).
+- **TOFU pin**: scoped per `(user_id, plugin_id)`; mismatch refuses
+  without `force` (force is owner-implicit since the command is
+  scoped to the caller).
+- **Sidecar name isolation**: sandbox hosts use
+  `sidecar_name = "sandbox:<user_id>:<plugin_id>"` so two users with
+  the same plugin id don't collide on the supervisor's
+  `plugin:<plugin_id>` namespace.
 
 ---
 

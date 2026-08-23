@@ -95,13 +95,18 @@ class ServicePluginHost:
         env: dict[str, str] | None = None,
         source: str = "local",
         memory_limit_mb: int | None = None,
+        sidecar_name: str | None = None,
     ) -> None:
         if command is None:
             if entry_module is None:
                 raise ValueError("either command or entry_module must be provided")
             command = [sys.executable, "-m", entry_module]
         self.plugin_id = plugin_id
-        self.sidecar_name = f"plugin:{plugin_id}"
+        # Allow a custom sidecar name so per-user sandbox hosts (keyed by
+        # ``(user_id, plugin_id)``) don't collide on the supervisor's
+        # ``plugin:<plugin_id>`` namespace.  Defaults to the standard name
+        # for non-sandbox hosts (unchanged behaviour).
+        self.sidecar_name = sidecar_name or f"plugin:{plugin_id}"
         self._command = command
         self._cwd = str(package_dir) if package_dir else None
         self._env = dict(env) if env else {}
@@ -111,11 +116,11 @@ class ServicePluginHost:
         )
         self.db_path = self.data_dir / "plugin.db"
         self.migrations = migrations
-        # Sandbox caps for community-origin plugins: stricter 5s call timeout
-        # (community plugins are unsigned subprocesses).  The cap is a
-        # maximum — an explicit smaller timeout is respected.
+        # Sandbox caps for community-origin AND sandbox plugins: stricter 5s
+        # call timeout (unsigned subprocesses running on the server).  The
+        # cap is a maximum — an explicit smaller timeout is respected.
         self.source = source
-        if source == "community":
+        if source in ("community", "sandbox"):
             default_timeout = min(default_timeout, 5.0)
         self.default_timeout = default_timeout
         self.memory_limit_mb = memory_limit_mb
