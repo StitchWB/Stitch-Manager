@@ -1,6 +1,6 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Sixteen subcommands:
+Seventeen subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package
@@ -17,6 +17,7 @@ Sixteen subcommands:
     publish-selectors […]                       publish a selector overlay pack (hot update)
     codes {issue|list}                          issue and list activation codes (admin)
     install-from <url> [--ref|--release] [--sha256] [--trust]  fetch+install from git/release
+    catalog-lint <catalog.json>                 validate a community catalog offline (CI)
 
 The signing key is OFFLINE — the developer stores it on media not reachable
 from the build / runtime.  ``keygen`` writes the private key with
@@ -505,8 +506,8 @@ def _cmd_vendor(args: argparse.Namespace) -> int:
     after ``dev-install`` or before ``publish`` to refresh the vendored
     server.  Idempotent: skips the write when the file is already canonical.
     """
-    from stitch_plugin_tools.vendoring import vendor_rpc_server
     from stitch_plugin_tools.upgrade import _package_module_dir
+    from stitch_plugin_tools.vendoring import vendor_rpc_server
 
     package_dir = Path(args.package_dir)
     if not package_dir.is_dir():
@@ -524,16 +525,16 @@ def _cmd_vendor(args: argparse.Namespace) -> int:
     return 0
 
 
-# ── run / test ─────────────────────────────────────────────────────────────
+# ── run / test ────────────────────────────────────────────────────────────
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    """Interactive plugin REPL - spawn, stream stderr, drive commands.
+    """Interactive plugin REPL — spawn, stream stderr, drive commands.
 
     See :func:`stitch_plugin_tools.runtool.run_package` for the spawn /
     attach / stderr-streaming / reverse-RPC-stub design.  The author
-    loop becomes: ``new`` -> edit handlers -> ``run`` (exercise commands
-    instantly, watch stderr) -> ``test`` -> ``dev-install``.
+    loop becomes: ``new`` → edit handlers → ``run`` (exercise commands
+    instantly, watch stderr) → ``test`` → ``dev-install``.
     """
     from stitch_plugin_tools.runtool import run_package
 
@@ -544,8 +545,8 @@ def _cmd_test(args: argparse.Namespace) -> int:
     """Run the plugin's own tests via the venv pytest.
 
     Streams ``python -m pytest <package_dir>/tests -q`` output.  No
-    tests dir -> friendly message pointing at the template's starter
-    test.  pytest absent -> error with install hint.
+    tests dir → friendly message pointing at the template's starter
+    test.  pytest absent → error with install hint.
     """
     from stitch_plugin_tools.runtool import test_package
 
@@ -677,7 +678,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_run = sub.add_parser(
         "run",
-        help="interactive plugin REPL - spawn, stream stderr, drive commands",
+        help="interactive plugin REPL — spawn, stream stderr, drive commands",
     )
     p_run.add_argument(
         "package_dir", help="package directory (contains plugin.json)"
@@ -813,6 +814,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_install_from.set_defaults(func=_cmd_install_from)
 
+    # ── catalog-lint ─────────────────────────────────────────────────────
+    p_catalog_lint = sub.add_parser(
+        "catalog-lint",
+        help="validate a community catalog.json offline (for catalog repo CI)",
+    )
+    p_catalog_lint.add_argument(
+        "catalog", help="path to catalog.json to validate"
+    )
+    p_catalog_lint.set_defaults(func=_cmd_catalog_lint)
+
     return parser
 
 
@@ -848,6 +859,13 @@ def _cmd_install_from(args: argparse.Namespace) -> int:
         + (f" (pinned {result['pinned_sha'][:12]})" if result.get("pinned_sha") else "")
     )
     return 0
+
+
+def _cmd_catalog_lint(args: argparse.Namespace) -> int:
+    """Validate a community catalog.json offline (for catalog repo CI)."""
+    from stitch_plugin_tools.catalog_lint import lint_catalog
+
+    return lint_catalog(args.catalog)
 
 
 def main(argv: list[str] | None = None) -> int:

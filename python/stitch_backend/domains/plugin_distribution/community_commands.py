@@ -23,8 +23,8 @@ from autoreg.plugin.manifest import validate_manifest
 from stitch_backend.core.command_registry import register_command
 
 from .community import (
-    fetch_catalog,
-    install_community,
+    install_community_plugin,
+    list_community_plugins,
     list_installed_community,
     uninstall_community,
 )
@@ -37,18 +37,41 @@ _PACKAGE_FILES = ("plugin.json", "scenario.json", "selectors.json", "profile.jso
 
 @register_command("get_community_catalog", readonly=True)
 async def cmd_get_community_catalog(params: dict) -> dict:
-    """Browse the community plugin catalog."""
-    return {"plugins": fetch_catalog().get("plugins", [])}
+    """Browse the community plugin catalog (source-index aware).
+
+    Each entry is enriched with ``sourceType`` (``"git"`` / ``"release"`` /
+    ``"zip-legacy"`` / ``"malformed"``) and ``sourceUrl`` for the UI.
+    """
+    return {"plugins": list_community_plugins()}
 
 
 @register_command("install_community_plugin")
 async def cmd_install_community_plugin(params: dict) -> dict:
-    """Install a community plugin by id + version."""
+    """Install a community plugin by id + version.
+
+    For source-index entries (``source`` field): delegates to
+    :func:`community.install_community_plugin` which builds a
+    :class:`PluginSourceSpec` and calls :func:`sources.install_from_source`
+    with the existing trust gates.  The TOFU pin is checked + recorded.
+
+    For legacy entries: falls back to the zip-based flow unchanged.
+
+    Params:
+        id: plugin id.
+        version: plugin version.
+        force: TOFU pin override — accept a changed pin (names both shas
+            in the error when not set).
+        trust: admin override for the dev-tier gate (git mode only).
+    """
     plugin_id = str(params.get("id", ""))
     version = str(params.get("version", ""))
     if not plugin_id or not version:
         return {"success": False, "error": "id and version required"}
-    return await install_community(plugin_id, version)
+    force = bool(params.get("force", False))
+    trust = bool(params.get("trust", False))
+    return await install_community_plugin(
+        plugin_id, version, force=force, trust=trust,
+    )
 
 
 @register_command("uninstall_community_plugin")
