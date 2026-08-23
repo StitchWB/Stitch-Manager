@@ -1,6 +1,6 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Eleven subcommands:
+Thirteen subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package
@@ -8,6 +8,8 @@ Eleven subcommands:
     dev-install <package_dir>                   copy package to plugins-local
     pack-engine <out_dir> [--version …]         assemble engine-pack from autoreg/captcha
     new <out_dir> --id <plugin_id> […]          scaffold a kind=service plugin package
+    upgrade <package_dir> [--apply]             migrate an authored plugin to the current scaffold
+    sync-template [--out <dir>]                 regenerate the template/ dir (GitHub template seed)
     drift […]                                   fetch drift report + propose selector weight rerank
     publish-selectors […]                       publish a selector overlay pack (hot update)
     codes {issue|list}                          issue and list activation codes (admin)
@@ -257,6 +259,86 @@ def _cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── upgrade ──────────────────────────────────────────────────────────────
+
+
+def _cmd_upgrade(args: argparse.Namespace) -> int:
+    """Migrate an authored plugin to the current scaffold conventions.
+
+    Writes a diff preview to ``<package>/upgrade.diff`` first; nothing is
+    modified until ``--apply``.  Only canonical regions (inline fallback
+    block, marker lines, generated manifest fields) are rewritten —
+    author handlers, storage schema, and contributions are never touched.
+    """
+    from stitch_plugin_tools.upgrade import (
+        SKIPPED_AUTHOR_REGIONS,
+        upgrade_package,
+    )
+
+    package_dir = Path(args.package_dir)
+    if not package_dir.is_dir():
+        print(f"error: package dir not found: {package_dir}", file=sys.stderr)
+        return 2
+
+    report = upgrade_package(package_dir, apply=args.apply)
+
+    if report.status == "legacy":
+        print(f"legacy plugin: {report.message}")
+        print("manual migration checklist:")
+        print("  1. adopt the RPC entry conventions (RpcPluginServer or the")
+        print("     inline fallback, _Ctx handshake state, service.py layer)")
+        print("  2. add the _generated_by marker + manifest generated_by field")
+        print("  3. re-run this command to pick up future scaffold changes")
+        print("  see docs/plugin-authoring.md §7 (Implementation Conventions)")
+        return 1
+
+    if report.status == "newer":
+        print(report.message)
+        return 1
+
+    detected = report.detected.label if report.detected else "?"
+    print(f"detected scaffold generation: {detected} (via {report.detected.source})")
+
+    if report.status in ("up-to-date", "no-drift"):
+        print(report.message)
+        return 0
+
+    for result in report.results:
+        flag = "updated" if result.changed else "skipped"
+        print(f"  [{flag:>7}] {result.file}: {result.region} — {result.note}")
+
+    print("author regions preserved (never rewritten):")
+    for region in SKIPPED_AUTHOR_REGIONS:
+        print(f"  - {region}")
+
+    print(report.message)
+    return 0
+
+
+# ── sync-template ────────────────────────────────────────────────────────
+
+
+def _cmd_sync_template(args: argparse.Namespace) -> int:
+    """Regenerate the template/ directory from the scaffold internals."""
+    from stitch_plugin_tools.template_sync import (
+        TEMPLATE_PLUGIN_ID,
+        sync_template,
+    )
+
+    out_dir = Path(args.out)
+    license_source = Path(args.license) if args.license else Path("LICENSE")
+    try:
+        result = sync_template(out_dir, license_source=license_source)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"template regenerated at {result}")
+    print(f"  plugin id: {TEMPLATE_PLUGIN_ID}")
+    print("  extras:    .github/workflows/ci.yml, .gitignore, LICENSE,")
+    print("             README.md, tests/test_plugin_protocol.py")
+    return 0
+
+
 # ── drift ────────────────────────────────────────────────────────────────
 
 
@@ -494,6 +576,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "--version", default="0.1.0", help="semver version (default: 0.1.0)"
     )
     p_new.set_defaults(func=_cmd_new)
+
+    p_upgrade = sub.add_parser(
+        "upgrade",
+        help="migrate an authored plugin to the current scaffold conventions",
+    )
+    p_upgrade.add_argument(
+        "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_upgrade.add_argument(
+        "--apply",
+        action="store_true",
+        help="write the changes (default: preview to <package>/upgrade.diff only)",
+    )
+    p_upgrade.set_defaults(func=_cmd_upgrade)
+
+    p_sync_template = sub.add_parser(
+        "sync-template",
+        help="regenerate the template/ dir (GitHub template seed) from the scaffold",
+    )
+    p_sync_template.add_argument(
+        "--out", default="template", help="output directory (default: template/)"
+    )
+    p_sync_template.add_argument(
+        "--license",
+        default=None,
+        help="LICENSE file to copy verbatim (default: ./LICENSE if present)",
+    )
+    p_sync_template.set_defaults(func=_cmd_sync_template)
 
     p_drift = sub.add_parser(
         "drift",

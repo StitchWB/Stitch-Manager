@@ -25,8 +25,36 @@ from typing import Any
 
 from autoreg.plugin.manifest import MANIFEST_FILENAME, SCHEMA_ID_V2
 
+# Scaffold version — bumped when the canonical conventions change.
+# v1 = pre-marker historical (no _generated_by marker, no generated_by field).
+# v2 = current conventions (_Ctx class, _uid helper, service.py stub,
+#      health_check demo command, nested i18n, i18n-key tab labels,
+#      byte-identical inline RpcPluginServer fallback, capabilities: []
+#      in init result, _generated_by marker + manifest generated_by field).
+SCAFFOLD_VERSION = 2
+
+# Marker written as the first line after the module docstring in every
+# generated ``__main__.py`` / ``service.py`` / ``storage.py``.  ``upgrade``
+# parses it to detect which scaffold generation a package came from.
+MARKER_PREFIX = "# _generated_by: stitch_plugin_tools scaffold v"
+
+
+def marker_line(version: int = SCAFFOLD_VERSION) -> str:
+    """The ``_generated_by`` marker comment for a scaffold version."""
+    return f"{MARKER_PREFIX}{version}"
+
 # Plugin id charset (matches manifest._PLUGIN_ID_RE).
 _PLUGIN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+# Canonical manifest fields for the current scaffold conventions.
+# ``upgrade`` rewrites exactly these generated fields in authored
+# manifests — everything else (contributions, signature, …) is preserved.
+CANONICAL_ENGINE: dict[str, Any] = {"min": "0.3.0", "api": 2}
+
+
+def generated_by_field() -> dict[str, Any]:
+    """Manifest ``generated_by`` extra for the current scaffold version."""
+    return {"tool": "stitch_plugin_tools", "scaffold": SCAFFOLD_VERSION}
 
 
 def _pkg_name(plugin_id: str) -> str:
@@ -70,6 +98,8 @@ Self-contained: tries to import ``RpcPluginServer`` from
 If the import fails (standalone plugin without the host's python tree),
 an inline equivalent is used — same protocol, no external dependency.
 """
+
+# _generated_by: stitch_plugin_tools scaffold v{scaffold_version}
 
 from __future__ import annotations
 
@@ -223,6 +253,7 @@ class _Ctx:
 
     db_path: str = ""
     data_dir: str = ""
+    supported: list[str] = []
 
 
 ctx = _Ctx()
@@ -235,13 +266,22 @@ def _uid(params: dict[str, Any]) -> int | None:
 
 
 def _handle_init(params: dict[str, Any]) -> dict[str, Any]:
-    """Store handshake params and return them as the init result."""
+    """Store handshake params and return them as the init result.
+
+    ``supported`` lists the optional host features available in this
+    session (e.g. ``reverse_rpc``, ``caller_identity``).  Declare the
+    plugin's own opt-in features in the ``capabilities`` result field
+    (e.g. ``["reverse_rpc"]`` when using ``server.call_host``).
+    """
     ctx.db_path = str(params.get("db_path", ""))
     ctx.data_dir = str(params.get("data_dir", ""))
+    supported = params.get("supported")
+    ctx.supported = list(supported) if isinstance(supported, list) else []
     return {{
         "plugin_id": params.get("plugin_id", ""),
         "db_path": ctx.db_path,
         "data_dir": ctx.data_dir,
+        "capabilities": [],
     }}
 
 
@@ -292,12 +332,36 @@ if __name__ == "__main__":
     main()
 '''
 
+# ── Canonical inline fallback block ──────────────────────────────────────
+# The byte-exact inline ``RpcPluginServer`` fallback embedded in every
+# generated ``__main__.py`` — from the ``try:`` import guard through the
+# end of the class (5730 bytes, LF-normalized; locked by
+# test_sdk_scaffold_service_plugin).  Derived from ``_MAIN_TEMPLATE``
+# (which stays the single source of truth) by un-doubling the format
+# braces.  ``stitch_plugin_tools upgrade`` swaps this region wholesale
+# between scaffold versions — the text itself is never modified.
+_FALLBACK_ANCHOR_START = "try:\n    from autoreg.plugin.rpc import RpcPluginServer"
+_FALLBACK_ANCHOR_END = "\n\n\n# ── State received"
+_RPC_FALLBACK_BLOCK = (
+    _MAIN_TEMPLATE[
+        _MAIN_TEMPLATE.index(_FALLBACK_ANCHOR_START) : _MAIN_TEMPLATE.index(
+            _FALLBACK_ANCHOR_END
+        )
+    ]
+    .replace("{{", "{")
+    .replace("}}", "}")
+    .rstrip("\n")
+    + "\n"
+)
+
 _STORAGE_TEMPLATE = '''"""SQLite storage for this service plugin.
 
 The plugin owns its own SQLite database at ``db_path`` (received in the
 ``plugin.init`` handshake).  Tables are created on ``_migrate_db``.
 Replace this with your own schema as needed.
 """
+
+# _generated_by: stitch_plugin_tools scaffold v{scaffold_version}
 
 from __future__ import annotations
 
@@ -345,7 +409,7 @@ def list_items(db_path: str) -> list[dict[str, Any]]:
         rows = conn.execute(
             "SELECT id, text FROM items ORDER BY created_at DESC"
         ).fetchall()
-        return [{"id": r["id"], "text": r["text"]} for r in rows]
+        return [{{"id": r["id"], "text": r["text"]}} for r in rows]
     finally:
         conn.close()
 
@@ -362,7 +426,7 @@ def create_item(db_path: str, text: str) -> dict[str, Any]:
         conn.commit()
     finally:
         conn.close()
-    return {"id": item_id, "text": text}
+    return {{"id": item_id, "text": text}}
 '''
 
 _SERVICE_TEMPLATE = '''"""Service layer for this service plugin.
@@ -375,6 +439,8 @@ mirrors the reference plugins (stitch-cards, stitch-totp, …) where
 Replace the placeholder functions below with your own domain logic.
 """
 
+# _generated_by: stitch_plugin_tools scaffold v{scaffold_version}
+
 from __future__ import annotations
 
 from typing import Any
@@ -382,12 +448,12 @@ from typing import Any
 
 def health_check() -> dict[str, Any]:
     """Return a health-check response."""
-    return {"pong": True}
+    return {{"pong": True}}
 
 
 def echo(text: str) -> dict[str, Any]:
     """Echo the provided text back to the caller."""
-    return {"text": text}
+    return {{"text": text}}
 '''
 
 _README_TEMPLATE = """# {name}
@@ -504,12 +570,13 @@ def scaffold_service_plugin(
         "version": version,
         "service": plugin_id,
         "kind": "service",
-        "engine": {"min": "0.3.0", "api": 2},
+        "engine": dict(CANONICAL_ENGINE),
         "depends": [],
         "entry": {"module": pkg_name},
         "capabilities": [],
         "outputs": [],
         "signature": "",
+        "generated_by": generated_by_field(),
         "contributions": {
             "commands": [
                 {"name": "health_check", "readonly": True},
@@ -579,19 +646,23 @@ def scaffold_service_plugin(
 
     # ── <pkg>/__main__.py ──────────────────────────────────────────────
     (pkg_dir / "__main__.py").write_text(
-        _MAIN_TEMPLATE.format(pkg_name=pkg_name, plugin_id=plugin_id),
+        _MAIN_TEMPLATE.format(
+            pkg_name=pkg_name,
+            plugin_id=plugin_id,
+            scaffold_version=SCAFFOLD_VERSION,
+        ),
         encoding="utf-8",
     )
 
     # ── <pkg>/service.py ──────────────────────────────────────────────
     (pkg_dir / "service.py").write_text(
-        _SERVICE_TEMPLATE,
+        _SERVICE_TEMPLATE.format(scaffold_version=SCAFFOLD_VERSION),
         encoding="utf-8",
     )
 
     # ── <pkg>/storage.py ──────────────────────────────────────────────
     (pkg_dir / "storage.py").write_text(
-        _STORAGE_TEMPLATE,
+        _STORAGE_TEMPLATE.format(scaffold_version=SCAFFOLD_VERSION),
         encoding="utf-8",
     )
 
