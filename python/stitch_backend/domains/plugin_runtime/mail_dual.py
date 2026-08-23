@@ -7,8 +7,9 @@ built-in command-registry handler.  This avoids flag-day: the built-in
 domain stays registered, and the plugin takes over only when installed
 and healthy.
 
-Pattern: same as ``dual_format.py`` for notebooklm and ``sheets_dual.py``
-for google_sheets (v1 solution 9).  No names are re-registered in
+Pattern: same as :mod:`sheets_dual` for google_sheets — the dispatcher
+routes ``email_*`` / ``email_inbox_*`` commands to the plugin before
+falling through to the built-in handler.  No names are re-registered in
 ``command_registry`` — the indirection lives in the dispatcher, so no
 overwrite-warning spam.
 

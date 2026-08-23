@@ -119,10 +119,10 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         return JSONResponse(content=_serialise(_plugin_result))
 
     # ── Dual-format routing for google_sheets_* commands ───────────────────
-    # Same pattern as notebooklm_* above: when a healthy ``stitch-sheets``
-    # plugin host is registered, google_sheets_* commands are routed to the
-    # plugin (stripping the ``google_sheets_`` prefix) BEFORE falling through
-    # to the built-in handler.
+    # Same pattern as the generic plugin.* route above: when a healthy
+    # ``stitch-sheets`` plugin host is registered, google_sheets_* commands
+    # are routed to the plugin (stripping the ``google_sheets_`` prefix)
+    # BEFORE falling through to the built-in handler.
     from stitch_backend.domains.plugin_runtime.sheets_dual import (
         _FALLTHROUGH as _SHEETS_FALLTHROUGH,
     )
@@ -135,7 +135,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         return JSONResponse(content=_serialise(_sheets_result))
 
     # ── Dual-format routing for email_* / email_inbox_* commands ─────────
-    # Same pattern as notebooklm_* / google_sheets_* above: when a healthy
+    # Same pattern as the google_sheets_* dual route above: when a healthy
     # ``stitch-mail`` plugin host is registered, email_* / email_inbox_*
     # commands are routed to the plugin (stripping the prefix) BEFORE
     # falling through to the built-in handler.  Owner identity is

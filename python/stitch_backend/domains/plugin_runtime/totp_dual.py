@@ -4,11 +4,10 @@ When a healthy ``stitch-totp`` plugin host is registered, the built-in
 totp command handlers route to the plugin (command names without the
 totp prefix) BEFORE the built-in handler runs.  This avoids flag-day:
 the built-in domain stays registered, and the plugin takes over only
-when installed and healthy — the same pattern as ``dual_format.py`` for
-notebooklm, with one difference: the indirection lives in wrapped
-registry handlers (installed by :func:`install_totp_dual_routing`)
-instead of the dispatcher, so no dispatcher edit and no command
-re-registration (no overwrite-warning spam).
+when installed and healthy.  The indirection lives in wrapped registry
+handlers (installed by :func:`install_totp_dual_routing`) that route
+plugin-first with a fallthrough sentinel — no dispatcher edit and no
+command re-registration (no overwrite-warning spam).
 
 Single live secret store: while the plugin is healthy, built-in writes
 are bypassed entirely (the routed handler returns the plugin result and
