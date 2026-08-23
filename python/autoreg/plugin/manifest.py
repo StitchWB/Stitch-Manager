@@ -37,6 +37,11 @@ _SEMVER_RE = re.compile(
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 
+# CalVer — YYYY.MM (zero-padded month 01-12).  v1 signed packages use this
+# format for engine.min (e.g. "2026.08").  We validate but never rewrite
+# signed artifacts.
+_CALVER_RE = re.compile(r"^\d{4}\.(0[1-9]|1[0-2])$")
+
 # Safe plugin id — a single directory-name component. Blocks path separators,
 # "..", and anything outside [A-Za-z0-9_-] so a malicious id cannot escape the
 # plugins/ cache directory (path-traversal guard).
@@ -94,11 +99,6 @@ class PluginManifest:
     # declarative UI tabs, i18n bundles, and storage declarations here.
     # Defaults to empty so v1 manifests parse identically.
     contributions: dict[str, Any] = field(default_factory=dict)
-
-    # v2 config.needs — whitelist of core settings the plugin requests
-    # (e.g. ["imap.host", "imap.port"]).  The host reads these from
-    # core settings and passes them in the RPC handshake.
-    config: dict[str, Any] = field(default_factory=dict)
 
     def service_ids(self) -> list[str]:
         """Return all service ids this package serves.
@@ -201,6 +201,23 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         raise ManifestValidationError("engine.min", "required string missing")
     if "api" not in engine_raw or not isinstance(engine_raw["api"], int):
         raise ManifestValidationError("engine.api", "required integer missing")
+    # engine.min format is validated per api level:
+    #   api >= 2 → semver 2.0.0 (v2 service plugins)
+    #   api == 1 → CalVer YYYY.MM (v1 signed packages, e.g. "2026.08")
+    engine_min = engine_raw["min"]
+    engine_api = engine_raw["api"]
+    if engine_api >= 2:
+        if not _SEMVER_RE.match(engine_min):
+            raise ManifestValidationError(
+                "engine.min",
+                f'"{engine_min}" is not a valid semver 2.0.0 string (required for api >= 2)',
+            )
+    else:
+        if not _CALVER_RE.match(engine_min):
+            raise ManifestValidationError(
+                "engine.min",
+                f'"{engine_min}" is not a valid Calver YYYY.MM string (required for api == 1)',
+            )
 
     depends_raw = raw.get("depends", [])
     if not isinstance(depends_raw, list) or not all(
@@ -279,16 +296,10 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         raise ManifestValidationError("contributions", "must be an object")
     contributions = dict(contributions_raw)
 
-    # v2 config (config.needs whitelist of core settings the plugin requests).
-    config_raw = raw.get("config", {})
-    if not isinstance(config_raw, dict):
-        raise ManifestValidationError("config", "must be an object")
-    config = dict(config_raw)
-
     known = {
         "schema", "id", "name", "version", "service", "kind",
         "engine", "depends", "entry", "capabilities", "outputs", "signature",
-        "services", "contributions", "config",
+        "services", "contributions",
     }
     extras = {k: v for k, v in raw.items() if k not in known}
 
@@ -308,7 +319,6 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         services=services,
         extras=extras,
         contributions=contributions,
-        config=config,
     )
 
 
