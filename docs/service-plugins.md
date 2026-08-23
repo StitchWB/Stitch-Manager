@@ -191,9 +191,31 @@ server.serve()  # blocks until plugin.shutdown
 `plugin.shutdown`, and `plugin.call` dispatch automatically. Handler
 exceptions are caught and returned as JSON-RPC errors.
 
+### Vendored server (standalone operation)
+
 When `autoreg` is not on `sys.path` (standalone plugin without the
-host's Python tree), the generated template includes an inline
-equivalent — same protocol, no external dependency.
+host's Python tree), the generated `__main__.py` uses a 3-line
+try-import that falls back to a **vendored** copy of
+`RpcPluginServer`:
+
+```python
+try:
+    from autoreg.plugin.rpc import RpcPluginServer
+except ImportError:
+    from ._vendor.rpc_server import RpcPluginServer
+```
+
+The vendored module (`<pkg>/_vendor/rpc_server.py`) is extracted from
+the canonical `autoreg/plugin/rpc.py` at scaffold/dev-install/publish
+time by `stitch_plugin_tools`. It contains the server-side subset only
+(`RpcPluginServer`, exception classes, `_error` helper) — no client-side
+code. The vendored file is stdlib-only (json, sys, threading, time,
+typing) and importable standalone.
+
+The `dev-install` and `vendor` commands refresh `<pkg>/_vendor/` from
+the canonical source (idempotent byte-refresh), so the dev install
+always carries the current vendored server. The publish workflow
+vendors into the staged copy before signing.
 
 ---
 
@@ -386,9 +408,9 @@ STITCH_DEV_MODE=1 python -m stitch_backend
 ### Upgrading an authored plugin
 
 When the scaffold conventions change, migrate an existing package with
-`upgrade` — it rewrites only the canonical regions (inline fallback
-block, `_generated_by` marker, generated manifest fields) and never
-touches your handlers, storage schema, or contributions:
+`upgrade` — it rewrites only the canonical regions (vendored server,
+`_generated_by` marker, generated manifest fields) and never touches
+your handlers, storage schema, or contributions:
 
 ```bash
 # 1. Preview — writes <package>/upgrade.diff, changes nothing:
@@ -398,7 +420,14 @@ python -m stitch_plugin_tools upgrade my-plugin/
 python -m stitch_plugin_tools upgrade my-plugin/ --apply
 ```
 
-Packages without a `_generated_by` marker predate scaffold v2 and are
+The v2→v3 migration replaces the inline `RpcPluginServer` fallback
+class with a 3-line try-import + creates `_vendor/rpc_server.py` from
+the canonical source. The `dev-install` command also refreshes
+`_vendor/` from canonical on each install (idempotent byte-refresh), so
+the dev install always carries the current vendored server.
+
+Packages without a `_generated_by` marker, `generated_by` manifest
+field, or v2-era inline fallback block predate scaffold v2 and are
 reported as legacy (manual migration — see
 `docs/plugin-authoring.md` §7).
 
@@ -553,7 +582,8 @@ test.
 | `sign <package_dir> --key <private.key>` | Sign a plugin package. |
 | `verify <package_dir> --pubkey <public.key>` | Verify a package signature. |
 | `publish <package_dir> [--server-url …] [--key …]` | Sign + zip + POST to server. |
-| `dev-install <package_dir>` | Copy package to `plugins-local/`. |
+| `dev-install <package_dir>` | Copy package to `plugins-local/`. Refreshes `_vendor/rpc_server.py` from canonical on each install. |
+| `vendor <package_dir>` | Vendor the canonical `RpcPluginServer` into `<pkg>/_vendor/rpc_server.py`. Idempotent — skips the write when the file is already canonical. Run after `dev-install` or before `publish` to refresh the vendored server. |
 | `pack-engine <out_dir> [--version …]` | Assemble an engine-pack (captcha solvers). |
 | `codes {issue\|list} [--server-url …] [--admin-key …]` | Issue and list activation codes (admin). |
 | `install-from <url> [--ref\|--release] [--sha256] [--trust]` | Fetch + install a plugin from a git repo or release tarball. |

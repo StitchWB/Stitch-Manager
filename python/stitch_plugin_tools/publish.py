@@ -181,6 +181,10 @@ def dev_install(package_dir: Path) -> Path:
     destination path.  Excludes ``__pycache__``, ``*.pyc``, ``*.db``, and
     ``*.sqlite3`` so stale bytecode and test databases don't leak into the
     dev install.
+
+    After copying, refreshes ``<pkg>/_vendor/`` from the canonical
+    ``autoreg/plugin/rpc.py`` so the dev install always carries the
+    current vendored server (idempotent byte-refresh).
     """
     manifest = crypto.read_manifest(package_dir)
     dest = plugins_local_dir() / manifest.id
@@ -194,6 +198,13 @@ def dev_install(package_dir: Path) -> Path:
             "__pycache__", "*.pyc", "*.db", "*.sqlite3",
         ),
     )
+
+    # Refresh _vendor/ from canonical so the dev install is standalone.
+    module = manifest.entry.get("module") if manifest.entry else None
+    if module and (dest / module).is_dir():
+        from stitch_plugin_tools.vendoring import vendor_rpc_server
+        vendor_rpc_server(dest / module)
+
     return dest
 
 

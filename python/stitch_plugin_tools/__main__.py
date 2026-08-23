@@ -1,6 +1,6 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Thirteen subcommands:
+Fourteen subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package
@@ -10,6 +10,7 @@ Thirteen subcommands:
     new <out_dir> --id <plugin_id> […]          scaffold a kind=service plugin package
     upgrade <package_dir> [--apply]             migrate an authored plugin to the current scaffold
     sync-template [--out <dir>]                 regenerate the template/ dir (GitHub template seed)
+    vendor <package_dir>                        vendor canonical RpcPluginServer into <pkg>/_vendor/
     drift […]                                   fetch drift report + propose selector weight rerank
     publish-selectors […]                       publish a selector overlay pack (hot update)
     codes {issue|list}                          issue and list activation codes (admin)
@@ -491,6 +492,36 @@ def _cmd_codes_list(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── vendor ───────────────────────────────────────────────────────────────
+
+
+def _cmd_vendor(args: argparse.Namespace) -> int:
+    """Vendor the canonical RpcPluginServer into a plugin package.
+
+    Writes ``<pkg>/_vendor/rpc_server.py`` from ``autoreg/plugin/rpc.py``
+    so the package runs standalone (no ``autoreg`` on sys.path).  Run
+    after ``dev-install`` or before ``publish`` to refresh the vendored
+    server.  Idempotent: skips the write when the file is already canonical.
+    """
+    from stitch_plugin_tools.vendoring import vendor_rpc_server
+    from stitch_plugin_tools.upgrade import _package_module_dir
+
+    package_dir = Path(args.package_dir)
+    if not package_dir.is_dir():
+        print(f"error: package dir not found: {package_dir}", file=sys.stderr)
+        return 2
+    module_dir = _package_module_dir(package_dir)
+    if module_dir is None:
+        print(
+            f"error: no Python package dir (with __main__.py) found in {package_dir}",
+            file=sys.stderr,
+        )
+        return 2
+    rpc_path = vendor_rpc_server(module_dir)
+    print(f"vendored RpcPluginServer to {rpc_path}")
+    return 0
+
+
 # ── argparse ──────────────────────────────────────────────────────────────
 
 
@@ -604,6 +635,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="LICENSE file to copy verbatim (default: ./LICENSE if present)",
     )
     p_sync_template.set_defaults(func=_cmd_sync_template)
+
+    p_vendor = sub.add_parser(
+        "vendor",
+        help="vendor the canonical RpcPluginServer into a plugin package",
+    )
+    p_vendor.add_argument(
+        "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_vendor.set_defaults(func=_cmd_vendor)
 
     p_drift = sub.add_parser(
         "drift",
