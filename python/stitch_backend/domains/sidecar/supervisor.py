@@ -34,6 +34,39 @@ from .spec import LaunchPlan, SidecarSpec
 logger = logging.getLogger(__name__)
 
 
+# ── child env allowlist ───────────────────────────────────────────────────
+# Community plugins are unsigned arbitrary code; a ~10-line exfiltration of
+# os.environ leaks FERNET_KEY, JWT_SECRET, IMAP_PASSWORD, API keys.  Children
+# spawned by the supervisor receive ONLY these host vars (runtime/locale/Python
+# tuning — none secret, none code-loading) plus the explicit plan.env overrides
+# declared by each SidecarSpec.prepare().  Never add KEY/SECRET/PASSWORD/TOKEN/
+# CREDENTIAL vars here; a sidecar needing a specific var must declare it in its
+# own plan.env.
+_CHILD_ENV_ALLOWLIST = frozenset({
+    # Windows runtime
+    "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC",
+    "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "PROGRAMDATA",
+    # POSIX runtime
+    "HOME", "TZ", "TERM", "SHELL",
+    # locale / encoding
+    "LANG", "LC_ALL", "LC_CTYPE",
+    # Python tuning (non-secret, no code-execution effect)
+    "PYTHONIOENCODING", "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE",
+})
+
+
+def _child_env(extra: dict[str, str]) -> dict[str, str]:
+    """Minimal env for child processes: allowlisted host vars + explicit extras.
+
+    The host's full environment (FERNET_KEY, JWT_SECRET, IMAP_PASSWORD, ...)
+    must NOT leak into plugin/sidecar subprocesses — community plugins are
+    unsigned code.
+    """
+    env = {k: v for k, v in os.environ.items() if k in _CHILD_ENV_ALLOWLIST}
+    env.update(extra)
+    return env
+
+
 class _State:
     __slots__ = ("process", "port", "config", "start_time", "error", "lock")
 
@@ -121,7 +154,7 @@ class SidecarSupervisor:
                         stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        env={**os.environ, **plan.env},
+                        env=_child_env(plan.env),
                         **_subprocess_isolation_kwargs(),
                     )
                     st.process = proc
@@ -140,7 +173,7 @@ class SidecarSupervisor:
                         cwd=plan.cwd,
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL,
-                        env={**os.environ, **plan.env},
+                        env=_child_env(plan.env),
                         **_subprocess_isolation_kwargs(),
                     )
                     st.port = plan.port

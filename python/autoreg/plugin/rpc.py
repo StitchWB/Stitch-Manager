@@ -137,6 +137,11 @@ class RpcPluginClient:
             raise RuntimeError("client already started")
 
         self._closed = False
+        # NOTE: production plugin spawns go through SidecarSupervisor.start()
+        # which applies the _CHILD_ENV_ALLOWLIST (no host secrets leak).  This
+        # ``start()`` is only used by tests; if it ever becomes a production
+        # path, apply the same allowlist here (rpc.py is Zone-1 stdlib-only,
+        # so duplicate a minimal allowlist rather than importing stitch_backend).
         child_env = {**os.environ, **env} if env else None
         try:
             self._proc = subprocess.Popen(
