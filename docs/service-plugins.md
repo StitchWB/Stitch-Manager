@@ -106,11 +106,55 @@ the host.
 
 | Method | Direction | Params | Result | Description |
 |--------|-----------|--------|--------|-------------|
-| `plugin.init` | host→plugin | `{engine_api, plugin_id, db_path, data_dir}` | any | Handshake. Called once at startup. `engine_api` is the host's engine API level (currently `2`). The plugin stores `db_path` for SQLite access. |
+| `plugin.init` | host→plugin | `{engine_api, plugin_id, db_path, data_dir, supported}` | `{plugin_id, db_path, data_dir, capabilities}` | Handshake. Called once at startup. `engine_api` is the host's engine API level (currently `2`). The plugin stores `db_path` for SQLite access. `supported` / `capabilities` — see [Handshake fields](#handshake-fields). |
 | `plugin.call` | host→plugin | `{name: <str>, params: <dict>}` | any | Dispatch a command. `name` matches a `contributions.commands[].name`. Unknown name → JSON-RPC error `-32601`. |
 | `plugin.ping` | host→plugin | `{}` | `"pong"` | Health check. Host uses this for liveness. |
 | `plugin.shutdown` | host→plugin | `{}` | `null` | Graceful shutdown. Plugin should clean up and exit. |
 | `plugin.call` (`_migrate_db`) | host→plugin | `{from_version, to_version}` | `{from_version, to_version}` | Reserved call name. Called after `plugin.init` when `contributions.storage.migrations` is set. The plugin creates/migrates its SQLite tables. |
+
+### Handshake fields
+
+- **`supported`** (host→plugin, in `plugin.init` params) — the optional
+  host features available in this session. The plugin may adapt its
+  behavior to their presence but must not hard-require them. Current
+  values: `"reverse_rpc"` (the host serves plugin→host `server.call_host`
+  requests) and `"caller_identity"` (`plugin.call` params carry
+  `caller_user_id`).
+- **`capabilities`** (plugin→host, in the `plugin.init` result) — the
+  plugin's opt-in features, declared by the plugin itself. Empty list by
+  default; e.g. a plugin that uses `server.call_host` declares
+  `["reverse_rpc"]`. Do not invent values beyond the contract — unknown
+  capabilities are ignored by the host.
+
+The scaffold template's `_handle_init` returns
+`{"plugin_id", "db_path", "data_dir", "capabilities": []}` and stores
+`supported` in `_Ctx` for later use.
+
+### Metrics
+
+The host serves per-plugin call statistics as
+`plugin.{id}.metrics` (HTTP: `POST /api/plugin.{id}.metrics`):
+
+```json
+{
+  "calls": 12,
+  "errors": 1,
+  "avg_latency_ms": 3.4,
+  "last_error": "boom",
+  "by_command": {
+    "health_check": {"calls": 10, "errors": 0},
+    "echo": {"calls": 2, "errors": 1}
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `calls` | `int` | Total dispatched calls since the plugin started. |
+| `errors` | `int` | Calls that returned an error. |
+| `avg_latency_ms` | `float` | Average dispatch latency in milliseconds. |
+| `last_error` | `str \| null` | Message of the most recent error (`null` when none). |
+| `by_command` | `dict` | Per-command breakdown: `{name: {"calls": int, "errors": int}}`. |
 
 ### Error handling
 
@@ -339,6 +383,25 @@ python -m stitch_plugin_tools dev-install my-plugin/
 STITCH_DEV_MODE=1 python -m stitch_backend
 ```
 
+### Upgrading an authored plugin
+
+When the scaffold conventions change, migrate an existing package with
+`upgrade` — it rewrites only the canonical regions (inline fallback
+block, `_generated_by` marker, generated manifest fields) and never
+touches your handlers, storage schema, or contributions:
+
+```bash
+# 1. Preview — writes <package>/upgrade.diff, changes nothing:
+python -m stitch_plugin_tools upgrade my-plugin/
+
+# 2. Review the diff, then apply:
+python -m stitch_plugin_tools upgrade my-plugin/ --apply
+```
+
+Packages without a `_generated_by` marker predate scaffold v2 and are
+reported as legacy (manual migration — see
+`docs/plugin-authoring.md` §7).
+
 ### Environment variables
 
 | Variable | Default | Description |
@@ -384,6 +447,11 @@ This signs (if a key is provided), zips the package, computes the
 transport sha256, and POSTs to `/admin/publish`. The server stores
 the package in its cache and serves it to clients via the sync
 endpoint.
+
+> **Tip:** run `upgrade --apply` (§8) before publishing a package
+> authored against an older scaffold — it touches the manifest, so
+> re-sign afterwards (the `publish` command signs for you when `--key`
+> is passed).
 
 ### Community submission (`submit_for_review`)
 
@@ -479,6 +547,8 @@ test.
 | Command | Description |
 |---------|-------------|
 | `new <out_dir> --id <id> [--name …] [--author …] [--version …]` | Scaffold a kind=service plugin package. |
+| `upgrade <package_dir> [--apply]` | Migrate an authored plugin to the current scaffold conventions. Previews to `<package>/upgrade.diff`; `--apply` writes. Only canonical regions are rewritten (inline fallback block, `_generated_by` marker, generated manifest fields) — author code is never clobbered. Legacy (unmarked) packages get a manual-migration checklist. |
+| `sync-template [--out <dir>] [--license <file>]` | Regenerate the repo-root `template/` directory (the future GitHub template repo seed) from the scaffold internals: scaffolded `stitch-plugin-template` package + CI workflow, `.gitignore`, LICENSE, template-grade README, and a raw-stdin starter test. |
 | `keygen --out <dir>` | Generate an ed25519 keypair. |
 | `sign <package_dir> --key <private.key>` | Sign a plugin package. |
 | `verify <package_dir> --pubkey <public.key>` | Verify a package signature. |
