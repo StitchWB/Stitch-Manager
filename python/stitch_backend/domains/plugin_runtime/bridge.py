@@ -30,6 +30,7 @@ from stitch_backend.domains.plugin_runtime import (
     get_host,
     get_manifest,
 )
+from stitch_backend.domains.plugin_runtime.host import SUPPORTED_CAPABILITIES
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,13 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
     params["caller_user_id"] = body.get("_caller_user_id")
     params["caller_role"] = body.get("_caller_role")
 
+    # Host-served metrics: short-circuit before the RPC call so the
+    # child process is not touched (the host tracks counters around
+    # call()).  Entitlement still applies — only entitled callers see
+    # plugin metrics.  The shape is fixed by the runtime contract.
+    if cmd == "metrics":
+        return host.get_metrics()
+
     try:
         return await host.call(cmd, params)
     except PluginCallTimeout:
@@ -153,6 +161,11 @@ async def _list_service_plugins(params: dict[str, Any]) -> list[dict[str, Any]]:
             "i18n": contributions.get("i18n", {}),
             "commands": contributions.get("commands", []),
             "source": host.source,
+            # Capability negotiation (additive field): the plugin's
+            # declared capabilities + the host's supported list, so the
+            # frontend can gate UI on what the runtime actually offers.
+            "capabilities": host.capabilities,
+            "supported": list(SUPPORTED_CAPABILITIES),
         })
     return result
 
