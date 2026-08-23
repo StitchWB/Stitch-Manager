@@ -208,6 +208,198 @@ def _find_catalog_entry(
     return None
 
 
+# ── Source-index (v2 catalog entries) ─────────────────────────────────────────
+#
+# A catalog entry MAY carry a ``source`` field pointing at a git repo or a
+# release tarball instead of the legacy zip-hosting path.  When ``source``
+# is present, install delegates to ``sources.install_from_source`` (reusing
+# the existing git/release machinery) and the TOFU pin is recorded.
+
+
+def _parse_source(entry: dict[str, Any]) -> dict[str, Any]:
+    """Parse the ``source`` field from a catalog entry.
+
+    Returns a dict with ``kind`` describing the source:
+      - ``{"kind": "none"}`` — legacy zip entry (no ``source`` field).
+      - ``{"kind": "git", "url": str, "ref": str}`` — git source.
+      - ``{"kind": "release", "url": str, "sha256": str}`` — release source.
+      - ``{"kind": "malformed", "reason": str}`` — malformed source; the
+        entry is listed but install is refused with a clear reason.
+    """
+    source = entry.get("source")
+    if source is None:
+        return {"kind": "none"}
+    if not isinstance(source, dict):
+        return {"kind": "malformed", "reason": "source must be an object"}
+    stype = source.get("type")
+    if stype == "git":
+        url = source.get("url")
+        if not url or not isinstance(url, str):
+            return {"kind": "malformed", "reason": "git source requires url"}
+        ref = source.get("ref", "main")
+        if not isinstance(ref, str):
+            return {"kind": "malformed", "reason": "git source ref must be a string"}
+        return {"kind": "git", "url": url, "ref": ref}
+    if stype == "release":
+        url = source.get("url")
+        sha256 = source.get("sha256")
+        if not url or not isinstance(url, str):
+            return {"kind": "malformed", "reason": "release source requires url"}
+        if (
+            not sha256
+            or not isinstance(sha256, str)
+            or len(sha256) != 64
+            or not all(c in "0123456789abcdef" for c in sha256.lower())
+        ):
+            return {"kind": "malformed", "reason": "release source requires sha256 (hex64)"}
+        return {"kind": "release", "url": url, "sha256": sha256}
+    return {"kind": "malformed", "reason": f"unknown source type: {stype!r}"}
+
+
+def list_community_plugins() -> list[dict[str, Any]]:
+    """Return catalog entries enriched with ``sourceType`` + ``sourceUrl``.
+
+    Each entry gains:
+      - ``sourceType``: ``"git"`` | ``"release"`` | ``"zip-legacy"`` |
+        ``"malformed"``.
+      - ``sourceUrl``: the git/release URL, or ``None`` for legacy/malformed.
+    """
+    catalog = fetch_catalog()
+    out: list[dict[str, Any]] = []
+    for entry in catalog.get("plugins", []):
+        if not isinstance(entry, dict):
+            continue
+        enriched = dict(entry)
+        parsed = _parse_source(entry)
+        if parsed["kind"] == "git":
+            enriched["sourceType"] = "git"
+            enriched["sourceUrl"] = parsed["url"]
+        elif parsed["kind"] == "release":
+            enriched["sourceType"] = "release"
+            enriched["sourceUrl"] = parsed["url"]
+        elif parsed["kind"] == "malformed":
+            enriched["sourceType"] = "malformed"
+            enriched["sourceUrl"] = None
+        else:
+            enriched["sourceType"] = "zip-legacy"
+            enriched["sourceUrl"] = None
+        out.append(enriched)
+    return out
+
+
+async def install_community_plugin(
+    plugin_id: str,
+    version: str,
+    *,
+    force: bool = False,
+    trust: bool = False,
+) -> dict[str, Any]:
+    """Install a community plugin by id + version (source-index aware).
+
+    For entries with a ``source`` field: build a :class:`PluginSourceSpec`
+    and delegate to :func:`sources.install_from_source` (reusing the
+    existing git/release machinery + trust gates).  The TOFU pin is checked
+    and recorded via :mod:`pins`.
+
+    For legacy entries (no ``source``): fall back to the zip-based
+    :func:`install_community` flow unchanged.
+
+    Params:
+        plugin_id: catalog plugin id.
+        version: catalog plugin version.
+        force: TOFU pin override — accept a changed pin (names both shas
+            in the error when not set).
+        trust: admin override for the dev-tier gate (git mode only —
+            mirrors the ``--trust`` CLI flag).
+
+    Returns ``{"success": bool, "error"?: str}`` (or the install_from_source
+    result dict on success); never raises.
+    """
+    entry = _find_catalog_entry(fetch_catalog(), plugin_id, version)
+    if entry is None:
+        return {"success": False, "error": f"not in catalog: {plugin_id}@{version}"}
+
+    parsed = _parse_source(entry)
+
+    if parsed["kind"] == "none":
+        # Legacy zip flow — unchanged.
+        return await install_community(plugin_id, version)
+
+    if parsed["kind"] == "malformed":
+        return {
+            "success": False,
+            "error": f"catalog entry has malformed source: {parsed['reason']}",
+        }
+
+    # Source-index install: delegate to install_from_source.
+    from .pins import check_and_record
+    from .sources import PluginSourceSpec, install_from_source
+
+    if parsed["kind"] == "git":
+        spec = PluginSourceSpec(
+            type="git",
+            url=parsed["url"],
+            ref=parsed["ref"],
+        )
+        pin_url = parsed["url"]
+    else:  # release
+        spec = PluginSourceSpec(
+            type="release",
+            url=parsed["url"],
+            expected_sha256=parsed["sha256"],
+        )
+        pin_url = parsed["url"]
+
+    # Release mode: the pin (sha256) is known upfront — check before install.
+    if parsed["kind"] == "release":
+        ok, msg = check_and_record(
+            plugin_id,
+            new_sha=parsed["sha256"],
+            url=pin_url,
+            force=force,
+        )
+        if not ok:
+            return {"success": False, "error": msg}
+
+    result = await install_from_source(spec, trust=trust)
+    if not result.get("success"):
+        return result
+
+    # Git mode: the pin (commit SHA) is only known after clone — check now.
+    if parsed["kind"] == "git":
+        pinned_sha = result.get("pinned_sha")
+        if not pinned_sha:
+            return {
+                "success": False,
+                "error": "git install succeeded but no commit SHA was pinned",
+            }
+        ok, msg = check_and_record(
+            plugin_id,
+            new_sha=pinned_sha,
+            url=pin_url,
+            force=force,
+        )
+        if not ok:
+            # The new (untrusted) install overwrote the prior one.
+            # Remove it so the user is not left with an untrusted package.
+            _remove_local_install(result.get("plugin_id", plugin_id))
+            return {"success": False, "error": msg}
+
+    return result
+
+
+def _remove_local_install(plugin_id: str) -> None:
+    """Best-effort remove a plugins-local/{id}/ install (TOFU rollback)."""
+    try:
+        from autoreg.plugin.layout import plugins_local_dir
+
+        dest = plugins_local_dir() / plugin_id
+        if dest.is_dir():
+            shutil.rmtree(dest, ignore_errors=True)
+    except Exception:  # noqa: BLE001 — best-effort cleanup
+        logger.warning("TOFU rollback: failed to remove %s", plugin_id)
+
+
 def _find_repo_root(extract_dir: Path) -> Path | None:
     entries = [p for p in extract_dir.iterdir() if p.is_dir()]
     return entries[0] if len(entries) == 1 else None

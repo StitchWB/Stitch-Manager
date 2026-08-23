@@ -498,6 +498,146 @@ endpoint.
 > re-sign afterwards (the `publish` command signs for you when `--key`
 > is passed).
 
+### Community catalog (source index)
+
+The community catalog (`WhiteBite/stitch-plugin-catalog`) is a
+**source index**: each entry points at a git repo or a GitHub release
+tarball — the catalog no longer hosts zip packages.  Installation
+reuses the existing `install_from_source` machinery (git clone or
+release download + sha256 verify) with **TOFU pin protection** so a
+compromised catalog entry pointing at a different ref or tarball is
+surfaced as a visible pin mismatch.
+
+#### Entry shapes
+
+A catalog entry MAY carry a `source` field in addition to the legacy
+fields.  Three shapes are accepted:
+
+**Legacy (zip-era, backward compatible):**
+```json
+{
+  "id": "kiro-autoreg",
+  "version": "1.0.0",
+  "path": "plugins/kiro-autoreg/1.0.0",
+  "sha256": "<hex64>"
+}
+```
+Legacy entries install via the old zip-download flow (unchanged).  No
+TOFU pin is recorded.
+
+**Git source:**
+```json
+{
+  "id": "my-plugin",
+  "version": "2.0.0",
+  "source": {
+    "type": "git",
+    "url": "https://github.com/author/my-plugin",
+    "ref": "main"
+  }
+}
+```
+`ref` is a branch, tag, or 40-char commit SHA (default: `main`).  The
+install clones `url@ref`, pins the resolved commit SHA into a
+`.source.json` sidecar, and installs to `plugins-local/{id}/` (dev
+tier — requires `STITCH_DEV_MODE=1` or `trust=True`).
+
+**Release source:**
+```json
+{
+  "id": "my-plugin",
+  "version": "3.0.0",
+  "source": {
+    "type": "release",
+    "url": "https://github.com/author/my-plugin/releases/download/v3.0.0/pkg.tar.gz",
+    "sha256": "<hex64>"
+  }
+}
+```
+The install downloads the tarball, verifies `sha256` **before**
+extract, and routes by signature: signed → verified cache install;
+unsigned → community dir (gated by `STITCH_COMMUNITY_SERVICES` for
+`kind=service` or `STITCH_COMMUNITY_ENABLED` for `kind=data`).
+
+Malformed `source` (unknown type, missing `url`, non-hex64 `sha256`)
+→ the entry is listed in the catalog but install is refused with a
+clear reason.
+
+#### TOFU pinning
+
+After any successful source install, the plugin's pin is recorded in
+`<app_data>/plugin_pins.json`:
+
+```json
+{
+  "my-plugin": {
+    "sha": "<commit_sha or release sha256>",
+    "url": "<source url>",
+    "installed_at": "<iso8601 utc>"
+  }
+}
+```
+
+- **Git mode**: pin = commit SHA from the `.source.json` sidecar.
+- **Release mode**: pin = `sha256` from the catalog entry.
+
+On installing a `plugin_id` that already has a pin:
+
+| Prior pin | New pin | `force` | Outcome |
+|-----------|---------|---------|---------|
+| none | any | — | Proceed + record |
+| same sha | same | — | Proceed + re-record |
+| different sha | different | `False` | **Refuse** — error names both shas |
+| different sha | different | `True` | Proceed + replace pin |
+
+Release-mode pins are checked **before** install (sha256 is known
+upfront).  Git-mode pins are checked **after** clone (commit SHA is
+only known post-clone); on refusal the new install is rolled back
+(removed from `plugins-local/`).
+
+#### `install_community_plugin` command
+
+```json
+{
+  "id": "my-plugin",
+  "version": "2.0.0",
+  "force": false,
+  "trust": false
+}
+```
+
+- `force` — TOFU pin override (accept a changed pin).
+- `trust` — admin override for the dev-tier gate (git mode only;
+  mirrors the `--trust` CLI flag on `install-from`).
+
+Legacy entries (no `source`) ignore `force`/`trust` and use the
+existing zip flow.
+
+#### `get_community_catalog` command
+
+Each entry is enriched with `sourceType` (`"git"` / `"release"` /
+`"zip-legacy"` / `"malformed"`) and `sourceUrl` for the UI.
+
+### Catalog lint (`catalog-lint`)
+
+The catalog repo's CI calls `catalog-lint` on every PR to catch
+malformed entries before merge.  It validates **offline** — never
+fetches anything:
+
+```bash
+python -m stitch_plugin_tools catalog-lint catalog.json
+```
+
+Rules:
+1. JSON must parse and be a dict with a `plugins` array.
+2. Each entry must have `id` (str) and `version` (semver).
+3. `source.type` must be `"git"` or `"release"`.
+4. git: `url` required.  release: `url` + `sha256` (hex64) required.
+5. Duplicate `id@version` → error.
+6. Legacy entries (no `source`) accepted (backward compat).
+
+Exit 0 on success, 1 on any error.  A per-entry report is printed.
+
 ### Community submission (`submit_for_review`)
 
 Community plugins are submitted via a GitHub PR to the catalog repo.
@@ -599,12 +739,13 @@ test.
 | `verify <package_dir> --pubkey <public.key>` | Verify a package signature. |
 | `publish <package_dir> [--server-url …] [--key …]` | Sign + zip + POST to server. |
 | `dev-install <package_dir>` | Copy package to `plugins-local/`. Refreshes `_vendor/rpc_server.py` from canonical on each install. |
-| `run <package_dir>` | Interactive plugin REPL — spawn, stream child stderr live to the tool's stderr prefixed `[<plugin_id>]`, drive commands from stdin (`<command> [json-params]` → pretty-printed result), and stub reverse-RPC `engine.oauth.*` requests so plugins that use `server.call_host` fail gracefully instead of hanging. Built-ins: `ping`, `init-info`, `logs`, `help`, `exit`. The author loop: `new` → edit handlers → `run` → `test` → `dev-install`. |
-| `test <package_dir>` | Run the plugin's own tests via the venv pytest (`python -m pytest <dir>/tests -q --timeout=60`). No tests dir → friendly message pointing at the template's `tests/test_plugin_protocol.py`. pytest absent → error with install hint. |
+| `run <package_dir>` | Interactive plugin REPL — spawn, stream child stderr live to the tool's stderr prefixed `[<plugin_id>]`, drive commands from stdin (`<command> [json-params]` -> pretty-printed result), and stub reverse-RPC `engine.oauth.*` requests so plugins that use `server.call_host` fail gracefully instead of hanging. Built-ins: `ping`, `init-info`, `logs`, `help`, `exit`. The author loop: `new` -> edit handlers -> `run` -> `test` -> `dev-install`. |
+| `test <package_dir>` | Run the plugin's own tests via the venv pytest (`python -m pytest <dir>/tests -q --timeout=60`). No tests dir -> friendly message pointing at the template's `tests/test_plugin_protocol.py`. pytest absent -> error with install hint. |
 | `vendor <package_dir>` | Vendor the canonical `RpcPluginServer` into `<pkg>/_vendor/rpc_server.py`. Idempotent — skips the write when the file is already canonical. Run after `dev-install` or before `publish` to refresh the vendored server. |
 | `pack-engine <out_dir> [--version …]` | Assemble an engine-pack (captcha solvers). |
 | `codes {issue\|list} [--server-url …] [--admin-key …]` | Issue and list activation codes (admin). |
 | `install-from <url> [--ref\|--release] [--sha256] [--trust]` | Fetch + install a plugin from a git repo or release tarball. |
+| `catalog-lint <catalog.json>` | Validate a community catalog offline (for catalog repo CI). Never fetches anything. |
 | `drift [--server-url …] --plugin <id> [--version …] [--window-hours …] [--package-dir …] [--apply]` | **v1 selector tooling.** Fetch drift report + propose selector weight rerank. Expects `scenario.json` — not applicable to v2 service plugins. |
 | `publish-selectors [--server-url …] --plugin-id <id> --plugin-version <ver> --package-dir <dir> [--note …]` | **v1 selector tooling.** Publish a selector overlay pack (hot update). Expects `scenario.json` — not applicable to v2 service plugins. |
 
