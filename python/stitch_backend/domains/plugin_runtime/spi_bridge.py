@@ -10,11 +10,17 @@ via ``host.call(cmd, params)``.  The proxy's ``health_check`` calls
 and ``spi.resolve()`` falls back to the built-in impl automatically.
 
 On host stop / app shutdown, ``unregister_plugin_spi(host)`` removes
-the plugin impls so the registry reflects reality.
+ONLY that host's plugin impls so the registry reflects reality.
 
 This module is the ONLY place that maps manifest SPI class names to
 core SPI string constants — the manifest declares the public contract
 (class names), the bridge maps to internal registry keys.
+
+Method forwarding is driven by :data:`SPI_METHOD_MAP` — an explicit,
+auditable map of SPI constant → method → (plugin command, params).
+No method is forwarded unless it appears in the map.  This is critical
+because protocol method names do not always match plugin command names
+(e.g. ``TotpProvider.get_code`` → plugin command ``generate_code``).
 """
 
 from __future__ import annotations
@@ -23,7 +29,12 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from stitch_backend.core.spi import register_impl, unregister_plugin
+from autoreg.plugin.rpc import RpcCallError, RpcTimeoutError
+from stitch_backend.core.spi import (
+    register_impl,
+    spi_registry,
+    unregister_plugin,
+)
 
 if TYPE_CHECKING:
     from autoreg.plugin.manifest import PluginManifest
@@ -51,22 +62,213 @@ _HEALTH_TTL_OK: float = 5.0
 _HEALTH_TTL_FAIL: float = 1.0
 
 
+# ── SPI method map ────────────────────────────────────────────────────────────
+#
+# Keyed by core SPI constant.  Each entry maps protocol method name →
+# method spec.  The spec has:
+#   "cmd": plugin RPC command name (str), or None for a local no-op.
+#   "params": list of (param_name, default_expr) tuples.
+#       default_expr is None for required params (no default).
+#       Otherwise it's a string expression evaluated as the default.
+#
+# The factory :func:`_generate_method` builds async wrappers from these
+# specs with exact signatures (no **kwargs) so callers that inspect
+# signatures (imap_otp_capability) see the protocol's real shape.
+#
+# Methods that appear under multiple SPIs (e.g. ``wait_otp`` under both
+# ``mail_inbox`` and ``email_verification``) must have identical params —
+# the factory verifies this.  The command name is looked up at call time
+# via ``self._spi_const`` so the same generated method serves any SPI.
+
+SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
+    "mail_inbox": {
+        "list_profiles": {
+            "cmd": "list_profiles",
+            "params": [("owner_id", "None")],
+        },
+        "wait_otp": {
+            "cmd": "wait_otp",
+            "params": [
+                ("email", None),
+                ("subject_filter", '""'),
+                ("code_pattern", "None"),
+                ("timeout", "120.0"),
+            ],
+        },
+        "sync": {
+            "cmd": "sync",
+            "params": [("profile_id", None)],
+        },
+    },
+    "email_verification": {
+        "wait_otp": {
+            "cmd": "wait_otp",
+            "params": [
+                ("email", None),
+                ("subject_filter", '""'),
+                ("code_pattern", "None"),
+                ("timeout", "120.0"),
+            ],
+        },
+        # close is a local no-op — the plugin has no persistent IMAP
+        # connection to release (built-in EmailService is per-call).
+        "close": {
+            "cmd": None,
+            "params": [],
+        },
+    },
+    "totp": {
+        "generate_secret": {
+            "cmd": "generate_secret",
+            "params": [],
+        },
+        # NOTE the name mismatch: protocol method get_code → plugin
+        # command generate_code.  This is exactly why the method map
+        # must be explicit — blind forwarding would call "get_code"
+        # which the plugin doesn't implement.
+        "get_code": {
+            "cmd": "generate_code",
+            "params": [("secret", None), ("timestamp", "None")],
+        },
+        "verify_code": {
+            "cmd": "verify_code",
+            "params": [("secret", None), ("code", None)],
+        },
+        "count_owned_keys": {
+            "cmd": "count_owned_keys",
+            "params": [("owner_id", "None")],
+        },
+        "list_keys": {
+            "cmd": "list_keys",
+            "params": [],
+        },
+    },
+    "oauth": {
+        "start_pkce_flow": {
+            "cmd": "start_pkce_flow",
+            "params": [
+                ("authorize_url", None),
+                ("token_url", None),
+                ("client_id", None),
+                ("redirect_uri", '"http://localhost:25584/api/oauth/callback"'),
+                ("scope", '"openid profile email"'),
+                ("state", "None"),
+            ],
+        },
+        "start_device_flow": {
+            "cmd": "start_device_flow",
+            "params": [
+                ("device_auth_url", None),
+                ("token_url", None),
+                ("client_id", None),
+                ("scope", '""'),
+            ],
+        },
+        "exchange_code": {
+            "cmd": "exchange_code",
+            "params": [
+                ("code", None),
+                ("code_verifier", None),
+                ("token_url", None),
+                ("client_id", None),
+                ("redirect_uri", '"http://localhost:25584/api/oauth/callback"'),
+                ("proxy", "None"),
+            ],
+        },
+    },
+}
+
+
+# ── Method factory ───────────────────────────────────────────────────────────
+
+
+def _generate_method(method_name: str, spec: dict[str, Any]) -> Any:
+    """Build an async wrapper method from a method spec.
+
+    The wrapper has the exact signature of the protocol method (no
+    ``**kwargs``) so ``inspect.signature`` returns the real shape.
+    It builds a params dict from named args (omitting None values)
+    and delegates to ``self._forward(method_name, params)``.
+    """
+    cmd = spec["cmd"]
+    params = spec["params"]
+
+    if cmd is None:
+        # Local no-op (e.g. close).
+        src = f"async def {method_name}(self):\n    pass\n"
+        namespace: dict[str, Any] = {}
+        exec(src, namespace)
+        return namespace[method_name]
+
+    # Build signature: "email, subject_filter=''", code_pattern=None, ..."
+    sig_parts: list[str] = []
+    for name, default in params:
+        if default is None:
+            sig_parts.append(name)  # required
+        else:
+            sig_parts.append(f"{name}={default}")
+    sig_str = ", ".join(sig_parts)
+
+    # Build params dict construction (omit None values).
+    lines = [f"async def {method_name}(self, {sig_str}):"]
+    lines.append("    _params = {}")
+    for name, _ in params:
+        lines.append(f"    if {name} is not None:")
+        lines.append(f"        _params[{name!r}] = {name}")
+    lines.append(f"    return await self._forward({method_name!r}, _params)")
+    src = "\n".join(lines)
+
+    namespace = {}
+    exec(src, namespace)
+    return namespace[method_name]
+
+
+def _install_methods(cls: type) -> type:
+    """Generate and attach all SPI methods to the proxy class.
+
+    Iterates :data:`SPI_METHOD_MAP`, generating one async wrapper per
+    unique method name.  Methods shared across SPIs (e.g. ``wait_otp``)
+    must have identical params — verified here.  The command name is
+    resolved at call time via ``self._spi_const`` so the same method
+    serves any SPI that declares it.
+    """
+    seen: dict[str, list] = {}
+    for _spi_const, methods in SPI_METHOD_MAP.items():
+        for method_name, spec in methods.items():
+            if method_name in seen:
+                prev_params = seen[method_name]
+                if prev_params != spec["params"]:
+                    raise ValueError(
+                        f"Method {method_name!r} has different params under "
+                        f"different SPIs: {prev_params} vs {spec['params']}"
+                    )
+                continue
+            seen[method_name] = spec["params"]
+            method = _generate_method(method_name, spec)
+            setattr(cls, method_name, method)
+    return cls
+
+
+# ── Proxy ────────────────────────────────────────────────────────────────────
+
+
 class _PluginSpiProxy:
     """RPC-backed SPI proxy.
 
-    All SPI interface methods (``list_profiles``, ``wait_otp``, ``sync``,
-    ``close``) are forwarded to the plugin's RPC commands.  The
-    ``health_check`` method pings the plugin — when the plugin is dead,
-    ``_is_healthy`` returns False and ``spi.resolve`` falls back to
-    built-in.
+    All SPI interface methods are generated from
+    :data:`SPI_METHOD_MAP` and forwarded to the plugin's RPC commands.
+    The ``health_check`` method pings the plugin — when the plugin is
+    dead, ``_is_healthy`` returns False and ``spi.resolve`` falls back
+    to built-in.
 
-    A single proxy instance serves all SPI names the plugin declares
-    (e.g. both ``MailInboxSPI`` and ``EmailVerificationProvider``).
-    Methods not used by a particular SPI are simply never called.
+    A single proxy instance serves ONE SPI constant (``self._spi_const``).
+    ``register_plugin_spi`` creates one proxy per declared SPI so the
+    per-call fallback knows which built-in to resolve.
     """
 
-    def __init__(self, host: "ServicePluginHost") -> None:
+    def __init__(self, host: ServicePluginHost, spi_const: str | None = None) -> None:
         self._host = host
+        self._spi_const = spi_const
         #: Cached health result: ``(monotonic_timestamp, ok)``.
         #: ``None`` = no cache yet.  TTL is 5s when healthy, 1s when
         #: unhealthy (fast recovery).  The cache is consulted only when
@@ -109,39 +311,69 @@ class _PluginSpiProxy:
             raise
         self._health_cache = (now, True)
 
-    async def list_profiles(
-        self, owner_id: int | None = None,
-    ) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {}
-        if owner_id is not None:
-            params["owner_id"] = owner_id
-        return await self._host.call("list_profiles", params)
+    async def _forward(self, method_name: str, params: dict[str, Any]) -> Any:
+        """Forward a method call to the plugin RPC with built-in fallback.
 
-    async def wait_otp(
-        self,
-        email: str,
-        subject_filter: str = "",
-        code_pattern: str | None = None,
-        timeout: float = 120.0,
-    ) -> str:
-        params: dict[str, Any] = {
-            "email": email,
-            "subject_filter": subject_filter,
-            "timeout": timeout,
-        }
-        if code_pattern is not None:
-            params["code_pattern"] = code_pattern
-        return await self._host.call("wait_otp", params)
+        Looks up the plugin command name from
+        :data:`SPI_METHOD_MAP[self._spi_const][method_name]`.  If the
+        RPC call fails with ``RpcCallError`` / ``RpcTimeoutError`` /
+        ``PluginCallTimeout`` / ``PluginNotRunning``, falls back to the
+        built-in impl for that SPI (looked up via the registry's
+        internal ``_impls`` dict — no public accessor exists).  If no
+        built-in is registered, re-raises the original exception.
+        """
+        # Lazy import to avoid loading host.py at module import time
+        # (host.py pulls in sidecar + spi_builtin_oauth).
+        from .host import PluginCallTimeout, PluginNotRunning
 
-    async def sync(self, profile_id: str) -> dict[str, Any]:
-        return await self._host.call("sync", {"profile_id": profile_id})
+        spi_const = self._spi_const
+        if spi_const is None:
+            raise RuntimeError(
+                f"proxy for {self._host.plugin_id} has no spi_const — "
+                "forwarded methods require a spi_const"
+            )
+        spec = SPI_METHOD_MAP[spi_const][method_name]
+        cmd = spec["cmd"]
+        try:
+            return await self._host.call(cmd, params)
+        except (
+            RpcCallError,
+            RpcTimeoutError,
+            PluginCallTimeout,
+            PluginNotRunning,
+        ) as exc:
+            # Per-call defensive fallback: resolve the built-in impl
+            # for this SPI and call the same method.  We access the
+            # registry's internal _impls dict because spi.py exposes
+            # no public built-in accessor — see REPORT note.
+            slots = spi_registry._impls.get(spi_const)
+            builtin = slots.get("builtin") if slots else None
+            if builtin is None:
+                raise
+            logger.warning(
+                "Plugin %s: SPI %s method %s failed (%s) — "
+                "falling back to built-in",
+                self._host.plugin_id, spi_const, method_name, exc,
+            )
+            builtin_method = getattr(builtin, method_name)
+            return await builtin_method(**params)
 
-    async def close(self) -> None:
-        pass
+
+# Generate and attach all SPI methods to the proxy class.
+_PluginSpiProxy = _install_methods(_PluginSpiProxy)
+
+
+# ── Per-host registration tracking ────────────────────────────────────────────
+#
+# Keyed by host.plugin_id (hosts are unique per plugin_id).  Stores the
+# list of SPI constants registered for that host so unregister_plugin_spi
+# removes ONLY that host's registrations — not every plugin's.
+
+_registered_spis: dict[str, list[str]] = {}
 
 
 def register_plugin_spi(
-    host: "ServicePluginHost", manifest: "PluginManifest"
+    host: ServicePluginHost, manifest: PluginManifest
 ) -> list[str]:
     """Register plugin-backed SPI proxies for each declared SPI name.
 
@@ -149,7 +381,18 @@ def register_plugin_spi(
     Unknown SPI class names (not in ``_SPI_NAME_MAP``) are logged and
     skipped — tolerant reader so a newer manifest does not crash an
     older host.
+
+    Creates one proxy per SPI constant (each proxy knows its spi_const
+    for per-call fallback).  Tracks registered constants per plugin_id
+    so :func:`unregister_plugin_spi` can remove only this host's.
     """
+    # Defensive: clean up old registrations for this plugin in case of
+    # re-registration without explicit unregister (LKG rollback calls
+    # unregister first, but this guards against leaks).
+    old_consts = _registered_spis.pop(host.plugin_id, [])
+    for spi_const in old_consts:
+        unregister_plugin(spi_const)
+
     contributions = manifest.contributions
     spi_names_raw = contributions.get("spi", [])
     if not isinstance(spi_names_raw, list):
@@ -159,7 +402,6 @@ def register_plugin_spi(
         )
         return []
 
-    proxy = _PluginSpiProxy(host)
     registered: list[str] = []
     for class_name in spi_names_raw:
         if not isinstance(class_name, str):
@@ -171,25 +413,30 @@ def register_plugin_spi(
                 manifest.id, class_name,
             )
             continue
+        proxy = _PluginSpiProxy(host, spi_const=spi_const)
         register_impl(spi_const, proxy, source="plugin")
         registered.append(spi_const)
         logger.info(
             "Plugin %s: registered SPI %s (%s) as plugin-backed",
             manifest.id, class_name, spi_const,
         )
+    _registered_spis[host.plugin_id] = registered
     return registered
 
 
-def unregister_plugin_spi(host: "ServicePluginHost") -> None:
+def unregister_plugin_spi(host: ServicePluginHost) -> None:
     """Unregister all plugin-backed SPI impls for *host*.
 
-    Called on host stop / app shutdown.  Iterates all known SPI
-    constants and removes the plugin slot — the built-in fallback
-    stays.
+    Removes ONLY the SPI constants that were registered for this host
+    (tracked in ``_registered_spis``).  Other hosts' registrations are
+    untouched.  The built-in fallback stays.
     """
-    for spi_const in _SPI_NAME_MAP.values():
+    spi_consts = _registered_spis.pop(host.plugin_id, [])
+    for spi_const in spi_consts:
         unregister_plugin(spi_const)
-    logger.debug("Plugin %s: unregistered all SPI proxies", host.plugin_id)
+    logger.debug(
+        "Plugin %s: unregistered %d SPI proxies", host.plugin_id, len(spi_consts)
+    )
 
 
 def unregister_all_plugin_spi() -> None:
@@ -198,6 +445,7 @@ def unregister_all_plugin_spi() -> None:
     Called from ``plugin_runtime.stop_all()`` during app shutdown so
     the registry is clean for the next startup (tests, CLI re-run).
     """
+    _registered_spis.clear()
     for spi_const in _SPI_NAME_MAP.values():
         unregister_plugin(spi_const)
 
