@@ -8,6 +8,13 @@
  *   (d) safeInvoke rejection triggers appToast.error('pluginUi.actionFailed').
  *   (e) Missing/non-array schema.nodes renders without crash (hardened guard).
  *   (f) Table node accepts a bare-array command response (unwrapped rows).
+ *   (g) Field→param binding: typing into a text field and clicking a button
+ *       with paramsFrom sends the merged params (static keys preserved).
+ *   (h) Toggle + select fields bind through paramsFrom.
+ *   (i) Field placeholder resolves via the label machinery and renders.
+ *   (j) Buttons without paramsFrom send static params unchanged.
+ *   (k) paramsFrom referencing a missing field id omits the key and
+ *       console.warns once.
  *
  * Mocks: invoke module (safeInvoke), i18n (t = identity), toast, and
  * @/components/ui primitives (stubbed to simple HTML like Plugins.test.tsx
@@ -50,16 +57,26 @@ jest.mock('@/components/ui', () => ({
       {children}
     </button>
   ),
-  Input: ({ label, value, readOnly }: any) => (
+  Input: ({ label, value, readOnly, onChange, placeholder }: any) => (
     <div data-testid="ui-input">
       {label && <label>{label}</label>}
-      <input value={value ?? ''} readOnly={readOnly} />
+      <input
+        value={value ?? ''}
+        readOnly={readOnly}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
     </div>
   ),
-  Select: ({ label, value, options, disabled }: any) => (
+  Select: ({ label, value, options, disabled, onChange, placeholder }: any) => (
     <div data-testid="ui-select">
       {label && <label>{label}</label>}
-      <select value={value ?? ''} disabled={disabled}>
+      <select
+        value={value ?? ''}
+        disabled={disabled}
+        onChange={onChange}
+        data-placeholder={placeholder}
+      >
         {(options ?? []).map((o: { value: string; label: string }) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
@@ -144,6 +161,51 @@ const unknownNodeSchema: PluginPageSchema = {
     // Cast: simulates a future node kind the renderer doesn't know yet.
     { kind: 'future_widget', label: 'X' } as unknown as UiNode,
     { kind: 'heading', text: 'After' },
+  ],
+};
+
+// Fields live inside a section node on purpose: the field state map is
+// page-scoped, so section-nested fields must bind exactly like top-level ones.
+const formSchema: PluginPageSchema = {
+  nodes: [
+    {
+      kind: 'section',
+      title: 'Form',
+      nodes: [
+        {
+          kind: 'field',
+          field: 'text',
+          id: 'name-field',
+          label: 'Name',
+          value: 'Alice',
+          placeholder: 'name.ph',
+        },
+        {
+          kind: 'field',
+          field: 'select',
+          id: 'mode-field',
+          label: 'Mode',
+          value: 'fast',
+          options: [
+            { value: 'fast', label: 'Fast' },
+            { value: 'slow', label: 'Slow' },
+          ],
+        },
+        { kind: 'field', field: 'toggle', id: 'flag-field', label: 'Flag' },
+      ],
+    },
+    {
+      kind: 'button',
+      id: 'save',
+      label: 'Save',
+      command: 'save',
+      params: { staticKey: 'kept', name: '' },
+      paramsFrom: {
+        name: 'name-field',
+        mode: 'mode-field',
+        flag: 'flag-field',
+      },
+    },
   ],
 };
 
@@ -241,5 +303,146 @@ describe('DeclarativePage', () => {
       expect(screen.getByText('Bob')).toBeTruthy();
     });
     expect(screen.getByText('bob@b.c')).toBeTruthy();
+  });
+
+  it('(g) typing into a text field + clicking a paramsFrom button sends merged params', async () => {
+    render(<DeclarativePage pluginId="test" schema={formSchema} />);
+
+    // Section-nested text field starts with its manifest value.
+    const textInput = screen.getByDisplayValue('Alice');
+    fireEvent.change(textInput, { target: { value: 'Bob' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Save'));
+    });
+
+    // Typed value overrides the paramsFrom key; static keys not listed in
+    // paramsFrom are preserved.
+    expect(safeInvoke).toHaveBeenCalledWith('plugin.test.save', {
+      staticKey: 'kept',
+      name: 'Bob',
+      mode: 'fast',
+      flag: false,
+    });
+  });
+
+  it('(h) toggle and select fields bind through paramsFrom', async () => {
+    render(<DeclarativePage pluginId="test" schema={formSchema} />);
+
+    // Select: change fast → slow. (getByDisplayValue matches the selected
+    // option's TEXT — "Fast" — for <select> elements.)
+    fireEvent.change(screen.getByDisplayValue('Fast'), {
+      target: { value: 'slow' },
+    });
+    // Toggle: check the checkbox (initial value undefined → false).
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Save'));
+    });
+
+    expect(safeInvoke).toHaveBeenCalledWith('plugin.test.save', {
+      staticKey: 'kept',
+      name: 'Alice',
+      mode: 'slow',
+      flag: true,
+    });
+  });
+
+  it('(i) field placeholder resolves via the label machinery and renders', () => {
+    const placeholderSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'field',
+          field: 'text',
+          id: 'a',
+          label: 'A',
+          placeholder: 'hint.key',
+        },
+        {
+          kind: 'field',
+          field: 'text',
+          id: 'b',
+          label: 'B',
+          placeholder: 'Plain hint',
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={placeholderSchema} />);
+
+    const inputs = screen.getAllByRole('textbox');
+    // Dotted placeholder treated as an i18n key (t = identity in this test).
+    expect(inputs[0].getAttribute('placeholder')).toBe('plugin.test.hint.key');
+    // Plain placeholder renders as-is.
+    expect(inputs[1].getAttribute('placeholder')).toBe('Plain hint');
+  });
+
+  it('(j) button without paramsFrom sends its static params unchanged', async () => {
+    const staticParamsSchema: PluginPageSchema = {
+      nodes: [
+        { kind: 'field', field: 'text', id: 'unused-field', label: 'Unused' },
+        {
+          kind: 'button',
+          id: 'plain',
+          label: 'Plain',
+          command: 'ping',
+          params: { a: 1, b: 'two' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={staticParamsSchema} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Plain'));
+    });
+
+    expect(safeInvoke).toHaveBeenCalledWith('plugin.test.ping', {
+      a: 1,
+      b: 'two',
+    });
+  });
+
+  it('(k) paramsFrom referencing a missing field id omits the key and warns once', async () => {
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const missingFieldSchema: PluginPageSchema = {
+        nodes: [
+          { kind: 'field', field: 'text', id: 'real-field', label: 'Real' },
+          {
+            kind: 'button',
+            id: 'ghost-btn',
+            label: 'Ghost',
+            command: 'save',
+            // Static value for the ghost key must be dropped too — a missing
+            // field id omits the key entirely.
+            params: { ghost: 'static-default' },
+            paramsFrom: { ghost: 'nope-field', real: 'real-field' },
+          },
+        ],
+      };
+
+      render(<DeclarativePage pluginId="test" schema={missingFieldSchema} />);
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Ghost'));
+      });
+
+      expect(safeInvoke).toHaveBeenCalledWith('plugin.test.save', {
+        real: '',
+      });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      // Second click: the warning is not repeated.
+      await act(async () => {
+        fireEvent.click(screen.getByText('Ghost'));
+      });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

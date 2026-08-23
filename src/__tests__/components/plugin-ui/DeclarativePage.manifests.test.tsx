@@ -175,6 +175,39 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
   it('stitch-totp page renders keys table, add/remove form and switches to ru', async () => {
     const manifest = loadManifest('stitch-totp');
     install(manifest);
+
+    // The Add Key button binds its params to the page fields via paramsFrom;
+    // the form fields carry i18n-key placeholders.
+    const pageNodes = allNodes(
+      (manifest.contributions.ui.page as PluginPageSchema).nodes,
+    );
+    const addButton = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'button' }> =>
+        n.kind === 'button' && n.id === 'add-key',
+    );
+    expect(addButton).toBeDefined();
+    expect(addButton?.paramsFrom).toEqual({
+      label: 'label-field',
+      secret: 'secret-field',
+    });
+    // remove_key stays row-scoped static params — row-scoped table actions
+    // are deliberately out of the declarative vocabulary for now.
+    const removeButton = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'button' }> =>
+        n.kind === 'button' && n.id === 'remove-key',
+    );
+    expect(removeButton?.paramsFrom).toBeUndefined();
+    const labelField = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'field' }> =>
+        n.kind === 'field' && n.id === 'label-field',
+    );
+    const secretField = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'field' }> =>
+        n.kind === 'field' && n.id === 'secret-field',
+    );
+    expect(labelField?.placeholder).toBe('totp.labelPlaceholder');
+    expect(secretField?.placeholder).toBe('totp.secretPlaceholder');
+
     (safeInvoke as jest.Mock).mockImplementation((cmd: string) => {
       if (cmd === 'plugin.stitch-totp.list_keys') {
         return Promise.resolve([
@@ -201,6 +234,11 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
     // Buttons resolved from bundle keys.
     expect(screen.getByText('Add Key')).toBeTruthy();
     expect(screen.getByText('Remove Key')).toBeTruthy();
+    // Placeholders resolve through the en bundle like labels do.
+    expect(screen.getByPlaceholderText('e.g. Kiro')).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText('Base32 secret, e.g. JBSWY3DPEHPK3PXP'),
+    ).toBeTruthy();
 
     // Locale switch: re-render resolves the same keys through the ru bundle.
     setLocale('ru');
@@ -213,6 +251,7 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
     expect(screen.getByText('TOTP-ключи')).toBeTruthy();
     expect(screen.getByText('Добавить ключ')).toBeTruthy();
     expect(screen.getByText('Удалить ключ')).toBeTruthy();
+    expect(screen.getByPlaceholderText('например, Kiro')).toBeTruthy();
   });
 
   it('stitch-sheets page renders both tables via rowsKey and the oauth button', async () => {
