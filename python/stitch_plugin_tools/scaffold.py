@@ -57,7 +57,7 @@ Spawned by ``ServicePluginHost`` as ``python -m {pkg_name}``.
 Implements the JSON-RPC 2.0 line protocol via ``RpcPluginServer``.
 
 Protocol methods handled automatically by ``RpcPluginServer``:
-  - ``plugin.init``    -> calls ``init_handler(params)`` (if set).
+  - ``plugin.init``    -> stores handshake params via ``_Ctx``.
   - ``plugin.ping``    -> returns ``"pong"``.
   - ``plugin.shutdown``-> returns ``None`` and exits.
 
@@ -77,7 +77,7 @@ import json
 import sys
 from typing import Any
 
-from . import storage
+from . import service, storage
 
 try:
     from autoreg.plugin.rpc import RpcPluginServer
@@ -217,40 +217,63 @@ except ImportError:
 
 # ── State received in plugin.init handshake ───────────────────────────────
 
-_db_path: str = ""
-_data_dir: str = ""
+
+class _Ctx:
+    """Mutable container for plugin.init handshake state."""
+
+    db_path: str = ""
+    data_dir: str = ""
+
+
+ctx = _Ctx()
+
+
+def _uid(params: dict[str, Any]) -> int | None:
+    """Caller user id forwarded by the dual-format router (None = guest)."""
+    uid = params.get("caller_user_id")
+    return int(uid) if uid is not None else None
 
 
 def _handle_init(params: dict[str, Any]) -> dict[str, Any]:
     """Store handshake params and return them as the init result."""
-    global _db_path, _data_dir
-    _db_path = str(params.get("db_path", ""))
-    _data_dir = str(params.get("data_dir", ""))
+    ctx.db_path = str(params.get("db_path", ""))
+    ctx.data_dir = str(params.get("data_dir", ""))
     return {{
         "plugin_id": params.get("plugin_id", ""),
-        "db_path": _db_path,
-        "data_dir": _data_dir,
+        "db_path": ctx.db_path,
+        "data_dir": ctx.data_dir,
     }}
 
 
 def _handle_migrate_db(params: dict[str, Any]) -> dict[str, Any]:
-    """Create SQLite tables (raw_sql migration)."""
-    if _db_path:
-        storage.migrate(_db_path)
+    """Create SQLite tables (raw_sql migration).
+
+    For plugins with ``contributions.storage.sqlite = false`` (e.g.
+    cards/opencode/radar), use the no-op variant that returns the
+    version ack without touching the database::
+
+        return {{
+            "from_version": params.get("from_version", 0),
+            "to_version": params.get("to_version", 1),
+        }}
+    """
+    if ctx.db_path:
+        storage.migrate(ctx.db_path)
     return {{
         "from_version": params.get("from_version", 0),
         "to_version": params.get("to_version", 1),
     }}
 
 
-def _handle_ping(params: dict[str, Any]) -> dict[str, Any]:
+def _handle_health_check(params: dict[str, Any]) -> dict[str, Any]:
     """Health-check command — returns pong."""
-    return {{"pong": True}}
+    return service.health_check()
 
 
 def _handle_echo(params: dict[str, Any]) -> dict[str, Any]:
     """Echo the ``text`` param back to the caller."""
-    return {{"text": str(params.get("text", ""))}}
+    _uid(params)  # caller identity available for per-user logic
+    return service.echo(str(params.get("text", "")))
 
 
 # ── Server entry point ────────────────────────────────────────────────────
@@ -260,7 +283,7 @@ def main() -> None:
     server = RpcPluginServer()
     server.set_init_handler(_handle_init)
     server.register("_migrate_db", _handle_migrate_db)
-    server.register("ping", _handle_ping)
+    server.register("health_check", _handle_health_check)
     server.register("echo", _handle_echo)
     server.serve()
 
@@ -342,11 +365,40 @@ def create_item(db_path: str, text: str) -> dict[str, Any]:
     return {"id": item_id, "text": text}
 '''
 
+_SERVICE_TEMPLATE = '''"""Service layer for this service plugin.
+
+Business logic lives here — ``__main__.py`` handlers are thin wrappers
+that parse params, call service functions, and return results. This
+mirrors the reference plugins (stitch-cards, stitch-totp, …) where
+``service.py`` holds the domain logic and ``__main__.py`` only dispatches.
+
+Replace the placeholder functions below with your own domain logic.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def health_check() -> dict[str, Any]:
+    """Return a health-check response."""
+    return {"pong": True}
+
+
+def echo(text: str) -> dict[str, Any]:
+    """Echo the provided text back to the caller."""
+    return {"text": text}
+'''
+
 _README_TEMPLATE = """# {name}
 
 A Stitch service plugin (`{plugin_id}`).
 
 ## Quick start (dev loop)
+
+> **Prerequisite:** `stitch_plugin_tools` must be importable. Run
+> `pip install -e python/` from the repo root first, or run all
+> `python -m stitch_plugin_tools` commands from the `python/` dir.
 
 ```bash
 # 1. Generate a signing keypair (one-time):
@@ -366,7 +418,7 @@ STITCH_DEV_MODE=1 python -m stitch_backend
 
 | Command | Readonly | Description |
 |--------|----------|-------------|
-| `ping` | yes | Health check — returns `{{pong: true}}` |
+| `health_check` | yes | Health check — returns `{{pong: true}}` |
 | `echo` | yes | Echoes back the `text` param |
 
 ## Layout
@@ -378,6 +430,7 @@ STITCH_DEV_MODE=1 python -m stitch_backend
 └── {pkg_name}/
     ├── __init__.py
     ├── __main__.py           # RPC entry (RpcPluginServer)
+    ├── service.py             # domain logic (handlers delegate here)
     └── storage.py            # SQLite helper
 ```
 
@@ -406,8 +459,8 @@ def scaffold_service_plugin(
     """Scaffold a service-plugin package into ``out_dir``.
 
     Creates ``plugin.json``, ``<pkg>/__init__.py``, ``<pkg>/__main__.py``,
-    ``<pkg>/storage.py``, and ``README.md``.  The directory is created
-    if it does not exist; existing files are overwritten.
+    ``<pkg>/service.py``, ``<pkg>/storage.py``, and ``README.md``.  The
+    directory is created if it does not exist; existing files are overwritten.
 
     Args:
         out_dir: Target directory for the package (created if absent).
@@ -428,6 +481,22 @@ def scaffold_service_plugin(
     pkg_dir.mkdir(exist_ok=True)
 
     # ── plugin.json (v2 manifest) ─────────────────────────────────────
+    # i18n bundle is NESTED: {plugin_id: {key: value}}. The FE resolver
+    # (src/lib/i18nPluginBundles.ts walkBundle) walks dot-paths through
+    # nested objects — flat keys like "{plugin_id}.title" never resolve.
+    # Labels are i18n KEY strings (e.g. "{plugin_id}.tab") resolved via
+    # resolveLabel/t("plugin.{id}.{label}") in DeclarativePage + AiTopTabs.
+    i18n_bundle = {
+        plugin_id: {
+            "title": display_name,
+            "tab": display_name,
+            "health_check": "Health Check",
+            "echo": {
+                "text": "Text to echo",
+                "btn": "Echo",
+            },
+        }
+    }
     manifest: dict[str, Any] = {
         "schema": SCHEMA_ID_V2,
         "id": plugin_id,
@@ -443,7 +512,7 @@ def scaffold_service_plugin(
         "signature": "",
         "contributions": {
             "commands": [
-                {"name": "ping", "readonly": True},
+                {"name": "health_check", "readonly": True},
                 {"name": "echo", "readonly": True},
             ],
             "ui": {
@@ -451,7 +520,7 @@ def scaffold_service_plugin(
                 "tabs": [
                     {
                         "id": plugin_id,
-                        "label": f"{plugin_id}.title",
+                        "label": f"{plugin_id}.tab",
                         "icon": "Plug",
                         "page": "main",
                     }
@@ -461,9 +530,9 @@ def scaffold_service_plugin(
                     "nodes": [
                         {
                             "kind": "button",
-                            "id": "ping-btn",
-                            "label": f"{plugin_id}.ping",
-                            "command": "ping",
+                            "id": "health-check-btn",
+                            "label": f"{plugin_id}.health_check",
+                            "command": "health_check",
                             "variant": "primary",
                         },
                         {
@@ -475,7 +544,7 @@ def scaffold_service_plugin(
                         {
                             "kind": "button",
                             "id": "echo-btn",
-                            "label": f"{plugin_id}.echo",
+                            "label": f"{plugin_id}.echo.btn",
                             "command": "echo",
                             "params": {"text": {"field": "echo-field"}},
                             "variant": "secondary",
@@ -484,8 +553,8 @@ def scaffold_service_plugin(
                 },
             },
             "i18n": {
-                "ru": {f"{plugin_id}.title": display_name},
-                "en": {f"{plugin_id}.title": display_name},
+                "ru": i18n_bundle,
+                "en": i18n_bundle,
             },
             "storage": {
                 "sqlite": True,
@@ -511,6 +580,12 @@ def scaffold_service_plugin(
     # ── <pkg>/__main__.py ──────────────────────────────────────────────
     (pkg_dir / "__main__.py").write_text(
         _MAIN_TEMPLATE.format(pkg_name=pkg_name, plugin_id=plugin_id),
+        encoding="utf-8",
+    )
+
+    # ── <pkg>/service.py ──────────────────────────────────────────────
+    (pkg_dir / "service.py").write_text(
+        _SERVICE_TEMPLATE,
         encoding="utf-8",
     )
 
