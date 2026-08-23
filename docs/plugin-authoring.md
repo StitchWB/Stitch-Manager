@@ -299,3 +299,166 @@ host version you developed and tested against.
    → `STITCH_DEV_MODE=1 python -m stitch_backend` → verify the plugin
    appears in `list_service_plugins` and its commands respond via
    `plugin.{id}.{cmd}`.
+
+---
+
+## 7. Implementation Conventions
+
+The preceding sections cover the **contract** surface (command names,
+SPI methods, versioning). This section covers **implementation
+conventions** — the patterns the shipped plugins follow inside their
+`__main__.py` and supporting modules. These are not enforced by the
+loader, but they are the canonical shape new plugins should match.
+
+### 7.1 Error convention — `ValueError` for input validation
+
+Command handlers validate input by **raising `ValueError`** for missing
+or invalid parameters. The `RpcPluginServer._dispatch` method catches
+all exceptions and surfaces them as JSON-RPC `{-32603, message}` errors,
+which the host's bridge translates to HTTP 400. This is the only
+sanctioned way to reject bad input from a handler.
+
+Returning a `{"success": false, "error": "..."}` dict is **reserved for
+API-result shapes** — commands that wrap an external API call and
+report that API's failure (e.g. a `test_api`-style command whose result
+is a structured status object the frontend renders). It is **never**
+used for input validation: a missing `profile_id` raises `ValueError`,
+it does not return a failure dict. The distinction matters because the
+dispatcher treats a raised exception as a JSON-RPC error (client sees
+an error response), while a returned dict is a normal result (client
+must inspect `success` manually).
+
+### 7.2 SPI-target commands are NOT declared in `contributions.commands`
+
+Commands invoked **only** through the SPI proxy (e.g. mail's `wait_otp`
+and `sync`) are **not** listed in `contributions.commands`. The SPI
+proxy (`spi_bridge.SPI_METHOD_MAP`) forwards protocol methods to plugin
+commands by name lookup at call time — it does not consult
+`contributions.commands`. Declaring them there would be misleading:
+they are not user-dispatchable via `plugin.{id}.{cmd}` and should not
+appear in the command surface.
+
+Declare in `contributions.commands` **only** commands that are:
+- Invoked directly by the frontend via `safeInvoke('plugin.{id}.{cmd}')`,
+- Invoked by the host's command dispatcher (dual-route or direct), or
+- Both.
+
+A command that is **both** SPI-invoked and user-dispatchable (e.g.
+`list_profiles` in the mail plugin) IS declared — it serves both paths.
+A command that is **only** SPI-invoked (e.g. `wait_otp`, `sync`) is NOT
+declared.
+
+### 7.3 File naming — `storage.py` and `service.py`
+
+Plugin modules follow a consistent file naming convention:
+
+| File | Purpose | Present when |
+|------|---------|--------------|
+| `__main__.py` | RPC entry point — `RpcPluginServer` loop + handlers | Always |
+| `storage.py` | SQLite storage — schema, migrations, CRUD | `contributions.storage.sqlite` is true |
+| `service.py` | External-API wrapper — HTTP calls, auth, response shaping | Plugin calls an external service |
+| `crypto.py` | At-rest encryption helpers | Plugin stores secrets (e.g. TOTP) |
+
+A plugin with both SQLite storage and an external API uses **both**
+`storage.py` and `service.py` (reference: `stitch-sheets`). A plugin
+with only storage uses just `storage.py` (reference: `stitch-totp`). A
+plugin with neither uses only `__main__.py`.
+
+The historical name `sheets_service.py` (pre-unification) has been
+renamed to `service.py` to match the convention. New plugins MUST use
+`service.py`, not `<plugin>_service.py`.
+
+### 7.4 Reverse-RPC pattern — closures capturing `server`
+
+Handlers that need to call back into the host (reverse RPC via
+`server.call_host`) are defined as **closures inside `main()`** so they
+capture the `server` instance. They are registered after the
+module-level handlers.
+
+Reference: `stitch-sheets` `start_oauth` and `exchange_oauth_code`:
+
+```python
+def main() -> None:
+    server = RpcPluginServer()
+    # ... module-level handlers registered first ...
+
+    def _handle_start_oauth(params: dict[str, Any]) -> dict[str, Any]:
+        return server.call_host("engine.oauth.start_pkce_flow", {
+            "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+            "token_url": "https://oauth2.googleapis.com/token",
+            "client_id": str(params.get("clientId", "")),
+            # ...
+        })
+
+    server.register("start_oauth", _handle_start_oauth)
+    server.serve()
+```
+
+Module-level handlers cannot capture `server`, so any handler that calls
+`server.call_host` MUST be a closure inside `main()`.
+
+### 7.5 Init extras — `_handle_init` may do setup beyond storing params
+
+The `_handle_init` handler receives the `plugin.init` handshake params
+(`db_path`, `data_dir`, `plugin_id`, `engine_api`). Beyond storing
+them, it MAY perform additional setup that must happen before any
+command handler runs.
+
+Reference: `stitch-totp` resolves the Fernet encryption key in
+`_handle_init`:
+
+```python
+def _handle_init(params: dict[str, Any]) -> dict[str, Any]:
+    ctx.db_path = str(params.get("db_path", ""))
+    ctx.data_dir = str(params.get("data_dir", ""))
+    crypto.init_crypto(ctx.data_dir)  # resolve Fernet key before any command
+    return {"plugin_id": params.get("plugin_id", ""), ...}
+```
+
+This guarantees the encryption key is resolved before `add_key` or
+`import_secrets` tries to encrypt a secret. Any setup that commands
+depend on (key resolution, connection pooling, config loading) belongs
+in `_handle_init`, not in a lazy first-call guard inside each handler.
+
+### 7.6 `service` field — domain shorthand, not command prefix
+
+The manifest's top-level `service` field is a **domain shorthand**
+matching the plugin id's suffix, not the built-in command prefix.
+
+| Plugin id | `service` | Rationale |
+|-----------|-----------|-----------|
+| `stitch-cards` | `cards` | Matches id suffix `cards` |
+| `stitch-totp` | `totp` | Matches id suffix `totp` |
+| `stitch-mail` | `mail` | Matches id suffix `mail` |
+| `stitch-notebooklm` | `notebooklm` | Matches id suffix `notebooklm` |
+| `stitch-opencode` | `opencode` | Matches id suffix `opencode` |
+| `stitch-radar` | `radar` | Matches id suffix `radar` |
+| `stitch-sheets` | `google_sheets` | **Historical exception** — matches the built-in `google_sheets_` command prefix for dual-route compatibility |
+
+New plugins MUST set `service` to the id suffix (e.g. `stitch-foo` →
+`service: "foo"`). The `google_sheets` value is a legacy exception kept
+for dual-route compatibility with the built-in `google_sheets_*`
+commands; do not introduce new exceptions.
+
+### 7.7 camelCase params — frontend-compat shim
+
+The frontend sends params in **camelCase** (`profileId`,
+`spreadsheetId`, `serviceAccountJson`), while the Python backend
+convention is `snake_case` (`profile_id`, `spreadsheet_id`). Plugin
+handlers are a **frontend-compat shim**: they read the camelCase variant
+directly from `params` rather than requiring the host to translate.
+
+When a handler accepts a param that might arrive in either form (e.g.
+because it is also called from a Python code path), it reads **both**
+variants:
+
+```python
+profile_id = str(params.get("profileId") or params.get("profile_id") or "")
+```
+
+Reference: `stitch-sheets` handlers read `spreadsheetId`,
+`serviceAccountJson`, `linkId`, `clientId`, etc. directly from
+`params` — the camelCase shape the frontend sends. This is deliberate:
+the plugin is the translation boundary, so the handler owns the
+camelCase-to-snake_case mapping rather than pushing it into every
+caller.
