@@ -82,11 +82,26 @@ from . import storage
 try:
     from autoreg.plugin.rpc import RpcPluginServer
 except ImportError:
-    # Inline fallback for standalone operation (no autoreg on sys.path).
-    class RpcPluginServer:  # minimal, protocol-equivalent
+    import threading
+    import time
+
+    class RpcPluginServer:
+        """Inline stdio JSON-RPC 2.0 server (protocol-equivalent fallback).
+
+        Handles plugin.init/ping/shutdown/call dispatch, handler
+        exceptions → -32603, unknown method → -32601, and reverse-RPC
+        call_host with queued-line processing.  Uses
+        sys.stdin.readline() (not ``for line in sys.stdin``) so call_host
+        can interleave reads without the iterator's buffering.
+        """
+
         def __init__(self) -> None:
             self._handlers: dict[str, Any] = {{}}
             self._init_handler: Any = None
+            self._request_handlers: dict[str, Any] = {{}}
+            self._next_request_id = 1
+            self._request_id_lock = threading.Lock()
+            self._queued_lines: list[str] = []
 
         def register(self, name: str, handler: Any) -> None:
             self._handlers[name] = handler
@@ -94,26 +109,78 @@ except ImportError:
         def set_init_handler(self, handler: Any) -> None:
             self._init_handler = handler
 
-        def serve(self) -> None:
-            for line in sys.stdin:
-                line = line.strip()
+        def set_request_handler(self, name: str, handler: Any) -> None:
+            self._request_handlers[name] = handler
+
+        def _next_request_id_locked(self) -> int:
+            with self._request_id_lock:
+                rid = self._next_request_id
+                self._next_request_id += 1
+                return rid
+
+        def call_host(self, method: str, params: dict[str, Any] | None = None, timeout: float = 30.0) -> Any:
+            rid = self._next_request_id_locked()
+            req = {{"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {{}}}}
+            sys.stdout.write(json.dumps(req, ensure_ascii=False) + "\\n")
+            sys.stdout.flush()
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                raw = sys.stdin.readline()
+                if not raw:
+                    raise RuntimeError("stdin closed while waiting for host response")
+                line = raw.strip()
                 if not line:
                     continue
                 try:
-                    req = json.loads(line)
-                except (json.JSONDecodeError, ValueError):
+                    obj = json.loads(line)
+                except (ValueError, TypeError):
                     continue
-                if not isinstance(req, dict):
+                if not isinstance(obj, dict):
                     continue
-                rid = req.get("id")
-                method = req.get("method", "")
-                params = req.get("params", {{}})
-                if not isinstance(params, dict):
-                    params = {{}}
-                result = self._dispatch(method, params)
-                self._send(rid, result)
-                if method == "plugin.shutdown":
+                obj_id = obj.get("id")
+                has_result = "result" in obj
+                has_error = "error" in obj and obj["error"] is not None
+                obj_method = obj.get("method")
+                if obj_id == rid and has_result and obj_method is None:
+                    return obj["result"]
+                if obj_id == rid and has_error and obj_method is None:
+                    err = obj["error"]
+                    if isinstance(err, dict):
+                        raise RuntimeError(f"host error [{{err.get('code', -32603)}}]: {{err.get('message', '')}}")
+                    raise RuntimeError(str(err))
+                self._queued_lines.append(line)
+            raise TimeoutError(f"call_host {{method}} (id={{rid}}) timed out after {{timeout}}s")
+
+        def serve(self) -> None:
+            while True:
+                while self._queued_lines:
+                    queued = self._queued_lines.pop(0)
+                    if self._process_line(queued):
+                        return
+                raw = sys.stdin.readline()
+                if not raw:
                     break
+                line = raw.strip()
+                if not line:
+                    continue
+                if self._process_line(line):
+                    return
+
+        def _process_line(self, line: str) -> bool:
+            try:
+                req = json.loads(line)
+            except (ValueError, TypeError):
+                return False
+            if not isinstance(req, dict):
+                return False
+            rid = req.get("id")
+            method = req.get("method", "")
+            params = req.get("params", {{}})
+            if not isinstance(params, dict):
+                params = {{}}
+            result = self._dispatch(method, params)
+            self._send_response(rid, result)
+            return method == "plugin.shutdown"
 
         def _dispatch(self, method: str, params: dict[str, Any]) -> Any:
             try:
@@ -139,7 +206,7 @@ except ImportError:
                 return {{"error": {{"code": -32603, "message": str(exc)}}}}
 
         @staticmethod
-        def _send(rid: Any, result: Any) -> None:
+        def _send_response(rid: Any, result: Any) -> None:
             if isinstance(result, dict) and "error" in result:
                 obj = {{"jsonrpc": "2.0", "id": rid, "error": result["error"]}}
             else:
@@ -384,46 +451,36 @@ def scaffold_service_plugin(
                 "tabs": [
                     {
                         "id": plugin_id,
-                        "label": display_name,
+                        "label": f"{plugin_id}.title",
                         "icon": "Plug",
                         "page": "main",
                     }
                 ],
                 "page": {
-                    "sections": [
+                    "title": f"{plugin_id}.title",
+                    "nodes": [
                         {
-                            "kind": "actions",
-                            "id": "ping-actions",
-                            "items": [
-                                {
-                                    "kind": "button",
-                                    "label": {"ru": "Пинг", "en": "Ping"},
-                                    "command": "ping",
-                                }
-                            ],
+                            "kind": "button",
+                            "id": "ping-btn",
+                            "label": f"{plugin_id}.ping",
+                            "command": "ping",
+                            "variant": "primary",
                         },
                         {
                             "kind": "field",
+                            "field": "text",
                             "id": "echo-field",
-                            "input": "text",
-                            "label": {"ru": "Текст", "en": "Text"},
-                            "placeholder": {
-                                "ru": "Введите текст...",
-                                "en": "Enter text...",
-                            },
+                            "label": f"{plugin_id}.echo.text",
                         },
                         {
-                            "kind": "actions",
-                            "id": "echo-actions",
-                            "items": [
-                                {
-                                    "kind": "button",
-                                    "label": {"ru": "Эхо", "en": "Echo"},
-                                    "command": "echo",
-                                }
-                            ],
+                            "kind": "button",
+                            "id": "echo-btn",
+                            "label": f"{plugin_id}.echo",
+                            "command": "echo",
+                            "params": {"text": {"field": "echo-field"}},
+                            "variant": "secondary",
                         },
-                    ]
+                    ],
                 },
             },
             "i18n": {
@@ -435,7 +492,6 @@ def scaffold_service_plugin(
                 "migrations": "raw_sql",
             },
         },
-        "config": {},
     }
     if author:
         manifest["author"] = author
