@@ -392,18 +392,34 @@ python -m stitch_plugin_tools sign /abs/path/to/my-plugin/ --key /abs/path/to/pr
 # 1. Scaffold a new service plugin (from repo root after `pip install -e python/`):
 python -m stitch_plugin_tools new my-plugin/ --id my-plugin
 
-# 2. Generate a signing keypair (one-time):
+# 2. Exercise commands instantly in the local REPL (no host boot):
+python -m stitch_plugin_tools run my-plugin/
+
+# 3. Run the plugin's own tests (tests/test_plugin_protocol.py):
+python -m stitch_plugin_tools test my-plugin/
+
+# 4. Generate a signing keypair (one-time):
 python -m stitch_plugin_tools keygen --out keys/
 
-# 3. Sign the package (optional in dev mode, required for production):
+# 5. Sign the package (optional in dev mode, required for production):
 python -m stitch_plugin_tools sign my-plugin/ --key keys/private.key
 
-# 4. Dev-install to plugins-local:
+# 6. Dev-install to plugins-local:
 python -m stitch_plugin_tools dev-install my-plugin/
 
-# 5. Start the host with dev mode:
+# 7. Start the host with dev mode:
 STITCH_DEV_MODE=1 python -m stitch_backend
 ```
+
+The author loop is: `new` -> edit handlers -> `run` (exercise commands
+instantly, watch stderr) -> `test` -> `dev-install` for host-level
+checks.  `run` spawns the plugin child with `RpcPluginClient`, streams
+child stderr live to the tool's stderr prefixed `[<plugin_id>]`, drives
+a line-based REPL on stdin (`<command> [json-params]` -> pretty-printed
+result), and stubs reverse-RPC `engine.oauth.*` requests so plugins
+that use `server.call_host` fail gracefully instead of hanging.  Built
+-ins: `ping`, `init-info` (handshake result + capabilities), `logs`
+(last 50 child stderr lines), `help`, `exit`/`quit`/EOF/Ctrl-C.
 
 ### Upgrading an authored plugin
 
@@ -583,6 +599,8 @@ test.
 | `verify <package_dir> --pubkey <public.key>` | Verify a package signature. |
 | `publish <package_dir> [--server-url …] [--key …]` | Sign + zip + POST to server. |
 | `dev-install <package_dir>` | Copy package to `plugins-local/`. Refreshes `_vendor/rpc_server.py` from canonical on each install. |
+| `run <package_dir>` | Interactive plugin REPL — spawn, stream child stderr live to the tool's stderr prefixed `[<plugin_id>]`, drive commands from stdin (`<command> [json-params]` → pretty-printed result), and stub reverse-RPC `engine.oauth.*` requests so plugins that use `server.call_host` fail gracefully instead of hanging. Built-ins: `ping`, `init-info`, `logs`, `help`, `exit`. The author loop: `new` → edit handlers → `run` → `test` → `dev-install`. |
+| `test <package_dir>` | Run the plugin's own tests via the venv pytest (`python -m pytest <dir>/tests -q --timeout=60`). No tests dir → friendly message pointing at the template's `tests/test_plugin_protocol.py`. pytest absent → error with install hint. |
 | `vendor <package_dir>` | Vendor the canonical `RpcPluginServer` into `<pkg>/_vendor/rpc_server.py`. Idempotent — skips the write when the file is already canonical. Run after `dev-install` or before `publish` to refresh the vendored server. |
 | `pack-engine <out_dir> [--version …]` | Assemble an engine-pack (captcha solvers). |
 | `codes {issue\|list} [--server-url …] [--admin-key …]` | Issue and list activation codes (admin). |
