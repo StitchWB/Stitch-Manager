@@ -138,8 +138,8 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     # Same pattern as the google_sheets_* dual route above: when a healthy
     # ``stitch-mail`` plugin host is registered, email_* / email_inbox_*
     # commands are routed to the plugin (stripping the prefix) BEFORE
-    # falling through to the built-in handler.  Owner identity is
-    # forwarded as ``owner_id`` when ``_caller_user_id`` is present.
+    # falling through to the built-in handler.  Caller identity is
+    # forwarded as ``caller_user_id`` / ``caller_role`` (totp_dual pattern).
     from stitch_backend.domains.plugin_runtime.mail_dual import (
         _FALLTHROUGH as _MAIL_FALLTHROUGH,
     )

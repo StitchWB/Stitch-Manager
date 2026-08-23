@@ -105,8 +105,11 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
             detail=f"Not entitled to plugin: {plugin_id}",
         )
 
-    # Strip internal dispatcher keys before forwarding to the plugin.
+    # Strip internal dispatcher keys, then forward caller identity so
+    # plugins can scope rows by owner (parallel to totp_dual / mail_dual).
     params = {k: v for k, v in body.items() if not k.startswith("_")}
+    params["caller_user_id"] = body.get("_caller_user_id")
+    params["caller_role"] = body.get("_caller_role")
 
     try:
         return await host.call(cmd, params)

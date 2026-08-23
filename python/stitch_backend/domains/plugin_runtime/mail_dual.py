@@ -13,9 +13,10 @@ falling through to the built-in handler.  No names are re-registered in
 ``command_registry`` — the indirection lives in the dispatcher, so no
 overwrite-warning spam.
 
-Owner identity is forwarded under ``owner_id`` (from
-``_caller_user_id`` when present) so the plugin can scope profile rows
-by owner — parallel to the notebooklm cookies passthrough.
+Owner identity is forwarded under unprefixed names
+(``caller_user_id`` / ``caller_role``) so the plugin can scope profile
+rows by owner — parallel to the totp_dual and notebooklm cookies
+passthrough.
 
 Entitlements: none extra.  The built-in email commands are not
 ``admin_only``, so the dual route adds no entitlement gate — the plugin
@@ -97,10 +98,10 @@ async def try_mail_dual_route(
       - plugin call timed out (``PluginCallTimeout``)
       - plugin returned a JSON-RPC error (``RpcCallError``)
 
-    Owner identity is forwarded under ``owner_id`` (from
-    ``_caller_user_id`` when present) so the plugin can scope rows by
-    owner.  Internal ``_``-prefixed dispatcher keys are stripped before
-    forwarding.
+    Owner identity is forwarded under unprefixed names
+    (``caller_user_id`` / ``caller_role``) so the plugin can scope
+    profile rows by owner.  Internal ``_``-prefixed dispatcher keys
+    are stripped before forwarding.
     """
     plugin_cmd = MAIL_DUAL.get(name)
     if plugin_cmd is None:
@@ -117,14 +118,10 @@ async def try_mail_dual_route(
     if host is None or not _plugin_healthy(host):
         return _FALLTHROUGH
 
-    # Strip internal dispatcher keys before forwarding to the plugin.
+    # Strip internal dispatcher keys, then forward caller identity.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
-
-    # Forward caller identity as owner_id when present so the plugin
-    # can scope profile rows by owner.
-    caller_user_id = body.get("_caller_user_id")
-    if caller_user_id is not None:
-        params["owner_id"] = caller_user_id
+    params["caller_user_id"] = body.get("_caller_user_id")
+    params["caller_role"] = body.get("_caller_role")
 
     try:
         return await host.call(plugin_cmd, params)
