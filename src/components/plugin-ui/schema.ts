@@ -51,6 +51,13 @@ export type UiNode =
       value?: string | boolean;
       options?: SelectOption[];
       readonly?: boolean;
+      /**
+       * Optional placeholder hint shown while the field is empty (text and
+       * select). Resolved like `label`: a string containing a dot is
+       * treated as an i18n key (`plugin.{id}.{key}`), anything else
+       * renders as-is.
+       */
+      placeholder?: string;
     }
   | {
       kind: 'table';
@@ -66,6 +73,21 @@ export type UiNode =
       command: string;
       params?: Record<string, unknown>;
       variant?: ButtonVariant;
+      /**
+       * Field→param binding: maps a param key to the `id` of a field node
+       * on the same page (fields nested in sections participate too — the
+       * field state map is page-scoped). On click the final params are
+       * `{...params}` with every key listed here overridden by the current
+       * value of the referenced field. A referenced field id that does not
+       * exist on the page omits that key from the params entirely (the
+       * renderer warns once). Buttons WITHOUT `paramsFrom` send `params`
+       * unchanged.
+       *
+       * Row-scoped table actions (params bound to a table ROW, e.g. a
+       * per-row delete button like totp's `remove_key`) are NOT part of
+       * this vocabulary — deferred as a future extension (v3 concern).
+       */
+      paramsFrom?: Record<string, string>;
     };
 
 /** Top-level schema for a declarative plugin page. */

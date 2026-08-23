@@ -259,14 +259,16 @@ Anything beyond the node dictionary stays `core_page`.
       "kind": "field",
       "field": "text",
       "id": "ask-field",
-      "label": "plugin.my-plugin.ask"
+      "label": "plugin.my-plugin.ask",
+      "placeholder": "plugin.my-plugin.ask.placeholder"
     },
     {
       "kind": "button",
       "id": "ask-btn",
       "label": "plugin.my-plugin.ask.btn",
       "command": "ask",
-      "params": {"text": {"field": "ask-field"}},
+      "params": {"text": ""},
+      "paramsFrom": {"text": "ask-field"},
       "variant": "primary"
     }
   ]
@@ -279,9 +281,9 @@ Anything beyond the node dictionary stays `core_page`.
 |------|---------|------------|
 | `heading` | Section heading. | `text`, `level?` (1-6). |
 | `section` | Group of nodes with an optional title. | `title?`, `nodes: UiNode[]`. |
-| `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`. |
+| `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`, `placeholder?` (text/select hint; plain string or i18n key, resolved like `label`). |
 | `table` | Read-only data table. | `id`, `columns: [{key, label}]`, `source: {command, params?}`, `rowsKey?`. `source.command` must be a readonly command returning rows. |
-| `button` | Action button. | `id`, `label`, `command`, `params?`, `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`. |
+| `button` | Action button. | `id`, `label`, `command`, `params?`, `paramsFrom?` (param key → field `id` binding), `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`. |
 
 ### Labels
 
@@ -290,11 +292,43 @@ Labels are plain **i18n key strings** resolved by the frontend `t()`
 `{"ru": "...", "en": "..."}` objects — the frontend resolves keys via
 the plugin's `contributions.i18n` bundle for the current locale.
 
+### Field state and placeholders
+
+The renderer keeps a **page-level field state map**: every `field` node
+(including fields nested inside `section` nodes) contributes its initial
+value (`value?`, default `""`) at page load, and all inputs render as
+controlled components that write back into this map. `placeholder?` is an
+optional hint for text/select fields, resolved like `label` (dotted
+string → i18n key via the plugin bundle, otherwise rendered as-is).
+
 ### Button clicks
 
 Button clicks invoke `plugin.{id}.{command}` via the host's
 `safeInvoke` — the result is surfaced as a toast or table refresh.
-Button `params` can reference field values via `{"field": "<field-id>"}`.
+
+Buttons bind field values through **`paramsFrom`**, a map of
+`param key → field id`:
+
+```json
+{
+  "kind": "button",
+  "id": "ask-btn",
+  "command": "ask",
+  "params": {"text": ""},
+  "paramsFrom": {"text": "ask-field"}
+}
+```
+
+On click, the final params are `{...params}` with every key listed in
+`paramsFrom` overridden by the current value of the referenced field.
+Keys not listed in `paramsFrom` keep their static `params` value. A
+`paramsFrom` entry that references a field id not present on the page
+omits that key from the params (the renderer warns once). Buttons
+without `paramsFrom` send their static `params` unchanged.
+
+**Deferred:** row-scoped table actions — params bound to a table ROW
+(e.g. a per-row delete button such as totp's `remove_key`) — are NOT
+part of the vocabulary yet; they are a future extension (v3 concern).
 
 ---
 
