@@ -184,6 +184,22 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     if _radar_result is not _RADAR_FALLTHROUGH:
         return JSONResponse(content=_serialise(_radar_result))
 
+    # ── Dual-format routing for card commands ──────────────────────────────
+    # Same pattern as radar above: when a healthy ``stitch-cards`` plugin
+    # host is registered, generate_cards / check_card_rust / find_live_card
+    # commands are routed to the plugin (identity mapping — no prefix to
+    # strip) BEFORE falling through to the built-in handler.
+    from stitch_backend.domains.plugin_runtime.cards_dual import (
+        _FALLTHROUGH as _CARDS_FALLTHROUGH,
+    )
+    from stitch_backend.domains.plugin_runtime.cards_dual import (
+        try_cards_dual_route,
+    )
+
+    _cards_result = await try_cards_dual_route(name, body)
+    if _cards_result is not _CARDS_FALLTHROUGH:
+        return JSONResponse(content=_serialise(_cards_result))
+
     # Look up handler
     try:
         handler = get_command_handler(name)
