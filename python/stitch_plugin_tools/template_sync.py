@@ -162,10 +162,22 @@ python -m pytest tests/ -q --timeout=60
 ```
 
 `tests/test_plugin_protocol.py` spawns the plugin and drives the raw
-JSON-RPC line protocol (init → ping → command → shutdown) with no host
-dependency — copy the pattern for your own commands.
+JSON-RPC line protocol (init -> ping -> command -> shutdown) with no host
+dependency -- copy the pattern for your own commands.
 
-### 4. Sign
+### 4. Run (local REPL, no host boot)
+
+```bash
+python -m stitch_plugin_tools run .
+```
+
+Spawns the plugin child, streams stderr live, and drives a line-based
+REPL on stdin (`<command> [json-params]` -> pretty-printed result).
+Built-ins: `ping`, `init-info`, `logs`, `help`, `exit`.  Reverse-RPC
+`engine.oauth.*` requests are stubbed (the plugin gets a clear error
+instead of hanging).  Try `health_check` and `echo {{"text":"hi"}}` first.
+
+### 5. Sign
 
 ```bash
 # one-time keypair (keep the private key offline):
@@ -173,7 +185,7 @@ python -m stitch_plugin_tools keygen --out keys/
 python -m stitch_plugin_tools sign . --key keys/private.key
 ```
 
-### 5. Dev-install and run
+### 6. Dev-install and run
 
 ```bash
 python -m stitch_plugin_tools dev-install .

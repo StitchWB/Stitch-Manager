@@ -1,6 +1,6 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Fourteen subcommands:
+Sixteen subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package
@@ -11,6 +11,8 @@ Fourteen subcommands:
     upgrade <package_dir> [--apply]             migrate an authored plugin to the current scaffold
     sync-template [--out <dir>]                 regenerate the template/ dir (GitHub template seed)
     vendor <package_dir>                        vendor canonical RpcPluginServer into <pkg>/_vendor/
+    run <package_dir>                           interactive plugin REPL (spawn + stderr stream + reverse-RPC stubs)
+    test <package_dir>                          run the plugin's own tests via the venv pytest
     drift […]                                   fetch drift report + propose selector weight rerank
     publish-selectors […]                       publish a selector overlay pack (hot update)
     codes {issue|list}                          issue and list activation codes (admin)
@@ -522,6 +524,34 @@ def _cmd_vendor(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── run / test ─────────────────────────────────────────────────────────────
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    """Interactive plugin REPL - spawn, stream stderr, drive commands.
+
+    See :func:`stitch_plugin_tools.runtool.run_package` for the spawn /
+    attach / stderr-streaming / reverse-RPC-stub design.  The author
+    loop becomes: ``new`` -> edit handlers -> ``run`` (exercise commands
+    instantly, watch stderr) -> ``test`` -> ``dev-install``.
+    """
+    from stitch_plugin_tools.runtool import run_package
+
+    return run_package(Path(args.package_dir))
+
+
+def _cmd_test(args: argparse.Namespace) -> int:
+    """Run the plugin's own tests via the venv pytest.
+
+    Streams ``python -m pytest <package_dir>/tests -q`` output.  No
+    tests dir -> friendly message pointing at the template's starter
+    test.  pytest absent -> error with install hint.
+    """
+    from stitch_plugin_tools.runtool import test_package
+
+    return test_package(Path(args.package_dir))
+
+
 # ── argparse ──────────────────────────────────────────────────────────────
 
 
@@ -644,6 +674,24 @@ def _build_parser() -> argparse.ArgumentParser:
         "package_dir", help="package directory (contains plugin.json)"
     )
     p_vendor.set_defaults(func=_cmd_vendor)
+
+    p_run = sub.add_parser(
+        "run",
+        help="interactive plugin REPL - spawn, stream stderr, drive commands",
+    )
+    p_run.add_argument(
+        "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_run.set_defaults(func=_cmd_run)
+
+    p_test = sub.add_parser(
+        "test",
+        help="run the plugin's own tests via the venv pytest",
+    )
+    p_test.add_argument(
+        "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_test.set_defaults(func=_cmd_test)
 
     p_drift = sub.add_parser(
         "drift",
