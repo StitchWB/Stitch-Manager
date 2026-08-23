@@ -30,7 +30,7 @@ manifest with `schema: "stitch.plugin/v2"` and `kind: "service"`.
 | `engine` | `object` | `{min: "<semver>", api: <int>}` — minimum host version + API level. |
 | `depends` | `string[]` | Plugin ids this plugin depends on (usually `[]`). |
 | `entry` | `object` | `{module: "<python_module>"}` — the module spawned as `python -m <module>`. |
-| `capabilities` | `string[]` | SPI registrations (e.g. `["mail.inbox"]`). Usually `[]` for non-SPI plugins. |
+| `capabilities` | `string[]` | v1 heritage list (usually `[]` for service plugins). SPI registrations live in `contributions.spi`. |
 | `outputs` | `string[]` | Output declarations (usually `[]`). |
 | `signature` | `string` | `ed25519:<base64>` signature (empty when unsigned). |
 
@@ -73,19 +73,15 @@ The `contributions` object declares the plugin's surface area:
 | `i18n` | `object` | Translation bundles keyed by locale (`ru`, `en`). Keys are resolved via `t("plugin.{id}.{key}")` fallback. |
 | `storage` | `object` | Storage declaration. `sqlite: true` enables per-plugin SQLite at `data/plugins/{id}/plugin.db`. `migrations` is `"raw_sql"`, `"alembic"`, or `null`. |
 
-### `config` (v2)
+### Settings & environment
 
-The `config` object declares which core settings the plugin needs
-(whitelist). The host reads these from core settings and passes them
-in the `plugin.init` handshake as `engine_config`.
-
-```json
-{
-  "config": {
-    "needs": ["imap.host", "imap.port"]
-  }
-}
-```
+There is no generic settings-injection mechanism. Plugins receive
+`db_path`, `data_dir`, and `plugin_id` in the `plugin.init` handshake.
+Storage-declaring plugins additionally receive `TOKEN_ENCRYPTION_KEY`
+via the process environment (so secrets at rest use the same Fernet key
+as the core). Any other configuration a plugin needs must be fetched
+via its own RPC commands (e.g. reading from its own SQLite database or
+requesting values through `call_host` reverse-RPC).
 
 ### Extras
 
@@ -110,7 +106,7 @@ the host.
 
 | Method | Direction | Params | Result | Description |
 |--------|-----------|--------|--------|-------------|
-| `plugin.init` | host→plugin | `{plugin_id, db_path, data_dir, engine_config}` | any | Handshake. Called once at startup. The plugin stores `db_path` for SQLite access. |
+| `plugin.init` | host→plugin | `{engine_api, plugin_id, db_path, data_dir}` | any | Handshake. Called once at startup. `engine_api` is the host's engine API level (currently `2`). The plugin stores `db_path` for SQLite access. |
 | `plugin.call` | host→plugin | `{name: <str>, params: <dict>}` | any | Dispatch a command. `name` matches a `contributions.commands[].name`. Unknown name → JSON-RPC error `-32601`. |
 | `plugin.ping` | host→plugin | `{}` | `"pong"` | Health check. Host uses this for liveness. |
 | `plugin.shutdown` | host→plugin | `{}` | `null` | Graceful shutdown. Plugin should clean up and exit. |
@@ -160,65 +156,79 @@ equivalent — same protocol, no external dependency.
 ## 4. Declarative UI Schema
 
 When `contributions.ui.kind = "declarative"`, the host renders the
-plugin's page from a fixed schema vocabulary. No arbitrary JavaScript
+plugin's page from a fixed **nodes vocabulary**. No arbitrary JavaScript
 or HTML from the plugin enters the frontend.
 
 ### Boundary rule
 
-The declarative vocabulary covers **fixed-layout pages**: tables,
-forms, buttons, fields. Pages that need polling/realtime, rich-text,
-drag-and-drop, or virtual scrolling must use `kind = "core_page"`
-(a host page that binds to plugin commands).
+The declarative vocabulary covers **fixed-layout pages**: headings,
+sections, fields, tables, and buttons. Pages that need polling/realtime,
+rich-text, drag-and-drop, or virtual scrolling must use
+`kind = "core_page"` (a host page that binds to plugin commands).
+Anything beyond the node dictionary stays `core_page`.
 
-### Schema vocabulary
+### Schema
 
 ```json
 {
-  "sections": [
+  "title": "plugin.my-plugin.title",
+  "nodes": [
+    {"kind": "heading", "text": "plugin.my-plugin.heading", "level": 2},
     {
-      "kind": "table",
-      "id": "notebooks",
-      "label": {"ru": "Ноутбуки", "en": "Notebooks"},
-      "columns": [
-        {"key": "id", "label": "ID"},
-        {"key": "title", "label": {"ru": "Заголовок", "en": "Title"}}
-      ],
-      "command": "list_notebooks"
+      "kind": "section",
+      "title": "plugin.my-plugin.section",
+      "nodes": [
+        {
+          "kind": "table",
+          "id": "items",
+          "columns": [
+            {"key": "id", "label": "ID"},
+            {"key": "title", "label": "plugin.my-plugin.col.title"}
+          ],
+          "source": {"command": "list_items"}
+        }
+      ]
     },
     {
       "kind": "field",
+      "field": "text",
       "id": "ask-field",
-      "input": "text",
-      "label": {"ru": "Вопрос", "en": "Ask"},
-      "placeholder": {"ru": "Задайте вопрос...", "en": "Ask a question..."}
+      "label": "plugin.my-plugin.ask"
     },
     {
-      "kind": "actions",
-      "id": "ask-actions",
-      "items": [
-        {
-          "kind": "button",
-          "label": {"ru": "Спросить", "en": "Ask"},
-          "command": "ask",
-          "params": {"field": "ask-field"}
-        }
-      ]
+      "kind": "button",
+      "id": "ask-btn",
+      "label": "plugin.my-plugin.ask.btn",
+      "command": "ask",
+      "params": {"text": {"field": "ask-field"}},
+      "variant": "primary"
     }
   ]
 }
 ```
 
-| Section kind | Purpose |
-|-------------|---------|
-| `table` | Read-only data table. `columns` define the schema. `command` is a readonly command that returns `[{...}, ...]`. |
-| `field` | Input field. `input` is `"text"`, `"select"`, or `"toggle"`. |
-| `actions` | Action buttons. Each `item` has `kind: "button"`, `label`, `command`, and optional `params`. |
-| `heading` | Section heading (label only). |
+### Node kinds
 
-Labels can be plain strings or localized objects `{"ru": "...", "en": "..."}`.
+| Kind | Purpose | Key fields |
+|------|---------|------------|
+| `heading` | Section heading. | `text`, `level?` (1-6). |
+| `section` | Group of nodes with an optional title. | `title?`, `nodes: UiNode[]`. |
+| `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`. |
+| `table` | Read-only data table. | `id`, `columns: [{key, label}]`, `source: {command, params?}`, `rowsKey?`. `source.command` must be a readonly command returning rows. |
+| `button` | Action button. | `id`, `label`, `command`, `params?`, `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`. |
+
+### Labels
+
+Labels are plain **i18n key strings** resolved by the frontend `t()`
+(e.g. `"plugin.my-plugin.title"` or bundle keys). They are NOT inline
+`{"ru": "...", "en": "..."}` objects — the frontend resolves keys via
+the plugin's `contributions.i18n` bundle for the current locale.
+
+### Button clicks
 
 Button clicks invoke `plugin.{id}.{command}` via the host's
 `safeInvoke` — the result is surfaced as a toast or table refresh.
+Button `params` can reference field values via `{"field": "<field-id>"}`.
 
 ---
 
@@ -407,7 +417,7 @@ plugins-src/stitch-notebooklm/
     "ui": {
       "kind": "declarative",
       "tabs": [{"id": "notebooklm", "label": "NotebookLM", "icon": "BookOpen", "page": "main"}],
-      "page": { /* sections: table + actions + field */ }
+      "page": { /* nodes vocabulary — see §4 */ }
     },
     "i18n": {"ru": {...}, "en": {...}},
     "storage": {"sqlite": true, "migrations": "raw_sql"}
