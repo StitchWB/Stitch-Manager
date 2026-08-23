@@ -27,7 +27,7 @@ import time
 from typing import Any
 
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.domains.plugin_runtime import all_hosts, get_manifest
+from stitch_backend.domains.plugin_runtime import all_hosts, get_host, get_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -171,3 +171,38 @@ async def _get_service_plugin_health(
         )
         await _notify_crash_loop(plugin_id, restarts)
     return entries
+
+
+@register_command("service_plugin_metrics", readonly=True, admin_only=True)
+async def _service_plugin_metrics(
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Return host-served call metrics for one plugin (admin-only).
+
+    Mirrors the ``get_service_plugin_logs`` pattern: takes a required
+    ``plugin_id``, returns the host's :meth:`ServicePluginHost.get_metrics`
+    dict (the same shape served by ``plugin.{id}.metrics`` without an RPC
+    roundtrip).  404 for an unknown plugin id, 400 for a malformed id.
+
+    The metrics shape (fixed contract):
+        {
+          "calls": int, "errors": int, "avg_latency_ms": float,
+          "last_error": str | None,
+          "by_command": {name: {"calls": int, "errors": int}},
+        }
+    """
+    from fastapi import HTTPException
+
+    from stitch_backend.domains.plugin_runtime.bridge import _PLUGIN_ID_RE
+
+    plugin_id = params.get("plugin_id")
+    if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
+        raise HTTPException(
+            status_code=400, detail="plugin_id is required and must be valid"
+        )
+    host = get_host(plugin_id)
+    if host is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown plugin: {plugin_id}"
+        )
+    return host.get_metrics()

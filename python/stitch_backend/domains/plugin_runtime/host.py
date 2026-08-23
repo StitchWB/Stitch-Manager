@@ -22,11 +22,13 @@ import logging
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from autoreg.plugin.rpc import (
+    RpcCallError,
     RpcPluginClient,
     RpcProtocolError,
     RpcTimeoutError,
@@ -36,6 +38,20 @@ from stitch_backend.domains.sidecar import LaunchPlan, SidecarSpec, get_supervis
 from stitch_backend.domains.sidecar.supervisor import subprocess_isolation_kwargs
 
 logger = logging.getLogger(__name__)
+
+
+#: Capabilities the host advertises in the ``plugin.init`` handshake params
+#: under the ``supported`` key.  Extensible string list — a plugin reads
+#: this to know which host-side features it may rely on:
+#:   - ``reverse_rpc``    : the host wires ``engine.oauth.*`` reverse-RPC
+#:                          handlers (plugin can call_host).
+#:   - ``caller_identity``: the host forwards ``caller_user_id`` /
+#:                          ``caller_role`` on every dispatched command.
+#:
+#: Plugins respond with their own ``capabilities`` list in the init result
+#: (see :meth:`ServicePluginHost._parse_capabilities`); unknown values are
+#: logged at WARNING and kept verbatim for observability.
+SUPPORTED_CAPABILITIES: list[str] = ["reverse_rpc", "caller_identity"]
 
 
 class PluginCallTimeout(Exception):
@@ -122,6 +138,24 @@ class ServicePluginHost:
         self._log_buffer: collections.deque[str] = collections.deque(maxlen=1000)
         self._stderr_thread: threading.Thread | None = None
 
+        # Capability negotiation: capabilities the plugin declared in its
+        # plugin.init result.  Empty until the handshake completes; the
+        # host never filters values it does not recognise (it logs a
+        # warning and keeps them so status() stays observability-complete).
+        self._capabilities: list[str] = []
+
+        # Per-host call metrics — thread-safe because call() runs via
+        # asyncio.to_thread(self.rpc.call, ...) and the bridge may issue
+        # concurrent calls.  Counters are integers; latency is summed in
+        # milliseconds (float) and divided by calls for the average.
+        # by_command tracks calls + errors per command name.
+        self._metrics_lock = threading.Lock()
+        self._metrics_calls: int = 0
+        self._metrics_errors: int = 0
+        self._metrics_latency_ms: float = 0.0
+        self._metrics_last_error: str | None = None
+        self._metrics_by_command: dict[str, dict[str, int]] = {}
+
     # ── public API ─────────────────────────────────────────────────────
 
     async def start(self) -> dict[str, Any]:
@@ -193,16 +227,36 @@ class ServicePluginHost:
     async def call(
         self, cmd_name: str, params: dict | None = None, timeout: float | None = None
     ) -> Any:
-        """Call a plugin command.  Raises PluginCallTimeout on timeout."""
+        """Call a plugin command.  Raises PluginCallTimeout on timeout.
+
+        Every call is instrumented for host-served metrics: timing,
+        success/error classification, and per-command counters.  Errors
+        counted: PluginCallTimeout, RpcCallError, PluginNotRunning.
+        """
         to = timeout or self.default_timeout
         if self._stopping or not self.rpc.is_alive:
+            self._record_call(cmd_name, 0.0, error="plugin not running")
             raise PluginNotRunning(self.plugin_id)
+        start = time.perf_counter()
         try:
-            return await asyncio.to_thread(self.rpc.call, cmd_name, params or {}, to)
+            result = await asyncio.to_thread(self.rpc.call, cmd_name, params or {}, to)
         except RpcTimeoutError:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_call(
+                cmd_name, elapsed_ms, error=f"timeout after {to}s"
+            )
             raise PluginCallTimeout(self.plugin_id, cmd_name, to)
         except RpcProtocolError:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_call(cmd_name, elapsed_ms, error="rpc protocol error")
             raise PluginNotRunning(self.plugin_id)
+        except RpcCallError as exc:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_call(cmd_name, elapsed_ms, error=str(exc))
+            raise
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_call(cmd_name, elapsed_ms)
+        return result
 
     async def ping(self, timeout: float | None = None) -> bool:
         to = timeout or self.default_timeout
@@ -227,13 +281,32 @@ class ServicePluginHost:
                     f"crash loop: host dead after {self._restart_count} restart(s)"
                 ),
             }
+        # Cheap metrics snapshot (ints only — no copy of by_command, which
+        # would mutate under concurrent calls).  The full metrics shape
+        # is served by get_metrics() / plugin.{id}.metrics.
+        with self._metrics_lock:
+            calls = self._metrics_calls
+            errors = self._metrics_errors
         return {
             **sup,
             "plugin_id": self.plugin_id,
             "restarts": self._restart_count,
             "stopping": self._stopping,
             "source": self.source,
+            "supported": list(SUPPORTED_CAPABILITIES),
+            "capabilities": list(self._capabilities),
+            "calls": calls,
+            "errors": errors,
         }
+
+    @property
+    def capabilities(self) -> list[str]:
+        """Capabilities the plugin declared in its init result (a copy).
+
+        Empty until the handshake completes; backward-compatible ``[]``
+        for plugins that predate the capability handshake.
+        """
+        return list(self._capabilities)
 
     def get_logs(self, lines: int = 100) -> list[str]:
         """Return the last *lines* entries from the stderr ring buffer.
@@ -245,6 +318,95 @@ class ServicePluginHost:
         if lines <= 0:
             return snapshot
         return snapshot[-lines:] if lines < len(snapshot) else snapshot
+
+    def get_metrics(self) -> dict[str, Any]:
+        """Return host-served call metrics (no RPC roundtrip).
+
+        Shape (fixed contract — served by ``plugin.{id}.metrics`` and
+        the ``service_plugin_metrics`` admin command):
+
+            {
+              "calls": int,
+              "errors": int,
+              "avg_latency_ms": float,
+              "last_error": str | None,
+              "by_command": {name: {"calls": int, "errors": int}},
+            }
+
+        ``avg_latency_ms`` is 0.0 when no calls have been made.
+        """
+        with self._metrics_lock:
+            calls = self._metrics_calls
+            errors = self._metrics_errors
+            latency = self._metrics_latency_ms
+            last_error = self._metrics_last_error
+            by_command = {
+                name: {"calls": s["calls"], "errors": s["errors"]}
+                for name, s in self._metrics_by_command.items()
+            }
+        avg = (latency / calls) if calls else 0.0
+        return {
+            "calls": calls,
+            "errors": errors,
+            "avg_latency_ms": avg,
+            "last_error": last_error,
+            "by_command": by_command,
+        }
+
+    def _record_call(
+        self, cmd_name: str, elapsed_ms: float, *, error: str | None = None
+    ) -> None:
+        """Record one call outcome under the metrics lock (thread-safe).
+
+        ``error`` is the human-readable failure reason (command name is
+        embedded by the caller via ``cmd_name``).  Per-command counters
+        are kept under ``by_command``; the global ``last_error`` carries
+        the most recent failure string (None when the last call succeeded).
+        """
+        with self._metrics_lock:
+            self._metrics_calls += 1
+            self._metrics_latency_ms += elapsed_ms
+            slot = self._metrics_by_command.setdefault(
+                cmd_name, {"calls": 0, "errors": 0}
+            )
+            slot["calls"] += 1
+            if error is not None:
+                self._metrics_errors += 1
+                slot["errors"] += 1
+                self._metrics_last_error = f"{cmd_name}: {error}"
+            else:
+                self._metrics_last_error = None
+
+    @staticmethod
+    def _parse_capabilities(init_result: Any) -> list[str]:
+        """Extract the ``capabilities`` list from a plugin.init result.
+
+        Tolerant contract:
+          - Missing key / None / non-list value → ``[]`` (backward compat
+            with plugins that predate the capability handshake).
+          - Non-string entries are dropped (defensive — the contract is
+            ``list[str]``).
+          - Unknown capability strings (not in :data:`SUPPORTED_CAPABILITIES`)
+            are logged at WARNING and kept verbatim — the host never
+            silently drops a declared capability.
+        """
+        if not isinstance(init_result, dict):
+            return []
+        raw = init_result.get("capabilities")
+        if not isinstance(raw, list):
+            return []
+        known = set(SUPPORTED_CAPABILITIES)
+        out: list[str] = []
+        for item in raw:
+            if not isinstance(item, str) or not item:
+                continue
+            if item not in known:
+                logger.warning(
+                    "[Plugin] init result declares unknown capability %r "
+                    "(kept for observability)", item,
+                )
+            out.append(item)
+        return out
 
     # ── internal ───────────────────────────────────────────────────────
 
@@ -401,6 +563,10 @@ class ServicePluginHost:
             "plugin_id": self.plugin_id,
             "data_dir": str(self.data_dir),
             "db_path": str(self.db_path),
+            # Capability negotiation: advertise the host-side features
+            # the plugin may rely on.  Plugins echo back their own
+            # ``capabilities`` list in the init result (optional).
+            "supported": list(SUPPORTED_CAPABILITIES),
         }
         self.rpc = RpcPluginClient(default_timeout=self.default_timeout)
         self.rpc._proc = proc
@@ -416,6 +582,13 @@ class ServicePluginHost:
         except (RpcTimeoutError, RpcProtocolError):
             self.rpc.kill()
             raise
+        # Parse the plugin's declared capabilities from the init result.
+        # Tolerant: a missing/empty/non-list value → [].  Unknown values
+        # (not in SUPPORTED_CAPABILITIES) are logged at WARNING and kept
+        # verbatim so status() surfaces them for observability.
+        self._capabilities = self._parse_capabilities(
+            self.rpc._init_result
+        )
         if self.migrations:
             self.rpc.call(
                 "_migrate_db",
