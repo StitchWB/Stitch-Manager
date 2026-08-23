@@ -65,6 +65,12 @@ _COMMUNITY_SERVICES_ENV = "STITCH_COMMUNITY_SERVICES"
 #: Best-effort memory cap (MB) for community-origin service plugins.
 _COMMUNITY_MEMORY_LIMIT_MB = 256
 
+#: The service-plugin platform engine version this host implements.  v2
+#: service plugins whose ``engine.min`` is strictly newer than this are
+#: skipped at discovery time (log warning, never crash startup).  Bump
+#: when the service-plugin platform contract changes.
+SERVICE_ENGINE_VERSION = "0.3.0"
+
 
 async def start_service_plugins() -> None:
     """Discover and start all installed service plugins.
@@ -113,9 +119,38 @@ async def _start_one(
         )
         return False
 
+    # Skip v2 plugins whose engine.min is newer than the host's
+    # service-plugin engine version.  Never crash startup — just log.
+    engine_api = manifest.engine.get("api")
+    if engine_api is not None and engine_api >= 2:
+        engine_min = manifest.engine.get("min", "")
+        try:
+            if parse_semver(engine_min) > parse_semver(SERVICE_ENGINE_VERSION):
+                logger.warning(
+                    "Service plugin %s: engine.min %s is newer than host "
+                    "service-plugin engine %s — skipping",
+                    manifest.id, engine_min, SERVICE_ENGINE_VERSION,
+                )
+                return False
+        except ValueError:
+            logger.warning(
+                "Service plugin %s: engine.min %s is not valid semver — skipping",
+                manifest.id, engine_min,
+            )
+            return False
+
     contributions = manifest.contributions
     storage_decl = contributions.get("storage", {})
     migrations = bool(storage_decl.get("migrations"))
+
+    # Plugins with their own storage need TOKEN_ENCRYPTION_KEY to encrypt
+    # secrets at rest with the same Fernet key as the core (tokens stay
+    # interchangeable across the migration boundary).  Passed via plan.env,
+    # NOT the supervisor allowlist — it is a secret that only
+    # storage-declaring plugins should see.
+    child_env: dict[str, str] = {}
+    if storage_decl and (tok := os.environ.get("TOKEN_ENCRYPTION_KEY", "")):
+        child_env["TOKEN_ENCRYPTION_KEY"] = tok
 
     host = ServicePluginHost(
         plugin_id=manifest.id,
@@ -125,6 +160,7 @@ async def _start_one(
         migrations=migrations,
         source=source,
         memory_limit_mb=memory_limit_mb,
+        env=child_env,
     )
     # Crash-loop hook: telemetry report + LKG rollback (todo 23).
     host.crash_hook = _on_crash_loop
@@ -239,6 +275,27 @@ async def rollback_service_plugin(plugin_id: str) -> bool:
         logger.warning("rollback %s: SPI unregister failed: %s", plugin_id, exc)
 
     storage_decl = prev_manifest.contributions.get("storage", {})
+    # Skip rollback to a version whose engine.min is newer than the host's
+    # service-plugin engine version (same guard as _start_one).
+    prev_engine_api = prev_manifest.engine.get("api")
+    if prev_engine_api is not None and prev_engine_api >= 2:
+        prev_engine_min = prev_manifest.engine.get("min", "")
+        try:
+            if parse_semver(prev_engine_min) > parse_semver(SERVICE_ENGINE_VERSION):
+                logger.warning(
+                    "Service plugin %s: rollback target engine.min %s is newer "
+                    "than host service-plugin engine %s — degraded",
+                    plugin_id, prev_engine_min, SERVICE_ENGINE_VERSION,
+                )
+                record_event({
+                    "action": "degraded",
+                    "plugin_id": plugin_id,
+                    "version": current_version or "",
+                    "reason": "engine_too_new_for_rollback",
+                })
+                return False
+        except ValueError:
+            pass
     new_host = ServicePluginHost(
         plugin_id=plugin_id,
         entry_module=entry_module,
@@ -431,4 +488,4 @@ def _community_services_enabled() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
-__all__ = ["start_service_plugins", "rollback_service_plugin"]
+__all__ = ["start_service_plugins", "rollback_service_plugin", "SERVICE_ENGINE_VERSION"]
