@@ -1,6 +1,6 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Ten subcommands:
+Eleven subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package

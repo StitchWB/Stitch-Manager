@@ -81,7 +81,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["stitch_backend*"]
+include = ["stitch_backend*", "stitch_plugin_tools*", "autoreg*"]
 
 # ── Tool config ──────────────────────────────────────────────────────────────
 

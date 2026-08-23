@@ -178,14 +178,22 @@ def dev_install(package_dir: Path) -> Path:
     """Copy a package into ``plugins-local/{id}/`` (dev loop, no server).
 
     Overwrites any existing copy of the same plugin id.  Returns the
-    destination path.
+    destination path.  Excludes ``__pycache__``, ``*.pyc``, ``*.db``, and
+    ``*.sqlite3`` so stale bytecode and test databases don't leak into the
+    dev install.
     """
     manifest = crypto.read_manifest(package_dir)
     dest = plugins_local_dir() / manifest.id
     if dest.exists():
         shutil.rmtree(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(package_dir, dest)
+    shutil.copytree(
+        package_dir,
+        dest,
+        ignore=shutil.ignore_patterns(
+            "__pycache__", "*.pyc", "*.db", "*.sqlite3",
+        ),
+    )
     return dest
 
 

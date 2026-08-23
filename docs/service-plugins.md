@@ -42,7 +42,7 @@ The `contributions` object declares the plugin's surface area:
 {
   "contributions": {
     "commands": [
-      {"name": "ping", "readonly": true},
+      {"name": "health_check", "readonly": true},
       {"name": "create_notebook", "readonly": false}
     ],
     "ui": {
@@ -53,8 +53,8 @@ The `contributions` object declares the plugin's surface area:
       "page": { /* declarative schema — see §4 */ }
     },
     "i18n": {
-      "ru": {"notebooklm.title": "NotebookLM"},
-      "en": {"notebooklm.title": "NotebookLM"}
+      "ru": {"notebooklm": {"title": "NotebookLM"}},
+      "en": {"notebooklm": {"title": "NotebookLM"}}
     },
     "storage": {
       "sqlite": true,
@@ -70,7 +70,7 @@ The `contributions` object declares the plugin's surface area:
 | `ui` | `object` | UI contribution. `kind` is `"declarative"` (schema-driven) or `"core_page"` (host page binds to plugin commands). |
 | `ui.tabs` | `object[]` | Dynamic tabs in the AI Hub. `id`, `label`, `icon` (Lucide icon name), `page` (schema ref). |
 | `ui.page` | `object` | Declarative page schema (see §4). Only used when `kind=declarative`. |
-| `i18n` | `object` | Translation bundles keyed by locale (`ru`, `en`). Keys are resolved via `t("plugin.{id}.{key}")` fallback. |
+| `i18n` | `object` | Translation bundles keyed by locale (`ru`, `en`). Keys are **nested objects** whose string leaves are translations — the FE resolver (`walkBundle`) walks dot-paths through nested objects. Flat keys (e.g. `"myplugin.title"`) never resolve. Labels are i18n key strings resolved via `t("plugin.{id}.{key}")`. |
 | `storage` | `object` | Storage declaration. `sqlite: true` enables per-plugin SQLite at `data/plugins/{id}/plugin.db`. `migrations` is `"raw_sql"`, `"alembic"`, or `null`. |
 
 ### Settings & environment
@@ -138,7 +138,7 @@ from autoreg.plugin.rpc import RpcPluginServer
 
 server = RpcPluginServer()
 server.set_init_handler(handle_init)
-server.register("ping", handle_ping)
+server.register("health_check", handle_health_check)
 server.register("echo", handle_echo)
 server.serve()  # blocks until plugin.shutdown
 ```
@@ -239,15 +239,19 @@ Translation bundles live in `contributions.i18n`:
 ```json
 {
   "i18n": {
-    "ru": {"myplugin.title": "Мой плагин"},
-    "en": {"myplugin.title": "My Plugin"}
+    "ru": {"myplugin": {"title": "Мой плагин"}},
+    "en": {"myplugin": {"title": "My Plugin"}}
   }
 }
 ```
 
 The frontend `t()` function resolves keys in the form
-`plugin.{id}.{key}` by falling back to the plugin's bundle for the
-current locale. Missing keys return the key string as-is (no crash).
+`plugin.{id}.{key}` by walking the dot-path through the plugin's
+nested bundle for the current locale. For example,
+`plugin.myplugin.myplugin.title` walks `bundle["myplugin"]["title"]`.
+Missing keys return the key string as-is (no crash). Bundles MUST be
+nested objects — flat keys (e.g. `"myplugin.title"`) never resolve
+because `walkBundle` walks each path segment as a separate object key.
 
 ---
 
@@ -293,10 +297,33 @@ return 504.
 The dev loop uses `plugins-local/` — a directory of unsigned packages
 that the host discovers when `STITCH_DEV_MODE=1`.
 
+### Prerequisites
+
+The `stitch_plugin_tools` package must be importable. Either install it
+editable from the repo root (one-time):
+
+```bash
+pip install -e python/
+```
+
+Or run all `python -m stitch_plugin_tools` commands from the `python/`
+directory (where `stitch_plugin_tools/` is a direct subpackage). The
+`sign` and `dev-install` commands take a package directory argument, so
+you can pass an absolute path regardless of cwd:
+
+```bash
+# From repo root (after `pip install -e python/`):
+python -m stitch_plugin_tools sign /abs/path/to/my-plugin/ --key /abs/path/to/private.key
+
+# Or from python/ dir (no install needed):
+cd python/
+python -m stitch_plugin_tools sign /abs/path/to/my-plugin/ --key /abs/path/to/private.key
+```
+
 ### Quick start
 
 ```bash
-# 1. Scaffold a new service plugin:
+# 1. Scaffold a new service plugin (from repo root after `pip install -e python/`):
 python -m stitch_plugin_tools new my-plugin/ --id my-plugin
 
 # 2. Generate a signing keypair (one-time):
@@ -458,6 +485,10 @@ test.
 | `publish <package_dir> [--server-url …] [--key …]` | Sign + zip + POST to server. |
 | `dev-install <package_dir>` | Copy package to `plugins-local/`. |
 | `pack-engine <out_dir> [--version …]` | Assemble an engine-pack (captcha solvers). |
+| `codes {issue\|list} [--server-url …] [--admin-key …]` | Issue and list activation codes (admin). |
+| `install-from <url> [--ref\|--release] [--sha256] [--trust]` | Fetch + install a plugin from a git repo or release tarball. |
+| `drift [--server-url …] --plugin <id> [--version …] [--window-hours …] [--package-dir …] [--apply]` | **v1 selector tooling.** Fetch drift report + propose selector weight rerank. Expects `scenario.json` — not applicable to v2 service plugins. |
+| `publish-selectors [--server-url …] --plugin-id <id> --plugin-version <ver> --package-dir <dir> [--note …]` | **v1 selector tooling.** Publish a selector overlay pack (hot update). Expects `scenario.json` — not applicable to v2 service plugins. |
 
 ### `pack` / `sign` for service plugins
 
