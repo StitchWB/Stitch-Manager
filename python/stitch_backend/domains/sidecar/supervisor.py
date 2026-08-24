@@ -122,6 +122,59 @@ def _child_env(extra: dict[str, str], name: str) -> dict[str, str]:
     return env
 
 
+# ── opt-in privilege drop ──────────────────────────────────────────────────
+# When STITCH_PLUGIN_RUN_AS_USER is set (POSIX only), plugin/sidecar
+# subprocesses are spawned with ``user=<that user>`` so they run as a
+# DIFFERENT (unprivileged) uid.  This is ADDITIVE defense-in-depth on top
+# of the env allowlist and scoped TEMP — it does NOT replace them.
+#
+# Why a different uid is needed (Linux): a same-user child can read the
+# parent's env via ``/proc/<ppid>/environ``, defeating the env allowlist.
+# Running as a different uid closes that hole (the child cannot read a
+# /proc entry owned by a different uid).  See
+# ``docs/plugin-sandbox-isolation.md`` for the full write-up.
+#
+# One-time log guard so the Windows skip warning is not repeated per spawn.
+_privilege_drop_windows_skip_logged: bool = False
+
+
+def _privilege_drop_kwargs() -> dict[str, Any]:
+    """Opt-in privilege-drop kwargs for plugin/sidecar subprocesses.
+
+    Reads ``STITCH_PLUGIN_RUN_AS_USER``:
+
+    - **Unset** → returns ``{}`` (behavior identical to pre-feature — no
+      regression).
+    - **Set + POSIX** (``sys.platform != "win32"``) → returns
+      ``{"user": <value>}`` so children run as that user.  Only ``user=``
+      is passed; the OS resolves the primary group from the user's passwd
+      entry (no fabricated group).
+    - **Set + Windows** → logs a one-time WARNING that privilege drop is
+      POSIX-only (``subprocess.Popen(user=)`` raises on Windows) and
+      returns ``{}`` (no regression, no failure).
+
+    Failure semantics: if Popen raises because the target user doesn't
+    exist or setuid is denied, the caller's ``except Exception`` path
+    surfaces it as a spawn failure — there is NO silent fallback to a
+    privileged spawn (that would defeat the purpose).
+    """
+    global _privilege_drop_windows_skip_logged
+    run_as = os.environ.get("STITCH_PLUGIN_RUN_AS_USER")
+    if not run_as:
+        return {}
+    if sys.platform == "win32":
+        if not _privilege_drop_windows_skip_logged:
+            logger.warning(
+                "STITCH_PLUGIN_RUN_AS_USER=%s ignored: privilege drop is "
+                "POSIX-only (subprocess.Popen(user=) raises on Windows). "
+                "Continuing without privilege drop.",
+                run_as,
+            )
+            _privilege_drop_windows_skip_logged = True
+        return {}
+    return {"user": run_as}
+
+
 class _State:
     __slots__ = ("process", "port", "config", "start_time", "error", "lock")
 
@@ -211,6 +264,7 @@ class SidecarSupervisor:
                         stderr=subprocess.PIPE,
                         env=_child_env(plan.env, name),
                         **_subprocess_isolation_kwargs(),
+                        **_privilege_drop_kwargs(),
                     )
                     st.process = proc
                     st.port = plan.port
@@ -230,6 +284,7 @@ class SidecarSupervisor:
                         stderr=asyncio.subprocess.DEVNULL,
                         env=_child_env(plan.env, name),
                         **_subprocess_isolation_kwargs(),
+                        **_privilege_drop_kwargs(),
                     )
                     st.port = plan.port
                     st.config = dict(plan.config)
@@ -247,7 +302,13 @@ class SidecarSupervisor:
                         # Do not leave an unhealthy process running.
                         await self._stop_locked(name)
             except Exception as exc:  # noqa: BLE001
-                st.error = str(exc)
+                run_as = os.environ.get("STITCH_PLUGIN_RUN_AS_USER")
+                if run_as and sys.platform != "win32":
+                    st.error = (
+                        f"STITCH_PLUGIN_RUN_AS_USER={run_as} failed: {exc}"
+                    )
+                else:
+                    st.error = str(exc)
                 logger.error("[Sidecar:%s] failed to start: %s", name, exc, exc_info=True)
             return self.status(name)
 
