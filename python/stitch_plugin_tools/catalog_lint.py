@@ -10,11 +10,14 @@ Rules:
   3. Version must be semver (``MAJOR.MINOR.PATCH`` with optional pre-release).
   4. If ``source`` is present:
      - Must be a dict with ``type`` ∈ {``"git"``, ``"release"``}.
-     - git: ``url`` required (str).
+     - git: ``url`` required (str); ``ref`` optional, when present must be
+       a non-empty string not starting with ``-`` (git injection hardening,
+       mirrors ``sources._git_clone``).
      - release: ``url`` required (str) + ``sha256`` required (hex64).
      - Unknown ``type`` → error.
-  5. Duplicate ``id`` + ``version`` pairs → error.
-  6. Legacy entries (no ``source``) are accepted (backward compat).
+  5. Legacy entries (no ``source``): ``path`` (non-empty str) +
+     ``sha256`` (hex64) required — the documented zip-era shape.
+  6. Duplicate ``id`` + ``version`` pairs → error.
 
 Exit 0 on success, 1 on any error.  A per-entry report is printed to stdout.
 """
@@ -58,26 +61,45 @@ def lint_entry(entry: Any) -> list[str]:
 
     # Source field (optional — legacy entries have none).
     source = entry.get("source")
-    if source is not None:
-        if not isinstance(source, dict):
-            errors.append("'source' must be an object")
+    if source is None:
+        # Legacy entry (zip-era, backward compatible).
+        # Documented shape: path (non-empty str) + sha256 (hex64).
+        path = entry.get("path")
+        if not path or not isinstance(path, str):
+            errors.append("legacy entry requires 'path'")
+        sha256 = entry.get("sha256")
+        if not sha256 or not isinstance(sha256, str):
+            errors.append("legacy entry requires 'sha256'")
+        elif not _is_hex64(sha256):
+            errors.append("legacy entry 'sha256' must be hex64")
+    elif not isinstance(source, dict):
+        errors.append("'source' must be an object")
+    else:
+        stype = source.get("type")
+        if stype == "git":
+            url = source.get("url")
+            if not url or not isinstance(url, str):
+                errors.append("git source requires 'url'")
+            # ref validation: when present, must be a non-empty string and
+            # must not start with "-" (git argument injection hardening,
+            # mirrors sources._git_clone).
+            ref = source.get("ref")
+            if ref is not None:
+                if not isinstance(ref, str) or not ref:
+                    errors.append("git source 'ref' must be a non-empty string")
+                elif ref.startswith("-"):
+                    errors.append("git source 'ref' must not start with '-'")
+        elif stype == "release":
+            url = source.get("url")
+            if not url or not isinstance(url, str):
+                errors.append("release source requires 'url'")
+            sha256 = source.get("sha256")
+            if not sha256 or not isinstance(sha256, str):
+                errors.append("release source requires 'sha256'")
+            elif not _is_hex64(sha256):
+                errors.append("release source 'sha256' must be hex64")
         else:
-            stype = source.get("type")
-            if stype == "git":
-                url = source.get("url")
-                if not url or not isinstance(url, str):
-                    errors.append("git source requires 'url'")
-            elif stype == "release":
-                url = source.get("url")
-                if not url or not isinstance(url, str):
-                    errors.append("release source requires 'url'")
-                sha256 = source.get("sha256")
-                if not sha256 or not isinstance(sha256, str):
-                    errors.append("release source requires 'sha256'")
-                elif not _is_hex64(sha256):
-                    errors.append("release source 'sha256' must be hex64")
-            else:
-                errors.append(f"unknown source type: {stype!r}")
+            errors.append(f"unknown source type: {stype!r}")
 
     return errors
 
