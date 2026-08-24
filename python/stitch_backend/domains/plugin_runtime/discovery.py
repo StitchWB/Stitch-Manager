@@ -151,9 +151,11 @@ async def _start_one(
     # rpc_server.py may drift when a package is hand-edited or generated
     # from a different canonical source.  The upgrade tool + dev-install
     # refresh exist to fix drift; this is just a visibility nudge.
+    # The vendored file lives in the MODULE dir (<pkg>/<module>/_vendor/),
+    # not the package root — resolve it the same way the spawner does.
     try:
         from stitch_plugin_tools.vendoring import vendored_matches_canonical
-        if not vendored_matches_canonical(package_dir):
+        if not vendored_matches_canonical(package_dir / entry_module):
             logger.warning(
                 "Service plugin %s: vendored rpc_server.py drifts from "
                 "canonical — run `python -m stitch_plugin_tools vendor "

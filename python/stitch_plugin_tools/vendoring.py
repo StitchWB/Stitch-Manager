@@ -177,15 +177,17 @@ def canonical_rpc_server_text() -> str:
     return header + _SECTION_SEP + body
 
 
-def vendored_matches_canonical(package_dir: Path) -> bool:
-    """Return True if the package's vendored rpc_server.py matches canonical.
+def vendored_matches_canonical(module_dir: Path) -> bool:
+    """Return True if the module's vendored rpc_server.py matches canonical.
 
-    A package whose vendored file has drifted (edited by hand, or generated
-    from a different canonical source) returns False.  Packages without a
-    vendored file return False.  Never raises — callers use this to WARN
-    (not block) on drift.
+    ``module_dir`` is the Python package directory containing ``__main__.py``
+    (the same convention as :func:`vendor_rpc_server`), NOT the plugin
+    package root.  A module whose vendored file has drifted (edited by hand,
+    or generated from a different canonical source) returns False.  Modules
+    without a vendored file return False.  Never raises — callers use this
+    to WARN (not block) on drift.
     """
-    rpc_path = package_dir / "_vendor" / "rpc_server.py"
+    rpc_path = module_dir / "_vendor" / "rpc_server.py"
     if not rpc_path.is_file():
         return False
     try:

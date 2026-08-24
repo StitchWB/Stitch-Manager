@@ -279,6 +279,12 @@ rich-text, drag-and-drop, or virtual scrolling must use
 `kind = "core_page"` (a host page that binds to plugin commands).
 Anything beyond the node dictionary stays `core_page`.
 
+The vocabulary above is the **frozen v2 contract**: node kinds and their
+fields only change by a schema revision (new kinds are additive and the
+renderer tolerates unknown kinds). Known deferred extensions (row-scoped
+table actions, tabbed pages, modals) are v3 candidates — until then,
+pages that need them stay `core_page`.
+
 ### Schema
 
 ```json
@@ -442,6 +448,13 @@ return 504.
 
 The dev loop uses `plugins-local/` — a directory of unsigned packages
 that the host discovers when `STITCH_DEV_MODE=1`.
+
+The in-repo reference plugins (`plugins-src/`) commit their
+`_vendor/rpc_server.py`, so a bare clone runs them standalone
+(`python -m <module>` from the plugin dir) without `pip install -e`.
+`dev-install` and the `vendor` command refresh `_vendor/` from the
+canonical `autoreg/plugin/rpc.py` on demand, and discovery warns when a
+package's vendored server drifts.
 
 ### Prerequisites
 
