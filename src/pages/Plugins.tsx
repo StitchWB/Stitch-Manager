@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText, Download } from 'lucide-react';
+import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText, Download, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
@@ -45,6 +45,7 @@ import {
   type ServicePluginStatus,
 } from '@/lib/backend/modules/servicePlugins';
 import { SandboxSection } from '../components/plugins/SandboxSection';
+import { ServicePluginMetricsPanel } from '../components/plugins/ServicePluginMetricsPanel';
 
 const ALL_PLUGINS_ID = '*';
 
@@ -77,6 +78,7 @@ export default function Plugins() {
   const [logsOpenId, setLogsOpenId] = useState<string | null>(null);
   const [logsCache, setLogsCache] = useState<Record<string, string[]>>({});
   const [logsLoadingId, setLogsLoadingId] = useState<string | null>(null);
+  const [metricsOpenId, setMetricsOpenId] = useState<string | null>(null);
   const [installModalOpen, setInstallModalOpen] = useState(false);
 
   useEffect(() => { void fetchServicePlugins(); }, []);
@@ -145,6 +147,10 @@ export default function Plugins() {
       setLogsLoadingId(null);
     }
   }, [logsOpenId, logsCache]);
+
+  const onToggleMetrics = useCallback((pluginId: string) => {
+    setMetricsOpenId(prev => (prev === pluginId ? null : pluginId));
+  }, []);
 
   const roles = useMemo(() => ROLE_LADDER, []);
 
@@ -436,8 +442,10 @@ export default function Plugins() {
                     logsOpen={logsOpenId === plugin.id}
                     logsLines={logsCache[plugin.id]}
                     logsLoading={logsLoadingId === plugin.id}
+                    metricsOpen={metricsOpenId === plugin.id}
                     onRestart={() => void onRestartServicePlugin(plugin.id)}
                     onToggleLogs={() => void onToggleLogs(plugin.id)}
+                    onToggleMetrics={() => onToggleMetrics(plugin.id)}
                   />
                 ))}
               </div>
@@ -482,12 +490,14 @@ interface ServicePluginCardProps {
   logsOpen: boolean;
   logsLines: string[] | undefined;
   logsLoading: boolean;
+  metricsOpen: boolean;
   onRestart: () => void;
   onToggleLogs: () => void;
+  onToggleMetrics: () => void;
 }
 
 function ServicePluginCard({
-  plugin, restarting, logsOpen, logsLines, logsLoading, onRestart, onToggleLogs,
+  plugin, restarting, logsOpen, logsLines, logsLoading, metricsOpen, onRestart, onToggleLogs, onToggleMetrics,
 }: ServicePluginCardProps) {
   const badge = statusBadge(plugin.status);
   const isCommunity = plugin.source === 'community';
@@ -512,6 +522,9 @@ function ServicePluginCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Badge variant={badge.variant} size="sm">{badge.label}</Badge>
+          <Button variant="ghost" size="xs" onClick={onToggleMetrics} leftIcon={<Activity size={12} />}>
+            {t('admin.plugins.servicePlugin.metrics.toggle')}
+          </Button>
           <Button variant="ghost" size="xs" onClick={onToggleLogs} leftIcon={<FileText size={12} />}>
             {t('admin.plugins.servicePluginLogs')}
           </Button>
@@ -526,13 +539,22 @@ function ServicePluginCard({
           </Button>
         </div>
       </div>
-      <div className="flex items-center gap-4 text-xs text-slate-500">
+      <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+        {typeof plugin.status.calls === 'number' && typeof plugin.status.errors === 'number' && (
+          <span>
+            {t('admin.plugins.servicePlugin.metrics.calls')}: {plugin.status.calls} ·{' '}
+            {t('admin.plugins.servicePlugin.metrics.errors')}: {plugin.status.errors}
+          </span>
+        )}
         <span>{t('admin.plugins.servicePluginRestarts')}: {plugin.status.restarts}</span>
         <span>{t('admin.plugins.servicePluginUptime')}: {formatUptime(plugin.status.uptimeSeconds)}</span>
         {plugin.status.error && (
           <span className="text-red-400 truncate">{plugin.status.error}</span>
         )}
       </div>
+      {metricsOpen && (
+        <ServicePluginMetricsPanel pluginId={plugin.id} />
+      )}
       {logsOpen && (
         <div className="mt-1 rounded-lg border border-white/[0.06] bg-black/60 p-3 max-h-48 overflow-y-auto">
           {logsLoading ? (

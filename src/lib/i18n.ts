@@ -3961,6 +3961,22 @@ export interface Translations {
       servicePluginCommunity: string;
       servicePluginCommunityTooltip: string;
       servicePluginCommunityTabTooltip: string;
+      servicePlugin: {
+        metrics: {
+          toggle: string;
+          title: string;
+          calls: string;
+          errors: string;
+          avgLatency: string;
+          lastError: string;
+          byCommand: string;
+          command: string;
+          noCommands: string;
+          loadFailed: string;
+          refresh: string;
+          ms: string;
+        };
+      };
       installFromSource: {
         title: string;
         url: string;
