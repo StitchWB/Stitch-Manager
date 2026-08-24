@@ -129,6 +129,8 @@ module = [
     "google.oauth2.*",
     "webview",
     "shardx",
+    "pyotp",
+    "aiogram.*",
     "autoreg.browser.*",
     "autoreg.spoofers.*",
     "autoreg.services.*",
