@@ -1,7 +1,7 @@
 """Community plugin channel — catalog client + install/uninstall (plan §3.5).
 
 Community plugins are unsigned (trust=community) packages contributed via
-GitHub PR to ``WhiteBite/stitch-plugin-catalog``.  Catalog is a JSON index
+GitHub PR to ``StitchWB/stitch-plugin-catalog``.  Catalog is a JSON index
 at the repo root; packages live under ``plugins/<id>/<version>/`` and are
 downloaded as a whole-repo zip from codeload.github.com.
 
@@ -32,10 +32,10 @@ from .config import data_dir
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CATALOG_URL = (
-    "https://raw.githubusercontent.com/WhiteBite/stitch-plugin-catalog/main/catalog.json"
+    "https://raw.githubusercontent.com/StitchWB/stitch-plugin-catalog/main/catalog.json"
 )
 _REPO_ZIP_URL = (
-    "https://codeload.github.com/WhiteBite/stitch-plugin-catalog/zip/refs/heads/main"
+    "https://codeload.github.com/StitchWB/stitch-plugin-catalog/zip/refs/heads/main"
 )
 _CACHE_TTL_SECONDS = 60.0
 

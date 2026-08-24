@@ -32,7 +32,7 @@ TEMPLATE_PLUGIN_ID = "stitch-plugin-template"
 TEMPLATE_PLUGIN_NAME = "Stitch Plugin Template"
 _TEMPLATE_PKG = TEMPLATE_PLUGIN_ID.replace("-", "_")
 
-_REPO_URL = "https://github.com/WhiteBite/Stitch-Manager"
+_REPO_URL = "https://github.com/StitchWB/Stitch-Manager"
 
 # ── Overlay extras ───────────────────────────────────────────────────────
 

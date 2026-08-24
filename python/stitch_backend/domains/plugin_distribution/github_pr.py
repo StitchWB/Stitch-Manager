@@ -3,7 +3,7 @@
 Extracted from ``community_commands._submit_pr_flow`` so both the community
 submit-for-review path and the local-override patch-candidate path reuse the
 same fork → branch → upload → PR sequence against
-``WhiteBite/stitch-plugin-catalog``.
+``StitchWB/stitch-plugin-catalog``.
 
 Token is never logged or persisted — it lives only in the ``AsyncClient``
 headers for the duration of the request and is dropped when the client
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _GH_API = "https://api.github.com"
-_CATALOG_OWNER = "WhiteBite"
+_CATALOG_OWNER = "StitchWB"
 _CATALOG_REPO = "stitch-plugin-catalog"
 
 
@@ -35,7 +35,7 @@ async def submit_catalog_pr(
     pr_title: str,
     pr_body: str,
 ) -> dict[str, Any]:
-    """Open a PR against ``WhiteBite/stitch-plugin-catalog``.
+    """Open a PR against ``StitchWB/stitch-plugin-catalog``.
 
     Flow: GET /user → ensure fork → branch from catalog main → PUT each
     file → POST pulls.  Token is in ``client`` headers.
