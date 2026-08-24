@@ -11,6 +11,7 @@ import {
   Toggle,
   LoadingSpinner,
   EmptyState,
+  GlassCard,
   Table,
   TableHeader,
   TableBody,
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui';
 import type { PluginPageSchema, RowAction, UiNode } from './schema';
 import { invokeAction } from './bindings';
+import { renderMarkdown } from './markdown';
 
 /** Minimal shape of a service-plugin entry returned by list_service_plugins. */
 interface ServicePluginInfo {
@@ -221,6 +223,10 @@ function renderNode(
           fieldValues={fields.values}
         />
       );
+    case 'card_grid':
+      return <CardGridNode key={index} pluginId={pluginId} node={node} />;
+    case 'markdown':
+      return <MarkdownNode key={index} pluginId={pluginId} node={node} />;
     default: {
       // Tolerant reader: future node kinds not in the type union yet.
       const kind = (node as { kind: string }).kind;
@@ -443,6 +449,248 @@ function ButtonNode({
       {resolveLabel(pluginId, node.label)}
     </Button>
   );
+}
+
+/**
+ * Resolve a card template field against a row: the template string is
+ * FIRST treated as a column key of the row — if the row has that key its
+ * value is rendered ('' for null/undefined); otherwise the template
+ * string renders literally (static text / literal image URL).
+ */
+function resolveCardField(
+  row: Record<string, unknown>,
+  template: string | undefined,
+): string {
+  if (template === undefined) return '';
+  if (template in row) {
+    const value = row[template];
+    return value == null ? '' : String(value);
+  }
+  return template;
+}
+
+function CardGridNode({
+  pluginId,
+  node,
+}: {
+  pluginId: string;
+  node: Extract<UiNode, { kind: 'card_grid' }>;
+}) {
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Bumped after a successful card action so the effect below re-runs
+  // the source command (same refetch mechanism as TableNode row actions).
+  const [fetchKey, setFetchKey] = useState(0);
+  // Index of the card whose action is in flight, if any.
+  const [busyAction, setBusyAction] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    invokeAction<Record<string, unknown> | Record<string, unknown>[]>(
+      pluginId,
+      node.source.command,
+      node.source.params,
+    )
+      .then(resp => {
+        if (cancelled) return;
+        // null/undefined → empty state (no cards, no error).
+        if (resp == null) {
+          setRows([]);
+          setLoading(false);
+          return;
+        }
+        // Bare array of rows.
+        if (Array.isArray(resp)) {
+          setRows(resp as Record<string, unknown>[]);
+          setLoading(false);
+          return;
+        }
+        // Object wrapping rows under "rows" (table default rowsKey;
+        // card_grid has no configurable rowsKey field).
+        const data = (resp as Record<string, unknown>).rows;
+        if (Array.isArray(data)) {
+          setRows(data as Record<string, unknown>[]);
+          setLoading(false);
+          return;
+        }
+        // Malformed response — inline error like TableNode.
+        setError('Card grid response missing "rows"');
+        setLoading(false);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pluginId, node.source.command, node.source.params, fetchKey]);
+
+  const action = node.card.action;
+
+  const handleAction = async (
+    row: Record<string, unknown>,
+    rowIndex: number,
+  ) => {
+    if (!action) return;
+    // Destructive actions confirm before invoking; declining aborts
+    // without calling the command (same key as table row actions).
+    if (
+      action.variant === 'danger' &&
+      !window.confirm(t('pluginUi.confirmRowAction'))
+    ) {
+      return;
+    }
+    // Static params first, then paramsFromRow entries resolved from the
+    // clicked card's row — identical to TableNode's rowAction merge.
+    const params: Record<string, unknown> = { ...(action.params ?? {}) };
+    for (const [paramKey, columnKey] of Object.entries(
+      action.paramsFromRow ?? {},
+    )) {
+      if (columnKey in row) {
+        params[paramKey] = row[columnKey];
+      } else {
+        // Manifest bug: referenced column does not exist on the row.
+        // Omit the key entirely and warn once per grid+param.
+        delete params[paramKey];
+        const warnKey = `${pluginId}.${node.id}.${paramKey}`;
+        if (!missingRowParamWarnings.has(warnKey)) {
+          missingRowParamWarnings.add(warnKey);
+          console.warn(
+            `DeclarativePage: card grid "${node.id}" action paramsFromRow ` +
+              `references unknown column "${columnKey}" — param ` +
+              `"${paramKey}" omitted`,
+          );
+        }
+      }
+    }
+    setBusyAction(rowIndex);
+    try {
+      const ok = await runPluginCommand(pluginId, action.command, params);
+      // Refresh the rows so the mutation is visible immediately.
+      if (ok) setFetchKey(k => k + 1);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  if (loading) return <LoadingSpinner size="sm" />;
+  if (error) return <p className="text-xs text-red-400">{error}</p>;
+  if (rows.length === 0) return <p className="text-xs text-slate-500">&mdash;</p>;
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {rows.map((row, i) => {
+        const title = resolveCardField(row, node.card.title);
+        const subtitle = resolveCardField(row, node.card.subtitle);
+        const body = resolveCardField(row, node.card.body);
+        const imageSrc = resolveCardField(row, node.card.image);
+        return (
+          <GlassCard key={i} className="overflow-hidden">
+            {imageSrc && (
+              <img
+                src={imageSrc}
+                alt={title}
+                className="h-32 w-full object-cover"
+              />
+            )}
+            <div className="space-y-1 p-3">
+              <div className="text-sm font-semibold text-white">{title}</div>
+              {subtitle && (
+                <div className="text-xs text-slate-400">{subtitle}</div>
+              )}
+              {body && (
+                <div className="text-xs leading-relaxed text-slate-300">
+                  {body}
+                </div>
+              )}
+              {action && (
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    variant={action.variant ?? 'primary'}
+                    isLoading={busyAction === i}
+                    onClick={() => handleAction(row, i)}
+                  >
+                    {resolveLabel(pluginId, action.label)}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        );
+      })}
+    </div>
+  );
+}
+
+function MarkdownNode({
+  pluginId,
+  node,
+}: {
+  pluginId: string;
+  node: Extract<UiNode, { kind: 'markdown' }>;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setText(null);
+    invokeAction<unknown>(pluginId, node.source.command, node.source.params)
+      .then(resp => {
+        if (cancelled) return;
+        // null/undefined → empty state (no text, no error).
+        if (resp == null) {
+          setLoading(false);
+          return;
+        }
+        // Bare string response is accepted as the markdown text directly
+        // (the string analogue of the table node's bare-array tolerance).
+        if (typeof resp === 'string') {
+          setText(resp);
+          setLoading(false);
+          return;
+        }
+        // Object carrying the markdown under `textKey` (default "text").
+        if (typeof resp === 'object') {
+          const textKey = node.textKey ?? 'text';
+          const value = (resp as Record<string, unknown>)[textKey];
+          if (typeof value === 'string') {
+            setText(value);
+            setLoading(false);
+            return;
+          }
+          // Malformed response — inline error like TableNode.
+          setError(`Markdown response missing textKey "${textKey}"`);
+          setLoading(false);
+          return;
+        }
+        setError(`Markdown response missing textKey "${node.textKey ?? 'text'}"`);
+        setLoading(false);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pluginId, node.source.command, node.source.params, node.textKey]);
+
+  if (loading) return <LoadingSpinner size="sm" />;
+  if (error) return <p className="text-xs text-red-400">{error}</p>;
+  if (!text) return <p className="text-xs text-slate-500">&mdash;</p>;
+
+  return renderMarkdown(text);
 }
 
 interface DeclarativePageProps {
