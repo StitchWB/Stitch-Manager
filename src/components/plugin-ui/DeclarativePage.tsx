@@ -18,7 +18,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui';
-import type { PluginPageSchema, UiNode } from './schema';
+import type { PluginPageSchema, RowAction, UiNode } from './schema';
 import { invokeAction } from './bindings';
 
 /** Minimal shape of a service-plugin entry returned by list_service_plugins. */
@@ -108,6 +108,30 @@ function collectInitialFieldValues(
 
 /** Warn-once registry for buttons whose paramsFrom references a missing field. */
 const missingParamsFromWarnings = new Set<string>();
+
+/** Warn-once registry for row actions whose paramsFromRow references a missing column. */
+const missingRowParamWarnings = new Set<string>();
+
+/**
+ * Shared invoke path for button nodes and table row actions: runs
+ * `plugin.{pluginId}.{command}` through invokeAction and surfaces
+ * rejections as the `pluginUi.actionFailed` toast. Returns true on
+ * success so callers (row actions) can trigger follow-ups like a table
+ * refetch.
+ */
+async function runPluginCommand(
+  pluginId: string,
+  command: string,
+  params?: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    await invokeAction(pluginId, command, params);
+    return true;
+  } catch {
+    appToast.error(t('pluginUi.actionFailed'));
+    return false;
+  }
+}
 
 function renderNode(
   pluginId: string,
@@ -216,6 +240,12 @@ function TableNode({
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumped after a successful row action so the effect below re-runs the
+  // source command (TableNode had no refresh mechanism before row
+  // actions; page-level buttons still do NOT trigger a table refetch).
+  const [fetchKey, setFetchKey] = useState(0);
+  // `${rowIndex}:${actionId}` of the in-flight row action, if any.
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -263,7 +293,55 @@ function TableNode({
     return () => {
       cancelled = true;
     };
-  }, [pluginId, node.source.command, node.source.params, node.rowsKey]);
+  }, [pluginId, node.source.command, node.source.params, node.rowsKey, fetchKey]);
+
+  const rowActions = node.rowActions ?? [];
+
+  const handleRowAction = async (
+    action: RowAction,
+    row: Record<string, unknown>,
+    rowIndex: number,
+  ) => {
+    // Destructive actions confirm before invoking; declining aborts
+    // without calling the command.
+    if (
+      action.variant === 'danger' &&
+      !window.confirm(t('pluginUi.confirmRowAction'))
+    ) {
+      return;
+    }
+    // Static params first, then paramsFromRow entries resolved from the
+    // clicked row — the row analogue of ButtonNode's paramsFrom merge.
+    const params: Record<string, unknown> = { ...(action.params ?? {}) };
+    for (const [paramKey, columnKey] of Object.entries(
+      action.paramsFromRow ?? {},
+    )) {
+      if (columnKey in row) {
+        params[paramKey] = row[columnKey];
+      } else {
+        // Manifest bug: referenced column does not exist on the row.
+        // Omit the key entirely and warn once per table+action+param.
+        delete params[paramKey];
+        const warnKey = `${pluginId}.${node.id}.${action.id}.${paramKey}`;
+        if (!missingRowParamWarnings.has(warnKey)) {
+          missingRowParamWarnings.add(warnKey);
+          console.warn(
+            `DeclarativePage: row action "${action.id}" in table ` +
+              `"${node.id}" paramsFromRow references unknown column ` +
+              `"${columnKey}" — param "${paramKey}" omitted`,
+          );
+        }
+      }
+    }
+    setBusyAction(`${rowIndex}:${action.id}`);
+    try {
+      const ok = await runPluginCommand(pluginId, action.command, params);
+      // Refresh the rows so the mutation is visible immediately.
+      if (ok) setFetchKey(k => k + 1);
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   if (loading) return <LoadingSpinner size="sm" />;
   if (error) return <p className="text-xs text-red-400">{error}</p>;
@@ -276,6 +354,7 @@ function TableNode({
           {node.columns.map(col => (
             <TableHead key={col.key}>{resolveLabel(pluginId, col.label)}</TableHead>
           ))}
+          {rowActions.length > 0 && <TableHead />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -286,6 +365,23 @@ function TableNode({
                 {String(row[col.key] ?? '')}
               </TableCell>
             ))}
+            {rowActions.length > 0 && (
+              <TableCell key="__row_actions">
+                <div className="flex justify-end gap-2">
+                  {rowActions.map(action => (
+                    <Button
+                      key={action.id}
+                      size="sm"
+                      variant={action.variant ?? 'primary'}
+                      isLoading={busyAction === `${i}:${action.id}`}
+                      onClick={() => handleRowAction(action, row, i)}
+                    >
+                      {resolveLabel(pluginId, action.label)}
+                    </Button>
+                  ))}
+                </div>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>
@@ -332,9 +428,7 @@ function ButtonNode({
         }
         params = merged;
       }
-      await invokeAction(pluginId, node.command, params);
-    } catch {
-      appToast.error(t('pluginUi.actionFailed'));
+      await runPluginCommand(pluginId, node.command, params);
     } finally {
       setBusy(false);
     }
