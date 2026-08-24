@@ -28,7 +28,9 @@ from pathlib import Path
 from typing import Any
 
 from autoreg.plugin import crypto
+from autoreg.plugin.dependency_resolver import resolve_service_dependencies
 from autoreg.plugin.layout import _base_dir, plugins_cache_dir, plugins_local_dir
+from autoreg.plugin.loader import PluginLoader
 from autoreg.plugin.manifest import (
     ManifestValidationError,
     PluginManifest,
@@ -81,6 +83,7 @@ async def start_service_plugins() -> None:
     """
     dev_mode = _resolve_dev_mode()
     pubkey = crypto.load_embedded_pubkey()
+    loader = PluginLoader(dev_mode=dev_mode, public_key_b64=pubkey)
 
     discovered = _discover_service_plugins(dev_mode, pubkey)
     if not discovered:
@@ -92,7 +95,8 @@ async def start_service_plugins() -> None:
         try:
             memory_mb = _COMMUNITY_MEMORY_LIMIT_MB if source == "community" else None
             ok = await _start_one(
-                manifest, package_dir, source=source, memory_limit_mb=memory_mb
+                manifest, package_dir, source=source,
+                memory_limit_mb=memory_mb, loader=loader,
             )
             if ok:
                 started += 1
@@ -110,6 +114,7 @@ async def _start_one(
     *,
     source: str = "local",
     memory_limit_mb: int | None = None,
+    loader: PluginLoader | None = None,
 ) -> bool:
     """Register + start a single service plugin host.  Returns True on success."""
     entry_module = manifest.entry.get("module")
@@ -140,6 +145,21 @@ async def _start_one(
             logger.warning(
                 "Service plugin %s: engine.min %s is not valid semver — skipping",
                 manifest.id, engine_min,
+            )
+            return False
+
+    # Dependency presence check — v2 service plugins can declare depends.
+    # Skip (don't crash) when a declared dependency is not installed so
+    # startup continues for the remaining plugins.  Range suffixes
+    # (``@^1.0``) are stripped by parse_dep_entry; only the dep id is
+    # checked against the loader (PRESENCE, not scenario loading).
+    if manifest.depends:
+        dep_loader = loader or PluginLoader()
+        missing = resolve_service_dependencies(manifest, dep_loader)
+        if missing:
+            logger.warning(
+                "Service plugin %s: dependency %s not installed — skipping",
+                manifest.id, ", ".join(missing),
             )
             return False
 
