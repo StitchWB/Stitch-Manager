@@ -40,6 +40,12 @@ export interface ServicePluginStatus {
   plugin_id: string;
   restarts: number;
   stopping: boolean;
+  /** Total command calls served by this host (cheap snapshot from status()). */
+  calls?: number;
+  /** Total command errors served by this host (cheap snapshot from status()). */
+  errors?: number;
+  /** Origin of the host — "global" | "sandbox" | ... (host.source). */
+  source?: string;
 }
 
 export interface ServicePluginInfo {
@@ -151,4 +157,46 @@ export function _resetForTests(): void {
   cache = [];
   fetchInFlight = null;
   subscribers.clear();
+}
+
+// ============================================
+// Per-plugin metrics (host-served, no RPC roundtrip)
+// ============================================
+
+/** Per-command counters inside the ``by_command`` metrics map. */
+export interface ServicePluginCommandMetrics {
+  calls: number;
+  errors: number;
+}
+
+/**
+ * Full metrics shape served by the namespaced route
+ * ``plugin.{plugin_id}.metrics`` (bridge.py short-circuits to
+ * ``host.get_metrics()`` — no child-process RPC). ``avg_latency_ms`` is
+ * 0.0 when no calls have been made; ``last_error`` is null when the last
+ * call succeeded. See python/.../plugin_runtime/host.py get_metrics().
+ */
+export interface ServicePluginMetrics {
+  calls: number;
+  errors: number;
+  avg_latency_ms: number;
+  last_error: string | null;
+  by_command: Record<string, ServicePluginCommandMetrics>;
+}
+
+/**
+ * Fetch the full metrics snapshot for a single service plugin. Hits the
+ * namespaced route ``plugin.{id}.metrics`` via safeInvoke (same fetch +
+ * error-handling layer the UI uses for plugin commands). ``noCache`` so a
+ * manual refresh always sees fresh counters. Errors propagate to the
+ * caller — the panel catches and surfaces them inline.
+ */
+export async function fetchServicePluginMetrics(
+  pluginId: string,
+): Promise<ServicePluginMetrics> {
+  return safeInvoke<ServicePluginMetrics>(
+    `plugin.${pluginId}.metrics`,
+    {},
+    { noCache: true },
+  );
 }
