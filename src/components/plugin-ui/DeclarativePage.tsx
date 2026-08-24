@@ -42,14 +42,16 @@ const headingSizes = [
 ];
 
 /**
- * Resolve a manifest label to display text. Labels that look like i18n keys
- * (contain a dot) are resolved via `t('plugin.{id}.{key}')` against the
- * plugin's registered bundle (see i18nPluginBundles.ts) — the same
- * convention AiTopTabs uses for plugin tab labels. Plain strings (e.g.
- * "ID", "Email") render as-is.
+ * Resolve a manifest label to display text. Labels are plugin-namespaced
+ * i18n keys: text starting with `<pluginId>.` is resolved via
+ * `t('plugin.{id}.{text}')` against the plugin's registered bundle (see
+ * i18nPluginBundles.ts) — the same convention the scaffold generates and
+ * AiTopTabs uses for plugin tab labels. Anything else (plain strings like
+ * "ID", "Email", or version strings like "v1.2.3") renders as-is.
  */
 function resolveLabel(pluginId: string, text: string): string {
-  return text.includes('.') ? t(`plugin.${pluginId}.${text}`) : text;
+  const prefix = `${pluginId}.`;
+  return text.startsWith(prefix) ? t(`plugin.${pluginId}.${text}`) : text;
 }
 
 /** Value held in the page-level field state map. */
@@ -66,14 +68,34 @@ interface FieldBinding {
  * (`node.value ?? ''`; toggles default to `false` so bindings send a real
  * boolean). Fields nested inside section nodes participate in the same
  * page-scoped map — state is page-level, not section-level.
+ *
+ * Duplicate field ids within the same page silently overwrite (last-wins)
+ * but emit a one-time `console.warn` per plugin+id pair so manifest
+ * authors can catch the bug. The warn-once registry is module-level so
+ * repeated renders of the same plugin page don't spam the console.
  */
+const duplicateFieldIdWarnings = new Set<string>();
+
 function collectInitialFieldValues(
+  pluginId: string,
   nodes: UiNode[],
 ): Record<string, FieldValue> {
   const out: Record<string, FieldValue> = {};
+  const seen = new Set<string>();
   const walk = (list: UiNode[]): void => {
     for (const node of list) {
       if (node.kind === 'field') {
+        if (seen.has(node.id)) {
+          const warnKey = `${pluginId}.${node.id}`;
+          if (!duplicateFieldIdWarnings.has(warnKey)) {
+            duplicateFieldIdWarnings.add(warnKey);
+            console.warn(
+              `DeclarativePage: duplicate field id "${node.id}" in plugin ` +
+                `"${pluginId}" — last value wins`,
+            );
+          }
+        }
+        seen.add(node.id);
         out[node.id] = node.value ?? (node.field === 'toggle' ? false : '');
       } else if (node.kind === 'section') {
         walk(node.nodes ?? []);
@@ -206,14 +228,31 @@ function TableNode({
     )
       .then(resp => {
         if (cancelled) return;
-        // Readonly commands may return either a bare array of rows or an
-        // object wrapping the rows under `rowsKey` (default "rows").
-        const data = Array.isArray(resp)
-          ? resp
-          : (resp as Record<string, unknown> | null | undefined)?.[
-              node.rowsKey ?? 'rows'
-            ];
-        setRows(Array.isArray(data) ? (data as Record<string, unknown>[]) : []);
+        // null/undefined → empty state (no rows, no error).
+        if (resp == null) {
+          setRows([]);
+          setLoading(false);
+          return;
+        }
+        // Bare array of rows.
+        if (Array.isArray(resp)) {
+          setRows(resp as Record<string, unknown>[]);
+          setLoading(false);
+          return;
+        }
+        // Object wrapping rows under `rowsKey` (default "rows").
+        const rowsKey = node.rowsKey ?? 'rows';
+        const data = (resp as Record<string, unknown>)[rowsKey];
+        if (Array.isArray(data)) {
+          setRows(data as Record<string, unknown>[]);
+          setLoading(false);
+          return;
+        }
+        // Malformed response: non-null, non-array, no rowsKey — show an
+        // inline error instead of silently rendering the empty state.
+        setError(
+          `Table response missing rowsKey "${rowsKey}"`,
+        );
         setLoading(false);
       })
       .catch(err => {
@@ -326,7 +365,7 @@ function DeclarativePage({ pluginId, schema }: DeclarativePageProps) {
   // nested in sections) contributes its initial value at schema load; input
   // changes write back into this map and buttons read it via paramsFrom.
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>(
-    () => collectInitialFieldValues(nodes),
+    () => collectInitialFieldValues(pluginId, nodes),
   );
   const handleFieldChange = useCallback((fieldId: string, value: FieldValue) => {
     setFieldValues(prev => ({ ...prev, [fieldId]: value }));

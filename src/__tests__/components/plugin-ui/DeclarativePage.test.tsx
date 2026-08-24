@@ -112,8 +112,9 @@ jest.mock('@/components/ui', () => ({
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const fixtureSchema: PluginPageSchema = {
-  // Relative i18n key — resolved by the renderer as `plugin.test.page.title`.
-  title: 'page.title',
+  // Relative i18n key — resolved by the renderer as `plugin.test.test.page.title`.
+  // Labels must start with `<pluginId>.` to be treated as i18n keys.
+  title: 'test.page.title',
   nodes: [
     { kind: 'heading', text: 'Overview', level: 1 },
     {
@@ -178,7 +179,7 @@ const formSchema: PluginPageSchema = {
           id: 'name-field',
           label: 'Name',
           value: 'Alice',
-          placeholder: 'name.ph',
+          placeholder: 'test.name.ph',
         },
         {
           kind: 'field',
@@ -271,10 +272,10 @@ describe('DeclarativePage', () => {
   it('(e) missing schema.nodes renders without crash', () => {
     // Cast: simulates a malformed manifest missing the nodes array entirely.
     const { container } = render(
-      <DeclarativePage pluginId="test" schema={{ title: 'only.title' } as PluginPageSchema} />,
+      <DeclarativePage pluginId="test" schema={{ title: 'test.only.title' } as PluginPageSchema} />,
     );
     // Title still renders; no nodes, no throw.
-    expect(screen.getByText('plugin.test.only.title')).toBeTruthy();
+    expect(screen.getByText('plugin.test.test.only.title')).toBeTruthy();
     expect(container.querySelectorAll('[data-testid="ui-button"]')).toHaveLength(0);
   });
 
@@ -357,7 +358,7 @@ describe('DeclarativePage', () => {
           field: 'text',
           id: 'a',
           label: 'A',
-          placeholder: 'hint.key',
+          placeholder: 'test.hint.key',
         },
         {
           kind: 'field',
@@ -372,8 +373,9 @@ describe('DeclarativePage', () => {
     render(<DeclarativePage pluginId="test" schema={placeholderSchema} />);
 
     const inputs = screen.getAllByRole('textbox');
-    // Dotted placeholder treated as an i18n key (t = identity in this test).
-    expect(inputs[0].getAttribute('placeholder')).toBe('plugin.test.hint.key');
+    // Dotted placeholder starting with pluginId is treated as an i18n key
+    // (t = identity in this test).
+    expect(inputs[0].getAttribute('placeholder')).toBe('plugin.test.test.hint.key');
     // Plain placeholder renders as-is.
     expect(inputs[1].getAttribute('placeholder')).toBe('Plain hint');
   });
@@ -441,6 +443,170 @@ describe('DeclarativePage', () => {
         fireEvent.click(screen.getByText('Ghost'));
       });
       expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  // ── Fix 1: resolveLabel dot heuristic ────────────────────────────────────
+
+  it('(l) version-like label "v1.2.3" renders literally (not an i18n key)', () => {
+    const versionSchema: PluginPageSchema = {
+      nodes: [
+        { kind: 'heading', text: 'v1.2.3', level: 2 },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={versionSchema} />);
+
+    // "v1.2.3" does not start with "test." → renders literally, NOT
+    // "plugin.test.v1.2.3".
+    expect(screen.getByText('v1.2.3')).toBeTruthy();
+  });
+
+  it('(m) label starting with pluginId resolves via t()', () => {
+    const i18nSchema: PluginPageSchema = {
+      nodes: [
+        { kind: 'heading', text: 'test.title', level: 2 },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={i18nSchema} />);
+
+    // "test.title" starts with "test." → t('plugin.test.test.title')
+    // (t = identity in this test).
+    expect(screen.getByText('plugin.test.test.title')).toBeTruthy();
+  });
+
+  it('(n) dotted label not starting with pluginId renders literally', () => {
+    const dottedSchema: PluginPageSchema = {
+      nodes: [
+        { kind: 'heading', text: 'other.title', level: 2 },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={dottedSchema} />);
+
+    // "other.title" contains a dot but does not start with "test." → literal.
+    expect(screen.getByText('other.title')).toBeTruthy();
+  });
+
+  // ── Fix 2: TableNode malformed responses ─────────────────────────────────
+
+  it('(o) table object without rowsKey shows inline error', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce({ unrelated: 'data' });
+
+    const malformedTableSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'bad',
+          columns: [{ key: 'name', label: 'Name' }],
+          source: { command: 'list_bad' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={malformedTableSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Table response missing rowsKey "rows"')).toBeTruthy();
+    });
+  });
+
+  it('(p) table null response renders empty state', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce(null);
+
+    const nullTableSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'empty',
+          columns: [{ key: 'name', label: 'Name' }],
+          source: { command: 'list_empty' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={nullTableSchema} />);
+
+    // null → empty state (em-dash), NOT an error.
+    await waitFor(() => {
+      expect(screen.getByText('—')).toBeTruthy();
+    });
+  });
+
+  it('(q) table bare-array response still renders rows', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([
+      { name: 'Carol' },
+    ]);
+
+    const arrayTableSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'arr',
+          columns: [{ key: 'name', label: 'Name' }],
+          source: { command: 'list_arr' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={arrayTableSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Carol')).toBeTruthy();
+    });
+  });
+
+  it('(r) table rowsKey present still renders rows', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce({
+      rows: [{ name: 'Dave' }],
+    });
+
+    const rowsKeyTableSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'rk',
+          columns: [{ key: 'name', label: 'Name' }],
+          source: { command: 'list_rk' },
+          rowsKey: 'rows',
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={rowsKeyTableSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Dave')).toBeTruthy();
+    });
+  });
+
+  // ── Fix 3: duplicate field ids ───────────────────────────────────────────
+
+  it('(s) duplicate field ids warn once and last value wins', () => {
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const duplicateSchema: PluginPageSchema = {
+        nodes: [
+          { kind: 'field', field: 'text', id: 'dup', label: 'First', value: 'A' },
+          { kind: 'field', field: 'text', id: 'dup', label: 'Second', value: 'B' },
+        ],
+      };
+
+      render(<DeclarativePage pluginId="test" schema={duplicateSchema} />);
+
+      // console.warn called once for the duplicate id.
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain('duplicate field id "dup"');
+
+      // Last value wins — both inputs read from the same state entry
+      // (keyed by id "dup"), so both show "B", not "A".
+      expect(screen.queryByDisplayValue('A')).toBeNull();
+      expect(screen.getAllByDisplayValue('B')).toHaveLength(2);
     } finally {
       warnSpy.mockRestore();
     }

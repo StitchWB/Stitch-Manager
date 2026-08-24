@@ -205,8 +205,8 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
       (n): n is Extract<UiNode, { kind: 'field' }> =>
         n.kind === 'field' && n.id === 'secret-field',
     );
-    expect(labelField?.placeholder).toBe('totp.labelPlaceholder');
-    expect(secretField?.placeholder).toBe('totp.secretPlaceholder');
+    expect(labelField?.placeholder).toBe('stitch-totp.labelPlaceholder');
+    expect(secretField?.placeholder).toBe('stitch-totp.secretPlaceholder');
 
     (safeInvoke as jest.Mock).mockImplementation((cmd: string) => {
       if (cmd === 'plugin.stitch-totp.list_keys') {
