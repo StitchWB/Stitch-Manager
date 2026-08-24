@@ -199,13 +199,19 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         raise ManifestValidationError("engine", "required field missing or not an object")
     if "min" not in engine_raw or not isinstance(engine_raw["min"], str):
         raise ManifestValidationError("engine.min", "required string missing")
-    if "api" not in engine_raw or not isinstance(engine_raw["api"], int):
-        raise ManifestValidationError("engine.api", "required integer missing")
+    # engine.api defaults to 1 when absent (v1 manifests predate the field —
+    # v1 semantics: CalVer engine.min, no semver engine gate at discovery).
+    # Present but wrong type → still raise (contract enforcement).
+    if "api" not in engine_raw:
+        engine_api = 1
+    elif not isinstance(engine_raw["api"], int):
+        raise ManifestValidationError("engine.api", "must be an integer")
+    else:
+        engine_api = engine_raw["api"]
     # engine.min format is validated per api level:
     #   api >= 2 → semver 2.0.0 (v2 service plugins)
     #   api == 1 → CalVer YYYY.MM (v1 signed packages, e.g. "2026.08")
     engine_min = engine_raw["min"]
-    engine_api = engine_raw["api"]
     if engine_api >= 2:
         if not _SEMVER_RE.match(engine_min):
             raise ManifestValidationError(
@@ -303,6 +309,12 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     }
     extras = {k: v for k, v in raw.items() if k not in known}
 
+    # Store the engine dict with the resolved api level so downstream
+    # consumers (discovery, sandbox) see it explicitly even when the
+    # original manifest omitted engine.api (v1 backward compat).
+    engine_dict = dict(engine_raw)
+    engine_dict["api"] = engine_api
+
     return PluginManifest(
         schema=schema,
         id=plugin_id,
@@ -310,7 +322,7 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         version=version,
         service=service,
         kind=kind,
-        engine=dict(engine_raw),
+        engine=engine_dict,
         depends=depends,
         entry=entry,
         capabilities=capabilities,
@@ -334,3 +346,41 @@ def parse_semver(version: str) -> tuple[int, int, int]:
     if not m:
         raise ValueError(f"invalid semver: {version!r}")
     return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+def semver_sort_key(version: str) -> tuple:
+    """Return a sort key for a semver string that respects prerelease ordering.
+
+    The key is ``(major, minor, patch, is_release, prerelease_key)`` where:
+
+    - ``is_release`` is ``1`` for a release and ``0`` for a prerelease, so a
+      prerelease of a triple (e.g. ``"0.4.0-alpha"``) sorts BELOW the release
+      of the same triple (``"0.4.0"``).
+    - ``prerelease_key`` is a tuple of per-part sort keys (empty for a
+      release).  Numeric identifiers sort below alphanumeric (semver 2.0.0
+      §11), numerically within numeric, lexically within alphanumeric.
+
+    A prerelease of a HIGHER triple (``"0.4.0-alpha"``) still sorts ABOVE a
+    lower release (``"0.3.0"``) because the major/minor/patch fields dominate.
+
+    Use this instead of bare ``parse_semver`` tuple compares in engine gates
+    so that ``engine.min = "0.4.0-alpha"`` is correctly rejected (newer than
+    ``SERVICE_ENGINE_VERSION = "0.3.0"``) while ``"0.3.0-rc.1"`` is accepted
+    (same-triple prerelease ≤ current release).
+
+    Raises ``ValueError`` if the string is not valid semver.
+    """
+    m = _SEMVER_RE.match(version)
+    if not m:
+        raise ValueError(f"invalid semver: {version!r}")
+    major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    # Strip build metadata (+...) then split prerelease (-...).
+    core = version.split("+", 1)[0]
+    prerelease: str | None = core.split("-", 1)[1] if "-" in core else None
+    if prerelease is None:
+        return (major, minor, patch, 1, ())
+    pre_key = tuple(
+        (0, int(p)) if p.isdigit() else (1, p)
+        for p in prerelease.split(".")
+    )
+    return (major, minor, patch, 0, pre_key)

@@ -25,7 +25,7 @@ from fastapi import HTTPException, status
 
 from autoreg.plugin.crypto import read_manifest
 from autoreg.plugin.layout import sandbox_plugin_dir
-from autoreg.plugin.manifest import parse_semver
+from autoreg.plugin.manifest import semver_sort_key
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.domains.plugin_distribution.pins import (
     check_and_record_scoped,
@@ -133,11 +133,14 @@ async def cmd_sandbox_install(params: dict[str, Any]) -> dict[str, Any]:
         plugin_id = manifest.id
 
         # Refuse engine.min newer than the host's service-plugin engine.
+        # Uses semver_sort_key so that a same-triple prerelease (e.g.
+        # "0.3.0-rc.1") is accepted while a higher-triple prerelease (e.g.
+        # "0.4.0-alpha") is correctly rejected.
         engine_api = manifest.engine.get("api")
         if engine_api is not None and engine_api >= 2:
             engine_min = manifest.engine.get("min", "")
             try:
-                if parse_semver(engine_min) > parse_semver(SERVICE_ENGINE_VERSION):
+                if semver_sort_key(engine_min) > semver_sort_key(SERVICE_ENGINE_VERSION):
                     return {
                         "success": False,
                         "error": (

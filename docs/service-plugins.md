@@ -27,7 +27,7 @@ manifest with `schema: "stitch.plugin/v2"` and `kind: "service"`.
 | `version` | `string` | Semver 2.0.0 (`MAJOR.MINOR.PATCH`). |
 | `service` | `string` | Canonical service identifier (usually same as `id`). |
 | `kind` | `string` | Must be `"service"`. |
-| `engine` | `object` | `{min: "<semver>", api: <int>}` — minimum host version + API level. |
+| `engine` | `object` | `{min: "<version>", api?: <int>}` — minimum host version + API level. `api` is optional (default `1`, v1 semantics). `min` format depends on `api`: `api >= 2` → semver 2.0.0 (`"0.3.0"`); `api == 1` (or absent) → CalVer `YYYY.MM` (`"2026.08"`). See [Engine gate](#engine-gate) below. |
 | `depends` | `string[]` | Plugin ids this plugin depends on (usually `[]`). |
 | `entry` | `object` | `{module: "<python_module>"}` — the module spawned as `python -m <module>`. |
 | `capabilities` | `string[]` | v1 heritage list (usually `[]` for service plugins). SPI registrations live in `contributions.spi`. |
@@ -88,6 +88,52 @@ requesting values through `call_host` reverse-RPC).
 Unknown fields are tolerated (tolerant reader) and preserved in
 `manifest.extras`. `author` and `description` are forwarded to the
 marketplace when publishing.
+
+### Engine gate
+
+The host declares its service-plugin engine version as
+`SERVICE_ENGINE_VERSION` (currently `"0.3.0"`). At discovery and sandbox
+install, a v2 plugin's `engine.min` is compared against this version
+using `semver_sort_key` — a sort key that respects semver 2.0.0
+prerelease ordering.
+
+**`engine.api` backward compat:** v1 manifests predate the `engine.api`
+field. When `api` is absent, it defaults to `1` (v1 semantics: CalVer
+`engine.min`, no semver engine gate at discovery). Present but wrong
+type (non-int) → still raises. The resolved `api` level is stored back
+into the manifest's `engine` dict so downstream consumers see it
+explicitly.
+
+**`engine.min` format per api level:**
+
+| `api` | `min` format | Example | Gate applies? |
+|-------|-------------|---------|----------------|
+| absent (default `1`) | CalVer `YYYY.MM` | `"2026.08"` | No (v1 data plugins) |
+| `1` | CalVer `YYYY.MM` | `"2026.08"` | No (v1 data plugins) |
+| `>= 2` | semver 2.0.0 | `"0.3.0"`, `"0.4.0-alpha"` | Yes (v2 service plugins) |
+
+**Prerelease ordering (semver 2.0.0 §11):** the sort key is
+`(major, minor, patch, is_release, prerelease_key)` where `is_release`
+is `1` for a release and `0` for a prerelease. This means:
+
+| `engine.min` | vs `SERVICE_ENGINE_VERSION` (`"0.3.0"`) | Gate result |
+|-------------|------------------------------------------|-------------|
+| `"0.3.0"` | equal release | **accepted** (not strictly newer) |
+| `"0.2.9"` | lower release | **accepted** |
+| `"0.3.0-rc.1"` | same-triple prerelease ≤ release | **accepted** |
+| `"0.3.0-alpha"` | same-triple prerelease ≤ release | **accepted** |
+| `"0.4.0-alpha"` | higher-triple prerelease > release | **rejected** |
+| `"0.4.0"` | higher release | **rejected** |
+| malformed | not valid semver | **soft-skip** (never crash) |
+
+The key invariant: a prerelease of the SAME triple (`0.3.0-rc.1`) sorts
+BELOW the release of that triple (`0.3.0`), so it is accepted. A
+prerelease of a HIGHER triple (`0.4.0-alpha`) still sorts ABOVE the
+current release (`0.3.0`) because the major.minor.patch fields dominate,
+so it is rejected.
+
+Malformed `engine.min` never crashes discovery or sandbox install — the
+gate catches `ValueError` and soft-skips the plugin with a warning log.
 
 ---
 
@@ -501,6 +547,27 @@ On startup, the host scans `plugins-local/` (dev) and `plugins/`
 
 `plugins-local/` takes precedence over `plugins/` (cache) when both
 have the same plugin id.
+
+### Vendor drift detection
+
+On startup, `_start_one` checks each package's `<pkg>/_vendor/rpc_server.py`
+against the canonical source text. The vendored file header embeds
+`_VENDOR_SOURCE_SHA256` — a SHA-256 computed over the canonical text
+**excluding the hash line itself** (avoiding self-reference: the hash
+line's value depends on the hash, so including it would create an
+unsolvable fixed-point).
+
+When the vendored file drifts (hand-edited, or generated from a
+different canonical source), the host logs a **WARNING** naming the
+plugin and the fix command (`python -m stitch_plugin_tools vendor
+<package>`). The plugin **still starts** — drift is a visibility nudge,
+not a block. The `upgrade` tool's vendor region and `dev-install`
+refresh exist to fix drift; discovery only warns.
+
+Packages without a `_vendor/` dir also return `False` from
+`vendored_matches_canonical()` — the warning fires but startup
+proceeds (the plugin may use the `autoreg.plugin.rpc` import path
+instead of the vendored fallback).
 
 ### `list_service_plugins`
 
