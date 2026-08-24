@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -591,16 +592,31 @@ class RpcPluginClient:
         self._close_pipes()
 
     def _close_pipes(self) -> None:
-        """Close stdin/stdout pipes on the child."""
+        """Close stdin/stdout pipes on the child.
+
+        On Windows, closing ``proc.stdout`` while the reader thread is
+        blocked in ``readline()`` deadlocks: a pending synchronous ReadFile
+        on a pipe cannot be cancelled by closing the handle from another
+        thread (the close blocks until the read returns, which never happens
+        while a spawned grandchild still holds the write end).  When the
+        reader is still alive we leave stdout open — the daemon reader
+        observes EOF once the child's process tree is killed by the
+        supervisor's kill-tree and unblocks naturally.
+        """
         proc = self._proc
         if proc is None:
             return
-        for stream in (proc.stdin, proc.stdout):
-            if stream is not None:
-                try:
-                    stream.close()
-                except OSError:
-                    pass
+        if proc.stdin is not None:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+        reader_blocked = self._reader is not None and self._reader.is_alive()
+        if proc.stdout is not None and not reader_blocked:
+            try:
+                proc.stdout.close()
+            except OSError:
+                pass
 
 
 # ── Server side (plugin entry-point helper) ───────────────────────────────
@@ -767,12 +783,12 @@ class RpcPluginServer:
         ``sys``, ``threading``, ``time``, ``typing`` at module level)
         remains self-contained.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         params: dict[str, Any] = {
             "level": level,
             "message": message,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         params.update(extra)
         line = json.dumps(
