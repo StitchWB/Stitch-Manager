@@ -52,6 +52,13 @@ _SANDBOX_MEMORY_LIMIT_MB = 256
 #: Idle threshold (seconds) — hosts unused for this long are stopped.
 IDLE_STOP_SECONDS: float = 900.0  # 15 minutes
 
+#: Maximum concurrent ``host.stop()`` calls in ``stop_idle_hosts``.  Each
+#: stop involves a graceful RPC shutdown + supervisor kill-tree (~3s);
+#: without concurrency, N idle hosts take N×3s while the tick is 60s.
+#: The semaphore bounds the concurrent stops to avoid overwhelming the
+#: supervisor while still finishing well within the tick.
+_IDLE_STOP_CONCURRENCY = 8
+
 #: ``(user_id, plugin_id) → ServicePluginHost``
 _sandbox_hosts: dict[tuple[int, str], "ServicePluginHost"] = {}
 
@@ -218,34 +225,64 @@ async def stop_idle_hosts(idle_seconds: float = IDLE_STOP_SECONDS) -> int:
 
     Hosts stay registered (cheap restart on next use).  Returns the count
     of hosts stopped.  Called by the periodic idle-stop task in main.py.
+
+    Stops concurrently with ``asyncio.gather`` bounded by a semaphore
+    (``_IDLE_STOP_CONCURRENCY``) so N idle hosts stop in ~ceil(N/8)×single-stop
+    instead of N×single-stop.  Per-host error isolation: one failing stop
+    does not kill the batch (each stop is wrapped in try/except).
     """
     now = time.monotonic()
-    stopped = 0
+    # Collect idle hosts to stop (snapshot the registry — the loop is
+    # safe against concurrent ensure_sandbox_host because the per-key lock
+    # serializes start; a host collected here is either stopped or was
+    # already stopped — both are fine).
+    to_stop: list[tuple[tuple[int, str], "ServicePluginHost"]] = []
     for key, host in list(_sandbox_hosts.items()):
         last_use = _sandbox_last_use.get(key, now)
         if (now - last_use) < idle_seconds:
             continue
         if not host.rpc.is_alive:
             continue  # already stopped
-        try:
-            await host.stop()
-            stopped += 1
-            logger.info(
-                "Sandbox host %s/%s idle-stopped (idle %.0fs)",
-                key[0], key[1], now - last_use,
-            )
-        except Exception as exc:  # noqa: BLE001 — best-effort
-            logger.warning(
-                "Sandbox host %s/%s idle-stop failed: %s",
-                key[0], key[1], exc,
-            )
-    return stopped
+        to_stop.append((key, host))
+
+    if not to_stop:
+        return 0
+
+    sem = asyncio.Semaphore(_IDLE_STOP_CONCURRENCY)
+
+    async def _stop_one(
+        key: tuple[int, str], host: "ServicePluginHost"
+    ) -> bool:
+        async with sem:
+            try:
+                await host.stop()
+                logger.info(
+                    "Sandbox host %s/%s idle-stopped (idle %.0fs)",
+                    key[0], key[1], now - _sandbox_last_use.get(key, now),
+                )
+                return True
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                logger.warning(
+                    "Sandbox host %s/%s idle-stop failed: %s",
+                    key[0], key[1], exc,
+                )
+                return False
+
+    results = await asyncio.gather(
+        *[_stop_one(key, host) for key, host in to_stop]
+    )
+    return sum(1 for r in results if r)
 
 
 async def uninstall_sandbox_plugin(
-    user_id: int, plugin_id: str
+    user_id: int, plugin_id: str, *, forget_pin: bool = False
 ) -> dict[str, object]:
-    """Stop the host, remove package + data dirs, drop registry + pin.
+    """Stop the host, remove package + data dirs, drop registry entries.
+
+    The scoped TOFU pin is **kept** by default so a reinstall with a
+    different source sha is refused (defeats silent source swaps).  Pass
+    ``forget_pin=True`` to clear the pin (dedicated forget path — the
+    caller acknowledges the source change).
 
     Returns ``{"success": True}`` on success, ``{"success": False,
     "error": ...}`` when the plugin is not installed.
@@ -277,13 +314,19 @@ async def uninstall_sandbox_plugin(
     _sandbox_manifests.pop(key, None)
     _sandbox_last_use.pop(key, None)
 
-    # Remove scoped pin.
-    from stitch_backend.domains.plugin_distribution.pins import remove_scoped_pin
-    remove_scoped_pin(user_id, plugin_id)
+    # Keep the scoped pin by default (TOFU: reinstall must match the
+    # original source).  Only remove when the caller explicitly requests
+    # forget_pin=True (dedicated forget path).
+    if forget_pin:
+        from stitch_backend.domains.plugin_distribution.pins import remove_scoped_pin
+        remove_scoped_pin(user_id, plugin_id)
 
     if not removed_any and host is None:
         return {"success": False, "error": f"not installed: {plugin_id}"}
-    logger.info("Sandbox plugin %s/%s uninstalled", user_id, plugin_id)
+    logger.info(
+        "Sandbox plugin %s/%s uninstalled (pin %s)",
+        user_id, plugin_id, "forgotten" if forget_pin else "kept",
+    )
     return {"success": True}
 
 
