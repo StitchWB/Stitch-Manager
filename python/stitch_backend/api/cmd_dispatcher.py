@@ -82,37 +82,45 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail="Request body must be a JSON object")
 
+    # ── Caller identity resolution (single source of truth) ────────────────
+    # Resolved ONCE here, BEFORE any dual-format route or plugin.* block
+    # runs, so every downstream consumer (plugin.* namespace, sheets/mail/
+    # opencode/radar/cards dual routes, and the fallthrough command-registry
+    # handler) receives the AUTHENTICATED identity.  Body-supplied
+    # ``_caller_*`` keys from the client are OVERWRITTEN — never trusted.
+    # Auth disabled (single-trusted-user desktop) → caller is admin; a
+    # guest session (auth on, no user) resolves to None (below every tier).
+    caller_role: str | None = "admin"
+    caller_user_id: int | None = None
+    caller_username: str | None = None
+    caller_telegram_id: int | None = None
+    from stitch_backend.config import get_settings
+
+    if get_settings().auth_enabled:
+        from stitch_backend.domains.auth.router import _current_user_optional
+
+        user, preview_role, _raw = await _current_user_optional(request)
+        # Effective role = preview_role (when admin is previewing) or real
+        # role.  This single value drives meta.admin_only enforcement,
+        # ensure_permission (reads params["_caller_role"]), and scenario
+        # tier gating (role_at_least).  Identity/scope stays the real user.
+        caller_role = (preview_role or user.role) if user is not None else None
+        caller_user_id = user.id if user is not None else None
+        caller_username = user.username if user is not None else None
+        caller_telegram_id = user.telegram_id if user is not None else None
+    # Overwrite any client-supplied _caller_* keys — they are NEVER trusted.
+    body["_caller_role"] = caller_role
+    body["_caller_user_id"] = caller_user_id
+    body["_caller_username"] = caller_username
+    body["_caller_telegram_id"] = caller_telegram_id
+
     # ── Plugin command routing ──────────────────────────────────────────────
     # Namespaced commands ``plugin.{id}.{cmd}`` are routed to the plugin
     # runtime BEFORE the command-registry lookup.  This avoids dynamic
     # re-registration of plugin command names (which would spam the
     # overwrite-warning log in command_registry.register_command).
-    # Caller identity is resolved here so the entitlement check in the
-    # bridge has ``_caller_role`` / ``_caller_user_id``.
+    # Caller identity was already resolved + injected above.
     if name.startswith("plugin."):
-        caller_role_plugin: str | None = "admin"
-        caller_user_id_plugin: int | None = None
-        caller_username_plugin: str | None = None
-        caller_telegram_id_plugin: int | None = None
-        from stitch_backend.config import get_settings as _get_settings_plugin
-
-        if _get_settings_plugin().auth_enabled:
-            from stitch_backend.domains.auth.router import _current_user_optional
-
-            _user, _preview_role, _raw = await _current_user_optional(request)
-            caller_role_plugin = (
-                (_preview_role or _user.role) if _user is not None else None
-            )
-            caller_user_id_plugin = _user.id if _user is not None else None
-            caller_username_plugin = _user.username if _user is not None else None
-            caller_telegram_id_plugin = (
-                _user.telegram_id if _user is not None else None
-            )
-        body["_caller_role"] = caller_role_plugin
-        body["_caller_user_id"] = caller_user_id_plugin
-        body["_caller_username"] = caller_username_plugin
-        body["_caller_telegram_id"] = caller_telegram_id_plugin
-
         from stitch_backend.domains.plugin_runtime.bridge import call_plugin_command
 
         _plugin_result = await call_plugin_command(name, body)
@@ -209,42 +217,15 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
             detail=f"Unknown command: '{name}'",
         ) from None
 
-    # Caller identity: resolve once, enforce admin_only, and inject the role
-    # into params (``_caller_role``) so tier-gated handlers (scenarios etc.)
-    # can authorize without re-resolving the session.  Auth disabled
-    # (single-trusted-user desktop) → caller is treated as admin; a guest
-    # session (auth on, no user) resolves to None (below every tier).
-    # ``_caller_user_id`` / ``_caller_username`` are also injected so
-    # per-owner handlers (proxy_library, totp) can scope reads/writes
-    # without re-resolving the session.  Auth disabled → both are None.
+    # Caller identity was already resolved and injected above (single
+    # resolution point, before any dual-format route).  Here we only
+    # enforce meta.admin_only with that same authenticated ``caller_role``.
     meta = get_command_meta(name)
-    caller_role: str | None = "admin"
-    caller_user_id: int | None = None
-    caller_username: str | None = None
-    caller_telegram_id: int | None = None
-    from stitch_backend.config import get_settings
-
-    if get_settings().auth_enabled:
-        from stitch_backend.domains.auth.router import _current_user_optional
-
-        user, preview_role, _raw = await _current_user_optional(request)
-        # Effective role = preview_role (when admin is previewing) or real
-        # role.  This single value drives meta.admin_only enforcement,
-        # ensure_permission (reads params["_caller_role"]), and scenario
-        # tier gating (role_at_least).  Identity/scope stays the real user.
-        caller_role = (preview_role or user.role) if user is not None else None
-        caller_user_id = user.id if user is not None else None
-        caller_username = user.username if user is not None else None
-        caller_telegram_id = user.telegram_id if user is not None else None
     if meta.admin_only and caller_role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Command '{name}' requires admin role",
         )
-    body["_caller_role"] = caller_role
-    body["_caller_user_id"] = caller_user_id
-    body["_caller_username"] = caller_username
-    body["_caller_telegram_id"] = caller_telegram_id
 
     # Determine effective timeout from command metadata.
     #   None  → use DEFAULT_COMMAND_TIMEOUT

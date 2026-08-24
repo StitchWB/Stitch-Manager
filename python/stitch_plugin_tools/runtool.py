@@ -168,8 +168,51 @@ def _resolve_module_dir(package_dir: Path, manifest: Any) -> Path:
     )
 
 
+# ── minimal child env ──────────────────────────────────────────────────
+# runtool matches the host's env contract (the sidecar supervisor's
+# ``_CHILD_ENV_ALLOWLIST``): the plugin under development must NOT inherit
+# the developer's full environment (API keys, tokens, shell secrets).
+# Only runtime/locale vars, a reduced PATH, and a TEMP/TMP scoped under the
+# run session's data_dir are passed.  ``stitch_backend`` is not importable
+# in this zone, so the allowlist semantics are replicated here — keep the
+# two in sync.
+
+
+def _minimal_child_env(data_dir: Path) -> dict[str, str]:
+    """Build the minimal env for the plugin child (see module note)."""
+    python_dir = os.path.dirname(sys.executable)
+    if os.name == "nt":
+        win_dir = os.environ.get("SYSTEMROOT", r"C:\Windows")
+        path = os.pathsep.join(
+            [python_dir, os.path.join(win_dir, "System32"), win_dir]
+        )
+    else:
+        path = os.pathsep.join([python_dir, "/usr/bin", "/bin"])
+
+    scoped_tmp = data_dir / "tmp"
+    scoped_tmp.mkdir(parents=True, exist_ok=True)
+
+    env = {
+        "PATH": path,
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "TEMP": str(scoped_tmp),
+        "TMP": str(scoped_tmp),
+    }
+    if os.name == "nt":
+        for key in ("SYSTEMROOT", "COMSPEC", "PATHEXT"):
+            value = os.environ.get(key)
+            if value:
+                env[key] = value
+    else:
+        value = os.environ.get("HOME")
+        if value:
+            env["HOME"] = value
+    return env
+
+
 def _spawn_plugin(
-    package_dir: Path, module_dir: Path, module: str
+    package_dir: Path, module_dir: Path, module: str, data_dir: Path
 ) -> subprocess.Popen[bytes]:
     """Spawn the plugin child with stderr=PIPE (for live streaming).
 
@@ -179,6 +222,9 @@ def _spawn_plugin(
     spawning here so the client reuses our Popen with the live stderr
     pipe - ``RpcPluginClient.start`` would DEVNULL stderr, which we
     must avoid for the playground).
+
+    The child receives a MINIMAL env (:func:`_minimal_child_env`) — never
+    the developer's full environment.
     """
     cmd = [sys.executable, "-m", module]
     try:
@@ -188,6 +234,7 @@ def _spawn_plugin(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=str(package_dir),
+            env=_minimal_child_env(data_dir),
         )
     except OSError as exc:
         raise RuntimeError(f"failed to spawn plugin child: {exc}") from exc
@@ -454,7 +501,7 @@ def run_package(package_dir: Path) -> int:
     # 4. Spawn + attach.
     writer = _StderrWriter(plugin_id)
     try:
-        proc = _spawn_plugin(package_dir, module_dir, module)
+        proc = _spawn_plugin(package_dir, module_dir, module, data_dir)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return _RC_RUNTIME_FAILURE
