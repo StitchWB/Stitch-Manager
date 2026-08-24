@@ -51,12 +51,18 @@ logger = logging.getLogger(__name__)
 #:   - ``structured_logging`` : the host collects ``plugin.log`` notifications
 #:                              into a structured log ring buffer (plugin can
 #:                              call ``server.log()`` for structured logs).
+#:   - ``plugin_rpc``         : the host wires a ``plugin.call_plugin``
+#:                              reverse-RPC handler so a plugin can call
+#:                              another plugin's command at runtime
+#:                              (call_host("plugin.call_plugin", ...)),
+#:                              mediated by the host which enforces the
+#:                              caller's ``depends`` permission boundary.
 #:
 #: Plugins respond with their own ``capabilities`` list in the init result
 #: (see :meth:`ServicePluginHost._parse_capabilities`); unknown values are
 #: logged at WARNING and kept verbatim for observability.
 SUPPORTED_CAPABILITIES: list[str] = [
-    "reverse_rpc", "caller_identity", "structured_logging",
+    "reverse_rpc", "caller_identity", "structured_logging", "plugin_rpc",
 ]
 
 
@@ -455,6 +461,88 @@ class ServicePluginHost:
             out.append(item)
         return out
 
+    # ── plugin-to-plugin reverse-RPC ───────────────────────────────────
+
+    def _register_plugin_rpc_handler(self) -> None:
+        """Register the ``plugin.call_plugin`` reverse-RPC handler.
+
+        Lets this host's plugin call another plugin's command at runtime
+        via ``call_host("plugin.call_plugin", {target, command, params})``.
+        The host mediates the call and enforces the permission boundary:
+        the ``target`` MUST be listed in the caller's manifest ``depends``
+        (after stripping ``@range`` via :func:`parse_dep_entry`).  This
+        prevents a plugin from calling arbitrary plugins it did not declare
+        a dependency on.
+
+        The handler is sync (required by
+        :meth:`RpcPluginClient.set_request_handler`); it bridges to the
+        async :meth:`ServicePluginHost.call` on the target host via
+        ``asyncio.run`` (no existing event loop in the reverse-RPC worker
+        thread — same pattern as ``engine.oauth.*`` handlers in
+        :func:`register_engine_handlers`).
+
+        Errors are raised as exceptions; the RPC layer
+        (:meth:`RpcPluginClient._run_plugin_request`) catches them and
+        returns a JSON-RPC error response to the calling plugin:
+
+          - :class:`PermissionError` — target not in caller's depends, or
+            caller has no registered manifest.
+          - :class:`RuntimeError` — target plugin not running.
+          - :class:`PluginCallTimeout` / :class:`PluginNotRunning` /
+            :class:`RpcCallError` — forwarded from the target host's
+            ``call`` (propagated through ``asyncio.run``).
+        """
+        from autoreg.plugin.dependency_resolver import parse_dep_entry
+
+        from stitch_backend.domains.plugin_runtime import get_host, get_manifest
+
+        caller_plugin_id = self.plugin_id
+
+        def _call_plugin(params: dict[str, Any]) -> Any:
+            target = str(params.get("target", ""))
+            command = str(params.get("command", ""))
+            call_params = params.get("params", {})
+            if not isinstance(call_params, dict):
+                call_params = {}
+
+            if not target or not command:
+                raise ValueError(
+                    "plugin.call_plugin requires 'target' and 'command'"
+                )
+
+            # PERMISSION CHECK: target must be in the caller's depends list.
+            # The caller is THIS host's own plugin (the plugin that calls
+            # host.call_host("plugin.call_plugin", ...) is the host's own
+            # plugin).  We strip @range from each depends entry via
+            # parse_dep_entry to get the bare service id.
+            manifest = get_manifest(caller_plugin_id)
+            if manifest is None:
+                raise PermissionError(
+                    f"plugin {caller_plugin_id!r} has no registered manifest; "
+                    f"plugin_rpc denied"
+                )
+            dep_ids = {parse_dep_entry(d)[0] for d in manifest.depends}
+            if target not in dep_ids:
+                raise PermissionError(
+                    f"plugin {caller_plugin_id!r} cannot call plugin "
+                    f"{target!r}: not in declared depends "
+                    f"{sorted(dep_ids) or '[]'}"
+                )
+
+            # Resolve target host.
+            target_host = get_host(target)
+            if target_host is None or not target_host.rpc.is_alive:
+                raise RuntimeError(
+                    f"target plugin {target!r} is not running"
+                )
+
+            # Forward the call.  target_host.call is async; reverse-RPC
+            # handlers are sync, so bridge via asyncio.run (no existing
+            # event loop in the reverse-RPC worker thread).
+            return asyncio.run(target_host.call(command, call_params))
+
+        self.rpc.set_request_handler("plugin.call_plugin", _call_plugin)
+
     # ── internal ───────────────────────────────────────────────────────
 
     def _make_spec(self) -> SidecarSpec:
@@ -836,6 +924,8 @@ class ServicePluginHost:
             call_host during/after init; handlers must be wired before the
             first plugin.call).  Lives in _attach_rpc rather than start()
             so restart (_restart_once → _attach_rpc) also wires handlers.
+          - register plugin.call_plugin reverse-RPC handler (plugin→plugin
+            calls; same wiring rationale as engine.oauth.*).
           - parse capabilities from the init result (tolerant: missing/
             non-list → []).  Host-only — the playground does not parse
             capabilities.
@@ -882,6 +972,11 @@ class ServicePluginHost:
         # Host-specific: register engine.oauth.* reverse-RPC handlers AFTER
         # attach.
         register_engine_handlers(self.rpc)
+        # Host-specific: register the plugin.call_plugin reverse-RPC handler
+        # (plugin→plugin calls mediated by the host).  Lives in _attach_rpc
+        # for the same reason as register_engine_handlers: restart
+        # (_restart_once → _attach_rpc) also wires it.
+        self._register_plugin_rpc_handler()
         # Host-specific: parse capabilities from the init result AFTER attach.
         self._capabilities = self._parse_capabilities(
             self.rpc.init_result
