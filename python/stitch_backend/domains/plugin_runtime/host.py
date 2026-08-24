@@ -44,15 +44,20 @@ logger = logging.getLogger(__name__)
 #: Capabilities the host advertises in the ``plugin.init`` handshake params
 #: under the ``supported`` key.  Extensible string list — a plugin reads
 #: this to know which host-side features it may rely on:
-#:   - ``reverse_rpc``    : the host wires ``engine.oauth.*`` reverse-RPC
-#:                          handlers (plugin can call_host).
-#:   - ``caller_identity``: the host forwards ``caller_user_id`` /
-#:                          ``caller_role`` on every dispatched command.
+#:   - ``reverse_rpc``        : the host wires ``engine.oauth.*`` reverse-RPC
+#:                              handlers (plugin can call_host).
+#:   - ``caller_identity``    : the host forwards ``caller_user_id`` /
+#:                              ``caller_role`` on every dispatched command.
+#:   - ``structured_logging`` : the host collects ``plugin.log`` notifications
+#:                              into a structured log ring buffer (plugin can
+#:                              call ``server.log()`` for structured logs).
 #:
 #: Plugins respond with their own ``capabilities`` list in the init result
 #: (see :meth:`ServicePluginHost._parse_capabilities`); unknown values are
 #: logged at WARNING and kept verbatim for observability.
-SUPPORTED_CAPABILITIES: list[str] = ["reverse_rpc", "caller_identity"]
+SUPPORTED_CAPABILITIES: list[str] = [
+    "reverse_rpc", "caller_identity", "structured_logging",
+]
 
 
 class PluginCallTimeout(Exception):
@@ -170,6 +175,18 @@ class ServicePluginHost:
         self._metrics_latency_ms: float = 0.0
         self._metrics_last_error: str | None = None
         self._metrics_by_command: dict[str, dict[str, int]] = {}
+
+        # Per-host resource accounting (best-effort).  peak_memory_mb is the
+        # peak RSS across all child lifetimes (max of readings at each death).
+        # total_cpu_s is cumulative user+kernel CPU across all child lifetimes.
+        # Both are None until the first child death is observed; they stay
+        # None on platforms where resource reading is unavailable.
+        self._peak_memory_mb: float | None = None
+        self._total_cpu_s: float | None = None
+        # POSIX RUSAGE_CHILDREN baseline taken at attach time — the delta at
+        # child death gives this child's resource usage (best-effort; may be
+        # affected by other children dying in between).
+        self._rusage_baseline: Any = None
 
     # ── public API ─────────────────────────────────────────────────────
 
@@ -331,6 +348,18 @@ class ServicePluginHost:
             return snapshot
         return snapshot[-lines:] if lines < len(snapshot) else snapshot
 
+    def get_structured_logs(self, lines: int = 100) -> list[dict[str, Any]]:
+        """Return the last *lines* structured log entries from the ring buffer.
+
+        Structured logs are emitted by the plugin via ``server.log()``
+        (a ``plugin.log`` JSON-RPC notification on the stdout channel).
+        Each entry is a dict with ``level``, ``message``, ``timestamp``
+        and optional ``extra``.  Returns an empty list when the plugin
+        has not emitted any structured logs (plugin does not support
+        structured logging, or has not called ``server.log()``).
+        """
+        return self.rpc.get_structured_logs(lines)
+
     def get_metrics(self) -> dict[str, Any]:
         """Return host-served call metrics (no RPC roundtrip).
 
@@ -343,9 +372,13 @@ class ServicePluginHost:
               "avg_latency_ms": float,
               "last_error": str | None,
               "by_command": {name: {"calls": int, "errors": int}},
+              "peak_memory_mb": float | None,
+              "total_cpu_s": float | None,
             }
 
         ``avg_latency_ms`` is 0.0 when no calls have been made.
+        ``peak_memory_mb`` / ``total_cpu_s`` are None until the first
+        child death is observed (best-effort resource accounting).
         """
         with self._metrics_lock:
             calls = self._metrics_calls
@@ -363,6 +396,8 @@ class ServicePluginHost:
             "avg_latency_ms": avg,
             "last_error": last_error,
             "by_command": by_command,
+            "peak_memory_mb": self._peak_memory_mb,
+            "total_cpu_s": self._total_cpu_s,
         }
 
     def _record_call(
@@ -602,6 +637,185 @@ class ServicePluginHost:
             self.plugin_id, self.memory_limit_mb,
         )
 
+    # ── resource accounting (best-effort) ───────────────────────────────
+
+    @staticmethod
+    def _snapshot_rusage_children() -> Any:
+        """Snapshot POSIX ``RUSAGE_CHILDREN`` (best-effort, None if unavailable).
+
+        Used as a baseline at attach time; the delta at child death gives
+        this child's CPU time and (if it was the largest child) peak RSS.
+        Returns None on non-POSIX platforms or if getrusage fails.
+        """
+        try:
+            import resource
+            return resource.getrusage(resource.RUSAGE_CHILDREN)
+        except (ImportError, OSError, AttributeError):
+            return None
+
+    def _read_resource_usage_at_death(
+        self, proc: subprocess.Popen[bytes]
+    ) -> None:
+        """Read peak memory + total CPU at child death (best-effort).
+
+        Called from the ``_monitor`` death path after ``proc.wait()``
+        returns.  Updates ``_peak_memory_mb`` (max of readings) and
+        ``_total_cpu_s`` (cumulative).  Never raises — best-effort only.
+
+        Platform paths:
+          - Windows: ``GetProcessMemoryInfo`` (PeakWorkingSetSize) +
+            ``GetProcessTimes`` (User+Kernel) via ctypes.  The Popen
+            handle is still open after ``wait()`` so the kernel object
+            is queryable.
+          - POSIX: ``resource.getrusage(RUSAGE_CHILDREN)`` delta from
+            the baseline taken at attach time.  ``ru_maxrss`` is the
+            max RSS of the largest child — if the new value exceeds the
+            baseline, the new value is this child's peak.  CPU time is
+            the delta (cumulative across all children).
+          - Other platforms: no-op (fields stay None).
+        """
+        try:
+            if sys.platform == "win32":
+                peak_mb, cpu_s = self._read_windows_resource_usage(proc)
+            elif self._rusage_baseline is not None:
+                peak_mb, cpu_s = self._read_posix_resource_usage()
+            else:
+                return
+            if peak_mb is not None and peak_mb > 0:
+                self._peak_memory_mb = max(
+                    self._peak_memory_mb or 0.0, peak_mb
+                )
+            if cpu_s is not None and cpu_s > 0:
+                self._total_cpu_s = (self._total_cpu_s or 0.0) + cpu_s
+        except Exception:  # noqa: BLE001 — best-effort, never crash the monitor
+            logger.debug(
+                "[Plugin:%s] resource accounting read failed",
+                self.plugin_id,
+                exc_info=True,
+            )
+
+    def _read_windows_resource_usage(
+        self, proc: subprocess.Popen[bytes]
+    ) -> tuple[float | None, float | None]:
+        """Read peak memory (MB) + total CPU (s) from a Windows process handle.
+
+        The Popen handle is still open after ``wait()`` returns, so the
+        kernel process object is queryable.  Returns (None, None) if the
+        ctypes calls fail.
+        """
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [
+            wintypes.DWORD, wintypes.BOOL, wintypes.DWORD,
+        ]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+        class _PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+                ("PrivateUsage", ctypes.c_size_t),
+            ]
+
+        kernel32.GetProcessMemoryInfo.argtypes = [
+            wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
+        ]
+        kernel32.GetProcessMemoryInfo.restype = wintypes.BOOL
+
+        kernel32.GetProcessTimes.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(wintypes.FILETIME),
+            ctypes.POINTER(wintypes.FILETIME),
+            ctypes.POINTER(wintypes.FILETIME),
+            ctypes.POINTER(wintypes.FILETIME),
+        ]
+        kernel32.GetProcessTimes.restype = wintypes.BOOL
+
+        peak_mb: float | None = None
+        cpu_s: float | None = None
+
+        h_proc = kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, proc.pid
+        )
+        if not h_proc:
+            return None, None
+        try:
+            # Peak memory
+            counters = _PROCESS_MEMORY_COUNTERS_EX()
+            counters.cb = ctypes.sizeof(counters)
+            if kernel32.GetProcessMemoryInfo(
+                h_proc, ctypes.byref(counters), counters.cb
+            ):
+                # PeakWorkingSetSize is in bytes
+                peak_mb = counters.PeakWorkingSetSize / (1024.0 * 1024.0)
+
+            # CPU time (User + Kernel, in 100-nanosecond intervals)
+            creation = wintypes.FILETIME()
+            exit_ft = wintypes.FILETIME()
+            kernel = wintypes.FILETIME()
+            user = wintypes.FILETIME()
+            if kernel32.GetProcessTimes(
+                h_proc,
+                ctypes.byref(creation),
+                ctypes.byref(exit_ft),
+                ctypes.byref(kernel),
+                ctypes.byref(user),
+            ):
+                # FILETIME is 100-nanosecond intervals; combine to seconds
+                def _ft_to_100ns(ft: wintypes.FILETIME) -> int:
+                    return (ft.dwHighDateTime << 32) | ft.dwLowDateTime
+                total_100ns = _ft_to_100ns(user) + _ft_to_100ns(kernel)
+                cpu_s = total_100ns / 10_000_000.0
+        finally:
+            kernel32.CloseHandle(h_proc)
+
+        return peak_mb, cpu_s
+
+    def _read_posix_resource_usage(self) -> tuple[float | None, float | None]:
+        """Read peak memory (MB) + total CPU (s) via RUSAGE_CHILDREN delta.
+
+        ``ru_maxrss`` in RUSAGE_CHILDREN is the max RSS of the largest
+        child ever waited for.  If the new value exceeds the baseline,
+        the new value is this child's peak.  CPU time is the delta
+        (cumulative across all children — best-effort with multiple
+        concurrent child deaths).
+        """
+        import resource
+
+        baseline = self._rusage_baseline
+        if baseline is None:
+            return None, None
+        current = resource.getrusage(resource.RUSAGE_CHILDREN)
+
+        # ru_maxrss: kilobytes on Linux, bytes on macOS
+        rss_unit = 1024.0 if sys.platform == "linux" else 1.0
+        if current.ru_maxrss > baseline.ru_maxrss:
+            peak_mb = current.ru_maxrss / (rss_unit * 1024.0)
+        else:
+            peak_mb = None  # this child was not the largest — can't determine
+
+        cpu_s = (
+            (current.ru_utime + current.ru_stime)
+            - (baseline.ru_utime + baseline.ru_stime)
+        )
+        if cpu_s < 0:
+            cpu_s = None
+
+        return peak_mb, cpu_s
+
     def _attach_rpc(
         self, proc: subprocess.Popen[bytes], timeout: float = 10.0
     ) -> Any:
@@ -640,6 +854,12 @@ class ServicePluginHost:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         # Host-specific: memory caps BEFORE attach.
         self._apply_memory_caps_best_effort(proc)
+        # POSIX resource accounting baseline: snapshot RUSAGE_CHILDREN before
+        # the child starts doing work.  At child death, the delta gives this
+        # child's CPU time and (if it was the largest child) peak RSS.
+        # Windows uses GetProcessMemoryInfo/GetProcessTimes at death instead
+        # (the process handle stays open after wait()).
+        self._rusage_baseline = self._snapshot_rusage_children()
         init_params = {
             "engine_api": 2,
             "plugin_id": self.plugin_id,
@@ -718,6 +938,12 @@ class ServicePluginHost:
                 return
 
             record_crash(self.plugin_id)
+
+            # Best-effort resource accounting: read peak memory + total CPU
+            # at child death.  Never crashes the monitor — failures are
+            # swallowed at debug level inside the method.
+            if isinstance(proc, subprocess.Popen):
+                self._read_resource_usage_at_death(proc)
 
             # Test hook (STITCH_PLUGIN_RESTART_DELAY_S): hold the restart
             # so the built-in fallback can be observed deterministically.

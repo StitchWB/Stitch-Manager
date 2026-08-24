@@ -11,6 +11,7 @@ Zone-1: plain stdlib only (no stitch_backend imports, no third-party deps).
 
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import os
@@ -106,6 +107,14 @@ class RpcPluginClient:
         self._reverse_pool = ThreadPoolExecutor(
             max_workers=4, thread_name_prefix="rpc-reverse"
         )
+        # Structured log ring buffer: entries pushed from plugin.log
+        # notifications (no id) received on the stdout channel.  The reader
+        # thread appends; the host reads via get_structured_logs().
+        # maxlen bounds memory; old entries are evicted automatically.
+        self._structured_logs: collections.deque[dict[str, Any]] = (
+            collections.deque(maxlen=1000)
+        )
+        self._structured_logs_lock = threading.Lock()
 
     @property
     def init_result(self) -> Any:
@@ -253,6 +262,21 @@ class RpcPluginClient:
         """
         self._request_handlers[name] = handler
 
+    def get_structured_logs(self, lines: int = 100) -> list[dict[str, Any]]:
+        """Return the last *lines* structured log entries from the ring buffer.
+
+        Each entry is a dict with ``level``, ``message``, ``timestamp`` and
+        optional ``extra`` keys (the ``plugin.log`` notification params).
+        Returns an empty list when no structured logs have been received
+        (plugin never called ``server.log()`` or the host does not support
+        structured logging).
+        """
+        with self._structured_logs_lock:
+            snapshot = list(self._structured_logs)
+        if lines <= 0:
+            return snapshot
+        return snapshot[-lines:] if lines < len(snapshot) else snapshot
+
     def shutdown(self, *, drain_timeout: float = 5.0) -> None:
         """Graceful shutdown: drain in-flight, send ``plugin.shutdown``, wait."""
         if self._proc is None:
@@ -386,6 +410,16 @@ class RpcPluginClient:
             logger.warning("rpc: skipping non-object line: %r", line)
             return
 
+        # Structured log notification (plugin.log, no id) — push to the
+        # structured log ring buffer.  This is NOT a reverse-RPC request
+        # (no response needed); the entry is recorded for host-side
+        # observability.  Handled before the id check because notifications
+        # have no id.
+        method = obj.get("method")
+        if method == "plugin.log" and "id" not in obj:
+            self._handle_plugin_log(obj.get("params", {}))
+            return
+
         rid = obj.get("id")
         if rid is None:
             logger.debug("rpc: ignoring non-response line: %r", line)
@@ -399,7 +433,6 @@ class RpcPluginClient:
 
         has_result = "result" in obj
         has_error = "error" in obj and obj["error"] is not None
-        method = obj.get("method")
 
         # Reverse RPC: plugin→host request (has method, no result/error).
         if method is not None and not has_result and not has_error:
@@ -465,6 +498,30 @@ class RpcPluginClient:
             # Pool was shut down (client finalizing) — drop the request
             # silently; the plugin is going down anyway.
             pass
+
+    def _handle_plugin_log(self, params: Any) -> None:
+        """Push a ``plugin.log`` notification's params into the ring buffer.
+
+        Runs in the reader thread.  Tolerant: non-dict params are dropped
+        (the plugin sent a malformed notification).  The entry is a dict
+        with ``level``, ``message``, ``timestamp`` and optional ``extra``
+        (all params beyond the three known keys).
+        """
+        if not isinstance(params, dict):
+            return
+        entry: dict[str, Any] = {
+            "level": params.get("level", "info"),
+            "message": params.get("message", ""),
+            "timestamp": params.get("timestamp", ""),
+        }
+        extra = {
+            k: v for k, v in params.items()
+            if k not in ("level", "message", "timestamp")
+        }
+        if extra:
+            entry["extra"] = extra
+        with self._structured_logs_lock:
+            self._structured_logs.append(entry)
 
     def _run_plugin_request(
         self, rid: int, handler: Any, params: dict[str, Any]
@@ -690,6 +747,40 @@ class RpcPluginServer:
         raise RpcTimeoutError(
             f"call_host {method} (id={rid}) timed out after {timeout}s"
         )
+
+    def log(self, level: str, message: str, **extra: Any) -> None:
+        """Write a structured log entry to stdout as a ``plugin.log`` notification.
+
+        Emits a JSON-RPC 2.0 notification (no ``id``) with method
+        ``plugin.log`` and params ``{level, message, timestamp, ...extra}``.
+        The host's :class:`RpcPluginClient` reader thread picks it up and
+        pushes it into the structured log ring buffer — no response is
+        expected or sent.
+
+        ``level`` is a free-form string (conventionally ``debug``,
+        ``info``, ``warning``, ``error``).  ``extra`` key-value pairs are
+        merged into the params dict (e.g. ``server.log("info", "synced",
+        count=3)`` → params include ``"count": 3``).
+
+        The timestamp is an ISO 8601 UTC string.  Uses a local import of
+        ``datetime`` so the vendored copy (which only ships ``json``,
+        ``sys``, ``threading``, ``time``, ``typing`` at module level)
+        remains self-contained.
+        """
+        from datetime import datetime, timezone
+
+        params: dict[str, Any] = {
+            "level": level,
+            "message": message,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        params.update(extra)
+        line = json.dumps(
+            {"jsonrpc": _JSONRPC, "method": "plugin.log", "params": params},
+            ensure_ascii=False,
+        )
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
 
     def serve(self) -> None:
         """Main read-dispatch-write loop.  Exits on ``plugin.shutdown``.

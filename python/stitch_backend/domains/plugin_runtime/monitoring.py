@@ -40,6 +40,9 @@ _ALERT_DEDUPE_SECONDS: float = 600.0
 #: Max stderr lines embedded in a health entry.
 _STDERR_TAIL_LINES: int = 20
 
+#: Max structured log entries embedded in a health entry.
+_STRUCTURED_TAIL_LINES: int = 20
+
 #: plugin_id → monotonic timestamp of the last crash-loop alert.
 _last_alert: dict[str, float] = {}
 
@@ -50,7 +53,14 @@ def reset_alert_state() -> None:
 
 
 def build_health_entries() -> list[dict[str, Any]]:
-    """Enrich ``status_all()`` with version, last_error and stderr tail."""
+    """Enrich ``status_all()`` with version, last_error, stderr tail and
+    structured log tail.
+
+    The ``structured_tail`` field is additive — it carries the last
+    ``_STRUCTURED_TAIL_LINES`` entries from the host's structured log
+    ring buffer (``plugin.log`` notifications).  Existing consumers that
+    only read ``stderr_tail`` are unaffected.
+    """
     entries: list[dict[str, Any]] = []
     for host in all_hosts():
         status = host.status()
@@ -60,6 +70,7 @@ def build_health_entries() -> list[dict[str, Any]]:
             "version": manifest.version if manifest else None,
             "last_error": status.get("error"),
             "stderr_tail": host.get_logs(_STDERR_TAIL_LINES),
+            "structured_tail": host.get_structured_logs(_STRUCTURED_TAIL_LINES),
         })
     return entries
 
@@ -189,6 +200,7 @@ async def _service_plugin_metrics(
           "calls": int, "errors": int, "avg_latency_ms": float,
           "last_error": str | None,
           "by_command": {name: {"calls": int, "errors": int}},
+          "peak_memory_mb": float | None, "total_cpu_s": float | None,
         }
     """
     from fastapi import HTTPException
@@ -206,3 +218,49 @@ async def _service_plugin_metrics(
             status_code=404, detail=f"Unknown plugin: {plugin_id}"
         )
     return host.get_metrics()
+
+
+@register_command("service_plugin_logs", readonly=True, admin_only=True)
+async def _service_plugin_logs(
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Return both raw stderr and structured logs for one plugin (admin-only).
+
+    Combines the raw stderr ring buffer (``host.get_logs()``) and the
+    structured log ring buffer (``host.get_structured_logs()``) into a
+    single response.  This is the additive surface for structured
+    logging — the existing ``get_service_plugin_logs`` command (in
+    bridge.py) continues to return only raw stderr lines for backward
+    compatibility.
+
+    Shape:
+        {
+          "stderr": [str, ...],       # raw stderr lines
+          "structured": [{...}, ...], # plugin.log notification entries
+        }
+
+    Takes a required ``plugin_id`` and an optional ``lines`` (default
+    100, capped to the ring buffer size).  404 for an unknown plugin id,
+    400 for a malformed id.
+    """
+    from fastapi import HTTPException
+
+    from stitch_backend.domains.plugin_runtime.bridge import _PLUGIN_ID_RE
+
+    plugin_id = params.get("plugin_id")
+    if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
+        raise HTTPException(
+            status_code=400, detail="plugin_id is required and must be valid"
+        )
+    host = get_host(plugin_id)
+    if host is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown plugin: {plugin_id}"
+        )
+    lines = params.get("lines", 100)
+    if not isinstance(lines, int) or lines < 0:
+        lines = 100
+    return {
+        "stderr": host.get_logs(lines),
+        "structured": host.get_structured_logs(lines),
+    }
