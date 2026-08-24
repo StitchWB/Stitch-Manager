@@ -485,7 +485,24 @@ class ServicePluginHost:
     def _apply_windows_job_memory_cap(
         self, proc: subprocess.Popen[bytes], limit_bytes: int
     ) -> None:
-        """Assign the child process to a Job Object with a memory limit."""
+        """Assign the child process to a Job Object with a memory limit.
+
+        Handle lifecycle (leak fix): EVERY handle opened here is closed
+        before returning — on success and on every failure path.  The job
+        handle is closed AFTER ``AssignProcessToJobObject`` succeeds:
+        closing it does NOT remove the process from the job.  A job object
+        kernel object stays alive (with its limits enforced) while any
+        process is a member, regardless of open handles — the assignment
+        is what binds the process, not the handle.  Verified on Windows:
+        ``IsProcessInJob`` still returns TRUE after the job handle is
+        closed (see ``test_windows_job_cap_membership_survives_handle_close``
+        in test_plugin_host.py).  Keeping the handle alive instead would
+        leak one kernel handle per attach/restart until the cap silently
+        stops applying.
+
+        The child is assigned via a real process handle (``OpenProcess``)
+        — ``AssignProcessToJobObject`` takes a HANDLE, not a PID.
+        """
         import ctypes
         from ctypes import wintypes
 
@@ -493,6 +510,23 @@ class ServicePluginHost:
 
         # JobObjectExtendedLimitInformation = 9
         JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100
+        PROCESS_ALL_ACCESS = 0x1FFFFF
+
+        # Proper types: default ctypes restype (c_int) truncates handles
+        # on 64-bit Windows.
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [
+            wintypes.DWORD, wintypes.BOOL, wintypes.DWORD,
+        ]
+        kernel32.SetInformationJobObject.argtypes = [
+            wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+        ]
+        kernel32.AssignProcessToJobObject.argtypes = [
+            wintypes.HANDLE, wintypes.HANDLE,
+        ]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 
         class _IO_COUNTERS(ctypes.Structure):
             _fields_ = [
@@ -530,20 +564,31 @@ class ServicePluginHost:
         h_job = kernel32.CreateJobObjectW(None, None)
         if not h_job:
             raise ctypes.WinError()  # type: ignore[attr-defined]
+        try:
+            info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY
+            info.ProcessMemoryLimit = limit_bytes
 
-        info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY
-        info.ProcessMemoryLimit = limit_bytes
+            ok = kernel32.SetInformationJobObject(
+                h_job, 9, ctypes.byref(info), ctypes.sizeof(info)
+            )
+            if not ok:
+                raise ctypes.WinError()  # type: ignore[attr-defined]
 
-        ok = kernel32.SetInformationJobObject(
-            h_job, 9, ctypes.byref(info), ctypes.sizeof(info)
-        )
-        if not ok:
-            raise ctypes.WinError()  # type: ignore[attr-defined]
-
-        ok = kernel32.AssignProcessToJobObject(h_job, int(proc.pid))
-        if not ok:
-            raise ctypes.WinError()  # type: ignore[attr-defined]
+            h_proc = kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, proc.pid)
+            if not h_proc:
+                raise ctypes.WinError()  # type: ignore[attr-defined]
+            try:
+                ok = kernel32.AssignProcessToJobObject(h_job, h_proc)
+                if not ok:
+                    raise ctypes.WinError()  # type: ignore[attr-defined]
+            finally:
+                kernel32.CloseHandle(h_proc)
+        finally:
+            # Safe to close: the assignment survives handle closure (see
+            # docstring).  On failure paths this releases the job object
+            # immediately instead of leaking it.
+            kernel32.CloseHandle(h_job)
 
         logger.info(
             "[Plugin:%s] memory cap %dMB applied via Job Object",
