@@ -174,6 +174,30 @@ async def publish_package(
 # ── Dev install ────────────────────────────────────────────────────────
 
 
+def _find_flat_i18n_keys(i18n: dict) -> list[str]:
+    """Return a list of ``"<locale>.<key>"`` flat keys in an i18n bundle.
+
+    A top-level key in a locale bundle that contains ``.`` is a *flat key*:
+    the FE ``i18nPluginBundles.ts`` ``walkBundle`` walks dot-paths through
+    nested objects, so a flat top-level key like ``"my.plugin.title"``
+    silently never resolves.  Authors must nest:
+    ``{"my": {"plugin": {"title": …}}}``.
+
+    Returns ``[]`` when the bundle is well-formed (or not a dict — caller
+    validates shape separately).
+    """
+    flat: list[str] = []
+    if not isinstance(i18n, dict):
+        return flat
+    for locale, bundle in i18n.items():
+        if not isinstance(bundle, dict):
+            continue
+        for key in bundle:
+            if isinstance(key, str) and "." in key:
+                flat.append(f"{locale}.{key}")
+    return flat
+
+
 def dev_install(package_dir: Path) -> Path:
     """Copy a package into ``plugins-local/{id}/`` (dev loop, no server).
 
@@ -185,8 +209,26 @@ def dev_install(package_dir: Path) -> Path:
     After copying, refreshes ``<pkg>/_vendor/`` from the canonical
     ``autoreg/plugin/rpc.py`` so the dev install always carries the
     current vendored server (idempotent byte-refresh).
+
+    Raises :class:`ValueError` when the manifest carries an i18n bundle
+    with a flat top-level key (contains ``.``) — the FE walkBundle walks
+    dot-paths through nested objects, so flat keys silently never resolve.
+    Catching this at dev-install time saves a confusing runtime failure.
     """
     manifest = crypto.read_manifest(package_dir)
+
+    # i18n flat-key check — catch the silent walkBundle resolution failure
+    # at dev-install time so authors fix it before publishing.
+    i18n = manifest.contributions.get("i18n")
+    if isinstance(i18n, dict):
+        flat_keys = _find_flat_i18n_keys(i18n)
+        if flat_keys:
+            raise ValueError(
+                f"i18n bundle in {manifest.id} has flat top-level keys "
+                f"({', '.join(flat_keys)}) — nest them under objects "
+                f"(FE walkBundle walks dot-paths; flat keys never resolve)"
+            )
+
     dest = plugins_local_dir() / manifest.id
     if dest.exists():
         shutil.rmtree(dest)
