@@ -296,12 +296,40 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
         paramsFromRow: { linkId: 'link_id' },
       },
     ]);
+    // Real plugin shape: cell-shaped rows under identities/links (consumed by
+    // the identity graph) plus flat rows under identitiesFlat/linksFlat for
+    // the declarative tables (rowsKey points at the flat variants).
     const dataset = {
       identities: [
-        { identity_id: 'i-1', display_name: 'Alice', email: 'alice@x.io', status: 'active' },
+        {
+          rowNumber: 2,
+          cells: [
+            { key: 'identity_id', value: 'i-1' },
+            { key: 'display_name', value: 'Alice' },
+            { key: 'email', value: 'alice@x.io' },
+            { key: 'status', value: 'active' },
+          ],
+        },
+      ],
+      identitiesFlat: [
+        { rowNumber: 2, identity_id: 'i-1', display_name: 'Alice', email: 'alice@x.io', status: 'active' },
       ],
       links: [
         {
+          rowNumber: 2,
+          cells: [
+            { key: 'link_id', value: 'l-1' },
+            { key: 'identity_id', value: 'i-1' },
+            { key: 'provider', value: 'tiktok' },
+            { key: 'account_id', value: 'acc-9' },
+            { key: 'role', value: 'owner' },
+            { key: 'status', value: 'active' },
+          ],
+        },
+      ],
+      linksFlat: [
+        {
+          rowNumber: 2,
           link_id: 'l-1',
           identity_id: 'i-1',
           provider: 'tiktok',
