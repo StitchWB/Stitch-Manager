@@ -281,9 +281,10 @@ Anything beyond the node dictionary stays `core_page`.
 
 The vocabulary above is the **frozen v2 contract**: node kinds and their
 fields only change by a schema revision (new kinds are additive and the
-renderer tolerates unknown kinds). Known deferred extensions (row-scoped
-table actions, tabbed pages, modals) are v3 candidates — until then,
-pages that need them stay `core_page`.
+renderer tolerates unknown kinds). Additive field revisions land without
+new kinds — so far: `rowActions` on the table node (row-scoped actions,
+see below). Known deferred extensions (tabbed pages, modals) are v3
+candidates — until then, pages that need them stay `core_page`.
 
 ### Schema
 
@@ -334,7 +335,7 @@ pages that need them stay `core_page`.
 | `heading` | Section heading. | `text`, `level?` (1-6). |
 | `section` | Group of nodes with an optional title. | `title?`, `nodes: UiNode[]`. |
 | `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`, `placeholder?` (text/select hint; plain string or i18n key, resolved like `label`). |
-| `table` | Read-only data table. | `id`, `columns: [{key, label}]`, `source: {command, params?}`, `rowsKey?`. `source.command` must be a readonly command returning rows. |
+| `table` | Data table with optional per-row actions. | `id`, `columns: [{key, label}]`, `source: {command, params?}`, `rowsKey?`, `rowActions?` (per-row action buttons; see below). `source.command` must be a readonly command returning rows. |
 | `button` | Action button. | `id`, `label`, `command`, `params?`, `paramsFrom?` (param key → field `id` binding), `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`. |
 
 ### Labels
@@ -378,9 +379,48 @@ Keys not listed in `paramsFrom` keep their static `params` value. A
 omits that key from the params (the renderer warns once). Buttons
 without `paramsFrom` send their static `params` unchanged.
 
-**Deferred:** row-scoped table actions — params bound to a table ROW
-(e.g. a per-row delete button such as totp's `remove_key`) — are NOT
-part of the vocabulary yet; they are a future extension (v3 concern).
+### Row-scoped table actions
+
+Tables support per-row action buttons through `rowActions` (an additive
+revision of the frozen v2 contract — older manifests without it render
+unchanged). Each entry renders as a button in an extra trailing actions
+column on EVERY row:
+
+```json
+{
+  "kind": "table",
+  "id": "totp-keys",
+  "columns": [{"key": "label", "label": "plugin.my-plugin.label"}],
+  "source": {"command": "list_keys"},
+  "rowActions": [
+    {
+      "id": "remove-key-row",
+      "label": "plugin.my-plugin.removeRow",
+      "command": "remove_key",
+      "variant": "danger",
+      "params": {"reason": "manual"},
+      "paramsFromRow": {"id": "id"}
+    }
+  ]
+}
+```
+
+`label` resolves like every other label (i18n key or plain string).
+**`paramsFromRow`** is the row analogue of the button's `paramsFrom`: a
+map of `param key → COLUMN KEY of the row`. On click the final params
+are `{...params}` with every `paramsFromRow` entry overridden by the
+clicked row's value for that column (rows may carry more keys than the
+table displays — e.g. totp rows expose `id` without a visible ID
+column). A column key missing from the row omits that param entirely
+(the renderer warns once). The command runs through the same
+`plugin.{id}.{command}` invoke path as button nodes, and a successful
+action refetches the table's `source` command so the mutation is
+visible immediately.
+
+`variant: "danger"` prompts a confirm dialog (`window.confirm`,
+localized via the core `pluginUi.confirmRowAction` key) before invoking;
+declining aborts without calling the command. Destructive actions
+(delete/remove) MUST use `variant: "danger"`.
 
 ---
 

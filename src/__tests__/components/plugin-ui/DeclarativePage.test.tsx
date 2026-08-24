@@ -15,6 +15,13 @@
  *   (j) Buttons without paramsFrom send static params unchanged.
  *   (k) paramsFrom referencing a missing field id omits the key and
  *       console.warns once.
+ *   (t) rowActions render one button set per row (+ trailing header cell).
+ *   (u) Row action click sends static params + paramsFromRow values from
+ *       the CLICKED row.
+ *   (v) paramsFromRow referencing a missing column omits the key and
+ *       console.warns once.
+ *   (w) danger row actions prompt window.confirm and abort on decline.
+ *   (x) danger row actions invoke on acceptance and refetch the source.
  *
  * Mocks: invoke module (safeInvoke), i18n (t = identity), toast, and
  * @/components/ui primitives (stubbed to simple HTML like Plugins.test.tsx
@@ -145,6 +152,16 @@ const fixtureSchema: PluginPageSchema = {
       ],
       source: { command: 'list_users' },
       rowsKey: 'rows',
+      // Row-scoped action — renders a trailing actions column per row.
+      rowActions: [
+        {
+          id: 'delete-user',
+          label: 'Delete',
+          command: 'delete_user',
+          variant: 'danger',
+          paramsFromRow: { id: 'id' },
+        },
+      ],
     },
     { kind: 'button', id: 'ping', label: 'Ping', command: 'ping', variant: 'primary' },
   ],
@@ -609,6 +626,213 @@ describe('DeclarativePage', () => {
       expect(screen.getAllByDisplayValue('B')).toHaveLength(2);
     } finally {
       warnSpy.mockRestore();
+    }
+  });
+
+  // ── Row-scoped table actions (rowActions / paramsFromRow) ────────────────
+
+  const rowActionSchema: PluginPageSchema = {
+    nodes: [
+      {
+        kind: 'table',
+        id: 'items',
+        columns: [{ key: 'name', label: 'Name' }],
+        source: { command: 'list_items' },
+        rowActions: [
+          {
+            id: 'delete-item',
+            label: 'Delete',
+            command: 'delete_item',
+            params: { staticKey: 'kept' },
+            paramsFromRow: { itemId: 'id' },
+          },
+        ],
+      },
+    ],
+  };
+
+  const dangerRowSchema: PluginPageSchema = {
+    nodes: [
+      {
+        kind: 'table',
+        id: 'danger-items',
+        columns: [{ key: 'name', label: 'Name' }],
+        source: { command: 'list_danger' },
+        rowActions: [
+          {
+            id: 'delete-danger',
+            label: 'Delete',
+            command: 'delete_danger',
+            variant: 'danger',
+            paramsFromRow: { itemId: 'id' },
+          },
+        ],
+      },
+    ],
+  };
+
+  it('(t) rowActions render one button set per row plus a trailing header cell', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([
+      { id: 'r1', name: 'One' },
+      { id: 'r2', name: 'Two' },
+    ]);
+
+    const { container } = render(
+      <DeclarativePage pluginId="test" schema={rowActionSchema} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('One')).toBeTruthy();
+    });
+    // One action button per row.
+    expect(screen.getAllByText('Delete')).toHaveLength(2);
+    // One data column + one trailing actions header cell.
+    expect(container.querySelectorAll('th')).toHaveLength(2);
+  });
+
+  it('(u) clicking a row action sends static params + row-mapped params from the clicked row', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([
+      { id: 'r1', name: 'One' },
+      { id: 'r2', name: 'Two' },
+    ]);
+
+    render(<DeclarativePage pluginId="test" schema={rowActionSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Two')).toBeTruthy();
+    });
+
+    // Click the SECOND row's button — params must come from row r2.
+    await act(async () => {
+      fireEvent.click(screen.getAllByText('Delete')[1]);
+    });
+
+    expect(safeInvoke).toHaveBeenCalledWith('plugin.test.delete_item', {
+      staticKey: 'kept',
+      itemId: 'r2',
+    });
+  });
+
+  it('(v) paramsFromRow referencing a missing column omits the key and warns once', async () => {
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      // Persistent (not Once): the post-action refetch must return the
+      // same rows so the second click sees the same missing column.
+      (safeInvoke as jest.Mock).mockResolvedValue([
+        { id: 'r1', name: 'One' },
+      ]);
+
+      const missingColumnSchema: PluginPageSchema = {
+        nodes: [
+          {
+            kind: 'table',
+            id: 'ghost-table',
+            columns: [{ key: 'name', label: 'Name' }],
+            source: { command: 'list_ghost' },
+            rowActions: [
+              {
+                id: 'ghost-action',
+                label: 'Ghost',
+                command: 'ghost_cmd',
+                // Static value for the ghost key must be dropped too — a
+                // missing column omits the key entirely.
+                params: { ghost: 'static-default' },
+                paramsFromRow: { ghost: 'nope-col', itemId: 'id' },
+              },
+            ],
+          },
+        ],
+      };
+
+      render(<DeclarativePage pluginId="test" schema={missingColumnSchema} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Ghost')).toBeTruthy();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Ghost'));
+      });
+
+      expect(safeInvoke).toHaveBeenCalledWith('plugin.test.ghost_cmd', {
+        itemId: 'r1',
+      });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      // Second click: the warning is not repeated.
+      await act(async () => {
+        fireEvent.click(screen.getByText('Ghost'));
+      });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('(w) danger row action confirms via window.confirm and aborts on decline', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([
+      { id: 'r1', name: 'One' },
+    ]);
+    const confirmSpy = jest
+      .spyOn(window, 'confirm')
+      .mockImplementation(() => false);
+    try {
+      render(<DeclarativePage pluginId="test" schema={dangerRowSchema} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('One')).toBeTruthy();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Delete'));
+      });
+
+      // Localized via the core confirm key (t = identity in this test).
+      expect(confirmSpy).toHaveBeenCalledWith('pluginUi.confirmRowAction');
+      // Declined → only the initial source fetch happened; the action
+      // command was never invoked.
+      expect(safeInvoke).toHaveBeenCalledTimes(1);
+      expect(safeInvoke).not.toHaveBeenCalledWith(
+        'plugin.test.delete_danger',
+        expect.anything(),
+      );
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it('(x) danger row action invokes on acceptance and refetches the source', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      { id: 'r1', name: 'One' },
+    ]);
+    const confirmSpy = jest
+      .spyOn(window, 'confirm')
+      .mockImplementation(() => true);
+    try {
+      render(<DeclarativePage pluginId="test" schema={dangerRowSchema} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('One')).toBeTruthy();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Delete'));
+      });
+
+      expect(safeInvoke).toHaveBeenCalledWith('plugin.test.delete_danger', {
+        itemId: 'r1',
+      });
+      // Successful action refetches the source command (initial + refetch).
+      await waitFor(() => {
+        const sourceCalls = (safeInvoke as jest.Mock).mock.calls.filter(
+          ([cmd]) => cmd === 'plugin.test.list_danger',
+        );
+        expect(sourceCalls).toHaveLength(2);
+      });
+    } finally {
+      confirmSpy.mockRestore();
     }
   });
 });

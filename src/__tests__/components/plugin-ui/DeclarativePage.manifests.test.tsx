@@ -190,13 +190,28 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
       label: 'label-field',
       secret: 'secret-field',
     });
-    // remove_key stays row-scoped static params — row-scoped table actions
-    // are deliberately out of the declarative vocabulary for now.
+    // The page-level remove button keeps its static params (no paramsFrom);
+    // the ROW-scoped remove lives on the table node as a rowAction —
+    // remove_key expects param `id` and list_keys rows carry `id`
+    // (verified against stitch_totp/storage.py).
     const removeButton = pageNodes.find(
       (n): n is Extract<UiNode, { kind: 'button' }> =>
         n.kind === 'button' && n.id === 'remove-key',
     );
     expect(removeButton?.paramsFrom).toBeUndefined();
+    const totpTable = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'table' }> =>
+        n.kind === 'table' && n.id === 'totp-keys',
+    );
+    expect(totpTable?.rowActions).toEqual([
+      {
+        id: 'remove-key-row',
+        label: 'stitch-totp.removeRow',
+        command: 'remove_key',
+        variant: 'danger',
+        paramsFromRow: { id: 'id' },
+      },
+    ]);
     const labelField = pageNodes.find(
       (n): n is Extract<UiNode, { kind: 'field' }> =>
         n.kind === 'field' && n.id === 'label-field',
@@ -234,6 +249,9 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
     // Buttons resolved from bundle keys.
     expect(screen.getByText('Add Key')).toBeTruthy();
     expect(screen.getByText('Remove Key')).toBeTruthy();
+    // Row action button rendered in the trailing actions column (one row
+    // → one button), label resolved from the plugin bundle.
+    expect(screen.getAllByText('Remove')).toHaveLength(1);
     // Placeholders resolve through the en bundle like labels do.
     expect(screen.getByPlaceholderText('e.g. Kiro')).toBeTruthy();
     expect(
@@ -251,12 +269,33 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
     expect(screen.getByText('TOTP-ключи')).toBeTruthy();
     expect(screen.getByText('Добавить ключ')).toBeTruthy();
     expect(screen.getByText('Удалить ключ')).toBeTruthy();
+    // Row action label switches locale with the bundle.
+    expect(screen.getAllByText('Удалить')).toHaveLength(1);
     expect(screen.getByPlaceholderText('например, Kiro')).toBeTruthy();
   });
 
   it('stitch-sheets page renders both tables via rowsKey and the oauth button', async () => {
     const manifest = loadManifest('stitch-sheets');
     install(manifest);
+    // The links table carries a row-scoped delete action: delete_link
+    // expects param `linkId` (verified against stitch_sheets/__main__.py
+    // _handle_delete_link), mapped from the row's link_id column.
+    const pageNodes = allNodes(
+      (manifest.contributions.ui.page as PluginPageSchema).nodes,
+    );
+    const linksTable = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'table' }> =>
+        n.kind === 'table' && n.id === 'links',
+    );
+    expect(linksTable?.rowActions).toEqual([
+      {
+        id: 'delete-link-row',
+        label: 'stitch-sheets.deleteRow',
+        command: 'delete_link',
+        variant: 'danger',
+        paramsFromRow: { linkId: 'link_id' },
+      },
+    ]);
     const dataset = {
       identities: [
         { identity_id: 'i-1', display_name: 'Alice', email: 'alice@x.io', status: 'active' },
@@ -297,6 +336,9 @@ describe('declarative plugin manifests render through DeclarativePage', () => {
     expect(screen.getByText('alice@x.io')).toBeTruthy();
     expect(screen.getByText('tiktok')).toBeTruthy();
     expect(screen.getByText('acc-9')).toBeTruthy();
+    // Row action button on the single links row (identities table has no
+    // rowActions — exactly one Delete button on the page).
+    expect(screen.getAllByText('Delete')).toHaveLength(1);
 
     expect(screen.getByText('Connect Google')).toBeTruthy();
   });
