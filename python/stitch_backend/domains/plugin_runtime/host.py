@@ -199,9 +199,6 @@ class ServicePluginHost:
                 await self.supervisor.stop(self.sidecar_name)
                 return {"status": "error", "error": str(exc),
                         "port": None, "pid": None, "uptimeSeconds": None}
-            # Wire engine.oauth.* reverse-RPC handlers so the plugin can
-            # request OAuth operations from the host via call_host.
-            register_engine_handlers(self.rpc)
             self._restart_count = 0
             self._crash_loop = False
             self._stopping = False
@@ -610,13 +607,38 @@ class ServicePluginHost:
     ) -> Any:
         """Attach RpcPluginClient to an already-spawned Popen and handshake.
 
-        RpcPluginClient.start() spawns its own process; we bypass that by
-        setting ``_proc`` directly and starting the reader thread + handshake
-        manually.  This reuses the client's id correlation, malformed-line
-        skip, and call/ping/shutdown methods without duplicating them.
+        Delegates the common attach sequence (set _proc, start reader,
+        ``plugin.init`` handshake, ``_migrate_db``) to
+        :meth:`RpcPluginClient.attach` — the single code path shared with
+        the runtool playground.  Host-specific steps are kept explicit and
+        ordered around it:
+
+        BEFORE attach:
+          - memory caps (the child does no meaningful work before
+            plugin.init; capping here bounds the handshake itself).
+
+        AFTER attach:
+          - register engine.oauth.* reverse-RPC handlers (the plugin may
+            call_host during/after init; handlers must be wired before the
+            first plugin.call).  Lives in _attach_rpc rather than start()
+            so restart (_restart_once → _attach_rpc) also wires handlers.
+          - parse capabilities from the init result (tolerant: missing/
+            non-list → []).  Host-only — the playground does not parse
+            capabilities.
+          - start stderr reader (host surfaces child logs via
+            get_service_plugin_logs; the reader is non-blocking).
+
+        Intentional deltas from runtool._attach_client (documented so the
+        next diverger sees them):
+          - memory caps: host-only (playground has none).
+          - engine.oauth handlers: host registers real handlers (playground
+            stubs them via _RunRpcPluginClient._handle_plugin_request).
+          - capabilities parsing: host-only (playground does not parse).
+          - stderr reader: host starts AFTER attach; playground starts
+            BEFORE attach (playground wants init-time stderr visible).
         """
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        # Apply best-effort memory cap before the child does meaningful work.
+        # Host-specific: memory caps BEFORE attach.
         self._apply_memory_caps_best_effort(proc)
         init_params = {
             "engine_api": 2,
@@ -629,35 +651,22 @@ class ServicePluginHost:
             "supported": list(SUPPORTED_CAPABILITIES),
         }
         self.rpc = RpcPluginClient(default_timeout=self.default_timeout)
-        self.rpc._proc = proc
-        self.rpc._closed = False
-        self.rpc._reader = threading.Thread(
-            target=self.rpc._reader_loop, name="rpc-reader", daemon=True
+        # Common sequence: set _proc, start reader, plugin.init handshake,
+        # _migrate_db (when self.migrations is True).
+        self.rpc.attach(
+            proc,
+            init_params=init_params,
+            timeout=timeout,
+            migrate=self.migrations,
         )
-        self.rpc._reader.start()
-        try:
-            self.rpc._init_result = self.rpc._call_internal(
-                "plugin.init", init_params, timeout=timeout
-            )
-        except (RpcTimeoutError, RpcProtocolError):
-            self.rpc.kill()
-            raise
-        # Parse the plugin's declared capabilities from the init result.
-        # Tolerant: a missing/empty/non-list value → [].  Unknown values
-        # (not in SUPPORTED_CAPABILITIES) are logged at WARNING and kept
-        # verbatim so status() surfaces them for observability.
+        # Host-specific: register engine.oauth.* reverse-RPC handlers AFTER
+        # attach.
+        register_engine_handlers(self.rpc)
+        # Host-specific: parse capabilities from the init result AFTER attach.
         self._capabilities = self._parse_capabilities(
-            self.rpc._init_result
+            self.rpc.init_result
         )
-        if self.migrations:
-            self.rpc.call(
-                "_migrate_db",
-                {"from_version": 0, "to_version": 1},
-                timeout=timeout,
-            )
-        # Start a daemon thread that reads child stderr into the ring
-        # buffer for get_service_plugin_logs.  The thread exits when the
-        # child's stderr pipe closes (process death / stop).
+        # Host-specific: stderr reader AFTER attach.
         if proc.stderr is not None:
             self._stderr_thread = threading.Thread(
                 target=self._stderr_reader,
@@ -665,7 +674,7 @@ class ServicePluginHost:
                 daemon=True,
             )
             self._stderr_thread.start()
-        return self.rpc._init_result
+        return self.rpc.init_result
 
     def _stderr_reader(self) -> None:
         """Read child stderr line-by-line into the ring buffer."""

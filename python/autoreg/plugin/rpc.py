@@ -109,7 +109,7 @@ class RpcPluginClient:
 
     @property
     def init_result(self) -> Any:
-        """Result of the ``plugin.init`` handshake (set by ``start``)."""
+        """Result of the ``plugin.init`` handshake (set by ``start``/``attach``)."""
         return self._init_result
 
     @property
@@ -132,11 +132,15 @@ class RpcPluginClient:
         Returns the init result (also available as ``.init_result``).
         Raises ``RpcTimeoutError`` / ``RpcProtocolError`` on handshake failure
         (child is killed before raising).
+
+        ``start()`` is test-only (production spawns go through
+        :class:`SidecarSupervisor`).  It delegates the attach sequence to
+        :meth:`attach` so there is a single code path for set-_proc,
+        start-reader, handshake, and (optional) ``_migrate_db``.
         """
         if self._proc is not None:
             raise RuntimeError("client already started")
 
-        self._closed = False
         # NOTE: production plugin spawns go through SidecarSupervisor.start()
         # which applies the _CHILD_ENV_ALLOWLIST (no host secrets leak).  This
         # ``start()`` is only used by tests; if it ever becomes a production
@@ -144,7 +148,7 @@ class RpcPluginClient:
         # so duplicate a minimal allowlist rather than importing stitch_backend).
         child_env = {**os.environ, **env} if env else None
         try:
-            self._proc = subprocess.Popen(
+            proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -154,6 +158,42 @@ class RpcPluginClient:
         except OSError as exc:
             raise RpcProtocolError(f"failed to spawn child: {exc}") from exc
 
+        return self.attach(proc, init_params=init_params, timeout=timeout)
+
+    def attach(
+        self,
+        proc: subprocess.Popen[bytes],
+        *,
+        init_params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+        migrate: bool = False,
+    ) -> Any:
+        """Attach to an already-spawned child and perform the init handshake.
+
+        Single code path for both :class:`ServicePluginHost` (production) and
+        the runtool playground (dev).  Steps:
+
+        1. Set ``_proc`` / ``_closed`` state.
+        2. Start the reader thread.
+        3. Run the ``plugin.init`` handshake (sets ``.init_result``).
+        4. When *migrate* is True, call the reserved ``_migrate_db`` method
+           with ``{"from_version": 0, "to_version": 1}``.
+
+        On **handshake** failure (``RpcTimeoutError`` / ``RpcProtocolError``)
+        the child is killed and the error is re-raised — same failure path
+        as :meth:`start`.  On **_migrate_db** failure the error propagates
+        without killing (the handshake already succeeded; the caller decides
+        whether to continue or clean up — the runtool playground treats
+        migration failure as non-fatal).
+
+        Returns the init result (also available as ``.init_result``).
+        Raises ``RuntimeError`` if the client already has a proc attached.
+        """
+        if self._proc is not None:
+            raise RuntimeError("client already started")
+
+        self._closed = False
+        self._proc = proc
         self._reader = threading.Thread(
             target=self._reader_loop, name="rpc-reader", daemon=True
         )
@@ -167,6 +207,12 @@ class RpcPluginClient:
         except (RpcTimeoutError, RpcProtocolError):
             self.kill()
             raise
+        if migrate:
+            self.call(
+                "_migrate_db",
+                {"from_version": 0, "to_version": 1},
+                timeout=to,
+            )
         return self._init_result
 
     def call(
