@@ -1667,6 +1667,7 @@ export const en: Translations = {
   },
   pluginUi: {
     actionFailed: "Action failed",
+    confirmRowAction: "Execute this action?",
     pluginNotInstalled: "Plugin not installed",
     pluginNotInstalledDescription: "The plugin is not installed or is unavailable.",
     loading: "Loading..."

@@ -20,6 +20,18 @@ apply regardless of env (see ``host.py``).
 
 TOFU pins are scoped per ``(user_id, plugin_id)`` in a separate file
 (``sandbox_plugin_pins.json``) — global pins are untouched.
+
+SPI contract:
+    Sandbox plugins do NOT participate in the SPI registry.  The SPI
+    registry is global by design — ``register_plugin_spi`` is called only
+    in ``discovery.py`` for global hosts.  A sandbox plugin's manifest may
+    declare ``contributions.spi``, but those declarations are inert in
+    sandbox mode: ``spi.resolve("mail_inbox")`` still hits the global
+    plugin or built-in.  This contract is enforced by omission (the
+    sandbox install/start flow never calls ``register_plugin_spi``) and
+    made visible by a WARNING logged at install time
+    (:func:`_warn_if_spi_declared`).  SPI integrations require a real
+    global install (``dev-install``).
 """
 
 from __future__ import annotations
@@ -94,8 +106,39 @@ def _reset_state() -> None:
 def register_sandbox_manifest(
     user_id: int, plugin_id: str, manifest: "PluginManifest"
 ) -> None:
-    """Store manifest metadata for a sandbox plugin (idempotent)."""
+    """Store manifest metadata for a sandbox plugin (idempotent).
+
+    Also warns when the manifest declares ``contributions.spi`` — sandbox
+    plugins do not serve SPI (see the module docstring's SPI contract).
+    """
     _sandbox_manifests[(user_id, plugin_id)] = manifest
+    _warn_if_spi_declared(plugin_id, manifest)
+
+
+def _warn_if_spi_declared(plugin_id: str, manifest: "PluginManifest") -> None:
+    """Log a WARNING when a sandbox plugin's manifest declares SPI
+    contributions.
+
+    Sandbox plugins do not participate in the SPI registry — SPI calls
+    resolve to the global plugin or built-in.  This warning makes the
+    contract visible so authors know their SPI declarations are inert in
+    sandbox mode and that activating SPI integrations requires a real
+    global install (``dev-install``).
+    """
+    contributions = getattr(manifest, "contributions", None) or {}
+    spi_names = contributions.get("spi", [])
+    if not isinstance(spi_names, list) or not spi_names:
+        return
+    declared = [s for s in spi_names if isinstance(s, str)]
+    if not declared:
+        return
+    logger.warning(
+        "Sandbox plugin %s declares SPI contributions %s — sandbox plugins "
+        "do not serve SPI; SPI calls resolve to the global plugin or "
+        "built-in. Install via dev-install (global) to activate SPI "
+        "integrations.",
+        plugin_id, declared,
+    )
 
 
 def get_sandbox_manifest(
