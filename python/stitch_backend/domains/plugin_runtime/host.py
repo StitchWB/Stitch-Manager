@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import logging
+import os
 import subprocess
 import sys
 import threading
@@ -132,6 +133,15 @@ class ServicePluginHost:
         #: Set True when the host dies after its restart-once (crash loop).
         #: Surfaced via status() as an error + restarts (degraded state).
         self._crash_loop = False
+        #: Test hook (env ``STITCH_PLUGIN_RESTART_DELAY_S``, default 0 = no
+        #: delay): delays the monitor's restart after death detection so
+        #: the built-in fallback can be observed deterministically.  Read
+        #: per-tick by :meth:`_monitor` so a running test can lower it to
+        #: release the restart.  Production behavior is unchanged when
+        #: unset (0.0) — the delay loop never executes.
+        self._restart_delay_s: float = float(
+            os.environ.get("STITCH_PLUGIN_RESTART_DELAY_S", "0") or 0
+        )
         #: Invoked (as an awaitable) once when the host crash-loops.  Wired
         #: by discovery to telemetry + LKG rollback (todo 23).  Runs in its
         #: own task — never awaited while the host lock is held.
@@ -699,6 +709,19 @@ class ServicePluginHost:
                 return
 
             record_crash(self.plugin_id)
+
+            # Test hook (STITCH_PLUGIN_RESTART_DELAY_S): hold the restart
+            # so the built-in fallback can be observed deterministically.
+            # Read per-tick so a running test can lower the attribute to
+            # release the restart.  Only delays the first restart
+            # (restart_count == 0); the crash-loop path (second crash)
+            # fires the hook immediately.  Outside the lock so stop() can
+            # cancel the monitor during the hold.
+            if self._restart_count == 0:
+                while self._restart_delay_s > 0:
+                    if self._stopping:
+                        return
+                    await asyncio.sleep(0.05)
 
             crash_loop = False
             async with self._lock:
