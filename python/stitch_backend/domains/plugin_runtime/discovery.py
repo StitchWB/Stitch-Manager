@@ -33,6 +33,7 @@ from autoreg.plugin.manifest import (
     ManifestValidationError,
     PluginManifest,
     parse_semver,
+    semver_sort_key,
     validate_manifest,
 )
 
@@ -121,11 +122,14 @@ async def _start_one(
 
     # Skip v2 plugins whose engine.min is newer than the host's
     # service-plugin engine version.  Never crash startup — just log.
+    # Uses semver_sort_key so that a same-triple prerelease (e.g.
+    # "0.3.0-rc.1") is accepted (≤ current release) while a higher-triple
+    # prerelease (e.g. "0.4.0-alpha") is correctly rejected.
     engine_api = manifest.engine.get("api")
     if engine_api is not None and engine_api >= 2:
         engine_min = manifest.engine.get("min", "")
         try:
-            if parse_semver(engine_min) > parse_semver(SERVICE_ENGINE_VERSION):
+            if semver_sort_key(engine_min) > semver_sort_key(SERVICE_ENGINE_VERSION):
                 logger.warning(
                     "Service plugin %s: engine.min %s is newer than host "
                     "service-plugin engine %s — skipping",
@@ -142,6 +146,22 @@ async def _start_one(
     contributions = manifest.contributions
     storage_decl = contributions.get("storage", {})
     migrations = bool(storage_decl.get("migrations"))
+
+    # Vendor drift check — WARN only, never block startup.  The vendored
+    # rpc_server.py may drift when a package is hand-edited or generated
+    # from a different canonical source.  The upgrade tool + dev-install
+    # refresh exist to fix drift; this is just a visibility nudge.
+    try:
+        from stitch_plugin_tools.vendoring import vendored_matches_canonical
+        if not vendored_matches_canonical(package_dir):
+            logger.warning(
+                "Service plugin %s: vendored rpc_server.py drifts from "
+                "canonical — run `python -m stitch_plugin_tools vendor "
+                "<package>` to refresh",
+                manifest.id,
+            )
+    except ImportError:
+        pass  # stitch_plugin_tools not available — skip drift check
 
     # Plugins with their own storage need TOKEN_ENCRYPTION_KEY to encrypt
     # secrets at rest with the same Fernet key as the core (tokens stay
@@ -292,7 +312,7 @@ async def rollback_service_plugin(plugin_id: str) -> bool:
     if prev_engine_api is not None and prev_engine_api >= 2:
         prev_engine_min = prev_manifest.engine.get("min", "")
         try:
-            if parse_semver(prev_engine_min) > parse_semver(SERVICE_ENGINE_VERSION):
+            if semver_sort_key(prev_engine_min) > semver_sort_key(SERVICE_ENGINE_VERSION):
                 logger.warning(
                     "Service plugin %s: rollback target engine.min %s is newer "
                     "than host service-plugin engine %s — degraded",

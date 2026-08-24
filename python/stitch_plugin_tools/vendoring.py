@@ -19,11 +19,20 @@ Symbols extracted:
 The client-side symbols (``RpcPluginClient``, ``_PendingCall``,
 ``_make_request``, ``logger``) are NOT extracted — plugins only need the
 server side.
+
+Drift detection: the vendored file header embeds
+``_VENDOR_SOURCE_SHA256 = "<hex>"`` — a SHA-256 computed over the full
+canonical text EXCLUDING the hash line itself (avoiding self-reference:
+the hash line's value depends on the hash, so including it would create
+an unsolvable fixed-point).  ``vendored_matches_canonical(package_dir)``
+compares the on-disk vendored file against the canonical text so callers
+can WARN (not block) when a package's vendored copy has drifted.
 """
 
 from __future__ import annotations
 
 import ast
+import hashlib
 from pathlib import Path
 
 # Symbols to extract from the canonical rpc.py, in output order.
@@ -39,12 +48,31 @@ _TARGET_SYMBOLS: list[tuple[type, str]] = [
     (ast.FunctionDef, "_error"),
 ]
 
-# Header prepended to every vendored file.
-_HEADER = (
+# Header prepended to every vendored file.  The ``_VENDOR_SOURCE_SHA256``
+# line is inserted between _HEADER_FUTURE and _HEADER_SUFFIX.  The hash
+# is computed over (_HEADER_PREFIX + _HEADER_FUTURE + _HEADER_SUFFIX +
+# separator + body) — i.e. the full canonical text EXCLUDING the hash
+# line itself.
+#
+# Layout: comment → from __future__ → _VENDOR_SOURCE_SHA256 → imports.
+# ``from __future__ import annotations`` MUST precede the hash assignment
+# — Python requires __future__ imports to be the first code statement
+# (only comments/blank lines may precede them).  An assignment before
+# ``from __future__`` is a SyntaxError.
+_HEADER_PREFIX = (
     "# _vendored_from: autoreg/plugin/rpc.py"
     " — do not edit; regenerate via stitch_plugin_tools dev-install\n"
+)
+
+# from __future__ must come BEFORE the _VENDOR_SOURCE_SHA256 assignment.
+_HEADER_FUTURE = (
     "\n"
     "from __future__ import annotations\n"
+)
+
+_HASH_LINE_TEMPLATE = '_VENDOR_SOURCE_SHA256 = "{hash}"\n'
+
+_HEADER_SUFFIX = (
     "\n"
     "import json\n"
     "import sys\n"
@@ -52,6 +80,9 @@ _HEADER = (
     "import time\n"
     "from typing import Any\n"
 )
+
+# Two-blank-line separator between header and first symbol (PEP 8).
+_SECTION_SEP = "\n\n\n"
 
 # Stdlib imports the extracted symbols reference (for the import block).
 # These are the ONLY imports the server-side subset needs.
@@ -107,25 +138,61 @@ def _node_name(node: ast.stmt, expected: str) -> str | None:
     return None
 
 
+def _build_header(sha256_hex: str) -> str:
+    """Assemble the vendored file header with the source hash embedded."""
+    return (
+        _HEADER_PREFIX
+        + _HEADER_FUTURE
+        + _HASH_LINE_TEMPLATE.format(hash=sha256_hex)
+        + _HEADER_SUFFIX
+    )
+
+
 def canonical_rpc_server_text() -> str:
     """Return the canonical vendored ``rpc_server.py`` text (LF-normalized).
 
     This is the exact text that :func:`vendor_rpc_server` writes to
     ``<pkg>/_vendor/rpc_server.py``.  Tests and the upgrade tool use it
     for byte-equality comparison.
+
+    The header embeds ``_VENDOR_SOURCE_SHA256`` — a SHA-256 over the full
+    canonical text EXCLUDING the hash line itself (avoids self-reference).
     """
     rpc_path = _canonical_rpc_path()
     source = rpc_path.read_text(encoding="utf-8").replace("\r\n", "\n")
     tree = ast.parse(source)
     snippets = _extract_symbol_sources(source, tree)
 
-    parts = [_HEADER.rstrip("\n")]
-    for snippet in snippets:
-        parts.append(snippet)
-    # Join with exactly two newlines between sections (PEP 8 two-blank-line
+    # Body: symbols joined with two blank lines (PEP 8 two-blank-line
     # separation).  The file ends with a single trailing newline.
-    body = "\n\n\n".join(parts) + "\n"
-    return body
+    body = _SECTION_SEP.join(snippets) + "\n"
+
+    # Compute the source hash over the full canonical text EXCLUDING the
+    # hash line itself.  The hash line's value depends on the hash, so
+    # including it would create an unsolvable self-referential fixed-point.
+    text_for_hash = _HEADER_PREFIX + _HEADER_FUTURE + _HEADER_SUFFIX + _SECTION_SEP + body
+    sha = hashlib.sha256(text_for_hash.encode("utf-8")).hexdigest()
+
+    header = _build_header(sha)
+    return header + _SECTION_SEP + body
+
+
+def vendored_matches_canonical(package_dir: Path) -> bool:
+    """Return True if the package's vendored rpc_server.py matches canonical.
+
+    A package whose vendored file has drifted (edited by hand, or generated
+    from a different canonical source) returns False.  Packages without a
+    vendored file return False.  Never raises — callers use this to WARN
+    (not block) on drift.
+    """
+    rpc_path = package_dir / "_vendor" / "rpc_server.py"
+    if not rpc_path.is_file():
+        return False
+    try:
+        existing = rpc_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    except OSError:
+        return False
+    return existing == canonical_rpc_server_text()
 
 
 def vendor_rpc_server(package_dir: Path) -> Path:
