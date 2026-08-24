@@ -32,6 +32,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import httpx
 
@@ -128,7 +129,7 @@ async def _radar_get(path: str, params: dict[str, str]) -> dict:
     try:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
-        return resp.json()
+        return cast("dict[Any, Any]", resp.json())
     except httpx.HTTPError as exc:
         raise StitchError(f"AiApiRadar unavailable: {exc}") from exc
     except ValueError as exc:

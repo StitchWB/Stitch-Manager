@@ -67,7 +67,7 @@ def _resolve_imap_password_from_db(
             ).fetchone()
             if row and row[0]:
                 con.close()
-                return row[0]
+                return cast("str", row[0])
         row = con.execute(
             "SELECT value FROM settings WHERE key = ?", (key,)
         ).fetchone()

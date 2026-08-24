@@ -67,11 +67,11 @@ async def bootstrap() -> None:
     import stitch_backend.domains.account_status.commands  # noqa: F401
     import stitch_backend.domains.accounts.commands  # noqa: F401
     import stitch_backend.domains.activation.commands  # noqa: F401
-    import stitch_backend.domains.auth.telegram_commands  # noqa: F401
     import stitch_backend.domains.ai_proxy.commands  # noqa: F401
     import stitch_backend.domains.ai_proxy.zai_token_commands  # noqa: F401
     import stitch_backend.domains.api_keys.commands  # noqa: F401
     import stitch_backend.domains.auth.commands  # noqa: F401
+    import stitch_backend.domains.auth.telegram_commands  # noqa: F401
     import stitch_backend.domains.aws_accounts.commands  # noqa: F401
     import stitch_backend.domains.background_manager.commands  # noqa: F401
     import stitch_backend.domains.browser.commands  # noqa: F401
@@ -81,18 +81,17 @@ async def bootstrap() -> None:
     import stitch_backend.domains.email_counter.commands  # noqa: F401
     import stitch_backend.domains.email_inbox.commands  # noqa: F401
     import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
-    import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
     import stitch_backend.domains.key_health.commands  # noqa: F401
-import stitch_backend.domains.keys.commands  # noqa: F401
+    import stitch_backend.domains.keys.commands  # noqa: F401
     import stitch_backend.domains.kiro_patch.commands  # noqa: F401
     import stitch_backend.domains.logging.commands  # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands  # noqa: F401
     import stitch_backend.domains.oauth.commands  # noqa: F401
     import stitch_backend.domains.opencode_config.commands  # noqa: F401
-    import stitch_backend.domains.patcher.commands  # noqa: F401  # noqa: F401
+    import stitch_backend.domains.patcher.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.community_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.grant_commands  # noqa: F401
@@ -110,6 +109,7 @@ import stitch_backend.domains.keys.commands  # noqa: F401
     import stitch_backend.domains.scheduler.commands  # noqa: F401
     import stitch_backend.domains.settings.commands  # noqa: F401
     import stitch_backend.domains.totp.commands  # noqa: F401
+    import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
     import stitch_backend.domains.utility.commands  # noqa: F401
     import stitch_backend.domains.utility.file_dialogs  # noqa: F401
     import stitch_backend.domains.utility.stubs  # noqa: F401

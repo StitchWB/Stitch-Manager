@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -300,7 +300,7 @@ async def get_monitoring() -> dict[str, Any]:
         except httpx.HTTPError as exc:
             raise _map_network_error(exc) from exc
 
-    return resp.json()
+    return cast("dict[str, Any]", resp.json())
 
 
 @register_command("ack_monitoring_alerts")
@@ -327,4 +327,4 @@ async def cmd_ack_monitoring_alerts(params: dict) -> dict:
         except httpx.HTTPError as exc:
             raise _map_network_error(exc) from exc
 
-    return resp.json()
+    return cast("dict[Any, Any]", resp.json())

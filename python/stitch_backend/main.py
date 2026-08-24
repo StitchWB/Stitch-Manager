@@ -257,6 +257,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.source_commands  # noqa: F401
     import stitch_backend.domains.plugin_runtime.sandbox_commands  # noqa: F401
+
+    # Dual-format routing + migrate_totp_to_plugin for the stitch-totp
+    # service plugin.  Imported AFTER totp.commands so the handler
+    # wrapping finds the registered built-in commands.  The install call
+    # is explicit (not at module import) so the ordering is visible and
+    # testable — importing totp_dual alone does NOT wrap the handlers.
+    import stitch_backend.domains.plugin_runtime.totp_dual  # noqa: F401
     import stitch_backend.domains.profiles.commands  # noqa: F401
     import stitch_backend.domains.prompts.commands  # noqa: F401
     import stitch_backend.domains.proxy_library.commands  # noqa: F401
@@ -268,12 +275,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.scheduler.commands  # noqa: F401
     import stitch_backend.domains.settings.commands  # noqa: F401
     import stitch_backend.domains.totp.commands  # noqa: F401
-    # Dual-format routing + migrate_totp_to_plugin for the stitch-totp
-    # service plugin.  Imported AFTER totp.commands so the handler
-    # wrapping finds the registered built-in commands.  The install call
-    # is explicit (not at module import) so the ordering is visible and
-    # testable — importing totp_dual alone does NOT wrap the handlers.
-    import stitch_backend.domains.plugin_runtime.totp_dual  # noqa: F401
     from stitch_backend.domains.plugin_runtime.totp_dual import (
         install_totp_dual_routing,
     )
@@ -560,6 +561,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
+#: Endpoint paths that must not be reachable without an Origin header at all
+#: (raw-socket clients like curl/malware send none; the renderer always sends
+#: one) - enforced by the origin_guard middleware in create_app().
+_NO_ORIGIN_SENSITIVE = {"/api/get_found_key_secret"}
+
+
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
     settings = get_settings()
@@ -587,7 +594,6 @@ def create_app() -> FastAPI:
     # credentials:include — so reject foreign Origins server-side, and require
     # an Origin at all on the secret-decrypting command (raw-socket clients
     # like curl/malware send none; the renderer always sends one).
-    _NO_ORIGIN_SENSITIVE = {"/api/get_found_key_secret"}
 
     @app.middleware("http")
     async def origin_guard(request, call_next):

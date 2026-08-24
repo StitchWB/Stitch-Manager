@@ -24,9 +24,8 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoreg.plugin.rpc import (
     RpcCallError,
@@ -36,7 +35,9 @@ from autoreg.plugin.rpc import (
 )
 from stitch_backend.core.spi_builtin_oauth import register_engine_handlers
 from stitch_backend.domains.sidecar import LaunchPlan, SidecarSpec, get_supervisor
-from stitch_backend.domains.sidecar.supervisor import subprocess_isolation_kwargs
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ class ServicePluginHost:
         #: Invoked (as an awaitable) once when the host crash-loops.  Wired
         #: by discovery to telemetry + LKG rollback (todo 23).  Runs in its
         #: own task — never awaited while the host lock is held.
-        self.crash_hook: Callable[["ServicePluginHost"], Awaitable[None]] | None = None
+        self.crash_hook: Callable[[ServicePluginHost], Awaitable[None]] | None = None
         self._monitor_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         # Ring buffer for child stderr lines — used by get_service_plugin_logs.
@@ -240,7 +241,7 @@ class ServicePluginHost:
                 self._monitor_task = None
             # Try graceful RPC shutdown (sends plugin.shutdown, waits).
             try:
-                await asyncio.to_thread(self.rpc.shutdown, 3.0)
+                await asyncio.to_thread(self.rpc.shutdown, drain_timeout=3.0)
             except Exception:  # noqa: BLE001
                 pass
             # Kill-tree via supervisor (on_stop hook finalizes RPC client).
@@ -275,16 +276,16 @@ class ServicePluginHost:
         start = time.perf_counter()
         try:
             result = await asyncio.to_thread(self.rpc.call, cmd_name, params or {}, to)
-        except RpcTimeoutError:
+        except RpcTimeoutError as exc:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             self._record_call(
                 cmd_name, elapsed_ms, error=f"timeout after {to}s"
             )
-            raise PluginCallTimeout(self.plugin_id, cmd_name, to)
-        except RpcProtocolError:
+            raise PluginCallTimeout(self.plugin_id, cmd_name, to) from exc
+        except RpcProtocolError as exc:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             self._record_call(cmd_name, elapsed_ms, error="rpc protocol error")
-            raise PluginNotRunning(self.plugin_id)
+            raise PluginNotRunning(self.plugin_id) from exc
         except RpcCallError as exc:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             self._record_call(cmd_name, elapsed_ms, error=str(exc))
@@ -493,7 +494,6 @@ class ServicePluginHost:
             ``call`` (propagated through ``asyncio.run``).
         """
         from autoreg.plugin.dependency_resolver import parse_dep_entry
-
         from stitch_backend.domains.plugin_runtime import get_host, get_manifest
 
         caller_plugin_id = self.plugin_id
@@ -592,7 +592,7 @@ class ServicePluginHost:
                 self._apply_windows_job_memory_cap(proc, limit_bytes)
             elif sys.platform == "linux":
                 import resource
-                resource.prlimit(  # type: ignore[attr-defined]
+                resource.prlimit(
                     proc.pid,
                     resource.RLIMIT_AS,
                     (limit_bytes, limit_bytes),
@@ -638,9 +638,10 @@ class ServicePluginHost:
 
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
 
-        # JobObjectExtendedLimitInformation = 9
-        JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100
-        PROCESS_ALL_ACCESS = 0x1FFFFF
+        # JobObjectExtendedLimitInformation = 9.  Names mirror the Win32 API
+        # constants they wrap (hence the noqa on the naming rule).
+        JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100  # noqa: N806
+        PROCESS_ALL_ACCESS = 0x1FFFFF  # noqa: N806
 
         # Proper types: default ctypes restype (c_int) truncates handles
         # on 64-bit Windows.
@@ -658,7 +659,7 @@ class ServicePluginHost:
         ]
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 
-        class _IO_COUNTERS(ctypes.Structure):
+        class _IO_COUNTERS(ctypes.Structure):  # noqa: N801 (Win32 struct name)
             _fields_ = [
                 ("ReadOperationCount", ctypes.c_uint64),
                 ("WriteOperationCount", ctypes.c_uint64),
@@ -668,7 +669,9 @@ class ServicePluginHost:
                 ("OtherTransferCount", ctypes.c_uint64),
             ]
 
-        class _JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+        class _JOBOBJECT_BASIC_LIMIT_INFORMATION(  # noqa: N801 (Win32 struct name)
+            ctypes.Structure
+        ):
             _fields_ = [
                 ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
                 ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
@@ -681,7 +684,9 @@ class ServicePluginHost:
                 ("SchedulingClass", wintypes.DWORD),
             ]
 
-        class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+        class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(  # noqa: N801 (Win32 struct name)
+            ctypes.Structure
+        ):
             _fields_ = [
                 ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
                 ("IoInfo", _IO_COUNTERS),
@@ -795,7 +800,7 @@ class ServicePluginHost:
         from ctypes import wintypes
 
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000  # noqa: N806 (Win32 name)
 
         kernel32.OpenProcess.restype = wintypes.HANDLE
         kernel32.OpenProcess.argtypes = [
@@ -803,7 +808,9 @@ class ServicePluginHost:
         ]
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 
-        class _PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+        class _PROCESS_MEMORY_COUNTERS_EX(  # noqa: N801 (Win32 struct name)
+            ctypes.Structure
+        ):
             _fields_ = [
                 ("cb", wintypes.DWORD),
                 ("PageFaultCount", wintypes.DWORD),
@@ -994,7 +1001,7 @@ class ServicePluginHost:
     def _stderr_reader(self) -> None:
         """Read child stderr line-by-line into the ring buffer."""
         proc = self.rpc._proc
-        if proc is None or getattr(proc, "stderr", None) is None:
+        if proc is None or proc.stderr is None:
             return
         stream = proc.stderr
         try:

@@ -129,6 +129,7 @@ async def _notify_crash_loop(plugin_id: str, restarts: int) -> None:
             return
 
         from aiogram import Bot
+
         from stitch_bot.config import get_settings as _get_bot_settings
 
         token = _get_bot_settings().tg_bot_token

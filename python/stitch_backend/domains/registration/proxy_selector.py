@@ -30,7 +30,7 @@ class ProxySelector:
         proxies are configured.
         """
         from stitch_backend.domains.ai_proxy.service import get_settings_kv, set_settings_kv
-        from stitch_backend.domains.proxy_library.service import load_proxy_library, _load_secret
+        from stitch_backend.domains.proxy_library.service import _load_secret, load_proxy_library
 
         proxies = await load_proxy_library(session)
         enabled = [p for p in proxies if p.enabled]

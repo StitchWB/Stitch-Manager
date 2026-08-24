@@ -55,7 +55,7 @@ import json
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_, select
 
@@ -123,7 +123,7 @@ async def _find_credential_by_legacy_id(
     result = await session.execute(select(Credential))
     for cred in result.scalars().all():
         if _legacy_id(cred.id) == legacy_id:
-            return cred
+            return cast("Credential", cred)
     return None
 
 
@@ -262,7 +262,7 @@ async def _get_or_create_endpoint(
     )
     existing = result.scalar_one_or_none()
     if existing is not None:
-        return existing
+        return cast("ProviderEndpoint", existing)
 
     svc = ProviderEndpointService(session)
     endpoint = await svc.create_endpoint(
@@ -792,7 +792,7 @@ def conversion_failed() -> bool:
     return _conversion_failed
 
 
-async def run_final_conversion(session: Any) -> dict[str, int]:
+async def run_final_conversion(session: Any) -> dict[str, Any]:
     """FINAL one-time conversion: ``ai_proxy_accounts`` → ai_gateway credentials.
 
     Idempotent — safe to call on every boot. If the legacy table exists and

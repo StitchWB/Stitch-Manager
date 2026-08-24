@@ -37,11 +37,13 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from .config import data_dir
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _PINS_FILENAME = "plugin_pins.json"
 
@@ -115,7 +117,7 @@ def record_pin(plugin_id: str, *, sha: str, url: str) -> None:
     pins[plugin_id] = {
         "sha": sha,
         "url": url,
-        "installed_at": datetime.now(timezone.utc).isoformat(),
+        "installed_at": datetime.now(UTC).isoformat(),
     }
     save_pins(pins)
 
@@ -146,12 +148,12 @@ def _pin_lock(pins_file: Path, *, timeout: float = _PIN_LOCK_TIMEOUT):
 
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
-            except (OSError, IOError):
+            except OSError as err:
                 if time.monotonic() >= deadline:
                     raise TimeoutError(
                         f"could not acquire pin lock {lock_path} within "
-                        f"{timeout}s — another install is in progress"
-                    )
+                        f"{timeout}s - another install is in progress"
+                    ) from err
                 time.sleep(0.05)
         try:
             yield
@@ -166,12 +168,12 @@ def _pin_lock(pins_file: Path, *, timeout: float = _PIN_LOCK_TIMEOUT):
                     import fcntl
 
                     fcntl.flock(fd, fcntl.LOCK_UN)
-            except (OSError, IOError):
+            except OSError:
                 pass
     finally:
         try:
             os.close(fd)
-        except (OSError, IOError):
+        except OSError:
             pass
 
 
@@ -277,7 +279,7 @@ def record_scoped_pin(
     pins[_scoped_key(user_id, plugin_id)] = {
         "sha": sha,
         "url": url,
-        "installed_at": datetime.now(timezone.utc).isoformat(),
+        "installed_at": datetime.now(UTC).isoformat(),
     }
     save_scoped_pins(pins)
 

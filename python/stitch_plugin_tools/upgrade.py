@@ -39,14 +39,11 @@ import re
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoreg.plugin.manifest import MANIFEST_FILENAME
 from stitch_plugin_tools.scaffold import (
-    _FALLBACK_ANCHOR_END,
-    _FALLBACK_ANCHOR_START,
     _MAIN_TEMPLATE,
-    _RPC_FALLBACK_BLOCK,
     CANONICAL_ENGINE,
     MARKER_PREFIX,
     SCAFFOLD_VERSION,
@@ -54,6 +51,9 @@ from stitch_plugin_tools.scaffold import (
     marker_line,
 )
 from stitch_plugin_tools.vendoring import canonical_rpc_server_text
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 UPGRADE_DIFF_FILENAME = "upgrade.diff"
 

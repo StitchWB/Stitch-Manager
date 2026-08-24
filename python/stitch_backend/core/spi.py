@@ -352,12 +352,12 @@ class _BuiltinTotp:
     """
 
     async def generate_secret(self) -> str:
-        import pyotp  # type: ignore[import-untyped]
+        import pyotp
 
         return str(pyotp.random_base32())
 
     async def get_code(self, secret: str, timestamp: int | None = None) -> str:
-        import pyotp  # type: ignore[import-untyped]
+        import pyotp
 
         totp = pyotp.TOTP(secret)
         if timestamp is not None:
@@ -365,7 +365,7 @@ class _BuiltinTotp:
         return str(totp.now())
 
     async def verify_code(self, secret: str, code: str) -> bool:
-        import pyotp  # type: ignore[import-untyped]
+        import pyotp
 
         return bool(pyotp.TOTP(secret).verify(code, valid_window=1))
 

@@ -22,10 +22,12 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoreg.plugin.manifest import MANIFEST_FILENAME, SCHEMA_ID_V2
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Scaffold version — bumped when the canonical conventions change.
 # v1 = pre-marker historical (no _generated_by marker, no generated_by field).
@@ -759,9 +761,7 @@ def scaffold_service_plugin(
     tests_dir = out_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
     (tests_dir / "__init__.py").write_text(
-        '"""Test package for the {plugin_id} service plugin."""\n'.format(
-            plugin_id=plugin_id
-        ),
+        f'"""Test package for the {plugin_id} service plugin."""\n',
         encoding="utf-8",
     )
     (tests_dir / "test_plugin_protocol.py").write_text(

@@ -29,13 +29,16 @@ import asyncio
 import logging
 import time
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import jwt
 
 from stitch_backend.config import get_settings
 from stitch_backend.core.exceptions import StitchError
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +128,7 @@ async def _fetch_jwks() -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=_JWKS_TIMEOUT) as client:
             resp = await client.get(_JWKS_URL)
             resp.raise_for_status()
-            return resp.json()
+            return cast("dict[str, Any]", resp.json())
     except Exception as exc:
         logger.warning("Failed to fetch Telegram JWKS: %s", exc)
         raise TelegramJWKSUnavailableError("Telegram JWKS unavailable") from exc
@@ -161,7 +164,7 @@ def _find_key(jwks: dict[str, Any], kid: str) -> dict[str, Any] | None:
     """Return the JWK with matching *kid* in *jwks*, or ``None``."""
     for key in jwks.get("keys", []):
         if key.get("kid") == kid:
-            return key
+            return cast("dict[str, Any]", key)
     return None
 
 
@@ -208,7 +211,10 @@ async def verify_telegram_id_token(id_token: str) -> dict[str, Any]:
         raise TelegramOIDCVerificationError(f"Unknown kid: {kid}")
 
     try:
-        public_key = jwt.algorithms.RSAAlgorithm.from_jwk(jwk)
+        # JWKS only ever carries public keys; narrow the from_jwk union.
+        public_key = cast(
+            "RSAPublicKey", jwt.algorithms.RSAAlgorithm.from_jwk(jwk)
+        )
     except Exception as exc:
         logger.warning("Failed to build key from JWK (kid=%s): %s", kid, exc)
         raise TelegramOIDCVerificationError("Invalid signing key") from exc

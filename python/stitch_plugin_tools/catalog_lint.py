@@ -126,7 +126,7 @@ def _verify_attestation_signature(
     # for offline CI without a key configured).
     from autoreg.plugin import crypto
 
-    payload = f"{reviewed_by}|{reviewed_at}|{sha256}".encode("utf-8")
+    payload = f"{reviewed_by}|{reviewed_at}|{sha256}".encode()
     try:
         pub = crypto.load_public_key(pubkey_b64)
         sig_b64 = signature.removeprefix(_ATTESTATION_SIG_PREFIX)

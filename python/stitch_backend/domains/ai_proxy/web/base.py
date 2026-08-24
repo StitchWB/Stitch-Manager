@@ -30,9 +30,11 @@ __all__ = [
     "sanitize_secrets",
 ]
 
-# A model entry in the unified model list. Loose dict shape (matches the
-# OpenAI ``/v1/models`` item: ``id``, ``object``, ``description``, ...).
-ModelDict: TypeAlias = dict[str, object]
+# A model entry in the unified model list (matches the OpenAI
+# ``/v1/models`` item shape). All values are strings — ``id``, ``provider``,
+# ``name``, ``object`` — kept identical to the registry's ModelDict contract
+# (inference_provider.py) so adapter fetchers plug into the registry cleanly.
+ModelDict: TypeAlias = dict[str, str]
 
 
 class WebSessionAdapter(Protocol):

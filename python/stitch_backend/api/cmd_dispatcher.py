@@ -22,6 +22,10 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+# Import so the @register_command decorator in bridge.py fires at startup
+# (registers ``list_service_plugins``).  The dispatcher also routes
+# ``plugin.{id}.{cmd}`` names through this module before the registry lookup.
+import stitch_backend.domains.plugin_runtime.bridge  # noqa: F401
 from stitch_backend.core.command_registry import (
     CommandNotFoundError,
     get_command_handler,
@@ -30,11 +34,6 @@ from stitch_backend.core.command_registry import (
 )
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
-
-# Import so the @register_command decorator in bridge.py fires at startup
-# (registers ``list_service_plugins``).  The dispatcher also routes
-# ``plugin.{id}.{cmd}`` names through this module before the registry lookup.
-import stitch_backend.domains.plugin_runtime.bridge  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
