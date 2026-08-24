@@ -1667,6 +1667,7 @@ tabs: {
   },
   pluginUi: {
     actionFailed: "Действие не удалось",
+    confirmRowAction: "Выполнить это действие?",
     pluginNotInstalled: "Плагин не установлен",
     pluginNotInstalledDescription: "Плагин не установлен или недоступен.",
     loading: "Загрузка..."
