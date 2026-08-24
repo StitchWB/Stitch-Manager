@@ -44,6 +44,7 @@ import {
   type ServicePluginInfo,
   type ServicePluginStatus,
 } from '@/lib/backend/modules/servicePlugins';
+import { SandboxSection } from '../components/plugins/SandboxSection';
 
 const ALL_PLUGINS_ID = '*';
 
@@ -442,6 +443,9 @@ export default function Plugins() {
               </div>
             )}
           </div>
+
+          {/* Per-user developer sandbox (authenticated callers only) */}
+          <SandboxSection />
         </div>
       </div>
       <InstallFromSourceModal

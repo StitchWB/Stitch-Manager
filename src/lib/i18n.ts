@@ -3972,6 +3972,63 @@ export interface Translations {
         success: string;
         failed: string;
       };
+      sandbox: {
+        title: string;
+        subtitle: string;
+        loadFailed: string;
+        empty: string;
+        emptyDesc: string;
+        restartSuccess: string;
+        restartFailed: string;
+        uninstallSuccess: string;
+        uninstallFailed: string;
+        uninstallConfirmTitle: string;
+        uninstallConfirmMessage: string;
+        install: {
+          url: string;
+          ref: string;
+          sha256: string;
+          trust: string;
+          urlRequired: string;
+          submit: string;
+          forceInstall: string;
+          success: string;
+        };
+        status: {
+          running: string;
+          stopped: string;
+          stopping: string;
+          error: string;
+        };
+        metrics: {
+          calls: string;
+          errors: string;
+        };
+        actions: {
+          logs: string;
+          restart: string;
+          uninstall: string;
+          playground: string;
+        };
+        logs: {
+          title: string;
+          refresh: string;
+          empty: string;
+        };
+        playground: {
+          title: string;
+          command: string;
+          params: string;
+          execute: string;
+          commandRequired: string;
+          invalidJson: string;
+          networkError: string;
+          response: string;
+          error: string;
+          idleHint: string;
+          shadowHint: string;
+        };
+      };
     };
     userProfile: {
       title: string;
