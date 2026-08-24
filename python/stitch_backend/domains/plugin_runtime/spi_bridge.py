@@ -70,6 +70,13 @@ _HEALTH_TTL_FAIL: float = 1.0
 #   "params": list of (param_name, default_expr) tuples.
 #       default_expr is None for required params (no default).
 #       Otherwise it's a string expression evaluated as the default.
+#   "returns": declared return-shape expectation — one of "list", "int",
+#       "str", "dict", "any".  ``_forward`` validates the RPC result
+#       against it; a mismatch is treated like a failed call (per-call
+#       built-in fallback).  Core consumers assume the protocol shapes
+#       (list_keys → list, count_owned_keys → int, list_profiles → list),
+#       so a malformed plugin result must never reach them.  "any" skips
+#       validation (e.g. verify_code → bool, not in the light spec).
 #
 # The factory :func:`_generate_method` builds async wrappers from these
 # specs with exact signatures (no **kwargs) so callers that inspect
@@ -85,6 +92,7 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
         "list_profiles": {
             "cmd": "list_profiles",
             "params": [("owner_id", "None")],
+            "returns": "list",
         },
         "wait_otp": {
             "cmd": "wait_otp",
@@ -94,10 +102,12 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
                 ("code_pattern", "None"),
                 ("timeout", "120.0"),
             ],
+            "returns": "str",
         },
         "sync": {
             "cmd": "sync",
             "params": [("profile_id", None)],
+            "returns": "dict",
         },
     },
     "email_verification": {
@@ -109,6 +119,7 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
                 ("code_pattern", "None"),
                 ("timeout", "120.0"),
             ],
+            "returns": "str",
         },
         # close is a local no-op — the plugin has no persistent IMAP
         # connection to release (built-in EmailService is per-call).
@@ -121,6 +132,7 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
         "generate_secret": {
             "cmd": "generate_secret",
             "params": [],
+            "returns": "str",
         },
         # NOTE the name mismatch: protocol method get_code → plugin
         # command generate_code.  This is exactly why the method map
@@ -129,18 +141,24 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
         "get_code": {
             "cmd": "generate_code",
             "params": [("secret", None), ("timestamp", "None")],
+            "returns": "str",
         },
         "verify_code": {
             "cmd": "verify_code",
             "params": [("secret", None), ("code", None)],
+            # Protocol returns bool — not in the light shape spec, so
+            # pass through unvalidated.
+            "returns": "any",
         },
         "count_owned_keys": {
             "cmd": "count_owned_keys",
             "params": [("owner_id", "None")],
+            "returns": "int",
         },
         "list_keys": {
             "cmd": "list_keys",
             "params": [],
+            "returns": "list",
         },
     },
     "oauth": {
@@ -154,6 +172,7 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
                 ("scope", '"openid profile email"'),
                 ("state", "None"),
             ],
+            "returns": "dict",
         },
         "start_device_flow": {
             "cmd": "start_device_flow",
@@ -163,6 +182,7 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
                 ("client_id", None),
                 ("scope", '""'),
             ],
+            "returns": "dict",
         },
         "exchange_code": {
             "cmd": "exchange_code",
@@ -174,8 +194,21 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
                 ("redirect_uri", '"http://localhost:25584/api/oauth/callback"'),
                 ("proxy", "None"),
             ],
+            "returns": "dict",
         },
     },
+}
+
+
+#: Return-shape predicates for the ``"returns"`` spec key (see
+#: :data:`SPI_METHOD_MAP`).  ``int`` rejects ``bool`` (a bool is an int
+#: subclass but never a valid count).
+_RETURN_SHAPE_CHECKS: dict[str, Any] = {
+    "list": lambda v: isinstance(v, list),
+    "int": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "str": lambda v: isinstance(v, str),
+    "dict": lambda v: isinstance(v, dict),
+    "any": lambda v: True,
 }
 
 
@@ -317,10 +350,11 @@ class _PluginSpiProxy:
         Looks up the plugin command name from
         :data:`SPI_METHOD_MAP[self._spi_const][method_name]`.  If the
         RPC call fails with ``RpcCallError`` / ``RpcTimeoutError`` /
-        ``PluginCallTimeout`` / ``PluginNotRunning``, falls back to the
-        built-in impl for that SPI (looked up via the registry's
-        internal ``_impls`` dict — no public accessor exists).  If no
-        built-in is registered, re-raises the original exception.
+        ``PluginCallTimeout`` / ``PluginNotRunning`` — or returns a value
+        whose shape does not match the spec's ``"returns"`` expectation —
+        falls back to the built-in impl for that SPI (via the registry's
+        public ``get_builtin`` accessor).  If no built-in is registered,
+        re-raises the original exception.
         """
         # Lazy import to avoid loading host.py at module import time
         # (host.py pulls in sidecar + spi_builtin_oauth).
@@ -335,19 +369,33 @@ class _PluginSpiProxy:
         spec = SPI_METHOD_MAP[spi_const][method_name]
         cmd = spec["cmd"]
         try:
-            return await self._host.call(cmd, params)
+            result = await self._host.call(cmd, params)
+            # Return-shape validation: core consumers assume protocol
+            # shapes, so a malformed plugin result is treated like a
+            # failed call (raises into the fallback below).
+            expected = spec.get("returns", "any")
+            if not _RETURN_SHAPE_CHECKS[expected](result):
+                logger.warning(
+                    "Plugin %s: SPI %s method %s returned %s, expected "
+                    "%r — treating as failed call",
+                    self._host.plugin_id, spi_const, method_name,
+                    type(result).__name__, expected,
+                )
+                raise RpcCallError(
+                    -32603,
+                    f"SPI {spi_const} method {method_name} returned "
+                    f"{type(result).__name__}, expected {expected}",
+                )
+            return result
         except (
             RpcCallError,
             RpcTimeoutError,
             PluginCallTimeout,
             PluginNotRunning,
         ) as exc:
-            # Per-call defensive fallback: resolve the built-in impl
-            # for this SPI and call the same method.  We access the
-            # registry's internal _impls dict because spi.py exposes
-            # no public built-in accessor — see REPORT note.
-            slots = spi_registry._impls.get(spi_const)
-            builtin = slots.get("builtin") if slots else None
+            # Per-call defensive fallback: resolve the built-in impl for
+            # this SPI and call the same method.
+            builtin = spi_registry.get_builtin(spi_const)
             if builtin is None:
                 raise
             logger.warning(
@@ -356,7 +404,14 @@ class _PluginSpiProxy:
                 self._host.plugin_id, spi_const, method_name, exc,
             )
             builtin_method = getattr(builtin, method_name)
-            return await builtin_method(**params)
+            # The params dict omits None values (plugin RPC contract), but
+            # the built-in method takes the protocol's full signature —
+            # rebuild it from the spec so required args (e.g. owner_id)
+            # are passed as None rather than dropped.
+            builtin_kwargs = {
+                name: params.get(name) for name, _ in spec["params"]
+            }
+            return await builtin_method(**builtin_kwargs)
 
 
 # Generate and attach all SPI methods to the proxy class.

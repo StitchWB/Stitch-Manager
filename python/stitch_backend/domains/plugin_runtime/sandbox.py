@@ -24,8 +24,10 @@ TOFU pins are scoped per ``(user_id, plugin_id)`` in a separate file
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -59,12 +61,27 @@ _sandbox_manifests: dict[tuple[int, str], "PluginManifest"] = {}
 #: ``(user_id, plugin_id) → monotonic timestamp of last use``
 _sandbox_last_use: dict[tuple[int, str], float] = {}
 
+#: Per-key locks serializing ``ensure_sandbox_host`` (create + start) per
+#: ``(user_id, plugin_id)``.  Without this, two concurrent ensures for the
+#: same key each create a ``ServicePluginHost`` and the first process is
+#: orphaned.  Locks are created lazily under ``_ensure_locks_guard``.
+_ensure_locks: dict[tuple[int, str], asyncio.Lock] = {}
+_ensure_locks_guard = threading.Lock()
+
+#: Set ``True`` by :func:`stop_all_sandbox` (app shutdown).  While set,
+#: ``ensure_sandbox_host`` refuses to start hosts instead of racing the
+#: supervisor's kill-tree.
+_sandbox_shutting_down = False
+
 
 def _reset_state() -> None:
     """Clear all sandbox registries (test isolation)."""
+    global _sandbox_shutting_down
     _sandbox_hosts.clear()
     _sandbox_manifests.clear()
     _sandbox_last_use.clear()
+    _ensure_locks.clear()
+    _sandbox_shutting_down = False
 
 
 def register_sandbox_manifest(
@@ -116,55 +133,84 @@ async def ensure_sandbox_host(
     or crash), it is restarted.  Updates the last-use timestamp.
 
     Called lazily by ``call_plugin_command`` — never at app boot.
+
+    The whole body runs under a per-key lock so two concurrent callers for
+    the same ``(user_id, plugin_id)`` cannot each create a host (the loser
+    would orphan the winner's process).  Raises ``RuntimeError`` when a
+    global sandbox shutdown is in progress (``stop_all_sandbox`` ran).
     """
     key = (user_id, plugin_id)
-    host = _sandbox_hosts.get(key)
+    with _ensure_locks_guard:
+        lock = _ensure_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _ensure_locks[key] = lock
 
-    if host is None:
-        # Check if the package is installed in the user's sandbox.
-        pkg_dir = sandbox_plugin_dir(user_id, plugin_id)
-        if not pkg_dir.is_dir():
-            return None
+    async with lock:
+        host = _sandbox_hosts.get(key)
 
-        manifest = _sandbox_manifests.get(key)
-        if manifest is None:
-            manifest = _try_read_manifest(pkg_dir)
-            if manifest is None:
+        if host is None:
+            # Check if the package is installed in the user's sandbox.
+            pkg_dir = sandbox_plugin_dir(user_id, plugin_id)
+            if not pkg_dir.is_dir():
                 return None
-            _sandbox_manifests[key] = manifest
 
-        entry_module = manifest.entry.get("module")
-        if not entry_module or not isinstance(entry_module, str):
-            return None
+            manifest = _sandbox_manifests.get(key)
+            if manifest is None:
+                manifest = _try_read_manifest(pkg_dir)
+                if manifest is None:
+                    return None
+                _sandbox_manifests[key] = manifest
 
-        data_dir = sandbox_plugin_data_dir(user_id, plugin_id)
-        host = ServicePluginHost(
-            plugin_id=plugin_id,
-            entry_module=entry_module,
-            package_dir=pkg_dir,
-            data_dir=data_dir,
-            source="sandbox",
-            memory_limit_mb=_SANDBOX_MEMORY_LIMIT_MB,
-            sidecar_name=f"sandbox:{user_id}:{plugin_id}",
-        )
-        _sandbox_hosts[key] = host
+            entry_module = manifest.entry.get("module")
+            if not entry_module or not isinstance(entry_module, str):
+                return None
 
-    # Update last-use BEFORE starting so the idle-stop task doesn't race.
-    _sandbox_last_use[key] = time.monotonic()
-
-    # Start if not running (on-demand).  When the host was idle-stopped,
-    # ``_stopping`` is True — clear it so ``start()`` proceeds.
-    if not host.rpc.is_alive and not host._crash_loop:
-        if host._stopping:
-            host._stopping = False
-        try:
-            await host.start()
-        except Exception as exc:  # noqa: BLE001 — never crash routing
-            logger.warning(
-                "Sandbox host %s/%s start failed: %s", user_id, plugin_id, exc
+        # A sandbox host exists or would be created/started by this call.
+        # Refuse during a global sandbox shutdown — starting a host here
+        # would race the supervisor's kill-tree.  Callers WITHOUT a sandbox
+        # plugin already returned None above and fall through to the global
+        # host path unchanged.
+        if _sandbox_shutting_down:
+            raise RuntimeError(
+                f"sandbox shutdown in progress — refusing to start host "
+                f"for user {user_id} plugin {plugin_id!r}"
             )
 
-    return host
+        if host is None:
+            data_dir = sandbox_plugin_data_dir(user_id, plugin_id)
+            host = ServicePluginHost(
+                plugin_id=plugin_id,
+                entry_module=entry_module,
+                package_dir=pkg_dir,
+                data_dir=data_dir,
+                source="sandbox",
+                memory_limit_mb=_SANDBOX_MEMORY_LIMIT_MB,
+                sidecar_name=f"sandbox:{user_id}:{plugin_id}",
+            )
+            _sandbox_hosts[key] = host
+
+        # Start if not running (on-demand).  When the host was idle-stopped,
+        # ``_stopping`` is True — clear it so ``start()`` proceeds.  This is
+        # safe: a global shutdown refuses above, so the flag here can only
+        # come from an idle-stop / prior stop, not from ``stop_all_sandbox``.
+        if not host.rpc.is_alive and not host._crash_loop:
+            if host._stopping:
+                host._stopping = False
+            try:
+                await host.start()
+            except Exception as exc:  # noqa: BLE001 — never crash routing
+                logger.warning(
+                    "Sandbox host %s/%s start failed: %s", user_id, plugin_id, exc
+                )
+
+        # Touch last-use only AFTER a successful start (or when the host was
+        # already alive).  A failed start must not look fresh to the
+        # idle-stop task.
+        if host.rpc.is_alive:
+            _sandbox_last_use[key] = time.monotonic()
+
+        return host
 
 
 async def stop_idle_hosts(idle_seconds: float = IDLE_STOP_SECONDS) -> int:
@@ -281,7 +327,13 @@ async def stop_all_sandbox() -> None:
     so the crash monitor does not race the supervisor's kill-tree.  The
     supervisor's ``stop_all()`` kills the processes; this function only
     pre-sets the flag and cancels monitor tasks.
+
+    Also sets the module-level shutdown flag so a concurrent
+    ``ensure_sandbox_host`` refuses to start a new host mid-shutdown
+    (instead of clearing ``_stopping`` and racing the kill-tree).
     """
+    global _sandbox_shutting_down
+    _sandbox_shutting_down = True
     for host in list(_sandbox_hosts.values()):
         host._stopping = True
         if host._monitor_task and not host._monitor_task.done():

@@ -247,6 +247,18 @@ class _SpiRegistry:
             logger.debug("SPI %s: unregistered plugin impl", name)
             return True
 
+    def get_builtin(self, name: str) -> Any | None:
+        """Return the built-in impl registered for *name*, or ``None``.
+
+        Acquires the registry lock (safe under concurrent registration —
+        unlike reaching into ``_impls`` directly).  Used by the SPI
+        bridge's per-call fallback path to find the built-in impl for an
+        SPI without disturbing the plugin slot.
+        """
+        with self._lock:
+            slots = self._impls.get(name)
+            return slots.get("builtin") if slots else None
+
     def resolve(self, name: str) -> Any:
         """Return the healthy plugin impl, or the built-in impl.
 
@@ -415,6 +427,11 @@ def register_impl(name: str, impl: Any, source: str = "builtin") -> None:
 def resolve(name: str) -> Any:
     """Module-level shortcut for ``spi_registry.resolve()``."""
     return spi_registry.resolve(name)
+
+
+def get_builtin(name: str) -> Any | None:
+    """Module-level shortcut for ``spi_registry.get_builtin()``."""
+    return spi_registry.get_builtin(name)
 
 
 def unregister_plugin(name: str) -> bool:
