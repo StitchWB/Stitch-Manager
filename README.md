@@ -15,11 +15,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/WhiteBite/Stitch-Manager?style=flat-square&color=6366f1" alt="Release">
+  <img src="https://img.shields.io/github/v/release/StitchWB/Stitch-Manager?style=flat-square&color=6366f1" alt="Release">
   <img src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square&logo=fastapi" alt="Python FastAPI">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react" alt="React 18">
-  <img src="https://img.shields.io/github/license/WhiteBite/Stitch-Manager?style=flat-square&color=green" alt="License">
+  <img src="https://img.shields.io/github/license/StitchWB/Stitch-Manager?style=flat-square&color=green" alt="License">
 </p>
 
 <p align="center">
@@ -266,14 +266,14 @@ Get the latest release for your platform:
 
 | Platform | Download                                                                                                                                                            |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows  | [`stitch-setup-X.Y.Z.exe`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (installer) or [`stitch-portable-X.Y.Z.zip`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (portable) |
-| Linux    | [`stitch-linux-X.Y.Z`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (standalone binary)                                                              |
+| Windows  | [`stitch-setup-X.Y.Z.exe`](https://github.com/StitchWB/Stitch-Manager/releases/latest) (installer) or [`stitch-portable-X.Y.Z.zip`](https://github.com/StitchWB/Stitch-Manager/releases/latest) (portable) |
+| Linux    | [`stitch-linux-X.Y.Z`](https://github.com/StitchWB/Stitch-Manager/releases/latest) (standalone binary)                                                              |
 
 ### Build from Source
 
 ```bash
 # Clone
-git clone https://github.com/WhiteBite/Stitch-Manager.git
+git clone https://github.com/StitchWB/Stitch-Manager.git
 cd Stitch-Manager
 
 # Install dependencies
@@ -490,14 +490,14 @@ Machine ID — это уникальный идентификатор, испо�
 
 | Платформа | Скачать                                                                                                                                                              |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows   | [`stitch-setup-X.Y.Z.exe`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (установщик) или [`stitch-portable-X.Y.Z.zip`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (portable) |
-| Linux     | [`stitch-linux-X.Y.Z`](https://github.com/WhiteBite/Stitch-Manager/releases/latest) (автономный бинарник)                                                            |
+| Windows   | [`stitch-setup-X.Y.Z.exe`](https://github.com/StitchWB/Stitch-Manager/releases/latest) (установщик) или [`stitch-portable-X.Y.Z.zip`](https://github.com/StitchWB/Stitch-Manager/releases/latest) (portable) |
+| Linux     | [`stitch-linux-X.Y.Z`](https://github.com/StitchWB/Stitch-Manager/releases/latest) (автономный бинарник)                                                            |
 
 ### Сборка из исходников
 
 ```bash
 # Клонировать
-git clone https://github.com/WhiteBite/Stitch-Manager.git
+git clone https://github.com/StitchWB/Stitch-Manager.git
 cd Stitch-Manager
 
 # Установить зависимости
