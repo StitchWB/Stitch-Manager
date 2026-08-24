@@ -414,8 +414,9 @@ class _PluginSpiProxy:
             return await builtin_method(**builtin_kwargs)
 
 
-# Generate and attach all SPI methods to the proxy class.
-_PluginSpiProxy = _install_methods(_PluginSpiProxy)
+# Generate and attach all SPI methods to the proxy class.  _install_methods
+# mutates the class in place (setattr) and returns it, so no reassignment.
+_install_methods(_PluginSpiProxy)
 
 
 # ── Per-host registration tracking ────────────────────────────────────────────
@@ -445,8 +446,8 @@ def register_plugin_spi(
     # re-registration without explicit unregister (LKG rollback calls
     # unregister first, but this guards against leaks).
     old_consts = _registered_spis.pop(host.plugin_id, [])
-    for spi_const in old_consts:
-        unregister_plugin(spi_const)
+    for old_const in old_consts:
+        unregister_plugin(old_const)
 
     contributions = manifest.contributions
     spi_names_raw = contributions.get("spi", [])

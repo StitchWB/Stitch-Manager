@@ -24,9 +24,16 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
+# Import spi_builtin_oauth so the built-in OAuthProvider SPI is registered
+# at startup (before any service-plugin that may call engine.oauth.* starts).
+# Import spi_builtin_email so the built-in MailInboxSPI and
+# EmailVerificationProvider are registered before the stitch-mail plugin
+# starts — the plugin overrides them, and when it dies the SPI registry
+# must fall back to the built-in impls.
+import stitch_backend.core.spi_builtin_email  # noqa: F401
+import stitch_backend.core.spi_builtin_oauth  # noqa: F401
 from autoreg.plugin import crypto
 from autoreg.plugin.dependency_resolver import resolve_service_dependencies
 from autoreg.plugin.layout import _base_dir, plugins_cache_dir, plugins_local_dir
@@ -38,15 +45,6 @@ from autoreg.plugin.manifest import (
     semver_sort_key,
     validate_manifest,
 )
-
-# Import spi_builtin_oauth so the built-in OAuthProvider SPI is registered
-# at startup (before any service-plugin that may call engine.oauth.* starts).
-# Import spi_builtin_email so the built-in MailInboxSPI and
-# EmailVerificationProvider are registered before the stitch-mail plugin
-# starts — the plugin overrides them, and when it dies the SPI registry
-# must fall back to the built-in impls.
-import stitch_backend.core.spi_builtin_email  # noqa: F401
-import stitch_backend.core.spi_builtin_oauth  # noqa: F401
 from stitch_backend.domains.plugin_runtime import (
     get_host,
     get_manifest,
@@ -60,6 +58,9 @@ from stitch_backend.domains.plugin_runtime.lkg import (
     record_event,
     reset_crashes,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

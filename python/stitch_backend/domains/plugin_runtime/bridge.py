@@ -76,7 +76,6 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
     the sandbox lookup is keyed by ``caller_user_id``.
     """
     from autoreg.plugin.rpc import RpcCallError
-
     from stitch_backend.domains.plugin_runtime.host import (
         PluginCallTimeout,
         PluginNotRunning,

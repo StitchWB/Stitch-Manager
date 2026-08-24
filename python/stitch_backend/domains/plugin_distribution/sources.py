@@ -28,9 +28,9 @@ import subprocess
 import tarfile
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -275,7 +275,7 @@ def _write_source_sidecar(pkg_dir: Path, data: dict[str, Any]) -> None:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ── install hand-off ─────────────────────────────────────────────────────────
@@ -400,6 +400,7 @@ def _read_sidecar_sha(pkg_dir: Path) -> str | None:
     if not sidecar.is_file():
         return None
     try:
-        return json.loads(sidecar.read_text(encoding="utf-8")).get("commit_sha")
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        return cast("str | None", data.get("commit_sha"))
     except (OSError, ValueError):
         return None

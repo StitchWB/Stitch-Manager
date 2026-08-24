@@ -82,7 +82,7 @@ def _caller_uid(params: dict) -> int | None:
 
 
 @register_command("groups_create")
-async def cmd_groups_create(params: dict) -> dict:
+async def cmd_groups_create(params: dict) -> GroupCreateResponse:
     """Create a group (vip+ gate; max 3 groups/owner; creator=owner-member)."""
     if not role_at_least(params.get("_caller_role"), "vip"):
         raise StitchError("Requires tier: vip")
@@ -99,7 +99,7 @@ async def cmd_groups_create(params: dict) -> dict:
 
 
 @register_command("groups_list", readonly=True)
-async def cmd_groups_list(params: dict) -> dict:
+async def cmd_groups_list(params: dict) -> GroupListResponse:
     """List groups where caller is a member + pending invites for caller."""
     uid = _caller_uid(params)
     username = params.get("_caller_username")
@@ -112,7 +112,7 @@ async def cmd_groups_list(params: dict) -> dict:
 
 
 @register_command("groups_get", readonly=True)
-async def cmd_groups_get(params: dict) -> dict:
+async def cmd_groups_get(params: dict) -> GroupDetailResponse:
     """Get group details (members only)."""
     group_id = params["groupId"]
     uid = _caller_uid(params)
@@ -125,7 +125,7 @@ async def cmd_groups_get(params: dict) -> dict:
 
 
 @register_command("groups_update")
-async def cmd_groups_update(params: dict) -> dict:
+async def cmd_groups_update(params: dict) -> GroupResponse:
     """Rename a group (owner only). Returns the updated group (FE: Promise<Group>)."""
     group_id = params["groupId"]
     name = str(params.get("name", "")).strip()
@@ -141,7 +141,7 @@ async def cmd_groups_update(params: dict) -> dict:
 
 
 @register_command("groups_delete")
-async def cmd_groups_delete(params: dict) -> dict:
+async def cmd_groups_delete(params: dict) -> SuccessResponse:
     """Delete a group (owner only; shares/members/invites cascade)."""
     group_id = params["groupId"]
     uid = _caller_uid(params)
@@ -159,7 +159,7 @@ async def cmd_groups_delete(params: dict) -> dict:
 
 
 @register_command("groups_invite")
-async def cmd_groups_invite(params: dict) -> dict:
+async def cmd_groups_invite(params: dict) -> InviteCreateResponse:
     """Invite a user by username (owner only; uniform error on guards)."""
     group_id = params["groupId"]
     username = str(params.get("username", "")).strip()
@@ -219,7 +219,7 @@ async def cmd_groups_invite(params: dict) -> dict:
 
 
 @register_command("groups_invite_resolve")
-async def cmd_groups_invite_resolve(params: dict) -> dict:
+async def cmd_groups_invite_resolve(params: dict) -> SuccessResponse:
     """Accept or decline an invite (invitee only)."""
     invite_id = params["inviteId"]
     accept = bool(params.get("accept", False))
@@ -235,7 +235,7 @@ async def cmd_groups_invite_resolve(params: dict) -> dict:
 
 
 @register_command("groups_invite_revoke")
-async def cmd_groups_invite_revoke(params: dict) -> dict:
+async def cmd_groups_invite_revoke(params: dict) -> SuccessResponse:
     """Revoke a pending invite (owner or inviter)."""
     invite_id = params["inviteId"]
     uid = _caller_uid(params)
@@ -253,7 +253,7 @@ async def cmd_groups_invite_revoke(params: dict) -> dict:
 
 
 @register_command("groups_remove_member")
-async def cmd_groups_remove_member(params: dict) -> dict:
+async def cmd_groups_remove_member(params: dict) -> SuccessResponse:
     """Remove a member (owner only; not self; not last owner)."""
     group_id = params["groupId"]
     target_user_id = int(params["userId"])
@@ -269,7 +269,7 @@ async def cmd_groups_remove_member(params: dict) -> dict:
 
 
 @register_command("groups_leave")
-async def cmd_groups_leave(params: dict) -> dict:
+async def cmd_groups_leave(params: dict) -> SuccessResponse:
     """Leave a group (sole owner must delete instead)."""
     group_id = params["groupId"]
     uid = _caller_uid(params)
@@ -287,7 +287,7 @@ async def cmd_groups_leave(params: dict) -> dict:
 
 
 @register_command("groups_share_credential")
-async def cmd_groups_share_credential(params: dict) -> dict:
+async def cmd_groups_share_credential(params: dict) -> SuccessResponse:
     """Share a credential to a group (credential owner + member; idempotent)."""
     credential_id = params["credentialId"]
     group_id = params["groupId"]
@@ -303,7 +303,7 @@ async def cmd_groups_share_credential(params: dict) -> dict:
 
 
 @register_command("groups_unshare_credential")
-async def cmd_groups_unshare_credential(params: dict) -> dict:
+async def cmd_groups_unshare_credential(params: dict) -> SuccessResponse:
     """Unshare a credential (credential owner OR group owner)."""
     credential_id = params["credentialId"]
     group_id = params["groupId"]
@@ -319,7 +319,7 @@ async def cmd_groups_unshare_credential(params: dict) -> dict:
 
 
 @register_command("groups_pool_list", readonly=True)
-async def cmd_groups_pool_list(params: dict) -> dict:
+async def cmd_groups_pool_list(params: dict) -> PoolListResponse:
     """List pooled credentials for a group (members only; masked secrets)."""
     group_id = params["groupId"]
     uid = _caller_uid(params)
@@ -337,7 +337,7 @@ async def cmd_groups_pool_list(params: dict) -> dict:
 
 
 @register_command("groups_usage_list", readonly=True)
-async def cmd_groups_usage_list(params: dict) -> dict:
+async def cmd_groups_usage_list(params: dict) -> UsageListResponse:
     """List per-member usage for the last 30 days (members: own; owner: all).
 
     Returns rows + ``max_per_member_daily`` (the group-wide cap) so members
@@ -354,7 +354,7 @@ async def cmd_groups_usage_list(params: dict) -> dict:
 
 
 @register_command("groups_set_quota")
-async def cmd_groups_set_quota(params: dict) -> dict:
+async def cmd_groups_set_quota(params: dict) -> GroupResponse:
     """Set the per-member daily request cap (owner only; null=unlimited)."""
     group_id = params["groupId"]
     raw = params.get("maxPerMemberDaily")
@@ -369,7 +369,7 @@ async def cmd_groups_set_quota(params: dict) -> dict:
 
 
 @register_command("groups_transfer_ownership")
-async def cmd_groups_transfer_ownership(params: dict) -> dict:
+async def cmd_groups_transfer_ownership(params: dict) -> GroupResponse:
     """Transfer group ownership to an existing member (owner only)."""
     group_id = params["groupId"]
     target_user_id = int(params["userId"])

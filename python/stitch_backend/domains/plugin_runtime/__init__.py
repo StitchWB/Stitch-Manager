@@ -32,16 +32,16 @@ _hosts: dict[str, ServicePluginHost] = {}
 _manifests: dict[str, PluginManifest] = {}
 
 
-def register_host(host: "ServicePluginHost") -> None:
+def register_host(host: ServicePluginHost) -> None:
     """Add a host to the active registry (idempotent per plugin_id)."""
     _hosts[host.plugin_id] = host
 
 
-def get_host(plugin_id: str) -> "ServicePluginHost | None":
+def get_host(plugin_id: str) -> ServicePluginHost | None:
     return _hosts.get(plugin_id)
 
 
-def all_hosts() -> list["ServicePluginHost"]:
+def all_hosts() -> list[ServicePluginHost]:
     return list(_hosts.values())
 
 
@@ -49,16 +49,16 @@ def status_all() -> list[dict]:
     return [h.status() for h in _hosts.values()]
 
 
-def register_manifest(plugin_id: str, manifest: "PluginManifest") -> None:
+def register_manifest(plugin_id: str, manifest: PluginManifest) -> None:
     """Store manifest metadata for a plugin id (idempotent)."""
     _manifests[plugin_id] = manifest
 
 
-def get_manifest(plugin_id: str) -> "PluginManifest | None":
+def get_manifest(plugin_id: str) -> PluginManifest | None:
     return _manifests.get(plugin_id)
 
 
-def all_manifests() -> list["PluginManifest"]:
+def all_manifests() -> list[PluginManifest]:
     return list(_manifests.values())
 
 

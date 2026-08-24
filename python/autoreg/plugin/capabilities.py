@@ -17,12 +17,12 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from ..scenario.schema import ScenarioStep, SelectorCandidate
-
 # Ensure built-in EmailVerificationProvider is registered at import time.
 # This is the entry point that makes resolve(SPI_EMAIL_VERIFICATION) work
 # even when no other module (bootstrap, strategies) has been imported yet.
 import stitch_backend.core.spi_builtin_email  # noqa: F401, PLC0415
+
+from ..scenario.schema import ScenarioStep, SelectorCandidate
 
 logger = logging.getLogger(__name__)
 

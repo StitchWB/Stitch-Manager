@@ -29,11 +29,12 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from .spec import LaunchPlan, SidecarSpec
+if TYPE_CHECKING:
+    from .spec import LaunchPlan, SidecarSpec
 
 logger = logging.getLogger(__name__)
 
@@ -277,8 +278,10 @@ class SidecarSupervisor:
                     # No HTTP readiness gate for stdio plugins — the caller
                     # performs the RPC handshake and owns readiness.
                 else:
+                    program, *cmd_args = plan.command
                     st.process = await asyncio.create_subprocess_exec(
-                        *plan.command,
+                        program,
+                        *cmd_args,
                         cwd=plan.cwd,
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL,
@@ -513,7 +516,7 @@ def subprocess_isolation_kwargs() -> dict[str, Any]:
     supervisor (e.g. ``ServicePluginHost`` for memory-capped children)
     should use this so the kill-tree contract is consistent.
     """
-    if os.name == "nt":
+    if sys.platform == "win32":
         return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 

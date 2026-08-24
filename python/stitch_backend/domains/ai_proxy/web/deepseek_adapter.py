@@ -256,8 +256,9 @@ class DeepSeekWebAdapter:
                     self._vendors[account_id] = vendor
                 session_id = self._session_ids.get(account_id)
                 if session_id is None:
-                    session_id = await asyncio.to_thread(vendor.create_session)
-                    self._session_ids[account_id] = session_id
+                    created: str = await asyncio.to_thread(vendor.create_session)
+                    self._session_ids[account_id] = created
+                    session_id = created
 
                 async for item in self._stream_vendor(
                     vendor, account_id, session_id, prompt, info

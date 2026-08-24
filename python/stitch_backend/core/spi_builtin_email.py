@@ -18,9 +18,11 @@ import email as email_mod
 import logging
 import re
 import time
-from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,8 @@ def _extract_body(msg: Any) -> str:
             if ct == "text/plain":
                 payload = part.get_payload(decode=True)
                 if payload:
-                    return payload.decode("utf-8", errors="replace")
+                    text: str = payload.decode("utf-8", errors="replace")
+                    return text
             elif ct == "text/html" and not body:
                 payload = part.get_payload(decode=True)
                 if payload:
@@ -114,7 +117,9 @@ def _poll_imap_once(
                     return m.group(1) if m.groups() else m.group(0)
             return None
 
-        patterns: list[re.Pattern[str] | None] = subject_res or [None]
+        patterns: list[re.Pattern[str] | None] = (
+            list(subject_res) if subject_res else [None]
+        )
         for subject_re in patterns:
             for subject, body in fetched:
                 if subject_re is not None and not subject_re.search(subject):

@@ -15,8 +15,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoreg.plugin.layout import plugins_cache_dir
 from autoreg.plugin.manifest import parse_semver
@@ -27,6 +26,9 @@ from stitch_backend.domains.plugin_distribution import failure_hook
 from stitch_backend.domains.plugin_distribution.pending_reports import (
     save_pending_report,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

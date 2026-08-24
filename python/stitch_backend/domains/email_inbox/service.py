@@ -469,7 +469,7 @@ async def _resolve_imap_password(
             )
             row = result.first()
             if row and row[0]:
-                return row[0]
+                return cast("str", row[0])
         result = await db.execute(
             text("SELECT value FROM settings WHERE key = :k"), {"k": setting_key},
         )

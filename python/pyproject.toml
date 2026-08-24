@@ -91,7 +91,8 @@ target-version = "py311"
 # TODO(debt): remove tests exclude once test ruff errors are cleaned up
 # "q*" excludes Zone-3 research dirs (qoder_*) without naming them in this
 # file — the leak-guard pattern matches the literal Zone-3 directory name.
-extend-exclude = ["tests", "q*", "*deepseek_vendor*"]  # deepseek_vendor = pinned upstream code
+# deepseek_vendor / turnstile-solver = pinned upstream code (vendored as-is)
+extend-exclude = ["tests", "q*", "*deepseek_vendor*", "*turnstile-solver*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
@@ -99,8 +100,11 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
 # E501: Line too long (handled by formatter)
 # B008: FastAPI Depends() in function defaults (correct FastAPI pattern)
 # N815: mixedCase in Pydantic models (required for API compatibility - camelCase JSON)
+# N818: domain exceptions keep semantic names without the Error suffix
+#       (PluginCallTimeout, PluginNotRunning, SpiNotRegistered) - they are
+#       public plugin-SDK surface caught by name in dual modules and tests.
 # B017: pytest.raises(Exception) in tests (acceptable for broad error testing)
-ignore = ["E501", "E402", "B008", "N815", "B017"]
+ignore = ["E501", "E402", "B008", "N815", "N818", "B017"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -136,6 +140,12 @@ ignore_missing_imports = true
 # numpy stubs use Python 3.12 syntax incompatible with our 3.11 target
 [[tool.mypy.overrides]]
 module = "numpy.*"
+ignore_errors = true
+
+# deepseek_vendor = pinned upstream code (vendored as-is, same as the ruff
+# extend-exclude) - do not type-check third-party internals.
+[[tool.mypy.overrides]]
+module = "stitch_backend.domains.ai_proxy.web.deepseek_vendor.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]

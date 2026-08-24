@@ -36,7 +36,7 @@ auth endpoints are the public exceptions:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -44,12 +44,14 @@ from pydantic import BaseModel, Field
 
 from stitch_backend.config import get_settings
 from stitch_backend.core.exceptions import StitchError
-from stitch_backend.database import get_db, run_in_session
+from stitch_backend.database import run_in_session
 from stitch_backend.domains.auth import service as auth_service
 from stitch_backend.domains.auth.permissions import (
     PERMISSION_KEYS,
     effective_permissions,
     get_matrix,
+)
+from stitch_backend.domains.auth.permissions import (
     set_permission as set_perm,
 )
 from stitch_backend.domains.auth.roles import SELECTABLE_ROLES, valid_role

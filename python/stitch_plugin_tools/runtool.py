@@ -28,13 +28,11 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 from collections import deque
 from pathlib import Path
 from typing import Any
 
-from autoreg.plugin.manifest import MANIFEST_FILENAME, ManifestValidationError
-from autoreg.plugin.manifest import validate_manifest
+from autoreg.plugin.manifest import MANIFEST_FILENAME, ManifestValidationError, validate_manifest
 from autoreg.plugin.rpc import (
     RpcCallError,
     RpcPluginClient,

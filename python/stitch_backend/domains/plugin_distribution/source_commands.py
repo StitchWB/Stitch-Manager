@@ -12,7 +12,6 @@ regular web user can never reach the host through the dispatcher.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from stitch_backend.core.command_registry import register_command
 

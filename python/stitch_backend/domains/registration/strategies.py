@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import random
 import string
-from typing import Any
+from typing import Any, cast
 
 from stitch_backend.core.types import TokenData
 
@@ -79,11 +79,14 @@ class ImapVerificationStrategy:
     async def wait_for_code(self, email: str, timeout: float | None = None) -> str:
         from stitch_backend.core.spi import SPI_EMAIL_VERIFICATION, resolve
         impl = resolve(SPI_EMAIL_VERIFICATION)
-        return await impl.wait_otp(
-            email=email,
-            subject_filter=self._subject_filter,
-            code_pattern=self._code_pattern,
-            timeout=timeout or self._timeout,
+        return cast(
+            "str",
+            await impl.wait_otp(
+                email=email,
+                subject_filter=self._subject_filter,
+                code_pattern=self._code_pattern,
+                timeout=timeout or self._timeout,
+            ),
         )
 
 

@@ -17,6 +17,10 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from stitch_backend.domains.ai_proxy.inference_provider import (
+        InferenceProviderRegistry,
+    )
+
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.http_gateway import ProxyUnavailableError, gateway
 from stitch_backend.database import run_in_read_session, run_in_session
@@ -449,7 +453,7 @@ def build_inference_providers(
     web_deepseek_settings: dict[str, bool] | None = None,
     web_qwen_accounts: list[dict] | None = None,
     web_qwen_settings: dict[str, bool] | None = None,
-):
+) -> InferenceProviderRegistry:
     """Construct the inference-provider registry from preloaded DB data.
 
     Thin adapter over the domain factory

@@ -1115,7 +1115,7 @@ async def cmd_proxy_keys_list(params: dict) -> dict:
         )
 
     result = await run_in_session(_op)
-    return result.model_dump(mode="json", by_alias=True)
+    return cast("dict[Any, Any]", result.model_dump(mode="json", by_alias=True))
 
 
 @register_command("proxy_keys_create")
@@ -1123,6 +1123,8 @@ async def cmd_proxy_keys_create(params: dict) -> dict:
     """Create a new proxy key for the caller. Raw key is shown ONCE."""
     req = ProxyKeyCreateRequest.model_validate(params)
     uid = _caller_uid(params)
+    if uid is None:
+        raise StitchError("proxy_keys_create requires an authenticated user")
 
     async def _op(session):
         svc = UserProxyKeyService(session)
@@ -1130,7 +1132,7 @@ async def cmd_proxy_keys_create(params: dict) -> dict:
         return ProxyKeyCreatedResponse(key=raw, id=record.id)
 
     result = await run_in_session(_op)
-    return result.model_dump(mode="json", by_alias=True)
+    return cast("dict[Any, Any]", result.model_dump(mode="json", by_alias=True))
 
 
 @register_command("proxy_keys_revoke")
@@ -1138,6 +1140,8 @@ async def cmd_proxy_keys_revoke(params: dict) -> dict:
     """Revoke a proxy key (own only; default guarded)."""
     req = ProxyKeyRevokeRequest.model_validate(params)
     uid = _caller_uid(params)
+    if uid is None:
+        raise StitchError("proxy_keys_revoke requires an authenticated user")
 
     async def _op(session):
         svc = UserProxyKeyService(session)
@@ -1152,7 +1156,7 @@ async def cmd_proxy_keys_revoke(params: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-_GATEWAY_KIND_MODELS: dict[str, type] = {
+_GATEWAY_KIND_MODELS: dict[str, type[Any]] = {
     "credential": Credential,
     "endpoint": ProviderEndpoint,
     "public_model": PublicModel,

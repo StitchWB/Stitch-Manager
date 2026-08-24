@@ -22,11 +22,13 @@ from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoreg.plugin.manifest import MANIFEST_FILENAME
 from stitch_plugin_tools.scaffold import scaffold_service_plugin
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 TEMPLATE_PLUGIN_ID = "stitch-plugin-template"
 TEMPLATE_PLUGIN_NAME = "Stitch Plugin Template"

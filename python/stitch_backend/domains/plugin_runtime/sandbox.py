@@ -41,7 +41,6 @@ import logging
 import shutil
 import threading
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoreg.plugin.layout import (
@@ -49,9 +48,10 @@ from autoreg.plugin.layout import (
     sandbox_plugin_dir,
     sandbox_user_dir,
 )
-from stitch_backend.domains.sidecar import get_supervisor
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from autoreg.plugin.manifest import PluginManifest
 
 from .host import ServicePluginHost
@@ -72,10 +72,10 @@ IDLE_STOP_SECONDS: float = 900.0  # 15 minutes
 _IDLE_STOP_CONCURRENCY = 8
 
 #: ``(user_id, plugin_id) → ServicePluginHost``
-_sandbox_hosts: dict[tuple[int, str], "ServicePluginHost"] = {}
+_sandbox_hosts: dict[tuple[int, str], ServicePluginHost] = {}
 
 #: ``(user_id, plugin_id) → PluginManifest``
-_sandbox_manifests: dict[tuple[int, str], "PluginManifest"] = {}
+_sandbox_manifests: dict[tuple[int, str], PluginManifest] = {}
 
 #: ``(user_id, plugin_id) → monotonic timestamp of last use``
 _sandbox_last_use: dict[tuple[int, str], float] = {}
@@ -104,7 +104,7 @@ def _reset_state() -> None:
 
 
 def register_sandbox_manifest(
-    user_id: int, plugin_id: str, manifest: "PluginManifest"
+    user_id: int, plugin_id: str, manifest: PluginManifest
 ) -> None:
     """Store manifest metadata for a sandbox plugin (idempotent).
 
@@ -115,7 +115,7 @@ def register_sandbox_manifest(
     _warn_if_spi_declared(plugin_id, manifest)
 
 
-def _warn_if_spi_declared(plugin_id: str, manifest: "PluginManifest") -> None:
+def _warn_if_spi_declared(plugin_id: str, manifest: PluginManifest) -> None:
     """Log a WARNING when a sandbox plugin's manifest declares SPI
     contributions.
 
@@ -143,18 +143,18 @@ def _warn_if_spi_declared(plugin_id: str, manifest: "PluginManifest") -> None:
 
 def get_sandbox_manifest(
     user_id: int, plugin_id: str
-) -> "PluginManifest | None":
+) -> PluginManifest | None:
     return _sandbox_manifests.get((user_id, plugin_id))
 
 
 def get_sandbox_host(
     user_id: int, plugin_id: str
-) -> "ServicePluginHost | None":
+) -> ServicePluginHost | None:
     """Return the registered sandbox host (no start).  None if not registered."""
     return _sandbox_hosts.get((user_id, plugin_id))
 
 
-def _try_read_manifest(package_dir: Path) -> "PluginManifest | None":
+def _try_read_manifest(package_dir: Path) -> PluginManifest | None:
     """Read + validate a manifest, returning None on any failure."""
     import json
 
@@ -175,7 +175,7 @@ def _try_read_manifest(package_dir: Path) -> "PluginManifest | None":
 
 async def ensure_sandbox_host(
     user_id: int, plugin_id: str
-) -> "ServicePluginHost | None":
+) -> ServicePluginHost | None:
     """Get or create+start the sandbox host for ``(user_id, plugin_id)``.
 
     Returns ``None`` when the plugin is not installed in the user's sandbox
@@ -279,7 +279,7 @@ async def stop_idle_hosts(idle_seconds: float = IDLE_STOP_SECONDS) -> int:
     # safe against concurrent ensure_sandbox_host because the per-key lock
     # serializes start; a host collected here is either stopped or was
     # already stopped — both are fine).
-    to_stop: list[tuple[tuple[int, str], "ServicePluginHost"]] = []
+    to_stop: list[tuple[tuple[int, str], ServicePluginHost]] = []
     for key, host in list(_sandbox_hosts.items()):
         last_use = _sandbox_last_use.get(key, now)
         if (now - last_use) < idle_seconds:
@@ -294,7 +294,7 @@ async def stop_idle_hosts(idle_seconds: float = IDLE_STOP_SECONDS) -> int:
     sem = asyncio.Semaphore(_IDLE_STOP_CONCURRENCY)
 
     async def _stop_one(
-        key: tuple[int, str], host: "ServicePluginHost"
+        key: tuple[int, str], host: ServicePluginHost
     ) -> bool:
         async with sem:
             try:

@@ -116,7 +116,7 @@ class SettingsService:
             if m:
                 # User-scoped key — only collect if it belongs to owner_id.
                 if owner_id is not None and int(m.group(1)) == owner_id:
-                    user_overrides[m.group(2)] = row.value
+                    user_overrides[m.group(2)] = row.value or ""
                 # Skip other users' keys entirely.
             else:
                 data[row.key] = _parse_value(row.key, row.value)

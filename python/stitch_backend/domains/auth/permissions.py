@@ -20,18 +20,19 @@ others are checked against the matrix for their role.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.database import run_in_read_session
 from stitch_backend.domains.auth.models import RolePermission
-from stitch_backend.domains.auth.roles import SELECTABLE_ROLES, valid_role
+from stitch_backend.domains.auth.roles import SELECTABLE_ROLES
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from stitch_backend.domains.auth.models import User
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ async def get_matrix(db: AsyncSession) -> dict[str, dict[str, bool]]:
         matrix[row.role][row.key] = row.allowed
 
     # Admin hard rule — admin is always fully allowed regardless of stored rows.
-    matrix["admin"] = {key: True for key in PERMISSION_KEYS}
+    matrix["admin"] = dict.fromkeys(PERMISSION_KEYS, True)
     return matrix
 
 
@@ -175,7 +176,9 @@ async def effective_permissions(user_or_role: User | str) -> set[str]:
     if role == "admin":
         return set(PERMISSION_KEYS)
     matrix = await run_in_read_session(lambda db: get_matrix(db))
-    return {k for k, v in matrix.get(role, {}).items() if v}
+    # role is always a str at runtime (User.role or the raw role string);
+    # getattr's static type is wider, so narrow it for the matrix lookup.
+    return {k for k, v in matrix.get(cast("str", role), {}).items() if v}
 
 
 # ── Enforcement ───────────────────────────────────────────────────────────────
