@@ -15,9 +15,9 @@ Two entry points:
   -> friendly message pointing at the template's starter test.
 
 Zone-1-ish: ``autoreg`` + stdlib only - no ``stitch_backend`` imports.
-The attach pattern (spawn with ``stderr=PIPE`` + reader thread + manual
-``RpcPluginClient._proc`` assignment) mirrors
-``ServicePluginHost._attach_rpc`` locally without importing the host.
+The attach sequence (set _proc, start reader, ``plugin.init`` handshake,
+``_migrate_db``) is shared with ``ServicePluginHost._attach_rpc`` via
+``RpcPluginClient.attach`` — the single code path in ``autoreg.plugin.rpc``.
 """
 
 from __future__ import annotations
@@ -218,10 +218,9 @@ def _spawn_plugin(
 
     Mirrors the host's spawn contract: ``python -m <module>`` with
     ``cwd=package_dir``.  ``stdin=PIPE`` + ``stdout=PIPE`` are wired by
-    ``RpcPluginClient`` via the attach pattern (we set ``_proc`` after
-    spawning here so the client reuses our Popen with the live stderr
-    pipe - ``RpcPluginClient.start`` would DEVNULL stderr, which we
-    must avoid for the playground).
+    ``RpcPluginClient.attach`` (which takes our Popen with the live stderr
+    pipe — ``RpcPluginClient.start`` would DEVNULL stderr, which we must
+    avoid for the playground).
 
     The child receives a MINIMAL env (:func:`_minimal_child_env`) — never
     the developer's full environment.
@@ -274,9 +273,25 @@ def _attach_client(
 ) -> _RunRpcPluginClient:
     """Attach a ``_RunRpcPluginClient`` to an already-spawned Popen.
 
-    Mirrors ``ServicePluginHost._attach_rpc``: set ``_proc`` directly,
-    start the reader thread, perform the ``plugin.init`` handshake, and
-    call ``_migrate_db`` when the manifest declares storage migrations.
+    Delegates the common attach sequence (set _proc, start reader,
+    ``plugin.init`` handshake, ``_migrate_db``) to
+    :meth:`RpcPluginClient.attach` — the single code path shared with
+    :meth:`ServicePluginHost._attach_rpc`.
+
+    Intentional deltas from host._attach_rpc (documented so the next
+    diverger sees them):
+      - stderr reader: playground starts it BEFORE attach (in
+        ``run_package``) so init-time stderr is visible; the host starts
+        it AFTER attach.
+      - engine.oauth handlers: playground stubs them via
+        ``_RunRpcPluginClient._handle_plugin_request`` (no real OAuth in
+        dev mode); the host registers real handlers via
+        ``register_engine_handlers``.
+      - capabilities parsing: playground does not parse (host-only).
+      - memory caps: playground has none (host-only).
+      - _migrate_db failure: non-fatal (playground continues so the
+        author can exercise non-storage commands); the host lets it
+        propagate (caught by start()'s error path → supervisor.stop).
     """
     init_params = {
         "engine_api": 2,
@@ -289,33 +304,23 @@ def _attach_client(
         plugin_id=plugin_id, stderr_writer=writer,
         default_timeout=_DEFAULT_CALL_TIMEOUT,
     )
-    client._proc = proc
-    client._closed = False
-    client._reader = threading.Thread(
-        target=client._reader_loop, name="rpc-reader", daemon=True
-    )
-    client._reader.start()
     try:
-        client._init_result = client._call_internal(
-            "plugin.init", init_params, timeout=_INIT_TIMEOUT
+        client.attach(
+            proc,
+            init_params=init_params,
+            timeout=_INIT_TIMEOUT,
+            migrate=migrations,
         )
-    except (RpcTimeoutError, RpcProtocolError):
-        client.kill()
-        raise
-    if migrations:
-        try:
-            client.call(
-                "_migrate_db",
-                {"from_version": 0, "to_version": 1},
-                timeout=_INIT_TIMEOUT,
-            )
-        except (RpcTimeoutError, RpcProtocolError, RpcCallError):
-            # Migration failure is non-fatal for the playground - the
-            # author can still exercise non-storage commands.  Surface
-            # the warning on stderr so it is visible.
-            writer.write(
-                "warning: _migrate_db failed; storage commands may error\n"
-            )
+    except (RpcTimeoutError, RpcProtocolError, RpcCallError):
+        # Handshake failure (init_result not set) is fatal — re-raise so
+        # run_package kills the child and returns _RC_RUNTIME_FAILURE.
+        if client.init_result is None:
+            raise
+        # _migrate_db failure — non-fatal: the client is attached,
+        # storage commands may error later.  Surface a warning.
+        writer.write(
+            "warning: _migrate_db failed; storage commands may error\n"
+        )
     return client
 
 
