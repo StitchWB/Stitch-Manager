@@ -274,17 +274,21 @@ or HTML from the plugin enters the frontend.
 ### Boundary rule
 
 The declarative vocabulary covers **fixed-layout pages**: headings,
-sections, fields, tables, and buttons. Pages that need polling/realtime,
-rich-text, drag-and-drop, or virtual scrolling must use
-`kind = "core_page"` (a host page that binds to plugin commands).
-Anything beyond the node dictionary stays `core_page`.
+sections, fields, tables, buttons, card grids, and rendered markdown.
+Pages that need polling/realtime, arbitrary HTML/rich-text (the
+`markdown` node renders a safe subset only — no raw HTML passthrough),
+drag-and-drop, or virtual scrolling must use `kind = "core_page"` (a
+host page that binds to plugin commands). Anything beyond the node
+dictionary stays `core_page`.
 
 The vocabulary above is the **frozen v2 contract**: node kinds and their
 fields only change by a schema revision (new kinds are additive and the
 renderer tolerates unknown kinds). Additive field revisions land without
 new kinds — so far: `rowActions` on the table node (row-scoped actions,
-see below). Known deferred extensions (tabbed pages, modals) are v3
-candidates — until then, pages that need them stay `core_page`.
+see below), and the `card_grid` + `markdown` node kinds (additive
+revision — existing manifests render unchanged). Known deferred
+extensions (tabbed pages, modals) are v3 candidates — until then, pages
+that need them stay `core_page`.
 
 ### Schema
 
@@ -337,6 +341,8 @@ candidates — until then, pages that need them stay `core_page`.
 | `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`, `placeholder?` (text/select hint; plain string or i18n key, resolved like `label`). |
 | `table` | Data table with optional per-row actions. | `id`, `columns: [{key, label}]`, `source: {command, params?}`, `rowsKey?`, `rowActions?` (per-row action buttons; see below). `source.command` must be a readonly command returning rows. |
 | `button` | Action button. | `id`, `label`, `command`, `params?`, `paramsFrom?` (param key → field `id` binding), `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`. |
+| `card_grid` | Responsive grid of cards (additive revision). | `id`, `source: {command, params?}`, `card: {title, subtitle?, body?, image?, action?}`. `source.command` must be a readonly command returning an array of row objects (or an object wrapping it under `"rows"`); each row renders one card. |
+| `markdown` | Readonly rendered markdown (additive revision). | `id`, `source: {command, params?}`, `textKey?` (default `"text"`). `source.command` must be a readonly command returning an object whose `textKey` field holds the markdown string (a bare string response is accepted directly). |
 
 ### Labels
 
@@ -421,6 +427,83 @@ visible immediately.
 localized via the core `pluginUi.confirmRowAction` key) before invoking;
 declining aborts without calling the command. Destructive actions
 (delete/remove) MUST use `variant: "danger"`.
+
+### Card grids
+
+`card_grid` (an additive revision of the frozen v2 contract — older
+manifests without it render unchanged) renders a responsive grid
+(1 column → 2 on `sm` → 3 on `lg`) with one card per row returned by
+`source.command`:
+
+```json
+{
+  "kind": "card_grid",
+  "id": "services",
+  "source": {"command": "list_services"},
+  "card": {
+    "title": "name",
+    "subtitle": "region",
+    "body": "description",
+    "image": "icon_url",
+    "action": {
+      "label": "plugin.my-plugin.refresh",
+      "command": "refresh_service",
+      "variant": "secondary",
+      "params": {"reason": "manual"},
+      "paramsFromRow": {"serviceId": "id"}
+    }
+  }
+}
+```
+
+`source.command` is a readonly command returning an array of row
+objects (or an object wrapping the array under `"rows"`); `null`
+renders the empty state. Each of `card.title` / `subtitle` / `body` /
+`image` is resolved per row: the string is FIRST treated as a COLUMN
+KEY of the row — if the row has that key, the row's value is rendered;
+if the row does NOT have the key, the string renders LITERALLY (so
+static text like a shared subtitle works). `image` renders an `<img>`
+with the resolved value as `src`; an empty resolved value renders no
+image. Rows may carry more keys than the card displays (e.g. an `id`
+used only by the action).
+
+The optional `card.action` renders one button on EVERY card with the
+exact semantics of table `rowActions`: `label` resolves like every
+other label; `paramsFromRow` maps `param key → COLUMN KEY of the row`
+and overrides `{...params}` on click (a missing column omits that param
+and warns once); the command runs through the same
+`plugin.{id}.{command}` invoke path; a successful invocation refetches
+the grid's `source` command; `variant: "danger"` prompts the same
+confirm dialog before invoking.
+
+### Markdown
+
+`markdown` (an additive revision of the frozen v2 contract) renders
+readonly markdown fetched from a plugin command:
+
+```json
+{
+  "kind": "markdown",
+  "id": "readme",
+  "source": {"command": "get_readme", "params": {"lang": "en"}},
+  "textKey": "text"
+}
+```
+
+`source.command` is a readonly command returning an object; `textKey`
+(default `"text"`) names the field holding the markdown string. A bare
+string response is accepted as the markdown text directly; `null`
+renders the empty state.
+
+Rendering is a **safe subset** — headings (`#`–`######`), bold, italic,
+inline code, fenced code blocks, links, unordered/ordered lists, and
+paragraphs. The renderer maps markdown DIRECTLY to React elements: no
+`dangerouslySetInnerHTML`, no HTML parsing, so raw HTML in the source
+(e.g. `<script>`) renders as inert visible text. Links are restricted
+to `http(s)`/`mailto` URLs — any other scheme (notably `javascript:`)
+renders its text without a hyperlink. Anything beyond the subset
+degrades to plain text; pages that need full rich-text/HTML stay
+`core_page`.
 
 ---
 

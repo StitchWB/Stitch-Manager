@@ -22,6 +22,21 @@
  *       console.warns once.
  *   (w) danger row actions prompt window.confirm and abort on decline.
  *   (x) danger row actions invoke on acceptance and refetch the source.
+ *   (y) card_grid renders cards from source rows (row-key title/subtitle/
+ *       body/image resolution + one action button per card).
+ *   (z) card_grid template strings absent from the row render literally.
+ *   (aa) Card action click sends static params + paramsFromRow values from
+ *        the CLICKED card and refetches the source on success.
+ *   (ab) danger card actions prompt window.confirm and abort on decline.
+ *   (ac) card_grid loading state shows the spinner until the source resolves.
+ *   (ad) card_grid null → empty state, malformed object → inline error,
+ *        rejection → error message.
+ *   (ae) markdown renders headings/bold/lists/links from the default textKey.
+ *   (af) markdown is safe: raw HTML (<script>) renders as inert text and
+ *        javascript: links get no hyperlink.
+ *   (ag) markdown custom textKey + bare-string response both resolve.
+ *   (ah) markdown loading state shows the spinner until the source resolves.
+ *   (ai) markdown null → empty state, missing textKey → inline error.
  *
  * Mocks: invoke module (safeInvoke), i18n (t = identity), toast, and
  * @/components/ui primitives (stubbed to simple HTML like Plugins.test.tsx
@@ -102,6 +117,11 @@ jest.mock('@/components/ui', () => ({
     </label>
   ),
   LoadingSpinner: () => <div data-testid="ui-loading-spinner">Loading...</div>,
+  GlassCard: ({ children, className }: any) => (
+    <div data-testid="ui-glass-card" className={className}>
+      {children}
+    </div>
+  ),
   EmptyState: ({ title, description }: any) => (
     <div data-testid="ui-empty-state">
       <span>{title}</span>
@@ -834,5 +854,355 @@ describe('DeclarativePage', () => {
     } finally {
       confirmSpy.mockRestore();
     }
+  });
+
+  // ── Card grid node (card_grid) ───────────────────────────────────────────
+
+  const cardGridSchema: PluginPageSchema = {
+    nodes: [
+      {
+        kind: 'card_grid',
+        id: 'services',
+        source: { command: 'list_services' },
+        card: {
+          // Row column keys — resolved from each row object.
+          title: 'name',
+          subtitle: 'region',
+          body: 'description',
+          image: 'icon_url',
+          action: {
+            label: 'Refresh',
+            command: 'refresh_service',
+            params: { staticKey: 'kept' },
+            paramsFromRow: { serviceId: 'id' },
+          },
+        },
+      },
+    ],
+  };
+
+  const dangerCardSchema: PluginPageSchema = {
+    nodes: [
+      {
+        kind: 'card_grid',
+        id: 'danger-cards',
+        source: { command: 'list_danger_cards' },
+        card: {
+          title: 'name',
+          action: {
+            label: 'Delete',
+            command: 'delete_card',
+            variant: 'danger',
+            paramsFromRow: { itemId: 'id' },
+          },
+        },
+      },
+    ],
+  };
+
+  it('(y) card_grid renders cards from source rows with row-key fields and an action per card', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([
+      {
+        id: 's1',
+        name: 'Alpha',
+        region: 'eu-west',
+        description: 'First service',
+        icon_url: 'https://img/a.png',
+      },
+      {
+        id: 's2',
+        name: 'Beta',
+        region: 'us-east',
+        description: 'Second service',
+        icon_url: 'https://img/b.png',
+      },
+    ]);
+
+    const { container } = render(
+      <DeclarativePage pluginId="test" schema={cardGridSchema} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha')).toBeTruthy();
+    });
+    // Title/subtitle/body resolved from row keys on both cards.
+    expect(screen.getByText('Beta')).toBeTruthy();
+    expect(screen.getByText('eu-west')).toBeTruthy();
+    expect(screen.getByText('Second service')).toBeTruthy();
+    // Image resolved from the row key → real <img> with the row's URL.
+    const images = container.querySelectorAll('img');
+    expect(images).toHaveLength(2);
+    expect(images[0].getAttribute('src')).toBe('https://img/a.png');
+    expect(images[1].getAttribute('src')).toBe('https://img/b.png');
+    // One action button per card.
+    expect(screen.getAllByText('Refresh')).toHaveLength(2);
+  });
+
+  it('(z) card_grid template strings absent from the row render literally', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([{ name: 'Gamma' }]);
+
+    const literalCardSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'card_grid',
+          id: 'literal',
+          source: { command: 'list_literal' },
+          card: {
+            title: 'name',
+            // Not a key of the row → literal fallback.
+            subtitle: 'Static subtitle',
+          },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={literalCardSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Gamma')).toBeTruthy();
+    });
+    expect(screen.getByText('Static subtitle')).toBeTruthy();
+  });
+
+  it('(aa) clicking a card action sends static params + row-mapped params from the clicked card and refetches', async () => {
+    // Persistent (not Once): the post-action refetch must return the
+    // same rows.
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      { id: 's1', name: 'Alpha' },
+      { id: 's2', name: 'Beta' },
+    ]);
+
+    render(<DeclarativePage pluginId="test" schema={cardGridSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Beta')).toBeTruthy();
+    });
+
+    // Click the SECOND card's button — params must come from row s2.
+    await act(async () => {
+      fireEvent.click(screen.getAllByText('Refresh')[1]);
+    });
+
+    expect(safeInvoke).toHaveBeenCalledWith('plugin.test.refresh_service', {
+      staticKey: 'kept',
+      serviceId: 's2',
+    });
+    // Successful action refetches the source command (initial + refetch).
+    await waitFor(() => {
+      const sourceCalls = (safeInvoke as jest.Mock).mock.calls.filter(
+        ([cmd]) => cmd === 'plugin.test.list_services',
+      );
+      expect(sourceCalls).toHaveLength(2);
+    });
+  });
+
+  it('(ab) danger card action confirms via window.confirm and aborts on decline', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce([
+      { id: 'c1', name: 'One' },
+    ]);
+    const confirmSpy = jest
+      .spyOn(window, 'confirm')
+      .mockImplementation(() => false);
+    try {
+      render(<DeclarativePage pluginId="test" schema={dangerCardSchema} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('One')).toBeTruthy();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Delete'));
+      });
+
+      // Same core confirm key as table row actions (t = identity here).
+      expect(confirmSpy).toHaveBeenCalledWith('pluginUi.confirmRowAction');
+      // Declined → only the initial source fetch happened; the action
+      // command was never invoked.
+      expect(safeInvoke).toHaveBeenCalledTimes(1);
+      expect(safeInvoke).not.toHaveBeenCalledWith(
+        'plugin.test.delete_card',
+        expect.anything(),
+      );
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it('(ac) card_grid shows the loading spinner until the source resolves', async () => {
+    let resolveSource: (value: unknown) => void = () => undefined;
+    (safeInvoke as jest.Mock).mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveSource = resolve;
+      }),
+    );
+
+    render(<DeclarativePage pluginId="test" schema={cardGridSchema} />);
+
+    expect(screen.getByTestId('ui-loading-spinner')).toBeTruthy();
+
+    await act(async () => {
+      resolveSource([{ id: 's1', name: 'Alpha' }]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('ui-loading-spinner')).toBeNull();
+  });
+
+  it('(ad) card_grid null → empty state, malformed object → inline error, rejection → error message', async () => {
+    // null → empty state (em-dash), NOT an error.
+    (safeInvoke as jest.Mock).mockResolvedValueOnce(null);
+    const first = render(
+      <DeclarativePage pluginId="test" schema={cardGridSchema} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('—')).toBeTruthy();
+    });
+    first.unmount();
+
+    // Object without a "rows" array → inline error.
+    (safeInvoke as jest.Mock).mockResolvedValueOnce({ unrelated: true });
+    const second = render(
+      <DeclarativePage pluginId="test" schema={cardGridSchema} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Card grid response missing "rows"')).toBeTruthy();
+    });
+    second.unmount();
+
+    // Rejection → inline error with the error message.
+    (safeInvoke as jest.Mock).mockRejectedValueOnce(new Error('grid down'));
+    render(<DeclarativePage pluginId="test" schema={cardGridSchema} />);
+    await waitFor(() => {
+      expect(screen.getByText('grid down')).toBeTruthy();
+    });
+  });
+
+  // ── Markdown node (markdown) ─────────────────────────────────────────────
+
+  const markdownSchema: PluginPageSchema = {
+    nodes: [
+      { kind: 'markdown', id: 'readme', source: { command: 'get_readme' } },
+    ],
+  };
+
+  it('(ae) markdown renders headings, bold, lists and links from the default textKey', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce({
+      text: '# Title\n\nSome **bold** text with a [docs](https://example.com) link.\n\n- one\n- two',
+    });
+
+    const { container } = render(
+      <DeclarativePage pluginId="test" schema={markdownSchema} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Title')).toBeTruthy();
+    });
+    // Bold span rendered inside <strong>.
+    const bold = screen.getByText('bold');
+    expect(bold.tagName).toBe('STRONG');
+    // Safe https link becomes a real hyperlink.
+    const link = container.querySelector('a[href="https://example.com"]');
+    expect(link).toBeTruthy();
+    // List items rendered.
+    expect(screen.getByText('one')).toBeTruthy();
+    expect(screen.getByText('two')).toBeTruthy();
+  });
+
+  it('(af) markdown is safe: raw HTML renders as inert text and javascript: links get no hyperlink', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValueOnce({
+      text: 'Safe text\n\n<script>alert(1)</script>\n\n[click](javascript:alert(1))',
+    });
+
+    const { container } = render(
+      <DeclarativePage pluginId="test" schema={markdownSchema} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Safe text')).toBeTruthy();
+    });
+    // No script element (or any injected HTML) enters the DOM.
+    expect(container.querySelectorAll('script')).toHaveLength(0);
+    // The raw HTML is visible as escaped, inert text.
+    expect(container.textContent).toContain('<script>alert(1)</script>');
+    // javascript: scheme is not turned into a hyperlink.
+    expect(container.querySelectorAll('a[href^="javascript"]')).toHaveLength(0);
+    // The link text still renders as plain (possibly split) text nodes.
+    expect(container.textContent).toContain('click');
+  });
+
+  it('(ag) markdown resolves a custom textKey and accepts a bare-string response', async () => {
+    // Custom textKey.
+    (safeInvoke as jest.Mock).mockResolvedValueOnce({
+      content: 'Custom **key** content',
+    });
+    const customKeySchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'markdown',
+          id: 'custom',
+          source: { command: 'get_custom' },
+          textKey: 'content',
+        },
+      ],
+    };
+    const first = render(
+      <DeclarativePage pluginId="test" schema={customKeySchema} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('key')).toBeTruthy();
+    });
+    first.unmount();
+
+    // Bare string response is accepted as the markdown text directly.
+    (safeInvoke as jest.Mock).mockResolvedValueOnce('Bare *string* response');
+    render(<DeclarativePage pluginId="test" schema={markdownSchema} />);
+    await waitFor(() => {
+      expect(screen.getByText('string')).toBeTruthy();
+    });
+  });
+
+  it('(ah) markdown shows the loading spinner until the source resolves', async () => {
+    let resolveSource: (value: unknown) => void = () => undefined;
+    (safeInvoke as jest.Mock).mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveSource = resolve;
+      }),
+    );
+
+    render(<DeclarativePage pluginId="test" schema={markdownSchema} />);
+
+    expect(screen.getByTestId('ui-loading-spinner')).toBeTruthy();
+
+    await act(async () => {
+      resolveSource({ text: 'Loaded text' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Loaded text')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('ui-loading-spinner')).toBeNull();
+  });
+
+  it('(ai) markdown null → empty state, missing textKey → inline error', async () => {
+    // null → empty state (em-dash), NOT an error.
+    (safeInvoke as jest.Mock).mockResolvedValueOnce(null);
+    const first = render(
+      <DeclarativePage pluginId="test" schema={markdownSchema} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('—')).toBeTruthy();
+    });
+    first.unmount();
+
+    // Object without the textKey field → inline error.
+    (safeInvoke as jest.Mock).mockResolvedValueOnce({ unrelated: true });
+    render(<DeclarativePage pluginId="test" schema={markdownSchema} />);
+    await waitFor(() => {
+      expect(
+        screen.getByText('Markdown response missing textKey "text"'),
+      ).toBeTruthy();
+    });
   });
 });
