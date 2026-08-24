@@ -1,4 +1,4 @@
-"""Dependency resolution for data-only plugin packages (plan §3.3).
+"""Dependency resolution for plugin packages (plan §3.3).
 
 When a plugin package declares ``depends: ["aws-builder-id@^1.0"]``, the
 engine resolves each dependency via the SAME :class:`PluginLoader` instance
@@ -10,6 +10,13 @@ v1 semantics (tolerant-reader):
     * Range mismatches log a WARNING and proceed anyway — do not hard-fail.
     * Unresolvable dependencies FAIL the run with a clear error before any
       browser is opened.
+
+v2 service-plugin variant (:func:`resolve_service_dependencies`):
+    * PRESENCE check only — does NOT load scenarios.  Service plugins are
+      started by :mod:`stitch_backend` discovery, which skips plugins whose
+      deps are not installed rather than crashing startup.
+    * Range suffixes (``@^1.0``) are stripped via :func:`parse_dep_entry`;
+      only the dependency id is checked against the loader.
 """
 
 from __future__ import annotations
@@ -84,6 +91,30 @@ def resolve_dependencies(
             ) from exc
         resolved.append(ResolvedDependency(dep_manifest, scenario, dep_dir))
     return resolved
+
+
+def resolve_service_dependencies(
+    manifest: PluginManifest,
+    loader: PluginLoader,
+) -> list[str]:
+    """Check PRESENCE of each declared dependency for a v2 service plugin.
+
+    Returns a list of missing dependency ids (empty when all installed).
+    Unlike :func:`resolve_dependencies`, this is a PRESENCE check only —
+    it does NOT load scenarios or validate ranges.  Range suffixes
+    (``@^1.0``) are stripped via :func:`parse_dep_entry`; only the
+    dependency id is checked against the loader.
+
+    v2 service plugins are started by :mod:`stitch_backend` discovery,
+    which calls this to skip plugins whose deps are not installed rather
+    than crashing startup.
+    """
+    missing: list[str] = []
+    for dep_entry in manifest.depends:
+        dep_id, _range = parse_dep_entry(dep_entry)
+        if loader.resolve(dep_id) is None:
+            missing.append(dep_id)
+    return missing
 
 
 def parse_dep_entry(entry: str) -> tuple[str, str]:
