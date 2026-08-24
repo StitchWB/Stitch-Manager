@@ -22,12 +22,21 @@ The pin value is:
 
 All functions here are pure (no I/O except the json file) and unit-testable
 without touching the network or the install machinery.
+
+``check_and_record`` and ``check_and_record_scoped`` wrap the read-then-write
+critical section with a cross-process file lock (``msvcrt.locking`` on
+Windows / ``fcntl.flock`` on POSIX) so concurrent installs cannot both pass
+the TOFU check and both record — exactly one wins, the other sees the
+recorded pin.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -35,6 +44,9 @@ from typing import Any
 from .config import data_dir
 
 _PINS_FILENAME = "plugin_pins.json"
+
+#: Timeout (seconds) for acquiring the cross-process pin lock.
+_PIN_LOCK_TIMEOUT: float = 5.0
 
 
 def _pins_file_path() -> Path:
@@ -108,6 +120,61 @@ def record_pin(plugin_id: str, *, sha: str, url: str) -> None:
     save_pins(pins)
 
 
+@contextlib.contextmanager
+def _pin_lock(pins_file: Path, *, timeout: float = _PIN_LOCK_TIMEOUT):
+    """Acquire a cross-process file lock for the pins critical section.
+
+    Uses ``msvcrt.locking`` on Windows and ``fcntl.flock`` on POSIX.  The
+    lock file is ``<pins_file>.lock``.  Raises ``TimeoutError`` when the
+    lock cannot be acquired within ``timeout`` seconds (another process is
+    holding it — the caller should surface this as a clear error).
+    """
+    lock_path = pins_file.with_suffix(pins_file.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except (OSError, IOError):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f"could not acquire pin lock {lock_path} within "
+                        f"{timeout}s — another install is in progress"
+                    )
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            except (OSError, IOError):
+                pass
+    finally:
+        try:
+            os.close(fd)
+        except (OSError, IOError):
+            pass
+
+
 def check_and_record(
     plugin_id: str,
     *,
@@ -115,17 +182,24 @@ def check_and_record(
     url: str,
     force: bool = False,
 ) -> tuple[bool, str | None]:
-    """Check the TOFU pin and record on success.
+    """Check the TOFU pin and record on success (atomic under a file lock).
 
     Returns ``(ok, error_message)``.  When ``ok`` is ``True``, the pin is
     recorded (replacing any prior pin).  When ``ok`` is ``False``, no state
     is changed — the caller must refuse the install.
+
+    The read-then-write critical section is wrapped in a cross-process file
+    lock so concurrent installs of the same ``plugin_id`` cannot both pass
+    the TOFU check: the first caller acquires the lock, checks, records,
+    releases; the second acquires the lock, sees the recorded pin, and
+    either succeeds (same sha) or fails (different sha).
     """
-    ok, msg = check_pin(plugin_id, new_sha)
-    if not ok and not force:
-        return False, msg
-    record_pin(plugin_id, sha=new_sha, url=url)
-    return True, None
+    with _pin_lock(_pins_file_path()):
+        ok, msg = check_pin(plugin_id, new_sha)
+        if not ok and not force:
+            return False, msg
+        record_pin(plugin_id, sha=new_sha, url=url)
+        return True, None
 
 
 # ── Scoped (per-user sandbox) pins ───────────────────────────────────────────
@@ -225,9 +299,16 @@ def check_and_record_scoped(
     url: str,
     force: bool = False,
 ) -> tuple[bool, str | None]:
-    """Check the scoped TOFU pin and record on success (mirrors check_and_record)."""
-    ok, msg = check_scoped_pin(user_id, plugin_id, new_sha)
-    if not ok and not force:
-        return False, msg
-    record_scoped_pin(user_id, plugin_id, sha=new_sha, url=url)
-    return True, None
+    """Check the scoped TOFU pin and record on success (atomic under a file lock).
+
+    Mirrors :func:`check_and_record` but for the scoped (per-user sandbox)
+    pin store.  The read-then-write critical section is wrapped in a
+    cross-process file lock so concurrent installs of the same
+    ``(user_id, plugin_id)`` cannot both pass the TOFU check.
+    """
+    with _pin_lock(_scoped_pins_file_path()):
+        ok, msg = check_scoped_pin(user_id, plugin_id, new_sha)
+        if not ok and not force:
+            return False, msg
+        record_scoped_pin(user_id, plugin_id, sha=new_sha, url=url)
+        return True, None
