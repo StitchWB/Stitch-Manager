@@ -148,8 +148,19 @@ async def _start_one(
     # interchangeable across the migration boundary).  Passed via plan.env,
     # NOT the supervisor allowlist — it is a secret that only
     # storage-declaring plugins should see.
+    #
+    # SECURITY: only TRUSTED sources (local dev / signed cache) receive the
+    # core Fernet key.  Community / sandbox plugins are unsigned arbitrary
+    # code — handing them the core key would let them decrypt every secret
+    # in the core DB.  They fall back to their own key: plugin crypto
+    # (e.g. stitch-totp's crypto.py) resolves env var → core key file →
+    # plugin-local ``<data_dir>/.db_key`` when the env var is absent.
     child_env: dict[str, str] = {}
-    if storage_decl and (tok := os.environ.get("TOKEN_ENCRYPTION_KEY", "")):
+    if (
+        storage_decl
+        and source not in ("community", "sandbox")
+        and (tok := os.environ.get("TOKEN_ENCRYPTION_KEY", ""))
+    ):
         child_env["TOKEN_ENCRYPTION_KEY"] = tok
 
     host = ServicePluginHost(

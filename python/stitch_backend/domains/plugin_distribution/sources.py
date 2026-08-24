@@ -129,11 +129,25 @@ def _fetch_git(spec: PluginSourceSpec, dest_dir: Path) -> Path:
 
 
 def _git_clone(url: str, ref: str, dest: Path) -> None:
-    """Clone url@ref into dest (depth 1 for branches/tags, full for SHA)."""
+    """Clone url@ref into dest (depth 1 for branches/tags, full for SHA).
+
+    SECURITY: url and ref are validated against leading dashes and every
+    positional argument is placed after a ``--`` separator so attacker-
+    controlled values can never be parsed as git options (argument
+    injection, e.g. ``--upload-pack=...``).
+    """
+    if url.startswith("-"):
+        raise SourceError(
+            "bad_url", f"git url must not start with '-': {url!r}"
+        )
+    if ref.startswith("-"):
+        raise SourceError(
+            "bad_ref", f"git ref must not start with '-': {ref!r}"
+        )
     if _looks_like_sha(ref):
         # Shallow clone by SHA is unreliable across git versions / hosts.
         result = subprocess.run(
-            ["git", "clone", "--quiet", url, str(dest)],
+            ["git", "clone", "--quiet", "--", url, str(dest)],
             capture_output=True, text=True, timeout=_GIT_TIMEOUT,
         )
         if result.returncode != 0:
@@ -142,7 +156,7 @@ def _git_clone(url: str, ref: str, dest: Path) -> None:
                 f"git clone failed: {result.stderr.strip() or result.stdout.strip()}",
             )
         result = subprocess.run(
-            ["git", "-C", str(dest), "checkout", "--quiet", ref],
+            ["git", "-C", str(dest), "checkout", "--quiet", "--", ref],
             capture_output=True, text=True, timeout=_GIT_TIMEOUT,
         )
         if result.returncode != 0:
@@ -152,7 +166,7 @@ def _git_clone(url: str, ref: str, dest: Path) -> None:
             )
     else:
         result = subprocess.run(
-            ["git", "clone", "--depth", "1", "--branch", ref, "--quiet", url, str(dest)],
+            ["git", "clone", "--depth", "1", "--branch", ref, "--quiet", "--", url, str(dest)],
             capture_output=True, text=True, timeout=_GIT_TIMEOUT,
         )
         if result.returncode != 0:
@@ -200,7 +214,11 @@ async def _fetch_release(spec: PluginSourceSpec, dest_dir: Path) -> Path:
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as tf:
-        tf.extractall(dest_dir)
+        # SECURITY: PEP 706 ``data`` filter — refuses entries that escape
+        # dest_dir (``../`` traversal, absolute paths) and strips dangerous
+        # mode bits.  A crafted tarball must NOT be able to write outside
+        # the install dir.  Never drop this filter.
+        tf.extractall(dest_dir, filter="data")
 
     pkg_dir = _find_package_dir(dest_dir)
     if pkg_dir is None:
@@ -278,7 +296,7 @@ async def install_from_source(
 
         if spec.type == "git":
             _gate_dev(trust)
-            _install_to_local(pkg_dir, manifest.id)
+            _install_to_local(pkg_dir, manifest)
             pinned = _read_sidecar_sha(pkg_dir)
             return {
                 "success": True,
@@ -343,13 +361,26 @@ def _gate_community(kind: str) -> None:
             )
 
 
-def _install_to_local(pkg_dir: Path, plugin_id: str) -> None:
-    """Install to plugins-local/{id}/ (dev tier, like dev_install)."""
-    dest = plugins_local_dir() / plugin_id
+def _install_to_local(pkg_dir: Path, manifest: Any) -> None:
+    """Install to plugins-local/{id}/ (dev tier, like dev_install).
+
+    After copying, refreshes ``<pkg>/<module>/_vendor/`` from the canonical
+    ``autoreg/plugin/rpc.py`` so the git-source install is standalone —
+    same vendoring refresh ``publish.dev_install`` performs.  Import
+    direction note: ``stitch_plugin_tools`` never imports ``stitch_backend``
+    (zone-1), so this backend → tools import is acyclic; the lazy import
+    mirrors ``dev_install``.
+    """
+    dest = plugins_local_dir() / manifest.id
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(pkg_dir, dest)
+
+    module = manifest.entry.get("module") if manifest.entry else None
+    if module and (dest / module).is_dir():
+        from stitch_plugin_tools.vendoring import vendor_rpc_server
+        vendor_rpc_server(dest / module)
 
 
 def _install_to_community(pkg_dir: Path, plugin_id: str, version: str) -> None:

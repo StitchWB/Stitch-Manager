@@ -22,9 +22,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import signal
 import subprocess
+import sys
+import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -37,17 +41,26 @@ logger = logging.getLogger(__name__)
 # ── child env allowlist ───────────────────────────────────────────────────
 # Community plugins are unsigned arbitrary code; a ~10-line exfiltration of
 # os.environ leaks FERNET_KEY, JWT_SECRET, IMAP_PASSWORD, API keys.  Children
-# spawned by the supervisor receive ONLY these host vars (runtime/locale/Python
-# tuning — none secret, none code-loading) plus the explicit plan.env overrides
-# declared by each SidecarSpec.prepare().  Never add KEY/SECRET/PASSWORD/TOKEN/
-# CREDENTIAL vars here; a sidecar needing a specific var must declare it in its
-# own plan.env.
+# spawned by the supervisor receive ONLY these host vars (locale/Python
+# tuning — none secret, none code-loading) plus the explicit plan.env
+# overrides declared by each SidecarSpec.prepare().  Never add
+# KEY/SECRET/PASSWORD/TOKEN/CREDENTIAL vars here; a sidecar needing a
+# specific var must declare it in its own plan.env.
+#
+# Deliberately NOT inherited (constructed instead):
+#   PATH      → reduced to the Python interpreter dir + OS system dirs
+#               (:func:`_minimal_path`); the user's PATH may contain
+#               attacker-writable dirs that shadow executables.
+#   TEMP/TMP/HOME/USERPROFILE → replaced with a per-sidecar scoped temp dir
+#               (:func:`_scoped_tmp_dir`) so children get an isolated
+#               writable home/temp instead of the user's real profile dirs
+#               (APPDATA/LOCALAPPDATA/PROGRAMDATA are NOT passed at all —
+#               they are credential-bearing).
 _CHILD_ENV_ALLOWLIST = frozenset({
-    # Windows runtime
-    "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC",
-    "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "PROGRAMDATA",
-    # POSIX runtime
-    "HOME", "TZ", "TERM", "SHELL",
+    # Windows runtime (PATH/TEMP/TMP/USERPROFILE are constructed, not inherited)
+    "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC",
+    # POSIX runtime (HOME is constructed)
+    "TZ", "TERM", "SHELL",
     # locale / encoding
     "LANG", "LC_ALL", "LC_CTYPE",
     # Python tuning (non-secret, no code-execution effect)
@@ -55,14 +68,56 @@ _CHILD_ENV_ALLOWLIST = frozenset({
 })
 
 
-def _child_env(extra: dict[str, str]) -> dict[str, str]:
+def _minimal_path() -> str:
+    """Reduced PATH for children: python interpreter dir + OS system dirs.
+
+    Never inherits the user's PATH — it may contain attacker-writable
+    directories that shadow executables the child resolves by name.
+    """
+    python_dir = os.path.dirname(sys.executable)
+    if os.name == "nt":
+        win_dir = os.environ.get("SYSTEMROOT", r"C:\Windows")
+        return os.pathsep.join(
+            [python_dir, os.path.join(win_dir, "System32"), win_dir]
+        )
+    return os.pathsep.join([python_dir, "/usr/local/bin", "/usr/bin", "/bin"])
+
+
+def _scoped_tmp_dir(name: str) -> Path:
+    """Per-sidecar scoped temp dir: ``<temp-root>/sidecar-env/<name>/tmp``.
+
+    Passed as TEMP/TMP (and HOME/USERPROFILE on the respective OS) so
+    children that need a writable home/temp get an isolated one instead of
+    the user's real profile directories.
+    """
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", name) or "sidecar"
+    scoped = Path(tempfile.gettempdir()) / "sidecar-env" / safe / "tmp"
+    scoped.mkdir(parents=True, exist_ok=True)
+    return scoped
+
+
+def _child_env(extra: dict[str, str], name: str) -> dict[str, str]:
     """Minimal env for child processes: allowlisted host vars + explicit extras.
 
-    The host's full environment (FERNET_KEY, JWT_SECRET, IMAP_PASSWORD, ...)
-    must NOT leak into plugin/sidecar subprocesses — community plugins are
-    unsigned code.
+    Boundary: the host's full environment (FERNET_KEY, JWT_SECRET,
+    IMAP_PASSWORD, ...) must NOT leak into plugin/sidecar subprocesses —
+    community plugins are unsigned code.  PATH is reconstructed minimal and
+    TEMP/TMP/HOME/USERPROFILE are scoped per sidecar (see allowlist note).
+
+    Honest limitation: this is defense-in-depth, not a sandbox.  On Linux a
+    same-user process can still read the host's env via ``/proc/<ppid>/environ``
+    — the allowlist stops *inherited* leakage into children, nothing stops a
+    malicious child from reading its parent's procfs entry under the same uid.
     """
     env = {k: v for k, v in os.environ.items() if k in _CHILD_ENV_ALLOWLIST}
+    env["PATH"] = _minimal_path()
+    scoped = str(_scoped_tmp_dir(name))
+    env["TEMP"] = scoped
+    env["TMP"] = scoped
+    if os.name == "nt":
+        env["USERPROFILE"] = scoped
+    else:
+        env["HOME"] = scoped
     env.update(extra)
     return env
 
@@ -154,7 +209,7 @@ class SidecarSupervisor:
                         stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        env=_child_env(plan.env),
+                        env=_child_env(plan.env, name),
                         **_subprocess_isolation_kwargs(),
                     )
                     st.process = proc
@@ -173,7 +228,7 @@ class SidecarSupervisor:
                         cwd=plan.cwd,
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL,
-                        env=_child_env(plan.env),
+                        env=_child_env(plan.env, name),
                         **_subprocess_isolation_kwargs(),
                     )
                     st.port = plan.port
