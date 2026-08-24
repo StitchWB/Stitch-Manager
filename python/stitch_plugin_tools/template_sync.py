@@ -356,7 +356,10 @@ def sync_template(out_dir: Path, *, license_source: Path | None = None) -> Path:
     (out_dir / "README.md").write_text(_README, encoding="utf-8")
 
     tests_dir = out_dir / "tests"
-    tests_dir.mkdir()
+    # scaffold_service_plugin already created tests/ (with the harness-based
+    # test); keep the dir, overwrite the test with the host-free starter so the
+    # template repo works standalone without stitch_plugin_testing installed.
+    tests_dir.mkdir(exist_ok=True)
     (tests_dir / "test_plugin_protocol.py").write_text(
         _STARTER_TEST, encoding="utf-8"
     )
