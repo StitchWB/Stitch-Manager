@@ -176,8 +176,129 @@ def _privilege_drop_kwargs() -> dict[str, Any]:
     return {"user": run_as}
 
 
+# ── Windows kill-tree Job Object ────────────────────────────────────────────
+# On Windows there is no process-group kill that survives the direct child:
+# taskkill /T walks the tree by parent pid, so once a cooperative child
+# exits (plugin.shutdown) its grandchildren are unreachable — and walking a
+# recycled pid is dangerous.  A Job Object with
+# JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE is the correct primitive: every
+# descendant a child spawns joins the job, and closing the supervisor's
+# (last) handle terminates all members atomically, alive or orphaned.
+
+
+def _win_kernel32() -> Any:
+    import ctypes
+
+    return ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+
+def _create_kill_job() -> Any:
+    """Create a Job Object whose members die when the last handle closes."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = _win_kernel32()
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+    kernel32.SetInformationJobObject.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+    ]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000  # noqa: N806 (Win32 name)
+
+    class _IO_COUNTERS(ctypes.Structure):  # noqa: N801 (Win32 struct name)
+        _fields_ = [
+            ("ReadOperationCount", ctypes.c_uint64),
+            ("WriteOperationCount", ctypes.c_uint64),
+            ("OtherOperationCount", ctypes.c_uint64),
+            ("ReadTransferCount", ctypes.c_uint64),
+            ("WriteTransferCount", ctypes.c_uint64),
+            ("OtherTransferCount", ctypes.c_uint64),
+        ]
+
+    class _JOBOBJECT_BASIC_LIMIT_INFORMATION(  # noqa: N801 (Win32 struct name)
+        ctypes.Structure
+    ):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
+            ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
+            ("LimitFlags", wintypes.DWORD),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", wintypes.DWORD),
+            ("Affinity", ctypes.c_void_p),
+            ("PriorityClass", wintypes.DWORD),
+            ("SchedulingClass", wintypes.DWORD),
+        ]
+
+    class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(  # noqa: N801 (Win32 struct name)
+        ctypes.Structure
+    ):
+        _fields_ = [
+            ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
+            ("IoInfo", _IO_COUNTERS),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ]
+
+    h_job = kernel32.CreateJobObjectW(None, None)
+    if not h_job:
+        raise ctypes.WinError()  # type: ignore[attr-defined]
+    info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    ok = kernel32.SetInformationJobObject(
+        h_job, 9, ctypes.byref(info), ctypes.sizeof(info)
+    )
+    if not ok:
+        kernel32.CloseHandle(h_job)
+        raise ctypes.WinError()  # type: ignore[attr-defined]
+    return h_job
+
+
+def _assign_to_kill_job(h_job: Any, pid: int) -> None:
+    """Assign a spawned child to the kill-job via a process handle.
+
+    The process handle is always closed before returning; the assignment
+    survives handle closure (the process stays a job member).
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = _win_kernel32()
+    PROCESS_ALL_ACCESS = 0x1FFFFF  # noqa: N806 (Win32 name)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    h_proc = kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, pid)
+    if not h_proc:
+        raise ctypes.WinError()  # type: ignore[attr-defined]
+    try:
+        ok = kernel32.AssignProcessToJobObject(h_job, h_proc)
+        if not ok:
+            raise ctypes.WinError()  # type: ignore[attr-defined]
+    finally:
+        kernel32.CloseHandle(h_proc)
+
+
+def _close_kill_job(h_job: Any) -> None:
+    """Close the supervisor's job handle — kills every remaining member."""
+    from ctypes import wintypes
+
+    kernel32 = _win_kernel32()
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle(h_job)
+
+
 class _State:
-    __slots__ = ("process", "port", "config", "start_time", "error", "lock")
+    __slots__ = (
+        "process", "port", "config", "start_time", "error", "lock",
+        "pgid", "job",
+    )
 
     def __init__(self) -> None:
         # asyncio.subprocess.Process (stdio=devnull) or subprocess.Popen
@@ -192,6 +313,20 @@ class _State:
         # Serializes start/stop for this sidecar (asyncio.Lock is not
         # reentrant — internal helpers assume it is already held).
         self.lock = asyncio.Lock()
+        # POSIX: process-group id recorded at spawn time.  Children are
+        # spawned with start_new_session=True, so pgid == child pid — but
+        # recording it at spawn is what makes the kill-tree SAFE: killing
+        # by the recorded pgid works even after the direct child exited
+        # (a cooperative plugin.shutdown) and never resolves a RECYCLED pid
+        # to a foreign group the way os.getpgid(dead_pid) would.
+        self.pgid: int | None = None
+        # Windows: Job Object handle with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        # (stdio=pipes children).  Closing the last handle at stop kills
+        # every tree member — including grandchildren orphaned by a
+        # cooperative child that exited on plugin.shutdown — without any
+        # pid-based tree walk (which cannot identify orphans and can hit a
+        # recycled pid).  None on POSIX or when job creation failed.
+        self.job: Any = None
 
 
 class SidecarSupervisor:
@@ -238,10 +373,23 @@ class SidecarSupervisor:
         async with st.lock:
             running = st.process is not None and st.process.returncode is None
             if running and force:
+                # No delay after _stop_locked: _terminate_tree already waited
+                # the old process to its exit (_wait_proc_exit) before
+                # returning, so the replacement spawn cannot race a live
+                # predecessor.
                 await self._stop_locked(name)
-                await asyncio.sleep(0.3)
             elif running:
                 return self.status(name)
+            elif force and st.process is not None:
+                # Dead predecessor (crash-restart path): sweep the remnants
+                # of its tree via the recorded group/job BEFORE respawning —
+                # descendants a crashed child left behind are killed here,
+                # and the recorded pgid/job makes the sweep safe (no pid
+                # resolution of a possibly-recycled pid).
+                await self._terminate_tree(st.process, name)
+                st.process = None
+                st.pgid = None
+                st.job = None
 
             try:
                 plan = spec.prepare(settings)
@@ -268,6 +416,27 @@ class SidecarSupervisor:
                         **_privilege_drop_kwargs(),
                     )
                     st.process = proc
+                    if os.name == "posix":
+                        # start_new_session=True ⇒ the child leads a new
+                        # group: pgid == its pid.  Recorded at spawn so the
+                        # kill-tree stays safe after the child's death.
+                        st.pgid = proc.pid
+                    else:
+                        # Best-effort kill-job: on failure fall back to the
+                        # taskkill tree walk (alive processes only).
+                        try:
+                            job = _create_kill_job()
+                            try:
+                                _assign_to_kill_job(job, proc.pid)
+                                st.job = job
+                            except Exception:  # noqa: BLE001
+                                _close_kill_job(job)
+                                raise
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "[Sidecar:%s] kill-job unavailable, falling "
+                                "back to taskkill: %s", name, exc,
+                            )
                     st.port = plan.port
                     st.config = dict(plan.config)
                     st.start_time = time.time()
@@ -289,6 +458,8 @@ class SidecarSupervisor:
                         **_subprocess_isolation_kwargs(),
                         **_privilege_drop_kwargs(),
                     )
+                    if os.name == "posix":
+                        st.pgid = st.process.pid
                     st.port = plan.port
                     st.config = dict(plan.config)
                     st.start_time = time.time()
@@ -340,14 +511,25 @@ class SidecarSupervisor:
             return await self._stop_locked(name)
 
     async def _stop_locked(self, name: str) -> dict[str, Any]:
-        """Stop logic; assumes ``st.lock`` is already held."""
+        """Stop logic; assumes ``st.lock`` is already held.
+
+        The kill-tree runs whenever a process is recorded — INCLUDING when
+        the direct child already exited.  A cooperative child (one that
+        exits on ``plugin.shutdown``) can leave descendants alive; the
+        recorded group (POSIX) / kill-job (Windows) reaches them, and is
+        safe where a pid-based kill is not (the pid may already be
+        recycled).  On a group/job with no live members the kill is a
+        no-op (ESRCH), so this adds nothing for the common clean exit.
+        """
         spec = self._specs.get(name)
         st = self._states.get(name)
-        if st and st.process is not None and st.process.returncode is None:
+        if st and st.process is not None:
             await self._terminate_tree(st.process, name)
             logger.info("[Sidecar:%s] stopped", name)
         if st:
             st.process = None
+            st.pgid = None
+            st.job = None
             st.start_time = None
             st.config = {}
             st.error = None
@@ -364,25 +546,43 @@ class SidecarSupervisor:
         """Terminate a sidecar and its children (whole process group/tree).
 
         Sidecars such as the turnstile solver spawn a browser child; killing
-        only the direct child would orphan it. On POSIX the child runs in its
-        own session (``start_new_session``), so we signal the whole group. On
-        Windows we use ``taskkill /T`` to kill the process tree.
+        only the direct child would orphan it.  The kill targets the tree
+        identity recorded AT SPAWN — the process group on POSIX
+        (start_new_session ⇒ pgid == child pid) and a KILL_ON_JOB_CLOSE Job
+        Object on Windows — instead of resolving the pid at kill time: the
+        recorded identity still reaches orphaned descendants when the direct
+        child already exited, and never resolves a possibly-recycled pid to
+        a foreign group/tree.
 
         Handles both ``asyncio.subprocess.Process`` (stdio=devnull) and
         ``subprocess.Popen`` (stdio=pipes).  Popen's ``wait()`` is sync, so
         it is wrapped via ``asyncio.to_thread``.
         """
         pid = proc.pid
+        st = self._states.get(name)
         if os.name == "posix":
-            try:
-                pgid = os.getpgid(pid)
-            except (ProcessLookupError, PermissionError):
-                pgid = None
+            # Recorded-at-spawn group first; probe a LIVE process only when
+            # nothing was recorded (legacy/test-constructed states).
+            pgid = st.pgid if st is not None else None
+            if pgid is None and proc.returncode is None:
+                try:
+                    pgid = os.getpgid(pid)
+                except (ProcessLookupError, PermissionError):
+                    pgid = None
             # Safety: never signal our own process group. If the child for
             # some reason shares the supervisor's group (start_new_session not
             # honoured), killpg would take down the whole test/runner process.
+            # The ``pgid > 0`` check rejects fake/test pids (-1) — kernel
+            # pids and thus start_new_session pgids are always positive.
             own_pgid = os.getpgrp()
-            safe_pgid = pgid if (pgid is not None and pgid != own_pgid) else None
+            safe_pgid = (
+                pgid
+                if (pgid is not None and pgid > 0 and pgid != own_pgid)
+                else None
+            )
+            if safe_pgid is None and proc.returncode is not None:
+                # Already dead and no group recorded — nothing safe to kill.
+                return
             try:
                 if safe_pgid is not None:
                     os.killpg(safe_pgid, signal.SIGTERM)
@@ -392,21 +592,55 @@ class SidecarSupervisor:
                 return
             try:
                 await self._wait_proc_exit(proc, 5)
-                return
             except TimeoutError:
-                pass
-            try:
-                if safe_pgid is not None:
+                try:
+                    if safe_pgid is not None:
+                        os.killpg(safe_pgid, signal.SIGKILL)
+                    else:
+                        proc.kill()
+                except (ProcessLookupError, PermissionError):
+                    return
+                try:
+                    await self._wait_proc_exit(proc, 3)
+                except TimeoutError:
+                    logger.error(
+                        "[Sidecar:%s] SIGKILL did not terminate pid=%s", name, pid
+                    )
+                    return
+            # Deterministic sweep: SIGKILL any tree member that ignored
+            # SIGTERM (only descendants can remain — the direct child exited
+            # or was escalated above).  ESRCH (empty group) is the common
+            # clean-exit case.
+            if safe_pgid is not None:
+                try:
                     os.killpg(safe_pgid, signal.SIGKILL)
-                else:
-                    proc.kill()
-            except (ProcessLookupError, PermissionError):
-                return
-            try:
-                await self._wait_proc_exit(proc, 3)
-            except TimeoutError:
-                logger.error("[Sidecar:%s] SIGKILL did not terminate pid=%s", name, pid)
+                except (ProcessLookupError, PermissionError):
+                    pass
         else:  # Windows: kill the whole process tree.
+            job = st.job if st is not None else None
+            if job is not None:
+                # Closing the last handle to the kill-job terminates ALL
+                # members — child and any descendants — regardless of
+                # whether the direct child is still alive.  No pid-based
+                # tree walk, hence no recycled-pid hazard.
+                try:
+                    _close_kill_job(job)
+                except Exception:  # noqa: BLE001 — best-effort during teardown
+                    logger.debug("[Sidecar:%s] kill-job close failed", name)
+                if st is not None:
+                    st.job = None
+                try:
+                    await self._wait_proc_exit(proc, 5)
+                except TimeoutError:
+                    logger.error(
+                        "[Sidecar:%s] kill-job close did not terminate pid=%s",
+                        name, pid,
+                    )
+                return
+            if proc.returncode is not None:
+                # Already dead without a kill-job: taskkill cannot walk the
+                # tree from this pid safely (it may be recycled).
+                return
             try:
                 killer = await asyncio.create_subprocess_exec(
                     "taskkill", "/T", "/F", "/PID", str(pid),

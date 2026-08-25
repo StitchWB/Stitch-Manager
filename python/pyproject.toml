@@ -158,5 +158,10 @@ ignore_errors = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-timeout = 10
-timeout_method = "thread"
+# Per-test hang guard. Budget covers the slowest legitimate lifecycle tests.
+# timeout_method is deliberately left at the plugin default: 'signal' on
+# POSIX, which fails the single timed-out test cleanly and lets the suite
+# continue. The previously pinned 'thread' method must NOT come back: on
+# timeout it dumps stacks and calls os._exit(1), killing the WHOLE pytest
+# process with no summary — one slow test nuked the entire CI run.
+timeout = 90
