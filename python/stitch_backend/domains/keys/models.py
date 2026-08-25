@@ -17,7 +17,7 @@ class FoundKeysParams(BaseModel):
     offset: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
-    def _clamp_limit(self) -> "FoundKeysParams":
+    def _clamp_limit(self) -> FoundKeysParams:
         # silent clamp 1..500, matching the radar contract and the
         # community domain house pattern (review finding: hard-reject
         # at 200 drifted from both)

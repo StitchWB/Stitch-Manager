@@ -16,14 +16,15 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
 from stitch_backend.config import get_settings
 from stitch_backend.core.exceptions import StitchError
 
-from .models import FoundKeysParams
+if TYPE_CHECKING:
+    from .models import FoundKeysParams
 
 _TIMEOUT = 10.0
 
@@ -48,8 +49,8 @@ def _mint_assertion(role: str, secret: str, sub: str | None = None) -> str:
     payload = _b64(json.dumps(payload_dict).encode())
     sig = _b64(
         hmac.new(
-            secret.encode("utf-8"),
-            f"{header}.{payload}".encode("utf-8"),
+            secret.encode(),
+            f"{header}.{payload}".encode(),
             hashlib.sha256,
         ).digest()
     )
