@@ -45,17 +45,26 @@ def _resolve_imap_password_from_db(
     pre-multi-user behaviour.
     """
     import sqlite3 as _sqlite3
+    from pathlib import Path
 
-    from stitch_backend.config import PYTHON_DIR, _app_data_dir
-    # Mirror the same DB-path logic as _default_db_url()
-    canonical = _app_data_dir() / "stitch-manager"
-    if canonical.is_dir():
-        db_path = canonical / "stitch.db"
-    else:
-        db_path = REPO_ROOT / "stitch.db"
-        # Also try python/stitch.db (dev layout)
-        if not db_path.exists():
-            db_path = PYTHON_DIR / "stitch.db"
+    from stitch_backend.config import PYTHON_DIR, _app_data_dir, get_settings
+    # Single source of truth: derive the sqlite path from settings.database_url
+    # (the same value the async engine uses), so tests that set DATABASE_URL
+    # steer both resolvers uniformly on every platform. Fall back to the
+    # canonical on-disk layout when the URL is not a sqlite file URL.
+    db_path: Path | None = None
+    db_url = get_settings().database_url or ""
+    if db_url.startswith("sqlite") and "///" in db_url:
+        db_path = Path(db_url.split("///", 1)[1])
+    if db_path is None or not db_path.exists():
+        canonical = _app_data_dir() / "stitch-manager"
+        if canonical.is_dir():
+            db_path = canonical / "stitch.db"
+        else:
+            db_path = REPO_ROOT / "stitch.db"
+            # Also try python/stitch.db (dev layout)
+            if not db_path.exists():
+                db_path = PYTHON_DIR / "stitch.db"
     key = "gmailAppPassword" if "gmail" in host.lower() else "imapPassword"
     user_key = f"u{owner_id}:{key}" if owner_id is not None else None
     try:
