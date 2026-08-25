@@ -240,6 +240,10 @@ class ServicePluginHost:
             # exits faster than on Windows).
             st["status"] = "running"
             st["error"] = None
+            # supervisor.status() re-probes liveness and would report pid=None
+            # for a crash-after-init child; the Popen we attached to is the
+            # authoritative pid at start time.
+            st["pid"] = proc.pid
             return st
 
     async def stop(self) -> dict[str, Any]:
