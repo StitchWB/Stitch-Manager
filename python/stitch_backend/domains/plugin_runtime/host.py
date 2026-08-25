@@ -145,6 +145,12 @@ class ServicePluginHost:
         #: Set True when the host dies after its restart-once (crash loop).
         #: Surfaced via status() as an error + restarts (degraded state).
         self._crash_loop = False
+        #: Set exactly once when the host enters the crash-loop state — in
+        #: BOTH crash-loop paths (the monitor's "crashed again after
+        #: restart" branch and _restart_once's handshake-failure branch).
+        #: Lets consumers await the terminal state deterministically (event
+        #: signaling, not polling).  Cleared on a successful start().
+        self._crash_loop_event = asyncio.Event()
         #: Test hook (env ``STITCH_PLUGIN_RESTART_DELAY_S``, default 0 = no
         #: delay): delays the monitor's restart after death detection so
         #: the built-in fallback can be observed deterministically.  Read
@@ -225,6 +231,7 @@ class ServicePluginHost:
                         "port": None, "pid": None, "uptimeSeconds": None}
             self._restart_count = 0
             self._crash_loop = False
+            self._crash_loop_event.clear()
             self._stopping = False
             self._monitor_task = asyncio.create_task(
                 self._monitor(), name=f"plugin-monitor:{self.plugin_id}"
@@ -261,6 +268,26 @@ class ServicePluginHost:
             # Kill-tree via supervisor (on_stop hook finalizes RPC client).
             result = await self.supervisor.stop(self.sidecar_name)
             logger.info("[Plugin:%s] stopped", self.plugin_id)
+            return result
+
+    async def stop_forced(self) -> dict[str, Any]:
+        """Kill-tree stop without a graceful RPC shutdown attempt.
+
+        ``stop()`` asks the plugin to exit via ``plugin.shutdown`` first; a
+        cooperative child then exits BEFORE the supervisor's kill-tree runs,
+        so ``_stop_locked`` sees a dead direct child and skips the tree kill
+        — orphaning any descendants the child spawned.  This variant goes
+        straight to the supervisor kill-tree (process group on POSIX, Job
+        Object + taskkill on Windows), which is the correct primitive when
+        the whole tree must die.
+        """
+        async with self._lock:
+            self._stopping = True
+            if self._monitor_task and not self._monitor_task.done():
+                self._monitor_task.cancel()
+                self._monitor_task = None
+            result = await self.supervisor.stop(self.sidecar_name)
+            logger.info("[Plugin:%s] stopped (forced)", self.plugin_id)
             return result
 
     async def restart(self) -> dict[str, Any]:
@@ -1084,6 +1111,7 @@ class ServicePluginHost:
                         self.plugin_id,
                     )
                     self._crash_loop = True
+                    self._crash_loop_event.set()
                     crash_loop = True
                 else:
                     await self._restart_once()
@@ -1140,6 +1168,7 @@ class ServicePluginHost:
                 pass
             await self.supervisor.stop(self.sidecar_name)
             self._crash_loop = True
+            self._crash_loop_event.set()
 
     async def _run_crash_hook(self) -> None:
         """Invoke the crash hook (telemetry + LKG rollback) without leaking errors."""
