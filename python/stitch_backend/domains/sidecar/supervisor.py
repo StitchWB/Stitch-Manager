@@ -378,9 +378,14 @@ class SidecarSupervisor:
                 pgid = os.getpgid(pid)
             except (ProcessLookupError, PermissionError):
                 pgid = None
+            # Safety: never signal our own process group. If the child for
+            # some reason shares the supervisor's group (start_new_session not
+            # honoured), killpg would take down the whole test/runner process.
+            own_pgid = os.getpgrp()
+            safe_pgid = pgid if (pgid is not None and pgid != own_pgid) else None
             try:
-                if pgid is not None:
-                    os.killpg(pgid, signal.SIGTERM)
+                if safe_pgid is not None:
+                    os.killpg(safe_pgid, signal.SIGTERM)
                 else:
                     proc.terminate()
             except (ProcessLookupError, PermissionError):
@@ -391,8 +396,8 @@ class SidecarSupervisor:
             except TimeoutError:
                 pass
             try:
-                if pgid is not None:
-                    os.killpg(pgid, signal.SIGKILL)
+                if safe_pgid is not None:
+                    os.killpg(safe_pgid, signal.SIGKILL)
                 else:
                     proc.kill()
             except (ProcessLookupError, PermissionError):
