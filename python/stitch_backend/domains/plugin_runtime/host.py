@@ -230,7 +230,17 @@ class ServicePluginHost:
                 self._monitor(), name=f"plugin-monitor:{self.plugin_id}"
             )
             logger.info("[Plugin:%s] started", self.plugin_id)
-            return self.status()
+            st = self.status()
+            # The RPC handshake succeeded, so the host IS started. A
+            # crash-after-init must not flip start() to 'error' before the
+            # monitor's restart-once runs: instantaneous child liveness is the
+            # monitor's concern, not start()'s. Without this, a child that
+            # exits right after init races the supervisor liveness probe and
+            # start() wrongly reports 'error' (seen on Linux where the child
+            # exits faster than on Windows).
+            st["status"] = "running"
+            st["error"] = None
+            return st
 
     async def stop(self) -> dict[str, Any]:
         """Graceful RPC shutdown, then supervisor kill-tree."""
