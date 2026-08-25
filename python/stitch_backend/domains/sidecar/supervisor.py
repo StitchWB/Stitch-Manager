@@ -360,6 +360,42 @@ class SidecarSupervisor:
             return proc.poll() is None
         return proc.returncode is None
 
+    def _record_tree_identity(self, st: _State, pid: int, name: str) -> None:
+        """Record the handle ``_terminate_tree`` kills the whole tree with.
+
+        The tree identity is captured AT SPAWN so the kill stays correct AND
+        safe after the direct child dies (a cooperative plugin.shutdown):
+
+        - POSIX: the process-group id.  Children are spawned with
+          ``start_new_session=True`` and lead their new group, so
+          ``pgid == pid`` — no syscall and no window in which the pid could
+          be recycled before the group is known.  ``killpg`` on the recorded
+          group reaches orphaned descendants and yields ESRCH once the tree
+          is gone.
+        - Windows: a ``KILL_ON_JOB_CLOSE`` Job Object containing the child.
+          Every descendant the child spawns joins the job, and closing the
+          supervisor's (last) handle at stop terminates all members — alive
+          or orphaned — with no pid-based tree walk (which cannot reach
+          orphans and can hit a recycled pid).  Best-effort: on failure the
+          taskkill walk remains as the fallback for live processes.
+        """
+        if os.name == "posix":
+            st.pgid = pid
+            return
+        try:
+            job = _create_kill_job()
+            try:
+                _assign_to_kill_job(job, pid)
+                st.job = job
+            except Exception:  # noqa: BLE001
+                _close_kill_job(job)
+                raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[Sidecar:%s] kill-job unavailable, falling back to "
+                "taskkill: %s", name, exc,
+            )
+
     async def start(
         self, name: str, settings: dict | None = None, *, force: bool = False
     ) -> dict[str, Any]:
@@ -416,27 +452,7 @@ class SidecarSupervisor:
                         **_privilege_drop_kwargs(),
                     )
                     st.process = proc
-                    if os.name == "posix":
-                        # start_new_session=True ⇒ the child leads a new
-                        # group: pgid == its pid.  Recorded at spawn so the
-                        # kill-tree stays safe after the child's death.
-                        st.pgid = proc.pid
-                    else:
-                        # Best-effort kill-job: on failure fall back to the
-                        # taskkill tree walk (alive processes only).
-                        try:
-                            job = _create_kill_job()
-                            try:
-                                _assign_to_kill_job(job, proc.pid)
-                                st.job = job
-                            except Exception:  # noqa: BLE001
-                                _close_kill_job(job)
-                                raise
-                        except Exception as exc:  # noqa: BLE001
-                            logger.warning(
-                                "[Sidecar:%s] kill-job unavailable, falling "
-                                "back to taskkill: %s", name, exc,
-                            )
+                    self._record_tree_identity(st, proc.pid, name)
                     st.port = plan.port
                     st.config = dict(plan.config)
                     st.start_time = time.time()
@@ -458,8 +474,7 @@ class SidecarSupervisor:
                         **_subprocess_isolation_kwargs(),
                         **_privilege_drop_kwargs(),
                     )
-                    if os.name == "posix":
-                        st.pgid = st.process.pid
+                    self._record_tree_identity(st, st.process.pid, name)
                     st.port = plan.port
                     st.config = dict(plan.config)
                     st.start_time = time.time()

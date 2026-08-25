@@ -92,6 +92,10 @@ class RpcPluginClient:
         self._id_lock = threading.Lock()
         self._pending: dict[int, _PendingCall] = {}
         self._pending_lock = threading.Lock()
+        # Condition over _pending_lock: wakes a graceful shutdown the moment
+        # the last in-flight call completes (event-driven drain — the reader
+        # thread / failure paths notify when the pending set goes empty).
+        self._pending_drained = threading.Condition(self._pending_lock)
         self._write_lock = threading.Lock()
         self._closed = False
         self._init_result: Any = None
@@ -284,12 +288,17 @@ class RpcPluginClient:
             return
         self._closed = True
 
-        deadline = time.monotonic() + drain_timeout
-        while time.monotonic() < deadline:
-            with self._pending_lock:
-                if not self._pending:
+        # Wait for in-flight calls to complete.  Event-driven: the condition
+        # is signalled the moment the pending set drains (see _handle_line /
+        # _fail_all_pending / _call_internal) — no polling loop.  New calls
+        # are rejected once ``_closed`` is set, so the set can only shrink.
+        with self._pending_drained:
+            deadline = time.monotonic() + drain_timeout
+            while self._pending:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
                     break
-            time.sleep(0.05)
+                self._pending_drained.wait(timeout=remaining)
 
         rid = self._next_request_id()
         try:
@@ -343,11 +352,13 @@ class RpcPluginClient:
         except RpcProtocolError as exc:
             with self._pending_lock:
                 self._pending.pop(rid, None)
+                self._notify_drained_locked()
             raise exc
 
         if not pending.event.wait(timeout=timeout):
             with self._pending_lock:
                 self._pending.pop(rid, None)
+                self._notify_drained_locked()
             self.kill()
             raise RpcTimeoutError(
                 f"call {method} (id={rid}) timed out after {timeout}s"
@@ -451,6 +462,7 @@ class RpcPluginClient:
 
         with self._pending_lock:
             pending = self._pending.pop(rid_int, None)
+            self._notify_drained_locked()
 
         if pending is None:
             logger.debug("rpc: response for unknown id %d: %r", rid_int, line)
@@ -572,9 +584,20 @@ class RpcPluginClient:
         with self._pending_lock:
             items = list(self._pending.items())
             self._pending.clear()
+            self._notify_drained_locked()
         for _, pending in items:
             pending.error = error
             pending.event.set()
+
+    def _notify_drained_locked(self) -> None:
+        """Signal drain waiters when the pending set became empty.
+
+        Must be called under ``_pending_lock`` (the drain condition's
+        underlying lock), right after entries were removed from
+        ``_pending``.  No-op when something is still in flight.
+        """
+        if not self._pending:
+            self._pending_drained.notify_all()
 
     def _finalize(self) -> None:
         """Join reader thread, shut down reverse-RPC pool, close pipes."""
@@ -837,7 +860,7 @@ class RpcPluginServer:
             params = {}
         result = self._dispatch(method, params)
         self._send_response(rid, result)
-        return method == "plugin.shutdown"
+        return str(method) == "plugin.shutdown"
 
     def _dispatch(self, method: str, params: dict[str, Any]) -> Any:
         """Dispatch one request, returning a result or error dict."""
