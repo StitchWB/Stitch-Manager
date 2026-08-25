@@ -521,7 +521,12 @@ def subprocess_isolation_kwargs() -> dict[str, Any]:
     supervisor (e.g. ``ServicePluginHost`` for memory-capped children)
     should use this so the kill-tree contract is consistent.
     """
-    if sys.platform == "win32":
+    # CREATE_NEW_PROCESS_GROUP only exists on real Windows. Tests monkeypatch
+    # sys.platform to "win32" on POSIX to exercise privilege-drop; the os.name
+    # conjunct keeps that from dereferencing a non-existent attribute at
+    # runtime, while the sys.platform conjunct lets mypy narrow the branch
+    # away on non-Windows platforms (it doesn't narrow os.name).
+    if sys.platform == "win32" and os.name == "nt":
         return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
