@@ -47,7 +47,12 @@ class ReferralPoolService:
         ``ref_max_count``.  Returns a serialised dict or ``None`` when the pool
         is empty.
         """
-        from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
+        try:
+            from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
+
+            seed_url = V0_APP_SIGNUP_URL
+        except ImportError:  # open-core: v0_app method not installed
+            seed_url = "(v0_app plugin not installed)"
         from stitch_backend.domains.accounts.models import Account
 
         stmt = (
@@ -63,7 +68,7 @@ class ReferralPoolService:
         if donor is None:
             logger.info(
                 "[referral_pool] No donor available — falling back to seed URL: %s",
-                V0_APP_SIGNUP_URL,
+                seed_url,
             )
             return None
         logger.debug(
@@ -123,7 +128,12 @@ class ReferralPoolService:
     @staticmethod
     def get_signup_url(donor: dict[str, Any] | None) -> str:
         """Return the signup URL to use: donor ref_url or the seed URL."""
-        from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
         if donor and donor.get("refUrl"):
             return cast("str", donor["refUrl"])
+        try:
+            from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
+        except ImportError as exc:  # open-core: v0_app method not installed
+            raise RuntimeError(
+                "v0_app method not installed — install plugin"
+            ) from exc
         return V0_APP_SIGNUP_URL

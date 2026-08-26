@@ -478,11 +478,17 @@ class AccountService:
             ``stitch_backend.core.exceptions.AccountNotFoundError`` if the account
             doesn't exist, or a ``TokenRefreshError`` on OIDC failure.
         """
-        from autoreg.providers.kiro_v2.token_refresh import (
-            TokenRefreshError,
-            refresh_from_account_metadata,
-            should_refresh_token,
-        )
+        try:
+            from autoreg.providers.kiro_v2.token_refresh import (
+                TokenRefreshError,
+                refresh_from_account_metadata,
+                should_refresh_token,
+            )
+        except ImportError:  # open-core: kiro_v2 method not installed
+            return {
+                "success": False,
+                "error": "kiro_v2 method not installed — install plugin",
+            }
 
         account = await self.get_account(account_id)
         self._check_ownership(account, caller_uid, account_id)
@@ -565,7 +571,13 @@ class AccountService:
             ``credit_used``, ``credit_limit``, ``credit_remaining`` and the
             updated ``account`` snapshot.
         """
-        from autoreg.providers.kiro_v2.verify_alive import verify_alive
+        try:
+            from autoreg.providers.kiro_v2.verify_alive import verify_alive
+        except ImportError:  # open-core: kiro_v2 method not installed
+            return {
+                "alive": False,
+                "error": "kiro_v2 method not installed — install plugin",
+            }
 
         account = await self.get_account(account_id)
         self._check_ownership(account, caller_uid, account_id)

@@ -46,16 +46,19 @@ class CaptchaMixin:
     def _get_turnstile_solver_class(self):
         """Resolve TurnstileSolver: engine-pack first, autoreg.captcha fallback.
 
-        Returns ``None`` only when both sources are unavailable (which
-        shouldn't happen in practice — autoreg.captcha is always present
-        in the open-core binary).
+        Returns ``None`` when both sources are unavailable — e.g. an
+        open-core build without the turnstile solver plugin installed
+        (``autoreg.captcha`` is Zone-2 and absent from the public export).
         """
         from autoreg.plugin.engine_pack import get_solver_class
 
         cls = get_solver_class("turnstile", "TurnstileSolver")
         if cls is not None:
             return cls
-        from autoreg.captcha.turnstile import TurnstileSolver
+        try:
+            from autoreg.captcha.turnstile import TurnstileSolver
+        except ImportError:  # open-core: captcha module not installed
+            return None
 
         return TurnstileSolver
 
