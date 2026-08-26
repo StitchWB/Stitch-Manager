@@ -2,9 +2,9 @@
 
 Public contract (imported by sibling agents / marketplace gating):
 
-  - :func:`get_effective_entitlements` — role ∪ user-grants − user-revokes
-    ∪ legacy activation (additive, non-wildcard only).  Admin → ``{"*"}``.
-    Desktop (no caller context) → ``{"*"}``.
+  - :func:`get_effective_entitlements` — role ∪ group-grants ∪ user-grants
+    − user-revokes ∪ legacy activation (additive, non-wildcard only).
+    Admin → ``{"*"}``.  Desktop (no caller context) → ``{"*"}``.
   - :func:`is_entitled_to` — ``"*"`` or membership.
   - :func:`resolve_provider_plugin_id` — service id → canonical package id
     via :class:`autoreg.plugin.loader.PluginLoader`; ``None`` when absent.
@@ -28,7 +28,7 @@ from sqlalchemy import select
 from stitch_backend.database import run_in_read_session
 
 from .activation import ActivationService
-from .models import RolePluginGrant, UserPluginGrant
+from .models import GroupPluginGrant, RolePluginGrant, UserPluginGrant
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +73,13 @@ async def get_effective_entitlements(
       - ``user_id is None and role is None`` (desktop / no caller context)
         → ``{"*"}``.
       - Otherwise: ``role_plugin_grants[role]``
+        ∪ ``group_plugin_grants`` (every group the user is a member of)
         ∪ ``user_plugin_grants(granted=True)``
         − ``user_plugin_grants(granted=False)``
         ∪ legacy ``.activation`` entitlements (additive, non-wildcard only).
+
+    A per-user revoke (``granted=False``) wins over a group grant because
+    group grants are applied before the user-override subtraction.
 
     ``"*"`` in the set means all plugins.  Cached for 60 s; call
     :func:`invalidate_entitlements_cache` on grant writes.
@@ -107,6 +111,12 @@ async def get_effective_entitlements(
     if role is not None:
         role_grants = await _read_role_grants(role)
         entitlements |= role_grants
+
+    # 1.5 Group grants (additive) — every group the user belongs to adds its
+    # granted plugins.  Applied BEFORE user overrides so a per-user revoke
+    # (granted=False) still wins over a group grant.
+    if user_id is not None:
+        entitlements |= await _read_group_grants(user_id)
 
     # 2 + 3. User overrides (add granted=True, remove granted=False).
     if user_id is not None:
@@ -353,6 +363,34 @@ async def _read_user_grants(user_id: int) -> dict[str, bool]:
     except Exception as exc:  # noqa: BLE001 — tolerant
         logger.warning("_read_user_grants(%s) failed: %s", user_id, exc)
         return {}
+
+
+async def _read_group_grants(user_id: int) -> set[str]:
+    """Return the set of plugin_ids granted to any group ``user_id`` is in.
+
+    Joins ``group_members`` (membership) to ``group_plugin_grants`` and
+    unions the granted plugin_ids.  A user in multiple groups gets the union
+    of all their groups' grants.
+    """
+    from stitch_backend.domains.groups.models import GroupMember
+
+    async def _fetch(session: Any) -> set[str]:
+        stmt = (
+            select(GroupPluginGrant.plugin_id)
+            .join(
+                GroupMember,
+                GroupMember.group_id == GroupPluginGrant.group_id,
+            )
+            .where(GroupMember.user_id == user_id)
+        )
+        result = await session.execute(stmt)
+        return {str(row[0]) for row in result.all()}
+
+    try:
+        return await run_in_read_session(_fetch)
+    except Exception as exc:  # noqa: BLE001 — tolerant
+        logger.warning("_read_group_grants(%s) failed: %s", user_id, exc)
+        return set()
 
 
 async def _read_legacy_entitlements() -> list[str]:
