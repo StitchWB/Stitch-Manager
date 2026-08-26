@@ -5,12 +5,14 @@ never leaks into Zone 1 (open-core) source trees. Exits 0 if clean, 1 if any
 violation is found. Stdlib only.
 
 Zones:
-  Zone 1 (open-core, SCANNED):
+  Zone 1 (open-core = CLIENT, SCANNED):
     - src/
     - python/stitch_backend/
-    - python/stitch_server/
     - python/stitch_plugin_tools/
     - python/autoreg/  (EXCLUDING its providers/ and captcha/ subtrees)
+
+  (python/stitch_server/ is PRIVATE since the client-only restructure —
+  it is not part of the open-core export and is not scanned as Zone 1.)
 
   Zone 2 (methods, must NOT leak into Zone 1):
     - python/autoreg/providers/
@@ -49,7 +51,6 @@ SKIP_DIRS = {
 ZONE1_ROOTS = (
     "src",
     "python/stitch_backend",
-    "python/stitch_server",
     "python/stitch_plugin_tools",
 )
 # Direct subdirectories of python/autoreg/ to skip entirely while walking.
