@@ -1,12 +1,15 @@
 """Plugin entitlement grant ORM models.
 
-Three tables on the shared :class:`stitch_backend.database.Base`:
+Four tables on the shared :class:`stitch_backend.database.Base`:
 
   - ``role_plugin_grants``  — composite PK ``(role, plugin_id)``.  A row
     means *role* is granted *plugin_id*.  ``"*"`` means all plugins.
   - ``user_plugin_grants``  — composite PK ``(user_id, plugin_id)``.
     Per-user override: ``granted=True`` adds, ``granted=False`` revokes
     (wins over a role grant).  FK → ``auth_users.id`` CASCADE.
+  - ``group_plugin_grants`` — composite PK ``(group_id, plugin_id)``.
+    A row means every member of *group_id* is granted *plugin_id*
+    (additive on top of role grants).  FK → ``groups.id`` CASCADE.
   - ``plugin_grant_audit``  — append-only audit log of every grant/revoke
     /seed action, with ``admin_user_id``, ``action``, ``scope``,
     ``target``, ``plugin_id``, ``granted``.
@@ -109,14 +112,55 @@ class UserPluginGrant(Base):
         )
 
 
+class GroupPluginGrant(Base):
+    """A (group_id, plugin_id) grant — every member of the group is entitled.
+
+    Composite PK ``(group_id, plugin_id)``.  Additive on top of role grants:
+    a user belonging to the group gains the plugin.  Per-user revocation via
+    :class:`UserPluginGrant` (``granted=False``) still wins.  FK →
+    ``groups.id`` CASCADE so deleting a group drops its plugin grants.
+    """
+
+    __tablename__ = "group_plugin_grants"
+
+    group_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("groups.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    plugin_id: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        nullable=False,
+        comment="Plugin package id or '*' for all",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_by: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id"),
+        nullable=True,
+        comment="Admin user id who last touched this row",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<GroupPluginGrant group_id={self.group_id!r} "
+            f"plugin_id={self.plugin_id!r}>"
+        )
+
+
 class PluginGrantAudit(Base):
     """Append-only audit log for every grant/revoke/seed action.
 
     ``action``  ∈ {'grant', 'revoke', 'seed'}.
-    ``scope``   ∈ {'role', 'user'}.
-    ``target``  — role name (scope='role') or ``str(user_id)`` (scope='user').
-    ``granted`` — True/False for user overrides; NULL for role grants
-      (role grants are always additive, so the boolean is meaningless).
+    ``scope``   ∈ {'role', 'user', 'group'}.
+    ``target``  — role name (scope='role'), ``str(user_id)`` (scope='user'),
+      or ``group_id`` (scope='group').
+    ``granted`` — True/False for user overrides; NULL for role/group grants
+      (role/group grants are always additive, so the boolean is meaningless).
     """
 
     __tablename__ = "plugin_grant_audit"

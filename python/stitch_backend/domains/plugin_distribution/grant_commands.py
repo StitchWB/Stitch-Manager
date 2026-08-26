@@ -10,6 +10,8 @@ Commands:
   - ``plugin_grants_user_get``    — user overrides + effective set
   - ``plugin_grants_user_set``    — upsert a user override
   - ``plugin_grants_user_delete`` — remove a user override
+  - ``plugin_grants_group_list``  — all group grants + group names + plugins
+  - ``plugin_grants_group_set``   — upsert/delete a group grant
   - ``plugin_grants_audit_list``  — newest audit entries
   - ``plugin_grants_seed_from_env``— idempotent seed from env var
 
@@ -37,7 +39,12 @@ from .entitlements import (
     get_effective_entitlements,
     invalidate_entitlements_cache,
 )
-from .models import PluginGrantAudit, RolePluginGrant, UserPluginGrant
+from .models import (
+    GroupPluginGrant,
+    PluginGrantAudit,
+    RolePluginGrant,
+    UserPluginGrant,
+)
 from .sync import PluginSyncService
 
 logger = logging.getLogger(__name__)
@@ -296,6 +303,98 @@ async def cmd_plugin_grants_user_delete(params: dict) -> dict:
 
     result = await run_in_session(_do)
     invalidate_entitlements_cache(user_id=user_id)
+    return result
+
+
+# ── Group grants ─────────────────────────────────────────────────────────────
+
+
+@register_command("plugin_grants_group_list", readonly=True, admin_only=True)
+async def cmd_plugin_grants_group_list(params: dict) -> dict:
+    """List all group grants + group names + marketplace plugins.
+
+    Returns ``{"groups": {group_id: [plugin_id,...]},
+    "groupNames": {group_id: name}, "plugins": [...]}``.  Plugins come from
+    the marketplace manifest fetch; empty when unavailable.
+    """
+    from stitch_backend.domains.groups.models import Group
+
+    async def _fetch(session: Any) -> dict:
+        grant_stmt = select(GroupPluginGrant).order_by(
+            GroupPluginGrant.group_id, GroupPluginGrant.plugin_id
+        )
+        grant_result = await session.execute(grant_stmt)
+        groups: dict[str, list[str]] = {}
+        for row in grant_result.scalars().all():
+            groups.setdefault(row.group_id, []).append(row.plugin_id)
+
+        name_stmt = select(Group.id, Group.name)
+        name_result = await session.execute(name_stmt)
+        names = {str(r[0]): str(r[1]) for r in name_result.all()}
+        return {"groups": groups, "groupNames": names}
+
+    data = await run_in_read_session(_fetch)
+    data["plugins"] = await _fetch_manifest_plugins()
+    return data
+
+
+@register_command("plugin_grants_group_set", admin_only=True)
+async def cmd_plugin_grants_group_set(params: dict) -> dict:
+    """Upsert (granted=True) or delete (granted=False) a group grant.
+
+    Every member of the group gains (granted=True) or loses (granted=False)
+    the plugin.  Params: ``{groupId, pluginId, granted}``.
+    """
+    group_id = str(params.get("groupId", ""))
+    plugin_id = str(params.get("pluginId", ""))
+    granted = bool(params.get("granted", False))
+    admin_id = params.get("_caller_user_id")
+
+    if not group_id or not plugin_id:
+        return {"success": False, "error": "groupId and pluginId required"}
+
+    now = _utcnow()
+    action = "grant" if granted else "revoke"
+
+    async def _do(session: Any) -> dict:
+        if granted:
+            stmt = sqlite_insert(GroupPluginGrant).values(
+                group_id=group_id,
+                plugin_id=plugin_id,
+                updated_at=now,
+                updated_by=admin_id,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["group_id", "plugin_id"],
+                set_={"updated_at": now, "updated_by": admin_id},
+            )
+            await session.execute(stmt)
+        else:
+            await session.execute(
+                delete(GroupPluginGrant).where(
+                    GroupPluginGrant.group_id == group_id,
+                    GroupPluginGrant.plugin_id == plugin_id,
+                )
+            )
+        session.add(
+            PluginGrantAudit(
+                ts=now,
+                admin_user_id=admin_id,
+                action=action,
+                scope="group",
+                target=group_id,
+                plugin_id=plugin_id,
+                granted=None,
+            )
+        )
+        await session.flush()
+        return {"success": True}
+
+    result = await run_in_session(_do)
+    # A group grant change affects every member — drop the whole cache
+    # (keyed by (user_id, role); targeted invalidation would need the member
+    # list, so a full clear is the simple correct option at 60s TTL).
+    invalidate_entitlements_cache()
     return result
 
 
