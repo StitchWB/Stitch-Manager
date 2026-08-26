@@ -3904,11 +3904,14 @@ export interface Translations {
       title: string;
       subtitle: string;
       accessByRole: string;
+      accessByGroup: string;
+      accessByGroupDesc: string;
       perUser: string;
       plugin: string;
       grantAll: string;
       allPlugins: string;
       role: string;
+      group: string;
       adminLocked: string;
       adminLockedHint: string;
       grant: string;
@@ -3929,6 +3932,8 @@ export interface Translations {
       summaryOverridesSub: string;
       noPlugins: string;
       noPluginsDesc: string;
+      noGroups: string;
+      noGroupsDesc: string;
       selectUser: string;
       selectUserPlaceholder: string;
       updated: string;
