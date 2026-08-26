@@ -179,10 +179,10 @@ class PluginGrantAudit(Base):
         String, nullable=False, comment="'grant'/'revoke'/'seed'"
     )
     scope: Mapped[str] = mapped_column(
-        String, nullable=False, comment="'role'/'user'"
+        String, nullable=False, comment="'role'/'user'/'group'"
     )
     target: Mapped[str] = mapped_column(
-        Text, nullable=False, comment="Role name or str(user_id)"
+        Text, nullable=False, comment="Role name, str(user_id), or group_id"
     )
     plugin_id: Mapped[str] = mapped_column(
         String, nullable=False, comment="Plugin package id or '*'"
@@ -190,7 +190,7 @@ class PluginGrantAudit(Base):
     granted: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,
-        comment="True/False for user overrides; NULL for role grants",
+        comment="True/False for user overrides; NULL for role/group grants",
     )
 
     def __repr__(self) -> str:
