@@ -20,7 +20,6 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -801,12 +800,14 @@ class RpcPluginServer:
         merged into the params dict (e.g. ``server.log("info", "synced",
         count=3)`` → params include ``"count": 3``).
 
-        The timestamp is an ISO 8601 UTC string.  Uses a local import of
-        ``datetime`` so the vendored copy (which only ships ``json``,
-        ``sys``, ``threading``, ``time``, ``typing`` at module level)
-        remains self-contained.
+        The timestamp is an ISO 8601 UTC string.  Uses a LOCAL import of
+        ``datetime`` + ``UTC`` so the vendored copy (which only ships
+        ``json``, ``sys``, ``threading``, ``time``, ``typing`` at module
+        level) remains self-contained — the earlier code referenced the
+        module-level ``UTC`` alias, which the vendored header does NOT
+        import and thus raised ``NameError`` in standalone plugins.
         """
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         params: dict[str, Any] = {
             "level": level,
