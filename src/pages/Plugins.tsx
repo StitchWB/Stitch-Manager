@@ -1,21 +1,23 @@
 /**
  * Plugins page — admin-only plugin entitlement management.
  *
- * Three sections:
+ * Four sections:
  * 1. "Access by role": matrix table — rows = plugins, columns = roles
  *    (user/vip/premium/elite). Admin column is locked/read-only. Cell =
  *    checkbox → plugin_grants_role_set (optimistic + rollback + toast).
  *    Column-header "grant all" toggle per role. Special first row "*"
  *    (all plugins) toggle per role.
  * 2. "Per-user grants": user picker → UserPluginGrants component.
- * 3. "Service plugins": cards for installed service-plugin hosts with
+ * 3. "Access by group": matrix table — rows = plugins, columns = groups
+ *    (GroupPluginGrants component, self-fetching).
+ * 4. "Service plugins": cards for installed service-plugin hosts with
  *    status badge, restart/uptime counters, Restart + Logs buttons.
  *
  * Follows the same layout/card conventions as Users.tsx/Privileges.tsx.
  */
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText, Download, Activity } from 'lucide-react';
+import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText, Download, Activity, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { useAppStore } from '../stores/app';
@@ -35,6 +37,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Toggle } from '../components/ui/Toggle';
 import { UserPluginGrants } from '../components/admin/UserPluginGrants';
+import { GroupPluginGrants } from '../components/admin/GroupPluginGrants';
 import { safeInvoke } from '@/lib/backend/core';
 import {
   fetchServicePlugins,
@@ -417,6 +420,16 @@ export default function Plugins() {
                 </div>
               ) : null}
             </div>
+          </div>
+
+          {/* Group plugin grants */}
+          <div className="rounded-xl border border-white/[0.06] bg-black/40 backdrop-blur-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-2">
+              <Users className="w-4 h-4 text-indigo-400" />
+              <h2 className="text-sm font-semibold text-white">{t('admin.plugins.accessByGroup')}</h2>
+              <span className="text-xs text-slate-500">{t('admin.plugins.accessByGroupDesc')}</span>
+            </div>
+            <GroupPluginGrants />
           </div>
 
           {/* Service plugins */}

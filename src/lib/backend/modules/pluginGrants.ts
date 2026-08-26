@@ -44,6 +44,22 @@ export interface PluginGrantsRoleSetResult {
   success: boolean;
 }
 
+export interface PluginGrantsGroupListResponse {
+  groups: Record<string, string[]>;
+  groupNames: Record<string, string>;
+  plugins: PluginSummary[];
+}
+
+export interface PluginGrantsGroupSetParams {
+  groupId: string;
+  pluginId: string;
+  granted: boolean;
+}
+
+export interface PluginGrantsGroupSetResult {
+  success: boolean;
+}
+
 export interface UserPluginGrant {
   pluginId: string;
   granted: boolean;
@@ -108,6 +124,29 @@ export async function pluginGrantsRoleList(): Promise<PluginGrantsRoleListRespon
 export async function pluginGrantsRoleSet(params: PluginGrantsRoleSetParams): Promise<PluginGrantsRoleSetResult> {
   return safeInvoke<PluginGrantsRoleSetResult>('plugin_grants_role_set', {
     role: params.role,
+    pluginId: params.pluginId,
+    granted: params.granted,
+  }, { noCache: true });
+}
+
+/**
+ * Fetch the full group→plugins grant map, all group names and the list of
+ * known plugins. Admin-only. The `groups` map keys are group IDs; values
+ * are arrays of plugin IDs granted to that group. `groupNames` contains
+ * every group (even ones with zero grants). The `plugins` array lists
+ * every official plugin the admin can grant.
+ */
+export async function pluginGrantsGroupList(): Promise<PluginGrantsGroupListResponse> {
+  return safeInvoke<PluginGrantsGroupListResponse>('plugin_grants_group_list', {}, { noCache: true });
+}
+
+/**
+ * Grant or revoke a plugin for a group. Admin-only.
+ * Every member of the group may download the granted plugins.
+ */
+export async function pluginGrantsGroupSet(params: PluginGrantsGroupSetParams): Promise<PluginGrantsGroupSetResult> {
+  return safeInvoke<PluginGrantsGroupSetResult>('plugin_grants_group_set', {
+    groupId: params.groupId,
     pluginId: params.pluginId,
     granted: params.granted,
   }, { noCache: true });
