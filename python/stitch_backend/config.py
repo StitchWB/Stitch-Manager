@@ -177,6 +177,19 @@ class Settings(BaseSettings):
         False,
         validation_alias=AliasChoices("auth_required", "STITCH_AUTH_REQUIRED"),
     )
+    # Domain-binding gate (desktop).  When ``True``, the desktop (auth
+    # disabled, no caller context) no longer gets the ``{"*"}`` wildcard:
+    # official plugins are only entitled per the server-granted activation
+    # entitlements (``.activation``); an unactivated desktop gets nothing
+    # official.  Community plugins stay open regardless.  Default ``False``
+    # preserves the legacy "everything works without activation" behavior so
+    # this can be rolled out in phases (flip on once activation UX ships).
+    require_activation: bool = Field(
+        False,
+        validation_alias=AliasChoices(
+            "require_activation", "STITCH_REQUIRE_ACTIVATION"
+        ),
+    )
     # Bootstrap only — used by the lifespan / ``create-admin`` CLI to seed the
     # first admin account.  Never logged.  Reads ``STITCH_ADMIN_PASSWORD``.
     admin_password: str | None = Field(

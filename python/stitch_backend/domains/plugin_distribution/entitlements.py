@@ -88,14 +88,36 @@ async def get_effective_entitlements(
     if role == "admin":
         return {"*"}
     if user_id is None and role is None:
-        # FIX 4 (P1): Desktop (auth disabled) → {"*"}.  Guest (auth enabled,
-        # no caller context) → NO wildcard; fall through to the grant
-        # computation below which will be empty (no role, no user grants)
-        # plus legacy additive (effectively empty without .activation
-        # specifics).  This prevents a guest from getting full access.
+        # Desktop (auth disabled, no caller context).
         from stitch_backend.config import get_settings
-        if not get_settings().auth_enabled:
-            return {"*"}
+
+        settings = get_settings()
+        if not settings.auth_enabled:
+            if not settings.require_activation:
+                # Legacy desktop behavior: everything is available without
+                # activation (flag off → no binding yet).
+                return {"*"}
+            # Domain binding: the server is the source of truth.  Honor the
+            # server-granted activation entitlements EXACTLY (including a
+            # "*" when the server granted everything).  Not activated → no
+            # official plugins (community plugins are gated elsewhere and
+            # stay open).
+            def _read_activation_entitlements() -> set[str]:
+                try:
+                    state = ActivationService().load()
+                    if state is None:
+                        return set()
+                    return set(state.entitlements)
+                except Exception as exc:  # noqa: BLE001 — tolerant
+                    logger.debug(
+                        "desktop activation entitlements read failed: %s", exc
+                    )
+                    return set()
+
+            return await asyncio.to_thread(_read_activation_entitlements)
+        # Guest (auth enabled, no caller context) → NO wildcard; fall through
+        # to the grant computation below which will be empty (no role, no
+        # user grants) plus legacy additive.  Prevents guest full access.
 
     cache_key = (user_id, role)
     now = time.monotonic()

@@ -84,6 +84,21 @@ class ActivationService:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
 
+    @staticmethod
+    def _invalidate_entitlements_cache() -> None:
+        """Drop the entitlements cache so server-granted rights apply now.
+
+        Lazy import avoids a module cycle (entitlements imports
+        ActivationService).  Best-effort — a stale cache only delays the
+        new rights by the TTL, it never grants extra access.
+        """
+        try:
+            from .entitlements import invalidate_entitlements_cache
+
+            invalidate_entitlements_cache()
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
+
     async def activate(self, activation_code: str, hwid: str) -> ActivationState:
         """Exchange a one-time activation code for a token bound to ``hwid``."""
         url = f"{server_url()}/activate"
@@ -100,6 +115,7 @@ class ActivationService:
             tier=body.get("tier") or None,
         )
         self._save(state)
+        self._invalidate_entitlements_cache()
         logger.info("Activation successful — pubkey=%s…", state.pubkey[:12])
         return state
 
@@ -118,6 +134,7 @@ class ActivationService:
             tg_admin=bool(body.get("tg_admin", False)),
         )
         self._save(state)
+        self._invalidate_entitlements_cache()
         return state
 
     def load(self) -> ActivationState | None:
@@ -135,6 +152,7 @@ class ActivationService:
         """Remove the activation file (deactivate)."""
         if self._path.is_file():
             self._path.unlink()
+            self._invalidate_entitlements_cache()
 
     def set_degraded(self, degraded: bool) -> None:
         """Update the degraded flag in the persisted state."""
