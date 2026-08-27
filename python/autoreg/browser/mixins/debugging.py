@@ -7,7 +7,7 @@ Provides methods for debugging, screenshots, and error analysis.
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from DrissionPage import ChromiumPage
@@ -25,7 +25,7 @@ class DebuggingMixin:
 
     def screenshot(
         self, page: "ChromiumPage", name: str, output_dir: Path
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """
         Save screenshot for debugging.
 
@@ -55,7 +55,7 @@ class DebuggingMixin:
 
     def save_debug_screenshot(
         self, page: "ChromiumPage", error_context: str, output_dir: Path
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """
         Save screenshot with error context.
 
