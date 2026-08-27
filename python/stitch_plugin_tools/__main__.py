@@ -202,7 +202,7 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
     """Assemble an engine-pack from the real autoreg/captcha solvers.
 
     See :func:`stitch_plugin_tools.publish.pack_engine` for the full
-    import-handling rationale.  The assembled pack is unsigned — run
+    import-handling rationale.  The assembled pack is unsigned - run
     ``python -m stitch_plugin_tools sign <out_dir> --key <private.key>``
     to produce a publish-ready, signed pack.
     """
@@ -215,6 +215,7 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
             version=args.version,
             name=args.name,
             service=args.service,
+            src_root=Path(args.src_root) if args.src_root else None,
         )
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -223,6 +224,40 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
     print(f"  version: {args.version}")
     print(f"  solvers: {', '.join(('turnstile', 'turnstile_api', 'aliyun_slider'))}")
     print("  bundled: vendor/turnstile-solver service + checkbox_template.png")
+    print(
+        f"  sign with: python -m stitch_plugin_tools sign {result} "
+        f"--key <private.key>"
+    )
+    return 0
+
+
+def _cmd_pack_provider(args: argparse.Namespace) -> int:
+    """Assemble a self-contained CODE plugin package for one provider.
+
+    Copies ``<providers_root>/<provider_id>/``, bundles base/common,
+    rewrites imports to package-relative form and emits ``plugin.json``
+    (``kind=provider``).  The package is unsigned - run
+    ``python -m stitch_plugin_tools sign <out_dir> --key <private.key>``
+    to produce a publish-ready, signed package.
+    """
+    from stitch_plugin_tools.publish import pack_provider
+
+    out_dir = Path(args.out)
+    try:
+        result = pack_provider(
+            args.provider_id,
+            out_dir,
+            version=args.version,
+            providers_root=(
+                Path(args.providers_root) if args.providers_root else None
+            ),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"provider plugin assembled at {result}")
+    print(f"  provider: {args.provider_id}")
+    print(f"  version: {args.version}")
     print(
         f"  sign with: python -m stitch_plugin_tools sign {result} "
         f"--key <private.key>"
@@ -618,7 +653,39 @@ def _build_parser() -> argparse.ArgumentParser:
     p_pack.add_argument(
         "--service", default="engine", help="service identifier (default: engine)"
     )
+    p_pack.add_argument(
+        "--src-root",
+        default=None,
+        help=(
+            "repo root to assemble from (must contain python/autoreg/ and "
+            "vendor/turnstile-solver/); default: resolve from the installed "
+            "SDK location"
+        ),
+    )
     p_pack.set_defaults(func=_cmd_pack_engine)
+
+    p_pack_provider = sub.add_parser(
+        "pack-provider",
+        help="assemble a kind=provider CODE plugin package from a providers tree",
+    )
+    p_pack_provider.add_argument(
+        "provider_id", help="provider directory name (e.g. kiro)"
+    )
+    p_pack_provider.add_argument(
+        "out", help="output directory for the package"
+    )
+    p_pack_provider.add_argument(
+        "--version", default="0.1.0", help="semver version (default: 0.1.0)"
+    )
+    p_pack_provider.add_argument(
+        "--providers-root",
+        default=None,
+        help=(
+            "directory containing <provider_id>/ plus base.py/common.py; "
+            "default: resolve autoreg/providers from the installed SDK location"
+        ),
+    )
+    p_pack_provider.set_defaults(func=_cmd_pack_provider)
 
     p_new = sub.add_parser(
         "new",

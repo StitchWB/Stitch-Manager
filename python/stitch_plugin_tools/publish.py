@@ -260,12 +260,27 @@ def dev_install(package_dir: Path) -> Path:
 _ENGINE_PACK_SOLVERS = ("aliyun_slider",)
 
 
+def _default_src_roots() -> tuple[Path, Path]:
+    """Derive ``(autoreg_root, repo_root)`` from the installed SDK location.
+
+    Back-compat default for :func:`pack_engine` / :func:`pack_provider`:
+    ``crypto.__file__`` → ``autoreg/plugin/crypto.py`` → ``autoreg/`` → repo
+    root.  Callers that build from an explicit checkout (e.g. a standalone
+    plugin repo's CI) pass ``src_root`` / ``providers_root`` instead.
+    """
+    plugin_dir = Path(crypto.__file__).resolve().parent  # autoreg/plugin/
+    autoreg_root = plugin_dir.parent                     # autoreg/
+    repo_root = autoreg_root.parents[1]                  # python/ → repo root
+    return autoreg_root, repo_root
+
+
 def pack_engine(
     out_dir: Path,
     *,
     version: str = "0.1.0",
     name: str = "Engine Pack",
     service: str = "engine",
+    src_root: Path | None = None,
 ) -> Path:
     """Assemble an engine-pack from the canonical source tree.
 
@@ -291,6 +306,10 @@ def pack_engine(
         version: Semver version string (default ``"0.1.0"``).
         name: Human-readable pack name (default ``"Engine Pack"``).
         service: Service identifier (default ``"engine"``).
+        src_root: Repo root to assemble from — must contain
+            ``python/autoreg/`` (engine-pack + captcha sources) and
+            ``vendor/turnstile-solver/``.  ``None`` (default) resolves the
+            roots from the installed SDK location (back-compat).
 
     Returns:
         The path to the assembled engine-pack directory.
@@ -299,10 +318,15 @@ def pack_engine(
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Locate source directories via the plugin package path (zone-boundary clean):
-    # crypto.__file__ → autoreg/plugin/crypto.py → autoreg/plugin/ → autoreg/
-    plugin_dir = Path(crypto.__file__).parent           # autoreg/plugin/
-    autoreg_root = plugin_dir.parent                     # autoreg/
+    # Locate source directories: explicit checkout root, or the installed
+    # SDK location (back-compat).
+    if src_root is not None:
+        repo_root = Path(src_root)
+        autoreg_root = repo_root / "python" / "autoreg"
+        plugin_dir = autoreg_root / "plugin"
+    else:
+        autoreg_root, repo_root = _default_src_roots()
+        plugin_dir = autoreg_root / "plugin"
     captcha_src = autoreg_root / "captcha"               # autoreg/captcha/
 
     # ── 1. plugin.json with captcha_backends config ──────────────────────
@@ -372,7 +396,6 @@ def pack_engine(
     # Makes the engine-pack self-sufficient: the solver launches this service
     # when type=local_service.  Copied from repo's vendor/ submodule.
     # Excludes: .git, __pycache__, *.pyc, proxies.txt (user-specific config).
-    repo_root = Path(crypto.__file__).resolve().parents[3]
     service_src = repo_root / "vendor" / "turnstile-solver"
     if service_src.is_dir():
         service_dst = out_dir / "vendor" / "turnstile-solver"
@@ -469,8 +492,9 @@ def pack_provider(
     out_dir: Path,
     *,
     version: str = "0.1.0",
+    providers_root: Path | None = None,
 ) -> Path:
-    """Assemble a self-contained CODE plugin package from ``autoreg/providers/<id>/``.
+    """Assemble a self-contained CODE plugin package from ``<providers>/<id>/``.
 
     Mirrors :func:`pack_engine`: copies the provider implementation into the
     package dir, bundles ``base.py`` + ``common.py`` if any bundled module
@@ -482,16 +506,28 @@ def pack_provider(
     The package is unsigned — sign with :func:`autoreg.plugin.crypto.sign_package`
     + :func:`autoreg.plugin.crypto.write_signature`, then publish with
     :func:`publish_package` (same pipeline as engine-pack).
+
+    Args:
+        provider_id: Provider directory name (e.g. ``"kiro"``).
+        out_dir: Target directory for the package. Created if absent.
+        version: Semver version string (default ``"0.1.0"``).
+        providers_root: Directory containing ``<provider_id>/`` plus the
+            shared ``base.py`` / ``common.py`` — e.g. a method repo's
+            ``providers/`` tree.  ``None`` (default) resolves
+            ``autoreg/providers/`` from the installed SDK location
+            (back-compat with the monorepo layout).
     """
     import json
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Locate source via the plugin package path (zone-boundary clean):
-    # crypto.__file__ → autoreg/plugin/crypto.py → autoreg/plugin/ → autoreg/
-    plugin_dir = Path(crypto.__file__).parent           # autoreg/plugin/
-    autoreg_root = plugin_dir.parent                     # autoreg/
-    providers_src = autoreg_root / "providers"           # autoreg/providers/
+    # Locate the providers tree: explicit root, or the installed SDK
+    # location (back-compat).
+    if providers_root is not None:
+        providers_src = Path(providers_root)
+    else:
+        autoreg_root, _repo_root = _default_src_roots()
+        providers_src = autoreg_root / "providers"      # autoreg/providers/
     provider_src = providers_src / provider_id
 
     if not provider_src.is_dir():
