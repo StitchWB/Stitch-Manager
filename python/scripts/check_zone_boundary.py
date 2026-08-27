@@ -21,6 +21,16 @@ Zones:
   Zone 3 (internal, must NOT leak into Zone 1):
     - python/qoder_*/  (research dirs — names constructed at runtime)
 
+Provider NAMES are Zone 1 by design (audited 2026-08-27):
+  Zone 1 freely mentions provider identities (kiro, windsurf, trae, github,
+  openai, fireworks, ...) — the client is an account manager for those IDEs
+  and its public positioning names them. What stays private is the
+  REGISTRATION AUTOMATION (Zone 2: browser flows, selectors, OAuth tricks)
+  and RESEARCH (Zone 3) — not the names. Catalog lists, command dispatch
+  keys (``start_<id>_autoreg_job``), AI-gateway adapters and account models
+  referencing providers are legitimate Zone-1 content; this guard
+  deliberately does NOT flag bare provider names.
+
 Checks:
   CHECK 1 -- module-level imports from Zone 2 (.py files only):
     Flags lines at module level (no leading whitespace) matching
