@@ -1,0 +1,163 @@
+# =============================================================================
+# Stitch Manager (open-core client) - Git Ignore
+# =============================================================================
+
+# Sidecar runtime (generated config, logs)
+.sidecar-runtime/
+
+# Agent/assistant local state
+.omo/
+.opencode/
+.sisyphus/
+.kiro/
+.trae/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+python/build/
+python/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+backups/
+
+# Nuitka-compiled autoreg extensions (generated build artefact, not committed)
+python/autoreg_compiled/
+
+# PyInstaller-generated specs (the committed one is python/stitch-backend.spec;
+# tracked files are unaffected by ignore rules)
+*.spec
+
+# Chrome/Browser profiles (huge cache data)
+python/profile_*/
+python/chromium/
+python/chrome/
+python/autoreg/build/
+python/autoreg/dist/
+python/autoreg/debug_sessions/
+
+# E2E browser user-data profiles (huge cache data, do not commit)
+**/.e2e-user-data/
+
+# Temporary images are ignored; tracked UI assets are negated so new screens
+# of generated/debug images never pollute the tree.
+*.png
+!resources/icons/app-icon.png
+!resources/branding/*.png
+!src/assets/providers/*.png
+debug_*.png
+error_*.png
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+bridge/.env
+bridge/server.log
+bridge/error.log
+bridge/stdout.log
+bridge/stderr.log
+
+# Plugin signing keys (NEVER commit a private key)
+/keys/
+*.pem
+private.key
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Misc temp
+*.bak
+*.tmp
+*.temp
+.cache/
+.tmp/
+_tmp/
+scratch/
+composed-flows/
+nul
+temp-browser-*.txt
+
+# Vite temp files
+vite.config.ts.timestamp*
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Temporary documentation artifacts
+*_SUMMARY.md
+*_COMPLETE.md
+*_REPORT.md
+*_ANALYSIS.md
+QUICK_START_*.md
+
+# Runtime state files
+autoreg_state.json
+
+# Local recordings
+Recording*.json
+temp_chunk*.txt
+
+# Local package tarballs / extracted packages
+*.tgz
+/package/
+
+# Stray local artifacts
+backend_*.log
+venice-models.json
+
+# Test/deploy runtime artifacts (regenerated on every run)
+python/tests/_subprocess_log.txt
+
+# Lint/analysis output files
+eslint-*.txt
+eslint-*.json
+violations*.txt
+*-violations.txt
+missing_*.json
+missing_*.txt
+
+# Bun lockfile (project uses npm)
+bun.lock
