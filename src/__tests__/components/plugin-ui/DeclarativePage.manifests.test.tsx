@@ -16,7 +16,7 @@
  *       in both en and ru locales.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -49,6 +49,12 @@ jest.mock('@/lib/observability/toast', () => ({
 // ── Manifest loading ─────────────────────────────────────────────────────────
 
 const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
+
+// plugins-src/ (official service plugins) is deliberately NOT part of the
+// open-core export — official plugins ship via the gated distribution server.
+// When it is absent (public client tree) skip this whole suite instead of
+// failing on the missing manifests.
+const HAS_PLUGINS_SRC = existsSync(resolve(REPO_ROOT, 'plugins-src'));
 
 interface PluginManifest {
   id: string;
@@ -118,7 +124,9 @@ function install(manifest: PluginManifest): void {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('declarative plugin manifests render through DeclarativePage', () => {
+const describeIfPlugins = HAS_PLUGINS_SRC ? describe : describe.skip;
+
+describeIfPlugins('declarative plugin manifests render through DeclarativePage', () => {
   const savedLocale = getLocale();
 
   beforeEach(() => {
