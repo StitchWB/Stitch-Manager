@@ -513,7 +513,7 @@ class AccountService:
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: refresh_from_account_metadata(
-                    account.refresh_token,  # type: ignore[arg-type]
+                    account.refresh_token,  # type: ignore[arg-type,unused-ignore]
                     account.provider_metadata,
                     proxy=proxy,
                 ),
@@ -588,7 +588,7 @@ class AccountService:
         try:
             health = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
+                lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type,unused-ignore]
             )
         except Exception as exc:
             # Network/parse failure — record error, fall back to stale quota
@@ -616,7 +616,7 @@ class AccountService:
                 try:
                     health = await asyncio.get_event_loop().run_in_executor(
                         None,
-                        lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type]
+                        lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type,unused-ignore]
                     )
                 except Exception as exc:
                     account.error_count = (account.error_count or 0) + 1
