@@ -134,6 +134,6 @@ class ReferralPoolService:
             from autoreg.providers.v0_app.config import V0_APP_SIGNUP_URL
         except ImportError as exc:  # open-core: v0_app method not installed
             raise RuntimeError(
-                "v0_app method not installed — install plugin"
+                "v0_app method not installed - install plugin"
             ) from exc
-        return V0_APP_SIGNUP_URL
+        return cast("str", V0_APP_SIGNUP_URL)

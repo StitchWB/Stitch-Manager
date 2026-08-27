@@ -110,6 +110,14 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "TCH"]
 # B017: pytest.raises(Exception) in tests (acceptable for broad error testing)
 ignore = ["E501", "E402", "B008", "N815", "N818", "B017"]
 
+[tool.ruff.lint.isort]
+# stitch_bot is a private sibling package (Telegram bot) that the open-core
+# client imports only opportunistically (function-level, try-guarded). It is
+# absent from this client-only distribution, so declare it first-party
+# explicitly to keep the optional-import blocks' sorting stable (else ruff
+# treats it as third-party and flags I001 against the intended layout).
+known-first-party = ["stitch_bot"]
+
 [tool.mypy]
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
@@ -153,6 +161,19 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = "stitch_backend.domains.ai_proxy.web.deepseek_vendor.*"
 ignore_errors = true
+
+# Zone-2 registration methods (autoreg.providers / autoreg.captcha) and the
+# private Telegram bot (stitch_bot) are NOT part of the open-core client.
+# Zone-1 code imports them only opportunistically (function-level, try-guarded)
+# and degrades gracefully when they are absent, so silence the resulting
+# missing-import errors for this client-only tree.
+[[tool.mypy.overrides]]
+module = [
+    "autoreg.providers.*",
+    "autoreg.captcha.*",
+    "stitch_bot.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
