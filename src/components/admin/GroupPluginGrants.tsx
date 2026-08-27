@@ -20,8 +20,26 @@ import {
 
 const ALL_PLUGINS_ID = '*';
 
+const EMPTY_GROUPS: PluginGrantsGroupListResponse = { groups: {}, groupNames: {}, plugins: [] };
+
+/**
+ * Normalise the group-list response so a missing/empty payload (e.g. the
+ * backend returning nothing, or a test mocking the invoke bridge to
+ * undefined) degrades to an empty matrix instead of crashing the page when
+ * `state.groupNames` / `state.groups` are read during render.
+ */
+function normalizeGroupList(
+  data: PluginGrantsGroupListResponse | null | undefined,
+): PluginGrantsGroupListResponse {
+  return {
+    groups: data?.groups ?? {},
+    groupNames: data?.groupNames ?? {},
+    plugins: data?.plugins ?? [],
+  };
+}
+
 export function GroupPluginGrants() {
-  const [state, setState] = useState<PluginGrantsGroupListResponse>({ groups: {}, groupNames: {}, plugins: [] });
+  const [state, setState] = useState<PluginGrantsGroupListResponse>(EMPTY_GROUPS);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -31,7 +49,7 @@ export function GroupPluginGrants() {
     setLoadError(null);
     try {
       const data = await pluginGrantsGroupList();
-      setState(data);
+      setState(normalizeGroupList(data));
     } catch {
       setLoadError(t('admin.plugins.loadFailed'));
     } finally {
@@ -46,7 +64,7 @@ export function GroupPluginGrants() {
   // deduping individual ids, or concurrent admin edits changed state).
   const refreshGroups = useCallback(async () => {
     const data = await pluginGrantsGroupList();
-    setState(data);
+    setState(normalizeGroupList(data));
   }, []);
 
   const groupEntries = Object.entries(state.groupNames);
