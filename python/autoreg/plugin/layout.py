@@ -121,3 +121,36 @@ def sandbox_plugin_dir(user_id: int, plugin_id: str) -> Path:
 def sandbox_plugin_data_dir(user_id: int, plugin_id: str) -> Path:
     """Data dir for a user's sandbox plugin: ``<base>/sandbox/<uid>/<pid>-data``."""
     return sandbox_user_dir(user_id) / f"{plugin_id}-data"
+
+
+# ── Platform tag (compiled-plugin distribution) ───────────────────────────
+#
+# Nuitka-compiled provider plugins are native and therefore platform-specific.
+# The client tells the server which platform it runs on so the server can serve
+# the matching binary artifact (``{id}-{version}-{platform}.zip``).  The CI
+# publish pipeline tags each build with the same scheme, so client + CI agree.
+
+def plugin_platform_tag() -> str:
+    """Return the platform tag used to select a compiled plugin artifact.
+
+    Scheme: ``<os>_<arch>`` with normalized architecture.  Examples:
+    ``win_x86_64``, ``linux_x86_64``, ``linux_arm64``, ``macos_arm64``.
+    Must stay in sync with the tags the publish CI uses per runner OS.
+    """
+    import platform as _platform
+
+    machine = _platform.machine().lower()
+    if machine in ("amd64", "x86_64", "x64", "i686", "i386"):
+        arch = "x86_64"
+    elif machine in ("arm64", "aarch64"):
+        arch = "arm64"
+    else:
+        arch = machine or "unknown"
+
+    if sys.platform == "win32":
+        return f"win_{arch}"
+    if sys.platform == "linux":
+        return f"linux_{arch}"
+    if sys.platform == "darwin":
+        return f"macos_{arch}"
+    return f"{sys.platform}_{arch}"
