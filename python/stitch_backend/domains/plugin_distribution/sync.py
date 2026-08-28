@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from autoreg.plugin.install import install_package, list_installed_versions
-from autoreg.plugin.layout import plugin_cache_path
+from autoreg.plugin.layout import plugin_cache_path, plugin_platform_tag
 from autoreg.plugin.manifest import parse_semver
 
 from .config import server_url
@@ -181,10 +181,20 @@ class PluginSyncService:
     async def _download_and_install(
         self, plugin_id: str, version: str, token: str, pubkey: str
     ) -> None:
-        """Download zip, unzip to temp dir, install via autoreg.plugin.install."""
+        """Download zip, unzip to temp dir, install via autoreg.plugin.install.
+
+        Sends the auto-detected platform tag so the server serves the matching
+        compiled artifact for platform-specific (Nuitka) plugins.  Platform-neutral
+        ``.py`` plugins ignore the param server-side and fall back to their
+        package_path, so this is safe for all plugin kinds.
+        """
         url = f"{server_url()}/plugins/{plugin_id}/{version}"
         client = self._ensure_client()
-        resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        resp = await client.get(
+            url,
+            params={"platform": plugin_platform_tag()},
+            headers={"Authorization": f"Bearer {token}"},
+        )
         resp.raise_for_status()
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="stitch-sync-"))
